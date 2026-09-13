@@ -33,10 +33,10 @@
     },
     {
       "name": "loosen-the-anchor-to-ignore-indentation",
-      "_mechanism": "A stripped-line anchor finds the 7 fenced template examples in references/inline-protocols.md and refuses a doc that is not ambiguous. This is the exact mismatch that a stripped corpus measurement hid.",
+      "_mechanism": "A stripped-line anchor finds the 7 fenced template examples in references/inline-protocols.md and refuses a doc that is not ambiguous. This is the exact mismatch that a stripped corpus measurement hid. RE-ANCHORED 2026-09-14: the `ANCHOR` constant this row mutated is gone and `find_anchor` now reads `_fence_events`. The equivalent mutation is a raw stripped-line scan, which finds all 7 fenced template headings and refuses `anchor_ambiguous` where the ported code correctly refuses `anchor_missing`.",
       "file": "scripts/h_mad_version_history.py",
-      "find": "ANCHOR = re.compile(r\"^##[ \\t]*Version History[ \\t]*$\", re.IGNORECASE)",
-      "replace": "ANCHOR = re.compile(r\"^[ \\t]*##[ \\t]*Version History[ \\t]*$\", re.IGNORECASE)",
+      "find": "    hits = [e.lineno - 1 for e in _events(text)\n            if e.kind == \"heading\" and e.level == 2\n            and e.text.strip().casefold() == \"version history\"]",
+      "replace": "    import re as _m\n    _A = _m.compile(r\"^[ \\t]*##[ \\t]*Version History[ \\t]*$\", _m.IGNORECASE)\n    hits = [i for i, ln in enumerate(text.split(\"\\n\")) if _A.match(ln)]",
       "test": "tests/test_h_mad_version_history.py::TestAnchorRefusals::test_indented_template_headers_are_not_live_sections"
     },
     {
@@ -73,7 +73,7 @@
     },
     {
       "name": "compare-versions-as-strings",
-      "_mechanism": "v1.10 < v1.9 lexically, so a correctly ascending section reads as unsorted and is refused. Caught by test_ten_sorts_after_nine_not_before -- a false-POSITIVE guard, the direction mutation testing usually misses. REWRITTEN: stringifying only `parse_versions`' output left the comparison mixing int and str, so the mutant died on `TypeError: '<=' not supported` and the ORDERING property was never exercised \u2014 a hollow kill. Comparing the tuples as strings is the stated mechanism and cannot crash: `str((1,10)) < str((1,9))`, so v1.10 sorts before v1.9 exactly as the lexical defect does.",
+      "_mechanism": "v1.10 < v1.9 lexically, so a correctly ascending section reads as unsorted and is refused. Caught by test_ten_sorts_after_nine_not_before -- a false-POSITIVE guard, the direction mutation testing usually misses. REWRITTEN: stringifying only `parse_versions`' output left the comparison mixing int and str, so the mutant died on `TypeError: '<=' not supported` and the ORDERING property was never exercised — a hollow kill. Comparing the tuples as strings is the stated mechanism and cannot crash: `str((1,10)) < str((1,9))`, so v1.10 sorts before v1.9 exactly as the lexical defect does.",
       "file": "scripts/h_mad_version_history.py",
       "find": "    asc = all(versions[i] <= versions[i + 1] for i in range(len(versions) - 1))\n    desc = all(versions[i] >= versions[i + 1] for i in range(len(versions) - 1))",
       "replace": "    asc = all(str(versions[i]) <= str(versions[i + 1]) for i in range(len(versions) - 1))\n    desc = all(str(versions[i]) >= str(versions[i + 1]) for i in range(len(versions) - 1))",
@@ -89,10 +89,10 @@
     },
     {
       "name": "stop-at-headers-but-not-at-rules",
-      "_mechanism": "20 of 713 sections end at `---`. Without the rule terminator the append lands below it, in the next section's prose.",
+      "_mechanism": "20 of 713 sections end at `---`. Without the rule terminator the append lands below it, in the next section's prose. RE-ANCHORED 2026-09-14: the terminator now lives in the `_events` loop.",
       "file": "scripts/h_mad_version_history.py",
-      "find": "        elif not fenced and (HEADER.match(line) or RULE.match(line)):",
-      "replace": "        elif not fenced and HEADER.match(line):",
+      "find": "        if event.kind == \"prose\" and RULE.match(lines[event.lineno - 1]):",
+      "replace": "        if False and RULE.match(lines[event.lineno - 1]):",
       "test": "tests/test_h_mad_version_history.py::TestAccepts::test_a_rule_terminated_section_appends_above_the_rule"
     },
     {
@@ -145,10 +145,10 @@
     },
     {
       "name": "a-fenced-heading-ends-the-section",
-      "_mechanism": "A ``` block inside the section can hold a `# heading`; treating it as the boundary splices the new entry into the middle of the code block.",
+      "_mechanism": "A ``` block inside the section can hold a `# heading`; treating it as the boundary splices the new entry into the middle of the code block. RE-ANCHORED 2026-09-14: fence awareness is no longer a local `fenced` flag but `_fence_events`, so the mutation is a raw line scan that cannot see fences at all.",
       "file": "scripts/h_mad_version_history.py",
-      "find": "        if line.lstrip().startswith(\"```\"):\n            fenced = not fenced",
-      "replace": "        if False:\n            fenced = not fenced",
+      "find": "    for event in _events(text):\n        if event.lineno <= anchor + 1:\n            continue\n        if event.kind == \"heading\" and event.level <= 2:\n            return anchor + 1, event.lineno - 1",
+      "replace": "    import re as _m\n    _H = _m.compile(r\"^ {0,3}#{1,2} \")\n    for _i in range(anchor + 1, len(lines)):\n        if _H.match(lines[_i]):\n            return anchor + 1, _i\n    if False:\n        pass",
       "test": "tests/test_h_mad_version_history.py::TestEntryBoundaries::test_a_heading_inside_a_fenced_block_is_not_the_section_end"
     },
     {
@@ -198,6 +198,22 @@
       "find": "        _vh_noop(ref, \"no `## Version History` heading\")\n        return text",
       "replace": "        return text",
       "test": "tests/test_h_mad_assemble_audit.py::test_an_absent_history_heading_also_says_so"
+    },
+    {
+      "name": "a-fenced-version-history-heading-becomes-the-anchor",
+      "_mechanism": "The asymmetry the precheck tests name in those words: `section_bounds` tracked fences for the section's END, `find_anchor` did not for its START. This repo quotes its own templates, so the bump landed inside a ``` block while the live log below went unbumped. Measured on references/inline-protocols.md, whose seventh heading sits inside a ```markdown fence spanning L477-L511.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "    hits = [e.lineno - 1 for e in _events(text)\n            if e.kind == \"heading\" and e.level == 2\n            and e.text.strip().casefold() == \"version history\"]",
+      "replace": "    import re as _m\n    _A = _m.compile(r\"^##[ \\t]*Version History[ \\t]*$\", _m.IGNORECASE)\n    hits = [i for i, ln in enumerate(text.split(\"\\n\")) if _A.match(ln)]",
+      "test": "tests/test_h_mad_version_history.py::TestFenceGrammarIsTheSharedOne::test_a_FENCED_version_history_heading_is_not_the_anchor"
+    },
+    {
+      "name": "match-the-heading-text-by-prefix",
+      "_mechanism": "Found as a SURVIVOR when this port was mutation-tested by hand: relaxing the whole-text comparison broke no test. Phase docs carry sibling `## Version Notes` / `## Versioning` headings, which then make the document read as two anchors and refuse `anchor_ambiguous` — so a legitimate bump becomes impossible.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "            and e.text.strip().casefold() == \"version history\"]",
+      "replace": "            and e.text.strip().casefold().startswith(\"version\")]",
+      "test": "tests/test_h_mad_version_history.py::TestFenceGrammarIsTheSharedOne::test_a_neighbouring_version_heading_is_not_the_anchor"
     }
   ]
 }
