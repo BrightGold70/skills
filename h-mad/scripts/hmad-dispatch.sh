@@ -2798,6 +2798,25 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   # and reached the agent as a broken prompt with no refusal. A narrower rule here
   # would warn on the well-formed slots and stay silent on exactly the malformed
   # ones the assembler learned to catch.
+  #
+  # BACKTICK AWARENESS WAS PROPOSED (#37) AND IS REFUSED, on measurement. The row
+  # is real -- a slot quoted in prose backticks trips this warning -- and the fix
+  # that suggests itself is to strip backticked spans before the grep. Counted
+  # across every `h-mad/**/*.md` carrying a slot, by position:
+  #
+  #     codex-verifier-prompt.md        fenced=0  backticked=17  bare=1
+  #     audit-prompt.template.md        fenced=0  backticked=2   bare=9
+  #     codex-implementer-prompt.md     fenced=0  backticked=4   bare=2
+  #
+  # The templates' OWN live slots are mostly backticked, because they are written
+  # into prose sentences (``Working directory: `<INLINE_REPO_ROOT>` ``). Stripping
+  # them would take `codex-verifier-prompt.md` from 18 detected slots to 1 -- and
+  # that is the 5e anti-gaming verifier, the template the comment above already
+  # names as unstaged by the assembler, so hand-shipping is its ONLY route and
+  # this advisory is its only guard. The false positive costs a warning on a
+  # prompt that quotes a slot; the cure costs silence on the hand-shipped file
+  # with seventeen live ones. Pinned by
+  # `test_a_BACKTICKED_live_slot_is_still_detected`.
   if grep -qE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' "$promptfile" 2>/dev/null; then
     local _slots
     _slots=$(grep -oE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' "$promptfile" \

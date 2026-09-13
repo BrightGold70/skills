@@ -1,0 +1,27 @@
+{
+  "_why": "#37 \u2014 the carried row's FACTS hold and its PRESCRIPTION is refused, which is the sixth time this session's lane has hit that shape. A slot quoted in prose backticks does trip the advisory; the probe's suggested cure ('the fix worth having, if any, is backtick awareness') would blind the detector on the one template that needs it most.\n\nMeasured across every `h-mad/**/*.md` carrying a slot: `codex-verifier-prompt.md` has 17 BACKTICKED live slots and 1 bare, because they are written into prose sentences. SKILL.md records that the assembler does not stage that template, so hand-shipping is its only route -- exactly the unguarded path this advisory exists for. Stripping backticked spans takes it from 18 detected slots to 1.\n\nThis spec has ONE mutation on purpose. It is not a guard over new behaviour -- nothing in the script changed -- it is a guard over a REFUSAL, and the only way that refusal can be undone is by someone implementing the thing it refuses. So the mutation IS the proposed fix, written out in full.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_exec.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "backtick-awareness-is-implemented-as-proposed",
+      "_mechanism": "The #37 prescription, verbatim: strip backticked spans before the grep. `codex-verifier-prompt.md` then reports 1 live slot instead of 18, and a hand-shipped 5e verifier prompt with seventeen unsubstituted slots dispatches near-silently -- the agent reviews placeholders and the reply reads like a real verification.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if grep -qE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' \"$promptfile\" 2>/dev/null; then\n    local _slots\n    _slots=$(grep -oE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' \"$promptfile\" \\\n             | sort -u | tr '\\n' ' ')",
+      "replace": "  if sed 's/`[^`]*`//g' \"$promptfile\" | grep -qE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' 2>/dev/null; then\n    local _slots\n    _slots=$(sed 's/`[^`]*`//g' \"$promptfile\" | grep -oE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' \\\n             | sort -u | tr '\\n' ' ')",
+      "test": "tests/test_hmad_dispatch_exec.py::test_a_BACKTICKED_live_slot_is_still_detected"
+    }
+  ]
+}

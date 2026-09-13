@@ -1131,3 +1131,52 @@ def test_agy_last_step_ignores_steps_written_before_this_dispatch(tmp_path):
             env=_env(b, HMAD_STUB_AGY_RESP=""))
     assert "last step reached — 2 step_update events" in r.stderr, r.stderr
     assert "5 step_update events" not in r.stderr, "read the prior dispatch's steps too"
+
+
+def test_a_BACKTICKED_live_slot_is_still_detected(tmp_path):
+    """#37 — and the prescription it came with is REFUSED here, on measurement.
+
+    The row is real: a slot quoted in prose backticks trips the advisory, and the
+    probe (`wsg7-carried-claims.probe.v1.md` §6) reproduced it through the live
+    code path. Its prescription — "the fix worth having, if any, is backtick
+    awareness" — is what this test exists to prevent.
+
+    Counted across every `h-mad/**/*.md` that carries a slot, splitting each hit
+    by whether it sits in a fence, in single backticks, or bare:
+
+        codex-verifier-prompt.md          fenced=0  backticked=17  bare=1
+        audit-prompt.template.md          fenced=0  backticked=2   bare=9
+        codex-implementer-prompt.md       fenced=0  backticked=4   bare=2
+        agy-architectural-reviewer...md   fenced=0  backticked=2   bare=5
+
+    The templates' OWN live slots are predominantly backticked —
+    ``Working directory: `<INLINE_REPO_ROOT>` ``, ``module `<INLINE_MODULE_NAME>` ``
+    — because they are written into prose sentences. Stripping backticked spans
+    before the grep would take `codex-verifier-prompt.md` from 18 detected slots
+    to 1.
+
+    That file is the worst possible one to blind, and the advisory's own comment
+    says why: SKILL.md records that the assembler does not stage the 5e
+    anti-gaming verifier, so "the only shipping route is by hand" — precisely the
+    unguarded path this advisory was added to cover.
+
+    So the false positive stays. It costs a warning on a prompt that quotes a
+    slot; the proposed cure costs silence on the hand-shipped template with
+    seventeen live ones. The advisory never blocks, which is what makes that
+    trade obviously correct rather than merely defensible.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    template = (Path(__file__).resolve().parents[1] / "references"
+                / "codex-verifier-prompt.md")
+    assert template.exists(), template
+
+    r = run(["exec", "codex", str(template), "--cd", str(tmp_path)], env=_env(b))
+
+    assert "WARNING: prompt carries live template slots" in r.stderr, r.stderr
+    # Each of these is inside single backticks in the template, in a prose
+    # sentence. Named individually rather than counted, so the assertion says
+    # which spelling must survive.
+    for slot in ("<INLINE_MODULE_NAME>", "<INLINE_REPO_ROOT>", "<INLINE_TEST_COMMAND>",
+                 "<INLINE_WIRE_PIN>", "<INLINE_PROPERTIES>"):
+        assert slot in r.stderr, (f"{slot} is backticked in the template and must "
+                                  f"still be detected", r.stderr)
