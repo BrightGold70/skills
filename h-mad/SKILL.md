@@ -276,7 +276,8 @@ yourself and correct the record with `h_mad_state_write.py`.
 | Token | What you do |
 |---|---|
 | `owned_elsewhere` | Another session holds this feature and was seen within the staleness window. **Stop and surface it** — print the owner id and heartbeat, and ask whether to coordinate, take over (`--claim <id> --force`), or pick a different feature. Never proceed silently: two sessions on one feature produce contradictory conclusions on the same branch. |
-| `start_fresh` | Initialize `orchestrator_state[<feature>]`. Enter Phase 1. |
+| `cannot_judge` | The state file EXISTS and could not be read — truncated mid-write, invalid JSON, unreadable. **Stop. Do NOT initialize and do NOT resume.** This is the absence of evidence, not evidence of absence: the store may hold dozens of records and a live owner for this very feature. Inspect the file by hand, restore it from `git`/backup if it is corrupt, and only then re-run the oracle. It is deliberately not `start_fresh` — that token would have you create a record over a feature another session is working. |
+| `start_fresh` | Initialize `orchestrator_state[<feature>]`. Enter Phase 1. Reached when there is no state file at all, or the file parsed and holds no record for this feature — both legitimately mean nothing is claimed. |
 | `resume_manual` | Print current phase + last marker. Ask "continue from phase <N>?" |
 | `enter_autonomous` | Print "all manual checkpoints clear; entering autonomous block." Enter Phase 5. |
 | `halted` | **Run the staleness check first** (below) — a halt that commits landed after is usually already resolved. Then print `halt_reason` + recovery hints (see `references/failure-recovery.md`). Ask "resume, retry, or reset?" |

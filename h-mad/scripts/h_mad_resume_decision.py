@@ -2,6 +2,23 @@
 """h_mad_resume_decision.py — read state file + feature; print decision token.
 
 Tokens: start_fresh | resume_manual | enter_autonomous | halted | complete
+        | owned_elsewhere | cannot_judge
+
+`cannot_judge` is the one token that is not a decision. It means the state file
+EXISTS and could not be read -- truncated mid-write, invalid JSON, unreadable --
+and it exists because all three of "no file", "no record" and "unreadable file"
+used to return `start_fresh`. Only the first two are legitimately that: a feature
+with no record has been looked up in a file that parsed fine. An unreadable file
+is not evidence that nothing is claimed; it is the absence of evidence either way,
+and answering `start_fresh` there tells a caller to initialise a feature that may
+be mid-flight and owned by a live session. WSG-6 was a state file that vanished
+with the cause undetermined, and this is the half of that incident a tool can
+defend against.
+
+An ABSENT file still answers `start_fresh`, deliberately: a feature that has never
+been started is the common case and the callers that know better (the handoff
+skill's HANDOVER and TAKEOVER) check for the file before asking. Distinguishing
+"never existed" from "vanished" needs evidence this script does not have.
 
 v2.2 thresholds:
 - complete: last_completed_phase >= 7 (was 9 in v1)
@@ -82,7 +99,12 @@ def decide(
     try:
         state = json.loads(state_file.read_text())
     except (json.JSONDecodeError, OSError):
-        return "start_fresh"
+        # NOT `start_fresh`. The file is there and something is in it; we could not
+        # read it. "I could not check" and "nothing is claimed" lead to opposite
+        # correct actions, so they must not share a token -- a truncated write on a
+        # store holding dozens of records would otherwise route a second session to
+        # initialise a feature another session is actively working.
+        return "cannot_judge"
     orchestrator_state = state.get("orchestrator_state") or {}
     feat_state = orchestrator_state.get(feature)
     if not feat_state:

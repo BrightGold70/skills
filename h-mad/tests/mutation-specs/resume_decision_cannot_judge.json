@@ -1,0 +1,32 @@
+{
+  "_why": "WSG-6. Three different states returned `start_fresh` and only two of them mean it: no file, and a file that parsed and holds no record for this feature. A file that EXISTS and could not be read is neither -- the store may hold dozens of records and a live owner for this very feature, and `start_fresh` tells the caller to initialise over it. The incident that filed this was a state file that vanished with the cause undetermined; an unreadable file is the half a tool can defend against. An ABSENT file still answers start_fresh deliberately, so both directions are mutated.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_resume_decision.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "an-unreadable-state-file-reads-as-nothing-claimed-again",
+      "_mechanism": "The defect itself. A truncated write over a populated store routes a second session to initialise a feature the first is actively working, and nothing downstream can tell that from a genuinely new feature.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "        return \"cannot_judge\"",
+      "replace": "        return \"start_fresh\"",
+      "test": "tests/test_h_mad_resume_decision.py::TestAnUnreadableStateFileIsNotAnEmptyOne::test_a_truncated_write_over_a_POPULATED_store_is_cannot_judge"
+    },
+    {
+      "name": "an-absent-file-becomes-a-false-alarm",
+      "_mechanism": "The over-firing direction, which matters as much: a feature that was never started is the COMMON case, and answering cannot_judge there makes every first resume a false alarm. An alert that is usually wrong is ignored, and then the real one is ignored too.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    if not state_file.is_file():\n        return \"start_fresh\"",
+      "replace": "    if not state_file.is_file():\n        return \"cannot_judge\"",
+      "test": "tests/test_h_mad_resume_decision.py::TestAnUnreadableStateFileIsNotAnEmptyOne::test_an_ABSENT_file_still_starts_fresh_deliberately"
+    },
+    {
+      "name": "the-token-leaves-the-decision-table",
+      "_mechanism": "A token nobody documented is one every caller's enumeration misclassifies by whatever its default is. An operator who hits cannot_judge with no prescribed action falls back to guessing, and the obvious guess is to treat it like start_fresh.",
+      "file": "SKILL.md",
+      "find": "| `cannot_judge` | The state file EXISTS and could not be read",
+      "replace": "| `cannot_judged` | The state file EXISTS and could not be read",
+      "test": "tests/test_h_mad_resume_decision.py::TestAnUnreadableStateFileIsNotAnEmptyOne::test_the_token_is_documented_where_callers_read_it"
+    }
+  ]
+}

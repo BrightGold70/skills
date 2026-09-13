@@ -557,7 +557,9 @@ python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_
 ```
 
 - **`owned_elsewhere`** → the owner is **LIVE**. The work is not yours to hand over. Stop and surface it — releasing here would yank a feature out from under a running session.
-- **any other token** (`enter_autonomous`, `resume_manual`, `halted`, `start_fresh`) → no live owner. Safe to proceed.
+- **`cannot_judge`** → the state file exists and could not be READ. Not a live owner and not a free claim: it is the absence of evidence either way, so treat it exactly as the predicate rule says and STOP. Releasing or claiming against a file you cannot parse is how a second session takes a feature the first is working.
+- **one of `enter_autonomous`, `resume_manual`, `halted`, `start_fresh`** → no live owner. Safe to proceed.
+- **anything else** → STOP and surface the token. This list is deliberately CLOSED. It previously ended with a catch-all bullet that granted the unknown case permission to proceed, which is fail-open: every token added to the oracle after that bullet was written would have been auto-classified as safe. `cannot_judge` was added FOR safety and would have been read as permission. The retired wording is not reproduced here on purpose — a hazardous instruction quoted verbatim is still copyable, and the test that guards this cannot tell a live instruction from prose quoting it.
 
 Read the owner and heartbeat for the brief — the receiver needs to know a claim existed and what happened to it:
 
