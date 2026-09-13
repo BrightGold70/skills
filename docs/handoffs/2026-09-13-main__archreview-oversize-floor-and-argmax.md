@@ -7,9 +7,12 @@
 
 ## Session Summary
 
-Resumed the WSG backlog and closed **all seven WSG items** — twenty-four commits,
-`54a4067..c5701dd`. WSG-1 through WSG-6 were fixed; WSG-7 was re-probed by a
-fresh agent and SPLIT into #28/#29/#30 (7 of its 8 claims hold, 1 cannot be probed). A fresh-context review lane found **7 findings (2 Major, 5 Minor,
+Resumed the WSG backlog and closed **all seven WSG items** — twenty-seven commits,
+`54a4067..f2024ad`, suite 3242, anchors `specs=90 mutations=877 drifted=0`. WSG-1
+through WSG-6 were fixed; WSG-7 was re-probed by a fresh agent and SPLIT into
+#28/#29/#30/#31 (7 of its 8 claims hold, 1 cannot be probed), with LINEPIN's message
+half fixed. A fresh-context review lane also found 7 findings on this session's own
+work, **three of them defects I had just introduced**, all fixed. A fresh-context review lane found **7 findings (2 Major, 5 Minor,
 0 Critical, all CONFIRMED)**; **three of them were defects in this session's own fixes**,
 including a test that actively defended a false boundary and a guard test that failed open.
 **Six are fixed (1, 3, 4, 5, 6, 7); only finding 2 remains open**, with its fix location
@@ -54,9 +57,12 @@ crash kills in an existing spec, now filed. Nothing is left uncommitted.
 
 ## Next Steps
 
-1. **#29 — the three `precheck_doc` findings**, LINEPIN first (the probe says its
-   consequence is worse than the brief described). Task #19(b)'s remaining `--help` nit
-   folds in, since it has been waiting for an edit to exactly that file.
+1. **#29 — the two remaining `precheck_doc` findings** (PINDRIFT bare-L, version-history).
+   LINEPIN's message half is done (`f2024ad`). Start by establishing what phrasing the
+   provenance extractor accepts — a probe of range pins came back inconclusive because a
+   fixture said "At `<sha>`" where the working form was "Measured at `<sha>`", and #19(b)
+   is blocked on the same question. `_BARE_PIN` at `:120` is the shared grammar, so bare-L
+   and the range question are one piece of work.
 2. **#28 — the wire-registry cwd ambiguity.** Read the task before coding: the OBVIOUS
    fix (resolve the default against the git root) re-creates J49, which
    `_registry_base_path`'s docstring records as already paid for. A nested registry is a
@@ -186,3 +192,27 @@ python3.11 scripts/h_mad_mutation_harness.py --check-anchors tests/mutation-spec
 - `docs/handoffs/2026-09-11-main__hmad-tooling-findings-from-the-wsg-lane.md` — the original WSG brief, stamped
 - `h-mad/scripts/h_mad_audit_cycle.py:31-40` — `DELIVERY_FLOOR = 2` and the rule that a floor is derived from the CONTRACT, never from tool names
 - `h-mad/audit-prompt.template.md:252` — the `.done` producer for agy audits, now pinned by a test
+
+## Closing state (final update, 2026-09-13)
+
+Twenty-seven commits, `54a4067..f2024ad`, pushed, in sync, tree clean apart from the
+standing 88 untracked `.done` markers and `lanestate/`.
+
+**Shipped:** WSG-1 `c5a5c9c` · WSG-2 `6fd9c20` (corrected by `86b6149`, `fae30f3`) ·
+WSG-3 `d235837` · WSG-4 `66cb2e7` (subagent) · WSG-5 `3a04342` · WSG-6 `b9f213a` ·
+review findings 4/5/7 `1c92f5e`+`cee5aea` · `--vh-tail` `86dde1c` ·
+pending-handovers scoping `9b3c1e4` · pre-push dirty-tree note `c5701dd` ·
+LINEPIN message `f2024ad`. Two probe reports committed: `201f716`, `c21e63e`.
+
+**Deliberately NOT done, each with the reason recorded in its task:** #31
+(`NO_LINE_PINS` is a migration — 3 live docs would fail and a ceiling-asserted doc
+gains 6 hard findings) · #28 (the obvious registry fix re-creates J49) · #19(b)
+(blocked on a provenance-phrasing question; the note would have been invented) ·
+#56 inside #30 (CANNOT PROBE — the document cannot be identified from this repo).
+
+**The pattern worth carrying.** Five times a carried finding's FACTS held while its
+PRESCRIPTION belonged to a different surface, and three of the review's seven findings
+were defects introduced by this session's own fixes — including a test that actively
+defended a false boundary and a guard test that failed open. The mutation harness
+refusing to measure, and a fresh lane with no session context, are what caught them.
+Neither a green suite nor per-mutation batteries did.
