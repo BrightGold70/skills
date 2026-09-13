@@ -1860,3 +1860,29 @@ stands and was not re-done. Census unchanged at `candidates=212 OPEN=47 yes=28 m
   mechanical: iterate the spec set, print one token line per spec plus a corpus summary, and REFUSE
   to run concurrently with another harness process in the same worktree (see the tree-lock row
   above — false anchor drift was self-inflicted three times on 2026-09-14 for exactly that reason).
+
+## 2026-09-14 — bkit-hooks-warning-and-upgrade (second session, same day)
+
+Reconciliation note: the census reads OPEN(yes+maybe)=51 (30 `yes`). Those rows were reconciled by
+the immediately-preceding session, whose pass is the file's last write (`ec75688`). `git log
+ec75688..HEAD` is **empty** and this session committed no source to this repo, so no open row can
+have changed state since — the decay this step exists to catch cannot have occurred in the interval.
+Rows re-read for relevance to this session's work (the crash-kill/`--sweep` pair at lines 1843 and
+1855): neither is touched by it. No row flipped.
+
+- **which diagnostic surface shows which warning**: reproducing `bkit: hooks.json: unknown key …`
+  cost five probes — `claude -p`, `--debug`, `--debug hooks`, `plugin details`, `plugin validate` —
+  all silent, because the warning renders only on the interactive TUI warn surface and
+  `plugin validate` runs a *different* validator (unknown **events**, not unknown **keys**). A
+  lookup of "this class of diagnostic appears on these surfaces" would have cost one. — recurrence: 1
+  this session, but the same shape as the agy TUI-capture and `--help`-is-the-command-surface rows
+  already in this file — candidate: maybe
+
+- **decode a closed key-set from the shipped binary, then replay it as a local validator**:
+  `strings` on the CC binary yielded `qdo=new Set(["description","hooks","modules","surface"])` and
+  the matcher set `{matcher,hooks}`; replaying them over the pre-patch file reproduced the reported
+  warning **verbatim**, which is what licensed trusting a before/after that no harness surface could
+  produce. Same technique as the earlier `CLAUDE_CODE_ENABLE_TODO_TOOLS` binary probes. The
+  generalisable half is the *discipline* (a decode is only trustworthy once its replay reproduces
+  the original text character-for-character), which is now a `docs/learnings.md` entry; whether the
+  mechanics deserve a skill is the open question. — recurrence: 2 across sessions — candidate: maybe
