@@ -121,6 +121,57 @@ class TestVerdicts:
         assert "drifted.json" in result.stderr
         assert "--no-verify" in result.stderr
 
+    def test_a_dirty_tree_is_named_so_nobody_re_anchors_a_half_finished_edit(
+        self, tmp_path
+    ):
+        """An UNCOMMITTED edit to a pinned file drifts its anchor exactly like a real
+        code move, and the two want OPPOSITE responses.
+
+        The block itself was always correct; the advice was not. "Re-anchor the
+        drifted specs above" applied to a concurrent writer's half-finished edit bakes
+        their transient text into the committed spec, which is worse than the block.
+
+        Measured 2026-09-13: a subagent editing `hmad-dispatch.sh` in this same
+        worktree blocked an unrelated push, the committed anchor matched the committed
+        file the whole time, and ten minutes went into chasing a harness defect that
+        did not exist. The tree state is the discriminator and the hook now prints it.
+        """
+        repo = _init_repo(tmp_path)
+        _spec(repo, "specs/drifted.json", "ANCHOR_THAT_CANNOT_MATCH")
+        _commit_all(repo)
+        # A concurrent writer, mid-edit, on the TRACKED file the spec pins. That is the
+        # shape that actually drifts an anchor: only a tracked file can be pinned, so
+        # only a modification to one produces this block. A first version of this test
+        # created an UNTRACKED file, which `git diff` does not report at all — the
+        # fixture, not the hook, was wrong.
+        (repo / "src" / "mod.py").write_text(
+            "def f():\n    return SENTINEL_VALUE  # half-finished\n", encoding="utf-8")
+
+        result = _run_hook(repo)
+
+        assert result.returncode == 1
+        assert "pre-push BLOCKED" in result.stderr
+        assert "UNCOMMITTED changes" in result.stderr, result.stderr
+        assert "src/mod.py" in result.stderr, result.stderr
+        assert "do NOT re-anchor" in result.stderr, result.stderr
+        assert "concurrent" in result.stderr, result.stderr
+
+    def test_a_clean_tree_does_not_get_the_dirty_note(self, tmp_path):
+        """The note must be a MEASUREMENT of the tree, not boilerplate on every block —
+        advice that appears unconditionally is advice nobody reads, and here it would
+        actively discourage the correct action when the code really did move."""
+        repo = _init_repo(tmp_path)
+        _spec(repo, "specs/drifted.json", "ANCHOR_THAT_CANNOT_MATCH")
+        _commit_all(repo)
+
+        result = _run_hook(repo)
+
+        assert result.returncode == 1
+        assert "pre-push BLOCKED" in result.stderr
+        assert "UNCOMMITTED changes" not in result.stderr, (
+            "the dirty-tree note fired on a clean tree, so it says nothing about the "
+            "tree and the reader learns to skip it")
+
     def test_one_drifted_spec_blocks_a_repo_of_clean_ones(self, tmp_path):
         """The sweep is over every spec, not the one you happened to touch."""
         repo = _init_repo(tmp_path)

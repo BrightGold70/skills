@@ -114,6 +114,22 @@ case "$OUT" in
         printf '\npre-push BLOCKED: mutation anchors are unverified (harness exit %s).\n' "$RC" >&2
         printf 'Re-anchor the drifted specs above; RESTORE any file reported unreadable\n' >&2
         printf 'first, since a spec cannot be re-anchored into a file that is gone.\n' >&2
+        # An UNCOMMITTED edit to a pinned file drifts its anchor exactly like a real
+        # code move, and the two want opposite responses. Re-anchoring against someone
+        # else's half-finished edit bakes their transient text into the committed spec,
+        # which is worse than the block. Measured 2026-09-13: a subagent editing
+        # hmad-dispatch.sh in this same worktree blocked an unrelated push, and the
+        # committed anchor matched the committed file the whole time -- ten minutes went
+        # into chasing a harness bug that did not exist.
+        DIRTY=$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)
+        if [ -n "$DIRTY" ]; then
+            printf '\nNOTE: this work tree has UNCOMMITTED changes:\n' >&2
+            printf '%s\n' "$DIRTY" | sort -u | sed 's/^/  /' >&2
+            printf 'If a drifted spec pins one of those files, the drift is the edit in\n' >&2
+            printf 'progress, NOT a code move -- do NOT re-anchor. Check for a concurrent\n' >&2
+            printf 'writer (another session or a subagent in this same tree) and let it\n' >&2
+            printf 'land first. Verify with: git diff -- <the drifted spec>'"'"'s target file\n' >&2
+        fi
         printf 'Deliberate override: git push --no-verify\n' >&2
         exit 1
         ;;
