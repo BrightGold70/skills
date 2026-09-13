@@ -7,8 +7,9 @@
 
 ## Session Summary
 
-Resumed the WSG backlog and closed **WSG-1 through WSG-6** — seventeen commits,
-`54a4067..b9f213a`. Only **WSG-7** remains of the inherited seven. A fresh-context review lane found **7 findings (2 Major, 5 Minor,
+Resumed the WSG backlog and closed **all seven WSG items** — twenty-four commits,
+`54a4067..c5701dd`. WSG-1 through WSG-6 were fixed; WSG-7 was re-probed by a
+fresh agent and SPLIT into #28/#29/#30 (7 of its 8 claims hold, 1 cannot be probed). A fresh-context review lane found **7 findings (2 Major, 5 Minor,
 0 Critical, all CONFIRMED)**; **three of them were defects in this session's own fixes**,
 including a test that actively defended a false boundary and a guard test that failed open.
 **Six are fixed (1, 3, 4, 5, 6, 7); only finding 2 remains open**, with its fix location
@@ -53,10 +54,15 @@ crash kills in an existing spec, now filed. Nothing is left uncommitted.
 
 ## Next Steps
 
-1. **WSG-7, the last inherited item** — three `precheck_doc` findings plus five carried
-   tooling backlog rows (`#57 #33 #37 #38 #56`). Re-probe each: `h_mad_precheck_doc.py` was
-   edited several times this session without touching any of the three, and `#37` may
-   interact with the widened `<INLINE[^>]*>` grammar. Task #17.
+1. **#29 — the three `precheck_doc` findings**, LINEPIN first (the probe says its
+   consequence is worse than the brief described). Task #19(b)'s remaining `--help` nit
+   folds in, since it has been waiting for an edit to exactly that file.
+2. **#28 — the wire-registry cwd ambiguity.** Read the task before coding: the OBVIOUS
+   fix (resolve the default against the git root) re-creates J49, which
+   `_registry_base_path`'s docstring records as already paid for. A nested registry is a
+   supported configuration; the real defect is that WHICH registry was used is invisible.
+3. **#30 — #57 / #37 / #38 / #56**, each with its framing corrected by the probe; not to
+   be batched.
 2. **Judge the three crash kills in `state_undeclared_keys.json`** — `StateWriteError` and
    `TypeError` out of `h_mad_state_write.py`, surfaced by the new classifier over 74
    mutations. Either the exception IS the guard doing its job (real kill) or it fires before
@@ -101,8 +107,19 @@ Claimed as `hmad-tooling-findings-from-the-wsg-lane`, owner re-claimed this sess
   over-firing direction is mutated so nobody "fixes" it into a false alarm. Also closed the
   fail-OPEN default in `handoff/SKILL.md`'s oracle enumeration, which would have read a
   safety token as permission to proceed.
-- **WSG-7 three `precheck_doc` findings + five carried rows (`#57 #33 #37 #38 #56`)** —
-  status: open, UNTOUCHED. Re-probe each. Task #17.
+- **WSG-7** — SPLIT after a fresh re-probe (`c21e63e`,
+  `docs/04-report/features/wsg7-carried-claims.probe.v1.md`, 628 lines with command output
+  per verdict). **7 HOLDS, 0 FALSE, 1 CANNOT PROBE** — the opposite of what the prior
+  carried-item sweep predicted, and not a rubber stamp: #38's "same root as WSG-5" is
+  FALSE, #57 narrowed to "a weaker diff-scoped restriction exists", #37's premise
+  corrected, PINDRIFT bare-L caveated, #56 refused rather than guessed. Now tasks
+  #28 / #29 / #30.
+- **`pending-handovers` re-offered every carry-forward handoff** — CLOSED `9b3c1e4`. Two
+  rules in one skill contradicted each other; the scan now reads the header block only.
+  Two of this repo's own closeouts had been offered as unadopted briefs.
+- **The pre-push anchor block gave wrong advice on a dirty tree** — CLOSED `c5701dd`. It
+  now names the uncommitted files and says not to re-anchor against a concurrent writer's
+  half-finished edit.
 
 **From this session:**
 
