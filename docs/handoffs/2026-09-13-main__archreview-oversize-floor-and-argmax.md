@@ -7,8 +7,8 @@
 
 ## Session Summary
 
-Resumed the WSG backlog and closed **WSG-1 through WSG-4** — eleven commits,
-`54a4067..cee5aea`. A fresh-context review lane found **7 findings (2 Major, 5 Minor,
+Resumed the WSG backlog and closed **WSG-1 through WSG-6** — seventeen commits,
+`54a4067..b9f213a`. Only **WSG-7** remains of the inherited seven. A fresh-context review lane found **7 findings (2 Major, 5 Minor,
 0 Critical, all CONFIRMED)**; **three of them were defects in this session's own fixes**,
 including a test that actively defended a false boundary and a guard test that failed open.
 **Six are fixed (1, 3, 4, 5, 6, 7); only finding 2 remains open**, with its fix location
@@ -53,11 +53,11 @@ crash kills in an existing spec, now filed. Nothing is left uncommitted.
 
 ## Next Steps
 
-1. **Fix `--vh-tail 0`** — `h_mad_assemble_audit.py:343`, `entry_idx[-0] == entry_idx[0]`
-   keeps every entry while claiming omission, making the prompt LARGER. Guard belongs inside
-   `_trim_version_history` (both argparse surfaces are equally reachable; no caller passes
-   0). Same task covers the table-formatted Version History silent no-op. Task #22.
-2. **Judge the two crash kills in `state_undeclared_keys.json`** — `StateWriteError` and
+1. **WSG-7, the last inherited item** — three `precheck_doc` findings plus five carried
+   tooling backlog rows (`#57 #33 #37 #38 #56`). Re-probe each: `h_mad_precheck_doc.py` was
+   edited several times this session without touching any of the three, and `#37` may
+   interact with the widened `<INLINE[^>]*>` grammar. Task #17.
+2. **Judge the three crash kills in `state_undeclared_keys.json`** — `StateWriteError` and
    `TypeError` out of `h_mad_state_write.py`, surfaced by the new classifier over 74
    mutations. Either the exception IS the guard doing its job (real kill) or it fires before
    the guard runs (hollow kill, and that guard is unverified). The harness cannot tell; the
@@ -90,11 +90,17 @@ Claimed as `hmad-tooling-findings-from-the-wsg-lane`, owner re-claimed this sess
   was `failure-recovery.md` prescribing a wait that cannot succeed. The producer cite it got
   wrong is fixed too (`fae30f3` code+test, `cee5aea` the doc row).
 - **WSG-4** — CLOSED `66cb2e7`, by subagent, with its measurement. See the block above.
-- **WSG-5 `baseline_sha` heuristic** — status: open, UNTOUCHED this session. NOT a token
-  defect; the first-commit-is-the-impl-plan heuristic is what's wrong. Shares a root with
-  carried `#38`. Task #16.
-- **WSG-6 state file vanished, cause UNDETERMINED, did not recur** — status: open, UNTOUCHED.
-  Proposal sound regardless of cause: treat an ABSENT state file as cannot-judge. Task #16.
+- **WSG-5 `baseline_sha` heuristic** — CLOSED `3a04342`. The `candidate=` discipline was
+  already right; the fallback handed back the one sha already proven not to be 5c. Now scans
+  for the oldest impl-plan-touching commit, `reason=impl_plan_not_first preceded_by=N`, still
+  never `sha=`.
+- **WSG-6 unreadable state file** — CLOSED `b9f213a`. Found worse than filed: an EXISTING but
+  unreadable file returned `start_fresh`, so a truncated write over a populated store told a
+  second session to initialise over a live feature. Now `cannot_judge`. An ABSENT file still
+  answers `start_fresh` deliberately — that half needs evidence this script lacks, and the
+  over-firing direction is mutated so nobody "fixes" it into a false alarm. Also closed the
+  fail-OPEN default in `handoff/SKILL.md`'s oracle enumeration, which would have read a
+  safety token as permission to proceed.
 - **WSG-7 three `precheck_doc` findings + five carried rows (`#57 #33 #37 #38 #56`)** —
   status: open, UNTOUCHED. Re-probe each. Task #17.
 
