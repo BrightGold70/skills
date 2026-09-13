@@ -613,6 +613,48 @@ def _registry_base_path(registry: Path, repo: Path) -> str:
         ) from None
 
 
+def registry_notice(registry: Path, repo: Path) -> tuple[str, str | None]:
+    """`(absolute path actually used, ambiguity warning or None)` — #33.
+
+    `DEFAULT_REGISTRY` is RELATIVE and nothing resolves it, so two byte-identical
+    invocations from two directories in one repo write two different files and
+    echo the same token: `registry=.h-mad/wires.jsonl` either way. Measured on
+    HemaSuite, which currently carries two live registries that differ —
+    `/…/HemaSuite/.h-mad/wires.jsonl` and
+    `/…/HemaSuite/hematology-paper-writer/.h-mad/wires.jsonl`.
+
+    NOT fixed by resolving the default against the git root, which is the obvious
+    move and re-creates J49. `_registry_base_path`'s docstring records what that
+    cost: a sub-project `verify` compared its registry against a DIFFERENT one at
+    the root and returned `FAIL undeclared_removals=5` where the truth was
+    `PASS registered=23 verified=23`. A nested project's own registry is a
+    SUPPORTED configuration, so forcing every default onto the root would
+    consolidate two deliberately separate registries.
+
+    The defect is not that the default points at the wrong file. It is that WHICH
+    file was used is invisible. So: name the resolved path, and warn — never
+    refuse — when the relative default was used while a different registry also
+    exists at the git root. That is exactly the HemaSuite situation, and a refusal
+    would break the supported nested case.
+    """
+    used = registry.resolve()
+    if registry.is_absolute():
+        return str(used), None
+    root = _git_root(repo)
+    if root is None:
+        return str(used), None
+    at_root = (root / DEFAULT_REGISTRY).resolve()
+    if at_root == used or not at_root.exists():
+        return str(used), None
+    return str(used), (
+        f"[H-MAD] wire_registry ambiguous_default: used {used}, but a different "
+        f"registry also exists at {at_root}. A relative --registry resolves "
+        f"against the CWD, so this command writes a different file depending on "
+        f"where it is run. A nested registry is legitimate (see J49), so this is "
+        f"a warning; pass --registry <abs path> to be explicit."
+    )
+
+
 def trackedness(path: Path, repo: Path) -> tuple[bool, str | None]:
     try:
         display = path.relative_to(repo).as_posix()
@@ -723,6 +765,9 @@ def main(argv: list[str] | None = None) -> int:
     register_parser.add_argument("--callee", required=True)
     register_parser.add_argument("--pin", required=True, action="append", metavar="PIN")
     register_parser.add_argument("--feature", required=True)
+    register_parser.add_argument(
+        "--repo", type=Path, default=Path("."),
+        help="repository root, used only to detect the ambiguous-default case (#33)")
     challenge_parser = subparsers.add_parser("challenge")
     challenge_parser.add_argument("--base")
     challenge_parser.add_argument("--impl-plan", type=Path, default=Path(".h-mad/impl-plan.md"))
@@ -754,13 +799,20 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, RegistryError) as exc:
             print(f"[H-MAD] wire_registry UNREADABLE: {exc}")
             return 2
-        print(f"WIREREG: REGISTER registered={len(stored)} registry={args.registry}")
+        used, warning = registry_notice(args.registry, args.repo)
+        if warning:
+            print(warning)
+        print(f"WIREREG: REGISTER registered={len(stored)} registry={used}")
         return 0
     if args.command != "verify":
         return 0
     if not args.base:
         print("verify requires --base", file=sys.stderr)
         return 2
+    used, warning = registry_notice(args.registry, args.repo)
+    print(f"[H-MAD] wire_registry using={used}")
+    if warning:
+        print(warning)
     try:
         result = verify(
             args.registry, args.base, args.rootdir, args.repo,

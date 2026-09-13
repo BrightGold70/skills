@@ -1,0 +1,51 @@
+{
+  "_why": "#33 \u2014 `DEFAULT_REGISTRY` is RELATIVE and nothing resolves it, so two byte-identical invocations from two directories in ONE repo wrote two different files and echoed the same token (`registry=.h-mad/wires.jsonl` both times). HemaSuite carries two live registries that differ because of it.\n\nThe second mutation is the load-bearing one and it guards a REFUSAL. Resolving the default against the git root is the fix that suggests itself and it re-creates J49: `_registry_base_path`'s docstring records a sub-project verify returning `FAIL undeclared_removals=5` where the truth was `PASS registered=23 verified=23`, because it compared one project's registry against another's. A nested registry is a SUPPORTED configuration, so the write must still land beside the caller. The defect was never 'the default points at the wrong file' \u2014 it is that WHICH file was used is invisible.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_wire_registry.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-token-echoes-the-relative-default-again",
+      "_mechanism": "Restores the defect exactly: two runs that wrote different files print the same line, so no transcript can say which registry was touched.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "        print(f\"WIREREG: REGISTER registered={len(stored)} registry={used}\")",
+      "replace": "        print(f\"WIREREG: REGISTER registered={len(stored)} registry={args.registry}\")",
+      "test": "tests/test_h_mad_wire_registry.py::test_register_echoes_the_RESOLVED_path_not_the_relative_default"
+    },
+    {
+      "name": "the-default-is-relocated-to-the-git-root",
+      "_mechanism": "THE forbidden fix, and the reason this row is closed with a warning rather than a relocation. J49 exactly: a sub-project's registration lands in the ROOT registry, two intentionally separate registries are consolidated, and cross-project comparison returns invented removals. Must fail the J49 regression guard.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    register_parser.add_argument(\"--registry\", type=Path, default=Path(DEFAULT_REGISTRY))",
+      "replace": "    register_parser.add_argument(\"--registry\", type=Path, default=(_git_root(Path(\".\")) or Path(\".\")) / DEFAULT_REGISTRY)",
+      "test": "tests/test_h_mad_wire_registry.py::test_a_nested_registry_is_still_HONOURED_not_relocated_to_the_git_root"
+    },
+    {
+      "name": "the-ambiguity-is-never-warned",
+      "_mechanism": "The visibility half. Without it an operator in a nested project has no signal that a second registry exists and that their cwd chose between them.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    if at_root == used or not at_root.exists():\n        return str(used), None",
+      "replace": "    return str(used), None",
+      "test": "tests/test_h_mad_wire_registry.py::test_the_ambiguous_default_is_WARNED_when_a_root_registry_also_exists"
+    },
+    {
+      "name": "the-ambiguity-warning-fires-on-every-run",
+      "_mechanism": "The over-correction. A warning on the ordinary single-project case is noise, and noise is how a real warning stops being read \u2014 the same reason every `h_mad_precheck_doc.py` detector filed hard on first cut had to be demoted.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    if at_root == used or not at_root.exists():",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_wire_registry.py::test_no_warning_when_the_registry_used_IS_the_root_one"
+    }
+  ]
+}

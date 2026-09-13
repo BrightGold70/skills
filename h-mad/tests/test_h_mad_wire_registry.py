@@ -1560,3 +1560,92 @@ def test_load_base_refuses_a_directory_that_is_not_a_work_tree(tmp_path: Path) -
     resolved = registry._registry_base_path(registry_path, plain)
     with pytest.raises(registry.RegistryError):
         registry.load_base("HEAD", resolved, plain)
+
+
+# ---------------------------------------------------------------------------
+# #33 — which registry was used must be visible
+# ---------------------------------------------------------------------------
+#
+# `DEFAULT_REGISTRY` is RELATIVE and nothing resolves it, so two byte-identical
+# invocations from two directories in one repo write two DIFFERENT files and echo
+# the same token. Measured on HemaSuite, which carries two live registries that
+# differ. The defect is not that the default points at the wrong file — a nested
+# project's own registry is a supported configuration — it is that WHICH file was
+# used is invisible.
+
+
+def _repo_with_both_registries(tmp_path: Path) -> Path:
+    """A repo with a registry at the root AND room for one in a sub-project.
+
+    Named distinctly on purpose: `_nested_repo` already exists above and returns
+    a 3-tuple. A second definition here SHADOWED it and broke the three J49
+    tests that call it — caught by running them, not by reading the diff.
+    """
+    repo = _git_repo(tmp_path)
+    (repo / ".h-mad").mkdir(parents=True, exist_ok=True)
+    (repo / ".h-mad" / "wires.jsonl").write_text(
+        json.dumps(_entry(id="root-1", owning_feature="root-feature")) + "\n",
+        encoding="utf-8")
+    (repo / "sub").mkdir(exist_ok=True)
+    return repo
+
+
+def _register(cwd: Path, *extra: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(SCRIPTS / "h_mad_wire_registry.py"), "register",
+         "--id", "w9", "--caller", "a.b", "--callee", "c.d", "--pin", "test_x",
+         "--feature", "nested-feature", *extra],
+        cwd=cwd, capture_output=True, text=True)
+
+
+def test_register_echoes_the_RESOLVED_path_not_the_relative_default(tmp_path):
+    """Two runs must be distinguishable in a transcript.
+
+    Both used to print `registry=.h-mad/wires.jsonl` while writing different
+    files, so the recorded output could not say which one was touched.
+    """
+    repo = _repo_with_both_registries(tmp_path)
+    r = _register(repo / "sub")
+    assert "WIREREG: REGISTER" in r.stdout, r.stdout
+    written = (repo / "sub" / ".h-mad" / "wires.jsonl").resolve()
+    assert f"registry={written}" in r.stdout, r.stdout
+    assert "registry=.h-mad/wires.jsonl" not in r.stdout, r.stdout
+
+
+def test_the_ambiguous_default_is_WARNED_when_a_root_registry_also_exists(tmp_path):
+    """The case that actually costs something, and it is a warning by design."""
+    repo = _repo_with_both_registries(tmp_path)
+    r = _register(repo / "sub")
+    assert "ambiguous_default" in r.stdout, r.stdout
+    assert str((repo / ".h-mad" / "wires.jsonl").resolve()) in r.stdout, r.stdout
+    assert str((repo / "sub" / ".h-mad" / "wires.jsonl").resolve()) in r.stdout, r.stdout
+
+
+def test_a_nested_registry_is_still_HONOURED_not_relocated_to_the_git_root(tmp_path):
+    """THE J49 REGRESSION GUARD, and the reason this row is not fixed the obvious way.
+
+    Resolving the default against the git root is the fix that suggests itself.
+    `_registry_base_path`'s docstring records what it cost: a sub-project verify
+    compared its registry against a DIFFERENT one at the root and returned
+    `FAIL undeclared_removals=5` where the truth was `PASS registered=23
+    verified=23`. A nested project's registry is a SUPPORTED configuration, so
+    the write must still land beside the caller — the warning is the whole remedy.
+    """
+    repo = _repo_with_both_registries(tmp_path)
+    before = (repo / ".h-mad" / "wires.jsonl").read_text(encoding="utf-8")
+    r = _register(repo / "sub")
+    assert r.returncode == 0, (r.stdout, r.stderr)
+    nested = repo / "sub" / ".h-mad" / "wires.jsonl"
+    assert nested.is_file(), "the nested registry was not written — the default was relocated"
+    assert "nested-feature" in nested.read_text(encoding="utf-8")
+    assert (repo / ".h-mad" / "wires.jsonl").read_text(encoding="utf-8") == before, (
+        "the ROOT registry was written instead of the nested one — J49 restored")
+
+
+def test_no_warning_when_the_registry_used_IS_the_root_one(tmp_path):
+    """The control. A warning that fires on the ordinary single-project case is
+    noise, and noise is how a real warning stops being read."""
+    repo = _repo_with_both_registries(tmp_path)
+    r = _register(repo)
+    assert "ambiguous_default" not in r.stdout, r.stdout
+    assert "WIREREG: REGISTER" in r.stdout, r.stdout
