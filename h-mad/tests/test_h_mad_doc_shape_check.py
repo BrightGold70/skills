@@ -35,10 +35,18 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from h_mad_doc_shape_check import (  # noqa: E402
     PLAN_PLUS_TRIGGERS,
     REQUIRED_SECTIONS,
+    _DETECTION_RULES,
     check_document,
     detect_doc_type,
     extract_sections,
 )
+
+#: The types this checker can actually ASSIGN to a document, plus `plan-plus`.
+#: `plan-plus` is mirrored deliberately and never assigned — `check_document`
+#: reports an escalated plan as FAIL against `plan`, because naming the literal
+#: beats listing the three extra sections it demands. It is in the mirror so the
+#: escalation table stays faithful to the live validator.
+ASSIGNABLE_TYPES = {doc_type for *_, doc_type in _DETECTION_RULES} | {"plan-plus"}
 
 VALIDATOR = (
     Path.home()
@@ -242,9 +250,60 @@ class TestMirrorFidelity:
             "h_mad_doc_shape_check.py AND the inline-protocols template together"
         )
 
-    def test_no_live_document_type_is_unmirrored(self) -> None:
+    def test_every_type_this_checker_can_assign_is_mirrored(self) -> None:
+        """The mirror must cover exactly what this checker can score. Not more.
+
+        REPLACES a set-EQUALITY assertion against the live validator's whole
+        table, which over-stated the invariant it was guarding. `invariants.base.md`
+        §"Doc-template superset compliance" binds *generated phase documents whose
+        type is validated by an external validator* — it names `plan`, `design`,
+        `report` — and says nothing about mirroring every type the external
+        validator happens to know. The duty runs from h-mad's documents outward,
+        not from bkit's table inward.
+
+        The equality broke on bkit 2.1.38, which added an `analysis` type
+        (`bc86602`, the v2.1.38 release merge, is the only commit that ever
+        introduced it there). That is a bkit release note, not an h-mad defect,
+        and under equality every future bkit type fails here the same way — an
+        alert that is always somebody else's news is one people learn to ignore.
+
+        This form still catches the drift that matters, at the moment it becomes
+        actionable: add a `_DETECTION_RULES` row without a mirror entry and this
+        fails, because that is h-mad scoring a document against an empty
+        requirement list — `missing_sections` uses `REQUIRED_SECTIONS.get(t, [])`,
+        so an unmirrored assignable type PASSES everything silently.
+        """
         _require_validator()
-        assert set(_live_required_sections()) == set(REQUIRED_SECTIONS)
+        assert ASSIGNABLE_TYPES == set(REQUIRED_SECTIONS), (
+            "the mirror and the set of assignable types have diverged; a type this "
+            "checker can assign but does not mirror is scored against an empty "
+            "requirement list and passes everything"
+        )
+
+    def test_a_live_type_this_checker_never_assigns_is_NOT_mirrored(self) -> None:
+        """Guards the tempting one-line 'fix' for the failure above.
+
+        Adding `"analysis": [...]` to REQUIRED_SECTIONS turns a red set-equality
+        green while changing nothing: there is no `docs/03-analysis/` detection
+        rule, so `detect_doc_type` returns None and the entry is never consulted.
+        Worse, it invites someone to "complete" the job by adding that rule —
+        which would import bkit's PDCA analysis contract into h-mad wholesale.
+
+        Measured 2026-09-14 over this repo's 13 `docs/03-analysis/*.analysis.md`:
+        0 of 13 satisfy bkit's required set, 0 have "Strategic Alignment Check",
+        0 have "Overall Score", and only 4 have "Version History". h-mad's
+        analysis notes are a different artifact that happens to share a word.
+        """
+        _require_validator()
+        unmirrored = set(_live_required_sections()) - set(REQUIRED_SECTIONS)
+        assert unmirrored.isdisjoint(ASSIGNABLE_TYPES), (
+            f"{sorted(unmirrored & ASSIGNABLE_TYPES)} is assignable but unmirrored"
+        )
+        for doc_type in sorted(unmirrored):
+            assert detect_doc_type(f"docs/03-{doc_type}/x.{doc_type}.md") is None, (
+                f"`{doc_type}` is mirrored-by-omission yet reachable by detection — "
+                "decide whether h-mad generates this type before mirroring it"
+            )
 
     def test_escalation_literals_match_the_live_validator(self) -> None:
         _require_validator()
