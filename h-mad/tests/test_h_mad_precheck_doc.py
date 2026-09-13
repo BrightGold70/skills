@@ -789,8 +789,13 @@ _VH = "\n## Version History\n\n- v1.0 — "
 
 
 def test_a_pin_inside_the_version_history_does_not_fail_the_document(tmp_path):
-    """The assembler omits the Version History from the audit prompt, so a hard
-    finding drawn only from it fails the document on text no reviewer will see.
+    """A Version History entry is a dated record, and the detectors read the
+    prose ABOUT a change as the change itself.
+
+    NOT "text no reviewer will see" — that justification was retracted in the
+    same commit that shipped it and then survived here, which is how a reader
+    reaching this rule through a mutation spec's `test` key met the argument the
+    author had already declared false (#29 review F8).
 
     The probe's minimum case (§3): a body with no pin at all returned `FAIL
     issues=1`, driven entirely by a dated entry that was correct as history and
@@ -881,3 +886,176 @@ def test_an_L_spelled_RANGE_pin_parses_as_a_line_pin(tmp_path):
     assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
     hits = details(r.stdout, "PINDRIFT")
     assert len(hits) == 1 and "h_mad_precheck_doc.py:L1-L9" in hits[0], hits
+
+
+# --------------------------------------------------------------------------
+# #29 review — the Version History BOUNDARY. Each test below answers a finding
+# from the fresh-context review of `a8b9e4e`, which found the first cut of this
+# rule had no test that bit: three single-edit boundary mutations left the whole
+# 3251-test suite green.
+# --------------------------------------------------------------------------
+
+
+def test_a_hard_finding_on_the_line_IMMEDIATELY_above_the_heading_still_fails(tmp_path):
+    """F5 — adjacency, which nothing pinned.
+
+    The first spec's only boundary mutation replaced `in_vh` with `return True`.
+    A maximal mutation tests that a boundary EXISTS, never where it is, and the
+    body-pin test placed its pin far from the heading — so an off-by-one that
+    demoted one extra line upward survived the full suite.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\nTODO immediately above.\n"
+                "## Version History\n\n- v1.0 — done.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    hits = details(r.stdout, "PLACEHOLDER")
+    assert len(hits) == 1 and hits[0].startswith("PLACEHOLDER: L3 "), hits
+
+
+def test_an_exotic_line_break_above_the_heading_does_not_shift_the_boundary(tmp_path):
+    """F1 — `text.count("\\n")` is not `str.splitlines()`.
+
+    `splitlines()` also breaks on \\x0b \\x0c \\x1c \\x1d \\x1e \\x85 U+2028 U+2029.
+    The boundary counted `\\n` while the per-line loop numbered with
+    `splitlines()`, so each such character ABOVE the heading made the boundary
+    one line too small and demoted a real body finding. A form feed from a pasted
+    source listing, or a U+2028 from a pasted web quote, was enough — and the
+    leak scaled: three form feeds demoted three separate body lines.
+    """
+    older = _root_commit()
+    for label, ch in (("formfeed", "\x0c"), ("linesep", " "),
+                      ("nextline", "\x85"), ("vtab", "\x0b")):
+        doc = write(tmp_path, f"x-{label}.impl-plan.md",
+                    f"Anchors verified at HEAD `{older}`.\n\nA{ch}B\n"
+                    "TODO right above the heading.\n\n## Version History\n\n- v1.0 — done.\n")
+        r = run(doc, "--phase", "impl-plan", "--root", REPO)
+        assert token(r.stdout).startswith("PRECHECK: FAIL"), (label, r.stdout)
+        assert details(r.stdout, "PLACEHOLDER"), (label, r.stdout)
+
+
+def test_the_section_ENDS_at_the_next_heading(tmp_path):
+    """F2 — the section had no end, so it ran to EOF.
+
+    `## Verification`, `## Open Questions`, anything appended after the history
+    was silenced wholesale. One heading covering an unbounded tail is a far wider
+    silencer than `--allow-historical`, which names a single pin.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\nclean body\n\n"
+                "## Version History\n\n- v1.0 — done.\n\n"
+                "## Open Questions\n\nTODO decide this.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    assert details(r.stdout, "PLACEHOLDER"), r.stdout
+
+
+def test_the_section_ENDS_at_a_horizontal_rule(tmp_path):
+    """F2 — `h_mad_version_history.section_bounds` stops at `---` as well, and
+    this boundary is now that one rather than a looser private copy."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\nclean body\n\n"
+                "## Version History\n\n- v1.0 — done.\n\n---\n\nTODO after the rule.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+
+
+def test_TWO_version_history_headings_demote_NOTHING(tmp_path):
+    """F2 — ambiguity is refused, not resolved by taking the first.
+
+    `find_anchor` raises `anchor_ambiguous` for this shape and records why: for a
+    document carrying a TEMPLATE history above its live one, first-match is the
+    template. Taking the first here would silence the entire span between the
+    two — which is the document body.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n"
+                "## Version History\n\n- v0.0 — TODO in the template block.\n\n"
+                "## Task 1\n\nTODO real work.\n\n"
+                "## Version History\n\n- v1.0 — TODO in the live log.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    # All THREE stay hard. Under first-match the template block would be demoted
+    # and the live log left hard — which is both the wrong block and a silent
+    # disagreement with `h_mad_version_history`, whose refusal exists precisely
+    # because first-match picks the template. Asserting the count is what
+    # discriminates; asserting only "FAIL" cannot, because the body finding fails
+    # the document either way.
+    assert token(r.stdout) == "PRECHECK: FAIL issues=3", r.stdout
+    assert "Version History" not in r.stdout, ("something was demoted — the two "
+                                               "headings were resolved, not refused", r.stdout)
+
+
+def test_a_FENCED_version_history_heading_demotes_nothing(tmp_path):
+    """F6 — a code block read as document structure.
+
+    This repo quotes its own templates, so a ``` block containing
+    `## Version History` is ordinary content. Read as the section start it
+    silenced the whole real body below — and unlike the other boundary cases this
+    one is not author intent at all. `section_bounds` tracks fences for the
+    section's END; `find_anchor` does not for its START.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n"
+                "```\n## Version History\n```\n\nTODO real body.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    assert details(r.stdout, "PLACEHOLDER"), r.stdout
+
+
+def test_a_declaration_written_with_L_covers_a_document_written_without(tmp_path):
+    """F4 — the help shipped a symmetric claim the code honoured one way only.
+
+    `_line_digits` normalised the DOCUMENT's tail and never the OPERATOR's flag,
+    so `--allow-historical foo.py:L1` against a document writing `:1` was ignored
+    WITHOUT AN ERROR — verbatim the failure the comment three lines above it
+    claims to close. Only the mirror direction was under test.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n" + _COLON_PIN)
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "h_mad_precheck_doc.py:L1")
+    assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout
+    assert "declared historical" in r.stdout, r.stdout
+
+
+def test_a_mixed_spelling_range_parses_rather_than_vanishing(tmp_path):
+    """F10 — `L1-L9` and `L1-9` parsed; `1-L9` matched no branch at all and the
+    span was dropped with no advisory. Given the help advertises the two
+    spellings as interchangeable, the invisible one is the surprising one."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n"
+                "See `h-mad/scripts/h_mad_precheck_doc.py:1-L9` for the scanner.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    hits = details(r.stdout, "PINDRIFT")
+    assert len(hits) == 1 and "h_mad_precheck_doc.py:1-L9" in hits[0], hits
+
+
+def test_an_UNKNOWNSHA_below_the_heading_is_placed_by_the_same_line_numbering(tmp_path):
+    """F1's second half — `scan()` carried TWO line-numbering bases.
+
+    The per-line loop numbers with `splitlines()`; the provenance-sha loop
+    numbered with `text.count("\\n", ...) + 1`. That was cosmetic while the number
+    was only PRINTED, but `hard()` made it a verdict input — so with an exotic
+    break above it, a sha inside the Version History was assigned a line number
+    from the other basis and missed the demotion (or took one it should not).
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\nA\x0cB\x0cC\x0cD\n\nclean body\n\n"
+                "## Version History\n\n- v1.0 — measured at `deadbeefdeadbeefdeadbeefdeadbeefdeadbeef`.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    # THREE exotic breaks, deliberately. Each one shifts the `\n`-counted number
+    # down by one, and the sha sits two lines below the heading — so a single
+    # break leaves it inside the section and the two bases are indistinguishable.
+    # Only a shift larger than that gap pushes it out and makes the finding hard.
+    assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout
+    assert not details(r.stdout, "UNKNOWNSHA"), r.stdout
+    assert "UNKNOWNSHA" in r.stdout and "Version History" in r.stdout, r.stdout

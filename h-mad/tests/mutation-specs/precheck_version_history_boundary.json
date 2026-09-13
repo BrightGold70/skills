@@ -1,0 +1,75 @@
+{
+  "_why": "The #29 review's F5: the first cut of the Version History rule had NO test that bit. Scored at the whole suite, three single-edit boundary mutations were green \u2014 `version_history_start` returning +1 instead of +2 (the demotion starts one line ABOVE the heading, i.e. F1 shipped as a permanent off-by-one), the same returning +3, and `VH_MARKER` losing its `##` prefix (any document merely MENTIONING the words silences everything from there, and the shared literal corrupts the assembler at the same time). The spec's only boundary row replaced `in_vh` with `return True`, and a maximal mutation tests that a boundary EXISTS, never where it is.\n\nThe boundary now delegates to `h_mad_version_history` \u2014 `find_anchor` (refuses more than one heading) and `section_bounds` (stops at the next header or `---`, tracks fences) \u2014 so these mutations target that delegation rather than a private arithmetic.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_precheck_doc.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-boundary-starts-one-line-above-the-heading",
+      "_mechanism": "F1 shipped as a permanent off-by-one: the last hard finding before the history is demoted on EVERY document. This is the mutation that was green across the full suite before the adjacency test existed.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    return anchor + 1, end",
+      "replace": "    return anchor, end",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_hard_finding_on_the_line_IMMEDIATELY_above_the_heading_still_fails"
+    },
+    {
+      "name": "the-section-runs-to-end-of-file-again",
+      "_mechanism": "F2: every `##` section appended after the history \u2014 `## Open Questions`, `## Verification` \u2014 is silenced wholesale. One heading covering an unbounded tail is a far wider silencer than `--allow-historical`, which names one pin.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    _body_start, end = section_bounds(lines, anchor)",
+      "replace": "    _body_start, end = anchor + 1, len(lines)",
+      "test": "tests/test_h_mad_precheck_doc.py::test_the_section_ENDS_at_the_next_heading"
+    },
+    {
+      "name": "ambiguity-is-resolved-by-taking-the-first-heading",
+      "_mechanism": "F2: `find_anchor` refuses two headings because for a document carrying a TEMPLATE history above its live one, first-match is the template \u2014 and everything between them is the document body. Taking the first silences exactly that span.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    try:\n        anchor = find_anchor(masked)\n    except Refusal:\n        return None",
+      "replace": "    _hits = [i for i, l in enumerate(masked) if l.strip().lower() == \"## version history\"]\n    if not _hits:\n        return None\n    anchor = _hits[0]",
+      "test": "tests/test_h_mad_precheck_doc.py::test_TWO_version_history_headings_demote_NOTHING"
+    },
+    {
+      "name": "the-fence-mask-is-removed",
+      "_mechanism": "F6: a ``` block quoting `## Version History` \u2014 which this repo does to its own templates \u2014 is read as document structure and silences the whole real body below it. Unlike the other boundary cases this one is not author intent at all.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "        masked.append(\"\" if fenced else line)",
+      "replace": "        masked.append(line)",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_FENCED_version_history_heading_demotes_nothing"
+    },
+    {
+      "name": "the-sha-loop-numbers-lines-the-other-way-again",
+      "_mechanism": "F1's second half. `scan()` carried two line-numbering bases; `hard()` promoted the sha loop's from a printed number to a VERDICT INPUT. With an exotic break above it, a sha inside the history is placed by the wrong basis and escapes the demotion.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "            lineno = _line_of(text, m.start(\"sha\"))",
+      "replace": "            lineno = text.count(\"\\n\", 0, m.start(\"sha\")) + 1",
+      "test": "tests/test_h_mad_precheck_doc.py::test_an_UNKNOWNSHA_below_the_heading_is_placed_by_the_same_line_numbering"
+    },
+    {
+      "name": "the-operators-L-spelling-is-not-normalised",
+      "_mechanism": "F4: the shipped help promised the two spellings are interchangeable while normalisation was applied to the DOCUMENT's tail only. A declaration written `:L1` against a document writing `:1` is ignored WITHOUT AN ERROR \u2014 verbatim the failure the comment beside it claims to close.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "                            or historical_by(f\"{rel}:L{digits}\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_declaration_written_with_L_covers_a_document_written_without"
+    },
+    {
+      "name": "a-mixed-spelling-range-parses-as-nothing-again",
+      "_mechanism": "F10: `L1-L9` and `L1-9` parsed while `1-L9` matched no branch and the span was dropped with NO advisory \u2014 silent, and surprising given the help advertises the spellings as interchangeable.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    r\"(?::(?P<tail>L?\\d+(?:-L?\\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$\"",
+      "replace": "    r\"(?::(?P<tail>L\\d+(?:-L?\\d+)?|\\d+(?:-\\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$\"",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_mixed_spelling_range_parses_rather_than_vanishing"
+    }
+  ]
+}

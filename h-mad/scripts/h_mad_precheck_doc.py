@@ -112,7 +112,7 @@ def _spans(line: str) -> list[str]:
 # `some/path.py`, `docs/x.md`, optionally followed by `:<line>` or `:<symbol>`.
 _PATHISH = re.compile(
     r"^(?P<path>[A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)+\.[A-Za-z0-9]{1,6})"
-    r"(?::(?P<tail>L\d+(?:-L?\d+)?|\d+(?:-\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$"
+    r"(?::(?P<tail>L?\d+(?:-L?\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$"
 )
 
 # `path.py:L2` is the SAME line pin as `path.py:2`. Measured (#29, probe
@@ -258,27 +258,79 @@ def _newest_commit(root: Path, shas: list[str]) -> str | None:
     return best
 
 
-def _version_history_start(text: str) -> int | None:
-    """1-based line of the `## Version History` heading — the ASSEMBLER's anchor.
+def _line_of(text: str, pos: int) -> int:
+    """1-based line number of `pos`, on `str.splitlines()`' notion of a line.
 
-    Reaches for a sibling script deliberately: the same call
-    `h_mad_archreview_cycle._trim_vh` makes, for the reason recorded there. A
-    second copy of the marker literal here is exactly how the assembler and this
-    precheck come to disagree about where the history starts, and that
-    disagreement IS the defect (#29 §3), not a risk of it.
+    `text.count("\n", 0, pos) + 1` was used here and is NOT the same function.
+    `splitlines()` also breaks on \x0b \x0c \x1c \x1d \x1e \x85 U+2028 U+2029,
+    so a document carrying any of those — a form feed from a pasted listing, a
+    U+2028 from a pasted web quote — numbered its lines one way in the per-line
+    loop and another way here. That was cosmetic while the number was only
+    PRINTED; `hard()` made it a verdict input (#29 review F1).
 
-    An import failure returns `None`, which loses the demotion and restores the
-    pre-#29 behaviour. That direction is deliberate: the demotion NARROWS what
-    this gate fails on, so losing it fails CLOSED — a document that should have
-    passed gets a finding an operator can read, never a document that should
-    have failed getting a silent PASS.
+    The sentinel forces a trailing empty segment to count: `"a\n"` must be line
+    2, and `"a\n".splitlines()` is `['a']`.
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    return len((text[:pos] + "\x00").splitlines())
+
+
+def _version_history_bounds(lines: list[str]) -> tuple[int, int] | None:
+    """1-based inclusive `(first, last)` of the Version History section, or None.
+
+    Delegates to `h_mad_version_history`, which OWNS this notion and is far more
+    careful than either of the two loose ones this used to straddle (#29 review
+    F2/F3): its `ANCHOR` is case-insensitive and full-line-anchored, `find_anchor`
+    REFUSES when there is more than one heading, and `section_bounds` stops at the
+    next header or `---` rule and tracks fences.
+
+    The first version of this shared the ASSEMBLER's marker instead, on the stated
+    grounds that the two agreeing was the point. That justification was false and
+    the review falsified it four ways: `_trim_version_history` omits the ENTRIES,
+    not everything from the heading on; for a table-shaped history — the shape its
+    own comment calls the real one — it omits nothing at all; `--vh-tail` defaults
+    to a strict no-op, so by default the assembler makes no decision here; and
+    there was never one anchor, because this stricter third one already existed.
+
+    Returns None — no demotion, every finding stays hard — when the section is
+    missing OR ambiguous. Both are fail-closed, and ambiguity especially: a
+    document with a template history above a live one would otherwise have the
+    span between them silenced.
+    """
+    here = str(Path(__file__).resolve().parent)
+    # Guarded and de-duplicated. `scan()` is an in-process API, so an
+    # unconditional insert grew `sys.path` by one entry PER DOCUMENT and left
+    # this directory at position 0 for every later import in the process,
+    # shadowing any module with a colliding name (#29 review F7).
+    if here not in sys.path:
+        sys.path.insert(0, here)
     try:
-        from h_mad_assemble_audit import version_history_start
+        from h_mad_version_history import Refusal, find_anchor, section_bounds
     except ImportError:
         return None
-    return version_history_start(text)
+    # A ``` fence can CONTAIN a `## Version History` line — a template being
+    # quoted, which this repo does to its own templates. `section_bounds` tracks
+    # fences for the section's END; `find_anchor` does not for its START, so a
+    # quoted heading near the top silenced the whole real body beneath it
+    # (#29 review F6). Masked here rather than upstream because
+    # `h_mad_version_history` is a live document mutator with its own contract;
+    # the asymmetry in it is filed rather than changed under this row.
+    masked, fenced = [], False
+    for line in lines:
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            masked.append("")
+            continue
+        masked.append("" if fenced else line)
+    try:
+        anchor = find_anchor(masked)
+    except Refusal:
+        return None
+    _body_start, end = section_bounds(lines, anchor)
+    # `anchor` is a 0-based index; `end` is a 0-based half-open bound. The section
+    # for demotion purposes is the heading line plus its body, so 1-based the
+    # first line is `anchor + 1` and the last is `end` — which collapses to the
+    # heading alone when the body is empty.
+    return anchor + 1, end
 
 
 def _line_count(p: Path) -> int | None:
@@ -368,10 +420,10 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
     # about an author granting THEMSELVES a silencer; here the precheck follows a
     # decision the ASSEMBLER already made about the same section, and the two
     # agreeing is the whole point.
-    vh_start = _version_history_start(text)
+    vh_bounds = _version_history_bounds(lines)
 
     def in_vh(lineno: int) -> bool:
-        return vh_start is not None and lineno >= vh_start
+        return vh_bounds is not None and vh_bounds[0] <= lineno <= vh_bounds[1]
 
     findings: list[tuple[str, int, str]] = []
     advisories: list[tuple[str, int, str]] = []
@@ -528,6 +580,7 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
                     # above already names.
                     if (historical_by(f"{rel}:{tail}")
                             or historical_by(f"{rel}:{digits}")
+                            or historical_by(f"{rel}:L{digits}")
                             or historical_by(rel)):
                         allowed.append(f"PINDRIFT {rel}:{tail} L{lineno} (declared historical)")
                     else:
@@ -586,7 +639,7 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
     if head:
         for m in _SHA_CLAIM.finditer(text):
             sha = m.group("sha")
-            lineno = text.count("\n", 0, m.start("sha")) + 1
+            lineno = _line_of(text, m.start("sha"))
             if allowed_by(sha):
                 allowed.append(f"STALESHA {sha} L{lineno}")
                 continue
