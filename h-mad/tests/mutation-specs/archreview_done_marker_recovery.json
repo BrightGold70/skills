@@ -30,6 +30,14 @@
       "find": "        \"--no-done-marker\", dest=\"require_marker\", action=\"store_false\",",
       "replace": "        \"--no-done-marker\", dest=\"require_marker\", action=\"store_false\", default=False,",
       "test": "tests/test_h_mad_report_wait.py"
+    },
+    {
+      "name": "the-flag-is-attached-to-the-wrong-leg",
+      "_mechanism": "The review's case C, which the FIRST version of this guard test passed. Keeping `--no-done-marker` on the line while attaching it to a different leg leaves a 6a-prime row prescribing a bare wait -- and a line-level co-occurrence check cannot tell the difference, because a very long table cell is exactly where a flag and the prescription it belongs to drift apart while still sharing a physical line.",
+      "file": "references/failure-recovery.md",
+      "find": "**For 6a-prime, that wait needs `--no-done-marker` and the others must NOT have it.**",
+      "replace": "**For the 5b leg, that wait needs `--no-done-marker`.**",
+      "test": "tests/test_h_mad_archreview_cycle.py::test_the_6a_prime_recovery_step_does_not_prescribe_a_wait_that_cannot_succeed"
     }
   ]
 }
