@@ -452,7 +452,24 @@ def crash_reports(output: str) -> list[tuple[str, list[str]]]:
 
         footer = _PYTEST_FOOTER.match(line)
         if footer:
-            reports.append((footer.group(2), [Path(footer.group(1)).name]))
+            # `AssertionError` in a FOOTER is never a crash — it is the shape of a
+            # guard's own `assert` firing, which is exactly what a real kill looks
+            # like. Counting it inverted the classifier whenever the mutated file
+            # WAS a test file: pytest's footer then names that file, `crash_kill`
+            # attributes by basename, and every ordinary assertion failure was
+            # reported as a crash. Measured over all 92 specs: of 25 crash kills,
+            # 13 came from the four specs that mutate `tests/`, and NO spec without
+            # a test-targeting mutation reported one — `doc_block_exec_wire.json`
+            # read 8 of 8, and all eight were verified real by reading the message
+            # each one fails on ("must call dbe.extract exactly once", …).
+            #
+            # A genuine crash still lands here under its own name — a direct-import
+            # `NameError` footer reads `guard.py:9: NameError` — and a child's
+            # traceback embedded in an assertion message is recognised by the
+            # frames path above, whose terminal line is the real exception. So this
+            # narrows exactly one spelling and loses no detection.
+            if footer.group(2) != "AssertionError":
+                reports.append((footer.group(2), [Path(footer.group(1)).name]))
             frames = []
             continue
 

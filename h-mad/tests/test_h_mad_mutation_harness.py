@@ -2565,3 +2565,70 @@ def test_frames_do_not_leak_from_a_truncated_report_into_the_next() -> None:
     )
     assert h_mad_mutation_harness.crash_kill(two, "guard.py") == "NameError"
     assert h_mad_mutation_harness.crash_kill(two, "other.py") is None
+
+
+# ---------------------------------------------------------------------------
+# A guard's own assertion is not a crash (#25)
+# ---------------------------------------------------------------------------
+
+PYTEST_ASSERTION_FOOTER = '''
+    def test_gate_block_resolves_through_doc_block_exec():
+>       assert calls == 1, "_gate_block must call dbe.extract exactly once"
+E       AssertionError: _gate_block must call dbe.extract exactly once
+E       assert 0 == 1
+
+tests/test_h_mad_collect_report_docs.py:118: AssertionError
+'''
+
+PYTEST_TYPEERROR_FOOTER = '''
+    def test_something():
+>       helper(1, 2)
+E       TypeError: helper() takes 1 positional argument but 2 were given
+
+tests/test_h_mad_collect_report_docs.py:44: TypeError
+'''
+
+
+def test_an_assertion_footer_is_NOT_a_crash_even_in_the_mutated_file() -> None:
+    """The classifier over-reported in exactly one shape, and it was systematic.
+
+    `crash_kill` attributes by basename and `_PYTEST_FOOTER` reads pytest's
+    ordinary failure footer — `<file>.py:N: AssertionError` — as a crash report
+    for that file. So whenever the mutation targeted a TEST file, every guard
+    assertion firing was counted as a crash, by construction rather than by
+    chance.
+
+    Measured over all 92 specs before the fix: 25 crash kills, of which 12 came
+    from the three specs whose mutations target `tests/`
+    (`doc_block_exec_wire` 8 of 8, `state_replay_fixture` 2 of 2,
+    `tail_signature_pass` 2 of 49) and vanish under it. All eight of
+    `doc_block_exec_wire`'s were verified real by applying each mutation and
+    reading the message it fails on — "must call dbe.extract exactly once",
+    "must never execute its selected block" — every one the guard's own
+    assertion.
+
+    The docstring of `crash_reports` documents the OPPOSITE risk, crashes it
+    cannot see, and says `crash_kills=0` means "none found, never none there".
+    This direction — crashes it invents — was undocumented, and it inflated a
+    whole backlog row's premise.
+    """
+    assert h_mad_mutation_harness.crash_kill(
+        PYTEST_ASSERTION_FOOTER, "test_h_mad_collect_report_docs.py") is None
+
+
+def test_a_REAL_crash_in_the_mutated_test_file_is_still_classified() -> None:
+    """The over-correction. Narrowing to "no AssertionError footers" would be
+    wrong if it hid a genuine crash raised inside a mutated test file — a
+    `TypeError` there is still a crash, and `docsections.json` is a live case:
+    6 of its 8 mutations target `tests/` and its one crash kill SURVIVES the
+    narrowing, so "targets tests/" predicts exposure, not artifact."""
+    assert h_mad_mutation_harness.crash_kill(
+        PYTEST_TYPEERROR_FOOTER, "test_h_mad_collect_report_docs.py") == "TypeError"
+
+
+def test_the_direct_import_footer_shape_is_unaffected() -> None:
+    """The control that keeps the narrowing honest: the footer branch exists for
+    direct-import failures, which carry no `Traceback` header, and those still
+    classify under their own exception name."""
+    assert h_mad_mutation_harness.crash_kill(
+        DIRECT_IMPORT_NAMEERROR, "guard.py") == "NameError"

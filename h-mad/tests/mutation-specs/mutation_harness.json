@@ -309,6 +309,22 @@
       "find": "        try:\n            relaxed = json.loads(_strip_jsonc(Path(path).read_text(encoding=\"utf-8\")))\n        except (OSError, json.JSONDecodeError):\n            return \"unclassifiable\", f\"not valid JSON: {exc}\"\n",
       "replace": "        if True:\n        try:\n            relaxed = json.loads(_strip_jsonc(Path(path).read_text(encoding=\"utf-8\")))\n        except (OSError, json.JSONDecodeError):\n            return \"unclassifiable\", f\"not valid JSON: {exc}\"\n",
       "failure_test": "test_jsonc_config_is_not_a_spec"
+    },
+    {
+      "name": "an-assertion-footer-counts-as-a-crash-again",
+      "_mechanism": "The defect, restored. Every guard assertion firing in a MUTATED TEST FILE is reported as a crash, because pytest's footer names that file and `crash_kill` attributes by basename. Measured corpus-wide: it manufactured 12 of 25 crash kills, and all eight in `doc_block_exec_wire` were verified real by reading the message each fails on. A row of the backlog was sized on that inflated number.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            if footer.group(2) != \"AssertionError\":\n                reports.append((footer.group(2), [Path(footer.group(1)).name]))",
+      "replace": "            reports.append((footer.group(2), [Path(footer.group(1)).name]))",
+      "test": "tests/test_h_mad_mutation_harness.py::test_an_assertion_footer_is_NOT_a_crash_even_in_the_mutated_file"
+    },
+    {
+      "name": "the-footer-branch-stops-classifying-anything",
+      "_mechanism": "The over-correction. Dropping the footer branch entirely \u2014 rather than one exception spelling \u2014 blinds the classifier to direct-import failures, which carry no `Traceback` header and are attributed ONLY by that footer. A genuine crash in a mutated test file would go unreported too, which `docsections.json` shows is a live shape.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            if footer.group(2) != \"AssertionError\":\n                reports.append((footer.group(2), [Path(footer.group(1)).name]))",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_REAL_crash_in_the_mutated_test_file_is_still_classified"
     }
   ]
 }
