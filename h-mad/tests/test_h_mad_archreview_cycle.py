@@ -367,11 +367,22 @@ def test_the_6a_prime_recovery_step_does_not_prescribe_a_wait_that_cannot_succee
     rows = [ln for ln in doc.splitlines()
             if "6a-prime" in ln and "report-wait" in ln]
     assert rows, "the 6a-prime recovery row no longer mentions report-wait — re-check this"
+
+    # The PRESCRIPTION, not the bare flag token. An earlier version of this test
+    # asked only whether `--no-done-marker` appeared somewhere on the same physical
+    # line, and it FAILED OPEN: a review added a row naming 6a-prime with a bare
+    # `report-wait "$RP"` whose cell mentioned `--no-done-marker` about the *5b* leg,
+    # and the test passed. Line-level co-occurrence is not clause attribution, and a
+    # very long table cell is exactly where a flag and the prescription it belongs to
+    # drift apart while still sharing a line. Requiring the sentence closes that.
+    CLAUSE = "For 6a-prime, that wait needs `--no-done-marker`"
     for row in rows:
-        assert "--no-done-marker" in row, (
-            "a 6a-prime recovery row prescribing `report-wait` without "
-            "`--no-done-marker` sends the operator into a wait for a marker this "
-            "channel never writes:\n" + row[:300])
+        assert CLAUSE in row, (
+            "a 6a-prime recovery row prescribes `report-wait` without carrying the "
+            f"clause {CLAUSE!r} that attaches the flag TO 6a-prime. Mentioning the "
+            "flag about another leg in the same cell is not the same prescription, "
+            "and an operator following this row waits for a marker this channel "
+            "never writes:\n" + row[:300])
 
 
 def test_the_audit_path_still_ASKS_for_the_done_marker():
@@ -756,6 +767,45 @@ class TestTheStagedPromptMustBeDeliverable:
         assert "- v1 first" not in body
         assert "3 of 4 Version History entries omitted" in body
         assert "git show" in body, "the omitted entries must stay reachable"
+
+    def test_the_omission_note_names_the_path_THE_REPO_knows(self, tmp_path):
+        """`git show <sha>:<ref>` resolves from the repo root, so the ref must too.
+
+        This value was arbitrarily wrong with the whole suite green: a review replaced
+        it with a literal "COMPLETELY/WRONG/PATH.md" and 3202 tests still passed. It
+        was computed against `Path.cwd()` while its own comment claimed the repo root
+        — and those coincide only when the process starts at the root, which `…/h-mad`
+        (where this suite actually runs) is not.
+
+        Hermetic: a throwaway git repo in tmp_path, so the assertion is about the
+        REPO root and not about wherever pytest happened to be invoked. Under the
+        cwd-based version the design is not below cwd at all, `relative_to` raises,
+        and the ref collapses to a bare basename — which is the failure.
+        """
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True,
+                       capture_output=True)
+        nested = tmp_path / "docs" / "02-design" / "features"
+        nested.mkdir(parents=True)
+        design = nested / "thing.design.md"
+        design.write_text(
+            "body\n\n## Version History\n- v1 a\n- v2 b\n- v3 c\n", encoding="utf-8")
+
+        prompt = tmp_path / "p.txt"
+        result = _run("stage", "--feature", "feat",
+                      "--template", str(self._tpl(tmp_path, with_report_slot=False)),
+                      "--base", "aaa1111", "--head", "bbb2222", "--design", str(design),
+                      "--diff-files", "a.py", "--summary", "s",
+                      "--prompt", str(prompt), "--vh-tail", "1")
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        body = prompt.read_text(encoding="utf-8")
+        assert "git show <sha>:docs/02-design/features/thing.design.md" in body, (
+            "the omission note must name the path the repo knows, or the reviewer has "
+            "no way back to the omitted entries. Got:\n"
+            + "\n".join(ln for ln in body.splitlines() if "git show" in ln))
+        assert "git show <sha>:thing.design.md" not in body, (
+            "the ref collapsed to a bare basename — it is being resolved against the "
+            "process's cwd rather than the repository root")
 
     def test_vh_tail_omitted_is_a_strict_no_op(self, tmp_path):
         """Existing callers and their prompt hashes must be unaffected: the default

@@ -110,6 +110,22 @@
       "find": "create the marker",
       "replace": "mention in your reply",
       "test": "tests/test_h_mad_archreview_cycle.py::test_the_audit_path_still_ASKS_for_the_done_marker"
+    },
+    {
+      "name": "the-ref-is-resolved-against-cwd-again",
+      "_mechanism": "The state a review found: the ref was computed against Path.cwd() while the comment claimed the repo root. Those coincide only when the process starts at the root, and `\u2026/h-mad` -- where this suite runs -- is not. From there the ref collapsed to a bare basename that `git show <sha>:<ref>` cannot resolve, so the reviewer loses the documented way back to the omitted Version History entries.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    ref = _repo_relative(design)",
+      "replace": "    try:\n        ref = str(design.resolve().relative_to(Path.cwd().resolve()))\n    except ValueError:\n        ref = design.name",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_the_omission_note_names_the_path_THE_REPO_knows"
+    },
+    {
+      "name": "the-repo-root-lookup-always-gives-up",
+      "_mechanism": "The fallback swallowing the normal case. Returning the basename unconditionally is indistinguishable from a file genuinely outside any work tree, and it is what the whole value was before: arbitrarily wrong with the suite green. A review proved it unmutated by substituting a literal wrong path and watching 3202 tests pass.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    root = out.stdout.strip() if out.returncode == 0 else \"\"",
+      "replace": "    root = \"\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_the_omission_note_names_the_path_THE_REPO_knows"
     }
   ]
 }

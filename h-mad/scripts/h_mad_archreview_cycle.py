@@ -219,6 +219,28 @@ def _trim_vh(text: str, keep: int | None, *, ref: str) -> str:
     return _trim_version_history(text, keep, ref=ref)
 
 
+def _repo_relative(path: Path) -> str:
+    """`path` as the repository names it, for `git show <sha>:<ref>`.
+
+    Falls back to the basename only when the file is genuinely outside any work
+    tree -- not, as the previous version did, whenever the process was started
+    somewhere other than the root. A wrong ref costs the reviewer the documented
+    way back to the omitted Version History entries, and nothing else notices.
+    """
+    try:
+        out = subprocess.run(["git", "-C", str(path.parent), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True)
+    except OSError:
+        return path.name
+    root = out.stdout.strip() if out.returncode == 0 else ""
+    if not root:
+        return path.name
+    try:
+        return str(path.resolve().relative_to(Path(root).resolve()))
+    except ValueError:
+        return path.name
+
+
 def _extract_assessment(text: str) -> str | None:
     """The LAST `ASSESSMENT:` whose value is one of the allowed words.
 
@@ -456,12 +478,19 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
 
     # Before substitution, so the size gate below measures what the reviewer will
     # actually receive. `ref` is what the omission note tells the reviewer to run
-    # `git show <sha>:<ref>` on, so it must be the design's path as the repo knows
-    # it, not a temp path -- relative to the repo root when it is inside one.
-    try:
-        ref = str(design.resolve().relative_to(Path.cwd().resolve()))
-    except ValueError:
-        ref = design.name
+    # `git show <sha>:<ref>` on, so it must be the design's path as the REPO knows
+    # it.
+    #
+    # Against the repo root, NOT `Path.cwd()`. An earlier version used cwd while its
+    # comment claimed "relative to the repo root", and those coincide only when the
+    # process happens to be started at the root -- `…/h-mad` is where this repo's
+    # own tests and mutation specs are run from, and from there the ref collapsed to
+    # a bare basename that `git show <sha>:<ref>` cannot resolve. The sibling this
+    # mirrors already does it correctly (`h_mad_assemble_audit.doc_text` resolves
+    # against `project_root`); `stage()` has no `--project-root`, which is why cwd
+    # was substituted, and `git rev-parse --show-toplevel` fixes it without adding
+    # a flag.
+    ref = _repo_relative(design)
     design_text = _trim_vh(design_text, vh_tail, ref=ref)
 
     # J31: --summary took a literal string while --design read a file, so an
