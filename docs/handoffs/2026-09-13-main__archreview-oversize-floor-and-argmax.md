@@ -87,8 +87,9 @@ Claimed as `hmad-tooling-findings-from-the-wsg-lane`, owner re-claimed this sess
   to it). Battery 6/6.
 - **WSG-2** — CLOSED `6fd9c20`, then CORRECTED by `86b6149` and `fae30f3` after review.
 - **WSG-3** — CLOSED `d235837`. The missing `.done` was correct and expected; the real defect
-  was `failure-recovery.md` prescribing a wait that cannot succeed. One cite still owed (#24B).
-- **WSG-4** — in flight, uncommitted. See the block above.
+  was `failure-recovery.md` prescribing a wait that cannot succeed. The producer cite it got
+  wrong is fixed too (`fae30f3` code+test, `cee5aea` the doc row).
+- **WSG-4** — CLOSED `66cb2e7`, by subagent, with its measurement. See the block above.
 - **WSG-5 `baseline_sha` heuristic** — status: open, UNTOUCHED this session. NOT a token
   defect; the first-commit-is-the-impl-plan heuristic is what's wrong. Shares a root with
   carried `#38`. Task #16.
@@ -104,13 +105,15 @@ Claimed as `hmad-tooling-findings-from-the-wsg-lane`, owner re-claimed this sess
   repo root, and the value was UNMUTATED — the reviewer substituted a literal wrong path and
   3202 tests passed. Finding 7: my own guard test failed OPEN on a row attaching
   `--no-done-marker` to a different leg. Both now carry mutations.
-- **The review never dispatched a live `exec agy`** — status: open. Task #26.
-- **Finding 2 `--vh-tail 0` + table-format no-op** — status: open, CONFIRMED, not fixed.
-  Deferred because `h_mad_assemble_audit.py` is shared and was held. Task #22.
+- **Finding 2 `--vh-tail 0` + table-format no-op** — status: open, CONFIRMED, not fixed. The
+  only review finding still open; its fix location is already determined
+  (`_trim_version_history`, not the two argparse surfaces). Task #22.
 - **Concurrent-writer anchor hazard** — status: open, documented. Task #23.
+- **Two crash kills in `state_undeclared_keys.json`** — status: open, need an author's
+  judgement on whether each exception IS the property violation. Task #25.
 - **The review never dispatched a live `exec agy`** — finding 1 is proven at the syscall with
-  an agy-shaped argv, not against the agy binary. One real oversize dispatch is the last
-  mile and is genuinely owed.
+  an agy-shaped argv and the real environment, not against the agy binary. One real oversize
+  dispatch is the last mile and is genuinely owed. Task #26.
 
 **Carried forward unchanged from the 2026-09-13 predecessor:**
 
