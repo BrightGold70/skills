@@ -70,6 +70,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -118,25 +119,70 @@ def _evidence_counts(log_text: str) -> dict:
     return scan(log_text)
 
 
-def _size_gate(chars: int) -> "tuple[bool, int, int]":
-    """Delegate the deliverable-size limit to the assembler that owns it.
+# 6a-prime is an agy-only channel, and agy receives the prompt as ONE argv
+# element: `hmad-dispatch.sh:2944` does `args+=(--print "$prompt")` after reading
+# the bounded prompt file with `$(cat …)`. So the ceiling here is `ARG_MAX`, which
+# is NOT the character limit codex enforces on stdin. Two differences, and each
+# one alone makes a char-count gate wrong in the permissive direction:
+#
+#   * ARG_MAX is a BYTE budget. A prompt of N characters costs more than N bytes
+#     the moment it contains anything non-ASCII, and the design documents this
+#     channel inlines measure 1.004-1.010 bytes/char in this repo.
+#   * The kernel shares that one budget between argv AND envp. The environment is
+#     not ours and not fixed: measured 9,586 bytes in this session's shell, and it
+#     can be larger in the shell that later runs the dispatch.
+#
+# Measured on this machine (`getconf ARG_MAX` = 1048576, env 9,586 B): an argv
+# payload of 1,048,512 bytes -- exactly what a `chars + 64 > 1048576` gate blesses
+# -- fails with `OSError 7 Argument list too long`, while 1,037,859 B succeeds. So
+# the char gate opened a ~10 KB window of prompts it called deliverable and no
+# surface accepts, which is the very symptom the halt exists to remove.
+#
+# Derived at RUNTIME, not as a second hardcoded constant: the first one drifted
+# precisely because it was a number rather than a measurement, and the env size is
+# the operator's, not ours.
+ENV_GROWTH_HEADROOM_BYTES = 8 * 1024
+# `agy --dangerously-skip-permissions [--model X] [--effort X] [--sandbox]
+# [--print-timeout Ns] --output-format stream-json --print` plus the binary path,
+# plus the per-entry pointer the kernel charges for every argv and envp slot.
+ARGV_SIBLING_RESERVE_BYTES = 4 * 1024
 
-    Imported rather than re-derived, on the same rule as `_evidence_counts`: a
-    second copy of "how large is too large" is a second thing to drift, and the
-    figure it would drift from was MEASURED on two real gating prompts -- codex
-    `exec` answers `input_too_large max_chars=1048576`, agy's `--print` arg is
-    bounded at the same number, and the dispatch wrapper's boundary marker counts
-    toward it. `h_mad_assemble_audit` already holds all three facts and reserves
-    the overhead; this channel had none of them.
 
-    Returns `(oversize, limit, headroom)` so the caller can name the figures in
-    the token rather than printing a bare refusal.
-    """
+def _argv_budget() -> "tuple[int, int]":
+    """`(budget, reserve)` in BYTES for a prompt delivered as one argv element."""
     sys.path.insert(0, str(SCRIPTS))
-    from h_mad_assemble_audit import (DISPATCH_OVERHEAD_CHARS, MAX_PROMPT_CHARS,
-                                      prompt_oversize)
+    from h_mad_assemble_audit import DISPATCH_OVERHEAD_CHARS
 
-    return prompt_oversize(chars), MAX_PROMPT_CHARS, DISPATCH_OVERHEAD_CHARS
+    try:
+        arg_max = os.sysconf("SC_ARG_MAX")
+    except (ValueError, OSError, AttributeError):
+        # Only as a floor, and deliberately the POSIX-documented macOS/Linux
+        # figure rather than something smaller: a wrong guess here is a refusal,
+        # not a silent oversize, because the reserve is subtracted from it.
+        arg_max = 1_048_576
+    env_bytes = sum(len(k) + len(v) + 2 for k, v in os.environ.items())
+    reserve = (env_bytes + ENV_GROWTH_HEADROOM_BYTES
+               + ARGV_SIBLING_RESERVE_BYTES + DISPATCH_OVERHEAD_CHARS)
+    return arg_max - reserve, reserve
+
+
+def _size_gate(body: str) -> "tuple[bool, int, int, int]":
+    """`(oversize, bytes, budget, reserve)` for THIS channel's delivery surface.
+
+    Takes the text rather than a length so the caller cannot hand it the wrong
+    unit -- which is exactly how the first version of this gate was wrong.
+
+    Deliberately NOT `h_mad_assemble_audit.prompt_oversize`. That function is
+    correct for the surface it guards (codex `exec` counts CHARACTERS on stdin and
+    answers `input_too_large max_chars=1048576`) and reusing it here looked like
+    the right kind of reuse -- one measured figure, one owner. It was not: the two
+    channels have different limits in different units, and sharing the constant
+    silently imported codex's units into an argv path. The assembler's check stays
+    unchanged for the assembler's surface.
+    """
+    budget, reserve = _argv_budget()
+    size = len(body.encode("utf-8"))
+    return size > budget, size, budget, reserve
 
 
 def _size_notes(size: int, text: str) -> list[str]:
@@ -513,11 +559,13 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
     # audit path's several, which is how a ~690 KB 6a-prime prompt was staged, said
     # STAGED, and was then refused or silently truncated by the surface -- read as
     # "6a-prime failed" rather than "the prompt was never delivered".
-    oversize, limit, headroom = _size_gate(len(body))
+    oversize, size, budget, reserve = _size_gate(body)
     if oversize:
-        _emit(f"OVERSIZE chars={len(body)} limit={limit} headroom={headroom}")
-        print("  - no known surface accepts a prompt this large: codex exec refuses it "
-              "(input_too_large) and agy's arg path is capped at the same figure. "
+        _emit(f"OVERSIZE bytes={size} budget={budget} reserve={reserve}")
+        print("  - this prompt cannot be delivered: `exec agy` passes it as a single "
+              "argv element, so it must fit ARG_MAX minus the environment the kernel "
+              "shares that budget with. Measured on this machine, an argv payload at "
+              "the old character limit failed with `Argument list too long`. "
               "Re-run with --vh-tail N to inline only the last N Version History "
               "entries of the design; the omitted entries stay reachable via "
               "`git show <sha>:<doc>`.")

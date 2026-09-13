@@ -461,19 +461,39 @@ class TestACleanVerdictMustRestOnMoreThanTheDeliveryContract:
 class TestTheStagedPromptMustBeDeliverable:
     """This channel had ZERO size guards while the audit path had several.
 
-    `h_mad_assemble_audit` halts on `oversize` and offers `--vh-tail`; `stage()`
-    measured nothing, so a ~690 KB 6a-prime prompt was written, said STAGED, and was
-    then refused by the surface -- which reads as "6a-prime failed" rather than "the
-    prompt was never delivered". The figures are the assembler's, imported rather
-    than restated, so the two cannot drift apart.
+    A ~690 KB 6a-prime prompt was written, said STAGED, and was then refused by the
+    surface -- which reads as "6a-prime failed" rather than "the prompt was never
+    delivered".
+
+    The FIRST version of this gate was wrong in the permissive direction and these
+    tests defended the wrong boundary. It reused `h_mad_assemble_audit.prompt_oversize`,
+    which counts CHARACTERS against codex's stdin limit. But `exec agy` passes the
+    prompt as one argv element (`hmad-dispatch.sh:2944`), so the real ceiling is
+    ARG_MAX: a BYTE budget the kernel shares with the environment. Measured: an argv
+    payload at the old character limit fails `Argument list too long`. Reuse of a
+    measured constant is not automatically right -- it imported the other surface's
+    UNITS along with its number.
+
+    So the boundary test below does not restate a constant. It EXECUTES: it asks the
+    gate what it blesses and then proves that payload actually survives as argv.
     """
 
-    # The assembler owns these. Read them from it for the same reason the code does:
-    # a hardcoded 1048576 here would keep passing after the measured figure moved.
-    def _limits(self):
-        sys.path.insert(0, str(SCRIPTS))
-        from h_mad_assemble_audit import DISPATCH_OVERHEAD_CHARS, MAX_PROMPT_CHARS
-        return MAX_PROMPT_CHARS, DISPATCH_OVERHEAD_CHARS
+    def _budget(self, tmp_path):
+        """The budget as the STAGING PROCESS computes it, read off its own token.
+
+        Not recomputed in this process, and that is not fastidiousness: the budget
+        is a function of `os.environ`, and the test process's environment is not
+        byte-identical to the child's (measured: a 25-byte disagreement, enough to
+        put a boundary payload on the wrong side of the line). Asking the child what
+        it blessed is the only figure that means anything about the child.
+        """
+        probe, _ = self._stage(tmp_path, "x" * 2_000_000, prompt_name="budget.txt")
+        assert probe.returncode == 2, probe.stdout[:200]
+        token = [ln for ln in probe.stdout.splitlines()
+                 if ln.startswith("ARCHREVIEW: OVERSIZE")]
+        assert token, probe.stdout[:300]
+        fields = dict(f.split("=", 1) for f in token[0].split() if "=" in f)
+        return int(fields["budget"]), int(fields["reserve"])
 
     def _tpl(self, tmp_path, *, with_report_slot: bool):
         t = tmp_path / ("tpl_r.md" if with_report_slot else "tpl.md")
@@ -502,44 +522,64 @@ class TestTheStagedPromptMustBeDeliverable:
             argv += ["--vh-tail", str(vh_tail)]
         return _run(*argv), prompt
 
-    def _pad_to(self, tmp_path, target_chars, *, report_file=None, slot=None):
-        """A design whose staged prompt is exactly `target_chars` long.
+    def _pad_to_bytes(self, tmp_path, target_bytes, *, report_file=None, slot=None):
+        """A design whose staged prompt is exactly `target_bytes` long.
 
-        Measured by staging once, not computed from the template -- the substitution
+        Measured by staging once, not computed from the template: the substitution
         and the contract both change the length, and a guessed figure would test the
         guess rather than the gate.
         """
         probe, prompt = self._stage(tmp_path, "x", report_file=report_file, slot=slot,
                                     prompt_name="probe.txt")
         assert probe.returncode == 0, probe.stdout + probe.stderr
-        base_len = len(prompt.read_text(encoding="utf-8"))
-        return "x" * (1 + target_chars - base_len)
+        base = len(prompt.read_bytes())
+        return "x" * (1 + target_bytes - base)
 
     def test_a_prompt_no_surface_accepts_is_refused_and_not_written(self, tmp_path):
         """Both halves matter. The refusal is the point; the ABSENT file is what makes
         it safe -- an oversize prompt left on disk is one that gets dispatched anyway
         by the next copy-pasted command line."""
-        limit, headroom = self._limits()
-        design = self._pad_to(tmp_path, limit - headroom + 1)
+        budget, reserve = self._budget(tmp_path)
+        design = self._pad_to_bytes(tmp_path, budget + 1)
         result, prompt = self._stage(tmp_path, design, prompt_name="over.txt")
 
         assert result.returncode == 2, result.stdout[:400]
         assert "ARCHREVIEW: OVERSIZE" in result.stdout
-        assert f"limit={limit}" in result.stdout
-        assert f"headroom={headroom}" in result.stdout
+        assert f"budget={budget}" in result.stdout
+        assert f"reserve={reserve}" in result.stdout
         assert not prompt.exists(), "an oversize prompt must not be left on disk"
         assert "--vh-tail" in result.stdout, "a halt must name its escape hatch"
 
-    def test_the_largest_deliverable_prompt_still_stages(self, tmp_path):
-        """One character under the refusal. Without this the gate could be an
-        off-by-one that refuses every real prompt and the suite would not notice."""
-        limit, headroom = self._limits()
-        design = self._pad_to(tmp_path, limit - headroom)
+    def test_the_largest_blessed_prompt_IS_ACTUALLY_DELIVERABLE(self, tmp_path):
+        """The boundary, proven by execution rather than asserted against a constant.
+
+        This is the test that was wrong before: it asserted STAGED at the old
+        character limit, and an argv payload of exactly that size fails with
+        `Argument list too long`. A test that restates the gate's own arithmetic
+        cannot catch a gate whose arithmetic is in the wrong unit -- so this one
+        takes what the gate blesses and hands it to the kernel.
+        """
+        budget, _ = self._budget(tmp_path)
+        design = self._pad_to_bytes(tmp_path, budget)
         result, prompt = self._stage(tmp_path, design, prompt_name="edge.txt")
 
         assert result.returncode == 0, result.stdout[:400]
         assert "ARCHREVIEW: STAGED" in result.stdout
-        assert len(prompt.read_text(encoding="utf-8")) == limit - headroom
+        body = prompt.read_bytes()
+        assert len(body) == budget
+
+        # The claim under test: this payload is deliverable as ONE argv element,
+        # which is how `exec agy` passes it. `/usr/bin/true` ignores the argument;
+        # only the kernel's argv+envp accounting is being measured.
+        try:
+            subprocess.run(["/usr/bin/true", body.decode("utf-8")],
+                           capture_output=True)
+        except OSError as exc:
+            raise AssertionError(
+                f"the gate blessed {len(body)} bytes and the kernel refused it as "
+                f"argv: {exc}. The budget is too permissive — this is the defect "
+                f"the char-count version of this gate had."
+            ) from exc
 
     def test_the_gate_measures_the_body_the_contract_prepend_produced(self, tmp_path):
         """The discriminating case, and the reason the gate sits after the prepend.
@@ -556,7 +596,7 @@ class TestTheStagedPromptMustBeDeliverable:
         discounts it SURVIVED. Same template, same flags, both times; only the design
         length moves.
         """
-        limit, headroom = self._limits()
+        budget, _ = self._budget(tmp_path)
         report = "/tmp/r.md"
 
         # Measure this exact staging's contract length rather than restating it: the
@@ -566,21 +606,76 @@ class TestTheStagedPromptMustBeDeliverable:
                                           prompt_name="probe_c.txt")
         assert probe.returncode == 0, probe.stdout + probe.stderr
         text = probe_prompt.read_text(encoding="utf-8")
-        contract_len = text.index("feature feat\n")
+        contract_len = len(text[:text.index("feature feat\n")].encode("utf-8"))
         assert contract_len > 0, "no contract was prepended; this test would be vacuous"
-        pre_contract_len = len(text) - contract_len
+        pre_contract = len(probe_prompt.read_bytes()) - contract_len
 
         # A design that makes the PRE-contract body exactly the largest deliverable
         # size. With the contract it is over; without it, it is not.
-        design = "x" * (limit - headroom - pre_contract_len + 1)
+        design = "x" * (budget - pre_contract + 1)
         result, prompt = self._stage(tmp_path, design, report_file=report,
                                      prompt_name="contract.txt")
 
         assert result.returncode == 2, (
             "the gate passed a body that is only deliverable without its own contract; "
-            f"contract={contract_len} chars\n" + result.stdout[:400])
+            f"contract={contract_len} bytes\n" + result.stdout[:400])
         assert "ARCHREVIEW: OVERSIZE" in result.stdout
         assert not prompt.exists()
+
+    def test_a_multibyte_design_is_measured_in_BYTES_not_characters(self, tmp_path):
+        """The unit, isolated. Every other fixture here is ASCII, where chars == bytes
+        and a character-counting gate looks identical to a byte-counting one.
+
+        The design documents this channel actually inlines are not ASCII — the ones in
+        this repo measure 1.004-1.010 bytes/char — so the window a char gate opens is
+        only reachable with multi-byte content. A tidy ASCII suite cannot see it, which
+        is why the first version shipped.
+        """
+        budget, _ = self._budget(tmp_path)
+
+        # Three bytes per character, so a body that is comfortably under `budget`
+        # CHARACTERS is far over it in bytes.
+        probe, probe_prompt = self._stage(tmp_path, "\u4e00", prompt_name="mb_probe.txt")
+        assert probe.returncode == 0, probe.stdout + probe.stderr
+        # Everything the staged prompt holds EXCEPT the design. The probe's own
+        # one-character design is 3 bytes and must come back off — leaving it in put
+        # the first version of this fixture 3 bytes under the line, and it staged.
+        prefix = len(probe_prompt.read_bytes()) - len("\u4e00".encode("utf-8"))
+
+        chars = -(-(budget + 3 - prefix) // 3)    # ceil: land just OVER in bytes
+        design = "\u4e00" * chars
+        predicted = prefix + 3 * chars
+        assert len(design) < budget, "the fixture must be UNDER budget in characters"
+        assert predicted > budget, (
+            f"the fixture must be OVER budget in bytes ({predicted} vs {budget}), "
+            "or it discriminates nothing")
+
+        result, prompt = self._stage(tmp_path, design, prompt_name="mb.txt")
+
+        assert result.returncode == 2, (
+            "a design under the budget in characters but over it in bytes was staged; "
+            "the gate is counting the wrong unit\n" + result.stdout[:300])
+        assert "ARCHREVIEW: OVERSIZE" in result.stdout
+        assert not prompt.exists()
+
+    def test_the_budget_is_derived_at_runtime_and_leaves_room_for_the_environment(self):
+        """A second hardcoded constant would drift exactly as the first one did.
+
+        The budget must fall below ARG_MAX by at least the size of the current
+        environment, because the kernel charges argv and envp against one budget.
+        """
+        import os
+        sys.path.insert(0, str(SCRIPTS))
+        import h_mad_archreview_cycle as arc
+        budget, reserve = arc._argv_budget()
+        arg_max = os.sysconf("SC_ARG_MAX")
+        env_bytes = sum(len(k) + len(v) + 2 for k, v in os.environ.items())
+
+        assert budget + reserve == arg_max, (budget, reserve, arg_max)
+        assert reserve > env_bytes, (
+            f"reserve {reserve} does not even cover this environment's {env_bytes} "
+            "bytes, so the budget is not an argv budget")
+        assert budget < arg_max - env_bytes
 
     def test_vh_tail_trims_the_inlined_design(self, tmp_path):
         """The remedy OVERSIZE prescribes has to exist in the channel that halts.
