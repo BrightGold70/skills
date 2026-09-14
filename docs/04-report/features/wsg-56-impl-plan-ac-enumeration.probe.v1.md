@@ -125,7 +125,7 @@ output of that structure, not a category anyone supplied.
 | Task 13 | 6 | `AC-5.8` | **DIFFERENT** | AC-5.8's predicate is *reachability* — "ingest is **reached** from **every** call site". The row's predicate is the AST **shape of one keyword argument**. The AC's text never mentions `strict`. |
 | Task 14 | 24 | `AC-5.8` | **DIFFERENT** | Different module, different function, different callee, and **no site enumeration at all**. |
 | Task 4 | 3 | `AC-9.1` | **GUARD** | It does not assert AC-9.1, but its absence would let a predicate that rejects *everything* satisfy AC-9.1's own tests. |
-| Task 15 | 9 | `AC-10.1` | *(pending)* | — |
+| Task 15 | 9 | `AC-10.1` | **DIFFERENT** | AC-10.1's subject is `RunReport`'s two fields being populated on every run; the row's subject is the *resolver's* unbound-read return value. |
 
 **Both AC-5.8 rows are decided by counterexamples in BOTH directions**, which is what rules out
 `NARROWER` as well as `SAME`:
@@ -154,9 +154,17 @@ that rejects everything passes tests 1 and 2."* Its `ac_9_1` label is defensible
 the test exists to keep AC-9.1's other tests non-vacuous; stripping the prefix would orphan it from
 the criterion it protects.
 
-**Consequence for the count: the measured total moves from twelve to fourteen**, and the two that
+**Consequence for the count: the measured total moves from twelve to fifteen**, and the three that
 move are *not* the three the census left unnamed — those remain unnamed. The count is reported,
 not reconciled to any prior figure, on the same instruction that produced twelve rather than eleven.
+
+**One caution about `GUARD`, raised by an unrelated reader in the same round.** A separate pass over
+the wider corpus classified **Task 15 row 2** as a `GUARD` against this same `AC-10.1`, on the
+ground that a collector↔emitter correspondence can hold while both fields are `None`. That is a
+different row from row 9 and does not touch its verdict — but it means `AC-10.1` now carries one
+row that asserts a different property (row 9) *and* one that guards it (row 2). A count that
+recorded only "two `ac_10_1` rows look wrong" would collapse two different situations, and only one
+of them is a defect.
 
 ## Two adjacent rows, already FIXED — not part of the eleven
 
