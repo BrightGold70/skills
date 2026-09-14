@@ -3236,3 +3236,130 @@ class TestTheBusyCLI:
 def test_TreeBusy_carries_the_holder() -> None:
     exc = TreeBusy({"pid": 4242})
     assert exc.holder["pid"] == 4242
+
+
+# --- the tree must not MOVE under the run ----------------------------------
+#
+# The lock serialises other mutation runs. It cannot stop a sibling session
+# committing into the same clone, and that is not hypothetical: `4915206` landed
+# in the middle of a full-suite run here on 2026-09-14, moving the count by +10
+# for reasons that were not the run's. A verdict measured across a commit is a
+# statement about a tree that no longer exists — and every number in it still
+# looks plausible, which is why it needs a verdict of its own rather than a note.
+
+from h_mad_mutation_harness import _git_head  # noqa: E402
+
+
+def _repo(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"
+    root.mkdir(parents=True)
+    for cmd in (["git", "init", "-q"], ["git", "config", "user.email", "t@t"],
+                ["git", "config", "user.name", "t"]):
+        subprocess.run(cmd, cwd=root, check=True, capture_output=True)
+    return root
+
+
+def _commit(root: Path, name: str) -> None:
+    (root / name).write_text("x\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", name], cwd=root, check=True,
+                   capture_output=True)
+
+
+class TestGitHead:
+    def test_it_reads_a_real_head(self, tmp_path: Path) -> None:
+        root = _repo(tmp_path)
+        _commit(root, "a")
+        head = _git_head(root)
+        assert head and len(head) == 40
+
+    def test_no_repo_is_None_and_None_is_not_a_change(self, tmp_path: Path) -> None:
+        """Treating an unavailable read as a change would refuse every run in a
+        non-repo — which is every tmp-path spec in this suite."""
+        assert _git_head(tmp_path) is None
+
+
+class TestTheTreeMustNotMoveUnderTheRun:
+    def test_a_commit_mid_run_invalidates_the_verdict(self, tmp_path: Path) -> None:
+        root = _repo(tmp_path)
+        (root / "guard.py").write_text(GUARD, encoding="utf-8")
+        _commit(root, "seed")
+        spec_path = root / "mutations.json"
+        # The spec's own command commits, which is how a sibling session's write
+        # is simulated without a second process: the harness runs this between
+        # its two HEAD reads.
+        spec_path.write_text(json.dumps({
+            "root": str(root),
+            "command": [sys.executable, "-c",
+                        "import subprocess,sys,pathlib;"
+                        f"p=pathlib.Path({str(root)!r});"
+                        "(p/'intruder.txt').write_text('x');"
+                        "subprocess.run(['git','add','-A'],cwd=p,capture_output=True);"
+                        "subprocess.run(['git','commit','-qm','sibling'],cwd=p,capture_output=True);"
+                        "sys.exit(0 if 'THRESHOLD = 5' in open(p/'guard.py').read() else 1)"],
+            "mutations": [_kills_the_guard()],
+        }), encoding="utf-8")
+        result = run_spec(spec_path)
+        assert result["verdict"] == "TREE_MOVED", result
+        assert result["head_before"] != result["head_after"]
+
+    def test_the_inner_verdict_is_KEPT_not_discarded(self, tmp_path: Path) -> None:
+        """It is still the most informative thing anyone has about those
+        mutations; throwing it away makes the honest verdict cost a re-run."""
+        root = _repo(tmp_path)
+        (root / "guard.py").write_text(GUARD, encoding="utf-8")
+        _commit(root, "seed")
+        spec_path = root / "mutations.json"
+        spec_path.write_text(json.dumps({
+            "root": str(root),
+            "command": [sys.executable, "-c",
+                        "import subprocess,sys,pathlib;"
+                        f"p=pathlib.Path({str(root)!r});"
+                        "(p/'intruder.txt').write_text('x');"
+                        "subprocess.run(['git','add','-A'],cwd=p,capture_output=True);"
+                        "subprocess.run(['git','commit','-qm','sibling'],cwd=p,capture_output=True);"
+                        "sys.exit(0 if 'THRESHOLD = 5' in open(p/'guard.py').read() else 1)"],
+            "mutations": [_kills_the_guard()],
+        }), encoding="utf-8")
+        result = run_spec(spec_path)
+        assert "inner" in result and result["inner"]["verdict"] in {
+            "ALL_CAUGHT", "SURVIVED", "REFUSED", "BASELINE_NOT_GREEN"}
+
+    def test_a_settled_tree_is_NOT_reported_as_moved(self, tmp_path: Path) -> None:
+        """The false-positive direction: it must not fire on an ordinary run."""
+        root = _repo(tmp_path)
+        (root / "guard.py").write_text(GUARD, encoding="utf-8")
+        _commit(root, "seed")
+        spec_path = root / "mutations.json"
+        spec_path.write_text(json.dumps({
+            "root": str(root),
+            "command": [sys.executable, "-c", CHECK.replace(
+                "open('guard.py')", f"open({str(root / 'guard.py')!r})")],
+            "mutations": [_kills_the_guard()],
+        }), encoding="utf-8")
+        assert run_spec(spec_path)["verdict"] != "TREE_MOVED"
+
+    def test_a_non_repo_run_is_never_reported_as_moved(self, tmp_path: Path) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+        assert run_spec(spec)["verdict"] == "ALL_CAUGHT"
+
+    def test_the_cli_prints_the_token_and_exits_two(self, tmp_path: Path) -> None:
+        root = _repo(tmp_path)
+        (root / "guard.py").write_text(GUARD, encoding="utf-8")
+        _commit(root, "seed")
+        spec_path = root / "mutations.json"
+        spec_path.write_text(json.dumps({
+            "root": str(root),
+            "command": [sys.executable, "-c",
+                        "import subprocess,sys,pathlib;"
+                        f"p=pathlib.Path({str(root)!r});"
+                        "(p/'intruder.txt').write_text('x');"
+                        "subprocess.run(['git','add','-A'],cwd=p,capture_output=True);"
+                        "subprocess.run(['git','commit','-qm','sibling'],cwd=p,capture_output=True);"
+                        "sys.exit(0)"],
+            "mutations": [_kills_the_guard()],
+        }), encoding="utf-8")
+        proc = _run_cli(spec_path)
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "MUTATION: TREE_MOVED before=" in proc.stdout, proc.stdout
+        assert "no longer exists" in proc.stdout

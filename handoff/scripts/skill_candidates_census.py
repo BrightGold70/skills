@@ -143,8 +143,18 @@ def main(argv=None):
     `sys.argv` or redirecting stdout first.
     """
     paths = list(sys.argv[1:] if argv is None else argv)
+    # `--list-open` names the rows behind the OPEN number. Nothing listed them,
+    # so every session that wanted to reconcile the backlog re-derived the set
+    # with an ad-hoc grep -- and this file has already been measured wrong twice
+    # that way (a wrapped bold name counted by neither the reader nor the
+    # coverage check, leaving a reassuring 207/207). It is a FLAG and add-only:
+    # the default output is byte-identical, because the summary line is parsed
+    # by other consumers.
+    list_open = "--list-open" in paths
+    paths = [a for a in paths if a != "--list-open"]
     if not paths:
-        print("usage: skill_candidates_census.py <skill-candidates.md> [more...]", file=sys.stderr)
+        print("usage: skill_candidates_census.py [--list-open] <skill-candidates.md> [more...]",
+              file=sys.stderr)
         return 1
 
     grand=collections.Counter(); bumps_all=[]; coverage=[]
@@ -191,6 +201,7 @@ def main(argv=None):
             continue
 
         c=collections.Counter(); bumps=[]; declined=collections.Counter(); unclosed=[]
+        open_rows=[]
         for ln,body in rows(f):
             name,tail=row_name(body)                    # matched ACROSS a wrap
             if name is None:
@@ -209,7 +220,13 @@ def main(argv=None):
                     else: declined["not-useful"]+=1
                 continue
             m=CAND.search(blob)
-            c[m.group(1).lower() if m else "<none>"]+=1
+            verdict=m.group(1).lower() if m else "<none>"
+            c[verdict]+=1
+            # Same row object the counter just consumed, so the listing and the
+            # number can never disagree -- which a second parser would eventually
+            # manage, and silently.
+            if verdict in OPEN:
+                open_rows.append((ln, verdict, name))
         n=sum(c.values()); op=sum(v for k,v in c.items() if k in OPEN)
         print(f"{tag:8s} candidates={n:4d} OPEN(yes+maybe)={op:4d}  "
               + "  ".join(f"{k}={v}" for k,v in sorted(c.items(),key=lambda x:-x[1]))
@@ -221,6 +238,13 @@ def main(argv=None):
                   f"useful-not-codable={declined['useful-not-codable']}  "
                   f"not-useful={declined['not-useful']}  "
                   f"unqualified={declined['unqualified']}")
+        if list_open:
+            print(f"  OPEN rows in {tag} ({len(open_rows)}):")
+            for ln, verdict, name in open_rows:
+                print(f"    {tag}:{ln:<5} {verdict:5} {name[:104]}")
+            assert len(open_rows) == op, (
+                f"listing shows {len(open_rows)} open rows but the count says {op} — "
+                "the two disagree, which is the defect this flag exists to avoid")
         grand.update(c); bumps_all+=bumps
         # Same coverage question for a candidate store: `- **` lines the reader did
         # not turn into a row are lines it did not understand.

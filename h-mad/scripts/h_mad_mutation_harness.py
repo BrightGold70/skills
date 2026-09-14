@@ -20,6 +20,10 @@ Verdicts, printed as a canonical token:
     MUTATION: RESTORE_FAILED                                           exit 2
     MUTATION: UNREADABLE                                               exit 2
     MUTATION: BUSY holder=8412 age=37s spec=/…/foo.json                exit 2
+    MUTATION: TREE_MOVED before=a1b2c3d4e after=f9e8d7c6b inner=ALL_CAUGHT  exit 2
+      (HEAD moved while the run was measuring — a sibling session committed into
+       the same clone, so the mutations were applied to one tree and scored
+       against another. The inner verdict is KEPT and printed.)
       (another run holds this working tree; nothing was applied and nothing
        was measured. `--check-anchors` takes NO lock and keeps working, which
        is why the pre-push hook is unaffected by a run in flight.)
@@ -899,6 +903,24 @@ def _process_alive(pid: int) -> bool:
     return True
 
 
+def _git_head(root: Path) -> str | None:
+    """The commit this tree is on, or None when there is no repo to ask.
+
+    None is NOT "unchanged": every caller compares two reads and only acts when
+    BOTH are present and differ, so a tree with no git (every tmp-path spec in the
+    suite) is never reported as having moved. The inverse — treating an
+    unavailable read as a change — would refuse every run in a non-repo.
+    """
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.strip() or None if r.returncode == 0 else None
+
+
 def _lock_path(root: Path) -> Path:
     """One lock per WORKING TREE, not per spec root.
 
@@ -1483,7 +1505,28 @@ def run_spec(spec_path: Path) -> dict:
     root = _resolve_root(spec, spec_path)
     try:
         with tree_lock(root, spec_path):
-            return _run_spec_holding_the_tree(spec_path, spec=spec, root=root)
+            # The lock serialises OTHER MUTATION RUNS. It cannot stop a sibling
+            # session committing into the same clone, and that is not
+            # hypothetical: `4915206` landed in the middle of a full-suite run
+            # here on 2026-09-14, moving the count by +10 for reasons that were
+            # not the run's. A verdict measured across a commit is a statement
+            # about a tree that no longer exists.
+            before = _git_head(root)
+            result = _run_spec_holding_the_tree(spec_path, spec=spec, root=root)
+            after = _git_head(root)
+            # BOTH present AND different. An unavailable read is not a change —
+            # otherwise every tmp-path spec in the suite would refuse.
+            if before and after and before != after:
+                return {
+                    "verdict": "TREE_MOVED",
+                    "head_before": before,
+                    "head_after": after,
+                    # Kept, not discarded: it is still the most informative thing
+                    # anyone has about those mutations, and throwing it away would
+                    # make the honest verdict cost a whole re-run to look at.
+                    "inner": result,
+                }
+            return result
     except TreeBusy as busy:
         return {"verdict": "BUSY", "holder": busy.holder}
 
@@ -1533,6 +1576,26 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     verdict = result["verdict"]
+    if verdict == "TREE_MOVED":
+        inner = result.get("inner") or {}
+        print(
+            f"MUTATION: TREE_MOVED before={result['head_before'][:9]} "
+            f"after={result['head_after'][:9]} inner={inner.get('verdict', 'unknown')}"
+        )
+        print(
+            "  the working tree was COMMITTED INTO while this run was measuring it. "
+            "Another session in the same clone moved HEAD, so the mutations were "
+            "applied to one tree and scored against another, and the inner verdict "
+            "above is a statement about a tree that no longer exists."
+        )
+        print(
+            "  Nothing here is a finding about any guard. Re-run on a settled tree; "
+            "if the other session is still working, wait for it rather than "
+            "re-running into the same race "
+            "(halt `step5e:mutation_unverified:<module>`)."
+        )
+        print(f"[H-MAD] {label} mutation TREE_MOVED")
+        return 2
     if verdict == "BUSY":
         holder = result["holder"]
         pid = holder.get("pid")

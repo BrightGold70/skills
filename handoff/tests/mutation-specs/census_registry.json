@@ -171,7 +171,7 @@
       "name": "empty-argv-returns-clean",
       "_mechanism": "The false-clean direction, on the NEW in-process surface. The CLI's refusal was already pinned; main([]) returning 0 would let a caller read 'no stores' as 'nothing open' -- the same TOTAL candidates=0 shape this whole file guards against.",
       "file": "scripts/skill_candidates_census.py",
-      "find": "        print(\"usage: skill_candidates_census.py <skill-candidates.md> [more...]\", file=sys.stderr)\n        return 1",
+      "find": "        print(\"usage: skill_candidates_census.py [--list-open] <skill-candidates.md> [more...]\",\n              file=sys.stderr)\n        return 1",
       "replace": "        return 0",
       "test": "tests/test_skill_candidates_census.py::test_no_arguments_still_refuses_after_the_guard"
     },

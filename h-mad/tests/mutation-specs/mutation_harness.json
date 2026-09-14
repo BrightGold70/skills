@@ -402,9 +402,17 @@
       "name": "run-spec-stops-taking-the-lock",
       "_mechanism": "The feature removed wholesale while every other test stays green — there is no assertion anywhere else that a run is serialised, which is precisely why the hazard survived this long unnoticed.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "find": "        with tree_lock(root, spec_path):\n            return _run_spec_holding_the_tree(spec_path, spec=spec, root=root)",
-      "replace": "        return _run_spec_holding_the_tree(spec_path, spec=spec, root=root)",
+      "find": "        with tree_lock(root, spec_path):\n            # The lock serialises OTHER MUTATION RUNS.",
+      "replace": "        if True:\n            # The lock serialises OTHER MUTATION RUNS.",
       "test": "tests/test_h_mad_mutation_harness.py::TestHoldingAndReleasing::test_a_second_run_is_refused_while_it_is_held"
+    },
+    {
+      "name": "a-tree-that-moved-mid-run-is-scored-anyway",
+      "_mechanism": "The verdict becomes a statement about a tree that no longer exists. Another session committing into the same clone mid-run means the mutations were applied to one tree and scored against another -- measured here on 2026-09-14, when `4915206` landed inside a full-suite run. Every count still looks plausible, which is the whole problem.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            if before and after and before != after:",
+      "replace": "            if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::TestTheTreeMustNotMoveUnderTheRun::test_a_commit_mid_run_invalidates_the_verdict"
     }
   ]
 }

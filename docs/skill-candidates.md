@@ -2114,6 +2114,18 @@ Rows re-read for relevance to this session's work (the crash-kill/`--sweep` pair
   events put stdout into the session so it is read rather than logged. The CLASS half of this row
   stays open — nothing generalises the guard to the next producer/consumer cap — but "it cannot be
   automated" is no longer part of why.
+  — **LANDED 2026-09-14.** The run now reads `HEAD` on both sides of itself and returns
+  `MUTATION: TREE_MOVED before=<sha> after=<sha> inner=<verdict>` (exit 2) when it moved. This is the
+  INTER-session half that `a tree lock around the mutation harness` deliberately left open: the lock
+  serialises other mutation runs and cannot stop a sibling session committing into the same clone.
+  Both halves measured here on 2026-09-14 — `4915206` landed inside a full-suite run. The inner
+  verdict is KEPT and printed rather than discarded (it is still the most informative thing anyone
+  has about those mutations, and throwing it away makes the honest verdict cost a whole re-run), and
+  an unavailable `HEAD` read is explicitly NOT a change — both reads must be present AND differ, or
+  every non-repo spec in the suite would refuse. 1 mutation, spec 50/50 ALL_CAUGHT. The row's other
+  prescription — attribute a suite-count delta with `git log <last-known>..HEAD` before trusting it —
+  remains a habit rather than a tool, and is what this session used to reconcile 3769 + 24 mine + 3
+  theirs = 3796.
 - **re-grep a decoded constant from the binary on every test run, and SKIP when it is unreadable**: second use of this shape in one day (plugin hooks validator, then the memory-index caps), and both times the alternative was a transcribed number that nothing would ever re-check. The discipline has three parts and the third is the one that gets dropped: match on the VALUE in its declaring context rather than the minified name (names are per-build), assert the rendering matches how the product SPELLS it (`25000` must read as `24.4KB` or the tool and the warning disagree about one number), and make an unreadable binary a SKIP rather than a pass — recurrence: 2 — candidate: yes — mechanical: a tiny helper that resolves the running binary (`which` → `readlink -f`), caches the blob per session, and offers `assert_constant(pattern, expected)` with the skip built in.
   — **LANDED 2026-09-14 as `h-mad/tests/claudebinary.py`.** All three parts of the ask, including
   the third: `claude_binary()` resolves the running image (`which` then `readlink -f` — the shim is

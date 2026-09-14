@@ -570,3 +570,73 @@ def test_coverage_DISAGREES_when_a_bold_name_never_closes(tmp_path: Path) -> Non
     parsed, rowish = re.search(r"parsed=(\d+) row-shaped=(\d+)", out).groups()
     assert int(parsed) < int(rowish), out
     assert "ROW-SHAPED LINES NOT PARSED" in out, out
+
+
+# --- `--list-open` ---------------------------------------------------------
+#
+# Nothing named the rows behind the OPEN number, so every session that wanted to
+# reconcile the backlog re-derived the set with an ad-hoc grep — and this file has
+# been measured wrong that way twice (a row whose bolded name WRAPPED was counted
+# by neither the reader nor the coverage check, leaving a reassuring 207/207). The
+# listing therefore comes from the SAME row objects the counter consumes, and the
+# script asserts the two agree rather than trusting that they do.
+
+def run_flag(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True, text=True, check=False,
+    )
+
+
+def _store(tmp_path: Path) -> Path:
+    p = tmp_path / "skill-candidates.md"
+    p.write_text(
+        "# Skill Candidates\n\n"
+        "- **an open one**: body — recurrence: 1 — candidate: yes\n"
+        "- **a maybe one**: body — recurrence: 1 — candidate: maybe\n"
+        "- **a landed one**: body — candidate: yes\n"
+        "  — **LANDED 2026-09-14** somewhere\n"
+        "- **a declined one**: body — candidate: yes\n"
+        "  — **DECLINED 2026-09-14 (triage: not useful)** because\n"
+        "- **a no one**: body — recurrence: 1 — candidate: no\n",
+        encoding="utf-8",
+    )
+    return p
+
+
+class TestListOpen:
+    def test_it_names_every_open_row_and_no_other(self, tmp_path: Path) -> None:
+        out = run_flag("--list-open", str(_store(tmp_path))).stdout
+        assert "an open one" in out
+        assert "a maybe one" in out
+        assert "a landed one" not in out
+        assert "a declined one" not in out
+        assert "a no one" not in out
+
+    def test_the_listing_and_the_count_cannot_disagree(self, tmp_path: Path) -> None:
+        """The script asserts this itself; this pins that it still does."""
+        r = run_flag("--list-open", str(_store(tmp_path)))
+        assert r.returncode == 0, r.stderr
+        assert "OPEN rows in" in r.stdout
+        listed = [l for l in r.stdout.splitlines() if l.startswith("    ") and ":" in l]
+        assert len(listed) == 2, r.stdout
+
+    def test_each_row_carries_its_line_number_and_verdict(self, tmp_path: Path) -> None:
+        """A backlog row you cannot jump to is one nobody reconciles."""
+        out = run_flag("--list-open", str(_store(tmp_path))).stdout
+        assert ":3" in out and "yes" in out
+        assert ":4" in out and "maybe" in out
+
+    def test_the_default_output_is_unchanged(self, tmp_path: Path) -> None:
+        """The summary line is parsed by other consumers; this is add-only."""
+        store = _store(tmp_path)
+        plain = run_flag(str(store)).stdout
+        assert "OPEN rows in" not in plain
+        flagged = run_flag("--list-open", str(store)).stdout
+        for line in plain.splitlines():
+            assert line in flagged, f"default line vanished under the flag: {line!r}"
+
+    def test_the_flag_is_not_mistaken_for_a_path(self, tmp_path: Path) -> None:
+        r = run_flag("--list-open")
+        assert r.returncode == 1
+        assert "usage:" in r.stderr and "--list-open" in r.stderr
