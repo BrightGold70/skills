@@ -365,6 +365,46 @@
       "find": "                        result[\"mechanism\"][mutation[\"name\"]] = SELF_MATCHING_NOTE",
       "replace": "                        pass",
       "test": "tests/test_h_mad_mutation_harness.py::TestASurvivorIsToldWhy::test_the_mechanism_carries_the_diagnosis"
+    },
+    {
+      "name": "EPERM-reads-as-dead",
+      "_mechanism": "The single line the lock turns on. `kill(pid,0)` raises PermissionError for a process owned by ANOTHER USER, which proves it exists; folding that in with ESRCH makes a live holder's lock stale and steals it. Same defect this repo already recorded for `is_pid_alive` (#40), and the one direction where being wrong corrupts the run you interrupted rather than your own.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    except PermissionError:\n        return True",
+      "replace": "    except PermissionError:\n        return False",
+      "test": "tests/test_h_mad_mutation_harness.py::TestProcessLiveness::test_EPERM_means_ALIVE"
+    },
+    {
+      "name": "an-unparseable-lock-is-stolen",
+      "_mechanism": "The error path 'simplified' into a fail-open: an unreadable lock reported as a holder that is merely DEAD, so it is taken as stale. `I could not read it` collapsing into `nobody holds it` -- blocking on a corrupt lock is recoverable by a human in one `rm` and the message names the path, while stealing one is not recoverable at all, because the run it corrupts returns a PLAUSIBLE verdict. NOTE: the first draft of this row mutated `holder.get(\"unparseable\") or` out of the acquire condition and SURVIVED -- correctly, because `pid: None` already fails `isinstance(pid, int)` and blocks on its own. That was an EQUIVALENT MUTANT, not a hole: the two clauses are belt-and-braces and only the `_read_holder` contract below is load-bearing. Retargeted rather than left in the battery, per this repo's own `a mutation that can never fire reads as a passing battery`.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        return {\"pid\": None, \"spec\": None, \"started\": None, \"unparseable\": True}",
+      "replace": "        return {\"pid\": -1}",
+      "test": "tests/test_h_mad_mutation_harness.py::TestStaleAndCorruptLocks::test_an_UNPARSEABLE_lock_is_never_stolen"
+    },
+    {
+      "name": "the-lock-is-keyed-on-the-spec-root",
+      "_mechanism": "Two specs rooted at different sub-directories of one repo write the SAME tree, so a root-keyed lock permits exactly the collision the lock exists to stop — while looking like a working lock in every single-spec test.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            return Path(top.stdout.strip()) / \".h-mad\" / \"mutation.lock\"",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_mutation_harness.py::TestTheLockIsPerWorkingTree::test_two_roots_in_one_repo_share_one_lock"
+    },
+    {
+      "name": "the-lock-is-never-released",
+      "_mechanism": "One crashed-looking run wedges the tree for every later run in the same process lifetime. The first run still reports ALL_CAUGHT, so the damage shows up only in the NEXT invocation — the shape that gets blamed on the next change rather than on this one.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            if _read_holder(path).get(\"pid\") == os.getpid():\n                path.unlink()",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHoldingAndReleasing::test_the_lock_is_released_after_a_run"
+    },
+    {
+      "name": "run-spec-stops-taking-the-lock",
+      "_mechanism": "The feature removed wholesale while every other test stays green — there is no assertion anywhere else that a run is serialised, which is precisely why the hazard survived this long unnoticed.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        with tree_lock(root, spec_path):\n            return _run_spec_holding_the_tree(spec_path, spec=spec, root=root)",
+      "replace": "        return _run_spec_holding_the_tree(spec_path, spec=spec, root=root)",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHoldingAndReleasing::test_a_second_run_is_refused_while_it_is_held"
     }
   ]
 }

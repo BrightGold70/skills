@@ -3054,3 +3054,185 @@ class TestCalibratedAgainstTheCommittedCorpus:
                 f"{spec_name}::{mutation_name} — a self-matching mutation must "
                 "not affect the spec's verdict"
             )
+
+
+# --- the tree lock ---------------------------------------------------------
+#
+# A mutation run rewrites files in place, so a second run over the same tree
+# measures a TORN tree and returns a verdict about that. The dangerous part is
+# that the verdict is PLAUSIBLE: REFUSED for an anchor that is fine is exactly
+# what real drift produces, and nothing at the token separates them.
+
+import json as _json
+import os as _os
+
+import pytest  # noqa: E402
+
+from h_mad_mutation_harness import (  # noqa: E402
+    TreeBusy,
+    _lock_path,
+    _process_alive,
+    tree_lock,
+)
+
+
+def _dead_pid() -> int:
+    """A pid that is definitely not running, proven rather than assumed."""
+    for candidate in range(999_999, 900_000, -1):
+        if not _process_alive(candidate):
+            return candidate
+    raise AssertionError("could not find a dead pid to test with")
+
+
+class TestProcessLiveness:
+    def test_our_own_pid_is_alive(self) -> None:
+        assert _process_alive(_os.getpid())
+
+    def test_a_dead_pid_is_dead(self) -> None:
+        assert not _process_alive(_dead_pid())
+
+    def test_EPERM_means_ALIVE(self) -> None:
+        """pid 1 is root-owned, so `kill(1, 0)` raises PermissionError here.
+
+        That error proves the process EXISTS. Folding it in with ESRCH is how a
+        live holder's lock gets stolen, and it is the same defect this repo
+        already recorded for `is_pid_alive` (#40).
+        """
+        if _os.geteuid() == 0:
+            pytest.skip("running as root — kill(1, 0) would not raise EPERM")
+        with pytest.raises(PermissionError):
+            _os.kill(1, 0)
+        assert _process_alive(1), "EPERM was read as 'not alive'"
+
+    def test_a_nonsense_pid_is_not_alive(self) -> None:
+        assert not _process_alive(0)
+        assert not _process_alive(-1)
+
+
+class TestTheLockIsPerWorkingTree:
+    def test_two_roots_in_one_repo_share_one_lock(self, tmp_path: Path) -> None:
+        """A root-keyed lock would allow exactly the collision this prevents."""
+        repo = tmp_path / "repo"
+        (repo / "a").mkdir(parents=True)
+        (repo / "b").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(repo)], check=True,
+                       capture_output=True)
+        assert _lock_path(repo / "a") == _lock_path(repo / "b")
+
+    def test_without_a_repo_it_falls_back_to_the_root(self, tmp_path: Path) -> None:
+        assert _lock_path(tmp_path) == tmp_path / ".h-mad" / "mutation.lock"
+
+
+class TestHoldingAndReleasing:
+    def test_the_lock_is_released_after_a_run(self, tmp_path: Path) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+        run_spec(spec)
+        assert not _lock_path(tmp_path).exists(), "the lock outlived the run"
+
+    def test_a_second_run_is_refused_while_it_is_held(self, tmp_path: Path) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+        with tree_lock(tmp_path, spec):
+            result = run_spec(spec)
+        assert result["verdict"] == "BUSY"
+        assert result["holder"]["pid"] == _os.getpid()
+
+    def test_the_refusal_measures_nothing_rather_than_guessing(
+        self, tmp_path: Path
+    ) -> None:
+        """BUSY must not carry mutation counts — nothing was applied."""
+        spec = _project(tmp_path, [_kills_the_guard()])
+        with tree_lock(tmp_path, spec):
+            result = run_spec(spec)
+        assert "caught" not in result and "survived" not in result
+
+    def test_the_guard_file_is_untouched_by_a_refused_run(
+        self, tmp_path: Path
+    ) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+        before = (tmp_path / "guard.py").read_text(encoding="utf-8")
+        with tree_lock(tmp_path, spec):
+            run_spec(spec)
+        assert (tmp_path / "guard.py").read_text(encoding="utf-8") == before
+
+
+class TestStaleAndCorruptLocks:
+    def test_a_lock_whose_holder_is_gone_is_TAKEN(self, tmp_path: Path) -> None:
+        """A crashed run must not wedge the tree forever."""
+        spec = _project(tmp_path, [_kills_the_guard()])
+        path = _lock_path(tmp_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_json.dumps({"pid": _dead_pid(), "spec": "old"}),
+                        encoding="utf-8")
+        result = run_spec(spec)
+        assert result["verdict"] == "ALL_CAUGHT", result
+
+    def test_an_UNPARSEABLE_lock_is_never_stolen(self, tmp_path: Path) -> None:
+        """`I could not read it` is not `nobody holds it`.
+
+        The two lead to opposite correct actions — wait versus proceed — so they
+        must not produce the same outcome. Blocking is recoverable by a human in
+        one `rm`; stealing a live holder's lock is not recoverable at all,
+        because the run it corrupts reports a plausible verdict.
+        """
+        spec = _project(tmp_path, [_kills_the_guard()])
+        path = _lock_path(tmp_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{not json at all", encoding="utf-8")
+        result = run_spec(spec)
+        assert result["verdict"] == "BUSY"
+        assert result["holder"]["unparseable"] is True
+
+    def test_a_lock_with_a_non_integer_pid_blocks(self, tmp_path: Path) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+        path = _lock_path(tmp_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_json.dumps({"pid": "not-a-pid"}), encoding="utf-8")
+        assert run_spec(spec)["verdict"] == "BUSY"
+
+
+class TestCheckAnchorsDoesNotLock:
+    def test_the_read_only_path_takes_no_lock(self, tmp_path: Path) -> None:
+        """`--check-anchors` applies nothing, so serialising it would only make
+        the cheap diagnostic unavailable exactly when a run is in flight."""
+        spec = _project(tmp_path, [_kills_the_guard()])
+        precheck_spec(spec)
+        assert not _lock_path(tmp_path).exists()
+
+    def test_check_anchors_still_works_while_the_tree_is_held(
+        self, tmp_path: Path
+    ) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+        with tree_lock(tmp_path, spec):
+            assert precheck_spec(spec)["verdict"] == "ANCHORS_OK"
+
+
+class TestTheBusyCLI:
+    def test_it_prints_the_token_with_the_holder_and_exits_two(
+        self, tmp_path: Path
+    ) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+        with tree_lock(tmp_path, spec):
+            proc = _run_cli(spec)
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert f"MUTATION: BUSY holder={_os.getpid()}" in proc.stdout, proc.stdout
+        assert "[H-MAD]" in proc.stdout
+
+    def test_it_names_the_lock_file_so_the_stuck_case_is_recoverable(
+        self, tmp_path: Path
+    ) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+        with tree_lock(tmp_path, spec):
+            proc = _run_cli(spec)
+        assert str(_lock_path(tmp_path)) in proc.stdout, proc.stdout
+
+    def test_BUSY_says_nothing_was_measured(self, tmp_path: Path) -> None:
+        """A verdict that reads like a result is the whole failure mode here."""
+        spec = _project(tmp_path, [_kills_the_guard()])
+        with tree_lock(tmp_path, spec):
+            proc = _run_cli(spec)
+        assert "Nothing was measured" in proc.stdout or "nothing was measured" in proc.stdout
+
+
+def test_TreeBusy_carries_the_holder() -> None:
+    exc = TreeBusy({"pid": 4242})
+    assert exc.holder["pid"] == 4242

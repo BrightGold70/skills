@@ -19,6 +19,10 @@ Verdicts, printed as a canonical token:
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
     MUTATION: UNREADABLE                                               exit 2
+    MUTATION: BUSY holder=8412 age=37s spec=/…/foo.json                exit 2
+      (another run holds this working tree; nothing was applied and nothing
+       was measured. `--check-anchors` takes NO lock and keeps working, which
+       is why the pre-push hook is unaffected by a run in flight.)
     ANCHORS: ANCHORS_OK specs=17 mutations=243 ok=243 drifted=0 unreadable=0 skipped=1 unclassifiable=0 exit 0
     ANCHORS: ANCHORS_DRIFTED specs=17 mutations=243 ok=240 drifted=2 unreadable=0 skipped=0 unclassifiable=0 exit 2
     ANCHORS: ANCHORS_UNREADABLE specs=17 mutations=243 ok=240 drifted=2 unreadable=1 skipped=0 unclassifiable=0 exit 2
@@ -140,12 +144,15 @@ Stdlib only: h-mad scripts are invoked with a bare `python3`.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import difflib
 import json
+import os
 import re
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -842,15 +849,166 @@ def _sibling_specs(spec_path: Path) -> dict:
     return {"spec_paths": spec_paths, "skipped": skipped}
 
 
-def run_spec(spec_path: Path) -> dict:
+# --- tree lock -------------------------------------------------------------
+#
+# A mutation run and anything else that reads or writes the same working tree
+# MEASURE EACH OTHER. The harness rewrites files in place and restores them, so a
+# second run -- or a plain `pytest` in another pane, or a sibling session -- sees
+# a torn tree and returns a verdict about that rather than about the code.
+#
+# Measured: a spec was launched while its own anchor lines were still being
+# edited and the harness returned REFUSED for an anchor that was fine. That is
+# the dangerous shape, because REFUSED is a PLAUSIBLE verdict -- it is exactly
+# what a genuinely drifted anchor produces, and nothing at the token tells the
+# two apart. The same day, a second session committed into this clone nine
+# seconds before a run, moving the suite count by +10 for reasons that were not
+# the run's.
+#
+# So the lock turns a silent wrong measurement into a wait. It is deliberately
+# NOT taken by `--check-anchors`, which only reads.
+
+
+class TreeBusy(Exception):
+    """Another mutation run holds this tree. Carries what is known about it."""
+
+    def __init__(self, holder: dict):
+        super().__init__(f"tree is held by {holder}")
+        self.holder = holder
+
+
+def _process_alive(pid: int) -> bool:
+    """Is `pid` running? EPERM means ALIVE, and that is the load-bearing line.
+
+    `os.kill(pid, 0)` raises `PermissionError` for a process owned by another
+    user -- which proves it EXISTS. Reading that as "not alive" is how a live
+    holder's lock gets stolen, and it is the same defect this repo already
+    recorded for `is_pid_alive` (#40): EPERM is the one answer that must not be
+    folded in with ESRCH.
+    """
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        # Unknown errno: cannot judge, so do not declare it dead.
+        return True
+    return True
+
+
+def _lock_path(root: Path) -> Path:
+    """One lock per WORKING TREE, not per spec root.
+
+    Two specs rooted at different sub-directories of one repo still write the
+    same tree, so a root-keyed lock would let exactly the collision this exists
+    to stop. Resolve the git toplevel and key on that; fall back to the root
+    itself when there is no repo (every tmp-path spec in the suite).
+    """
+    try:
+        top = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if top.returncode == 0 and top.stdout.strip():
+            return Path(top.stdout.strip()) / ".h-mad" / "mutation.lock"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return root / ".h-mad" / "mutation.lock"
+
+
+def _read_holder(path: Path) -> dict:
+    """Who holds the lock. An unreadable lock is `unparseable`, never `free`.
+
+    `I could not read it` and `nobody holds it` lead to opposite correct actions
+    -- wait versus proceed -- so they must not produce the same value. A corrupt
+    lock therefore BLOCKS and the message names the file to delete, which is
+    recoverable by a human in one command; silently stealing it is not
+    recoverable at all, because the run it interrupts reports a plausible
+    verdict.
+    """
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"pid": None, "spec": None, "started": None, "unparseable": True}
+
+
+@contextlib.contextmanager
+def tree_lock(root: Path, spec_path: Path):
+    """Hold the tree for the duration of a run, or raise `TreeBusy`.
+
+    A lock whose holder is gone is STALE and is taken -- a crashed run must not
+    wedge the repo forever -- but only when the holder could be identified and
+    proven dead. Unparseable, or alive, blocks.
+    """
+    path = _lock_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps({
+        "pid": os.getpid(),
+        "spec": str(spec_path),
+        "root": str(root),
+        "started": time.time(),
+    })
+    while True:
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            holder = _read_holder(path)
+            pid = holder.get("pid")
+            if holder.get("unparseable") or not isinstance(pid, int) or _process_alive(pid):
+                holder["lock"] = str(path)
+                raise TreeBusy(holder)
+            # Stale. Clear it and retry ONCE through the loop rather than
+            # writing over it: two runs can reach this point together, and the
+            # O_EXCL retry is what decides between them instead of last-write.
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            continue
+        try:
+            with os.fdopen(fd, "w") as fh:
+                fh.write(payload)
+            break
+        except OSError:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            raise
+    try:
+        yield path
+    finally:
+        # Only release a lock that is still OURS. A stale-take by a third run
+        # would otherwise be deleted here by the run that had already lost it.
+        try:
+            if _read_holder(path).get("pid") == os.getpid():
+                path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+
+def _run_spec_holding_the_tree(
+    spec_path: Path, spec: dict | None = None, root: Path | None = None
+) -> dict:
     """Apply each mutation in turn, run the command, always restore.
 
     Returns a result dict. Raises SpecError only when the spec itself is
     unusable — every other outcome is a verdict.
+
+    `spec`/`root` are passed in by `run_spec`, which has already resolved both to
+    take the tree lock. Re-deriving them here would be a THIRD `_resolve_root`
+    call, and `test_precheck_and_run_share_the_root_resolver` counts those — it
+    caught exactly that when the lock was first wired. They stay optional so a
+    direct call still works.
     """
     spec_path = Path(spec_path)
-    spec = _load_spec(spec_path)
-    root = _resolve_root(spec, spec_path)
+    spec = _load_spec(spec_path) if spec is None else spec
+    root = _resolve_root(spec, spec_path) if root is None else root
     command = spec["command"]
     mutations = spec["mutations"]
 
@@ -1317,6 +1475,19 @@ def _check_anchors(spec_paths: list[Path]) -> int:
     return 0 if verdict == "ANCHORS_OK" else 2
 
 
+
+def run_spec(spec_path: Path) -> dict:
+    """`_run_spec_holding_the_tree`, serialised against other runs on this tree."""
+    spec_path = Path(spec_path)
+    spec = _load_spec(spec_path)
+    root = _resolve_root(spec, spec_path)
+    try:
+        with tree_lock(root, spec_path):
+            return _run_spec_holding_the_tree(spec_path, spec=spec, root=root)
+    except TreeBusy as busy:
+        return {"verdict": "BUSY", "holder": busy.holder}
+
+
 def _print_skipped_precheck_entries(result: dict) -> None:
     for entry in result.get("precheck", {}).get("skipped", []):
         print(f"  skipped: {entry['path']}: {entry['reason']}")
@@ -1362,6 +1533,29 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     verdict = result["verdict"]
+    if verdict == "BUSY":
+        holder = result["holder"]
+        pid = holder.get("pid")
+        started = holder.get("started")
+        age = f"{time.time() - started:.0f}s" if isinstance(started, (int, float)) else "unknown"
+        print(
+            f"MUTATION: BUSY holder={pid if pid is not None else 'unparseable'} "
+            f"age={age} spec={holder.get('spec') or 'unknown'}"
+        )
+        print(
+            "  another mutation run holds this working tree. A run rewrites files in "
+            "place, so a second one measures a TORN tree and returns a verdict about "
+            "that — REFUSED for an anchor that is fine, which is indistinguishable "
+            "from real drift at the token. Nothing was measured; wait for the holder."
+        )
+        print(
+            f"  if you are certain no run is in flight, delete {holder.get('lock')} "
+            "— an unparseable lock is never stolen automatically, because "
+            "'I could not read it' is not 'nobody holds it' "
+            "(halt `step5e:mutation_unverified:<module>`)."
+        )
+        print(f"[H-MAD] {label} mutation BUSY")
+        return 2
     if verdict in {"BASELINE_NOT_GREEN", "RESTORE_FAILED"}:
         print(f"MUTATION: {verdict}")
     elif verdict == "PRECHECK_FAILED":

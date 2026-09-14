@@ -1645,6 +1645,18 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   the tree on every path, so it knows when it holds it; a lockfile that refuses a second run (and a
   loud `MUTATION: BUSY holder=<pid>`) turns a silent wrong measurement into a wait. Recurrence: 1 —
   candidate: yes — severe, because the failure mode is a *plausible* verdict rather than an error.
+  — **LANDED 2026-09-14.** `tree_lock()` in `h_mad_mutation_harness.py`, keyed on the **git toplevel**
+  rather than the spec root — two specs rooted at different sub-directories of one repo write the same
+  tree, so a root-keyed lock would have permitted exactly this collision while passing every
+  single-spec test. A second run gets `MUTATION: BUSY holder=<pid> age=<s> spec=<path>` and exit 2.
+  A lock whose holder is proven dead is taken (a crash must not wedge the repo); an UNPARSEABLE one is
+  never taken, and the message names the file to delete. `os.kill(pid,0)` raising **EPERM means ALIVE**
+  — folding it in with ESRCH steals a live holder's lock, the same defect recorded for `is_pid_alive`
+  (#40). `--check-anchors` takes NO lock, so the cheap diagnostic and the pre-push hook (which only
+  ever runs `--check-anchors` and scores `ANCHORS_*`) keep working during a run — which is also why the
+  new `BUSY` word needed no consumer sweep. 5 mutations, 49/49 ALL_CAUGHT; the first draft of one was
+  an EQUIVALENT MUTANT and was retargeted rather than shipped. The INTER-session half of this hazard —
+  refuse a run when HEAD moved since the anchors were checked — stays open on its own row below.
 - **a closure check that the archive is COMPLETE**: Phase 7c is `mv docs/…/<feature>*`, but for
   doc-block-exec it had moved **6 of 641** files — by copy, leaving the originals live. A merged
   feature's impl-plan therefore stayed in the working population and kept gating live code, and an
