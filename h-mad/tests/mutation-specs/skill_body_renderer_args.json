@@ -1,0 +1,68 @@
+{
+  "_why": "This guard is a LINT OVER DOCUMENTS, so the two ways it dies are different from a script's: the pattern can narrow (it goes quiet on the form that actually appears) and the file LIST can shrink (it stays loud but stops reading the file that regressed). The lint it replaces died the second way for months -- it was real, it bit, and it read one of the two bodies. `scope-drops-the-h-mad-body` is the load-bearing row: every pattern test still passes while `h-mad/SKILL.md` goes unguarded again, which is exactly the state this work found. `dollar-at-becomes-dollar-one` is the second: it mutates the ONE line a backlog row wanted linted away (`main \"$@\"`) into the form that IS rewritten, so a lint that cannot tell those two apart is caught rather than trusted. Note the root is the REPOSITORY, not `h-mad/` -- the lint spans two skills and a spec rooted at `h-mad/` cannot address `handoff/SKILL.md` at all.",
+  "root": "../../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "h-mad/tests/test_skill_body_renderer_args.py",
+    "handoff/tests/test_handoff_takeover_mode.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "scope-drops-the-h-mad-body",
+      "_mechanism": "The regression this work exists to prevent, restored exactly: the lint keeps its full pattern and every calibration row still passes, but it reads one file again. `h-mad/SKILL.md` is the larger body of fenced blocks and the one that was unguarded, so the surviving half is the half that mattered least.",
+      "file": "h-mad/tests/test_skill_body_renderer_args.py",
+      "find": "    REPO_ROOT / \"h-mad\" / \"SKILL.md\",\n)",
+      "replace": ")",
+      "test": "h-mad/tests/test_skill_body_renderer_args.py::TestOurOwnSkillBodiesAreClean::test_both_bodies_are_actually_covered"
+    },
+    {
+      "name": "dollar-at-becomes-dollar-one",
+      "_mechanism": "Turns the SAFE documented line into the UNSAFE one, in the live body, at the exact boundary a backlog row got wrong. A lint that had been 'closed' by adding `$@` to its pattern would have been firing on this line all along and would score this mutant as caught for the wrong reason; a lint pinned to the real expander is silent before and loud after.",
+      "file": "h-mad/SKILL.md",
+      "find": "`hmad-dispatch.sh` ends `main \"$@\"; exit $?`",
+      "replace": "`hmad-dispatch.sh` ends `main \"$1\"; exit $?`",
+      "test": "h-mad/tests/test_skill_body_renderer_args.py::TestOurOwnSkillBodiesAreClean::test_no_renderer_substituted_token_survives[h-mad]"
+    },
+    {
+      "name": "pattern-loses-the-ARGUMENTS-alternative",
+      "_mechanism": "The old lint's blind spot, re-created. `$ARGUMENTS` is the form a skill author is most likely to write and the one the renderer documents, and dropping it leaves the digit alternative -- which looks like a working lint and passes every `$1`-shaped test.",
+      "file": "h-mad/tests/test_skill_body_renderer_args.py",
+      "find": "RENDERER_ARG_SOURCE = r\"\\$ARGUMENTS\\[\\d+\\]|\\$ARGUMENTS|\\$\\d+(?!\\w)\"",
+      "replace": "RENDERER_ARG_SOURCE = r\"\\$\\d+(?!\\w)\"",
+      "test": "h-mad/tests/test_skill_body_renderer_args.py::TestTheLintIsCalibrated::test_the_two_alternatives_guard_word_boundaries_differently"
+    },
+    {
+      "name": "pattern-gains-the-refuted-dollar-at",
+      "_mechanism": "The change the backlog row actually asked for. It makes the lint fire on `main \"$@\"` -- a correct, safe line of documentation -- and a false positive on a real line is what gets a lint deleted rather than fixed. Pinned so the refuted premise cannot be re-applied by a later reader who only saw the row.",
+      "file": "h-mad/tests/test_skill_body_renderer_args.py",
+      "find": "RENDERER_ARG_SOURCE = r\"\\$ARGUMENTS\\[\\d+\\]|\\$ARGUMENTS|\\$\\d+(?!\\w)\"",
+      "replace": "RENDERER_ARG_SOURCE = r\"\\$ARGUMENTS\\[\\d+\\]|\\$ARGUMENTS|\\$\\d+(?!\\w)|\\$[@*]\"",
+      "test": "h-mad/tests/test_skill_body_renderer_args.py::TestTheLintIsCalibrated::test_dollar_at_is_specifically_not_a_hit"
+    },
+    {
+      "name": "blob-returns-empty-instead-of-the-binary",
+      "_mechanism": "`I could not check` collapsing into `the check said yes` -- the asymmetry the worktree-comment read and the state-file search already enforce. An empty blob makes every `in blob` assertion fail and every `not in blob` assertion PASS, so the `$*` negative would be certified by a binary nobody read. Aimed at the DECODE, not at the not-found branch: the first spec written here mutated `pytest.skip(...)` on the missing-binary path and SURVIVED, because on a machine where the binary exists that line never runs. An unreachable mutation scores as a clean battery and proves nothing -- the same defect as this repo's `a mutation that can never fire reads as a passing battery` row, reached while writing a spec to prevent it.",
+      "file": "h-mad/tests/claudebinary.py",
+      "find": "        return binary.read_bytes().decode(\"utf-8\", \"replace\")",
+      "replace": "        return \"\"",
+      "test": "h-mad/tests/test_skill_body_renderer_args.py::TestAgainstTheLiveBinary::test_the_blob_is_the_binary_not_an_empty_fallback"
+    },
+    {
+      "name": "placeholder-appears-in-the-handoff-body",
+      "_mechanism": "The other body, and the realistic authoring slip rather than a synthetic token: a doc writer reaching for a placeholder where a field name belongs. It is `$1`, so the OLD narrow lint would also have caught it -- that is deliberate, because this row's job is to prove the file is still being READ after the delegation, not to prove the pattern widened. `scope-drops-the-h-mad-body` covers the other direction.",
+      "file": "handoff/SKILL.md",
+      "find": "The `<project-slug>` field in the INDEX.md entry should match the project's canonical name:",
+      "replace": "The `$1` field in the INDEX.md entry should match the project's canonical name:",
+      "test": "h-mad/tests/test_skill_body_renderer_args.py::TestOurOwnSkillBodiesAreClean::test_no_renderer_substituted_token_survives[handoff]"
+    }
+  ]
+}

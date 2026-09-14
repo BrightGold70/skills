@@ -1682,6 +1682,17 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   `\$[0-9]` — **no `$@`, no `$*`** — and it reads exactly ONE file, `handoff/SKILL.md`, resolved from
   `parents[1]`. The row asks for the lint over "any `SKILL.md` reachable as a slash command", and
   `h-mad/SKILL.md` — by far the larger body of fenced blocks — is unguarded.
+  — **LANDED 2026-09-14 (both gaps), and the `$@`/`$*` half was REFUTED rather than closed.**
+  `h-mad/tests/test_skill_body_renderer_args.py` lints BOTH bodies and pins the expander decoded
+  from the 2.1.270 binary: `\$ARGUMENTS\[\d+\]|\$ARGUMENTS|\$\d+(?!\w)`, re-derived from the
+  binary on every run (SKIP, never pass, when it cannot be read). The old `\$[0-9]` was narrow in a
+  direction nobody had noticed — it is blind to `$ARGUMENTS`, the likeliest form — and `$ARGUMENTS`
+  carries NO `(?!\w)` guard while `$<digits>` does, so `$ARGUMENTSX` is rewritten and `$1abc` is
+  not. `$@`/`$*` are NOT rewritten: the alternation contains neither, and a census of the whole
+  image found `\$\*` 0 times and `\$@` 5 times, all inside C#/F# syntax-highlighting grammars.
+  `h-mad/SKILL.md:2238`'s `main "$@"; exit $?` is therefore SAFE and linting it would have been a
+  change made against the tool's behaviour. Scope deliberately narrowed to this repo's two authored
+  bodies — the ~300 vendored `SKILL.md` files use `$ARGUMENTS` on purpose.
 - **a positional shell arg in a skill body is REWRITTEN before the agent sees it**: the
   slash-command renderer substitutes the invocation's argument into `$1`, so a documented command
   containing one silently does something else — and the rendered text gives the reader no signal.
@@ -1699,6 +1710,13 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   — a fixture that can express the collision, which the distinct-by-construction ones could not.
   (b) NOT LANDED: the general rule — *for any gate that counts distinct things, require a fixture
   whose entries collide on the discriminating key* — has no home, so the next such gate starts over.
+  — **SHARPENED 2026-09-14: the hazard is bigger than a corrupted line — it is a MODE SWITCH.**
+  Observed live comparing three rendered bodies: `/loop` (contains a placeholder) had its argument
+  spliced INLINE and no trailer; `/handoff read` and `/caveman ultra` (no placeholder) arrived
+  unchanged with `ARGUMENTS: read` / `ARGUMENTS: ultra` APPENDED. Both `handoff` and `h-mad` route
+  their mode/verb off that trailer, so one stray `$1` or `$ARGUMENTS` anywhere in either body
+  suppresses the trailer entirely and the routing reads no arguments at all. Guard shipped — see the
+  note on the row above.
 - **a fixture that is distinct BY CONSTRUCTION cannot express the collision it guards**: `exit_check`
   certified a two-cycle clean streak from **one cycle's two legs**, and neither the 2936-test suite
   nor a purpose-written field tracer could see it — both used fixtures that were distinct cycles by

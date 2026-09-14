@@ -214,17 +214,40 @@ class TestAnUnnamedFeatureIsStillClaimed:
 class TestNoDollarArgInTheSkillBody:
     """`$0` in a documented command is REWRITTEN by slash-command arg substitution.
 
-    Measured twice this session on the same line: it arrived as `…": "read}` when
-    invoked as `/handoff read` and as `…": "takeover}` when invoked as
-    `/handoff takeover`, while the file on disk holds `$0`. So the INDEX-cleanup
-    snippet, as the agent actually receives it, prints the literal argument instead
-    of the matching line — a command that silently does the wrong thing.
+    Measured twice on the same line: it arrived as `…": "read}` when invoked as
+    `/handoff read` and as `…": "takeover}` when invoked as `/handoff takeover`,
+    while the file on disk holds `$0`. So the INDEX-cleanup snippet, as the agent
+    actually receives it, prints the literal argument instead of the matching line
+    — a command that silently does the wrong thing.
+
+    **The pattern is no longer spelled here.** This class used to carry its own
+    `\\$[0-9]`, which was narrower than the renderer in one direction and applied
+    to one file in the other: it was blind to `$ARGUMENTS` — the form most likely
+    to be written, and the one that also suppresses the `ARGUMENTS:` trailer this
+    skill's mode routing reads — and `h-mad/SKILL.md` was unguarded entirely. The
+    lint now lives in `h-mad/tests/test_skill_body_renderer_args.py`, pinned to
+    the expander decoded from the binary and re-derived there on every run, and
+    covers BOTH bodies. This class keeps a failing edge on `handoff/SKILL.md` so
+    the handoff suite alone still catches a regression, and imports the single
+    source rather than re-spelling it.
     """
 
+    @staticmethod
+    def _lint():
+        import sys
+        lint_dir = SKILL.parents[1] / "h-mad" / "tests"
+        if str(lint_dir) not in sys.path:
+            sys.path.insert(0, str(lint_dir))
+        import test_skill_body_renderer_args as lint
+        return lint
+
     def test_no_positional_shell_arg_survives_in_the_body(self) -> None:
-        import re as _re
-        hits = _re.findall(r"\$[0-9]", BODY)
-        assert not hits, f"positional args are rewritten by the renderer: {hits}"
+        hits = self._lint().renderer_arg_hits(BODY)
+        assert not hits, f"tokens the renderer rewrites survive in the body: {hits}"
+
+    def test_this_body_is_in_the_shared_lint_s_scope(self) -> None:
+        """Delegating is only safe if the delegate actually covers this file."""
+        assert SKILL in self._lint().OWN_SKILL_BODIES
 
 
 class TestTheTodoPrefixNamesTheOwnerNotTheCourier:
