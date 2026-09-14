@@ -87,14 +87,16 @@ enumeration existed. That premise is false, so the task as framed is moot: the c
 rather than re-derived, and its two load-bearing figures — **eleven**, and **six already shipped** —
 are confirmed at their origin.
 
-**What closing accepts, stated so it is not silently inherited.** Three of the eleven are named
-nowhere, *including at the origin*: the v1.12 author counted eleven and enumerated eight. The
-remainder was deferred to a "revision report" that was never written into either repo. So the three
-are not work this lane declined — they are work that was never recorded by anyone, and closing #56
-accepts them as not owed rather than carrying them forward as a debt.
+**The residue is TRACKED SEPARATELY, not absorbed.** Three of the eleven are named nowhere,
+*including at the origin*: the v1.12 author counted eleven and enumerated eight, deferring the rest
+to a "revision report" that was never written into either repo. Those three are not work this lane
+declined — they were never recorded by anyone.
 
-Anyone who later needs all eleven should start from §Method below: the row grammar, the confirmed
-count, and the measured fact that no mechanical screen narrows the residue.
+Closing #56 retires the framing (*"re-derive an enumeration that exists nowhere"*), which was false.
+It does **not** retire the residue, which is carried as its own item rather than inherited silently
+inside a closed row — the failure mode this whole row is an instance of. Whoever takes it starts
+from §Method below: the row grammar, the confirmed count, the eight already named, and the measured
+fact that no mechanical screen narrows what is left.
 
 ## What was owed, at the time of writing
 
