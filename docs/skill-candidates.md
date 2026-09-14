@@ -1689,6 +1689,13 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   A coverage metric derived from the same pattern as the thing it audits can only ever report
   agreement with itself. Do NOT reflow the two rows as the fix — that hides the defect and leaves the
   next wrapped row equally invisible.
+  **RE-VERIFIED 2026-09-14 (`de50186`): STILL OPEN, both halves.** `skill_candidates_census.py:30`
+  is still `ROW = re.compile(r'^- \*\*(.+?)\*\*')` — single-line, anchored, no scan to a closing
+  `**` on a later line — and COVERAGE at `:254` still derives `row-shaped` from that same pattern,
+  so the two numbers still cannot disagree. This session's own run read a reassuring `227/227` while
+  this row asserts three rows exist that no census has ever counted, which is precisely the
+  self-agreement the row predicts. Re-probing an OPEN row rather than a CLOSED one is what caught
+  this; a spot-check of closures could not have.
 - **the evidence gate counts tool CALLS, not their TARGETS**: `EVIDENCE: PASS tools=41 ok=41` is
   the same verdict whether a pass opened the module under discussion or spent all 41 calls in
   `docs/`. Measured over 32 paired agy/codex audit cycles on HemaSuite `#18` (analysis:
@@ -1720,6 +1727,13 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   two lists, or delete it. As of 2026-09-07 the tests import it (`set(HARD_KINDS)` and
   `set(HARD_KINDS) - {"PINDRIFT"}`) so the name has one consumer and the two filters cannot drift
   apart, but the script still does not consult it — that half is open.
+  **RE-VERIFIED 2026-09-14 (`de50186`): STILL OPEN, and the premise is sharper rather than merely
+  unchanged.** The #29 review's `hard()` router DID land — `h_mad_precheck_doc.py:489`, a real emit
+  router used at six sites — so the *adjacent* half closed while this half did not. `HARD_KINDS` now
+  sits at `:129` and the script's only other occurrence of the name is `:105`, **inside a comment**:
+  no executable line reads it, and nothing validates `hard()`'s `kind` argument against it, so a
+  typo'd kind still emits. That is exactly the hazard the row names — an authoritative-looking
+  constant surviving the very refactor that rewrote its neighbours.
 - **structure the 6a-prime archreview reports before any code-phase instrument is built**: measured
   across the 28 archreviews in HemaSuite (analysis:
   `docs/03-analysis/hmad-code-phase-ledger-not-warranted.md`) — median **2,114 B**, `Major` appears
