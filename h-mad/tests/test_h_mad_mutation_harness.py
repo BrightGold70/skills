@@ -2431,7 +2431,15 @@ def test_the_summary_line_carries_the_crash_kill_count(tmp_path: Path) -> None:
     head = ("MUTATION: ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0 "
             "unreadable=0 crash_kills=1")
     assert summary[0].startswith(head), proc.stdout
-    assert re.fullmatch(r" crash_visible=\d+/\d+", summary[0][len(head):]), proc.stdout
+    # `re.match`, NOT `re.fullmatch`. This assertion exists to pin that
+    # `crash_visible` comes immediately AFTER `crash_kills` — the left-to-right
+    # substring contract every consumer of this line depends on. `fullmatch`
+    # additionally pinned it as the LAST token, which is not that contract and
+    # is the opposite of it: the documented rule is that the line may only ever
+    # GROW AT THE END, so a test forbidding any further token makes the one
+    # sanctioned way of extending this line fail. It duly went red when
+    # `timeout_kills` and `untargeted` were appended, for no defect.
+    assert re.match(r" crash_visible=\d+/\d+(\s|$)", summary[0][len(head):]), proc.stdout
     assert "    mechanism: killed by its named test" in proc.stdout, proc.stdout
     assert "(crash: NameError in guard.py)" in proc.stdout, proc.stdout
 
@@ -2717,3 +2725,196 @@ class TestCrashVisibilityIsReported:
         assert 'f" crash_visible={' in src, "the token line no longer reports the denominator"
         i, j = src.index("crash_kills={result"), src.index('crash_visible={result')
         assert i < j, "crash_visible must stay AFTER crash_kills — left-to-right readers"
+
+
+class TestTimeoutKill:
+    """The second of the two blind spots the module docstring used to call permanent.
+
+    The old text declined to chase `TimeoutExpired` because chasing it meant
+    widening `_TERMINAL_LINE`, and that would have attributed the timeout to the
+    mutated file when pytest attributes it to the TEST file that set the timeout.
+    That objection was correct and is preserved: `timeout_kill` takes no file
+    argument and returns no attribution. What changed is that the EVENT is now
+    reported, unattributed, on its own count.
+    """
+
+    def test_a_bare_timeoutexpired_is_recognised(self) -> None:
+        assert h_mad_mutation_harness.timeout_kill(
+            "E           subprocess.TimeoutExpired: Command '['pytest']' timed out"
+        ) == "subprocess.TimeoutExpired"
+
+    def test_the_undotted_spelling_is_recognised_too(self) -> None:
+        """`from subprocess import TimeoutExpired` prints the bare name."""
+        assert h_mad_mutation_harness.timeout_kill(
+            "E           TimeoutExpired: Command timed out after 60 seconds"
+        ) == "TimeoutExpired"
+
+    def test_clean_output_yields_none(self) -> None:
+        assert h_mad_mutation_harness.timeout_kill("1 failed, 3 passed in 0.4s") is None
+
+    def test_a_crash_is_not_a_timeout(self) -> None:
+        """The two counts must not collapse: one names a file, the other cannot."""
+        crash = (
+            'E           Traceback (most recent call last):\n'
+            'E             File "guard.py", line 3, in over\n'
+            'E           NameError: name \'lines\' is not defined\n'
+        )
+        assert h_mad_mutation_harness.timeout_kill(crash) is None
+        assert h_mad_mutation_harness.crash_kill(crash, "guard.py") == "NameError"
+
+    def test_timeout_kill_takes_no_file_and_claims_no_attribution(self) -> None:
+        """The signature IS the guarantee. A file parameter would invite a caller
+        to read the result as "it hung in that file", which pytest's own
+        attribution cannot support."""
+        import inspect
+        params = list(inspect.signature(h_mad_mutation_harness.timeout_kill).parameters)
+        assert params == ["output"], (
+            "timeout_kill must stay unattributed — adding a file parameter would "
+            "reintroduce the false attribution the docstring declined to make"
+        )
+
+    def test_the_terminal_line_pattern_still_refuses_the_timeout_name(self) -> None:
+        """The fix must NOT have been 'widen _TERMINAL_LINE'.
+
+        This is the discriminating test: a future author who closes this blind
+        spot the easy way makes `crash_kill` attribute a timeout to the mutated
+        file, and every other test here would still pass.
+        """
+        assert h_mad_mutation_harness._TERMINAL_LINE.match(
+            "subprocess.TimeoutExpired: Command timed out"
+        ) is None
+        assert h_mad_mutation_harness.crash_kill(
+            'E             File "guard.py", line 3, in over\n'
+            "E           subprocess.TimeoutExpired: timed out\n",
+            "guard.py",
+        ) is None
+
+
+class TestUntargetedIsCountedAndClassified:
+    """The first blind spot: rows with no `test` key were scored and never classified."""
+
+    def _spec(self, tmp_path: Path, targeted: bool) -> Path:
+        (tmp_path / "guard.py").write_text(GUARD, encoding="utf-8")
+        (tmp_path / "test_guard.py").write_text(
+            "def test_threshold():\n"
+            "    assert 'THRESHOLD = 5' in open('guard.py').read()\n",
+            encoding="utf-8",
+        )
+        mutation = {
+            "name": "drop the threshold", "file": "guard.py",
+            "find": "THRESHOLD = 5", "replace": "THRESHOLD = 6",
+        }
+        if targeted:
+            mutation["test"] = "test_guard.py::test_threshold"
+        spec = {
+            "root": str(tmp_path),
+            "command": [sys.executable, "-m", "pytest", "-q", "test_guard.py"],
+            "target_command": [sys.executable, "-m", "pytest", "-q"],
+            "mutations": [mutation],
+        }
+        path = tmp_path / "s.json"
+        path.write_text(json.dumps(spec), encoding="utf-8")
+        return path
+
+    def test_an_untargeted_row_is_counted_as_untargeted(self, tmp_path: Path) -> None:
+        result = run_spec(self._spec(tmp_path, targeted=False))
+        assert result["untargeted"] == 1
+        assert result["caught"] == 1
+
+    def test_a_targeted_row_is_not_counted_as_untargeted(self, tmp_path: Path) -> None:
+        """The discriminating half. A counter that always increments would pass
+        the test above and say nothing."""
+        result = run_spec(self._spec(tmp_path, targeted=True))
+        assert result["untargeted"] == 0
+        assert result["caught"] == 1
+
+    def test_the_token_line_publishes_untargeted_and_timeout_kills(self) -> None:
+        src = (SCRIPTS / "h_mad_mutation_harness.py").read_text(encoding="utf-8")
+        assert 'timeout_kills={result' in src
+        assert 'untargeted={result' in src
+        # Order is the contract: every consumer reads this line left to right, so
+        # the two new tokens must sit AFTER the two that shipped before them.
+        for earlier, later in (
+            ("crash_kills={result", "crash_visible={result"),
+            ("crash_visible={result", "timeout_kills={result"),
+            ("timeout_kills={result", "untargeted={result"),
+        ):
+            assert src.index(earlier) < src.index(later), (
+                f"{later} must stay after {earlier} — left-to-right substring readers"
+            )
+
+    def test_untargeted_is_published_with_its_denominator(self) -> None:
+        """`untargeted=3` alone cannot be read; `untargeted=3/12` can.
+
+        The same lesson `crash_visible` exists for: a bare count whose base is
+        unknown is not a measurement.
+        """
+        src = (SCRIPTS / "h_mad_mutation_harness.py").read_text(encoding="utf-8")
+        assert "untargeted={result.get('untargeted', 0)}/{result.get('mutations', 0)}" in src
+
+
+class TestUntargetedCrashClassification:
+    """The half the first mutation run caught me missing.
+
+    `TestUntargetedIsCountedAndClassified` asserts the COUNTER, and a mutation
+    that stripped crash classification out of the untargeted branch SURVIVED it —
+    correctly, because nothing there reads `crash_kills`. The harness reported it
+    as caught by the wrong assertion, which is the finding it exists to make.
+    """
+
+    def test_an_untargeted_kill_still_classifies_a_crash_in_the_mutated_file(
+        self, tmp_path: Path
+    ) -> None:
+        """No `test` key, and the mutant crashes inside the file it mutated.
+
+        Before this branch classified, the run reported `crash_kills=0` for a
+        mutation that demonstrably died on a `NameError` in `guard.py` — the
+        exact silence `crash_visible` was invented to stop `crash_kills=0` from
+        being read as.
+        """
+        spec = _crash_project(tmp_path, [
+            {"name": "unbind the printed name", "file": "guard.py",
+             "find": 'print("OVER")', "replace": "print(OVER)"},   # NO `test` key
+        ])
+        result = run_spec(spec)
+        assert result["untargeted"] == 1, result
+        assert result["caught"] == 1, result
+        assert result["crash_kills"] == 1, (
+            "an untargeted kill whose traceback names the mutated file must be "
+            "classified — basename attribution is no weaker without a named test"
+        )
+        assert "crash: NameError in guard.py" in result["mechanism"][
+            "unbind the printed name"], result["mechanism"]
+
+
+class TestTimeoutMatchingIsStructural:
+    """Regression for a false positive this instrument produced against itself.
+
+    Shipped with a bare `.search()`, `timeout_kill` reported `timeout_kills=2` on
+    its own mutation spec for two mutations that never timed out: the tests that
+    killed them carry `"subprocess.TimeoutExpired: …"` as a fixture STRING, and
+    pytest echoes assertion source into its failure block. Same hazard
+    `crash_reports` documents for the word `Traceback`, same structural remedy.
+    """
+
+    def test_a_quoted_occurrence_in_echoed_source_is_not_a_timeout(self) -> None:
+        echoed = (
+            'E           assert timeout_kill(\n'
+            'E               "subprocess.TimeoutExpired: Command timed out"\n'
+            'E           ) == "subprocess.TimeoutExpired"\n'
+        )
+        assert h_mad_mutation_harness.timeout_kill(echoed) is None, (
+            "a timeout name inside an echoed source line is not a timeout kill"
+        )
+
+    def test_a_real_terminal_timeout_line_is_still_recognised(self) -> None:
+        """The positive control. Without it, a pattern that matches NOTHING
+        passes the test above and reports every run as timeout-free."""
+        assert h_mad_mutation_harness.timeout_kill(
+            "E           subprocess.TimeoutExpired: Command '['pytest']' timed out after 60s"
+        ) == "subprocess.TimeoutExpired"
+
+    def test_a_mention_without_the_terminal_colon_is_not_a_timeout(self) -> None:
+        assert h_mad_mutation_harness.timeout_kill(
+            "E           the helper raises subprocess.TimeoutExpired when it hangs"
+        ) is None

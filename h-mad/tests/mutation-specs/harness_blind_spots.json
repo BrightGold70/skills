@@ -1,0 +1,83 @@
+{
+  "_why": "The two blind spots the module docstring called permanent are now classified, and these mutations ask whether the classification actually bites. The load-bearing row is `widen-terminal-line-to-admit-timeout`: that is the EASY fix a future author reaches for, it closes the blind spot in a way that manufactures a false attribution, and every test except one would still pass. Each mutation names the ONE test it is aimed at, so a kill by an unrelated assertion, a crash or a timeout is reported as a survivor with the real catcher named.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_mutation_harness.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "widen-terminal-line-to-admit-timeout",
+      "_mechanism": "THE fix a future author reaches for: admit the timeout name into the terminal-exception pattern and let crash_kill attribute it. It closes the blind spot and manufactures an attribution pytest cannot support \u2014 the timeout belongs to the test file that set it, not the mutated module. Must be caught by test_the_terminal_line_pattern_still_refuses_the_timeout_name, which is the only test that can see it.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "_TERMINAL_LINE = re.compile(r\"^([\\w.]+(?:Error|Exception)): \")",
+      "replace": "_TERMINAL_LINE = re.compile(r\"^([\\w.]+(?:Error|Exception|TimeoutExpired)): \")",
+      "test": "tests/test_h_mad_mutation_harness.py::TestTimeoutKill::test_the_terminal_line_pattern_still_refuses_the_timeout_name"
+    },
+    {
+      "name": "timeout-kill-always-returns-none",
+      "_mechanism": "The silent pass: timeout_kills stays 0 forever and a hang is invisible exactly as before the fix. Caught by the bare-name recognition test.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if match:\n            return match.group(1)\n    return None",
+      "replace": "        if match:\n            return None\n    return None",
+      "test": "tests/test_h_mad_mutation_harness.py::TestTimeoutKill::test_a_bare_timeoutexpired_is_recognised"
+    },
+    {
+      "name": "timeout-pattern-loses-the-undotted-spelling",
+      "_mechanism": "`from subprocess import TimeoutExpired` prints the bare name; requiring a dotted prefix misses it. A corpus that only ever writes `subprocess.TimeoutExpired` cannot catch this, which is why the fixture does.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "_TIMEOUT_LINE = re.compile(r\"^((?:[\\w.]+\\.)?(?:TimeoutExpired|Timeout)): \")",
+      "replace": "_TIMEOUT_LINE = re.compile(r\"^((?:[\\w.]+\\.)(?:TimeoutExpired|Timeout)): \")",
+      "test": "tests/test_h_mad_mutation_harness.py::TestTimeoutKill::test_the_undotted_spelling_is_recognised_too"
+    },
+    {
+      "name": "untargeted-counter-never-increments",
+      "_mechanism": "The blind spot restored: untargeted rows are scored and not counted, so `untargeted=0/12` prints for a spec with no `test` key anywhere.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                result[\"untargeted\"] += 1",
+      "replace": "                result[\"untargeted\"] += 0",
+      "test": "tests/test_h_mad_mutation_harness.py::TestUntargetedIsCountedAndClassified::test_an_untargeted_row_is_counted_as_untargeted"
+    },
+    {
+      "name": "untargeted-counter-increments-for-targeted-rows-too",
+      "_mechanism": "The opposite error, and the reason the counter needs BOTH directions tested: a counter that always fires reports every spec as fully untargeted and passes the counted-as-untargeted test.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            scoring_command = None\n            if target_command and mutation.get(\"test\"):",
+      "replace": "            scoring_command = None\n            result[\"untargeted\"] += 1\n            if target_command and mutation.get(\"test\"):",
+      "test": "tests/test_h_mad_mutation_harness.py::TestUntargetedIsCountedAndClassified::test_a_targeted_row_is_not_counted_as_untargeted"
+    },
+    {
+      "name": "untargeted-loses-its-denominator",
+      "_mechanism": "`untargeted=3` alone is the bare count whose two causes read the same \u2014 the exact defect `crash_visible` was added to fix, reintroduced on the token this run added.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            f\" untargeted={result.get('untargeted', 0)}/{result.get('mutations', 0)}\"",
+      "replace": "            f\" untargeted={result.get('untargeted', 0)}\"",
+      "test": "tests/test_h_mad_mutation_harness.py::TestUntargetedIsCountedAndClassified::test_untargeted_is_published_with_its_denominator"
+    },
+    {
+      "name": "untargeted-branch-stops-classifying-crashes",
+      "_mechanism": "Restores the original gap precisely: the untargeted branch scores the kill and never asks whether the traceback names the mutated file, so crash_kills undercounts on every untargeted spec. THIS ROW SURVIVED ITS FIRST RUN and the survival was correct \u2014 it was aimed at the COUNTER test, which does not read crash_kills, so the harness reported it as caught by the wrong assertion. The discriminating test was written afterwards and this row now names it. That sequence is the row's whole value: the guard did not bite until something asserted the property it protects.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                    crash = crash_kill(suite_output, mutation[\"file\"])\n                    if crash:\n                        result[\"crash_kills\"] += 1",
+      "replace": "                    crash = None\n                    if crash:\n                        result[\"crash_kills\"] += 1",
+      "test": "tests/test_h_mad_mutation_harness.py::TestUntargetedCrashClassification::test_an_untargeted_kill_still_classifies_a_crash_in_the_mutated_file"
+    },
+    {
+      "name": "timeout-matching-goes-back-to-a-bare-search",
+      "_mechanism": "The false positive this instrument produced against itself on its first run: an UNANCHORED pattern searched over the WHOLE output matches a timeout name inside an echoed assertion source line, so `timeout_kills` counts runs that never timed out. Same hazard `crash_reports` documents for the word `Traceback`.\n\nTHE FIRST SPELLING OF THIS ROW SURVIVED, AND IT WAS INERT RATHER THAN UNCAUGHT. It replaced `.match(line)` with `.search(raw)`, which cannot restore the defect: the anchor now lives in the PATTERN (`^`), so a search over a single line that begins `E   \"subprocess...` still fails to match. A mutation that cannot express the defect is not evidence about the guard \u2014 it is the `a mutation that can never fire reads as a passing battery` row, met in the wild. Both halves must go: the anchor stripped AND the scan widened to the whole output.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        match = _TIMEOUT_LINE.match(line)",
+      "replace": "        match = re.search(_TIMEOUT_LINE.pattern.lstrip(\"^\"), output)",
+      "test": "tests/test_h_mad_mutation_harness.py::TestTimeoutMatchingIsStructural::test_a_quoted_occurrence_in_echoed_source_is_not_a_timeout"
+    }
+  ]
+}

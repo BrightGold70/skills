@@ -12,9 +12,9 @@ This is that harness, once.
 
 Verdicts, printed as a canonical token:
 
-    MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=19/19 exit 0
-    MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0 unreadable=0 crash_kills=1 crash_visible=12/19 exit 0
-    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1 unreadable=0 crash_kills=0 crash_visible=19/19 exit 2
+    MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=19/19 timeout_kills=0 untargeted=0/7 exit 0
+    MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0 unreadable=0 crash_kills=1 crash_visible=12/19 timeout_kills=0 untargeted=0/7 exit 0
+    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1 unreadable=0 crash_kills=0 crash_visible=19/19 timeout_kills=1 untargeted=7/7 exit 2
     MUTATION: PRECHECK_FAILED specs=3 drifted=1 unreadable=0               exit 2
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
@@ -92,14 +92,38 @@ fires on the source of any test whose SUBJECT is a crash (this suite has one:
     crash, so it prints the classification and leaves the judgement where the
     `caught:` detail lines already put it — with the author.
 
-Two things stay unclassified, and saying so is the point of writing it down. The
-second measured case — a kill by 60-second `TimeoutExpired` — is not reachable
-by this design: it prints as `subprocess.TimeoutExpired`, which carries neither
-`Error` nor `Exception` in its name, and pytest attributes it to the test file
-rather than to the mutated one. Widening the pattern to chase it would cost more
-in false attribution than the one case is worth. And the untargeted branch (no
-`test` key) is not classified at all, because its kill is scored against the
-whole suite, where a traceback may belong to any file. Nor can the classifier
+Both of those were listed here as permanently unclassified. **Both are now
+classified, each in the one direction that can be claimed honestly, and the
+reason the old text gave for declining was right about one thing and wrong about
+the other.**
+
+  * **The timeout kill** — the second measured case, a 60-second
+    `TimeoutExpired`. The old objection stands *as an objection to attribution*:
+    the name carries neither `Error` nor `Exception`, and pytest blames the TEST
+    file that set the timeout, never the module that hung, so widening
+    `_TERMINAL_LINE` would manufacture an attribution wrong by construction. What
+    did not follow is that the EVENT is unreportable. `timeout_kill` matches its
+    own pattern and returns an UNATTRIBUTED name, published as `timeout_kills=N`
+    and never folded into `crash_kills`, whose every entry names a file. It earns
+    its own count because it is the kill least likely to be the guard biting: a
+    guard that fires returns — it does not hang.
+  * **The untargeted branch** (no `test` key). The old reason — "its kill is
+    scored against the whole suite, where a traceback may belong to any file" —
+    was right about attribution and wrong about LOOKING. `crash_kill` already
+    asks only whether a traceback names the file THIS mutation edited, and that
+    basename rule is no weaker under a whole-suite run; other files' tracebacks
+    are what it discards. So the classification now runs on that branch too. What
+    stays true is that an untargeted kill is a weaker measurement, and that is
+    now REPORTED — `untargeted=N/M` on the token line — rather than left for a
+    reader to discover by opening the spec and counting `test` keys by hand.
+
+The general rule both fixes follow, and the one worth carrying: *unattributable*
+and *unreportable* are different. A measurement that cannot say WHICH file can
+still say THAT it happened, and publishing the weaker fact beside the count is
+strictly better than a silence the reader cannot distinguish from a zero. That is
+the same move `crash_visible` made for `crash_kills`.
+
+What still cannot be seen is unchanged: the classifier cannot
 see a crash the failing test never SURFACED: `assert r.returncode == 0` with no
 message discards the child's stderr, so `crash_kills=0` means "none found",
 never "none there". `crash_visible=M/T` on the token line is that caveat made
@@ -471,6 +495,20 @@ _TERMINAL_LINE = re.compile(r"^([\w.]+(?:Error|Exception)): ")
 # attribution a direct-import failure carries: pytest prints no `Traceback`
 # header of its own, so there are no `File "…"` frames to read.
 _PYTEST_FOOTER = re.compile(r"^(.+?\.py):\d+: ([\w.]+(?:Error|Exception))$")
+# A timeout kill, which `_TERMINAL_LINE` structurally cannot see: the name
+# `subprocess.TimeoutExpired` carries neither `Error` nor `Exception`. It is
+# matched on its OWN pattern rather than by widening that one, because the two
+# findings differ in what they may claim — see `timeout_kill`.
+#
+# ANCHORED at line start and requiring the `: ` of a terminal exception line,
+# exactly as `_TERMINAL_LINE` is, and for the reason `crash_reports` gives in its
+# own docstring: a bare search over the output matches any test whose SUBJECT is
+# timeouts. That is not hypothetical — the first run of this spec reported
+# `timeout_kills=2` against two mutations that never timed out, because the
+# tests killing them contain `"subprocess.TimeoutExpired: …"` as a FIXTURE
+# STRING and pytest echoes the assertion source into its failure block. The
+# leading quote is what the anchor now rejects.
+_TIMEOUT_LINE = re.compile(r"^((?:[\w.]+\.)?(?:TimeoutExpired|Timeout)): ")
 
 # Tier 1. `IndentationError` and `TabError` subclass `SyntaxError` but print
 # their own names, so all three are listed rather than inferred.
@@ -562,6 +600,53 @@ def crash_kill(output: str, mutated_file: str) -> str | None:
     for exception, files in crash_reports(output):
         if target in files:
             return exception
+    return None
+
+
+def timeout_kill(output: str) -> str | None:
+    """The timeout exception name if a run's output shows one, else None.
+
+    This is the second of the two blind spots the module docstring named, and it
+    is closed here in the ONE direction that can be closed honestly.
+
+    `crash_kill` answers "did the mutant crash *inside the file I mutated*", and
+    its whole value is that basename attribution. A timeout cannot be answered
+    that way: pytest attributes `subprocess.TimeoutExpired` to the TEST file
+    that called `subprocess.run(..., timeout=…)`, never to the mutated module
+    that hung, and the frames in between are the stdlib's. Widening
+    `_TERMINAL_LINE` to admit the name would therefore manufacture an attribution
+    that is wrong by construction — which is exactly why the docstring declined
+    to do it, and that judgement stands.
+
+    What does NOT follow is that the event is unreportable. "Something in this
+    run hung until a timeout fired" is knowable without knowing which file hung,
+    and it is worth knowing for a reason the other kills are not: a timeout is
+    the kill LEAST likely to be the guard biting. An assertion kill is usually
+    the property; a crash kill is ambiguous and annotated as such; a timeout kill
+    is almost never the property, because a guard that fires returns — it does
+    not hang. So this returns an unattributed name and the caller reports it as
+    its own count, never folded into `crash_kills`.
+
+    A run whose SUBJECT is timeouts false-positives here unless the match is
+    structural, which is the same hazard `crash_reports` documents for the word
+    `Traceback` — and this function shipped with a bare `.search()` and was
+    caught by its own spec on the first run, reporting `timeout_kills=2` for two
+    mutations that never timed out. The killing tests carry
+    `"subprocess.TimeoutExpired: …"` as a FIXTURE STRING, and pytest echoes the
+    assertion source into its failure block. So the scan is line-based, the
+    pytest `E ` marker is stripped first, and the name must open the line and be
+    followed by the `: ` of a real terminal exception line. A quoted occurrence
+    inside an echoed source line no longer matches.
+
+    The residual cost is bounded in a way the crash case's is not: this count is
+    published beside the verdict and changes no verdict, so anything that still
+    slips through costs a line of output and never a wrong PASS.
+    """
+    for raw in output.splitlines():
+        line = _PYTEST_MARKER.sub("", raw, count=1).strip()
+        match = _TIMEOUT_LINE.match(line)
+        if match:
+            return match.group(1)
     return None
 
 
@@ -735,7 +820,28 @@ def run_spec(spec_path: Path) -> dict:
         # whose named test failed on a traceback out of the mutated file. Tier 2
         # is printed for the author, not acted on.
         "crash_kills": 0,
-        # The DENOMINATOR for the line above. Computed once per run over the
+        # Also a SUBSET of `caught`, and deliberately NOT folded into
+        # `crash_kills`: a timeout is unattributed by construction (pytest blames
+        # the test file that set the timeout, not the module that hung), while
+        # every `crash_kills` entry names the mutated file. Merging them would
+        # put an unattributed count inside an attributed one.
+        #
+        # It earns its own line because it is the kill least likely to be the
+        # guard biting — a guard that fires RETURNS, it does not hang — so a
+        # non-zero here is a prompt to go and look, not a reassurance.
+        "timeout_kills": 0,
+        # How many of this run's mutations were scored WITHOUT a `test` key, and
+        # therefore against the whole suite rather than against a named pin. Not
+        # a fault and not a subset of anything — a measurement of how much of
+        # the score rests on the weaker question ("did the suite go red?")
+        # instead of the stronger one ("did THAT test bite?").
+        #
+        # Published for the same reason `crash_visible` is: the old docstring
+        # said untargeted rows were "not classified at all", which was true and
+        # invisible. A reader could only discover it by opening the spec and
+        # counting `test` keys by hand.
+        "untargeted": 0,
+        # The DENOMINATOR for `crash_kills`. Computed once per run over the
         # test files this spec's rows name: how many of their returncode
         # assertions carry a message and could therefore surface a traceback
         # at all. Without it `crash_kills=0` is a bare count whose two causes
@@ -940,6 +1046,18 @@ def run_spec(spec_path: Path) -> dict:
                             detail = f" (crash: {crash} in {basename})"
                         else:
                             detail = f" (assertion: no traceback from {basename})"
+                        # A timeout is a THIRD mechanism, not a flavour of the
+                        # other two, and it is checked independently of `crash`
+                        # for that reason: the run can carry both a traceback in
+                        # the mutated file and a timeout, and collapsing them
+                        # would hide whichever was checked second.
+                        timeout = timeout_kill(pin_output)
+                        if timeout:
+                            result["timeout_kills"] += 1
+                            detail += (
+                                f" (timeout: {timeout} — unattributed; a guard that "
+                                f"fires returns, so this is unlikely to be the property)"
+                            )
                         result["mechanism"][mutation["name"]] = (
                             f"killed by its named test {mutation['test']}{detail}"
                         )
@@ -962,16 +1080,48 @@ def run_spec(spec_path: Path) -> dict:
                             f"mutant is caught by the wrong assertion"
                         )
             else:
+                # The UNTARGETED branch — the first of the two blind spots the
+                # module docstring named. It used to score a kill and stop, with
+                # no crash or timeout classification at all, on the reasoning
+                # that a whole-suite traceback "may belong to any file".
+                #
+                # That reasoning is right about ATTRIBUTION and was wrong about
+                # LOOKING. `crash_kill` already answers the narrow question —
+                # does a traceback name the file THIS mutation edited — and its
+                # basename rule is no weaker here than in the targeted branch,
+                # because the question does not mention the test. What a
+                # whole-suite run adds is other files' tracebacks, which that
+                # same rule discards. So the classification runs here too, and a
+                # crash that names the mutated file is counted rather than
+                # silently folded into `caught`.
+                #
+                # What stays TRUE from the old comment: an untargeted kill is
+                # still a weaker measurement, because the killer may be any test.
+                # That is now reported as its own count instead of being left for
+                # the reader to infer from the spec file.
+                result["untargeted"] += 1
                 suite_green, suite_output = _run(command, root)
                 if suite_green:
                     result["survived"].append(mutation["name"])
                 else:
                     result["caught"] += 1
                     killers = _failing_tests(suite_output)
-                    result["mechanism"][mutation["name"]] = (
+                    mechanism = (
                         "killed by " + ", ".join(killers[:3]) if killers
                         else "killed, but the runner's output named no test (unparsed)"
                     )
+                    crash = crash_kill(suite_output, mutation["file"])
+                    if crash:
+                        result["crash_kills"] += 1
+                        mechanism += f" (crash: {crash} in {Path(mutation['file']).name})"
+                    timeout = timeout_kill(suite_output)
+                    if timeout:
+                        result["timeout_kills"] += 1
+                        mechanism += (
+                            f" (timeout: {timeout} — unattributed; a guard that "
+                            f"fires returns, so this is unlikely to be the property)"
+                        )
+                    result["mechanism"][mutation["name"]] = mechanism
 
             target.write_text(source, encoding="utf-8")
     finally:
@@ -1166,6 +1316,21 @@ def main(argv: list[str] | None = None) -> int:
             # have surfaced a crash at all — so `crash_kills=0` is never
             # again readable as "none there" without its own denominator.
             f" crash_visible={result.get('crash_visible', '?/?')}"
+            # Appended after both, and for the third time the same reason:
+            # left-to-right substring readers stay intact.
+            #
+            # `timeout_kills` is the other half of `crash_kills` — a kill by
+            # hang rather than by traceback — kept separate because it is
+            # unattributed where `crash_kills` names a file.
+            #
+            # `untargeted` closes the last silent gap on this line. Every other
+            # token describes rows scored against a NAMED test; this one says
+            # how many were not, i.e. how much of the verdict rests on "did the
+            # suite go red?" rather than "did that test bite?". `ALL_CAUGHT
+            # mutations=12 untargeted=12` and `… untargeted=0` are very
+            # different reports and used to print identically.
+            f" timeout_kills={result.get('timeout_kills', 0)}"
+            f" untargeted={result.get('untargeted', 0)}/{result.get('mutations', 0)}"
         )
     _print_skipped_precheck_entries(result)
     mechanism = result.get("mechanism") or {}
