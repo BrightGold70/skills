@@ -2918,3 +2918,139 @@ class TestTimeoutMatchingIsStructural:
         assert h_mad_mutation_harness.timeout_kill(
             "E           the helper raises subprocess.TimeoutExpired when it hangs"
         ) is None
+
+
+# --- self-matching specs: diagnosed, never refused --------------------------
+#
+# A backlog row asked the harness to REFUSE a mutation whose `find` occurs inside
+# its own `replace`. Calibrated against the corpus that already passes, that rule
+# refuses 21 of 874 committed mutations, every one of them a legitimate insertion
+# that is caught. So the refusal is refuted and the diagnosis is kept: the shape
+# is real and it explains a survivor, which is exactly when a reader needs it.
+
+
+def _self_matching_survivor() -> dict:
+    """Self-matching AND unobserved, so it survives and gets diagnosed.
+
+    `_untested_line` is the same mutation without the self-matching property, so
+    the pair discriminates the note from "any survivor gets a note".
+    """
+    return {"name": "append to an unobserved comment", "file": "guard.py",
+            "find": "# a comment that no test observes",
+            "replace": "# a comment that no test observes, and now a little more"}
+
+
+class TestSelfMatchingPredicate:
+    def test_a_replacement_containing_its_anchor_is_self_matching(self) -> None:
+        assert h_mad_mutation_harness.self_matching("THRESHOLD = 5",
+                                                    "THRESHOLD = 5\nextra = 1")
+
+    def test_an_ordinary_substitution_is_not(self) -> None:
+        assert not h_mad_mutation_harness.self_matching("THRESHOLD = 5",
+                                                        "THRESHOLD = 9")
+
+    def test_a_replacement_INSIDE_the_anchor_is_not(self) -> None:
+        """Deletion is the opposite direction and is perfectly detectable."""
+        assert not h_mad_mutation_harness.self_matching("a = 1\nb = 2", "a = 1")
+
+    def test_an_empty_anchor_is_not_reported_here(self) -> None:
+        """The anchor check already refuses it; two findings on one defect is worse."""
+        assert not h_mad_mutation_harness.self_matching("", "anything")
+
+
+class TestTheAnchorCheckSurfacesItWithoutJudging:
+    def test_it_is_reported(self, tmp_path: Path) -> None:
+        spec = _project(tmp_path, [_self_matching_survivor()])
+        result = precheck_spec(spec)
+        assert [e["name"] for e in result["self_matching"]] == [
+            "append to an unobserved comment"
+        ]
+
+    def test_it_does_not_change_the_verdict(self, tmp_path: Path) -> None:
+        """Advisory means advisory: the exit code and the word must not move."""
+        spec = _project(tmp_path, [_self_matching_survivor()])
+        assert precheck_spec(spec)["verdict"] == "ANCHORS_OK"
+
+    def test_an_ordinary_mutation_is_not_flagged(self, tmp_path: Path) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+        assert precheck_spec(spec)["self_matching"] == []
+
+    def test_the_summary_line_is_unchanged(self, tmp_path: Path) -> None:
+        """The `ANCHORS:` summary is parsed by exact string here and by an
+        ordered substring `case` in the pre-push hook whose default arm ALLOWS
+        the push. A new field there is a coordinated release; this finding rides
+        a detail line precisely so it is not one."""
+        spec = _project(tmp_path, [_self_matching_survivor()])
+        proc = subprocess.run(
+            [sys.executable, str(HARNESS), "--check-anchors", str(spec)],
+            capture_output=True, text=True,
+        )
+        summary = next(
+            line for line in proc.stdout.splitlines()
+            if line.startswith("ANCHORS: ANCHORS_OK")
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert summary == (
+            "ANCHORS: ANCHORS_OK specs=1 mutations=1 ok=1 drifted=0 unreadable=0 "
+            "skipped=0 unclassifiable=0"
+        )
+
+    def test_the_cli_names_the_mutation_and_says_why(self, tmp_path: Path) -> None:
+        spec = _project(tmp_path, [_self_matching_survivor()])
+        proc = subprocess.run(
+            [sys.executable, str(HARNESS), "--check-anchors", str(spec)],
+            capture_output=True, text=True,
+        )
+        assert "self-matching: 1 —" in proc.stdout, proc.stdout
+        assert "mutation: append to an unobserved comment :: guard.py" in proc.stdout
+        assert "cannot be detected by containment" in proc.stdout
+
+
+class TestASurvivorIsToldWhy:
+    def test_the_mechanism_carries_the_diagnosis(self, tmp_path: Path) -> None:
+        """The untargeted survivor branch printed a bare NAME and nothing else."""
+        spec = _project(tmp_path, [_self_matching_survivor()])
+        result = run_spec(spec)
+        assert result["survived"] == ["append to an unobserved comment"]
+        mechanism = result["mechanism"].get("append to an unobserved comment", "")
+        assert "self-matching spec" in mechanism, mechanism
+
+    def test_an_ordinary_survivor_gets_no_such_note(self, tmp_path: Path) -> None:
+        """Otherwise the note is decoration on every hole rather than a finding."""
+        spec = _project(tmp_path, [_untested_line()])
+        result = run_spec(spec)
+        assert result["survived"] == ["edit an unobserved comment"]
+        assert "self-matching" not in result["mechanism"].get(
+            "edit an unobserved comment", ""
+        )
+
+
+class TestCalibratedAgainstTheCommittedCorpus:
+    """The row's refusal, tested against the specs it would have refused."""
+
+    def _flagged(self):
+        project_root = Path(__file__).resolve().parents[1]
+        spec_paths, _ = _own_committed_mutation_specs(project_root)
+        out = []
+        for spec_path in spec_paths:
+            result = precheck_spec(spec_path)
+            for entry in result["self_matching"]:
+                out.append((spec_path.name, entry["name"], result["verdict"]))
+        return out
+
+    def test_the_shape_really_does_occur_in_committed_specs(self) -> None:
+        """If this ever hits zero the calibration argument has gone stale and a
+        refusal would look free again -- which is how it got proposed."""
+        flagged = self._flagged()
+        assert flagged, (
+            "no committed mutation is self-matching any more; re-run the census "
+            "before trusting the 'advisory, not a refusal' decision"
+        )
+
+    def test_not_one_of_them_is_turned_into_a_failure(self) -> None:
+        """The whole decision, in one assertion: 21 working guards stay online."""
+        for spec_name, mutation_name, verdict in self._flagged():
+            assert verdict != "ANCHORS_DRIFTED", (
+                f"{spec_name}::{mutation_name} — a self-matching mutation must "
+                "not affect the spec's verdict"
+            )

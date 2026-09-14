@@ -683,6 +683,46 @@ def _match_lines(source: str, find: str, limit: int = 5) -> list[int]:
     ][:limit]
 
 
+#: Why a self-matching mutation is diagnosed and NOT refused.
+#:
+#: A backlog row asked for a refusal: "refuse a mutation whose `find` string
+#: occurs in its own `replace` text". Calibrated against the specs that already
+#: pass, 2026-09-14: **21 of 874 committed mutations** are exactly that shape and
+#: every one is a legitimate, caught insertion -- `order = order + order` appended
+#: to a sort, `default=False,` added to an argparse line, `name: h-mad` renamed to
+#: `name: h-mad-renamed`. A refusal would have rejected all 21 and taken twenty-one
+#: working guards offline to prevent a failure mode that is already reported.
+#:
+#: What is real is the DIAGNOSIS. The incident behind the row was a mutant whose
+#: replacement still contained the phrase its assertion greps for, so the mutated
+#: tree still matched and the mutation survived for a reason that was a property
+#: of the SPEC, not of the code. The harness already catches that empirically --
+#: it reports SURVIVED -- and what it could not do was say WHY. Now it can, and
+#: the cost of being wrong is a line of text rather than a refused guard.
+SELF_MATCHING_NOTE = (
+    "self-matching spec: the replacement re-contains the anchor verbatim, so every "
+    "substring of the original survives the mutation and any assertion shaped "
+    "`assert \"<text>\" in ...` still passes. If a grep-shaped test was expected to "
+    "catch this, that is why it did not — the mutation cannot be detected by "
+    "containment. Advisory, never a refusal: pure insertions of this shape are "
+    "common and usually legitimate (21 of 874 committed mutations, all caught)"
+)
+
+
+def self_matching(find: str, replace: str) -> bool:
+    """Does the replacement re-contain its own anchor verbatim?
+
+    Deliberately the whole-string containment test and nothing cleverer. A
+    narrower predicate -- "insertion at the end", "the assertion greps for it" --
+    needs to know the shape of the test, which this harness does not and must not
+    start knowing (`_failing_tests`' docstring makes the same commitment about
+    test runners). An empty `find` is not self-matching: it is a spec error the
+    anchor check already refuses, and reporting it here as well would put two
+    findings on one defect.
+    """
+    return bool(find) and find in replace
+
+
 def anchor_status(source: str, find: str) -> tuple[int, list[str]]:
     """How often `find` occurs in `source`, plus recovery hints when that is not 1.
 
@@ -728,6 +768,10 @@ def precheck_spec(spec_path: Path) -> dict:
         "ok": 0,
         "drifted": [],
         "unreadable": [],
+        # Advisory only — it never reaches `verdict` below. This is the half of
+        # the row that genuinely "needs no execution": you learn a spec cannot be
+        # caught by containment from reading it, without paying for a suite run.
+        "self_matching": [],
     }
 
     # One read per file, not per mutation: specs routinely aim a dozen mutations
@@ -743,6 +787,10 @@ def precheck_spec(spec_path: Path) -> dict:
                     f"{mutation['name']}: cannot read {mutation['file']} ({exc})"
                 )
                 continue
+        if self_matching(mutation["find"], mutation.get("replace", "")):
+            result["self_matching"].append(
+                {"name": mutation["name"], "file": mutation["file"]}
+            )
         hits, hints = anchor_status(cache[target], mutation["find"])
         if hits == 1:
             result["ok"] += 1
@@ -1079,6 +1127,13 @@ def run_spec(spec_path: Path) -> dict:
                             f"red elsewhere ({', '.join(others[:3]) or 'unparsed'}) — the "
                             f"mutant is caught by the wrong assertion"
                         )
+                    # A survivor is where this diagnosis earns its keep: the
+                    # harness has just reported "nothing bites", which is
+                    # byte-identical to a real coverage gap, and the spec itself
+                    # may be the reason. Appended to the mechanism rather than
+                    # printed separately so the two never drift apart in a log.
+                    if self_matching(mutation["find"], mutation.get("replace", "")):
+                        result["mechanism"][mutation["name"]] += f" — {SELF_MATCHING_NOTE}"
             else:
                 # The UNTARGETED branch — the first of the two blind spots the
                 # module docstring named. It used to score a kill and stop, with
@@ -1103,6 +1158,12 @@ def run_spec(spec_path: Path) -> dict:
                 suite_green, suite_output = _run(command, root)
                 if suite_green:
                     result["survived"].append(mutation["name"])
+                    # The untargeted branch carried NO mechanism line at all, so
+                    # an untargeted survivor printed its name and nothing else.
+                    # This is the one thing the harness can say about it without
+                    # knowing which test should have bitten.
+                    if self_matching(mutation["find"], mutation.get("replace", "")):
+                        result["mechanism"][mutation["name"]] = SELF_MATCHING_NOTE
                 else:
                     result["caught"] += 1
                     killers = _failing_tests(suite_output)
@@ -1192,6 +1253,20 @@ def _check_anchors(spec_paths: list[Path]) -> int:
                 print(f"    hint: {hint}")
         for entry in result["unreadable"]:
             print(f"  unreadable: {entry}")
+        # Printed as a per-spec DETAIL line, never as a summary field. The
+        # `ANCHORS:`/`MUTATION:` summary lines are parsed by exact string in the
+        # suite and by an ordered substring `case` in the pre-push hook whose
+        # default arm ALLOWS the push, so a new word there is a coordinated
+        # release; a detail line costs nobody anything.
+        # One header per spec, then the names. The note is four lines long and a
+        # spec routinely has several of these; repeating it per mutation buries
+        # the drift and unreadable findings above it, which are the ones that
+        # actually stop a run.
+        flagged = result.get("self_matching", [])
+        if flagged:
+            print(f"  self-matching: {len(flagged)} — {SELF_MATCHING_NOTE}")
+            for entry in flagged:
+                print(f"    mutation: {entry['name']} :: {entry['file']}")
 
     if specs == 0:
         verdict = "ANCHORS_NOTHING_SWEPT"

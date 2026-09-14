@@ -1,0 +1,27 @@
+{
+  "_why": "The handoff half of the skill-body renderer lint. The lint itself lives in `h-mad/tests/test_skill_body_renderer_args.py` and covers BOTH authored skill bodies; this spec exists because a mutation that WRITES `handoff/SKILL.md` must be owned by the handoff skill. PORTABILITY: this spec is SPLIT across the two skills it lints, and the split is not cosmetic. `test_every_committed_spec_resolves_within_its_own_skill` refuses a committed root above its own skill directory, because a spec that can write outside the skill breaks a portable single-skill checkout. The first draft rooted at the repository and shipped that test RED -- caught by the baseline of the very next mutation run, not by the targeted slice that was run before committing. So `h-mad/` owns the mutations that write under `h-mad/`, `handoff/` owns the one that writes `handoff/SKILL.md`, and each runs the test file that lives beside it. It aims at the delegating edge rather than at the pattern: `TestNoDollarArgInTheSkillBody` used to spell its own `\\$[0-9]` and now calls the shared lint, and a delegation that stops reading the file is indistinguishable from a deletion unless something mutates the file and checks this suite alone.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_handoff_takeover_mode.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "placeholder-appears-in-the-handoff-body",
+      "_mechanism": "The other body, and the realistic authoring slip rather than a synthetic token: a doc writer reaching for a placeholder where a field name belongs. It is `$1`, so the OLD narrow lint would also have caught it -- that is deliberate, because this row's job is to prove the file is still being READ after the delegation, not to prove the pattern widened. `scope-drops-the-h-mad-body` covers the other direction.",
+      "file": "SKILL.md",
+      "find": "The `<project-slug>` field in the INDEX.md entry should match the project's canonical name:",
+      "replace": "The `$1` field in the INDEX.md entry should match the project's canonical name:",
+      "test": "tests/test_handoff_takeover_mode.py::TestNoDollarArgInTheSkillBody::test_no_positional_shell_arg_survives_in_the_body"
+    }
+  ]
+}

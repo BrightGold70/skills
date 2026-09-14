@@ -1710,7 +1710,7 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   — a fixture that can express the collision, which the distinct-by-construction ones could not.
   (b) NOT LANDED: the general rule — *for any gate that counts distinct things, require a fixture
   whose entries collide on the discriminating key* — has no home, so the next such gate starts over.
-  — **SHARPENED 2026-09-14: the hazard is bigger than a corrupted line — it is a MODE SWITCH.**
+  — **LANDED 2026-09-14, and SHARPENED: the hazard is bigger than a corrupted line — it is a MODE SWITCH.**
   Observed live comparing three rendered bodies: `/loop` (contains a placeholder) had its argument
   spliced INLINE and no trailer; `/handoff read` and `/caveman ultra` (no placeholder) arrived
   unchanged with `ARGUMENTS: read` / `ARGUMENTS: ultra` APPENDED. Both `handoff` and `h-mad` route
@@ -1734,6 +1734,20 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   `replace`. Searched by several spellings over the harness and found nothing. That is the mutation
   that cannot be cleanly reasoned about — the replacement re-contains the anchor, so a second
   application would compound rather than no-op.
+  — **LANDED 2026-09-14 as a DIAGNOSIS, and the REFUSAL is refuted by calibration.** The row asked
+  the harness to refuse a mutation whose `find` occurs inside its own `replace`. Measured against
+  the corpus that already passes: **21 of 874 committed mutations are exactly that shape and every
+  one is a legitimate insertion that is caught** — `order = order + order` appended to a sort,
+  `default=False,` added to an argparse line, a frontmatter `name:` renamed by suffix. A refusal
+  would have taken twenty-one working guards offline to prevent a failure the harness already
+  reports (as SURVIVED). What was genuinely missing was the REASON, so `self_matching()` now prints
+  a `self-matching:` detail line under `--check-anchors` — the half of the row that truly "needs no
+  execution" — and appends the diagnosis to the `mechanism:` line of any survivor, including the
+  untargeted branch, which printed a bare name and nothing else. Deliberately on DETAIL lines, not
+  the summary: the `ANCHORS:` line is asserted by exact string in the suite and scored by an ordered
+  substring `case` in the pre-push hook whose default arm ALLOWS the push. 5 mutations, ALL_CAUGHT
+  (44/44 for the spec as a whole). The absent-`find` lint half of this row remains LANDED at
+  `h_mad_mutation_harness.py:402`.
 - **a mutation that can never fire reads as a passing battery**: six rows this session SURVIVED or
   were REFUSED for reasons that were properties of the SPEC, not of the code — the assertion named
   the *topic* rather than the prescription; the mutation was aimed at a line that never carried the

@@ -59,7 +59,7 @@
       "name": "drop-the-near-miss-hint",
       "_mechanism": "The REFUSED verdict stays correct but the recovery goes back to a manual re-grep for whatever the author's own edits moved. Anchored in `anchor_status`, which both the precheck and the run read.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "find": "        return hits, [f\"near miss {h}\" for h in _near_misses(source, find)] or [\n            \"no near miss found \u2014 the anchor may be gone entirely\"\n        ]",
+      "find": "        return hits, [f\"near miss {h}\" for h in _near_misses(source, find)] or [\n            \"no near miss found — the anchor may be gone entirely\"\n        ]",
       "replace": "        return hits, []",
       "test": "tests/test_h_mad_mutation_harness.py::test_a_drifted_anchor_gets_a_near_miss_with_a_line_number"
     },
@@ -169,7 +169,7 @@
     },
     {
       "name": "precheck-calls-a-drifted-anchor-ok",
-      "_mechanism": "The sweep reports ANCHORS_OK over specs whose mutations cannot land \u2014 exactly the false all-clear the precheck exists to end, and cheaper to trust than the run it stands in for.",
+      "_mechanism": "The sweep reports ANCHORS_OK over specs whose mutations cannot land — exactly the false all-clear the precheck exists to end, and cheaper to trust than the run it stands in for.",
       "file": "scripts/h_mad_mutation_harness.py",
       "find": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if hits == 1:",
       "replace": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if True:",
@@ -235,7 +235,7 @@
       "name": "swallow-a-corrupt-spec-as-a-skip",
       "_mechanism": "A file that classifies `spec` and then fails deeper validation is counted as a skip instead of a finding. The sweep then reports success while a corrupt spec's guard is unverified -- the exact blindness the classifier must not introduce.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "find": "        except SpecError as exc:\n            # One unusable spec must not abort the sweep: the specs after it are\n            # exactly the ones whose drift would then go unreported.\n            specs += 1\n            unreadable += 1\n            print(f\"ANCHORS: {spec_path.name} UNREADABLE \u2014 {exc}\")\n            continue",
+      "find": "        except SpecError as exc:\n            # One unusable spec must not abort the sweep: the specs after it are\n            # exactly the ones whose drift would then go unreported.\n            specs += 1\n            unreadable += 1\n            print(f\"ANCHORS: {spec_path.name} UNREADABLE — {exc}\")\n            continue",
       "replace": "        except SpecError:\n            skipped += 1\n            continue",
       "test": "tests/test_h_mad_mutation_harness.py::test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation"
     },
@@ -243,7 +243,7 @@
       "name": "stop-naming-skipped-files-on-a-successful-sweep",
       "_mechanism": "Skipped files stop being named, so an operator cannot tell `swept 17` from `swept 12 and quietly ignored 5`.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "find": "            print(f\"ANCHORS: {spec_path.name} SKIPPED not-a-spec \u2014 {detail}\")",
+      "find": "            print(f\"ANCHORS: {spec_path.name} SKIPPED not-a-spec — {detail}\")",
       "replace": "            pass",
       "test": "tests/test_h_mad_mutation_harness.py::test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success"
     },
@@ -297,7 +297,7 @@
     },
     {
       "name": "a-bad-spec-aborts-the-sweep",
-      "_mechanism": "One unreadable spec would hide the drift in every spec after it \u2014 and the sweep's whole value is that it reports on all of them in one pass. Anchor widened to include the precheck_spec call above it: Task 4 added a second `except SpecError` in run_spec's sibling loop, so the bare clause is no longer unique.",
+      "_mechanism": "One unreadable spec would hide the drift in every spec after it — and the sweep's whole value is that it reports on all of them in one pass. Anchor widened to include the precheck_spec call above it: Task 4 added a second `except SpecError` in run_spec's sibling loop, so the bare clause is no longer unique.",
       "file": "scripts/h_mad_mutation_harness.py",
       "find": "            result = precheck_spec(spec_path)\n        except SpecError as exc:",
       "replace": "            result = precheck_spec(spec_path)\n        except ZeroDivisionError as exc:",
@@ -320,11 +320,51 @@
     },
     {
       "name": "the-footer-branch-stops-classifying-anything",
-      "_mechanism": "The over-correction. Dropping the footer branch entirely \u2014 rather than one exception spelling \u2014 blinds the classifier to direct-import failures, which carry no `Traceback` header and are attributed ONLY by that footer. A genuine crash in a mutated test file would go unreported too, which `docsections.json` shows is a live shape.",
+      "_mechanism": "The over-correction. Dropping the footer branch entirely — rather than one exception spelling — blinds the classifier to direct-import failures, which carry no `Traceback` header and are attributed ONLY by that footer. A genuine crash in a mutated test file would go unreported too, which `docsections.json` shows is a live shape.",
       "file": "scripts/h_mad_mutation_harness.py",
       "find": "            if footer.group(2) != \"AssertionError\":\n                reports.append((footer.group(2), [Path(footer.group(1)).name]))",
       "replace": "            pass",
       "test": "tests/test_h_mad_mutation_harness.py::test_a_REAL_crash_in_the_mutated_test_file_is_still_classified"
+    },
+    {
+      "name": "self-matching-detection-goes-dead",
+      "_mechanism": "The feature switched off while every other output stays identical. Nothing is flagged, no verdict moves, and the only visible difference is the one line a survivor needed -- which is precisely the failure mode this diagnosis exists to explain, reproduced in the thing that explains it.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return bool(find) and find in replace",
+      "replace": "    return False",
+      "test": "tests/test_h_mad_mutation_harness.py::TestTheAnchorCheckSurfacesItWithoutJudging::test_it_is_reported"
+    },
+    {
+      "name": "self-matching-flags-every-mutation",
+      "_mechanism": "The opposite failure and the more corrosive one: an advisory that fires on all 874 committed mutations is noise, a reader learns to scroll past it, and the one spec that genuinely cannot be caught by containment is hidden inside the flood. A detector that is always right about everything is not a detector.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return bool(find) and find in replace",
+      "replace": "    return bool(find)",
+      "test": "tests/test_h_mad_mutation_harness.py::TestTheAnchorCheckSurfacesItWithoutJudging::test_an_ordinary_mutation_is_not_flagged"
+    },
+    {
+      "name": "an-empty-anchor-becomes-self-matching",
+      "_mechanism": "`\"\" in anything` is True, so dropping the emptiness guard reports every mutation with a missing `find` as self-matching -- on top of the anchor refusal it already earns. Two findings on one defect sends the reader at the wrong one, and the wrong one has no fix.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return bool(find) and find in replace",
+      "replace": "    return find in replace",
+      "test": "tests/test_h_mad_mutation_harness.py::TestSelfMatchingPredicate::test_an_empty_anchor_is_not_reported_here"
+    },
+    {
+      "name": "the-advisory-becomes-a-verdict",
+      "_mechanism": "The change the backlog row actually asked for, applied where it would bite: a self-matching mutation now moves the spec's verdict and exits 2. Measured against the corpus it refuses 21 of 874 committed mutations -- every one a legitimate insertion that is caught -- so this row is the refutation kept executable rather than argued in a comment.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        \"ANCHORS_UNREADABLE\"\n        if result[\"unreadable\"]\n        else \"ANCHORS_DRIFTED\"\n        if result[\"drifted\"]",
+      "replace": "        \"ANCHORS_UNREADABLE\"\n        if result[\"unreadable\"]\n        else \"ANCHORS_DRIFTED\"\n        if result[\"drifted\"] or result[\"self_matching\"]",
+      "test": "tests/test_h_mad_mutation_harness.py::TestTheAnchorCheckSurfacesItWithoutJudging::test_it_does_not_change_the_verdict"
+    },
+    {
+      "name": "the-survivor-loses-its-diagnosis",
+      "_mechanism": "The untargeted survivor branch back to printing a bare name. The spec is still flagged by --check-anchors, so a reader who happens to run the cheap check separately still learns it -- which is exactly why this needs its own row: the expensive run, the one that just reported `nothing bites`, would stay silent about the reason.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                        result[\"mechanism\"][mutation[\"name\"]] = SELF_MATCHING_NOTE",
+      "replace": "                        pass",
+      "test": "tests/test_h_mad_mutation_harness.py::TestASurvivorIsToldWhy::test_the_mechanism_carries_the_diagnosis"
     }
   ]
 }
