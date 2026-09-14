@@ -1841,6 +1841,7 @@ stands and was not re-done. Census unchanged at `candidates=212 OPEN=47 yes=28 m
   strictly worse. Belongs in `measurement-discipline.md` rather than as a new skill.
 
 - **a hollow-kill detector — "did the mutant REACH the property?"**: the crash-kill classifier says
+  — **still open, but ADVANCED 2026-09-14 (`43c0cc6`)**: the harness now publishes `crash_visible=M/T` beside `crash_kills=N`, so a zero can no longer be read as absence — and on its first run it surfaced a real hollow kill (a mutation dying on `NameError` because a port had removed the name its replacement used). That is the DENOMINATOR, not the detector this row asks for: knowing a mutant crashed still does not tell you whether it reached the property. Recurrence 1 → 2.
   a mutant died on an exception; it cannot say whether the exception was the guard firing or the
   mutant failing to run at all. Measured 2026-09-14 over all 92 specs: of 12 genuine crash kills,
   **4 were HOLLOW** — a kwarg that does not exist (`TypeError`), a function never written
@@ -1871,6 +1872,7 @@ Rows re-read for relevance to this session's work (the crash-kill/`--sweep` pair
 1855): neither is touched by it. No row flipped.
 
 - **which diagnostic surface shows which warning**: reproducing `bkit: hooks.json: unknown key …`
+  — **SUPERSEDED 2026-09-14** — the question is retired rather than answered: the warning is a pure function of `hooks.json`, so the CC binary's own validator constants (`yko`/`_ko` at 2.1.270 offset ~169081421, byte-identical to 2.1.268) can be REPLAYED offline over every installed plugin, with the pre-patch backup as a negative control. No diagnostic surface is needed. The replay is still only in a session scratchpad — see the `plugin-hooks-validator-replay` row below.
   cost five probes — `claude -p`, `--debug`, `--debug hooks`, `plugin details`, `plugin validate` —
   all silent, because the warning renders only on the interactive TUI warn surface and
   `plugin validate` runs a *different* validator (unknown **events**, not unknown **keys**). A
@@ -1886,3 +1888,8 @@ Rows re-read for relevance to this session's work (the crash-kill/`--sweep` pair
   generalisable half is the *discipline* (a decode is only trustworthy once its replay reproduces
   the original text character-for-character), which is now a `docs/learnings.md` entry; whether the
   mechanics deserve a skill is the open question. — recurrence: 2 across sessions — candidate: maybe
+
+## 2026-09-14 — backlog-cleared-and-the-hollow-kill
+
+- **plugin-hooks-validator-replay**: replay Claude Code's own `hooks.json` key validator offline by extracting its allowed-key Sets from the running binary, then scoring every installed plugin — closes a "TUI-only, operator must look" item without an interactive session, and re-answers it after each upgrade wipes a vendor-cache patch. Negative control (the pre-patch backup) is part of the recipe, not an extra — recurrence: 1 — candidate: yes
+- **calibrate-a-ranking-screen-against-known-positives**: when a corpus is too large to read and the obvious proxy is known-wrong, rank by a cheap signal and then *calibrate the ranking against the items already known to be positive* before trusting the cut-off. Used on `#56` (177 rows, 8 knowns all inside rank 61) — the screen narrows, a human read decides. Distinct from the existing calibrate-a-detector row, which is about false-positive rates on a gate, not about bounding a search — recurrence: 1 — candidate: maybe
