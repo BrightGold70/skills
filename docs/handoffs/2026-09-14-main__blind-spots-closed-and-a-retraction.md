@@ -116,14 +116,18 @@ symbol doing the job — is the reusable part.
   does not leave the chain unmentioned; **no ownership moved** — it already has an owner.
 - **The `#56` probe doc's "202 test rows" is corrected to 200 in `cf6c933`**, but the same borrowed
   figure may exist in the brief it came from — not swept.
-- **The auto-memory index is 200 bytes from its own read limit** — status: open, **and it fails
-  silently and totally when it trips.** `~/.claude/projects/-Users-kimhawk-orca-skills/memory/MEMORY.md`
-  is **24.2 KB against a 24.4 KB limit**; the write hook asks for it to be compacted under 17.1 KB.
-  That file is the index loaded at the *start of every session*, so overflowing it does not degrade
-  recall — it removes it, with no error at the point of loss. Not done here because compaction is a
-  judgement call about which of ~120 entries merge or retire, and doing it badly is how the pointers
-  that still matter get dropped. `repo: n/a (user-global local state, not a git repo) · path:
-  ~/.claude/projects/-Users-kimhawk-orca-skills/memory/MEMORY.md`.
+- **The auto-memory index needs real compaction** — status: open, **but the silent loss is repaired
+  and there is now a guard** (`ae7d9a7`). It was **over** the cap, not near it: 25254 bytes against
+  25000, and it had been dropping its tail on every load — an h-mad skill note and the entire *"Orca
+  orchestration needs a bound Run"* entry were invisible to every session. Repaired by shortening
+  HOOKS only (no entry removed, no link changed): **25254 → 24966, dropped=254 → 0**, both entries
+  loading again.
+  **What is still open** is compaction to the 17500-byte target: the index sits at 100% of cap, so
+  the next memory written pushes it back over. Not done here because it is a judgement call about
+  which of ~120 entries merge or retire, and doing it badly drops the pointers that still matter.
+  `repo: n/a (user-global local state, not a git repo) · path:
+  ~/.claude/projects/-Users-kimhawk-orca-skills/memory/MEMORY.md · guard:
+  python3.11 h-mad/scripts/h_mad_check_memory_index.py --show-dropped`
 
 ## Context for Next Session
 
