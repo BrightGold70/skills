@@ -1,0 +1,99 @@
+{
+  "_why": "This guard exists because the failure it catches is INVISIBLE: the write succeeds and the overflow is dropped at LOAD time, so nothing in the tree looks wrong. That shape makes the whole battery vulnerable to a mutation that simply reports OK \u2014 which is why the loosening mutations dominate here. The load-bearing row is `byte-only-check-ignores-the-line-cap`: it is the obvious simplification of this script, it leaves every byte test passing, and only the worst-dimension tests can see it. Each mutation names the ONE test it is aimed at, so a kill by an unrelated assertion, a crash or a timeout is reported as a survivor with the real catcher named.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_check_memory_index.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "byte-only-check-ignores-the-line-cap",
+      "_mechanism": "THE simplification a future author reaches for: score bytes and stop. An index at 40% of its byte cap and 105% of its line cap then reports OK while its tail is being dropped. Every byte-dimension test still passes, so only the worst-dimension battery can see it.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "    worst = max(dims, key=lambda d: d[\"frac\"])",
+      "replace": "    worst = dims[0]",
+      "test": "tests/test_h_mad_check_memory_index.py::TestTheWorstDimensionWins::test_over_on_lines_while_comfortably_under_on_bytes"
+    },
+    {
+      "name": "over-becomes-greater-or-equal",
+      "_mechanism": "Off-by-one against the loader, which tests `size > cap`. An index sitting EXACTLY at the cap would be reported OVER and sent for a compaction it does not need \u2014 the false-positive direction, which erodes trust in the guard until someone stops running it.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "         \"over\": size_bytes > byte_cap, \"size\": size_bytes, \"cap\": byte_cap},",
+      "replace": "         \"over\": size_bytes >= byte_cap, \"size\": size_bytes, \"cap\": byte_cap},",
+      "test": "tests/test_h_mad_check_memory_index.py::TestTheBoundaries::test_exactly_at_the_cap_is_not_over"
+    },
+    {
+      "name": "warn-threshold-becomes-strictly-greater",
+      "_mechanism": "An index landing exactly on 80% reports OK. The boundary is the one value a threshold is most likely to be tested at and most likely to be got wrong.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "        \"OVER\" if worst[\"over\"] else \"WARN\" if worst[\"frac\"] >= WARN_FRAC else \"OK\"",
+      "replace": "        \"OVER\" if worst[\"over\"] else \"WARN\" if worst[\"frac\"] > WARN_FRAC else \"OK\"",
+      "test": "tests/test_h_mad_check_memory_index.py::TestTheBoundaries::test_exactly_at_the_warn_fraction_warns"
+    },
+    {
+      "name": "warn-no-longer-sets-the-exit-code",
+      "_mechanism": "WARN still PRINTS, so a human reading stdout sees it, but the CLI exits 0 and every gate built on it passes. WARN is the actionable state \u2014 it is the last moment compaction is cheap \u2014 so silencing it defers every index to OVER, where content is already lost.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "        elif verdict in (\"WARN\", \"OVER\"):",
+      "replace": "        elif verdict in (\"OVER\",):",
+      "test": "tests/test_h_mad_check_memory_index.py::TestCLI::test_a_warning_index_exits_one_too"
+    },
+    {
+      "name": "unreadable-index-reports-ok",
+      "_mechanism": "`I could not read it` collapsing into `it is fine` \u2014 the asymmetry this repo already enforces for the worktree comment and the state-file search. An index that has been moved or corrupted would exit 0.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "    except OSError as exc:\n        return (\"UNREADABLE\", f\"UNREADABLE {path} ({exc})\")",
+      "replace": "    except OSError:\n        return (\"OK\", \"OK unreadable treated as fine\")",
+      "test": "tests/test_h_mad_check_memory_index.py::TestUnreadableIsNotClean::test_a_missing_index_reports_unreadable"
+    },
+    {
+      "name": "dropped-text-measured-from-the-wrong-end",
+      "_mechanism": "Returns the HEAD instead of the TAIL. The count stays right, so `dropped=254` still reads correctly, and the operator is shown 254 bytes of text that is perfectly visible while the entries actually being lost stay hidden. A count-only assertion cannot see this.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "    return raw[byte_cap:].decode(\"utf-8\", \"replace\") if len(raw) > byte_cap else \"\"",
+      "replace": "    return raw[:byte_cap].decode(\"utf-8\", \"replace\") if len(raw) > byte_cap else \"\"",
+      "test": "tests/test_h_mad_check_memory_index.py::TestDroppedText::test_it_returns_exactly_the_bytes_past_the_cap"
+    },
+    {
+      "name": "inode-dedup-collapses-distinct-indexes",
+      "_mechanism": "A de-dup keyed on something every file shares reports ONE index no matter how many exist, hiding every index but the first. It passes the hardlink test \u2014 which is why that test needed a distinct-files sibling.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "        seen.setdefault((st.st_dev, st.st_ino), p)",
+      "replace": "        seen.setdefault((st.st_dev, 0), p)",
+      "test": "tests/test_h_mad_check_memory_index.py::TestInodeDedup::test_distinct_indexes_are_all_reported"
+    },
+    {
+      "name": "line-count-drops-the-unterminated-final-line",
+      "_mechanism": "`wc -l` semantics: count newlines. An index whose last line has no trailing newline is then under-counted by one, and an index sitting exactly at the line cap reads as under it. The off-by-one is invisible on any fixture that happens to end with a newline, which is most of them.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "    return (len(raw), len(raw.split(b\"\\n\")) - (1 if raw.endswith(b\"\\n\") else 0))",
+      "replace": "    return (len(raw), raw.count(b\"\\n\"))",
+      "test": "tests/test_h_mad_check_memory_index.py::TestLineCounting::test_a_final_line_without_a_newline_still_counts"
+    },
+    {
+      "name": "compaction-target-uses-the-warn-fraction",
+      "_mechanism": "Targets 80% instead of 70%, so a compaction done to this script's own advice lands just under the warn line and re-warns almost immediately. The number is advice, not a gate, which is exactly why nobody would notice it drifting.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "    worst[\"target\"] = int(worst[\"cap\"] * TARGET_FRAC)",
+      "replace": "    worst[\"target\"] = int(worst[\"cap\"] * WARN_FRAC)",
+      "test": "tests/test_h_mad_check_memory_index.py::TestTheBoundaries::test_the_compaction_target_is_seventy_percent_of_the_binding_cap"
+    },
+    {
+      "name": "kb-rendering-switches-to-decimal-kb",
+      "_mechanism": "25000/1000 renders '25.0KB' where the hook says '24.4KB'. The script and the built-in warning would then disagree about the same number, and a reader reconciling them concludes one of the two is measuring something else.",
+      "file": "scripts/h_mad_check_memory_index.py",
+      "find": "    return f\"{n / 1024:.1f}KB\"",
+      "replace": "    return f\"{n / 1000:.1f}KB\"",
+      "test": "tests/test_h_mad_check_memory_index.py::TestRendering::test_the_cap_renders_the_way_the_warning_spells_it"
+    }
+  ]
+}

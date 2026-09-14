@@ -17,6 +17,28 @@ only if `--skip-memories` was set, or the memory dir does not exist.)
 Skip anything already captured in the code, git history, CLAUDE.md, or that only mattered this
 session — those belong in the handoff doc or `docs/learnings.md`, not the auto-memory store.
 
+**PRE-CHECK THE INDEX BEFORE YOU WRITE TO IT — the failure is silent and happens at LOAD, not at
+write.** Claude Code caps the index at **25000 bytes / 200 lines**; past that, quoting the binary,
+*"the write succeeded, but everything past the limit is silently dropped each time the index is
+loaded — entries at the end are already invisible to readers."* So the built-in warning fires on the
+write that crosses the line, which is one write too late, and it lands in a hook message that no
+later session reads. `wc -c` cannot tell you the tail is being dropped; only a comparison against
+the cap can.
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_check_memory_index.py --show-dropped
+```
+
+`OK` → write normally. `WARN` (≥80% of the worse dimension) → **compact first**; this is the last
+point at which compaction is cheap, and a memory appended now may be pushing an older one off the
+end. `OVER` → content is **already** invisible: `--show-dropped` prints exactly which entries, and
+appending without compacting silently deletes more of them. Exit 1 on WARN/OVER, 2 on unreadable —
+an index you cannot read is never treated as fine.
+
+Compact to **70% of the cap** (17500 bytes / 140 lines), which is the target the binary itself
+names. Both dimensions are scored and the **worse** one binds: an index at 40% of its byte cap can
+still be over on lines, so a byte-only eyeball reports healthy on a broken index.
+
 **How to apply:**
 1. Read the store's `MEMORY.md` index first. For each candidate, find an existing memory file it
    updates and **edit that file** (correct/flip stale claims, append a dated reinforcement) rather
