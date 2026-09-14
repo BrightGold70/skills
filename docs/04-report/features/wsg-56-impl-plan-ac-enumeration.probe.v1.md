@@ -313,7 +313,8 @@ count is stated as a **floor**.
 **Seventeen confirmed** — the twelve published, plus the three borderline rows resolved above, plus
 `T1 r7` and `T6 r10`. Not counted, and listed so nobody has to re-derive them: 2 split, 5 refuted,
 `T1 r8` corroborated-but-unadjudicated, and **12 further new calls never put to adjudication at
-all**. The floor is seventeen; the ceiling is not established by this document.
+all** *(should read **eleven** — see §"SETTLED 2026-09-14" below; `T1 r8` is counted here and again
+in the clause before it)*. The floor is seventeen; the ceiling is not established by this document.
 
 ### RESIDUE ACCOUNTING — decided 2026-09-14, and one figure does NOT reconcile
 
@@ -350,6 +351,48 @@ itself off. Settling it needs the rank of `T6 r10` and nothing else.
 `T6 r10`, which is independent of 11-versus-12; the discrepancy lives entirely in the uncounted
 residue. Recorded rather than quietly corrected, because picking a number here would be a third
 reading of rows this document has twice warned against trusting a single reader on.
+
+### SETTLED 2026-09-14 (next session) — the rank was never the discriminator
+
+**The residue is ELEVEN, and the rank of `T6 r10` cannot decide it.** §RESIDUE ACCOUNTING closes
+with *"Settling it needs the rank of `T6 r10` and nothing else."* That instruction is itself a
+claim, and it is false. It was re-derived before the datum it names was fetched, which is the only
+reason this was cheap.
+
+**Why the rank is inert.** It enters the in-band route **twice, with opposite sign**. Moving
+`T6 r10` past rank 70 removes one row from the in-band new calls *and* removes one row from the
+in-band adjudicated set, so the difference is unchanged:
+
+| | out-of-band | in-band new | in-band adjudicated | residue |
+|---|---|---|---|---|
+| `T6 r10` in-band (as this document states) | 2 | 33 − 12 − 2 = 19 | 9 − 1 = 8 | **11** |
+| `T6 r10` at rank > 70 (the document's option a) | 3 | 33 − 12 − 3 = 18 | 9 − 2 = 7 | **11** |
+
+So **option (a) is arithmetically unreachable** — it cannot produce twelve, which is the only thing
+it was offered to explain. Option (c) — *"the in-band 19 is itself off"* — is refuted directly:
+19 = 21 new − 2 out-of-band, and the corpus reproduces (177 prefixed rows − 4 borderline = 173, and
+the batch table's own `n` column sums to 173; its `DIFFERENT` column sums to 33). **Only option (b)
+survives: the residue line should read eleven.**
+
+**A second route that never mentions a rank at all**, which is why the answer does not depend on the
+band split being right: 33 `DIFFERENT` − 12 planted knowns = **21 new**; 21 − 9 adjudicated − 1
+(`T1 r8`, named separately) = **11**.
+
+**The slip, named at its line, and it is a narrow one.** `21 − 9 = 12` is a correct count of new
+calls never put to adjudication — **including `T1 r8`**. §"Where the count actually stands" then
+lists `T1 r8` separately *and* says *"12 further"* in the same sentence, so `T1 r8` is counted
+twice. Either *"12, one of which is `T1 r8`"* or *"11 further"* is right; the two together are not.
+§RESIDUE ACCOUNTING then compounds it by comparing its own **in-band** derivation (11) against that
+**unscoped** figure (12) as though the two were the same quantity, which is what made the gap look
+like a missing datum rather than a double count.
+
+**The rank of `T6 r10` was deliberately NOT derived.** The screen's scoring formula is not recorded
+anywhere in this document or either repo, so reproducing it would be a **different instrument** on a
+corpus this document has twice warned against reading a third time — and it would buy a number that
+changes nothing. Not a gap: a datum that was never load-bearing.
+
+**The headline is untouched**, as §RESIDUE ACCOUNTING already predicted: seventeen = 12 published +
+3 borderline resolved + `T1 r7` + `T6 r10`.
 
 ## Two adjacent rows, already FIXED — not part of the eleven
 

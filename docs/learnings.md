@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-14 · gotcha · [0.5] · `evidence,counting,wsg-56,handoff:2026-09-14-main__hook-guards-and-two-red-pushes` — A doc's "settling this needs only X" is a CLAIM — re-derive the discriminator before fetching X. #56 named T6 r10's rank; it enters the arithmetic twice with opposite sign, so it is inert and the real gap was a double count.
 - 2026-09-14 · gotcha · [0.9] · `pid,locking,handoff:2026-09-14-hook-guards-and-two-red-pushes` — os.kill(pid,0) raising EPERM proves the process EXISTS. Folding EPERM in with ESRCH steals a live holder's lock. Only ProcessLookupError means dead.
 - 2026-09-14 · solution · [0.9] · `memory,compaction,handoff:2026-09-14-hook-guards-and-two-red-pushes` — Shortening hooks cannot compact a ~200-entry memory index: hooks were 7093B of 24947, and deleting all of them still left 164 lines vs a 140 cap. Split to an archive file instead.
 - 2026-09-14 · gotcha · [0.9] · `claude-code,skills,renderer,handoff:2026-09-14-hook-guards-and-two-red-pushes` — Claude Code's slash-command arg expander is $ARGUMENTS[n]|$ARGUMENTS|$<digits>(?!\w) — no $@ or $*. A match also SUPPRESSES the appended 'ARGUMENTS:' trailer that skill mode-routing reads.
