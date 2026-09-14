@@ -1445,12 +1445,22 @@ individually re-verified this pass; that is stated rather than left implied.
   three auditors return line numbers correct for what they read and mislabelled by the base commit
   they were given, and the orchestrator then relayed the wrong number onward. Belongs as a rule in
   `h-mad/SKILL.md` §5b rather than as a new skill — recurrence: 1 (but cost a full round's numbers)
-  — candidate: maybe
+  — candidate: **LANDED** — `h-mad/SKILL.md:1544`, rule 2 of §"The six rules that are the
+  ORCHESTRATOR's, not the author's". Verified by reading the shipped text, not by matching a
+  heading: it carries this row's own incident verbatim, `:1897` reported as `e8eaf6f` when it is
+  `:1887`, and ends *"Commit before the round or after it, never during."* Cross-referenced from
+  `references/measurement-discipline.md` §FREEZE, which pins what "frozen" has to mean. The row
+  guessed §5b and the rule lives under the teammate-authors section instead — a different home, the
+  same duty, so this is LANDED and not PARTIAL.
 - **cross-check any AC that two concurrent authors touched**: three authors running in parallel,
   each correctly measuring, produced two incompatible definitions of one acceptance criterion (25 vs
   30 files). Neither could see it; it surfaced only because the orchestrator read both reports
   against each other. The file-scoping rule (one author, one document) is what keeps this tractable,
-  but the cross-check has no home yet — recurrence: 1 — candidate: maybe
+  but the cross-check has no home yet — recurrence: 1 — candidate: **LANDED** —
+  `h-mad/SKILL.md:1551`, rule 3 of the same six. *"Cross-check any acceptance criterion two
+  concurrent authors touched … **This duty has no other home.**"* — the row's closing complaint
+  answered in the shipped rule's own words, with this row's 25-vs-30-files incident as its worked
+  example. Rule 1 carries the file-scoping premise the row names as what keeps it tractable.
 - **`.claude/agents/` is gitignored, so agent definitions do not survive a clone**: four agents
   (`doc-auditor`, `design-author`, `plan-author`, `implplan-author`) now carry measured process
   knowledge — the failure classes that produced this session's findings — and none of it is in
