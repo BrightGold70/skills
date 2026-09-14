@@ -1848,6 +1848,22 @@ stands and was not re-done. Census unchanged at `candidates=212 OPEN=47 yes=28 m
   OTHER way: pytest's `<file>.py:N: AssertionError` footer read as a crash whenever the mutated
   file is a test file, manufacturing 12 of the corpus's 25. Both directions are now guarded and
   both blind spots are documented in the function's own docstring.
+  — **BOTH BLIND SPOTS NOW CLOSED 2026-09-14 (`64b3752`), and "documented" turned out to be the
+  wrong resting place for them.** The docstring called each permanently unclassifiable; on re-reading,
+  its reasoning was right about ATTRIBUTION and wrong about LOOKING, which is the reusable half:
+  *unattributable* and *unreportable* are different, and a measurement that cannot say WHICH file can
+  still say THAT it happened. (1) `timeout_kill` returns an **unattributed** name — pytest blames the
+  test file that set the timeout, never the module that hung, so widening `_TERMINAL_LINE` would have
+  manufactured a false attribution and that objection is preserved — published as `timeout_kills=N`,
+  never folded into `crash_kills`, whose every entry names a file. It earns a separate count because
+  it is the kill least likely to be the guard biting: a guard that fires *returns*, it does not hang.
+  (2) The untargeted branch now runs the same `crash_kill` basename check, whose rule is no weaker
+  without a named test, and `untargeted=N/M` reports how much of a verdict rests on the weaker
+  question. **Two defects in the fix were caught by the harness itself on the first run and are
+  recorded in `tests/mutation-specs/harness_blind_spots.json` rather than quietly repaired**: a
+  `timeout_kills=2` FALSE POSITIVE matching fixture strings that pytest echoed into a failure block —
+  the very hazard the docstring documents for `Traceback`, walked into by its own author — and a
+  mutation that survived because no test asserted the property it stripped. 8 mutations, ALL_CAUGHT.
 - **a "starting state the suite never reaches" prompt when a mutation SURVIVES**: both surviving
   mutations this session shared one shape — every existing test began from a state where the weak
   mutation still looked caught (no stamp on disk makes a size-only signature look correct; one
