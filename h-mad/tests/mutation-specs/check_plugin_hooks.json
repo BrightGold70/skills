@@ -1,0 +1,115 @@
+{
+  "_why": "This script's whole job is to say NO WARNING when there is no warning, which means its catastrophic failure mode is the silent pass: a `findings()` that always returns [] reports every plugin CLEAN and looks exactly like a working check. So the mutations here are weighted toward loosening -- widening a key set, dropping a level of traversal, swallowing a parse error -- rather than toward breaking it noisily. Each mutation names the ONE test it is aimed at, so a kill by an unrelated assertion, a crash or a timeout is reported as a survivor with the actual catcher named rather than counted as ALL_CAUGHT. The `TestAgainstTheLiveBinary` class is deliberately NOT the named catcher for any key-set mutation: those tests compare TOP/MATCHER to the binary and would catch a widened set for the wrong reason, masking whether the recorded-warning tests -- the ones that pin what a USER saw -- still bite.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_check_plugin_hooks.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "schema-becomes-an-allowed-top-level-key",
+      "_mechanism": "The exact fail-open this check exists to detect: widen TOP by the one key that was actually warning, and every recorded warning silently becomes CLEAN. This is also the mutation that proves the negative controls are load-bearing rather than decorative.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "TOP = {\"description\", \"hooks\", \"modules\", \"surface\"}",
+      "replace": "TOP = {\"description\", \"hooks\", \"modules\", \"surface\", \"$schema\"}",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTheRecordedWarnings::test_bkit_2138_shape_reproduces_the_one_key_line_verbatim"
+    },
+    {
+      "name": "once-becomes-an-allowed-matcher-key",
+      "_mechanism": "The matcher-level half of the same fail-open. The bkit 2.0.8 line had TWO findings and only one of them was top-level; a check that sees only the top level reports the shorter message and reads as a partial fix.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "MATCHER = {\"matcher\", \"hooks\"}",
+      "replace": "MATCHER = {\"matcher\", \"hooks\", \"once\"}",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTheRecordedWarnings::test_bkit_208_shape_reproduces_the_two_key_line_verbatim"
+    },
+    {
+      "name": "matcher-traversal-is-dropped-entirely",
+      "_mechanism": "Not a widened set but a missing level: the top-level scan still works, so the script still WARNs and still exits 1 on the 2.0.8 shape. Only the exact recorded text catches it. A suite that greps for `$schema` instead of asserting the whole line lets this survive.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "    hooks = cfg.get(\"hooks\")\n    if isinstance(hooks, dict):",
+      "replace": "    hooks = cfg.get(\"hooks\")\n    if False:",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTheRecordedWarnings::test_the_matcher_finding_names_its_site"
+    },
+    {
+      "name": "findings-always-returns-empty",
+      "_mechanism": "The total silent pass. Every plugin reports CLEAN, the CLI exits 0, and nothing crashes. The positive-control tests all still pass by construction -- that is the point of pairing them with negative controls.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "    if not isinstance(cfg, dict):\n        return []",
+      "replace": "    if True:\n        return []",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTheRecordedWarnings::test_bkit_208_shape_reproduces_the_two_key_line_verbatim"
+    },
+    {
+      "name": "plural-is-hardcoded-to-keys",
+      "_mechanism": "The recorded bkit 2.1.38 line is SINGULAR (`unknown key \"$schema\" ignored`). Hardcoding the plural is invisible to any assertion that only checks the key name, and it is how a replayed line stops matching the text a user would actually read.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "    plural = \"key\" if len(found) == 1 else \"keys\"",
+      "replace": "    plural = \"keys\"",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTheRecordedWarnings::test_bkit_2138_shape_reproduces_the_one_key_line_verbatim"
+    },
+    {
+      "name": "unreadable-json-reports-clean",
+      "_mechanism": "`I could not read it` collapsing into `it is fine` -- the asymmetry this repo's handoff skill already enforces for the worktree comment and the state-file search. A malformed hooks.json would then exit 0.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "    except Exception as exc:  # unreadable is NOT clean\n        return (\"UNREADABLE\", label, str(exc))",
+      "replace": "    except Exception:\n        return (\"CLEAN\", label, None)",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestUnreadableIsNotClean::test_malformed_json_reports_unreadable"
+    },
+    {
+      "name": "warn-no-longer-sets-the-exit-code",
+      "_mechanism": "The check still PRINTS the warning and still looks right to a human reading stdout, but exits 0 -- so any CI gate or `&&` chain built on it passes silently. The mutation a screen-reading verification cannot see.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "        if state in (\"WARN\", \"UNREADABLE\"):\n            worst = 1",
+      "replace": "        if state in (\"UNREADABLE\",):\n            worst = 1",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestCLI::test_a_warning_file_exits_one_and_names_the_plugin"
+    },
+    {
+      "name": "the-worst-exit-code-is-reset-each-iteration",
+      "_mechanism": "Exits 1 only when the LAST file warns. A single-file invocation -- which is how every manual run looks -- cannot distinguish this from correct behaviour.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "    worst = 0\n    for arg in argv:",
+      "replace": "    for arg in argv:\n        worst = 0",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestCLI::test_one_warning_among_several_clean_files_still_exits_one"
+    },
+    {
+      "name": "truncation-limit-widens-to-fifty",
+      "_mechanism": "A transcription drift in `npn`. Only a key longer than 40 characters shows it, and real plugin keys are short -- so the corpus cannot catch this and the fixture must.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "MAXKEYS, TRUNC = 5, 40",
+      "replace": "MAXKEYS, TRUNC = 5, 50",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTruncationAndOverflow::test_a_long_key_is_elided_at_forty_characters"
+    },
+    {
+      "name": "overflow-cap-off-by-one",
+      "_mechanism": "`bko` drifting from 5 to 6 changes both the listed keys and the `and N more` count. Six-finding configs are rare in the wild, which is exactly why this is fixture-only.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "MAXKEYS, TRUNC = 5, 40",
+      "replace": "MAXKEYS, TRUNC = 6, 40",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTruncationAndOverflow::test_more_than_five_findings_collapse_into_and_n_more"
+    },
+    {
+      "name": "matcher-index-counts-from-one",
+      "_mechanism": "The site string is part of the recorded text (`hooks.SessionStart[0]`). An index base error renders a line that is wrong in a way no exit code and no key-name grep can see.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "                site = f\"hooks.{_truncate(event)}[{i}]\"",
+      "replace": "                site = f\"hooks.{_truncate(event)}[{i + 1}]\"",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTheRecordedWarnings::test_the_matcher_finding_names_its_site"
+    },
+    {
+      "name": "empty-findings-still-renders-a-line",
+      "_mechanism": "The emitter's early return is the entire reason a patched config produces NO warning. Removing it makes every clean plugin render `unknown keys  ignored` -- loud, but it inverts the check's meaning, and the positive controls are what notice.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "    if not found:\n        return None",
+      "replace": "    if False:\n        return None",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestThePatchedShapeIsClean::test_patched_config_renders_no_message"
+    }
+  ]
+}
