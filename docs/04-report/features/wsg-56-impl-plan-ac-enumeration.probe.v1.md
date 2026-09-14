@@ -56,6 +56,54 @@ IN PLACE"*. **That revision report is in neither repo** — searched across
 `HemaSuite/hematology-paper-writer/docs` and `skills/docs`; the six node ids appear in exactly one
 file, the impl-plan. So the last three are the only part of #56 that is genuinely a re-derivation.
 
+## The residue — FOUR found where the census implies three (2026-09-14)
+
+The census names eight of eleven, so three were expected. **Four rows classify as mismatches on a
+full reading of the AC text**, which makes the measured total **twelve**, not eleven. Per the brief's
+own instruction — *"If the true count is not eleven, that is a finding worth filing — report the
+number you measured and the rows behind it, rather than forcing the figure"* — it is reported as
+twelve rather than trimmed to fit.
+
+| # | task | row | prefix | the AC's actual criterion | what the row asserts |
+|---|---|---|---|---|---|
+| 9 | Task 5 | 4 | `AC-5.3` | a committed fixture manifest, byte-copy of the live `MANIFEST.yaml`, loads and validates after the schema bump | `effective_from` equals `retrieved_on`; `effective_to` is `None`, passed explicitly |
+| 10 | Task 6 | 8 | `AC-7.6` | **exactly one** outcome line per call, asserted `== 1` | two ingests in one run with different `strict` values do not share a cache entry |
+| 11 | Task 13 | 2 | `AC-1.6` | the resolved value round-trips synopsis → registry → `EngineConfig`, as caller-side propagation | dataclass **field order**, read from the dataclass at test time |
+| 12 | Task 14 | 17 | `AC-2.1` | set equality over all five admitted class names | the AXIS-1 grounding gate, `Yes` arm |
+
+None is a near-miss: in each case the AC's criterion and the row's subject are about different
+objects entirely — manifest loading vs row field values, line cardinality vs cache-key identity,
+value propagation vs declaration order, class-set equality vs a grounding outcome.
+
+### Method, and its calibration
+
+A token-overlap screen ranked all 177 prefixed rows by how much of each row's vocabulary its own
+prefix AC's spec text shares. **Calibrated against the eight already known** before being trusted:
+all eight rank within **61 of 177** (median 44, best 1). Rows 1–70 were then read by hand against
+the AC text. The screen is a NARROWING device only — every one of the four above was decided by
+reading, which is the distinction the brief drew when it warned that the prefix-vs-test-name proxy
+"measures a different property".
+
+The AC extraction was verified against the raw spec before any row was judged (`grep -n '^  - AC-'`,
+97 definitions, four spot-checked verbatim) — a misaligned extractor would have produced confident
+nonsense at every row.
+
+### Still open: borderline rows, not counted above
+
+Four rows are arguable and are deliberately **not** included in the twelve, because each could be
+read as the AC's positive control rather than a different property. They need a second opinion:
+
+- Task 13 r6 and Task 14 r24, both `AC-5.8` — the AC pins that ingest is reached from *every* call
+  site; the rows pin that the `strict` argument *at* each site is a `current_source_policy` read.
+- Task 4 r3, `AC-9.1` — the AC rejects `..` before any filesystem call; the row asserts a valid
+  multi-segment relative path is *accepted*.
+- Task 15 r9, `AC-10.1` — the AC pins that `RunReport` gains two populated fields; the row asserts
+  an unbound read equals `resolve_strict_grounding(None, _ABSENT)`.
+
+Rows 71–177 were not read. The calibration bounds the risk rather than removing it: the known eight
+all fell inside the range that was read, so an unread mismatch below rank 70 is possible but would
+be the first of its kind in this corpus.
+
 ## Two adjacent rows, already FIXED — not part of the eleven
 
 Task 13 rows 5 and 7 carried `ac_10_9` prefixes for properties `AC-10.9` does not state. They were
