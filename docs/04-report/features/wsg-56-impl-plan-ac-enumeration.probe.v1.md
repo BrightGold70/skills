@@ -104,6 +104,60 @@ Rows 71–177 were not read. The calibration bounds the risk rather than removin
 all fell inside the range that was read, so an unread mismatch below rank 70 is possible but would
 be the first of its kind in this corpus.
 
+### SECOND OPINION RETURNED 2026-09-14 — the borderline framing was WRONG for three of four
+
+The four rows above were parked on the hypothesis that *"each could be read as the AC's positive
+control rather than a different property."* Three fresh readers were dispatched, one per AC, and
+**that hypothesis holds for exactly one of the four.**
+
+**How the contamination was avoided, because it is the only reason these answers are worth
+anything.** Each reader received the criterion verbatim with its `path:line`, the row verbatim, and
+nothing else. None was told a prior reading existed, none saw the words *positive control*,
+*mismatch*, *borderline*, *eleven* or *twelve*, and each was explicitly forbidden to open anything
+under `docs/` in this repo — where this document, the brief, and four handoffs all carry the
+leaning. They were asked two counterfactual questions instead of being handed the categories:
+*could the criterion hold while the row is false*, and *could the row hold while the criterion is
+violated*. Both-yes is a different property; only-Q2-no is narrower. The classification is an
+output of that structure, not a category anyone supplied.
+
+| task | row | prefix | verdict | why |
+|---|---|---|---|---|
+| Task 13 | 6 | `AC-5.8` | **DIFFERENT** | AC-5.8's predicate is *reachability* — "ingest is **reached** from **every** call site". The row's predicate is the AST **shape of one keyword argument**. The AC's text never mentions `strict`. |
+| Task 14 | 24 | `AC-5.8` | **DIFFERENT** | Different module, different function, different callee, and **no site enumeration at all**. |
+| Task 4 | 3 | `AC-9.1` | **GUARD** | It does not assert AC-9.1, but its absence would let a predicate that rejects *everything* satisfy AC-9.1's own tests. |
+| Task 15 | 9 | `AC-10.1` | *(pending)* | — |
+
+**Both AC-5.8 rows are decided by counterexamples in BOTH directions**, which is what rules out
+`NARROWER` as well as `SAME`:
+
+- *AC holds, row false*: all four `_seed_guidelines_once` sites reach `ingest_corpus` exactly as
+  today, but each is written `strict=True`. AC-5.8 is fully satisfied; the row fails at all four.
+- *Row holds, AC violated*: at one site the `ingest_corpus(..., strict=current_source_policy().strict)`
+  call sits behind an early `return` or a dead guard. The AST still sees the `Call` node with the
+  pinned shape, so the row passes everywhere — and ingest is never reached from that site.
+
+The reader verified the sites in code rather than arguing from the text: four
+`_seed_guidelines_once` sites at `_ko_notebooks.py:114,247,350,436`, each with an adjacent
+`ingest_corpus` at `:123,254,359,443`; Row 24's target is `admitted_registry_ref:818`, inside
+`_seed_guideline_sources`, **downstream of the very set AC-5.8 quantifies over**.
+
+**Row 24's own text names its real source**, which is the sharpest evidence in the whole exchange:
+*"design v1.10's 'Structural, registry wire' bullet"* and the design's *"at BOTH wires"*
+requirement. It inherits `ac_5_8` **from Task 13's row 6, not from the AC** — a label propagating
+sideways between siblings rather than upward from a criterion. That is a distinct defect mechanism
+from the swaps and the subject-drift already recorded here, and it is worth naming because a census
+that looks only at prefix-vs-AC cannot see the direction the label travelled.
+
+**Task 4 row 3 is the one the parked framing got right, and `GUARD` is not a euphemism for
+mismatch.** The row's own subject column says it: *"the positive control — without it, a predicate
+that rejects everything passes tests 1 and 2."* Its `ac_9_1` label is defensible precisely because
+the test exists to keep AC-9.1's other tests non-vacuous; stripping the prefix would orphan it from
+the criterion it protects.
+
+**Consequence for the count: the measured total moves from twelve to fourteen**, and the two that
+move are *not* the three the census left unnamed — those remain unnamed. The count is reported,
+not reconciled to any prior figure, on the same instruction that produced twelve rather than eleven.
+
 ## Two adjacent rows, already FIXED — not part of the eleven
 
 Task 13 rows 5 and 7 carried `ac_10_9` prefixes for properties `AC-10.9` does not state. They were
