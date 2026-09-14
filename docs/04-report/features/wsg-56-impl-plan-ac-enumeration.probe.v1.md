@@ -229,7 +229,10 @@ disagreeing, and the disagreement is large. It is recorded as an open question r
 into any total, because a count published from one lane's reading is the thing this whole document
 exists to be sceptical of. A blinded adjudication set — the new calls, the knowns as positive
 controls, and rows a different reader called `SAME` as negative controls — is the instrument for
-deciding it, and until it returns **the measured total stands at fifteen**.
+deciding it, and until it returns **the measured total stands at fifteen**. *(It has since returned
+— see §"ADJUDICATION RETURNED" below, which moves the floor to seventeen. This paragraph is left as
+written rather than rewritten, because the adjudication is only meaningful if what was claimed
+before it ran is still legible.)*
 
 One reader flagged its own divergence axis unprompted, which is the most useful line in the round:
 rows 1.14 / 1.20 / 1.21 / 1.22 are *fallback-acceptance* rows sitting under a *rejection* criterion,
