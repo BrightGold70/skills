@@ -295,7 +295,16 @@ def _register_wiring_tasks(
         # `missing WIRE` that numbered labels used to produce, because a short
         # registry looks exactly like a plan that only had one wire.
         real_pins = [(suffix, value) for suffix, value in task["pins"] if _is_real_value(value)]
-        pins_by_suffix = {suffix: value for suffix, value in real_pins}
+        # Keyed by suffix, so N BARE pins all key on None and the dict keeps only
+        # the LAST -- silently, with no `skipped` increment. One wire legitimately
+        # needs N pins when its directions are killed by DISJOINT tests: measured
+        # on HemaSuite Task 10, severing the call kills the closure test while the
+        # propagation test passes VACUOUSLY, so a record pinned to propagation
+        # alone verifies green against a deleted connection. Collect the bare pins
+        # as a LIST rather than letting the dict drop all but one.
+        bare_pins = [value for suffix, value in real_pins if suffix is None]
+        pins_by_suffix = {suffix: value for suffix, value in real_pins if suffix is not None}
+        real_wires = [(sfx, w) for sfx, w in task["wires"] if _is_real_value(w)]
         for wire_suffix, wire in task["wires"]:
             if not _is_real_value(wire):
                 continue
@@ -304,8 +313,13 @@ def _register_wiring_tasks(
             # ambiguous is skipped LOUDLY rather than paired by position -- a wire
             # registered against the wrong pin is a false entry, and the registry is
             # consulted later precisely to decide whether a connection is tested.
-            if wire_suffix in pins_by_suffix:
+            if wire_suffix is not None and wire_suffix in pins_by_suffix:
                 pin = pins_by_suffix[wire_suffix]
+            elif wire_suffix is None and len(real_wires) == 1 and bare_pins:
+                # Exactly one wire, so every bare pin belongs to it. A single pin
+                # stays a bare string -- every record written before this change
+                # stores a scalar and must keep reading back unchanged.
+                pin = bare_pins[0] if len(bare_pins) == 1 else list(bare_pins)
             elif len(real_pins) == 1:
                 pin = real_pins[0][1]
             else:
@@ -326,8 +340,11 @@ def _register_wiring_tasks(
                 continue
             caller, callee = wire.replace("`", "").split(match.group(0), 1)
             caller, callee = caller.strip(), callee.strip()
-            pin = pin.replace("`", "").strip()
-            if not caller or not callee or not pin:
+            pin = ([p.replace("`", "").strip() for p in pin]
+                   if isinstance(pin, list) else pin.replace("`", "").strip())
+            if not caller or not callee or not pin or (
+                isinstance(pin, list) and not all(pin)
+            ):
                 skipped += 1
                 continue
             # The registry's identity is `(owning_feature, id)`, so two wires from

@@ -1,4 +1,5 @@
 """Phase-5b gate: a `wiring` task may not reach 5d without a WIRE-PIN.
+import json
 
 A wiring task's deliverable is a connection, and every downstream Phase-5 gate is
 scoped to the callee (`invariants.base.md` §"Connection enforcement"). The
@@ -1010,3 +1011,96 @@ def test_a_word_merely_starting_with_a_non_code_shape_is_not_a_free_pass(
     result = check(_plan(tmp_path, body))
     assert result["verdict"] == "FAIL", f"`{word}` slipped through: {result}"
     assert "Task 2" in " ".join(result["unshaped"]), result
+
+
+# --- one wire, N pins: the registry must keep every one of them -------------
+#
+# `pins_by_suffix` is keyed by label suffix, so two BARE `**WIRE-PIN**:` lines
+# both key on None and the dict comprehension silently keeps the LAST. Measured
+# on HemaSuite Task 10: 2 real pins -> 1 key, with no `skipped` increment and no
+# warning, so the registry held one pin while the plan named two.
+#
+# That task is why one wire needs N pins at all. Its two directions are killed by
+# DISJOINT tests: severing the call kills the closure test while the propagation
+# test passes VACUOUSLY -- nothing is imported, so nothing forbidden loads. A
+# record pinned to the propagation test alone verifies green against a connection
+# that has been deleted.
+#
+# The N numbered wires <-> N numbered pins pairing is unchanged; this only gives
+# the ONE-wire case somewhere to put its extra pins.
+
+
+def _task_multipin(n: int = 1) -> str:
+    return (
+        f"## Task {n}: probe\n"
+        "**Production file**: `engine/run.py`\n"
+        "**Test file**: `tests/test_run.py`\n"
+        "**Task shape**: `wiring`\n"
+        "**WIRE**: `probe.sh` -> `pkg.mod`\n"
+        "**WIRE-PIN**: `tests/test_run.py::test_value_propagates`\n"
+        "**WIRE-PIN**: `tests/test_run.py::test_the_call_was_made`\n"
+        "\n**Acceptance Criteria**:\n- [ ] AC-1.1: something testable\n\n"
+    )
+
+
+class TestOneWireManyPins:
+    def test_one_wire_with_two_bare_pins_registers_both(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        plan = _plan(tmp_path, _task_multipin())
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        assert rc == 0
+        records = registry.load(registry_path)
+        assert len(records) == 1, records
+        pin = records[0]["pin"]
+        assert isinstance(pin, list), (
+            f"one wire with two pins registered a scalar: {pin!r} -- the second "
+            "pin was silently dropped by the suffix-keyed dict"
+        )
+        assert pin == [
+            "tests/test_run.py::test_value_propagates",
+            "tests/test_run.py::test_the_call_was_made",
+        ], pin
+
+    def test_one_wire_with_one_pin_still_registers_a_bare_string(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Every record written before this change stores a scalar. The single-pin
+        # spelling must keep doing so, or every existing record's shape changes.
+        plan = _plan(tmp_path, _task(1, "dispatch"))
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        pin = registry.load(registry_path)[0]["pin"]
+        assert isinstance(pin, str), f"single pin became {pin!r}"
+
+    def test_two_bare_wires_do_not_each_claim_the_whole_bare_pin_list(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The one-wire guard's real job. "Every bare pin belongs to this wire" is
+        # true only when there IS one wire; with two bare wires, attaching the
+        # whole list to each files the same pins against two different
+        # connections -- the pair-by-position failure the surrounding code
+        # refuses on purpose, wearing a list.
+        body = (
+            "## Task 7: two\n"
+            "**Production file**: `engine/run.py`\n"
+            "**Test file**: `tests/test_run.py`\n"
+            "**Task shape**: `wiring`\n"
+            "**WIRE**: `engine/run.py:dispatch` -> `tools.a.measure`\n"
+            "**WIRE**: `engine/run.py:finish` -> `tools.b.close`\n"
+            "**WIRE-PIN**: `tests/test_run.py::test_one`\n"
+            "**WIRE-PIN**: `tests/test_run.py::test_two`\n"
+            "\n**Acceptance Criteria**:\n- [ ] AC-1.1: something testable\n\n"
+        )
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        _run_main_with_registration_args(monkeypatch, _plan(tmp_path, body), registry_path)
+        records = registry.load(registry_path)
+        pins = [r["pin"] for r in records]
+        assert not any(isinstance(p, list) and len(p) == 2 for p in pins), (
+            f"a bare pin list was claimed by an ambiguous wire: {pins!r}"
+        )

@@ -1,0 +1,43 @@
+{
+  "_why": "The defect was a SILENT drop: two bare WIRE-PIN lines both key on None, the dict comprehension keeps the last, and nothing increments `skipped` or prints. A registry short by one pin looks exactly like a task that only declared one. M1 restores that collapse. M2 guards the other direction -- every record written before this change stores a scalar, so emitting a one-element list for the single-pin spelling would silently change the shape of every existing record. M3 keeps the widening scoped to the one-wire case, where 'every bare pin belongs to this wire' is actually true.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_wire_pin_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "M1: KEEP ONLY THE LAST BARE PIN -- the shipped defect's observable effect, restored at the line that now carries it. The original collapse lived in a suffix-keyed dict; the fix collects bare pins separately, so mutating the dict no longer expresses the defect (that spelling SURVIVED and the survival was the spec's error, not the guard's).",
+      "_mechanism": "pins_by_suffix keeps the last bare pin; the one-wire branch never sees a list; the record registers a scalar.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "        bare_pins = [value for suffix, value in real_pins if suffix is None]",
+      "replace": "        bare_pins = [value for suffix, value in real_pins if suffix is None][-1:]",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestOneWireManyPins::test_one_wire_with_two_bare_pins_registers_both"
+    },
+    {
+      "name": "M2: ALWAYS EMIT A LIST, even for a single pin. Backward compatibility is the property: every record written before this change stores a bare string, and a one-element list would change the read-back shape of all of them at once.",
+      "_mechanism": "The single-pin spelling registers ['x'] instead of 'x'.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "                pin = bare_pins[0] if len(bare_pins) == 1 else list(bare_pins)",
+      "replace": "                pin = list(bare_pins)",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestOneWireManyPins::test_one_wire_with_one_pin_still_registers_a_bare_string"
+    },
+    {
+      "name": "M3: DROP THE ONE-WIRE GUARD -- with two BARE wires each claims the whole bare-pin list, filing the same pins against two different connections. Numbered wires cannot discriminate this (their suffix is not None, so the branch never fires), which is why the first attempt at this mutation survived against a numbered-wire test.",
+      "_mechanism": "The bare-pin branch fires for multi-wire tasks, so a wire that should be skipped LOUDLY registers against an unrelated pin.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "            elif wire_suffix is None and len(real_wires) == 1 and bare_pins:",
+      "replace": "            elif wire_suffix is None and bare_pins:",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestOneWireManyPins::test_two_bare_wires_do_not_each_claim_the_whole_bare_pin_list"
+    }
+  ]
+}
