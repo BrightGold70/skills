@@ -1699,13 +1699,24 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   A coverage metric derived from the same pattern as the thing it audits can only ever report
   agreement with itself. Do NOT reflow the two rows as the fix — that hides the defect and leaves the
   next wrapped row equally invisible.
-  **RE-VERIFIED 2026-09-14 (`de50186`): STILL OPEN, both halves.** `skill_candidates_census.py:30`
-  is still `ROW = re.compile(r'^- \*\*(.+?)\*\*')` — single-line, anchored, no scan to a closing
-  `**` on a later line — and COVERAGE at `:254` still derives `row-shaped` from that same pattern,
-  so the two numbers still cannot disagree. This session's own run read a reassuring `227/227` while
-  this row asserts three rows exist that no census has ever counted, which is precisely the
-  self-agreement the row predicts. Re-probing an OPEN row rather than a CLOSED one is what caught
-  this; a spot-check of closures could not have.
+  ~~**RE-VERIFIED 2026-09-14 (`de50186`): STILL OPEN, both halves.**~~ **THAT RE-VERIFICATION WAS
+  WRONG, and it is struck rather than deleted because the way it was wrong is the finding.** It
+  argued: `skill_candidates_census.py:30` is still the single-line `ROW = re.compile(r'^- \*\*(.+?)\*\*')`,
+  and COVERAGE at `:254` still derives `row-shaped` from that same pattern, so the two numbers
+  cannot disagree. Both halves of that are false.
+  — **LANDED, and it had already landed a week before I claimed otherwise** — `7cf6803` (2026-09-07),
+  *"a wrapped bold row name is a row, and COVERAGE can now disagree with the reader"*, an ancestor of
+  the very commit my note cited. (a) `NAME` at `:40` carries `re.S` *"so the name can span the wrap"*,
+  and `row_name()` at `:43` joins the body before matching; unclosed openers are collected and
+  printed rather than dropped. (b) COVERAGE at `:230` counts with **`OPENER`, not `ROW`**, under a
+  comment saying in so many words that the two numbers must be able to disagree.
+  **The method error, which is the reusable part:** I grepped for the symbol named in the row
+  (`ROW`), found it still present and unchanged at `:30`, and concluded nothing had shipped. `ROW`
+  *is* still there — it simply stopped being the thing that answers this question. **Grepping the
+  OLD symbol can only ever tell you the old symbol did not change; it cannot see a NEW symbol doing
+  the job.** The disproof was one command: a two-row fixture whose first name wraps now reads
+  `candidates=2`, and before `7cf6803` would have read `candidates=1`. Executing the property beats
+  reading for it, and I read for it.
 - **the evidence gate counts tool CALLS, not their TARGETS**: `EVIDENCE: PASS tools=41 ok=41` is
   the same verdict whether a pass opened the module under discussion or spent all 41 calls in
   `docs/`. Measured over 32 paired agy/codex audit cycles on HemaSuite `#18` (analysis:
