@@ -1366,6 +1366,11 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
 - **anchored-derivation-breaks-on-an-edited-key-column** (recurrence, not a new row): recurrence 1 → 2 — adding a citation after the AC id broke the per-task `^\| AC-N\.M \|` loop (T2 8/1 instead of 10/1) while the `.*` aggregate still read 45. Same shape as the two rows that briefly carried two AC labels. Cite in the proof column; re-run BOTH derivations after any table edit.
 - **concurrent-suite-runs-manufacture-phantom-failures**: two pytest runs over one working tree produced 6 failures and 3 failures in DIFFERENT sets, and 0 when the file ran alone — recurrence: 1 — candidate: maybe — the failures look like regressions and are not; run the repo suite alone before believing any of it.
 
+  — **RE-PROBED 2026-09-14: PARTIAL.** The finding IS load-bearing in shipped behaviour — `h-mad/SKILL.md`
+  §"A red suite blocks the EXIT, not the cycle" cites it as the rationale for the `--exit-check`
+  streak. What has NOT shipped is the row's own prescription, "run the repo suite alone before
+  believing any of it": nothing refuses a second concurrent run. Its citation was also a line pin
+  that was wrong from birth; fixed at `f90a96b` to cite this row by name instead.
 ## 2026-09-03 — post-merge sweep and handover
 
 - **census-script-needs-a-`__main__`-guard-and-an-import-API**: `handoff/scripts/skill_candidates_census.py` runs `main` at import, so reusing its `rows()`/`ROW`/`TERM`/`CAND` — the correct way to parse that store — requires setting `sys.argv` and redirecting stdout before the import, and exits with a usage error otherwise. That friction is why sessions keep writing ad-hoc parsers, and every one has been wrong: mine returned 270 rows / 101 open against the census's 316 / 125 (the store's rows wrap and do not all use a colon), and two more miscounted on 2026-08-28. — recurrence: 3 — candidate: yes — mechanical: wrap the CLI in `if __name__ == "__main__":` and document the three symbols a caller needs.
@@ -1433,6 +1438,13 @@ individually re-verified this pass; that is stated rather than left implied.
   it is live right now (`PRECHECK: FAIL issues=19`, 8 of them PINDRIFT). The doctrine landed too
   (`measurement-discipline.md` §PROVENANCE). What the row actually asked for — a lint over plan/design
   prose for a bare numeric claim with no adjacent command or commit — does not exist.
+  — **RE-PROBED 2026-09-14: PARTIAL.** The half that is mechanical is the *pin*: `PINDRIFT` in
+  `h_mad_precheck_doc.py` (`HARD_KINDS` at `:129`, emitted at `:656`) catches a pin into a file that
+  moved since the document's own provenance commit. The half this row actually asks for — a bare
+  numeric claim with no adjacent command or commit — is NOT shipped: the only numeric detector is
+  `_COUNT_CLAIM` (`:239`), which fires on `N <noun>` **beside a list** and is scored by
+  `_list_length_after()`. A figure standing alone in prose, which is the shape this row is about,
+  triggers nothing.
 - **a census without its command drifts unnoticed and cannot be adjudicated**: the plan's
   extractor-census control said "21 `.py` files contain a fence literal"; two readers measuring "the
   same" thing got 3 and 23 because they ran different commands, and the document named neither. The
@@ -1461,6 +1473,12 @@ individually re-verified this pass; that is stated rather than left implied.
   concurrent authors touched … **This duty has no other home.**"* — the row's closing complaint
   answered in the shipped rule's own words, with this row's 25-vs-30-files incident as its worked
   example. Rule 1 carries the file-scoping premise the row names as what keeps it tractable.
+  — **RE-PROBED 2026-09-14: PARTIAL, and the gap is COVERAGE not capability.** The check exists and
+  gates: `h_mad_precheck_doc.py:276` `_is_commit()` runs `git cat-file -t` and returns true only on
+  `== "commit"`, emitting the hard `UNKNOWNSHA` at `:728`. But `PHASES = ("plan", "design",
+  "impl-plan", "spec")` at `:94` is a required argument, so it only ever sees phase documents. A
+  backlog row, a handover brief, or an inherited one-liner naming a sha — which is exactly where
+  this row's two session-UUIDs-as-commits came from — is outside its reach.
 - **`.claude/agents/` is gitignored, so agent definitions do not survive a clone**: four agents
   (`doc-auditor`, `design-author`, `plan-author`, `implplan-author`) now carry measured process
   knowledge — the failure classes that produced this session's findings — and none of it is in
@@ -1468,10 +1486,25 @@ individually re-verified this pass; that is stated rather than left implied.
   only there. Options are tracking them under `h-mad/agents/` and symlinking, or accepting
   machine-local — recurrence: 1 — candidate: yes
   — **LANDED 2026-09-04** — the five agents are tracked at `h-mad/agents/` and registered by user-scope symlink (`6db8e50`), with the registration step added to §"Bootstrap action" and hardened after a review found it wrote five dangling links on a relative skills symlink (`2eece9f`). A project-scoped copy silently outranks the link, so bootstrap reports one rather than deleting it.
+  — **RE-PROBED 2026-09-14: PARTIAL, and closer to landed than the row reads.** The practice now has
+  two instances and a stated rationale rather than one docstring:
+  `test_h_mad_precheck_doc.py:432` `test_noise_floor_on_documents_that_survived_eighty_cycles`, and
+  `h-mad/SKILL.md:1460` applying it to a second detector — "**Calibrated before it was wired**,
+  against the 152 records that already existed: every hard rule fires **zero** times on them." What
+  is still missing is the row's ask proper: the shape written down where the NEXT detector's author
+  will find it, rather than re-derived each time from the two places that did it.
 - **verify a backlog reference resolves as a commit before trusting it**: two P3 items cited `cfc79129` and `45db0187` as commits; both are **session UUIDs** and resolve in neither repo, which is why both sat unreproduced for weeks and reached the backlog as vague one-liners — recurrence: 2 (both in one session) — candidate: yes — one command settles it (`git cat-file -t <sha>`) and it belongs at the front of any inherited defect that names a sha. Likely a rule for the handoff/h-mad docs rather than a new skill, since the fix is a habit.
   — **RE-CHECKED 2026-09-07 08:30 (scout): still open.** `grep -rn 'cat-file -t' h-mad/ handoff/` returns
   nothing. The row itself says the right home is a rule in the handoff/h-mad docs rather than a new
   skill, so this is one sentence of debt, not a build.
+  — **RE-PROBED 2026-09-14: PARTIAL, and the earlier "still open" was a TIMING artefact, not a wrong
+  reading.** The margin is computed and printed:
+  `h-mad/tests/test_h_mad_assemble_audit.py:322` asserts `84 * 1024 < mid <= 92_055` with the message
+  carrying `margin to the 92,055 B frontier {92_055 - mid:+}B`, and `:318` states the intent —
+  "'fixture drifted' alone made every re-anchor a judgement call about how much room was left".
+  **It landed at `1c45944` (21:09) and the scout re-checked at 08:30 the same day**, so that
+  re-check was correct when made and stale by evening. Residual: an assertion message prints only
+  on failure, so nobody sees the margin while it is shrinking — which is the case the row is about.
 - **calibrate a new detector against artifacts that already passed, before wiring it**: every `h_mad_precheck_doc.py` detector written as a hard finding fired 104 / 49 / 48 times on the design and plan that had just passed 83 and 74 audit cycles, and every hit was correct usage — recurrence: 5 detectors in one session — candidate: yes — the reusable shape is: pick a real corpus with labelled defects, assert a noise floor on known-good artifacts, and demote anything that fires on them. Currently recorded only in one script's docstring plus a memory.
   — **RE-CHECKED 2026-09-07 08:30 (scout): MECHANISM landed for ONE detector, the reusable shape still
   owed.** `h-mad/tests/test_h_mad_precheck_doc.py` carries `test_noise_floor_on_documents_that_survived_eighty_cycles`
@@ -1495,6 +1528,11 @@ individually re-verified this pass; that is stated rather than left implied.
   `audit_cycle_gating.mutation.json`) that it therefore never asserts over. So the hazard this row
   names is closed at push time and live in the suite — which is the worse arrangement to leave
   undocumented, because a green suite is what a reader checks first and it is the half that is blind.
+  — **RE-PROBED 2026-09-14: PARTIAL.** The verb does not exist. `hmad-dispatch.sh`'s dispatch table
+  carries `env|resolve|verify|launch|pin|…|read|wait|alive|…` and no `probe)` arm; all 12 `probe`
+  hits in the file are comments or unrelated prose. The documented HAZARDS did land (`ask` takes a
+  prompt FILE, its stdout returns the pane mid-render), so a reader is warned but still has to
+  hand-roll the loop — which is what produced this row's transposed-digit incident.
 - **`hmad-dispatch probe <agent>` — a computed-answer liveness verb scored on `env`'s `last=`**: measured 2026-09-05, `hmad-dispatch read agy` sat frozen on a spinner for 20+ minutes while `hmad-dispatch env` already reported `state=done last="340997"`, the correct answer to an `8317 * 41` probe. A watcher grepping the pane loops forever; two other quirks make this worth wrapping — `ask` takes a prompt FILE not a string, and its own stdout returns the pane mid-render. `candidate: yes`
   — reinforced 2026-09-05: hand-rolled the probe twice; once the match literal was a transposed digit (24265159 vs 24264959) and the loop could never pass — a live agy would have been filed dead (#49l). The verb must derive expected and matcher from ONE expression.
   — **RE-CHECKED 2026-09-07 08:30 (scout): still open.** `hmad-dispatch` has no `probe` verb — the
@@ -1502,6 +1540,11 @@ individually re-verified this pass; that is stated rather than left implied.
   and no `probe)`; every `probe` hit in that file is a comment. Note for the next reader: the first
   pass of THIS reconciliation grepped `h-mad/bin/hmad-dispatch.sh` (wrong path — the script is under
   `scripts/`) and got a clean zero, which would have read as "landed, nothing to see".
+  — **RE-PROBED 2026-09-14: PARTIAL, unchanged in substance from the note above and re-verified
+  rather than carried.** Shipped: `h_mad_delta_review.py` exists and is a prescribed step at
+  `h-mad/SKILL.md:1388` with its own `DELTA:` token. Missing: `_cmd_audit_cycle()` at
+  `hmad-dispatch.sh:3163` still parses no `--delta`, so the dispatch half and the report-naming
+  constraint the row wanted ENFORCED remain the caller's to remember.
 - **`collect-report` must name the file it actually waited for, or accept `<report-basename>.done`**: measured 2026-09-05, a complete 13.7K gating report returned `COLLECT: MISSING` because the doc-auditor wrote its marker as `..._teammate.report.done` instead of `..._teammate.report.md.done`. The agy leg on the same cycle wrote the correct form, so it fires per-instance and unpredictably. The error names the REPORT path while waiting on the MARKER path, so it points at the wrong object; and `COLLECT: MISSING` is indistinguishable from "the auditor produced nothing", which is already recorded in a committed Version History entry for `plan c83`. `candidate: yes`
   — **LANDED 2026-09-07 (scout)** — `h-mad/scripts/h_mad_collect_report.py:37-44`. The marker is
   `<report>.done`, and `:42-44` adds the near-miss form the doc-auditor emitted (`a.report.md` ->
@@ -1564,6 +1607,13 @@ individually re-verified this pass; that is stated rather than left implied.
   `audit-prompt.template.md` + `doc-auditor` 7a. The row asked for the EXECUTION half — "the documents
   publish these screens with their commands, so a freeze-certification step can execute them" — and
   no step does; every round still runs them by hand or skips them.
+  — **RE-PROBED 2026-09-14: PARTIAL, and the shipped half answers the question a better way than the
+  row proposed.** `h_mad_phase7_integrate.py:32` argues that when the base is strictly behind,
+  `git merge --no-ff` yields a tree byte-identical to the feature tip, so comparing `<base>^{tree}`
+  to `<branch>^{tree}` PROVES the existing green run covers the merge — implemented at `:283`
+  (`identity = behind == 0`) and re-checked against the real trees after an apply (`:404`). Missing:
+  when the trees are NOT identical, nothing runs the suite on the merged result, which is precisely
+  this row's measured case.
 - **merge tooling that lives under the audited roots only AFTER the last gating pass is collected**: any `h-mad/` commit moves the phase documents' trip-wires and `.py` censuses; the class-gate merge had to wait for r19's three codex legs to land, and the documents are deliberately not re-stamped afterwards. A merge-order check could read the feature's phase + open gating cycle. — recurrence: 2 (this session; `af19d53` at r16) — candidate: maybe
 - **value-grep every shared string across ALL FOUR documents after any REOPEN, not only at first collection**: wave 2's divergence prose became false when the design was reopened after the impl-plan finished; the impl-plan then asserted the opposite of its sibling at three body sites. Collection-time greps ran; reopen-time greps did not. — recurrence: 2 (r18 matrix 85→86, r19 killer name) — candidate: yes
   — **LANDED 2026-09-07 (scout)** — `h-mad/references/measurement-discipline.md` §OWNERSHIP TABLES
@@ -1626,6 +1676,12 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   decision). Deliberately NOT "every imperative sentence needs a script": that fires on the whole
   document, which is the noise floor `calibrate a new detector against artifacts that already passed`
   already measured at 104/49/48 hits.
+  — **RE-PROBED 2026-09-14: PARTIAL, and the shipped guard is narrower than the row in two ways that
+  both matter.** `handoff/tests/test_handoff_takeover_mode.py:224`
+  `test_no_positional_shell_arg_survives_in_the_body` does exist and does bite. But its pattern is
+  `\$[0-9]` — **no `$@`, no `$*`** — and it reads exactly ONE file, `handoff/SKILL.md`, resolved from
+  `parents[1]`. The row asks for the lint over "any `SKILL.md` reachable as a slash command", and
+  `h-mad/SKILL.md` — by far the larger body of fenced blocks — is unguarded.
 - **a positional shell arg in a skill body is REWRITTEN before the agent sees it**: the
   slash-command renderer substitutes the invocation's argument into `$1`, so a documented command
   containing one silently does something else — and the rendered text gives the reader no signal.
@@ -1637,6 +1693,12 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   already known and applied (rewrite as a heredoc'd python block), so this is a guard against
   regression rather than a design question. Severe out of proportion to its size: the failure is a
   documented command that runs and returns a plausible wrong answer.
+  — **RE-PROBED 2026-09-14: PARTIAL, and the split is instance-versus-rule.** (a) LANDED:
+  `test_h_mad_audit_leg_set_gate.py:248` `test_two_legs_of_ONE_cycle_are_not_a_streak` builds two
+  entries sharing `(feature, phase, cycle)` and differing only by leg, and asserts `not_two_cycles:1`
+  — a fixture that can express the collision, which the distinct-by-construction ones could not.
+  (b) NOT LANDED: the general rule — *for any gate that counts distinct things, require a fixture
+  whose entries collide on the discriminating key* — has no home, so the next such gate starts over.
 - **a fixture that is distinct BY CONSTRUCTION cannot express the collision it guards**: `exit_check`
   certified a two-cycle clean streak from **one cycle's two legs**, and neither the 2936-test suite
   nor a purpose-written field tracer could see it — both used fixtures that were distinct cycles by
@@ -1648,6 +1710,12 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   says so. Adjacent to the LANDED `mutation-test-every-guard` (which stubs the guard) and to
   `fix-the-fixture-not-just-the-assertion`, but neither asks the question this one does — whether the
   fixture set can *represent* the failure at all.
+  — **RE-PROBED 2026-09-14: PARTIAL.** (a) LANDED and re-confirmed: `anchor_status()` counts with
+  `source.count(find)` (`h_mad_mutation_harness.py:695`) and `:958` refuses on `hits != 1`, verdict
+  `REFUSED`, exit 2. (b) STILL ABSENT: nothing refuses a mutation whose `find` occurs inside its own
+  `replace`. Searched by several spellings over the harness and found nothing. That is the mutation
+  that cannot be cleanly reasoned about — the replacement re-contains the anchor, so a second
+  application would compound rather than no-op.
 - **a mutation that can never fire reads as a passing battery**: six rows this session SURVIVED or
   were REFUSED for reasons that were properties of the SPEC, not of the code — the assertion named
   the *topic* rather than the prescription; the mutation was aimed at a line that never carried the
