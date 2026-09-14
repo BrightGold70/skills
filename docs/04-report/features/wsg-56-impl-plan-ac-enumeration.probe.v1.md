@@ -80,7 +80,23 @@ it and is not separately enumerated, because the axis is the prefix and not the 
   `grep -c` **line** count; occurrences are **341** (`grep -o … | wc -l`). Its own reproduce command
   is `grep -c`, so the number is right and the label is wrong.
 
-## What is owed
+## Closure — CLOSED 2026-09-14 by operator decision
+
+**#56 is closed.** The row asked for the eleven rows to be enumerated on the premise that no
+enumeration existed. That premise is false, so the task as framed is moot: the census was recovered
+rather than re-derived, and its two load-bearing figures — **eleven**, and **six already shipped** —
+are confirmed at their origin.
+
+**What closing accepts, stated so it is not silently inherited.** Three of the eleven are named
+nowhere, *including at the origin*: the v1.12 author counted eleven and enumerated eight. The
+remainder was deferred to a "revision report" that was never written into either repo. So the three
+are not work this lane declined — they are work that was never recorded by anyone, and closing #56
+accepts them as not owed rather than carrying them forward as a debt.
+
+Anyone who later needs all eleven should start from §Method below: the row grammar, the confirmed
+count, and the measured fact that no mechanical screen narrows the residue.
+
+## What was owed, at the time of writing
 
 1. The remaining **three** rows, by reading each of the 169 not-yet-classified prefixed rows against
    the spec's AC text. No mechanical screen narrows this further — measured above.
