@@ -45,16 +45,12 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _claude_binary() -> Path | None:
-    which = subprocess.run(["which", "claude"], capture_output=True, text=True)
-    if which.returncode != 0 or not which.stdout.strip():
-        return None
-    resolved = subprocess.run(
-        ["readlink", "-f", which.stdout.strip()], capture_output=True, text=True
-    )
-    target = (resolved.stdout.strip() if resolved.returncode == 0 else "") or which.stdout.strip()
-    p = Path(target)
-    return p if p.is_file() else None
+# The locator and the decoded blob live in `claudebinary` so the two tests that
+# re-derive a constant from the binary cannot drift apart -- and so the ~208MB
+# read is paid ONCE per session rather than once per assertion.
+import claudebinary  # noqa: E402
+
+_claude_binary = claudebinary.claude_binary
 
 
 class TestAgainstTheLiveBinary:
@@ -66,13 +62,7 @@ class TestAgainstTheLiveBinary:
     """
 
     def _blob(self) -> str:
-        binary = _claude_binary()
-        if binary is None:
-            pytest.skip("claude binary not found — cannot verify, and will not pass")
-        try:
-            return binary.read_bytes().decode("utf-8", "replace")
-        except OSError as exc:
-            pytest.skip(f"claude binary unreadable ({exc}) — cannot verify")
+        return claudebinary.blob()
 
     def test_the_warn_and_target_fractions_still_match(self) -> None:
         """Both live in one `var` declaration next to the cap machinery."""

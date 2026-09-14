@@ -51,8 +51,8 @@
       "name": "blob-returns-empty-instead-of-the-binary",
       "_mechanism": "`I could not check` collapsing into `the check said yes` -- the asymmetry the worktree-comment read and the state-file search already enforce. An empty blob makes every `in blob` assertion fail and every `not in blob` assertion PASS, so the `$*` negative would be certified by a binary nobody read. Aimed at the DECODE, not at the not-found branch: the first spec written here mutated `pytest.skip(...)` on the missing-binary path and SURVIVED, because on a machine where the binary exists that line never runs. An unreachable mutation scores as a clean battery and proves nothing -- the same defect as this repo's `a mutation that can never fire reads as a passing battery` row, reached while writing a spec to prevent it.",
       "file": "tests/claudebinary.py",
-      "find": "        return binary.read_bytes().decode(\"utf-8\", \"replace\")",
-      "replace": "        return \"\"",
+      "find": "        return binary.read_bytes().decode(\"utf-8\", \"replace\"), None",
+      "replace": "        return \"\", None",
       "test": "tests/test_skill_body_renderer_args.py::TestAgainstTheLiveBinary::test_the_blob_is_the_binary_not_an_empty_fallback"
     }
   ]

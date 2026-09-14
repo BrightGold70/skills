@@ -178,3 +178,39 @@ class TestAgainstTheLiveBinary:
             "in this module's docstring may no longer hold; re-census before "
             "trusting it"
         )
+
+
+class TestTheSharedConstantHelper:
+    """`claudebinary.assert_constant` — the re-derivation shape, factored once.
+
+    Two tests in this directory now re-derive a transcribed constant from the
+    installed binary, and both used to carry their own `which` + `readlink` +
+    decode. That is the shape that drifts: a fix to one locator leaves the other
+    reading a binary that moved, and the ~208MB decode was being paid once per
+    ASSERTION rather than once per session.
+    """
+
+    def test_it_confirms_a_constant_that_is_really_there(self) -> None:
+        claudebinary.assert_constant(r"var \w+=(25000),", 25000)
+
+    def test_an_int_and_its_string_spelling_both_pass(self) -> None:
+        """`"25000" == 25000` is silently False, which would fail toward RED and
+        get the whole re-derivation deleted as flaky."""
+        claudebinary.assert_constant(r"var \w+=(25000),", "25000")
+
+    def test_a_pattern_that_no_longer_matches_fails_loudly(self) -> None:
+        with pytest.raises(AssertionError, match="no longer matches"):
+            claudebinary.assert_constant(r"var \w+=(31337810),", 31337810)
+
+    def test_a_changed_value_names_both_numbers(self) -> None:
+        with pytest.raises(AssertionError, match="transcribed"):
+            claudebinary.assert_constant(r"var \w+=(25000),", 24999)
+
+    def test_the_blob_is_read_once_per_session(self) -> None:
+        """The cache is the reason this helper exists at all."""
+        claudebinary.blob()
+        before = claudebinary._blob_or_error.cache_info()
+        claudebinary.blob()
+        after = claudebinary._blob_or_error.cache_info()
+        assert after.hits > before.hits, "the binary is being re-read per call"
+        assert after.misses == before.misses, "a second read happened"

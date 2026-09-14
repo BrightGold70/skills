@@ -15,6 +15,8 @@ actions, so they must not produce the same test outcome.
 
 from __future__ import annotations
 
+import functools
+import re
 import subprocess
 from pathlib import Path
 
@@ -39,6 +41,27 @@ def claude_binary() -> Path | None:
     return p if p.is_file() else None
 
 
+@functools.lru_cache(maxsize=1)
+def _blob_or_error() -> tuple[str | None, str | None]:
+    """`(text, None)` on success, `(None, reason)` on failure. Cached per session.
+
+    The cache is the point: the image is ~208MB and decoding it takes real time,
+    so a suite with several constants to re-derive was paying that per ASSERTION.
+    The failure is cached too -- a missing binary does not become findable by
+    asking again, and re-running `which` per test only makes the skip slower.
+
+    Returns a pair rather than raising so the cache holds an outcome instead of
+    a `Skipped` exception; `blob()` is the one place that turns it into a skip.
+    """
+    binary = claude_binary()
+    if binary is None:
+        return None, "claude binary not found -- cannot verify, and will not pass"
+    try:
+        return binary.read_bytes().decode("utf-8", "replace"), None
+    except OSError as exc:  # pragma: no cover - depends on the host
+        return None, f"claude binary unreadable ({exc}) -- cannot verify"
+
+
 def blob() -> str:
     """The binary decoded as lossy UTF-8, or a SKIP carrying the reason.
 
@@ -46,10 +69,32 @@ def blob() -> str:
     `assert X in blob` fail and every `assert X not in blob` pass, which is the
     fail-open direction for exactly the negative assertions this is used for.
     """
-    binary = claude_binary()
-    if binary is None:
-        pytest.skip("claude binary not found -- cannot verify, and will not pass")
-    try:
-        return binary.read_bytes().decode("utf-8", "replace")
-    except OSError as exc:  # pragma: no cover - depends on the host
-        pytest.skip(f"claude binary unreadable ({exc}) -- cannot verify")
+    text, reason = _blob_or_error()
+    if text is None:
+        pytest.skip(reason)
+    return text
+
+
+def assert_constant(pattern: str, expected, group: int = 1) -> None:
+    """Re-derive one transcribed constant from the binary, or SKIP saying why.
+
+    Match on the VALUE in its declaring context, never on the minified name --
+    `F2`, `hD`, `Ams` are regenerated every build, so pinning one goes red on a
+    rename that changed nothing. Pass a pattern that contains the value and
+    enough syntax around it to be unambiguous.
+
+    `expected` is compared as a STRING against the captured group. A caller
+    holding an int passes it directly and it is stringified here; comparing
+    `"25000" == 25000` silently False is exactly the fail-toward-red that makes
+    a re-derivation check get deleted as flaky.
+    """
+    m = re.search(pattern, blob())
+    assert m, (
+        f"pattern {pattern!r} no longer matches the installed binary -- the "
+        f"constant it pins may have moved or changed; re-decode before trusting it"
+    )
+    got = m.group(group)
+    assert got == str(expected), (
+        f"the binary declares {got!r} where this repo has transcribed "
+        f"{str(expected)!r} (pattern {pattern!r})"
+    )
