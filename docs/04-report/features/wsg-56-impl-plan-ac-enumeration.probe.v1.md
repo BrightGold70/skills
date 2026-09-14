@@ -237,6 +237,81 @@ and it called them `DIFFERENT` while noting that a reader weighing "vacuity cont
 would call them `GUARD`. That is a real definitional seam, not a mistake, and it accounts for four
 of the nineteen on its own.
 
+### ADJUDICATION RETURNED — the new calls mostly do NOT survive, and the reason is precise
+
+Nine of the new calls were put to two further readers inside a **blinded** 22-pair set: the 9 new
+calls, the 4 knowns as **positive** controls, and 9 rows a different reader had called `SAME` as
+**negative** controls, shuffled, with no indication which was which.
+
+| control | adj-1 | adj-2 |
+|---|---|---|
+| negative (rows called `SAME`) | **9/9 `SAME`** | **9/9 `SAME`** |
+| positive (known mismatches) | 3/4 | **4/4** |
+
+**Eighteen of eighteen negative controls came back `SAME`.** Whatever else is true, these readers do
+not call `DIFFERENT` indiscriminately — which is what the nineteen in-band calls had to be tested
+against, and the test exonerates the *method* while convicting most of the *calls*.
+
+Of the nine new calls: **2 unanimously `DIFFERENT`, 5 unanimously not, 2 split.**
+
+| row | adj-1 | adj-2 | |
+|---|---|---|---|
+| **T1 r7** | DIFFERENT | DIFFERENT | **CONFIRMED** |
+| **T6 r10** | DIFFERENT | DIFFERENT | **CONFIRMED** |
+| T6 r29 | GUARD | DIFFERENT | split |
+| T5 r3 | DIFFERENT | GUARD | split |
+| T8 r7 | GUARD | GUARD | refuted |
+| T9 r7 | GUARD | GUARD | refuted |
+| T6 r9 | NARROWER | NARROWER | refuted |
+| T14 r15 | NARROWER | NARROWER | refuted |
+| T14 r16 | NARROWER | NARROWER | refuted |
+
+So the batch readers were **not** over-calling `SAME` rows as `DIFFERENT` — they were over-calling
+`GUARD` and `NARROWER` rows as `DIFFERENT`. **The variance lives entirely at the
+`DIFFERENT`/`GUARD`/`NARROWER` boundary, and not at all at the `SAME` boundary.** That is the same
+seam the batch-1 reader named on its own, and it is a property of the question, not of any reader:
+deciding whether a row *asserts a different property* or *guards the criterion's other tests*
+requires knowing why the row was written, and the row text does not always say.
+
+**`T1 r7` is the load-bearing result.** It sits at rank **136**, deep in the tail that had never been
+read, and it is now confirmed by **three independent readers** — the batch-6 reader that first
+flagged it and both adjudicators. Its sibling `T1 r8` (rank 99) was found separately by a fourth
+reader with the same mechanism but arrived after the adjudication set was built, so it is
+corroborated-but-unadjudicated. **Reading rows 71–177 found a real mismatch, and the pair it belongs
+to is the first of its kind in this corpus — exactly the outcome the earlier pass called possible.**
+
+### The single most instructive error in the round, and it is the adjudicator's
+
+adj-1's one miss was **T14 r20**, a row the census itself names as a clean SWAP. It called it `SAME`,
+reasoning: *"Both: quorum value unmoved by the flag, driven under both settings."* Read the two
+criteria:
+
+- **AC-2.2** — `HEMASUITE_NLM_QUORUM` resolves to the same value under both settings, and is `0.8`
+  with the environment unset.
+- **AC-2.3** — `enforcing_site`, `is_claim_like`, `CLAIM_LIKE_VOCABULARY`, `CLAIM_LIKE_MIN_CHARS` are
+  not read by and do not change with the flag.
+
+The row is `test_ac_2_2_quorum_enforcing_site_and_claim_like_predicate_are_unmoved_by_the_flag`. What
+it asserts is **AC-2.3's** property. It carries `ac_2_2`. The census is right and adj-1 is wrong —
+and **the word that misled it is `quorum`, which appears in the row name only because
+`enforcing_site` lives in the `tools.grounding_quorum` module.** A module-path token, not a subject.
+
+That is worth more than the verdict it got wrong. The reader failed by **lexical overlap with the
+wrong AC** — which is the precise mechanism the token-overlap screen is built on, and plausibly the
+mechanism that produced the original mislabelling in the first place. adj-2, reading the same pair,
+got it right, so this is per-reader error and not a systematic bias. **The corollary is the one that
+should govern how this document is used: no single reader is authoritative on a lexically-confusable
+row, mine included, and the errors run in BOTH directions.** The five refuted calls may therefore
+contain genuine mismatches that two conservative readers downgraded, which is why the confirmed
+count is stated as a **floor**.
+
+### Where the count actually stands
+
+**Seventeen confirmed** — the twelve published, plus the three borderline rows resolved above, plus
+`T1 r7` and `T6 r10`. Not counted, and listed so nobody has to re-derive them: 2 split, 5 refuted,
+`T1 r8` corroborated-but-unadjudicated, and **12 further new calls never put to adjudication at
+all**. The floor is seventeen; the ceiling is not established by this document.
+
 ## Two adjacent rows, already FIXED — not part of the eleven
 
 Task 13 rows 5 and 7 carried `ac_10_9` prefixes for properties `AC-10.9` does not state. They were
