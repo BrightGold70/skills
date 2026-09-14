@@ -837,6 +837,40 @@ def _sibling_specs(spec_path: Path) -> dict:
     same classifier as --check-anchors so "not a spec" is a skip, while a file
     that declares itself a spec is handed to _load_spec/precheck_spec and can
     refuse the run if deeper validation fails.
+
+    ONE DIRECTORY, deliberately — `spec_path.parent`, never the whole tree. This
+    reads like a blind spot and is not one; it is AC-3.5 of
+    anchor-precheck-phase-5e-wiring, pinned by
+    `test_drifted_spec_in_a_different_directory_does_not_affect_run`. Decided again
+    2026-09-14 after the committed corpus became genuinely multi-directory (108
+    specs across `h-mad/tests/mutation-specs/`, `h-mad/tests/specs/` and
+    `handoff/tests/mutation-specs/`), and the answer did not change:
+
+      * The hazard is already closed TREE-WIDE, twice, and both were measured
+        rather than assumed. `h-mad/git-hooks/pre-push` sweeps every tracked
+        `*.json` via `git ls-files`, and
+        `test_committed_mutation_harness_anchor_sweep_is_ok` runs
+        `--check-anchors` over `_committed_mutation_specs()` — the same
+        `git ls-files` + classifier discovery. Drifting
+        `combine-rc-guard-drop` in `h-mad/tests/specs/` turned that test red and
+        restoring it turned it green, so the suite guard discriminates; it is
+        not a sweep that passes over an empty set.
+      * Widening would therefore change no verdict. Measured at the same commit:
+        `--check-anchors` over all three directories is `ANCHORS_OK 980/980`.
+      * It WOULD couple unrelated skills — one drifted `handoff/` spec would
+        refuse every `h-mad/` run — for a window the two gates above already
+        close before anything is published.
+      * It would also break the design's stated reason for having no opt-out
+        flag: "the harness's own tests avoid the precheck by construction — a
+        single-spec directory has no siblings". A tree-wide sweep needs a
+        no-repo fallback for every `tmp_path` spec in the suite, and that
+        fallback makes the AC-3.5 test pass VACUOUSLY, so the widening could
+        only be proven by a new git-fixture test.
+
+    The residue is real and is the price of the scoping: between a drift landing
+    and the next suite or push, a single run in directory A can report
+    ALL_CAUGHT while a spec in directory B is drifted. Run `--check-anchors`
+    over every spec directory if you need that window closed sooner.
     """
     spec_path = Path(spec_path).resolve()
     spec_paths = []

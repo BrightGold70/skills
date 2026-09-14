@@ -1549,6 +1549,27 @@ individually re-verified this pass; that is stated rather than left implied.
   That last gap is narrower than this row and is left open deliberately: widening what every run
   prechecks changes which runs return `PRECHECK_FAILED`, which is a behaviour change that wants its
   own measurement rather than a late-session edit.
+  — **DECIDED 2026-09-14 (next session): DO NOT WIDEN, and the measurement the deferral asked for
+  says why.** The sibling sweep is `spec_path.parent` by **AC-3.5** of
+  `anchor-precheck-phase-5e-wiring`, pinned by
+  `test_drifted_spec_in_a_different_directory_does_not_affect_run` — so widening reverses a spec'd
+  invariant rather than filling a gap. It would also buy nothing: the corpus is now **108 specs /
+  980 mutations across three directories** (`h-mad/tests/mutation-specs` 99, `handoff/tests/
+  mutation-specs` 7, `h-mad/tests/specs` 2) and `--check-anchors` over all three is `ANCHORS_OK
+  980/980`, so **zero runs change verdict today**. The hazard is already closed tree-wide TWICE —
+  the pre-push hook's `git ls-files` sweep, and
+  `test_committed_mutation_harness_anchor_sweep_is_ok`, which runs `--check-anchors` over
+  `_committed_mutation_specs()` (the same `git ls-files` + classifier discovery). That second one
+  was **executed, not asserted**: drifting `combine-rc-guard-drop` in `h-mad/tests/specs/` turned it
+  RED and restoring the file byte-identical turned it GREEN, so it discriminates and is not a sweep
+  passing over an empty set. Against that, widening would couple unrelated skills (one drifted
+  `handoff/` spec refusing every `h-mad/` run) and break the design's stated reason for shipping no
+  opt-out flag — *"the harness's own tests avoid the precheck by construction — a single-spec
+  directory has no siblings"* — because a tree-wide sweep needs a no-repo fallback for every
+  `tmp_path` spec, and that fallback makes the AC-3.5 test pass **vacuously**. Residue, stated
+  rather than hidden: between a drift landing and the next suite or push, one run in directory A can
+  report ALL_CAUGHT while a spec in directory B is drifted. Recorded at `_sibling_specs`'s docstring,
+  which is where the single-directory `glob` reads as a bug to the next reader.
 - **`hmad-dispatch probe <agent>` — a computed-answer liveness verb scored on `env`'s `last=`**: measured 2026-09-05, `hmad-dispatch read agy` sat frozen on a spinner for 20+ minutes while `hmad-dispatch env` already reported `state=done last="340997"`, the correct answer to an `8317 * 41` probe. A watcher grepping the pane loops forever; two other quirks make this worth wrapping — `ask` takes a prompt FILE not a string, and its own stdout returns the pane mid-render. `candidate: yes`
   — reinforced 2026-09-05: hand-rolled the probe twice; once the match literal was a transposed digit (24265159 vs 24264959) and the loop could never pass — a live agy would have been filed dead (#49l). The verb must derive expected and matcher from ONE expression.
   — **RE-CHECKED 2026-09-07 08:30 (scout): still open.** `hmad-dispatch` has no `probe` verb — the
