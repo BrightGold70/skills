@@ -1533,6 +1533,22 @@ individually re-verified this pass; that is stated rather than left implied.
   hits in the file are comments or unrelated prose. The documented HAZARDS did land (`ask` takes a
   prompt FILE, its stdout returns the pane mid-render), so a reader is warned but still has to
   hand-roll the loop — which is what produced this row's transposed-digit incident.
+  — **LANDED 2026-09-14: the suite half is closed, so both halves now discover the same way.**
+  `_committed_mutation_specs()` was `rglob("tests/mutation-specs/*.json")` and is now `git ls-files
+  '*.json'` filtered through the harness's own `classify_spec_file` — the identical discovery the
+  pre-push hook already documented as *"DISCOVERED, not hardcoded"*. That brings
+  `h-mad/tests/specs/audit_cycle_connections.mutation.json` and `…gating.mutation.json` — **19
+  mutations** — inside the portability and anchor guards for the first time; they were clean, which
+  is why nothing had noticed. `git ls-files` rather than `rglob` on purpose: COMMITTED is the
+  property under test and an untracked scratch spec is nobody else's portability problem. Two
+  non-vacuity assertions pin it: the old directory must still be in the set, and
+  `h-mad/tests/specs/` must be too, so a classifier change cannot quietly shrink the search back.
+  This session also made the row's premise concrete a second way — splitting
+  `skill_body_renderer_args.json` across `h-mad/` and `handoff/` put committed specs in two
+  directories by design, and `run_spec`'s SIBLING precheck still sweeps only `spec_path.parent`.
+  That last gap is narrower than this row and is left open deliberately: widening what every run
+  prechecks changes which runs return `PRECHECK_FAILED`, which is a behaviour change that wants its
+  own measurement rather than a late-session edit.
 - **`hmad-dispatch probe <agent>` — a computed-answer liveness verb scored on `env`'s `last=`**: measured 2026-09-05, `hmad-dispatch read agy` sat frozen on a spinner for 20+ minutes while `hmad-dispatch env` already reported `state=done last="340997"`, the correct answer to an `8317 * 41` probe. A watcher grepping the pane loops forever; two other quirks make this worth wrapping — `ask` takes a prompt FILE not a string, and its own stdout returns the pane mid-render. `candidate: yes`
   — reinforced 2026-09-05: hand-rolled the probe twice; once the match literal was a transposed digit (24265159 vs 24264959) and the loop could never pass — a live agy would have been filed dead (#49l). The verb must derive expected and matcher from ONE expression.
   — **RE-CHECKED 2026-09-07 08:30 (scout): still open.** `hmad-dispatch` has no `probe` verb — the

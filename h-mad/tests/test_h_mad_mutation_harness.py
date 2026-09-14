@@ -1897,11 +1897,46 @@ def test_recovery_table_carries_the_new_verdict() -> None:
 
 
 def _committed_mutation_specs() -> list[Path]:
+    """Every committed spec, DISCOVERED by classifier rather than by directory.
+
+    This was `rglob("tests/mutation-specs/*.json")` — one hardcoded directory —
+    while `h-mad/tests/specs/` holds two real specs carrying 19 mutations
+    (`audit_cycle_connections.mutation.json`, `audit_cycle_gating.mutation.json`)
+    that no suite-level assertion ever reached. So the portability and anchor
+    guards below were silent about them, and a drift there would have been
+    invisible to a green suite.
+
+    The push boundary never had this gap: `h-mad/git-hooks/pre-push` says in so
+    many words that which specs get swept is "DISCOVERED, not hardcoded" — it
+    walks `git ls-files` and lets the harness's own classifier decide what is a
+    spec. That is the worse arrangement to leave standing, because a green suite
+    is what a reader checks FIRST and it was the half that was blind. This now
+    discovers the same way, so the two cannot disagree.
+
+    `git ls-files` rather than `rglob`, deliberately: COMMITTED is the property
+    under test, and an untracked scratch spec is not a portability problem for
+    anyone else.
+    """
     repo = Path(__file__).resolve().parents[2]
-    specs = sorted(repo.rglob("tests/mutation-specs/*.json"))
+    listed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "*.json"],
+        capture_output=True, text=True,
+    )
+    assert listed.returncode == 0, f"git ls-files failed: {listed.stderr}"
+    specs = sorted(
+        repo / rel for rel in listed.stdout.split()
+        if classify_spec_file(repo / rel)[0] == "spec"
+    )
     # This is a non-vacuity guard, not a count pin: a broken layout/walk must
     # not certify "no offenders" by iterating over nothing.
-    assert specs, "found no committed mutation specs under tests/mutation-specs/*.json"
+    assert specs, "found no committed mutation specs anywhere in the repository"
+    # The directory that used to be the whole search must still be inside it —
+    # otherwise a classifier change could quietly shrink the set back.
+    assert any("mutation-specs" in s.parts for s in specs)
+    assert any(s.parent.name == "specs" for s in specs), (
+        "h-mad/tests/specs/ is no longer discovered — the single-directory blind "
+        "spot this helper exists to close has come back"
+    )
     return specs
 
 
