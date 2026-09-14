@@ -1475,6 +1475,16 @@ individually re-verified this pass; that is stated rather than left implied.
   and prose in `test_h_mad_assemble_audit.py:212,242` — the size fixture is still a bare re-anchored
   constant, which is the shape the row says reads as a pass right up until it does not.
 - **sweep EVERY mutation-spec directory, not the one you thought of**: `--check-anchors` over `tests/specs/` returned `ANCHORS_OK` while two anchors in `tests/mutation-specs/` were drifted and failing the suite — recurrence: 1 — candidate: maybe — `find h-mad -name '*.json' -path '*spec*'` is the whole fix, but nothing makes the two-directory layout discoverable to someone who checks one and stops.
+  — **RE-PROBED 2026-09-14: NARROWED, not closed, and the two halves now disagree.** The PUSH
+  boundary is covered: `h-mad/git-hooks/pre-push` says in so many words that which specs get swept is
+  *"DISCOVERED, not hardcoded"* — it sweeps every tracked `*.json` via `git ls-files` and lets the
+  harness's own classifier decide what is a spec, so both directories are reached. The SUITE-level
+  check is not: `tests/test_h_mad_mutation_harness.py:1901` is
+  `sorted(repo.rglob("tests/mutation-specs/*.json"))`, a hardcoded single directory, and
+  `h-mad/tests/specs/` holds two real specs (`audit_cycle_connections.mutation.json`,
+  `audit_cycle_gating.mutation.json`) that it therefore never asserts over. So the hazard this row
+  names is closed at push time and live in the suite — which is the worse arrangement to leave
+  undocumented, because a green suite is what a reader checks first and it is the half that is blind.
 - **`hmad-dispatch probe <agent>` — a computed-answer liveness verb scored on `env`'s `last=`**: measured 2026-09-05, `hmad-dispatch read agy` sat frozen on a spinner for 20+ minutes while `hmad-dispatch env` already reported `state=done last="340997"`, the correct answer to an `8317 * 41` probe. A watcher grepping the pane loops forever; two other quirks make this worth wrapping — `ask` takes a prompt FILE not a string, and its own stdout returns the pane mid-render. `candidate: yes`
   — reinforced 2026-09-05: hand-rolled the probe twice; once the match literal was a transposed digit (24265159 vs 24264959) and the loop could never pass — a live agy would have been filed dead (#49l). The verb must derive expected and matcher from ONE expression.
   — **RE-CHECKED 2026-09-07 08:30 (scout): still open.** `hmad-dispatch` has no `probe` verb — the
@@ -1916,3 +1926,19 @@ Rows re-read for relevance to this session's work (the crash-kill/`--sweep` pair
 
 - **plugin-hooks-validator-replay**: replay Claude Code's own `hooks.json` key validator offline by extracting its allowed-key Sets from the running binary, then scoring every installed plugin — closes a "TUI-only, operator must look" item without an interactive session, and re-answers it after each upgrade wipes a vendor-cache patch. Negative control (the pre-patch backup) is part of the recipe, not an extra — recurrence: 1 — candidate: **LANDED** 2026-09-14 (`dfff6fd`) — `h-mad/scripts/h_mad_check_plugin_hooks.py` + `tests/test_h_mad_check_plugin_hooks.py` + `tests/mutation-specs/check_plugin_hooks.json` (12 mutations, ALL_CAUGHT). **The negative control did NOT survive as a backup and the row's recipe is corrected here:** the pre-patch `hooks.json` was wiped by the upgrade that followed, so a test reading that vendor path would have skipped forever while reporting nothing wrong. Both recorded warning texts are pinned as literal strings against synthesised fixtures instead — including the singular/plural swap between them, which is `len(findings)` and which a mutant that hardcodes `"keys"` otherwise survives. The binary key-sets ARE re-grepped live, by Set *contents* not by the minified names, and SKIP (never pass) when the binary is unreadable. Live run: 7 installed plugins, all CLEAN, exit 0
 - **calibrate-a-ranking-screen-against-known-positives**: when a corpus is too large to read and the obvious proxy is known-wrong, rank by a cheap signal and then *calibrate the ranking against the items already known to be positive* before trusting the cut-off. Used on `#56` (177 rows, 8 knowns all inside rank 61) — the screen narrows, a human read decides. Distinct from the existing calibrate-a-detector row, which is about false-positive rates on a gate, not about bounding a search — recurrence: 1 — candidate: maybe
+  — **RECURRENCE 1 → 2, and the technique gained a much stronger validator than the one this row
+  describes. Measured 2026-09-14 by running the screen to exhaustion on `#56` itself.** All 177 rows
+  were read, in seven batches cut in ascending overlap order, by seven readers none of whom knew
+  which band they held or what any other found. `DIFFERENT` density came back **monotonic in
+  overlap** — 19, 7, 5, 1, 0, 1, 0 against mean overlap 0.070 → 0.905 — and the top two bands
+  returned **0 of 48** between them.
+  **That gradient is a better calibration than "the knowns rank inside 61", and the row should say
+  so**: knowns-inside-a-cut-off is equally consistent with a screen that merely fails to be
+  *anti*-correlated, whereas a monotonic gradient measured by independent readers is evidence the
+  ranking tracks the property. It also doubles as a free negative control on the readers — a pool
+  biased toward `DIFFERENT` would have produced a flat row.
+  The upgraded recipe is therefore: rank cheaply, calibrate against knowns, **then read the whole
+  corpus in rank-ordered blind bands and check the gradient is monotonic.** The cut-off is what you
+  are entitled to trust only once the gradient says the ranking is real.
+  Exhaustion also priced the cut-off: 33 `DIFFERENT` calls, and only **2** at rank > 70 — so the
+  screen's narrowing was sound, and the tail was worth reading exactly once.
