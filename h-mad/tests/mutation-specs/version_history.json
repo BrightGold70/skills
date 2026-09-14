@@ -17,10 +17,10 @@
   "mutations": [
     {
       "name": "missing-anchor-becomes-a-silent-noop",
-      "_mechanism": "The original defect: a drifted anchor writes nothing and reports success. Must be caught by test_a_missing_section_refuses, NOT merely by a crash.",
+      "_mechanism": "The original defect: a drifted anchor writes nothing and reports success. Must be caught by test_a_missing_section_refuses, NOT merely by a crash. REPAIRED 2026-09-14: the replacement said `return len(lines)`, but the fence-grammar port dropped `lines` from `find_anchor`'s signature, so the mutant died on `NameError` instead of on the named test — a HOLLOW kill, and one this row's own text forbids in those words. Surfaced by the `crash_visible` field added the same day, which is what a `crash_kills=1` on an ALL_CAUGHT run is for. `return 0` restores the intended defect: the function silently claims an anchor at index 0 instead of refusing, which is the drifted-anchor no-op the row exists to catch.",
       "file": "scripts/h_mad_version_history.py",
       "find": "    if not hits:\n        raise Refusal(\"anchor_missing\")",
-      "replace": "    if not hits:\n        return len(lines)",
+      "replace": "    if not hits:\n        return 0",
       "test": "tests/test_h_mad_version_history.py::TestAnchorRefusals::test_a_missing_section_refuses"
     },
     {

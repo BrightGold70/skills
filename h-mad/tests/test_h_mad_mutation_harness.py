@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -2411,7 +2412,14 @@ def test_the_classifier_does_not_fire_on_a_test_about_tracebacks(
 
 
 def test_the_summary_line_carries_the_crash_kill_count(tmp_path: Path) -> None:
-    """`crash_kills=` rides the token line, appended so existing parses survive."""
+    """`crash_kills=` rides the token line, appended so existing parses survive.
+
+    Still an exact match up to `crash_kills=`, which is what catches a field being
+    INSERTED mid-line and silently breaking every left-to-right reader. What follows
+    is pinned by shape rather than by value: `crash_visible=M/T` is a property of the
+    fixture's own test file, so hardcoding the fraction would make this test fail
+    whenever the fixture gains an assertion, for no defect.
+    """
     spec = _crash_project(tmp_path, [
         {"name": "unbind the printed name", "file": "guard.py",
          "find": 'print("OVER")', "replace": "print(OVER)", "test": CRASH_PIN},
@@ -2419,10 +2427,11 @@ def test_the_summary_line_carries_the_crash_kill_count(tmp_path: Path) -> None:
     proc = _run_cli(spec)
 
     summary = [l for l in proc.stdout.splitlines() if l.startswith("MUTATION:")]
-    assert summary == [
-        "MUTATION: ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0 "
-        "unreadable=0 crash_kills=1"
-    ], proc.stdout
+    assert len(summary) == 1, proc.stdout
+    head = ("MUTATION: ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0 "
+            "unreadable=0 crash_kills=1")
+    assert summary[0].startswith(head), proc.stdout
+    assert re.fullmatch(r" crash_visible=\d+/\d+", summary[0][len(head):]), proc.stdout
     assert "    mechanism: killed by its named test" in proc.stdout, proc.stdout
     assert "(crash: NameError in guard.py)" in proc.stdout, proc.stdout
 
@@ -2632,3 +2641,79 @@ def test_the_direct_import_footer_shape_is_unaffected() -> None:
     classify under their own exception name."""
     assert h_mad_mutation_harness.crash_kill(
         DIRECT_IMPORT_NAMEERROR, "guard.py") == "NameError"
+
+
+class TestCrashVisibilityIsReported:
+    """`crash_kills=0` has two causes with opposite meanings; publish the denominator.
+
+    A mutant can die on a crash instead of on the property its row is about, and
+    `assert r.returncode == 0` with NO message discards the child's stderr — so the
+    classifier cannot see the traceback and a hollow kill is spelled exactly like a
+    clean one. The harness docstring had said so since the classifier shipped, but
+    the TOKEN LINE — the thing a caller greps — carried only the bare count, so the
+    one consumer that had to know was the one place not told.
+
+    Measured 2026-09-14 across h-mad/tests: 452 of 921 returncode assertions carry a
+    message, 49.1%. So for roughly half the corpus `crash_kills=0` was never evidence
+    of absence, and nothing said which half a given run was in.
+
+    This paid for itself immediately: with the field live, the version_history spec
+    reported `crash_kills=1` on an ALL_CAUGHT run, and the crash was a HOLLOW kill
+    introduced hours earlier by the fence-grammar port — a mutation whose replacement
+    referenced a parameter the port had removed, so the mutant died on `NameError`
+    rather than on its named test, which that row's own `_mechanism` forbids in
+    those words.
+    """
+
+    def test_coverage_counts_a_message_that_is_a_NAME_not_only_a_literal(self, tmp_path) -> None:
+        """The regex version of this undercounted threefold; AST is why it is AST.
+
+        `assert r.returncode == 0, r.stdout` carries a real message — a Name node.
+        A screen keying on a quote after the comma misses it and reports 15% where
+        the truth is 49% (both measured on this repo before the function existed).
+        """
+        f = tmp_path / "test_x.py"
+        f.write_text(
+            "def test_a():\n    assert r.returncode == 0, r.stdout\n"
+            "def test_b():\n    assert r.returncode == 2, 'literal'\n"
+            "def test_c():\n    assert r.returncode == 1\n"
+        )
+        with_msg, total = h_mad_mutation_harness._returncode_assertion_coverage({f})
+        assert (with_msg, total) == (2, 3), (with_msg, total)
+
+    def test_non_returncode_assertions_are_not_counted(self, tmp_path) -> None:
+        f = tmp_path / "test_y.py"
+        f.write_text("def test_a():\n    assert 1 == 1\n    assert x.stdout == 'hi'\n")
+        assert h_mad_mutation_harness._returncode_assertion_coverage({f}) == (0, 0)
+
+    def test_an_unreadable_file_adds_nothing_and_does_not_raise(self, tmp_path) -> None:
+        """Unreadable is not zero-with-confidence; it simply contributes nothing."""
+        bad = tmp_path / "test_broken.py"
+        bad.write_text("def test_a(:\n")            # SyntaxError
+        assert h_mad_mutation_harness._returncode_assertion_coverage({bad}) == (0, 0)
+        missing = tmp_path / "test_absent.py"
+        assert h_mad_mutation_harness._returncode_assertion_coverage({missing}) == (0, 0)
+
+    def test_spec_test_files_resolves_row_test_keys_against_the_root(self, tmp_path) -> None:
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        real = tests / "test_real.py"
+        real.write_text("def test_a():\n    assert r.returncode == 0, r.stdout\n")
+        spec = {"mutations": [
+            {"test": "tests/test_real.py::TestK::test_a"},
+            {"test": "tests/test_absent.py::test_b"},   # not on disk -> excluded
+            {},                                          # untargeted row -> excluded
+        ]}
+        assert h_mad_mutation_harness._spec_test_files(spec, tmp_path) == {real}
+
+    def test_the_token_line_carries_the_denominator(self) -> None:
+        """Guards the report surface, not just the helper.
+
+        Appended LAST, for the same reason `crash_kills` was: every consumer parses
+        this line by substring from the left, so growing it at the end leaves those
+        reads intact.
+        """
+        src = (SCRIPTS / "h_mad_mutation_harness.py").read_text(encoding="utf-8")
+        assert 'f" crash_visible={' in src, "the token line no longer reports the denominator"
+        i, j = src.index("crash_kills={result"), src.index('crash_visible={result')
+        assert i < j, "crash_visible must stay AFTER crash_kills — left-to-right readers"

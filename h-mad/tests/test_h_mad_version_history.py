@@ -308,7 +308,7 @@ class TestCli:
         doc = stage(tmp_path, "vh-ascending.md")
         proc = run_cli(str(doc), "--version", "v1.3", "--text", "Audit v3 fixes.")
 
-        assert proc.returncode == 0
+        assert proc.returncode == 0, proc.stdout + proc.stderr
         assert "VERSION-HISTORY: OK" in proc.stdout
         assert "version=v1.3" in proc.stdout
         assert "placement=append" in proc.stdout
@@ -317,7 +317,7 @@ class TestCli:
         doc = stage(tmp_path, "vh-mixed-order.md")
         proc = run_cli(str(doc), "--version", "v1.3", "--text", "Audit v3 fixes.")
 
-        assert proc.returncode == 2
+        assert proc.returncode == 2, proc.stdout + proc.stderr
         assert "VERSION-HISTORY: REFUSED" in proc.stdout
         assert "reason=mixed_order" in proc.stdout
 
@@ -326,13 +326,13 @@ class TestCli:
         doc = stage(tmp_path, "vh-table.md")
         proc = run_cli(str(doc), "--version", "v0.2", "--text", "Phase 1.")
 
-        assert proc.returncode == 2
+        assert proc.returncode == 2, proc.stdout + proc.stderr
         assert "line=" not in proc.stdout
 
     def test_unreadable_prints_its_own_verdict(self, tmp_path: Path) -> None:
         proc = run_cli(str(tmp_path / "absent.md"), "--version", "v1.0", "--text", "X.")
 
-        assert proc.returncode == 2
+        assert proc.returncode == 2, proc.stdout + proc.stderr
         assert "VERSION-HISTORY: UNREADABLE" in proc.stdout
         assert "line=" not in proc.stdout
 
@@ -341,7 +341,7 @@ class TestCli:
         before = doc.read_text()
         proc = run_cli(str(doc), "--version", "v1.3", "--text", "X.", "--dry-run")
 
-        assert proc.returncode == 0
+        assert proc.returncode == 0, proc.stdout + proc.stderr
         assert "VERSION-HISTORY: DRY-RUN" in proc.stdout
         assert doc.read_text() == before
 

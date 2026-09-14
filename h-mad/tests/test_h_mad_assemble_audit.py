@@ -176,13 +176,13 @@ class TestSignalDiscipline:
 
     def test_missing_input_is_an_operational_error(self, tmp_path):
         r = _run("--feature", "nope", "--phase", "plan", "--project-root", str(tmp_path))
-        assert r.returncode == 1
+        assert r.returncode == 1, r.stdout + r.stderr
         assert "cannot assemble" in r.stderr
         assert "ASSEMBLE:" not in r.stdout
 
     def test_unknown_phase_is_rejected(self, tmp_path):
         r = _run("--feature", "demo", "--phase", "bogus", "--project-root", str(tmp_path))
-        assert r.returncode != 0
+        assert r.returncode != 0, r.stdout + r.stderr
         assert "ASSEMBLE: PASS" not in r.stdout
 
 

@@ -12,9 +12,9 @@ This is that harness, once.
 
 Verdicts, printed as a canonical token:
 
-    MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 exit 0
-    MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0 unreadable=0 crash_kills=1 exit 0
-    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1 unreadable=0 crash_kills=0 exit 2
+    MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=19/19 exit 0
+    MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0 unreadable=0 crash_kills=1 crash_visible=12/19 exit 0
+    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1 unreadable=0 crash_kills=0 crash_visible=19/19 exit 2
     MUTATION: PRECHECK_FAILED specs=3 drifted=1 unreadable=0               exit 2
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
@@ -102,7 +102,10 @@ in false attribution than the one case is worth. And the untargeted branch (no
 whole suite, where a traceback may belong to any file. Nor can the classifier
 see a crash the failing test never SURFACED: `assert r.returncode == 0` with no
 message discards the child's stderr, so `crash_kills=0` means "none found",
-never "none there".
+never "none there". `crash_visible=M/T` on the token line is that caveat made
+reportable: T returncode assertions in the files this spec targets, M of which
+carry a message and could surface a traceback at all. `crash_kills=0` beside
+`crash_visible=19/19` is evidence; beside `12/19` it is a partial reading.
 
 What stays with the author: whether the mechanism that fired is the mechanism
 the spec claims. The harness reports; it never judges that. `_mechanism` on a
@@ -392,6 +395,62 @@ def _failing_tests(output: str) -> list[str]:
     return FAILED_LINE.findall(output)
 
 
+# --- crash-kill VISIBILITY -------------------------------------------------
+#
+# `crash_kills=0` has two causes with opposite meanings: no mutant died on a
+# crash, or one did and the failing assertion never surfaced it. `assert
+# r.returncode == 0` with no message discards the child's stderr, so the
+# classifier cannot see the traceback and the count reads as absence.
+#
+# The docstring has said so since the classifier shipped. Prose in a docstring
+# is not what a caller greps, and the token line said only `crash_kills=0` —
+# so the one consumer that had to know was the one place not told. This closes
+# that by MEASURING the blind spot per run and publishing it beside the count.
+#
+# Scoped to the test files THIS spec targets, not the whole suite: a run's
+# blind spot is a property of the rows it actually scored. Measured over the
+# repo on 2026-09-14: 452 of 921 returncode assertions carry a message, 49.1%.
+
+def _returncode_assertion_coverage(paths: "set[Path]") -> "tuple[int, int]":
+    """(with_message, total) over `assert …returncode…` in `paths`.
+
+    AST, never a regex. A regex that keys on a quote after the comma misses
+    `assert r.returncode == 0, r.stdout` — a message that is a NAME, not a
+    literal — and under-reports coverage roughly threefold (15% vs 49%,
+    measured both ways on this repo before this function was written).
+    """
+    import ast
+    with_msg = total = 0
+    for path in sorted(paths):
+        try:
+            tree = ast.parse(Path(path).read_text(errors="replace"))
+        except (OSError, SyntaxError):
+            continue          # unreadable is not zero; it simply adds nothing
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assert):
+                continue
+            if "returncode" not in ast.dump(node.test):
+                continue
+            total += 1
+            if node.msg is not None:
+                with_msg += 1
+    return with_msg, total
+
+
+def _spec_test_files(spec: dict, root: "Path") -> "set[Path]":
+    """The test files a spec's rows name, resolved against the spec root."""
+    out = set()
+    for mutation in spec.get("mutations") or []:
+        key = mutation.get("test")
+        if not isinstance(key, str) or not key:
+            continue
+        rel = key.split("::", 1)[0]
+        candidate = Path(root) / rel
+        if candidate.is_file():
+            out.add(candidate)
+    return out
+
+
 # --- crash-kill classification -------------------------------------------
 #
 # A named-test kill is scored on "THAT test failed", which still covers two
@@ -676,6 +735,14 @@ def run_spec(spec_path: Path) -> dict:
         # whose named test failed on a traceback out of the mutated file. Tier 2
         # is printed for the author, not acted on.
         "crash_kills": 0,
+        # The DENOMINATOR for the line above. Computed once per run over the
+        # test files this spec's rows name: how many of their returncode
+        # assertions carry a message and could therefore surface a traceback
+        # at all. Without it `crash_kills=0` is a bare count whose two causes
+        # — nothing crashed, versus a crash nothing surfaced — are spelled the
+        # same way.
+        "crash_visible": "{}/{}".format(*_returncode_assertion_coverage(
+            _spec_test_files(spec, root))),
         "restore_verified": True,
         "baseline_green_after": None,
         # Reporting only. `mechanism` answers "which test bit, and was it the
@@ -1093,6 +1160,12 @@ def main(argv: list[str] | None = None) -> int:
             # substring from the left. Growing it at the end leaves those reads
             # intact; inserting anywhere earlier would break them silently.
             f"crash_kills={result.get('crash_kills', 0)}"
+            # Appended after `crash_kills` for the same reason it was:
+            # left-to-right substring readers stay intact. `m/t` is how
+            # many of the targeted files' returncode assertions could
+            # have surfaced a crash at all — so `crash_kills=0` is never
+            # again readable as "none there" without its own denominator.
+            f" crash_visible={result.get('crash_visible', '?/?')}"
         )
     _print_skipped_precheck_entries(result)
     mechanism = result.get("mechanism") or {}
