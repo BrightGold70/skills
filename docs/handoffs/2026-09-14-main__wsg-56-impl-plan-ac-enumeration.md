@@ -58,6 +58,12 @@ was missing.
    Both documents are co-located in the HemaSuite archive:
    - impl-plan: `/Users/kimhawk/orca/HemaSuite/hematology-paper-writer/docs/archive/2026-09/website-source-grounding/website-source-grounding.impl-plan.md`
      — **6651 lines, 202 `AC-x.y` occurrences** (re-derived 2026-09-14, not carried)
+     — **CORRECTION, appended 2026-09-14 (the doc above is otherwise left as written).** "202
+     occurrences" is the borrowed measurement this very handoff's own probe flags in the brief:
+     202 is `grep -c`, the count of LINES that match. The real figures are **202 matching lines,
+     341 occurrences, 96 distinct AC ids**, re-derived against both HemaSuite checkouts (the file
+     is byte-identical, `sha 8e21804d2028`). The `# expect 202` in the reproduce block below is
+     CORRECT — it sits under `grep -c`, which is a line count; only the prose label was wrong.
    - spec: `/Users/kimhawk/orca/HemaSuite/hematology-paper-writer/docs/archive/2026-09/website-source-grounding/website-source-grounding.spec.md`
 
    The claim to settle: **eleven** rows whose `AC-x.y` PREFIX names a different AC than the row

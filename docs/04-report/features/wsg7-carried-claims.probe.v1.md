@@ -537,7 +537,29 @@ docs/handoffs/2026-09-09-…__tasks-7-13-shipped-premises-falsified.md:144:
 
 That pins the document to
 `/Users/kimhawk/orca/HemaSuite/hematology-paper-writer/docs/archive/2026-09/website-source-grounding/website-source-grounding.impl-plan.md`
-(6651 lines, 202 `AC-x.y` occurrences).
+(6651 lines; **202 LINES carrying an `AC-x.y` reference, 341 occurrences, 96 distinct AC ids**).
+
+> **Corrected 2026-09-14.** This line previously read "202 `AC-x.y` occurrences". 202 is
+> `grep -c`, which counts LINES that match, not matches — the borrowed-measurement defect that
+> `wsg-56-impl-plan-ac-enumeration.probe.v1.md` flags in the `#56` brief, reproduced one document
+> further on. Re-derived rather than carried, and against BOTH checkouts because
+> `orca/HemaSuite-wsg` is a fourth clone that has hijacked this store before — the file is
+> byte-identical in each (`sha 8e21804d2028`):
+> `wc -l` = 6651 · `grep -c 'AC-[0-9]\+\.[0-9]\+'` = 202 ·
+> `grep -o … | wc -l` = 341 · `grep -o … | sort -u | wc -l` = 96.
+>
+> **Three instances existed; two are fixed and the third is NOT ours to touch.** Swept every
+> tracked and untracked doc with newlines collapsed first, because a hard wrap hides a value from
+> any line-based grep. Most `202` hits in this repo are unrelated homographs — orca's
+> `agent-context` schema ("202 commands"), HemaSuite issue `#202`
+> `feature/202-guideline-claim-like-visibility`, a `coverage 202/202` in `skill-candidates.md`,
+> an HTTP 202 in `sendgrid-automation`, and the Lancet impact factor in `source_discovery.py`.
+> The real instances are: this line; `skills:docs/handoffs/2026-09-14-main__wsg-56-impl-plan-ac-enumeration.md:60`
+> (corrected in place with an appended note, the doc otherwise left as written); and
+> **`/Users/kimhawk/orca/HemaSuite/docs/handoffs/2026-09-14-main__wsg-backlog-two-items-owed-here.md:36`**
+> — the originating brief, in ANOTHER repo, in a lane that already has an owner. Reported rather
+> than edited, per the cross-lane rule: it is not this session's to write. Its line should read
+> *202 matching lines / 341 occurrences / 96 distinct* the same way.
 
 **What blocked the probe.** The eleven rows were never enumerated — not in any of the four
 carriers, not in the WSG audit reports, not anywhere in either repo. The claim is
