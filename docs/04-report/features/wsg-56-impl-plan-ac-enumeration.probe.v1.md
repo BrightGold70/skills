@@ -100,7 +100,7 @@ read as the AC's positive control rather than a different property. They need a 
 - Task 15 r9, `AC-10.1` — the AC pins that `RunReport` gains two populated fields; the row asserts
   an unbound read equals `resolve_strict_grounding(None, _ABSENT)`.
 
-Rows 71–177 were not read. The calibration bounds the risk rather than removing it: the known eight
+Rows 71–177 were not read AT THE TIME OF WRITING. **They were read on 2026-09-14 — see §"ROWS 71–177 WERE READ" below.** The calibration bounds the risk rather than removing it: the known eight
 all fell inside the range that was read, so an unread mismatch below rank 70 is possible but would
 be the first of its kind in this corpus.
 
@@ -165,6 +165,77 @@ different row from row 9 and does not touch its verdict — but it means `AC-10.
 row that asserts a different property (row 9) *and* one that guards it (row 2). A count that
 recorded only "two `ac_10_1` rows look wrong" would collapse two different situations, and only one
 of them is a defect.
+
+## ROWS 71–177 WERE READ, 2026-09-14 — and the tail was as safe as the calibration promised
+
+The open item said the enumeration was bounded, not exhaustive, because rows 71–177 had not been
+read. **They have now been read — and so has every other row.** All 173 prefixed rows outside the
+four borderline ones were judged by seven independent readers, each given only a verbatim criterion
+and a verbatim row, each forbidden to open this repo's `docs/`, none told what any other found.
+
+### The instrument first: three properties, none of them assumed
+
+**1. The corpus reproduces, and one published figure does not.** 97 AC definitions and **177**
+prefixed rows both reproduce exactly. The row total does **not**: this document says *"202 test rows
+extracted as `| N | test_… | subject |`"*, and the real count is **200**. 202 is
+`grep -c 'AC-[0-9]\+\.[0-9]\+'` over the impl-plan — the **line** count of AC references. That is the
+same figure §"Method, and two instruments that failed" already flags as mislabelled *in the brief*,
+reused one section later as this document's own row total. The number was borrowed, not measured.
+Nothing downstream depends on it — 177, the load-bearing figure, is independently correct.
+
+**2. Calibration: 12 of 12, not 8 of 8.** Every previously-known mismatch was planted blind in the
+batches. All twelve came back `DIFFERENT`, at ranks **2–58** — inside the 1–70 band the earlier pass
+read, which reproduces the original calibration claim and extends it from eight rows to twelve.
+
+**3. A negative control nobody had to build.** Batches were cut in ascending token-overlap order, so
+each reader saw a band and no reader knew which. The `DIFFERENT` density came back **monotonic in
+overlap**:
+
+| batch | mean overlap | DIFFERENT | n |
+|---|---|---|---|
+| 1 | 0.070 | **19** | 25 |
+| 2 | 0.198 | 7 | 25 |
+| 3 | 0.397 | 5 | 25 |
+| 4 | 0.550 | 1 | 25 |
+| 5 | 0.667 | 0 | 25 |
+| 6 | 0.779 | 1 | 25 |
+| 7 | 0.905 | 0 | 23 |
+
+This matters more than the calibration does. A reader pool with a uniform bias toward `DIFFERENT`
+would produce a **flat** row, and the top two bands returned **0 of 48** between them. The gradient
+is therefore evidence about the corpus rather than about the readers, and it validates the
+token-overlap screen far more strongly than "the knowns rank inside 61" ever could — that claim is
+consistent with a screen that merely fails to be anti-correlated.
+
+### The answer to the question that was actually open
+
+**33 rows were called `DIFFERENT` in total. Exactly 2 of them sit at rank > 70.**
+
+They are **Task 1 row 7** (rank 136) and **Task 1 row 8** (rank 99) — and they were found by two
+different readers, in two different batches, with the same stated mechanism: the row drives
+`admit(None, …)`, the **unresolved** population, while the criterion's population is explicitly a
+**resolved** class for which `admit` is False, asserted on the union. One defect mechanism, two
+adjacent rows, corroborated across readers who never saw each other's work.
+
+So the unread tail held **2 findings in 107 rows**, against **31 in the 70 rows already read**. The
+earlier pass's judgement that the risk was *bounded but not removed* is confirmed in both
+directions: something was there, and it was the first of its kind, exactly as predicted.
+
+### The part that is NOT settled, and is not counted here
+
+The remaining **19** new `DIFFERENT` calls fall at ranks 1–62 — **inside the band the earlier pass
+read and judged.** That is not newly-explored territory; it is two reads of the same rows
+disagreeing, and the disagreement is large. It is recorded as an open question rather than folded
+into any total, because a count published from one lane's reading is the thing this whole document
+exists to be sceptical of. A blinded adjudication set — the new calls, the knowns as positive
+controls, and rows a different reader called `SAME` as negative controls — is the instrument for
+deciding it, and until it returns **the measured total stands at fifteen**.
+
+One reader flagged its own divergence axis unprompted, which is the most useful line in the round:
+rows 1.14 / 1.20 / 1.21 / 1.22 are *fallback-acceptance* rows sitting under a *rejection* criterion,
+and it called them `DIFFERENT` while noting that a reader weighing "vacuity control" more heavily
+would call them `GUARD`. That is a real definitional seam, not a mistake, and it accounts for four
+of the nineteen on its own.
 
 ## Two adjacent rows, already FIXED — not part of the eleven
 
