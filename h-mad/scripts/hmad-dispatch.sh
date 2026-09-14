@@ -3107,10 +3107,15 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       # delta as "the work landed, only the report failed", so a false non-zero argues
       # against re-dispatching a task that in fact never ran.
       # J36: the delta excludes UNTRACKED `.done` AUDIT MARKERS and nothing else.
-      # `grep -c .` over the whole porcelain counted them, and this repo carries 88,
-      # so the baseline was never 0 and every recovery read "non-zero delta" as "the
-      # work landed, only the report failed" — a false positive arguing AGAINST
-      # re-dispatching a task that never ran.
+      # `grep -c .` over the whole porcelain counted them, and a repo mid-audit
+      # accumulates them by the dozen, so the baseline was never 0 and every recovery
+      # read "non-zero delta" as "the work landed, only the report failed" — a false
+      # positive arguing AGAINST re-dispatching a task that never ran. (An earlier
+      # version of this comment pinned "this repo carries 88". That number is a
+      # property of one tree at one moment, not of the mechanism, and this repo
+      # gitignored `*.done` on 2026-09-14 — after which porcelain lists none of them
+      # and `markers=` reads 0 here while the exclusion below stays correct for any
+      # caller whose tree does not ignore them.)
       #
       # The exclusion is deliberately NARROW, and the first attempt at this fix was
       # wrong in a way the suite caught: dropping ALL untracked entries also drops a

@@ -35,3 +35,19 @@ Thumbs.db
 # The wire registry is the durable record of which connections were verified
 # and against which base; 5f cannot return PASS while it is untracked.
 !.h-mad/wires.jsonl
+
+# H-MAD audit-completion markers. `hmad-dispatch.sh` writes `<report-path>.done`
+# as the transport signal that a subagent finished writing; the coordinator polls
+# the marker and then reads the REPORT, which is what gets committed. So a marker
+# never carries information the tracked report does not already hold — measured
+# 2026-09-14: all 88 in this tree had a tracked report and none was an orphan.
+# They were standing untracked noise in `git status` across six consecutive
+# handoffs, which is how a real untracked file gets lost in the list.
+*.done
+
+# Another lane's phase pointers, left behind by the gateway-consolidation and
+# website-source-grounding runs. Nothing in THIS repo reads or writes them —
+# `grep -rn lanestate` over every .py/.sh returns only handoff prose — and both
+# lanes have since closed, so the contents are stale in both directions
+# (`wsg.phase=4` with WSG Phase 5 closed; `gateway.phase=5` with #18 archived).
+lanestate/

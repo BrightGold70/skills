@@ -2125,6 +2125,37 @@ renamed token is how a guard goes quiet while still appearing to run. ~0.04s. Ca
 dimensions controlled: a fixture built only to a byte target produced 479 lines against the 200-line
 cap and was correctly called OVER while the test was asking for WARN.
 
+**The wiring lives OUTSIDE this repo, in two places, and neither is versioned here** — so a clone of
+this repo has the hook's CODE and none of its INSTALLATION, and the only record of what was changed
+was a backup in a session scratchpad that does not survive cleanup. Both places:
+
+1. `$HOME/.claude/settings.json` — the two `hooks` entries above.
+2. `$HOME/.claude/hooks/memory-index-guard.sh` — a symlink to `h-mad/hooks/memory-index-guard.sh`
+   in this repo. The `command` strings name that path, not the repo one, so the symlink is
+   load-bearing and a moved checkout silently stops the hook (it reports `a missing checker` and
+   exits 0, by design).
+
+**Find them by VALUE, never by index.** They sat at `SessionStart[4]` and `PreToolUse[4]` when wired
+on 2026-09-14, and any later edit to that file renumbers both:
+
+```bash
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".claude/settings.json"
+for event, groups in json.load(p.open()).get("hooks", {}).items():
+    for gi, g in enumerate(groups):
+        for hi, h in enumerate(g.get("hooks", [])):
+            if "memory-index-guard" in h.get("command", ""):
+                print(f'{event}[{gi}].hooks[{hi}]  matcher={g.get("matcher")!r}')
+PY
+ls -l "$HOME/.claude/hooks/memory-index-guard.sh"
+```
+
+**To unwire**: delete every entry that locator prints, then `rm` the symlink. **To wire on a fresh
+machine**: recreate the symlink, then add the two entries exactly as shown above. Nothing else
+depends on either — `h_mad_check_memory_index.py` remains runnable by hand, which is all it was
+before the hook existed.
+
 ## Run-context ceiling — halt the run at 80%
 
 The ceiling in the section above protects one *call*. This one protects the *run*. They are
