@@ -943,3 +943,70 @@ class TestNumberedWireLabels:
         result = check(plan)
         assert result["verdict"] == "PASS", result
         assert result["unpinned"] == [], result["unpinned"]
+
+
+# --- the vocabulary admits the two non-code shapes real plans actually use ---
+#
+# A plan whose work is neither new behaviour, a refactor nor a wire had nowhere
+# honest to go: `gate` and `operational` were outside the closed set, so a
+# conformant plan using them read as UNSHAPED and the gate could not be reached
+# at all. Measured on HemaSuite's `guideline-ingest-doc-id-uniqueness`:
+# `UNSHAPED tasks=36 wiring=0` against a plan holding NINE wiring tasks — the
+# gate stood down on every task for the life of the feature. Forcing those three
+# into one of the three code shapes would buy the verdict with a false label:
+# its Task 27 states "No mutations — runs code Tasks 20-26 already mutated" and
+# its Task 0 "No file was written by this task".
+#
+# The set stays CLOSED; it is only larger. The tests below the first one are the
+# other half of the bargain and must never be relaxed.
+
+
+@pytest.mark.parametrize("shape", ["gate", "operational"])
+def test_a_non_code_shape_is_recognised_and_carries_no_wiring_obligation(
+    tmp_path: Path, shape: str
+) -> None:
+    result = check(_plan(tmp_path, _task(1, shape=shape, wire=None, pin=None)))
+    assert result["verdict"] == "PASS", f"`{shape}` read as undeclared: {result}"
+    assert result["wiring"] == 0
+    assert result["unshaped"] == [], result["unshaped"]
+
+
+@pytest.mark.parametrize(
+    "shape_line",
+    [
+        "`operational` (with one committed guard)",
+        "`gate` — cross-family read of the design, RAN and CLOSED",
+    ],
+)
+def test_a_qualified_non_code_shape_is_recognised_not_rejected(
+    tmp_path: Path, shape_line: str
+) -> None:
+    # Real plans qualify the word. The word boundary must tolerate that here for
+    # the same reason it already does for `new-behaviour`.
+    body = _qualified(1, "`wiring`") + _qualified(2, shape_line, wired=False)
+    result = check(_plan(tmp_path, body))
+    assert result["unshaped"] == [], result["unshaped"]
+    assert result["wiring"] == 1, result
+
+
+@pytest.mark.parametrize("shape", ["gate", "operational"])
+def test_a_wire_field_under_a_non_code_shape_is_still_a_mislabel(
+    tmp_path: Path, shape: str
+) -> None:
+    # Widening the vocabulary must not open a new hiding place: a task carrying a
+    # real WIRE while declaring a shape that owes no wire is the demotion this
+    # gate already refuses, and `gate`/`operational` must not become the escape.
+    result = check(_plan(tmp_path, _task(1, shape=shape, pin=None)))
+    assert result["verdict"] == "FAIL", f"`{shape}` laundered a WIRE: {result}"
+    assert "Task 1" in " ".join(result["mislabeled"]), result
+
+
+@pytest.mark.parametrize("word", ["gateway", "operationally", "gates", "operation"])
+def test_a_word_merely_starting_with_a_non_code_shape_is_not_a_free_pass(
+    tmp_path: Path, word: str
+) -> None:
+    # The word boundary is what keeps the set closed after widening it.
+    body = _qualified(1, "`wiring`") + _qualified(2, f"`{word}`", wired=False)
+    result = check(_plan(tmp_path, body))
+    assert result["verdict"] == "FAIL", f"`{word}` slipped through: {result}"
+    assert "Task 2" in " ".join(result["unshaped"]), result

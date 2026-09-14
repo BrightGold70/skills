@@ -86,7 +86,8 @@ _FILLER = {"tbd", "n/a", "na", "none", "-", "--", "todo", "?", "x"}
 # off the value. `_SHAPE_RE`'s word boundary already tolerates a trailing qualifier
 # on its own, so this exists for one narrow job: the `|` test below must see the
 # shape WITHOUT its qualifier, or `wiring (engine | tools seam)` reads as an unedited
-# `new-behaviour | refactor | wiring` template and halts correct work. That is also
+# `new-behaviour | refactor | wiring | gate | operational` template and halts correct
+# work. That is also
 # why the cut runs BEFORE the `|` test, not after.
 #
 # An ASCII hyphen is deliberately NOT a terminator: `new-behaviour` contains one.
@@ -99,7 +100,10 @@ _SHAPE_QUALIFIER_RE = re.compile(r"[(,;–—].*$", re.DOTALL)
 # wiring" — a silent PASS on precisely the task this gate exists to catch. Fail
 # closed: an unrecognised value is a hiding place, exactly like a missing one.
 # The set is the template's own alternation (`references/inline-protocols.md` §Phase 5a).
-_SHAPE_RE = re.compile(r"^(new-behaviours?|new-behaviors?|refactor|wiring)(?![\w-])", re.IGNORECASE)
+_SHAPE_RE = re.compile(
+    r"^(new-behaviours?|new-behaviors?|refactor|wiring|gate|operational)(?![\w-])",
+    re.IGNORECASE,
+)
 
 # WIRE values come from human-authored plans and the shipped template uses a
 # Unicode right arrow. Keep the allowlist explicit and longest-first so `-->`
@@ -130,7 +134,8 @@ def _is_real_value(value: str | None) -> bool:
 def _declared_shape(value: str) -> str | None:
     """The task's shape, or None when nothing recognisable was chosen.
 
-    The template line offers `new-behaviour | refactor | wiring`; left unedited it
+    The template line offers `new-behaviour | refactor | wiring | gate | operational`;
+    left unedited it
     declares nothing, and must not be read as a shape — least of all as a shape
     that happens to exclude `wiring`.
 
@@ -198,7 +203,7 @@ def _unshaped_entry(task: dict) -> str:
     if task["shape_raw"]:
         return (
             f"{task['id']} ({task['name']}): declares `{task['shape_raw']}`, which is "
-            "not `new-behaviour`, `refactor` or `wiring`"
+            "not `new-behaviour`, `refactor`, `wiring`, `gate` or `operational`"
         )
     return task["id"]
 
