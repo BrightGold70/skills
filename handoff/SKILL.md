@@ -856,9 +856,29 @@ A stale claim is takeable by plain `--claim` — reach for `--force` only agains
 
 **2. Verify the premises before adopting them.** A brief is a claim about the world made by a session that has stopped. Its reproduce commands are the cheap part — run them. Any premise that no longer holds becomes a divergence line, not a todo. A confident brief is not evidence.
 
-**3. Restore the todos with their ORIGIN, not yours.** Use READ Step 4's sink ladder and all of
-its rules (the `[<repo>@<branch>]` prefix, the dedupe, the named sink) — from READ continue into
-Step 4; from TAKEOVER restore only the brief's items. Either way prefix from the brief's `**Handover-From:**` and location block rather than the branch you are sitting on — the work belongs where the sender said it does.
+**3. Restore the todos with their OWNER, not the branch you are sitting on.** Use READ Step 4's
+sink ladder and all of its rules (the `[<repo>@<branch>]` prefix, the dedupe, the named sink) —
+from READ continue into Step 4; from TAKEOVER restore only the brief's items.
+
+**Take the prefix from the brief's `**Project:**` and `**Branch:**`**, which are the fields that
+say whose work it is. Fall back to `**Handover-From:**` only when those are absent.
+
+The earlier wording said to prefix from `**Handover-From:**` and justified it as "the work belongs
+where the sender said it does". Those two disagree on a **returned** brief, and the justification is
+the half that is right: on a return the sender says the work belongs to YOU, while `**Handover-From:**`
+still names *them*. It identifies the courier, not the owner.
+
+Measured 2026-09-14 in this repo. `#56` originated here, was handed to HemaSuite, and came back
+unstarted; its brief read `**Project:** skills`, `**Branch:** main`, `**Handover-From:** HemaSuite ·
+main`. Every other signal agreed with `**Project:**` — the brief was filed in *this* repo's store under
+the `main__` slug, the claim was created in *this* repo's state file, and HemaSuite's state file held
+nothing for it — yet the mechanical rule produced `[HemaSuite@main]`. Mislabelling work as another
+repo's is what made that row ping-pong between the two lanes in the first place, so the rule that
+restores it must not re-state the confusion.
+
+**A path in the location block is where the FILES are, not whose the work is.** A returned brief
+routinely cites read-only sources in the sender's tree (`#56`'s two documents live in a HemaSuite
+archive, `worktree: none`). Keep those paths in the todo's body, never in its prefix.
 
 **4. Stamp the BRIEF, so the next resume does not re-adopt it.** Add a `**Taken-Over-By:**` line directly under the brief's `**Handover-From:**` line, in the doc itself:
 

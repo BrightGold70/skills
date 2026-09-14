@@ -225,3 +225,39 @@ class TestNoDollarArgInTheSkillBody:
         import re as _re
         hits = _re.findall(r"\$[0-9]", BODY)
         assert not hits, f"positional args are rewritten by the renderer: {hits}"
+
+
+class TestTheTodoPrefixNamesTheOwnerNotTheCourier:
+    """A RETURNED brief's `**Handover-From:**` names the courier, not the owner.
+
+    The rule used to say "prefix from the brief's `**Handover-From:**`" while
+    justifying it as "the work belongs where the sender said it does". Those two
+    disagree the moment a brief comes BACK: the sender is saying the work is
+    yours again, and `**Handover-From:**` still points at them.
+
+    Measured 2026-09-14 on this repo's `#56`. It originated here, went to
+    HemaSuite, returned unstarted, and its brief read `**Project:** skills`,
+    `**Branch:** main`, `**Handover-From:** HemaSuite · main`. Every other
+    signal agreed with `**Project:**` — filed in this repo's store under the
+    `main__` slug, claimed in this repo's state file, and HemaSuite's state file
+    held nothing for it — yet the mechanical rule yielded `[HemaSuite@main]`.
+    Labelling work as another repo's is exactly what made that row ping-pong
+    between the lanes, so the restore step must not re-state the confusion.
+    """
+
+    def test_the_prefix_is_taken_from_Project_and_Branch(self) -> None:
+        assert "`**Project:**` and `**Branch:**`" in FLAT, (
+            "the restore step no longer names the fields the prefix comes from"
+        )
+
+    def test_Handover_From_is_demoted_to_a_fallback(self) -> None:
+        """It must not read as the primary source again."""
+        assert "Fall back to `**Handover-From:**` only when those are absent" in FLAT
+
+    def test_the_courier_distinction_is_stated(self) -> None:
+        """The reason, not just the rule — an unexplained rule gets 'simplified' back."""
+        assert "courier, not the owner" in FLAT
+
+    def test_a_location_path_is_not_a_prefix(self) -> None:
+        """The sibling half: cited source paths live in the body, never the prefix."""
+        assert "where the FILES are, not whose the work is" in FLAT
