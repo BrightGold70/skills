@@ -1,0 +1,40 @@
+{
+  "_why": "Widening a CLOSED set is the change most likely to buy a verdict by opening a hiding place. The gate's own comment defends the closed set -- 'an unrecognised value is a hiding place, exactly like a missing one' -- so admitting `gate` and `operational` has to be shown not to admit anything else, and not to exempt the two new words from the mislabel check that every other non-wiring shape obeys. M1 and M2 are the hiding places; M3 and M4 prove the widening is load-bearing rather than decorative.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_wire_pin_gate.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "M1: DROP THE WORD BOUNDARY after the shape alternation. Without (?![\\w-]) every word merely STARTING with a set member is admitted -- `gateway`, `gates`, `operationally` all read as a declared shape, which is the silent-PASS-on-an-unrecognised-word failure the closed set exists to prevent, reintroduced by the widening rather than by the original set.",
+      "_mechanism": "`gateway` matches `gate` with no boundary, so Task 2 leaves the unshaped list and the verdict flips to PASS.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "    r\"^(new-behaviours?|new-behaviors?|refactor|wiring|gate|operational)(?![\\w-])\",",
+      "replace": "    r\"^(new-behaviours?|new-behaviors?|refactor|wiring|gate|operational)\",",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_a_word_merely_starting_with_a_non_code_shape_is_not_a_free_pass"
+    },
+    {
+      "name": "M2: EXEMPT THE TWO NEW SHAPES FROM THE MISLABEL CHECK. Every non-wiring shape that carries a real WIRE is reported as a demotion; this mutant adds `gate` and `operational` to the skip list, so a wiring task could be hidden by relabelling it `operational` while keeping its WIRE. That is the exact escape the widening must not create.",
+      "_mechanism": "The mislabel loop `continue`s on the new words, so `mislabeled` stays empty and the verdict flips to PASS.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "        if not task[\"shape\"] or task[\"shape\"] == \"wiring\":",
+      "replace": "        if not task[\"shape\"] or task[\"shape\"] in (\"wiring\", \"gate\", \"operational\"):",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_a_wire_field_under_a_non_code_shape_is_still_a_mislabel"
+    },
+    {
+      "name": "M3: REMOVE `gate` FROM THE ALTERNATION -- the pre-widening state for that word. A plan declaring `gate` reads as UNSHAPED again, which is the condition that made the gate stand down on all 36 tasks of HemaSuite's guideline-ingest plan.",
+      "_mechanism": "`gate` no longer matches _SHAPE_RE, so the task lands in `unshaped` and the recognition test fails.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "wiring|gate|operational)(?![\\w-])",
+      "replace": "wiring|operational)(?![\\w-])",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_a_non_code_shape_is_recognised_and_carries_no_wiring_obligation"
+    },
+    {
+      "name": "M4: REMOVE `operational` FROM THE ALTERNATION -- the mirror of M3, and the word two of HemaSuite's three offending tasks actually use.",
+      "_mechanism": "`operational` no longer matches, so the task lands in `unshaped`.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "wiring|gate|operational)(?![\\w-])",
+      "replace": "wiring|gate)(?![\\w-])",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_a_non_code_shape_is_recognised_and_carries_no_wiring_obligation"
+    }
+  ]
+}

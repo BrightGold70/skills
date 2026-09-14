@@ -293,7 +293,11 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
 
    **Production file**: `<relative/path/to/module.py>`
    **Test file**: `<relative/path/to/test_module.py>`
-   **Task shape**: `new-behaviour` | `refactor` | `wiring`
+   **Task shape**: `new-behaviour` | `refactor` | `wiring` | `gate` | `operational`
+   — the last two carry no wiring obligation: `gate` is a read/verdict task writing no
+   production file, `operational` runs code other tasks already built and mutated. They
+   are part of the CLOSED set, not an escape from it — a task carrying a real `WIRE`
+   while declaring either is still reported as a mislabel.
    **WIRE** (`wiring` shape only): `<caller/path.py>:<symbol>` → `<callee-symbol>`
    **WIRE-PIN** (`wiring` shape only): `<test id that fails when ONLY the wire is removed, callee intact>`
 
