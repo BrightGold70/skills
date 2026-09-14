@@ -315,6 +315,42 @@ count is stated as a **floor**.
 `T1 r8` corroborated-but-unadjudicated, and **12 further new calls never put to adjudication at
 all**. The floor is seventeen; the ceiling is not established by this document.
 
+### RESIDUE ACCOUNTING — decided 2026-09-14, and one figure does NOT reconcile
+
+**Decision: the unadjudicated calls are NOT owed work, and `T1 r8` is not either.** §Closure already
+settles this and it is restated here because the two were being carried forward as open items in the
+handoff chain on the strength of the word "unadjudicated" rather than on anything §Closure says. What
+is owed is *"the remaining three rows … Nothing else. The count and the shipped-six are settled at
+their origin and should not be re-derived again."* The floor of seventeen is a deliberate publication
+decision — the ceiling is explicitly not established here — so re-running adjudication buys a number
+this document declined to publish, against an instrument whose own variance it measured. Anyone who
+wants the ceiling should read the three unnamed rows first; that is the only item with an owner.
+
+**The gap, chased because a count gap is worth chasing even when it changes no claim.** Every figure
+below is this document's own:
+
+| step | figure | source |
+|---|---|---|
+| `DIFFERENT` calls in total | 33 | §"The answer to the question that was actually open" |
+| of those, at rank > 70 | **exactly 2** — `T1 r7` (136), `T1 r8` (99) | same |
+| published knowns | 12, at ranks 2–58 | same |
+| ⇒ remaining, in-band | 33 − 12 − 2 = **19**, ranks 1–62 | §"The part that is NOT settled" ✓ |
+| adjudication set | 9 = 2 confirmed + 2 split + 5 refuted | §"ADJUDICATION RETURNED" ✓ |
+| of those 9, in-band | `T1 r7` is rank **136**, and `T1 r8` was never in the set | same |
+| ⇒ in-band, adjudicated | **8** | derived |
+| ⇒ in-band, never adjudicated | 19 − 8 = **11** | derived |
+| but this document states | **12** | §"Where the count actually stands" |
+
+**Off by one, and it cannot be closed from inside this document** — the per-row rank table is not
+here. Exactly one of three things is true: `T6 r10` is also above rank 70 (which would falsify
+*"exactly 2 of them sit at rank > 70"*), or the residue line should read eleven, or the in-band 19 is
+itself off. Settling it needs the rank of `T6 r10` and nothing else.
+
+**It does not move the headline.** Seventeen = 12 published + 3 borderline resolved + `T1 r7` +
+`T6 r10`, which is independent of 11-versus-12; the discrepancy lives entirely in the uncounted
+residue. Recorded rather than quietly corrected, because picking a number here would be a third
+reading of rows this document has twice warned against trusting a single reader on.
+
 ## Two adjacent rows, already FIXED — not part of the eleven
 
 Task 13 rows 5 and 7 carried `ac_10_9` prefixes for properties `AC-10.9` does not state. They were

@@ -2050,6 +2050,34 @@ puts the ceiling in front of the model while it is deciding. Wire it under **`Po
 ```json
 { "matcher": "*", "hooks": [{ "type": "command",
   "command": "bash $HOME/.claude/skills/h-mad/hooks/h-mad-advisor-warn.sh" }] }
+
+### `hooks/memory-index-guard.sh` — the auto-memory cap, surfaced without being asked
+
+`h_mad_check_memory_index.py` was correct from the day it shipped and ran only when somebody READ
+the step documenting it in `handoff/references/auto-memories.md`. The index then sat at 100% of its
+cap for a day with two entries already invisible, and nothing said so — a documented rule is not an
+enforced one. Wired at **two** events, because the loss and its cause happen at different moments:
+
+```json
+"SessionStart": [{ "hooks": [{ "type": "command",
+  "command": "bash $HOME/.claude/hooks/memory-index-guard.sh --session-start" }] }],
+"PreToolUse":   [{ "matcher": "Write|Edit", "hooks": [{ "type": "command",
+  "command": "bash $HOME/.claude/hooks/memory-index-guard.sh" }] }]
+```
+
+`SessionStart` is the moment the loss actually occurs — the cap is enforced at LOAD, so an index
+already over is being truncated for every session and that is the only point at which the fact is
+observable. `PreToolUse` is the CAUSE, filtered to `*/memory/MEMORY.md`: a topic file is uncapped and
+firing on one would be noise on the commonest memory write there is, which is how a hook gets
+disabled. **ADVISORY, exit 0 on every path** — a block would have to be right about someone's memory
+write and being wrong costs a refused write they cannot complete, while being wrong the other way
+costs a line of text; both events place stdout into the session, so it is read rather than logged. It
+says NOTHING on a healthy index (every session start pays for that line), reports `UNREADABLE` as its
+own outcome rather than as clean, and surfaces an unrecognised verdict instead of swallowing it — a
+renamed token is how a guard goes quiet while still appearing to run. ~0.04s. Calibrated in
+`h-mad/tests/test_memory_index_guard.py` against real over-cap indexes through the real checker, both
+dimensions controlled: a fixture built only to a byte target produced 479 lines against the 200-line
+cap and was correctly called OVER while the test was asking for WARN.
 ```
 
 **It is an advisory, not a gate, and that is structural — do not "fix" it back into a gate.**

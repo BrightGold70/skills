@@ -1,0 +1,48 @@
+{
+  "_why": "A hook that is ADVISORY has one failure mode nothing else in this repo shares: it can go silent and every other signal stays identical. No test fails, no verdict moves, no exit code changes -- the session simply is not told, which is the exact state this hook was built to end. So the load-bearing rows are the two that silence it (`the-OVER-arm-goes-quiet`, `unreadable-is-reported-as-clean`) rather than anything about its text. `the-path-filter-widens` is the opposite failure and is just as fatal in practice: an advisory that fires on every memory write is one the reader learns to scroll past, which disarms the other paths too. `the-hook-starts-blocking` guards the one promise that makes it safe to install at all.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_memory_index_guard.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "the-OVER-arm-goes-quiet",
+      "_mechanism": "The whole point, removed, with nothing else changing. An index that is ALREADY dropping its tail on every load produces a silent hook, an exit code of 0 and a session that is never told -- byte-identical to a healthy index from every other vantage point.",
+      "file": "hooks/memory-index-guard.sh",
+      "find": "  *\"OVER \"*)",
+      "replace": "  *\"__NEVER_MATCHES_OVER__\"*)",
+      "test": "tests/test_memory_index_guard.py::TestItFiresOnAnIndexThatBreaches::test_OVER_is_reported_and_names_what_is_invisible"
+    },
+    {
+      "name": "unreadable-is-reported-as-clean",
+      "_mechanism": "`I could not check` folded into `the check said OK` -- the asymmetry this repo enforces for the worktree comment, the state-file search and the binary blob. An index that has been moved or corrupted would report healthy, and the two situations prescribe opposite actions.",
+      "file": "hooks/memory-index-guard.sh",
+      "find": "  *\"UNREADABLE\"*)",
+      "replace": "  *\"__NEVER_MATCHES_UNREADABLE__\"*)",
+      "test": "tests/test_memory_index_guard.py::TestItFiresOnAnIndexThatBreaches::test_UNREADABLE_is_not_reported_as_clean"
+    },
+    {
+      "name": "the-path-filter-widens-to-every-memory-write",
+      "_mechanism": "Fires on topic files too. Topic files are uncapped and writing one never drops a tail, so this turns the advisory into noise on the commonest memory write there is -- and a reader who scrolls past it also scrolls past the OVER it was built for. The failure is in the OPPOSITE direction from silence and ends in the same place.",
+      "file": "hooks/memory-index-guard.sh",
+      "find": "    */memory/MEMORY.md) ;;",
+      "replace": "    */memory/*) ;;",
+      "test": "tests/test_memory_index_guard.py::TestThePreToolUsePathFilter::test_a_TOPIC_file_write_is_ignored"
+    },
+    {
+      "name": "the-hook-starts-blocking",
+      "_mechanism": "The one promise that makes this safe to install. A non-zero exit from a PreToolUse hook REFUSES the write, so a guard meant to inform would instead stop the user completing a memory -- and being wrong in that direction costs work, while being wrong the other way costs a line of text.",
+      "file": "hooks/memory-index-guard.sh",
+      "find": "esac\n\nexit 0",
+      "replace": "esac\n\nexit 1",
+      "test": "tests/test_memory_index_guard.py::TestItNeverBlocks::test_every_verdict_still_exits_zero[over]"
+    },
+    {
+      "name": "a-missing-checker-becomes-noisy",
+      "_mechanism": "Removing the silent bail-out makes every session on a machine without the checker print a complaint. That is the failure that trains the reader to ignore this hook, which silently disarms the two rows above -- the damage is to the OTHER findings, not to this line.",
+      "file": "hooks/memory-index-guard.sh",
+      "find": "[ -f \"$CHECKER\" ] || exit 0",
+      "replace": "[ -f \"$CHECKER\" ] || { echo \"[memory-index-guard] checker missing\"; exit 0; }",
+      "test": "tests/test_memory_index_guard.py::TestItNeverBlocks::test_a_missing_checker_is_silent_rather_than_noisy"
+    }
+  ]
+}

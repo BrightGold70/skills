@@ -29,6 +29,16 @@ the cap can.
 python3 ~/.claude/skills/h-mad/scripts/h_mad_check_memory_index.py --show-dropped
 ```
 
+**Since 2026-09-14 this also runs BY ITSELF and you will usually have been told already.**
+`memory-index-guard.sh` is wired at `SessionStart` (the moment the loss actually happens — the cap is
+enforced at LOAD) and at `PreToolUse` on `Write|Edit` filtered to `*/memory/MEMORY.md` (the write that
+crosses the line). It is **advisory and exits 0 on every path**: a block would have to be right about
+someone's memory write and being wrong costs a refused write, while being wrong the other way costs a
+line of text. Both events put its stdout into the session, so it is read rather than merely logged.
+Running the command below by hand stays correct and is what you do after compacting, to confirm.
+Silence from the hook means `OK` — it says nothing on a healthy index, because every session start
+pays for that line.
+
 `OK` → write normally. `WARN` (≥80% of the worse dimension) → **compact first**; this is the last
 point at which compaction is cheap, and a memory appended now may be pushing an older one off the
 end. `OVER` → content is **already** invisible: `--show-dropped` prints exactly which entries, and
@@ -36,7 +46,16 @@ appending without compacting silently deletes more of them. Exit 1 on WARN/OVER,
 an index you cannot read is never treated as fine.
 
 Compact to **70% of the cap** (17500 bytes / 140 lines), which is the target the binary itself
-names. Both dimensions are scored and the **worse** one binds: an index at 40% of its byte cap can
+names. **Shortening hooks is the wrong lever at any real size, and this was measured rather than
+guessed:** on a 24947-byte index the hooks were only **7093 bytes** in total, so deleting every hook
+in the file still left 15657 bytes and **164 lines** — under the byte target and still over the line
+target. The bulk is the link text itself (~80–100 bytes per entry), so an index of ~200 entries
+cannot reach its own compaction target at one line per entry however terse the hooks are. The lever
+is moving settled entries to `MEMORY-ARCHIVE.md` (not auto-loaded, uncapped, still greppable) and
+leaving one `## Archive` line pointing at it. When you split, prove link conservation IN THE SAME
+script that does the move — compare the set of `](*.md)` targets before against the UNION of both
+files after, and refuse to write on any difference. An entry that lands in neither file is lost
+exactly as silently as the cap itself. Both dimensions are scored and the **worse** one binds: an index at 40% of its byte cap can
 still be over on lines, so a byte-only eyeball reports healthy on a broken index.
 
 **How to apply:**
