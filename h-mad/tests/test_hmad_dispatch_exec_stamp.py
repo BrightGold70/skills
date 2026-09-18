@@ -82,12 +82,10 @@ def test_skill_frontmatter_name_and_description_are_unchanged():
     assert frontmatter == (
         "\n"
         "name: h-mad\n"
-        "description: Orchestrate the 7-phase H-MAD (Hawk Multi-Agents Development) workflow "
-        "end-to-end. Standalone — no external skill dependencies (spec-kit, b-mad, or pdca). "
-        "All phase protocols are built-in. Project-agnostic; splices project-specific Axis B "
-        "invariants from `<PROJECT_ROOT>/.h-mad/invariants.md` into audit prompts at dispatch "
-        "time. Use when user invokes /h-mad \"<feature>\", /h-mad do \"<feature>\", /h-mad "
-        "status, or /h-mad reset \"<feature>\".\n"
+        'description: "Orchestrate the seven-phase H-MAD development workflow end to end with '
+        "project invariants, independent audits, test-first implementation, verification, and "
+        "closure. Use for /h-mad feature, /h-mad do feature, /h-mad status, or /h-mad reset "
+        'feature."\n'
     )
 
 

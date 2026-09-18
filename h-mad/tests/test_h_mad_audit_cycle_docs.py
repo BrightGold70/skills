@@ -17,12 +17,10 @@ AUDIT_CYCLE = SKILL_DIR / "scripts" / "h_mad_audit_cycle.py"
 
 EXPECTED_FRONTMATTER = (
     "name: h-mad\n"
-    "description: Orchestrate the 7-phase H-MAD (Hawk Multi-Agents Development) workflow "
-    "end-to-end. Standalone \u2014 no external skill dependencies (spec-kit, b-mad, or pdca). "
-    "All phase protocols are built-in. Project-agnostic; splices project-specific Axis B "
-    "invariants from `<PROJECT_ROOT>/.h-mad/invariants.md` into audit prompts at dispatch "
-    "time. Use when user invokes /h-mad \"<feature>\", /h-mad do \"<feature>\", /h-mad "
-    "status, or /h-mad reset \"<feature>\"."
+    'description: "Orchestrate the seven-phase H-MAD development workflow end to end with '
+    "project invariants, independent audits, test-first implementation, verification, and "
+    "closure. Use for /h-mad feature, /h-mad do feature, /h-mad status, or /h-mad reset "
+    'feature."'
 )
 
 

@@ -381,8 +381,8 @@
    "_mechanism": "Reword the manifest description's opening. `any(startswith(\"description:\"))` -- the v1.13 assertion -- accepts it, and accepts an empty description too, so half the manifest contract this node claims to pin was unenforced. Pinned node: `test_skill_md_frontmatter_unchanged`.",
    "file": "SKILL.md",
    "test": "tests/test_hmad_dispatch.py::test_skill_md_frontmatter_unchanged",
-   "find": "description: Orchestrate the 7-phase H-MAD",
-   "replace": "description: Runs the H-MAD"
+   "find": "description: \"Orchestrate the seven-phase H-MAD",
+   "replace": "description: \"Runs the H-MAD"
   },
   {
    "name": "timeout-override-ignored",

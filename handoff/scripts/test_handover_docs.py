@@ -151,7 +151,7 @@ def test_frontmatter_carries_handover_triggers_and_the_boundary() -> None:
         "the description must say what HANDOVER does or it cannot be selected"
     )
     for phrase, why in [
-        ("hand off X to <worktree>", "the most common phrasing must appear verbatim"),
+        ("hand off X to another worktree", "the most common phrasing must appear verbatim"),
         ("Use the `orca-cli` skill directly instead", "the negative boundary keeps "
          "HANDOVER from stealing plain prompt-delivery requests"),
         ("`orchestration` skill when the user wants the work supervised", "supervised "

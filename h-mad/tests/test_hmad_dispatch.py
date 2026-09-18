@@ -5636,7 +5636,7 @@ def test_skill_md_frontmatter_unchanged():
     desc = [ln for ln in lines if ln.startswith("description:")]
     assert len(desc) == 1, f"expected one description line, got {len(desc)}"
     value = desc[0][len("description:"):].strip()
-    assert value.startswith("Orchestrate the 7-phase H-MAD"), (
+    assert value.startswith('"Orchestrate the seven-phase H-MAD'), (
         f"description reworded: {value[:60]!r}"
     )
     assert len(value) > 200, f"description truncated to {len(value)} chars"
