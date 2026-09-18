@@ -7,10 +7,14 @@ description: "Use this skill in five modes. WRITE creates a durable session clos
 
 ## Host runtime
 
-This package supports Claude Code and OpenAI Codex. In Codex, read
-[references/codex-runtime.md](references/codex-runtime.md) before acting and apply its tool,
-path, task-persistence, and delegation mappings as overrides to host-specific instructions below.
+This package supports Claude Code, OpenAI Codex, and the Antigravity CLI (`agy`). In Codex, read
+[references/codex-runtime.md](references/codex-runtime.md) before acting; in agy, read
+[references/agy-runtime.md](references/agy-runtime.md). Apply that adapter's tool, path,
+task-persistence, and delegation mappings as overrides to host-specific instructions below.
 The five modes and their safety invariants remain unchanged.
+
+Adapt a new host by adding an adapter beside these, never by rewriting the Claude spelling in
+place: this one checkout is symlinked live into more than one host.
 
 ## Mode routing — decide first
 

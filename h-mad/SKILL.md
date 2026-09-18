@@ -7,11 +7,16 @@ description: "Orchestrate the seven-phase H-MAD development workflow end to end 
 
 ## Host runtime
 
-This package supports Claude Code and OpenAI Codex. In Codex, read
-[references/codex-runtime.md](references/codex-runtime.md) before bootstrap and apply its path,
-hook, collaboration, checkpoint, and author/reviewer mappings as overrides to host-specific
+This package supports Claude Code, OpenAI Codex, and the Antigravity CLI (`agy`). In Codex, read
+[references/codex-runtime.md](references/codex-runtime.md) before bootstrap; in agy, read
+[references/agy-runtime.md](references/agy-runtime.md). Apply that adapter's path, hook,
+collaboration, checkpoint, and author/reviewer mappings as overrides to the host-specific
 instructions below. Phase gates, state tokens, evidence requirements, and stop conditions do not
 change between hosts.
+
+Adapt a new host by adding an adapter beside these, never by rewriting the Claude spelling in
+place: this one checkout is symlinked live into more than one host, so a global substitution
+adapting it to one breaks the others the moment it lands.
 
 ## Activation surface
 
