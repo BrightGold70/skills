@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills
 **Handover-From:** HemaSuite · feature/046-deck-guided-narrative-assets · session 3d65fe3c-0568-4f1a-82f6-4d77238017dc
+**Taken-Over-By:** skills · main · session ffaec156-1056-4683-a0c2-abf87e0614b9 · 2026-09-21
 **Supersedes:** none — this is an inbound handover, not a closeout
 
 ## Session Summary
