@@ -206,6 +206,78 @@
       "find": "impl_plan=impl_plan, project_root=args.project_root, module=args.module,",
       "replace": "impl_plan=impl_plan, project_root=args.project_root, module=_filename_slug(args.module),",
       "test": "tests/test_h_mad_assemble_tdd.py::TestModulePathSlug::test_the_prompt_body_still_names_the_REAL_module_path"
+    },
+    {
+      "name": "collapse-the-guards-back-into-the-else-arm",
+      "_mechanism": "The filed defect, restored exactly: the WIRE lines REPLACE the guards block instead of preceding it, so --guard is parsed, validated and then dropped on every wiring task with no warning and an ASSEMBLE-TDD: PASS. An implementer told by the template that guards are labelled, and then shown no labels, has the impl-plan's count as its only authority — the manufactured-failure path the template's own paragraph exists to close.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if guards:\n        lines.append(\n            \"**Regression guards (must pass from the first run — do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    else:\n        lines.append(\"**Regression guards:** none in this task.\")\n",
+      "replace": "    if shape != \"wiring\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run — do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_wiring_task_states_its_guard_labels"
+    },
+    {
+      "name": "emit-the-guards-only-for-wiring",
+      "_mechanism": "The over-correction. A repair that moved the guards block under the wiring arm instead of out of the conditional would pass every wiring-shaped test and silently drop the labels for new-behaviour and refactor tasks — the same defect with the shapes exchanged, which is why both directions are pinned.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if guards:\n        lines.append(\n            \"**Regression guards (must pass from the first run — do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    else:\n        lines.append(\"**Regression guards:** none in this task.\")\n",
+      "replace": "    if shape == \"wiring\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run — do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_new_behaviour_task_still_states_its_guard_labels"
+    },
+    {
+      "name": "suppress-a-wiring-tasks-supplied-counts",
+      "_mechanism": "The counts half of the filed defect. --expect-fail/--expect-pass reach no part of the prompt on a wiring task, so the dispatch states no split at all; four HemaSuite tasks shipped that way and were rescued only by a hand-written orchestrator preamble.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if expect_fail is not None and expect_pass is not None:\n",
+      "replace": "    if expect_fail is not None and expect_pass is not None and shape != \"wiring\":\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_wiring_tasks_supplied_counts_reach_the_prompt"
+    },
+    {
+      "name": "emit-the-counts-line-unconditionally",
+      "_mechanism": "The pre-fix emission, which was unconditional inside the else arm. Counts are not required for a GREEN dispatch or for a wiring task, so with none supplied the prompt shipped the literal `**Expected after this dispatch:** None failing, None passing.` — a stated split that states nothing, and worse than an absent line because it reads as an answer.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if expect_fail is not None and expect_pass is not None:\n",
+      "replace": "    if True:\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_green_dispatch_without_counts_does_not_emit_the_word_None"
+    },
+    {
+      "name": "drop-the-wiring-counts-rider",
+      "_mechanism": "Without the rider the counts read as the bar on a task the exemption deliberately does not gate on counts, so the implementer treats the split as what must be hit and the WIRE-PIN as decoration. Stating a number and stating what it means are different acts.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if shape == \"wiring\":\n            lines.append(\n                \"These counts are informational for a wiring task — the WIRE-PIN, \"\n",
+      "replace": "        if False:\n            lines.append(\n                \"These counts are informational for a wiring task — the WIRE-PIN, \"\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_wiring_tasks_counts_are_marked_informational"
+    },
+    {
+      "name": "call-every-shapes-counts-informational",
+      "_mechanism": "The other over-correction. On a non-wiring RED the counts ARE the bar and step5d:red_not_all_failing is enforced against them; telling that implementer they are informational licenses exactly the unlabelled immediate pass the counts exist to catch.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if shape == \"wiring\":\n            lines.append(\n                \"These counts are informational for a wiring task — the WIRE-PIN, \"\n",
+      "replace": "        if True:\n            lines.append(\n                \"These counts are informational for a wiring task — the WIRE-PIN, \"\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_new_behaviour_task_is_not_told_its_counts_are_informational"
+    },
+    {
+      "name": "allow-half-a-split",
+      "_mechanism": "Without the guard, --expect-fail 8 with no --expect-pass on a wiring task or on any GREEN reaches an emission conditional that requires both, so the half that WAS supplied is discarded in silence and the run still ends ASSEMBLE-TDD: PASS. The filed defect one case narrower.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if (expect_fail is None) != (expect_pass is None):\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestHalfASplitIsRefusedForEveryShapeAndPhase::test_a_wiring_task_is_refused_half_a_split"
+    },
+    {
+      "name": "refuse-a-wiring-task-that-supplied-neither-count",
+      "_mechanism": "The over-correction, and the expensive one: `or` in place of `!=` refuses BOTH-absent, which is the commonest wiring invocation and the exemption the whole shape carve-out exists for. It would halt every wiring dispatch and every GREEN staged without counts.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if (expect_fail is None) != (expect_pass is None):\n",
+      "replace": "    if (expect_fail is None) or (expect_pass is None):\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestHalfASplitIsRefusedForEveryShapeAndPhase::test_neither_count_is_still_allowed_on_a_wiring_task"
+    },
+    {
+      "name": "write-the-half-split-guard-on-truthiness",
+      "_mechanism": "`0` is falsy and is a real answer — the repo already has treat-zero-counts-as-absent for the sibling check. On truthiness, `--expect-fail 0 --expect-pass 4` reads as half a split and a correct dispatch is refused, which reads as strictness rather than as a bug.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if (expect_fail is None) != (expect_pass is None):\n",
+      "replace": "    if (not expect_fail) != (not expect_pass):\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestHalfASplitIsRefusedForEveryShapeAndPhase::test_zero_is_not_half_a_split"
     }
   ],
   "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."

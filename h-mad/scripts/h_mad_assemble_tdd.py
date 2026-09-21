@@ -216,6 +216,18 @@ def assemble(
             "whether an immediate pass is a guard or a weakened test",
         )
 
+    # Half a pair is an incoherent invocation, not an exemption. Both carve-outs
+    # above — a wiring task, and any GREEN — are about supplying NEITHER count.
+    # Supplying one without the other reaches an emission conditional that needs
+    # both, so the half that WAS given is silently discarded: the same failure as
+    # the shape-conditional drop this block's sibling closes, one case narrower.
+    if (expect_fail is None) != (expect_pass is None):
+        raise Halt(
+            "counts_required",
+            "one of --expect-fail/--expect-pass was given without the other; "
+            "half a split states nothing, and the half given would be dropped",
+        )
+
     if not interpreter_has_pytest(python):
         suggestions = find_interpreters_with_pytest()
         raise Halt(
@@ -241,17 +253,31 @@ def assemble(
             "an assertion about the CALLER's observable behaviour, never a missing "
             "symbol."
         )
-    else:
+    # Counts are STATED whenever they were supplied, whatever the shape. The
+    # exemption above is about not REQUIRING them on a wiring task; it was
+    # never a licence to discard a value the orchestrator did supply. Emitting
+    # them only in an `else` arm left four HemaSuite wiring dispatches with no
+    # stated split at all, and printed a literal `None failing` on any GREEN
+    # assembled without counts.
+    if expect_fail is not None and expect_pass is not None:
         lines.append(
             f"**Expected after this dispatch:** {expect_fail} failing, {expect_pass} passing."
         )
-        if guards:
+        if shape == "wiring":
             lines.append(
-                "**Regression guards (must pass from the first run — do NOT manufacture "
-                "a failure):** " + ", ".join(guards)
+                "These counts are informational for a wiring task — the WIRE-PIN, "
+                "not the split, is what gates it."
             )
-        else:
-            lines.append("**Regression guards:** none in this task.")
+    # Guards are orthogonal to shape. The label is what makes an immediate pass
+    # legitimate instead of something to be manufactured away, and the shipped
+    # template promises it unconditionally.
+    if guards:
+        lines.append(
+            "**Regression guards (must pass from the first run — do NOT manufacture "
+            "a failure):** " + ", ".join(guards)
+        )
+    else:
+        lines.append("**Regression guards:** none in this task.")
     lines.append("")
     lines.append(f"**Run the tests as:** `{python} -m pytest {test_path} -v`")
     lines.append(

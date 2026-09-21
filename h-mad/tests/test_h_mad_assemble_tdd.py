@@ -159,7 +159,13 @@ class TestWiringShape:
         # Asserted against the emitted LINE, not the bare word: the shipped
         # template's own prose contains "instead of failing, and a hang…".
         assert "**Expected after this dispatch:**" not in filled
-        assert "**Regression guards" not in filled
+        # An `assert "**Regression guards" not in filled` stood here and was
+        # REMOVED 2026-09-21. It did not follow from this test's own property.
+        # Counts being exempt from REQUIREMENT says nothing about guards, which
+        # are orthogonal to shape — so the assertion pinned the defect HemaSuite
+        # filed rather than the exemption, and any repair had to break it first.
+        # The guards contract now has its own pins, in both directions:
+        # TestGuardsAndCountsAreOrthogonalToShape.
 
     def test_a_wiring_task_without_a_pin_halts(self, plan: Path, tmp_path: Path) -> None:
         with pytest.raises(Halt) as exc:
@@ -170,6 +176,173 @@ class TestWiringShape:
         filled, _ = call(plan, tmp_path, task_id="Task 2",
                          expect_fail=None, expect_pass=None)
         assert "never a missing" in filled
+
+
+class TestGuardsAndCountsAreOrthogonalToShape:
+    """Filed by HemaSuite 2026-09-20 against this repo, fixed here.
+
+    `--expect-fail`, `--expect-pass` and `--guard` were parsed, validated, and
+    then dropped on every `wiring` task: the WIRE lines REPLACED the counts and
+    guards block instead of preceding it, and the run still ended
+    `ASSEMBLE-TDD: PASS`. Four of one HemaSuite feature's tasks were `wiring`,
+    and the only reason their implementers saw a split at all was a
+    hand-written orchestrator preamble.
+
+    The contract these pin:
+
+    * Guards are emitted for EVERY shape. A guard label says "this test
+      passing at once is legitimate" — that is orthogonal to whether the task
+      ships a connection, and it is the mechanism the shipped template's own
+      "do not manufacture a failure" paragraph depends on.
+    * Counts are emitted whenever both were SUPPLIED, whatever the shape. The
+      `counts_required` exemption is about not REQUIRING them on a wiring task
+      (its RED split is identical either way); it was never a licence to
+      discard a value the orchestrator did supply. On a wiring task they carry
+      an informational rider so the exemption's reasoning survives in the
+      prompt.
+
+    Both shapes are pinned in each direction: a repair that emitted guards for
+    `wiring` while dropping them for `new-behaviour` would pass a one-shape
+    test. Sentinel guard names are used so a hit cannot be a spliced plan line.
+    """
+
+    SENTINELS = ["GUARD_SENTINEL_ALPHA", "GUARD_SENTINEL_BETA"]
+
+    def test_a_wiring_task_states_its_guard_labels(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        filled, meta = call(plan, tmp_path, task_id="Task 2",
+                            expect_fail=None, expect_pass=None,
+                            guards=self.SENTINELS)
+        assert meta["shape"] == "wiring"
+        assert "GUARD_SENTINEL_ALPHA, GUARD_SENTINEL_BETA" in filled
+        assert "do NOT manufacture" in filled
+
+    def test_a_new_behaviour_task_still_states_its_guard_labels(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """The other half of the pin — see the class docstring."""
+        filled, meta = call(plan, tmp_path, task_id="Task 1",
+                            guards=self.SENTINELS)
+        assert meta["shape"] == "new-behaviour"
+        assert "GUARD_SENTINEL_ALPHA, GUARD_SENTINEL_BETA" in filled
+        assert "do NOT manufacture" in filled
+
+    def test_a_wiring_task_with_no_guards_says_so_rather_than_omitting_the_line(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """An absent line and a "none" line read identically to a grep but not
+        to an implementer: the second says the question was asked."""
+        filled, _ = call(plan, tmp_path, task_id="Task 2",
+                         expect_fail=None, expect_pass=None, guards=[])
+        assert "**Regression guards:** none in this task." in filled
+
+    def test_a_wiring_tasks_supplied_counts_reach_the_prompt(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(plan, tmp_path, task_id="Task 2",
+                         expect_fail=8, expect_pass=4)
+        assert "**Expected after this dispatch:** 8 failing, 4 passing." in filled
+
+    def test_a_wiring_tasks_counts_are_marked_informational(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """Stating them must not read as gating them — the exemption's
+        reasoning has to survive into the prompt, or the implementer treats the
+        split as the bar and the WIRE-PIN as decoration."""
+        filled, _ = call(plan, tmp_path, task_id="Task 2",
+                         expect_fail=8, expect_pass=4)
+        assert "informational for a wiring task" in filled
+        assert "not the split, is what gates it" in filled
+
+    def test_a_new_behaviour_task_is_not_told_its_counts_are_informational(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """The other half of the pin. On a non-wiring RED the counts ARE the
+        bar, and `step5d:red_not_all_failing` is enforced against them."""
+        filled, _ = call(plan, tmp_path, task_id="Task 1",
+                         expect_fail=8, expect_pass=4)
+        assert "8 failing, 4 passing" in filled
+        assert "informational for a wiring task" not in filled
+
+    def test_a_wiring_task_without_counts_states_none(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """The exemption intact: not supplying them is still allowed, and the
+        prompt must then say nothing rather than say `None failing`."""
+        filled, _ = call(plan, tmp_path, task_id="Task 2",
+                         expect_fail=None, expect_pass=None)
+        assert "**Expected after this dispatch:**" not in filled
+        assert "None failing" not in filled
+
+    def test_a_green_dispatch_without_counts_does_not_emit_the_word_None(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """5e needs no counts (`elif phase == "red"`), but the emission was
+        unconditional for every non-wiring task, so a GREEN assembled without
+        them shipped the literal `None failing, None passing`."""
+        filled, _ = call(plan, tmp_path, task_id="Task 1", phase="green",
+                         expect_fail=None, expect_pass=None)
+        assert "None failing" not in filled
+        assert "**Expected after this dispatch:**" not in filled
+
+
+class TestHalfASplitIsRefusedForEveryShapeAndPhase:
+    """Found by delta self-review of the wiring repair, 2026-09-21.
+
+    Two carve-outs let counts be absent: a `wiring` task (its RED split is
+    identical either way) and any GREEN (`elif phase == "red"`). Both are about
+    supplying NEITHER count. Supplying one without the other is a third state,
+    and it reached an emission conditional that requires both — so the half
+    that WAS given was discarded in silence, with the run still ending
+    `ASSEMBLE-TDD: PASS`. That is the filed defect one case narrower, and the
+    repair that closed the wide case is exactly what made this case visible.
+
+    A non-wiring RED was already refused by the `elif`, which is why these
+    parametrise over the two paths that reach the new check instead.
+    """
+
+    @pytest.mark.parametrize("missing", ["expect_fail", "expect_pass"])
+    def test_a_wiring_task_is_refused_half_a_split(
+        self, plan: Path, tmp_path: Path, missing: str
+    ) -> None:
+        kw = {"expect_fail": 8, "expect_pass": 4, missing: None}
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, task_id="Task 2", **kw)
+        assert exc.value.reason == "counts_required"
+        assert "without the other" in exc.value.detail
+
+    @pytest.mark.parametrize("missing", ["expect_fail", "expect_pass"])
+    def test_a_green_dispatch_is_refused_half_a_split(
+        self, plan: Path, tmp_path: Path, missing: str
+    ) -> None:
+        kw = {"expect_fail": 8, "expect_pass": 4, missing: None}
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, task_id="Task 1", phase="green", **kw)
+        assert exc.value.reason == "counts_required"
+
+    def test_neither_count_is_still_allowed_on_a_wiring_task(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """The exemption this must not swallow — a guard that refused BOTH-absent
+        would break every wiring dispatch, which is the commonest invocation."""
+        filled, _ = call(plan, tmp_path, task_id="Task 2",
+                         expect_fail=None, expect_pass=None)
+        assert "PHASE 5d (RED)" in filled
+
+    def test_neither_count_is_still_allowed_on_a_green_dispatch(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(plan, tmp_path, task_id="Task 1", phase="green",
+                         expect_fail=None, expect_pass=None)
+        assert "PHASE 5e (GREEN)" in filled
+
+    def test_zero_is_not_half_a_split(self, plan: Path, tmp_path: Path) -> None:
+        """`0` is falsy and is a real answer. A guard written on truthiness
+        rather than `is None` would refuse `--expect-fail 0 --expect-pass 4`."""
+        filled, _ = call(plan, tmp_path, task_id="Task 2",
+                         expect_fail=0, expect_pass=4)
+        assert "0 failing, 4 passing" in filled
 
 
 class TestTheFiveRecordedMistakes:
@@ -221,7 +394,7 @@ class TestTheFiveRecordedMistakes:
             "--expect-fail", "3", "--expect-pass", "1",
             "--python", PYTHON, "--sandbox", "read-only",
         )
-        assert proc.returncode == 2
+        assert proc.returncode == 2, proc.stdout + proc.stderr
         assert "HALT sandbox_read_only" in proc.stdout
         assert "tempdir" in proc.stdout
 
@@ -350,7 +523,7 @@ class TestCli:
             "--expect-fail", "3", "--expect-pass", "1",
             "--python", PYTHON, "--prompt", str(prompt),
         )
-        assert proc.returncode == 2
+        assert proc.returncode == 2, proc.stdout + proc.stderr
         assert "HALT task_not_found" in proc.stdout
         assert not prompt.exists()
 
