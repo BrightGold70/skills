@@ -345,6 +345,190 @@ class TestHalfASplitIsRefusedForEveryShapeAndPhase:
         assert "0 failing, 4 passing" in filled
 
 
+class TestTheTestPathIsRootedAtTheProjectRoot:
+    """The sibling defect the wiring handover named but did not hand over.
+
+    `--test-path` is taken as a bare string and interpolated verbatim into two
+    consumers with DIFFERENT working directories: the prompt (which the agent
+    runs under `--cd <project-root>`) and the operator's "re-run the tests
+    yourself" line (which had no `cd` at all and ran from wherever the
+    operator's shell happened to be). One string had to be correct relative to
+    two roots.
+
+    Measured 2026-09-21 against a subproject-shaped tree:
+
+    | `--test-path`                    | pytest rc | output       |
+    |----------------------------------|-----------|--------------|
+    | correct, root-relative           | 0         | 1 passed     |
+    | misrooted, file absent           | 4         | no tests ran |
+    | resolves to an existing EMPTY dir| 5         | no tests ran |
+
+    So "unrunnable" understates it — the rc=5 case runs, collects nothing and
+    reports no error, which is a dispatch that measured nothing.
+
+    **Absence cannot be the refusal.** A 5d RED names a test file the agent has
+    not written yet; every other test in this module passes a `--test-path`
+    that does not exist under its `tmp_path`, and a naive existence check would
+    refuse all of them. What is refusable is a path that exists somewhere ELSE
+    under the root, because that is the caller having rooted it at a
+    subproject — the same shape as the `interpreter_has_no_pytest` refusal,
+    which names a working interpreter rather than just saying no.
+    """
+
+    @staticmethod
+    def _tree(root: Path) -> None:
+        """A subproject layout: the tests live at `sub/tests/`, and a bare
+        `tests/` exists at the root as the empty-directory trap."""
+        (root / "sub" / "tests").mkdir(parents=True, exist_ok=True)
+        (root / "sub" / "tests" / "test_real.py").write_text(
+            "def test_it_runs():\n    assert True\n", encoding="utf-8")
+        (root / "tests").mkdir(exist_ok=True)
+
+    def test_a_subproject_relative_path_is_refused(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        self._tree(tmp_path)
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, test_path="tests/test_real.py")
+        assert exc.value.reason == "test_path_misrooted"
+
+    def test_the_refusal_names_the_path_that_would_work(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """A refusal that only says no sends the caller back to guessing, and
+        guessing is what produced the misrooted path."""
+        self._tree(tmp_path)
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, test_path="tests/test_real.py")
+        assert "sub/tests/test_real.py" in exc.value.detail
+
+    def test_a_correctly_rooted_path_is_accepted(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        self._tree(tmp_path)
+        filled, _ = call(plan, tmp_path, test_path="sub/tests/test_real.py")
+        assert "pytest sub/tests/test_real.py -v" in filled
+
+    def test_a_path_that_matches_nothing_is_accepted(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """THE over-correction guard, and the expensive one. A 5d RED names the
+        file it is about to create. Refusing a path that exists nowhere would
+        refuse every legitimate RED in the workflow."""
+        self._tree(tmp_path)
+        filled, _ = call(plan, tmp_path, test_path="sub/tests/test_not_yet.py")
+        assert "pytest sub/tests/test_not_yet.py -v" in filled
+
+    def test_an_ambiguous_match_is_still_refused_and_lists_both(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """Two subprojects with the same test path. Still misrooted, and
+        picking one by traversal order would be a coin flip."""
+        self._tree(tmp_path)
+        (tmp_path / "other" / "tests").mkdir(parents=True)
+        (tmp_path / "other" / "tests" / "test_real.py").write_text("", encoding="utf-8")
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, test_path="tests/test_real.py")
+        assert exc.value.reason == "test_path_misrooted"
+        assert "other/tests/test_real.py" in exc.value.detail
+        assert "sub/tests/test_real.py" in exc.value.detail
+
+    def test_a_directory_test_path_is_checked_the_same_way(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """`--test-path sub/tests` is legitimate. The trap is that a bare
+        `tests` EXISTS at the root and is empty, so pytest exits 5 rather than
+        4 — it runs, collects nothing, and reports no error."""
+        self._tree(tmp_path)
+        filled, _ = call(plan, tmp_path, test_path="sub/tests")
+        assert "pytest sub/tests -v" in filled
+
+    def test_a_bare_basename_match_is_not_offered_as_the_fix(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """The suggestion has to match the WHOLE given path, not just its last
+        component. `sub/other/test_real.py` shares a basename and is a
+        different file; offering it would send the caller confidently to the
+        wrong test, which is worse than the refusal it replaced."""
+        self._tree(tmp_path)
+        (tmp_path / "sub" / "other").mkdir(parents=True)
+        (tmp_path / "sub" / "other" / "test_real.py").write_text("", encoding="utf-8")
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, test_path="tests/test_real.py")
+        assert "sub/tests/test_real.py" in exc.value.detail
+        assert "sub/other/test_real.py" not in exc.value.detail
+
+    def test_the_operator_rerun_line_is_rooted_at_the_project_root(
+        self, tmp_path: Path
+    ) -> None:
+        """The half the handover brief did not name. The block's dispatch is
+        `--cd`'d to the project root, but this line was not, so a correct
+        root-relative path still failed for an operator whose shell was
+        somewhere else. A subshell keeps the `cd` from leaking."""
+        block = command_block(
+            feature="f", module="m", phase="red", prompt=tmp_path / "p.txt",
+            out=tmp_path / "o", log=tmp_path / "l", timeout=900,
+            python=PYTHON, test_path="tests/t.py", project_root=tmp_path,
+        )
+        rerun = next(l for l in block.splitlines() if "-m pytest" in l)
+        assert rerun.startswith("(cd "), rerun
+        assert str(tmp_path) in rerun
+        assert rerun.endswith(")"), rerun
+
+    def test_the_search_uses_git_when_the_root_is_a_work_tree(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """`tmp_path` is not a repo, so every other test here exercises the
+        os.walk FALLBACK and the git path would ship unmeasured. It is the
+        path that actually runs in production, and it is the faster one for a
+        reason: on HemaSuite the walk crossed 88349 entries in 4.6s because
+        the gitignored `.omc/` holds 126388 of them, against 9734 in 0.11s
+        from git — paid on the COMMON path, since a RED names a file that does
+        not exist yet."""
+        self._tree(tmp_path)
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, test_path="tests/test_real.py")
+        assert exc.value.reason == "test_path_misrooted"
+        assert "sub/tests/test_real.py" in exc.value.detail
+
+    def test_a_gitignored_tree_is_not_offered_as_the_fix(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """The reason git is the right corpus and not merely the fast one: a
+        path inside ignored runtime state is not a test this project owns, and
+        suggesting it would send the caller into `.omc/` or a stale `.venv`
+        copy of the tree."""
+        self._tree(tmp_path)
+        (tmp_path / ".gitignore").write_text("junk/\n", encoding="utf-8")
+        (tmp_path / "junk" / "tests").mkdir(parents=True)
+        (tmp_path / "junk" / "tests" / "test_real.py").write_text("", encoding="utf-8")
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, test_path="tests/test_real.py")
+        assert "sub/tests/test_real.py" in exc.value.detail
+        assert "junk/tests/test_real.py" not in exc.value.detail
+
+    def test_the_rerun_root_is_quoted_too(self, tmp_path: Path) -> None:
+        """The subshell added a THIRD interpolated path to that line. The
+        pre-existing spaces test covers the interpreter and the test path but
+        passes a space-free root, so without this the new one is unquoted and
+        nothing notices — a repo checked out under `~/My Projects/` would
+        `cd` into the wrong directory and the pasted block would run the
+        sibling project's tests."""
+        root = tmp_path / "My Projects" / "repo"
+        root.mkdir(parents=True)
+        block = command_block(
+            feature="f", module="m", phase="red", prompt=tmp_path / "p.txt",
+            out=tmp_path / "o", log=tmp_path / "l", timeout=900,
+            python=PYTHON, test_path="tests/t.py", project_root=root,
+        )
+        rerun = next(l for l in block.splitlines() if "-m pytest" in l)
+        assert f"'{root}'" in rerun, rerun
+
+
 class TestTheFiveRecordedMistakes:
     """One test per hand-assembly mistake the row records."""
 

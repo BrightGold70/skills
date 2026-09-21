@@ -47,6 +47,7 @@ exit 0 on PASS, 2 on any HALT. Stdlib-only.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shlex
 import subprocess
@@ -150,6 +151,87 @@ def task_body(text: str, task_id: str) -> str:
     raise Halt("task_not_found", f"task={task_id}")
 
 
+_WALK_SKIP = {
+    ".git", ".hg", ".tox", ".mypy_cache", ".pytest_cache", "__pycache__",
+    ".venv", "venv", "node_modules", "site-packages",
+}
+
+
+def _project_entries(project_root: Path) -> set[str]:
+    """Root-relative paths under `project_root`: files, plus their ancestor dirs.
+
+    `git ls-files` first, because `.gitignore` is exactly the right filter and
+    an `os.walk` is not. Measured on HemaSuite 2026-09-21: the walk crossed
+    88349 entries in 4.6s, of which 126388 index entries were the gitignored
+    `.omc/` runtime state; `git ls-files` gives 9734 in 0.11s. That gap is paid
+    on the COMMON path, because a 5d RED names a file that does not exist yet,
+    so the search runs on almost every assemble.
+
+    `git -C <root>` lists relative to `<root>` even when it is a subdirectory
+    of the work tree (verified), which is the rooting this needs. Ancestor
+    directories are added because git lists only files while `--test-path` may
+    name a directory. Falls back to a pruned walk when the root is not a git
+    work tree, which is what the unit tests exercise.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(project_root), "ls-files",
+             "--cached", "--others", "--exclude-standard", "-z"],
+            capture_output=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        proc = None
+    if proc is not None and proc.returncode == 0:
+        entries = {
+            path for path in proc.stdout.decode("utf-8", "replace").split("\0") if path
+        }
+        for path in list(entries):
+            parts = path.split("/")
+            for depth in range(1, len(parts)):
+                entries.add("/".join(parts[:depth]))
+        return entries
+    entries = set()
+    for dirpath, dirnames, filenames in os.walk(project_root):
+        dirnames[:] = [d for d in dirnames if d not in _WALK_SKIP]
+        for entry in (*filenames, *dirnames):
+            try:
+                entries.add(
+                    (Path(dirpath) / entry).relative_to(project_root).as_posix()
+                )
+            except ValueError:          # outside the root; not ours to suggest
+                continue
+    return entries
+
+
+def misrooted_candidates(
+    project_root: Path, test_path: str, limit: int = 5
+) -> list[str]:
+    """Root-relative paths under `project_root` that END WITH `test_path`.
+
+    Only meaningful when `project_root / test_path` does NOT exist. Absence by
+    itself cannot be a refusal: a 5d RED names the test file the agent is about
+    to write, so not existing is the normal case. Existing SOMEWHERE ELSE is
+    the refusable one — it means the caller rooted the path at a subproject,
+    and pytest then exits 4 on a missing file or 5 on an empty directory that
+    happens to share the name. The second is the dangerous reading: it runs,
+    collects nothing, and reports no error.
+
+    The whole given path must match, not just its last component: a file that
+    merely shares a basename is a DIFFERENT test, and naming it as the fix
+    sends the caller confidently to the wrong place. Sorted before truncating,
+    so which candidates are shown does not depend on traversal order.
+    """
+    rel = test_path.strip("/")
+    if not rel:
+        return []
+    suffix = "/" + rel
+    found = sorted(
+        entry for entry in _project_entries(project_root)
+        if entry != rel and entry.endswith(suffix)
+    )
+    return found[:limit]
+
+
 def interpreter_has_pytest(python: str) -> bool:
     try:
         return subprocess.run(
@@ -235,6 +317,24 @@ def assemble(
             f"{python} cannot import pytest"
             + (f"; try {suggestions[0]}" if suggestions else ""),
         )
+
+    # `--test-path` is interpolated verbatim into the prompt and into the
+    # operator's re-run line, both of which resolve it against project_root.
+    # The interpreter is probed; the path was not, which is the asymmetry this
+    # closes. Absence is NOT the refusal — a 5d RED names a file that does not
+    # exist yet. A path that exists somewhere ELSE is, because that is a
+    # subproject-relative path given where a root-relative one was needed.
+    if not (project_root / test_path).exists():
+        elsewhere = misrooted_candidates(project_root, test_path)
+        if elsewhere:
+            raise Halt(
+                "test_path_misrooted",
+                f"--test-path {test_path} does not exist under {project_root}, "
+                f"but {' and '.join(elsewhere)} does — --test-path is relative "
+                f"to --project-root, not to the subproject. A misrooted path "
+                f"makes pytest exit 4, or 5 when a same-named directory exists, "
+                f"and a dispatch that collected nothing reports no error.",
+            )
 
     # The phase is stamped because the template carries BOTH the RED and the
     # GREEN instructions and nothing in it says which one applies today.
@@ -331,7 +431,11 @@ def command_block(
         f"python3 {q(str(SKILL_DIR / 'scripts' / 'h_mad_extract_verdict.py'))} \\",
         f"  {q(str(out))} --key {key} --feature {q(feature)} --phase {step}",
         "# The verdict says what the agent claims. Re-run the tests yourself:",
-        f"{q(python)} -m pytest {q(test_path)} -v",
+        # A subshell: the dispatch above is `--cd`'d to the project root but
+        # this line was not, so a correct root-relative path still failed for
+        # an operator whose shell was elsewhere. The parens keep the `cd` from
+        # leaking into whatever they run next.
+        f"(cd {q(str(project_root))} && {q(python)} -m pytest {q(test_path)} -v)",
     ])
 
 

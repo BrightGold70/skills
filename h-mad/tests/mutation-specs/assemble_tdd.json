@@ -145,10 +145,10 @@
     },
     {
       "name": "unquote-the-interpolated-paths",
-      "_mechanism": "A path with a space becomes two shell arguments and the pasted block silently runs the wrong thing.",
+      "_mechanism": "A path with a space becomes two shell arguments and the pasted block silently runs the wrong thing. Re-anchored 2026-09-21 when the re-run line gained its project-root subshell — the project_root interpolation is now a third unquoted path on the same line, and the mutation must unquote all three or it stops being the mistake it names.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "        f\"{q(python)} -m pytest {q(test_path)} -v\",",
-      "replace": "        f\"{python} -m pytest {test_path} -v\",",
+      "find": "        f\"(cd {q(str(project_root))} && {q(python)} -m pytest {q(test_path)} -v)\",",
+      "replace": "        f\"(cd {project_root} && {python} -m pytest {test_path} -v)\",",
       "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_a_path_with_spaces_is_quoted_in_the_block"
     },
     {
@@ -278,6 +278,54 @@
       "find": "    if (expect_fail is None) != (expect_pass is None):\n",
       "replace": "    if (not expect_fail) != (not expect_pass):\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestHalfASplitIsRefusedForEveryShapeAndPhase::test_zero_is_not_half_a_split"
+    },
+    {
+      "name": "skip-the-test-path-rooting-probe",
+      "_mechanism": "The filed sibling defect restored. --test-path goes verbatim into the prompt and the operator's re-run line with no check that it resolves under --project-root. Subproject-relative, pytest exits 4 on the missing file or 5 when a same-named directory exists at the root — and 5 RUNS, collects nothing and reports no error, which is a dispatch that measured nothing wearing the shape of a clean one. The interpreter was probed; the path was not.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if not (project_root / test_path).exists():\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_a_subproject_relative_path_is_refused"
+    },
+    {
+      "name": "refuse-a-test-path-that-exists-nowhere",
+      "_mechanism": "The expensive over-correction: refusing on ABSENCE rather than on existing-elsewhere. A 5d RED names the test file the agent is about to write, so absence is the normal case — this halts every legitimate RED in the workflow, and reads as strictness rather than as a bug.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if elsewhere:\n",
+      "replace": "        if True:\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_a_path_that_matches_nothing_is_accepted"
+    },
+    {
+      "name": "suggest-only-the-first-candidate-found",
+      "_mechanism": "Reporting one hit turns an ambiguous layout into a confident single answer. Two subprojects with the same test path is a real layout, and naming one of them is the coin flip the handoff skill's own state-file search records from two `find` implementations returning different orders. Re-anchored 2026-09-21 when the search moved to git ls-files and the walk-order early return became a sort-then-truncate.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    return found[:limit]\n",
+      "replace": "    return found[:1]\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_an_ambiguous_match_is_still_refused_and_lists_both"
+    },
+    {
+      "name": "match-a-candidate-on-its-basename-alone",
+      "_mechanism": "Dropping the suffix test matches any path sharing the last component, so the refusal names a DIFFERENT test file as the fix. A wrong suggestion followed confidently is worse than the halt it replaced, because the caller stops looking. Re-anchored 2026-09-21 with the git ls-files rewrite.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if entry != rel and entry.endswith(suffix)\n",
+      "replace": "        if entry != rel\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_a_bare_basename_match_is_not_offered_as_the_fix"
+    },
+    {
+      "name": "drop-the-rerun-subshell-root",
+      "_mechanism": "The half the handover brief did not name. The dispatch is --cd'd to the project root but the operator's re-run line was not, so one path string had to be correct against two different working directories. Measured from $HOME: rooted rc=0, unrooted rc=4 on the identical correct path.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        f\"(cd {q(str(project_root))} && {q(python)} -m pytest {q(test_path)} -v)\",\n",
+      "replace": "        f\"{q(python)} -m pytest {q(test_path)} -v\",\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_the_operator_rerun_line_is_rooted_at_the_project_root"
+    },
+    {
+      "name": "always-fall-back-to-the-unfiltered-walk",
+      "_mechanism": "Ignoring a good `git ls-files` costs both properties at once. Speed: the walk crossed 88349 HemaSuite entries in 4.6s against git's 9734 in 0.11s, on the COMMON path because a RED names a file that does not exist yet. Correctness: the walk's prune list is a guess at what is uninteresting, while `.gitignore` is the project's own answer — so the walk offers a path inside ignored runtime state as the fix and sends the caller there.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if proc is not None and proc.returncode == 0:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_a_gitignored_tree_is_not_offered_as_the_fix"
     }
   ],
   "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."
