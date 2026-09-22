@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills
 **Handover-From:** HemaSuite · main · session 90b73ff2-53f5-45e9-a86a-8cc60a33dfb5
+**Taken-Over-By:** skills · main · session d6877189-0417-413f-8a5d-bde02ae504eb · 2026-09-23
 **Supersedes:** none — first on this branch for these items
 
 ## Session Summary
