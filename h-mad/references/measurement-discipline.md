@@ -123,10 +123,20 @@ lines contain this string", never "how many instances of this concept exist".
   ```bash
   grep -n -o -E '.{60}<token>.{20}' <doc> | grep -v '<the construct that is not the concept>'
   ```
-- **A value sweep over markdown collapses newlines AND admits the inline-code delimiters** —
+- **A value sweep over markdown collapses whitespace RUNS AND admits the inline-code delimiters** —
   prose-stated and backtick-stated occurrences are one population:
   ```bash
-  tr '\n' ' ' < <doc> | grep -o -E '<needle>.{0,2} <word>'
+  tr -s '[:space:]' ' ' < <doc> | grep -o -E '<needle>.{0,2} <word>'
+  ```
+  **`-s '[:space:]'`, never a bare `tr '\n' ' '`.** The bare form translates each newline to exactly
+  one space and touches no other whitespace, so it fails this sweep twice: a hard-wrapped indented
+  continuation still carries its leading indent (3+ spaces, and `.{0,2}` then misses it), and a tab
+  is not translated at all. Two independent lanes hit this on 2026-09-14. Run the positive control
+  before trusting a zero — a sweep that cannot find a hit you planted is measuring nothing:
+  ```bash
+  printf 'the needle\n   word here\n' > /tmp/sweep-control.txt
+  tr '\n' ' '          < /tmp/sweep-control.txt | grep -o -E 'needle.{0,2} word'   # NO MATCH — the bug
+  tr -s '[:space:]' ' ' < /tmp/sweep-control.txt | grep -o -E 'needle.{0,2} word'  # needle word
   ```
 - **Paste a shared string in the documents' OWN spelling — derive it by EDITING the shipped
   artifact, never by retyping it.**

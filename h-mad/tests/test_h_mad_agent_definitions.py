@@ -290,3 +290,28 @@ def test_the_awk_backspace_trap_is_recorded() -> None:
     assert "returns 0 on a file full of hits, which reads as a clean screen" in body
     # The remedy must be named, or the rule is a warning with no action.
     assert "grep -oE" in body and "[^0-9]" in body
+
+
+def test_the_value_sweep_squeezes_whitespace_runs_and_carries_a_control() -> None:
+    """Handed over from HemaSuite as `#106`'s sibling, re-verified 2026-09-23.
+
+    The sweep bullet prescribed `tr '\\n' ' '`, which translates each newline to
+    exactly ONE space and touches nothing else. It therefore fails the sweep it
+    exists for, twice: a hard-wrapped continuation keeps its leading indent, so
+    `.{0,2} <word>` misses it, and a tab is not translated at all. Two independent
+    lanes hit this on 2026-09-14, and the failure is a silent zero — the same class
+    as the awk-backspace trap above.
+
+    Pinned on the RAW text, not `_norm`, because the defect and the fix differ only
+    in the command line and `_norm` merges the fence into its prose.
+    """
+    raw = MEASUREMENT.read_text(encoding="utf-8")
+    # The prescribed command squeezes runs over ALL whitespace, not just newlines.
+    assert "tr -s '[:space:]' ' ' < <doc> | grep -o -E" in raw
+    # The bare form may appear as the named anti-pattern and in the control below,
+    # but never again as the prescription — `< <doc>` is what makes it one.
+    assert "tr '\\n' ' ' < <doc>" not in raw
+    # A rule with no positive control is how this one regressed: a sweep that cannot
+    # find a planted hit reads exactly like a document with no hits.
+    assert "printf 'the needle\\n   word here\\n'" in raw
+    assert "NO MATCH — the bug" in raw
