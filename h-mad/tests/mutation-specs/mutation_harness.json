@@ -171,9 +171,10 @@
       "name": "precheck-calls-a-drifted-anchor-ok",
       "_mechanism": "The sweep reports ANCHORS_OK over specs whose mutations cannot land — exactly the false all-clear the precheck exists to end, and cheaper to trust than the run it stands in for.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "find": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if hits == 1:",
-      "replace": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if True:",
-      "test": "tests/test_h_mad_mutation_harness.py::test_precheck_flags_a_drifted_anchor_with_its_hit_count"
+      "find": "        hits, hints, migration = anchor_check(\n            cache[target], mutation, Path(mutation[\"file\"]).suffix\n        )\n        if hits == 1 and not migration:",
+      "replace": "        hits, hints, migration = anchor_check(\n            cache[target], mutation, Path(mutation[\"file\"]).suffix\n        )\n        if True:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_precheck_flags_a_drifted_anchor_with_its_hit_count",
+      "symbol": "precheck_spec"
     },
     {
       "name": "precheck-passes-an-unreadable-target",

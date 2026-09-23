@@ -148,6 +148,7 @@ Stdlib only: h-mad scripts are invoked with a bare `python3`.
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import difflib
 import json
@@ -293,6 +294,12 @@ def _load_spec(spec_path: Path) -> dict:
             raise SpecError(f"mutation {index} ({mutation['name']}) has no `replace`")
         if mutation.get("test") is not None and not isinstance(mutation["test"], str):
             raise SpecError(f"mutation {index} ({mutation['name']}) has a non-string `test`")
+        # `symbol` is load-bearing, not one of the `_`-prefixed annotations the
+        # harness ignores, so a wrong TYPE must refuse rather than be read as
+        # absent — an unpinned mutation still runs, and silently downgrading a
+        # malformed pin to "no pin" is how a guard stops guarding without a word.
+        if mutation.get("symbol") is not None and not isinstance(mutation["symbol"], str):
+            raise SpecError(f"mutation {index} ({mutation['name']}) has a non-string `symbol`")
 
     target = spec.get("target_command")
     if target is not None and (
@@ -757,6 +764,104 @@ def anchor_status(source: str, find: str) -> tuple[int, list[str]]:
     ]
 
 
+_SH_DEF = re.compile(
+    r"^[ \t]*(?:function[ \t]+)?(?P<name>[A-Za-z_][A-Za-z0-9_-]*)[ \t]*\(\)[ \t]*\{",
+    re.M,
+)
+_MD_HEADING = re.compile(r"^#{1,6}[ \t]+(?P<title>.+?)[ \t]*$", re.M)
+
+
+def _py_enclosing(tree: ast.AST, line: int) -> str | None:
+    """Innermost def/class containing `line`, as a dotted path, or None."""
+    best: str | None = None
+
+    def walk(node: ast.AST, prefix: str) -> None:
+        nonlocal best
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                end = getattr(child, "end_lineno", None)
+                if end is not None and child.lineno <= line <= end:
+                    qualified = f"{prefix}{child.name}"
+                    best = qualified          # deeper assignments win
+                    walk(child, f"{qualified}.")
+                    continue
+            walk(child, prefix)
+
+    walk(tree, "")
+    return best
+
+
+def enclosing_symbol(source: str, offset: int, suffix: str) -> str | None:
+    """The definition `offset` sits inside, or None when it cannot be derived.
+
+    None is a cannot-judge, never a pass: an unsupported file type and an
+    unparseable one both return it, and the caller reports rather than counting
+    the anchor verified. `<module>` / `<file>` mean "derived, and it is top
+    level", which is a different answer.
+
+    `.py` is exact (`ast`, dotted for nesting). `.sh` and extensionless files use
+    the nearest preceding `name() {` / `function name`. `.md` uses the nearest
+    preceding heading, which is a PROXY — two migrations it cannot see, both
+    acceptable and both stated here rather than discovered later: a move between
+    two top-level sites in one file, and a move within one heading's body.
+    """
+    line = source.count("\n", 0, max(offset, 0)) + 1
+    if suffix == ".py":
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return None
+        return _py_enclosing(tree, line) or "<module>"
+    if suffix in (".sh", ""):
+        last = None
+        for match in _SH_DEF.finditer(source[:offset]):
+            last = match
+        return last.group("name") if last else "<file>"
+    if suffix == ".md":
+        last = None
+        for match in _MD_HEADING.finditer(source[:offset]):
+            last = match
+        return last.group("title") if last else "<file>"
+    return None
+
+
+def anchor_check(source: str, mutation: dict, suffix: str) -> tuple[int, list[str], str | None]:
+    """`anchor_status` PLUS the enclosing-symbol comparison, in ONE place.
+
+    Both the precheck and the live run call this. They used to call
+    `anchor_status` directly, which was itself extracted so the cheap check and
+    the expensive one could not disagree; adding the symbol comparison to only
+    one of them would have recreated that drift at the level above — the
+    precheck refusing while the run mutated the wrong function anyway.
+
+    Returns `(hits, hints, migration)`. `migration` is None when there is nothing
+    to say, and a message when the anchor still matches once but no longer sits
+    where the spec pinned it. A mutation with no `symbol` key returns
+    `(hits, hints, None)` and is counted as unpinned by the caller — 976
+    committed mutations predate the key and must keep running.
+    """
+    find = mutation["find"]
+    hits, hints = anchor_status(source, find)
+    if hits != 1:
+        return hits, hints, None
+    expected = mutation.get("symbol")
+    if not expected:
+        return hits, hints, None
+    derived = enclosing_symbol(source, source.index(find), suffix)
+    if derived is None:
+        return hits, hints, (
+            f"symbol pinned as `{expected}` but this file type has no derivable "
+            f"enclosing symbol — the pin cannot be checked"
+        )
+    if derived != expected:
+        return hits, hints, (
+            f"anchor migrated: pinned to `{expected}`, now sits in `{derived}` — "
+            f"it still matches exactly once, so it would mutate the wrong site "
+            f"and report SURVIVED"
+        )
+    return hits, hints, None
+
+
 def precheck_spec(spec_path: Path) -> dict:
     """Anchor-only sweep: does every mutation still match exactly once?
 
@@ -783,6 +888,10 @@ def precheck_spec(spec_path: Path) -> dict:
         # the row that genuinely "needs no execution": you learn a spec cannot be
         # caught by containment from reading it, without paying for a suite run.
         "self_matching": [],
+        # Mutations carrying no `symbol` pin. Counted, never silently folded into
+        # `ok`: a consumer must be able to tell an anchor that was checked against
+        # its symbol from one that only had its match count verified.
+        "unpinned": [],
     }
 
     # One read per file, not per mutation: specs routinely aim a dozen mutations
@@ -802,15 +911,24 @@ def precheck_spec(spec_path: Path) -> dict:
             result["self_matching"].append(
                 {"name": mutation["name"], "file": mutation["file"]}
             )
-        hits, hints = anchor_status(cache[target], mutation["find"])
-        if hits == 1:
+        hits, hints, migration = anchor_check(
+            cache[target], mutation, Path(mutation["file"]).suffix
+        )
+        if hits == 1 and not migration:
             result["ok"] += 1
+            if not mutation.get("symbol"):
+                result["unpinned"].append(mutation["name"])
         else:
+            # A migration rides ANCHORS_DRIFTED rather than a verdict word of its
+            # own. It IS drift — to another symbol instead of to another count —
+            # and the pre-push hook scores these with an ordered substring `case`
+            # whose default arm ALLOWS the push, so a new word would ship
+            # silently non-blocking until every consumer was updated in lockstep.
             result["drifted"].append({
                 "name": mutation["name"],
                 "file": mutation["file"],
                 "hits": hits,
-                "hints": hints,
+                "hints": ([migration] + hints) if migration else hints,
             })
 
     # An unreadable target and a moved anchor are BOTH unverified guards, but they
@@ -1216,7 +1334,18 @@ def _run_spec_holding_the_tree(
             if target_command and mutation.get("test"):
                 scoring_command = list(target_command) + [mutation["test"]]
 
-            hits, hint_lines = anchor_status(source, mutation["find"])
+            hits, hint_lines, migration = anchor_check(
+                source, mutation, Path(mutation["file"]).suffix
+            )
+            if migration:
+                # Same precedence as a drifted count: a mutation that would land
+                # on the wrong site measures NOTHING, and the verdict has to say
+                # so rather than scoring it. Measured in HemaSuite 2026-09-22, a
+                # migrated anchor reported `SURVIVED` — which reads as "the guard
+                # does not bite" and sends you to rewrite a test that is correct.
+                result["refused"].append(f"{mutation['name']}: {migration}")
+                result["hints"][mutation["name"]] = hint_lines
+                continue
             if hits != 1:
                 # The assert-landed guard, and the reason this script exists. An
                 # anchor matching 0 times mutates nothing and the suite stays
@@ -1429,6 +1558,7 @@ def _run_spec_holding_the_tree(
 def _check_anchors(spec_paths: list[Path]) -> int:
     """Print an anchor sweep over every spec. 0 iff every anchor still matches once."""
     specs = ok = drifted = unreadable = mutations = skipped = unclassifiable = 0
+    unpinned = 0
     for spec_path in spec_paths:
         kind, detail = classify_spec_file(spec_path)
         if kind == "not-a-spec":
@@ -1453,6 +1583,7 @@ def _check_anchors(spec_paths: list[Path]) -> int:
         specs += 1
         mutations += result["mutations"]
         ok += result["ok"]
+        unpinned += len(result["unpinned"])
         drifted += len(result["drifted"])
         unreadable += len(result["unreadable"])
 
@@ -1506,6 +1637,13 @@ def _check_anchors(spec_paths: list[Path]) -> int:
         f"ok={ok} drifted={drifted} unreadable={unreadable} "
         f"skipped={skipped} unclassifiable={unclassifiable}"
     )
+    if unpinned:
+        print(
+            f"  {unpinned} of {mutations} mutations carry no `symbol` pin: their match "
+            "COUNT was checked and their site was not. An anchor can keep matching "
+            "exactly once and relocate into another function — that reports SURVIVED, "
+            "not REFUSED. Pin the ones whose `find` identifies a site by its NEIGHBOUR."
+        )
     if unclassifiable:
         print(
             "  a file under a swept glob that is not JSON at all is a broken spec "

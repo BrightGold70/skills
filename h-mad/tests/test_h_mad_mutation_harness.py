@@ -3398,3 +3398,132 @@ class TestTheTreeMustNotMoveUnderTheRun:
         assert proc.returncode == 2, proc.stdout + proc.stderr
         assert "MUTATION: TREE_MOVED before=" in proc.stdout, proc.stdout
         assert "no longer exists" in proc.stdout
+
+
+# --- anchor MIGRATION (#89, handed over from HemaSuite 2026-09-23) -------------
+#
+# Ordinary drift makes an anchor match 0 or 2+ times and the harness REFUSES,
+# which is loud. Migration keeps the count at exactly 1 while the match moves
+# into a DIFFERENT function, so every instrument agrees the spec is healthy and
+# the only symptom is a SURVIVED verdict — which reads as "the guard does not
+# bite" and sends you to rewrite a test that was correct.
+#
+# Measured 2026-09-22 in HemaSuite (`deck_guided_narrative_assets_task12.json`
+# M3): an anchor written as `<body tail>\n\n\ndef <next function>` identified its
+# site by its NEIGHBOUR. A later task inserted a function between the two whose
+# body ended in the byte-identical `    return frozenset(keys)`, the anchor
+# relocated, `--check-anchors` still said ok, and the run reported
+# `MUTATION: SURVIVED mutations=11 caught=10 survived=1`.
+
+_ORIGINAL = '''def first():
+    keys = {1}
+    return frozenset(keys)
+
+
+def second():
+    return 2
+'''
+
+# `inserted` ends in the byte-identical line, so the anchor below relocates into
+# it while still matching exactly once.
+_MIGRATED = '''def first():
+    keys = {1}
+    return frozenset(keys)
+
+
+def inserted():
+    keys = {2}
+    return frozenset(keys)
+
+
+def second():
+    return 2
+'''
+
+_NEIGHBOUR_ANCHOR = "    return frozenset(keys)\n\n\ndef second():"
+
+
+def _migration_spec(tmp_path: Path, source: str, symbol: str | None) -> Path:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "target.py").write_text(source, encoding="utf-8")
+    mutation = {
+        "name": "neighbour-anchored",
+        "file": "target.py",
+        "find": _NEIGHBOUR_ANCHOR,
+        "replace": _NEIGHBOUR_ANCHOR.replace("frozenset(keys)", "set(keys)"),
+    }
+    if symbol is not None:
+        mutation["symbol"] = symbol
+    spec = {
+        "root": str(tmp_path),
+        "command": [sys.executable, "-c", "import sys; sys.exit(0)"],
+        "mutations": [mutation],
+    }
+    spec_path = tmp_path / "mutations.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+    return spec_path
+
+
+def test_the_migrated_anchor_still_matches_exactly_once(tmp_path: Path) -> None:
+    """The premise. Without this, the rest of these tests prove nothing.
+
+    If the insert made the anchor match 0 or 2 times, ordinary drift would
+    already catch it and there would be no defect to close.
+    """
+    assert _MIGRATED.count(_NEIGHBOUR_ANCHOR) == 1
+    assert _ORIGINAL.count(_NEIGHBOUR_ANCHOR) == 1
+
+
+def test_precheck_reports_an_anchor_that_migrated_to_another_symbol(tmp_path: Path) -> None:
+    result = precheck_spec(_migration_spec(tmp_path, _MIGRATED, symbol="first"))
+    assert result["verdict"] == "ANCHORS_DRIFTED", result
+    assert result["ok"] == 0, result
+    assert len(result["drifted"]) == 1, result
+    entry = result["drifted"][0]
+    # It rides ANCHORS_DRIFTED rather than a new verdict word on purpose: the
+    # pre-push hook scores these with an ordered substring `case` whose default
+    # arm ALLOWS the push, so a new word would ship silently non-blocking.
+    assert entry["hits"] == 1, entry
+    assert "migrated" in " ".join(entry["hints"]).lower(), entry
+    assert "first" in " ".join(entry["hints"]) and "inserted" in " ".join(entry["hints"]), entry
+
+
+def test_precheck_passes_the_same_anchor_before_the_insert(tmp_path: Path) -> None:
+    """The positive control — the check must not condemn a healthy anchor."""
+    result = precheck_spec(_migration_spec(tmp_path, _ORIGINAL, symbol="first"))
+    assert result["verdict"] == "ANCHORS_OK", result
+    assert result["ok"] == 1, result
+
+
+def test_an_unpinned_mutation_is_counted_not_silently_passed(tmp_path: Path) -> None:
+    """A spec with no `symbol` keeps working — 976 committed mutations have none —
+    but it is REPORTED as unpinned rather than counted as a verified anchor.
+
+    Same rule `skipped=`/`unclassifiable=` already follow: a consumer must be able
+    to tell a sweep that checked something from one that set it aside.
+    """
+    result = precheck_spec(_migration_spec(tmp_path, _MIGRATED, symbol=None))
+    assert result["verdict"] == "ANCHORS_OK", result
+    assert result["ok"] == 1, result
+    assert result["unpinned"] == ["neighbour-anchored"], result
+
+
+def test_the_live_run_refuses_a_migrated_anchor(tmp_path: Path) -> None:
+    """The half a precheck-only check would leave open.
+
+    `anchor_status`'s own docstring says it was extracted so the precheck and the
+    live run cannot drift apart. A symbol check in only one of them recreates
+    exactly that: `--check-anchors` refuses while the run still mutates the wrong
+    function and scores it.
+    """
+    spec_path = _migration_spec(tmp_path, _MIGRATED, symbol="first")
+    before = (tmp_path / "target.py").read_text(encoding="utf-8")
+    result = run_spec(spec_path)
+    # REFUSED, which is the harness's existing word for "the anchor did not land,
+    # so this measured NOTHING" — and it already outranks SURVIVED and exits 2.
+    # A migrated anchor is that class exactly: before this check the same spec
+    # reported `SURVIVED`, which reads as "the guard does not bite".
+    assert result["verdict"] == "REFUSED", result
+    assert any("migrated" in r for r in result["refused"]), result["refused"]
+    assert any("first" in r and "inserted" in r for r in result["refused"]), result["refused"]
+    assert (tmp_path / "target.py").read_text(encoding="utf-8") == before

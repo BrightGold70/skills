@@ -1,8 +1,19 @@
 {
   "_why": "Task 5: verify the second-surface gate consumer delegates extraction, selection, substitution, and execution to h_mad_doc_block_exec.",
   "root": "../..",
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_collect_report_docs.py", "-q"],
-  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_collect_report_docs.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
   "mutations": [
     {
       "name": "wire-revert-extract",
@@ -58,7 +69,8 @@
       "test": "tests/test_h_mad_collect_report_docs.py::test_consumer_calls_the_helper_module_qualified",
       "file": "tests/test_h_mad_collect_report_docs.py",
       "find": "def _gate_block() -> dbe.Block:\n    return dbe.select(dbe.extract(SKILL_MD, \"## Second surface — the codex leg\"))\n\n\ndef _gate_bash_block() -> str:\n    return _gate_block().text\n\n\ndef _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunResult:\n    collector = SCRIPT_DIR / \"h_mad_collect_report.py\"\n    gate = SCRIPT_DIR / \"h_mad_audit_gate.py\"\n    block = _gate_block()\n    # the doc addresses the installed skill; point the snippet at this tree\n    subbed, _ = dbe.substitute(\n        block, {\"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py\": shlex.quote(str(gate))}\n    )\n    q = shlex.quote\n    preamble = (\n        f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '\n        f'--feature f --phase {phase} --cycle {cycle} '\n        f'--report {q(str(report))} --project-root {q(str(root))})\\n'\n    )\n    return dbe.run_block(subbed, preamble=preamble, timeout=60.0)",
-      "replace": "from h_mad_doc_block_exec import extract, select, run_block, substitute  # noqa: E402\n\ndef _gate_block() -> dbe.Block:\n    return select(extract(SKILL_MD, \"## Second surface — the codex leg\"))\n\n\ndef _gate_bash_block() -> str:\n    return _gate_block().text\n\n\ndef _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunResult:\n    collector = SCRIPT_DIR / \"h_mad_collect_report.py\"\n    gate = SCRIPT_DIR / \"h_mad_audit_gate.py\"\n    block = _gate_block()\n    # the doc addresses the installed skill; point the snippet at this tree\n    subbed, _ = substitute(\n        block, {\"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py\": shlex.quote(str(gate))}\n    )\n    q = shlex.quote\n    preamble = (\n        f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '\n        f'--feature f --phase {phase} --cycle {cycle} '\n        f'--report {q(str(report))} --project-root {q(str(root))})\\n'\n    )\n    return run_block(subbed, preamble=preamble, timeout=60.0)"
+      "replace": "from h_mad_doc_block_exec import extract, select, run_block, substitute  # noqa: E402\n\ndef _gate_block() -> dbe.Block:\n    return select(extract(SKILL_MD, \"## Second surface — the codex leg\"))\n\n\ndef _gate_bash_block() -> str:\n    return _gate_block().text\n\n\ndef _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunResult:\n    collector = SCRIPT_DIR / \"h_mad_collect_report.py\"\n    gate = SCRIPT_DIR / \"h_mad_audit_gate.py\"\n    block = _gate_block()\n    # the doc addresses the installed skill; point the snippet at this tree\n    subbed, _ = substitute(\n        block, {\"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py\": shlex.quote(str(gate))}\n    )\n    q = shlex.quote\n    preamble = (\n        f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '\n        f'--feature f --phase {phase} --cycle {cycle} '\n        f'--report {q(str(report))} --project-root {q(str(root))})\\n'\n    )\n    return run_block(subbed, preamble=preamble, timeout=60.0)",
+      "symbol": "_gate_block"
     }
   ]
 }
