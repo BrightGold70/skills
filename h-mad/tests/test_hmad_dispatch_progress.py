@@ -95,11 +95,28 @@ def test_agy_streaming_flag_precedes_print_and_prompt_stays_last(tmp_path):
     argv = cap.read_text()
     assert argv.index("--output-format stream-json") < argv.index("--print")
     # The prompt argument is the body plus the dispatch boundary the wrapper
-    # appends (J23), so it is the tail of argv rather than a bare equality — but
-    # it must still be what FOLLOWS --print, with no flag wedged between.
+    # appends (J23) and, when a coordinator resolves, the #106a handle line the
+    # wrapper prepends — so it is the tail of argv rather than a bare equality.
+    # What is load-bearing is that NO FLAG is wedged between `--print` and the
+    # prompt: that is the failure this test exists for (`--print` eats the next
+    # token, and agy just greeted). Pin that, and pin the whole allowed prefix by
+    # enumeration, so a future prepend cannot slip in unnoticed either.
     after_print = argv.split("--print", 1)[1]
-    assert after_print.lstrip().startswith("PROMPT-BODY")
-    assert "--" not in after_print.split("PROMPT-BODY", 1)[0]
+    prefix = after_print.split("PROMPT-BODY", 1)[0]
+    assert "PROMPT-BODY" in after_print, after_print
+    # A wedged flag is consumed AS the prompt, so what matters is whether the
+    # first token after `--print` starts with `--` — not whether `--` occurs
+    # anywhere. The handle line legitimately contains `--to`, and a blanket
+    # substring check condemns it while still missing a flag further along.
+    assert not after_print.lstrip().startswith("--"), after_print[:160]
+    for line in prefix.splitlines():
+        # `.strip()` because the stub records argv as `agy $*`, which joins the
+        # flags and the prompt with a space — so the prompt's first line arrives
+        # with one leading space that is an artefact of the capture, not of the
+        # wrapper.
+        assert not line.strip() or line.strip().startswith(
+            "[H-MAD] worker_done coordinator handle (use as --to): "
+        ), f"unexpected text between --print and the prompt: {line!r}"
 
 
 @jq_required

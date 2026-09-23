@@ -1238,3 +1238,82 @@ def test_an_ordinary_prompt_is_NOT_refused_by_the_size_guard(tmp_path):
     r = run(["exec", "agy", str(p), "--cd", str(tmp_path)], env=_env(b))
     assert "OVERSIZE" not in r.stderr, r.stderr
     assert r.returncode != 2, (r.returncode, r.stderr)
+
+
+# --- #106, handed over from HemaSuite 2026-09-23 ------------------------------
+#
+# Both halves are about what `exec` hands the child, and both were invisible from
+# inside this repo because the consumer is HemaSuite's test suite.
+
+def test_exec_prepends_the_coordinator_handle_when_one_resolves(tmp_path):
+    """#106a. Four shipped templates tell the worker to run
+    `orca orchestration send --to <COORDINATOR_HANDLE>` and to read the real value
+    off the `[H-MAD] worker_done coordinator handle (use as --to):` line "at the top
+    of your task spec". Only `task-create` ever wrote that line, so on the exec path
+    — which is how 6a-prime and 5e are actually dispatched — the placeholder reached
+    the agent as prose with nothing to resolve it against.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    stdin_cap = tmp_path / "stdin.txt"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_STDIN_CAPTURE=str(stdin_cap),
+                     HMAD_ORCA_COORDINATOR_TERMINAL="term_abc123"))
+    assert r.returncode == 0, r.stderr
+    delivered = stdin_cap.read_text()
+    # FIRST line: the templates say "at the top of your task spec", and an agent
+    # that has to hunt for it is one that reports the fallback instead.
+    assert delivered.splitlines()[0] == (
+        "[H-MAD] worker_done coordinator handle (use as --to): term_abc123"
+    ), delivered[:200]
+    # The prompt itself still arrives intact, and so does the J23 boundary.
+    assert "RED task: write a failing test." in delivered
+    assert _BOUNDARY in delivered
+
+
+def test_exec_omits_the_handle_line_when_no_coordinator_resolves(tmp_path):
+    """The absent line is the templates' own documented fallback ("skip the
+    worker_done emission and print your STATUS as usual"), so the correct
+    behaviour outside Orca is silence — not an error, and not a warning that would
+    fire on every headless dispatch and train the reader to ignore it.
+    """
+    b = _bindir(tmp_path, ["codex"])          # no `orca` on the isolated PATH
+    stdin_cap = tmp_path / "stdin.txt"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_STDIN_CAPTURE=str(stdin_cap)))
+    assert r.returncode == 0, r.stderr
+    delivered = stdin_cap.read_text()
+    assert "worker_done coordinator handle" not in delivered
+    assert delivered.splitlines()[0] == "RED task: write a failing test."
+    assert "no coordinator" not in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("agent,expected", [("codex", "codex"), ("agy", "gemini")])
+def test_exec_names_the_backend_the_child_actually_runs_under(tmp_path, agent, expected):
+    """#106b. HemaSuite's `shared/agent_backend.py` infers the backend from env
+    markers and raises `Conflicting agent backend markers` when more than one
+    family is present. A dispatch from inside Claude Code inherits `CLAUDECODE`
+    and the child adds its own, so every HPW test in that child died — and it read
+    as a tree regression, not as a dispatch defect.
+
+    `agy` maps to `gemini`, not `antigravity`: `resolve_agent_backend` also requires
+    the selected backend on PATH, the CLI is `agy` with no `antigravity` binary to
+    find, and HemaSuite's project document records the two as routing through the
+    same CLI.
+    """
+    b = _bindir(tmp_path, [agent])
+    env_cap = tmp_path / "env.txt"
+    r = run(["exec", agent, str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_ENV_CAPTURE=str(env_cap)))
+    assert r.returncode == 0, r.stderr
+    assert env_cap.read_text().strip() == f"HPW_AGENT_BACKEND={expected}"
+
+
+def test_an_operator_backend_value_is_never_overwritten(tmp_path):
+    """`:=` supplies a default the caller could not otherwise know; it does not
+    impose one. An operator who set the variable meant it."""
+    b = _bindir(tmp_path, ["codex"])
+    env_cap = tmp_path / "env.txt"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_ENV_CAPTURE=str(env_cap), HPW_AGENT_BACKEND="claude"))
+    assert r.returncode == 0, r.stderr
+    assert env_cap.read_text().strip() == "HPW_AGENT_BACKEND=claude"

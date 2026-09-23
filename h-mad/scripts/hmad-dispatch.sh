@@ -2891,9 +2891,53 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   # its stdin into the transcript (the defect), and agy does not — but a caller can
   # point --log at a file that already holds echoed content. Both backends append
   # their transcript to a caller-supplied log, preserving its existing content.
+  # #106a: prepend the coordinator handle, the way `task-create` already does.
+  # Four shipped templates (codex-implementer, agy-skill-reviewer, agy-spec-reviewer,
+  # orchestration-mode) tell the worker to run
+  # `orca orchestration send --to <COORDINATOR_HANDLE>` and to read the real value
+  # off the `[H-MAD] worker_done coordinator handle (use as --to):` line "at the top
+  # of your task spec". Only `_cmd_task_create` ever wrote that line, so on the exec
+  # path — which is how 6a-prime and 5e are actually dispatched — the placeholder
+  # reached the agent as prose with nothing to resolve it against.
+  #
+  # Quietly, and never fatally: `_coordinator` prints to stderr and returns 1 when it
+  # cannot resolve one, which is the ordinary case for a headless dispatch outside
+  # Orca. An absent line is already the templates' documented fallback ("skip the
+  # worker_done emission and print your STATUS as usual"), so the correct behaviour
+  # when there is no coordinator is silence, not an error and not a warning.
+  local _coord=""; _coord="$(_coordinator 2>/dev/null)" || _coord=""
   local boundary; boundary="$(_dispatch_boundary)"
   local bounded_prompt; bounded_prompt="$(mktemp -t hmad_exec_prompt.XXXXXX)" || return 1
-  { cat "$promptfile"; printf '\n%s\n' "$boundary"; } > "$bounded_prompt"
+  {
+    if [ -n "$_coord" ]; then
+      printf '[H-MAD] worker_done coordinator handle (use as --to): %s\n\n' "$_coord"
+    fi
+    cat "$promptfile"
+    printf '\n%s\n' "$boundary"
+  } > "$bounded_prompt"
+
+  # #106b: name the backend the child is actually running under.
+  #
+  # HemaSuite's `shared/agent_backend.py` infers the backend from env markers and
+  # raises `Conflicting agent backend markers` when more than one family is present.
+  # A dispatch from inside Claude Code inherits `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT`
+  # and the child adds its own (`CODEX_SESSION_ID`, `GEMINI_CLI`), so two families
+  # are present and every HPW test in that child dies — a failure that reads as a
+  # tree regression rather than as a dispatch defect. `HPW_AGENT_BACKEND` is that
+  # module's documented override and it outranks marker detection.
+  #
+  # `agy` maps to `gemini`, not to `antigravity`: `resolve_agent_backend` also
+  # requires the selected backend to be found on PATH, the CLI is `agy` with no
+  # `antigravity` binary to find, and HemaSuite's own project document records that
+  # antigravity and gemini route through the same CLI and are treated as equivalent.
+  #
+  # `:=` so an operator's explicit value always wins — this supplies a default the
+  # caller could not otherwise know, it does not impose one.
+  case "$agent" in
+    codex) : "${HPW_AGENT_BACKEND:=codex}" ;;
+    agy)   : "${HPW_AGENT_BACKEND:=gemini}" ;;
+  esac
+  export HPW_AGENT_BACKEND
   # Dispatch-start marker for the heartbeat's elapsed field. Set before the start
   # stamp so every stamp in this dispatch measures from the same origin.
   _HMAD_EXEC_T0="$SECONDS"

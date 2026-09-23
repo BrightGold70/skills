@@ -4,6 +4,13 @@
 # transcript to stdout, and exits with a controllable code.
 printf 'codex %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
 
+# #106b: report the agent-backend env the wrapper handed us. `${VAR-<unset>}`
+# distinguishes an explicitly empty value from an unset one — the two take
+# different branches in HemaSuite's resolve_agent_backend.
+if [ -n "${HMAD_STUB_ENV_CAPTURE:-}" ]; then
+  printf 'HPW_AGENT_BACKEND=%s\n' "${HPW_AGENT_BACKEND-<unset>}" > "$HMAD_STUB_ENV_CAPTURE"
+fi
+
 # Consume stdin (the piped prompt); capture it if asked.
 # HMAD_STUB_CODEX_ECHO_STDIN models the REAL codex behaviour that produced the
 # verdict-laundering defect: `codex exec ... -` echoes the piped prompt into its
