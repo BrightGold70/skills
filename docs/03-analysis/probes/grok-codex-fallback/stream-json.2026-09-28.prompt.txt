@@ -1,0 +1,2 @@
+Read the file a.txt in the current directory using a tool, then create a file b.txt containing the word "probe". Then reply with exactly one final line:
+STATUS: DONE
