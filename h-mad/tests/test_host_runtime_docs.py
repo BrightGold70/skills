@@ -198,13 +198,17 @@ def test_claims_lines_execute_across_invocations(adapter_id: str, tmp_path: Path
     assert "cannot_judge" in control.stdout, "oracle without the file's session id must report cannot_judge"
 
 
-@pytest.mark.parametrize("adapter_id", (*HOST_ADAPTERS, "handoff-codex", "handoff-agy"), ids=(*HOST_ADAPTERS, "handoff-codex", "handoff-agy"))
+@pytest.mark.parametrize("adapter_id", (*HOST_ADAPTERS, "handoff-codex", "handoff-agy", "handoff-grok"), ids=(*HOST_ADAPTERS, "handoff-codex", "handoff-agy", "handoff-grok"))
 def test_not_applicable_rows_state_a_reason(adapter_id: str) -> None:
     _required_section(adapter_id, "## Construct mapping", "not-applicable rows state a reason")
     table = host_parity.adapter_table(ADAPTERS[adapter_id].read_text(encoding="utf-8"))
     assert table.problems == [], f"Construct mapping table must parse: {table.problems}"
     rows = [row for row in table.rows if row.status == "not-applicable"]
     assert rows, "Construct mapping must include at least one not-applicable row"
+    if adapter_id == "handoff-grok":
+        settings = _row(adapter_id, "claude-settings", "claude-settings not-applicable")
+        assert settings.status == "not-applicable", "handoff-grok claude-settings must be not-applicable"
+        assert "todo_write" in settings.mapping, "handoff-grok claude-settings must explain that todo_write needs no settings opt-in"
     for row in rows:
         mapping = re.sub(r"`[^`]*`", " ", row.mapping).strip()
         assert len(re.findall(r"[A-Za-z]{2,}", mapping)) >= 3, f"{row.id} not-applicable mapping needs a reason of at least three words"
@@ -221,10 +225,14 @@ def test_not_applicable_rows_state_a_reason(adapter_id: str) -> None:
         ("handoff-agy", "status", "status", "not-applicable"),
         ("handoff-agy", "manage-task", "mapping", "manage_task"),
         ("handoff-agy", "notepad", "mapping", ".omc/notepad.md"),
+        ("handoff-grok", "status", "status", "mapped"),
+        ("handoff-grok", "todo-write", "mapping", "todo_write"),
+        ("handoff-grok", "ctrl-t", "mapping", "Ctrl+T"),
     ],
     ids=[
         "handoff-codex-status", "handoff-codex-notepad", "handoff-codex-update-plan",
         "handoff-agy-status", "handoff-agy-manage-task", "handoff-agy-notepad",
+        "handoff-grok-status", "handoff-grok-todo-write", "handoff-grok-ctrl-t",
     ],
 )
 def test_task_tools_row(adapter_id: str, case: str, field: str, token: str) -> None:
@@ -232,6 +240,10 @@ def test_task_tools_row(adapter_id: str, case: str, field: str, token: str) -> N
     assert token in getattr(row, field), f"{adapter_id} task-tools {case} must state {token}"
     if case == "update-plan":
         assert "lead" in row.mapping.lower(), "handoff-codex task-tools must identify update_plan as a lead"
+    if adapter_id == "handoff-grok" and case == "todo-write":
+        tools = _required_section(adapter_id, "## grok tool mapping", "grok tool mapping")
+        for name in ("todo_write", "Ctrl+T", "spawn_subagent", "HANDOFF_SKILL_ROOT", "loaded skill path"):
+            assert name in tools, f"handoff-grok grok tool mapping must state {name}"
 
 
 @pytest.mark.parametrize(
@@ -321,32 +333,45 @@ def test_grok_session_id_condition(case: str, token: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "case,token",
+    "adapter_id,case,token",
     [
-        ("version", "1.0.41"),
-        ("compat-skills", "compat.claude.skills"),
-        ("compat-hooks", "compat.claude.hooks"),
+        ("h-mad-grok", "version", "1.0.41"),
+        ("h-mad-grok", "compat-skills", "compat.claude.skills"),
+        ("h-mad-grok", "compat-hooks", "compat.claude.hooks"),
+        ("handoff-grok", "version", "1.0.41"),
+        ("handoff-grok", "compat-skills", "compat.claude.skills"),
     ],
-    ids=["h-mad-grok-version", "h-mad-grok-compat-skills", "h-mad-grok-compat-hooks"],
+    ids=["h-mad-grok-version", "h-mad-grok-compat-skills", "h-mad-grok-compat-hooks", "handoff-grok-version", "handoff-grok-compat-skills"],
 )
-def test_version_and_compatibility(case: str, token: str) -> None:
-    section = _required_section("h-mad-grok", "## Version and compatibility", f"version and compatibility {case}")
+def test_version_and_compatibility(adapter_id: str, case: str, token: str) -> None:
+    section = _required_section(adapter_id, "## Version and compatibility", f"version and compatibility {case}")
     assert token in section, f"grok Version and compatibility must state {token}"
     if case == "version":
         assert "grok inspect" in section, "grok Version and compatibility must name the verification command"
-        text = ADAPTERS["h-mad-grok"].read_text(encoding="utf-8")
-        headings = (
-            "# grok runtime adapter", "## Version and compatibility", "## Package and project roots",
-            "## Install", "## Project trust", "## Hooks", "## The TDD gate",
-            "## Author and reviewer roles", "## Context budget and claims", "## Memory index",
-            "## Construct mapping", "## What does not change",
-        )
+        text = ADAPTERS[adapter_id].read_text(encoding="utf-8")
+        if adapter_id == "handoff-grok":
+            headings = (
+                "# grok runtime adapter", "## Version and compatibility", "## Resolve the skill package",
+                "## grok tool mapping", "## Mode routing", "## Construct mapping", "## Safety invariants",
+            )
+        else:
+            headings = (
+                "# grok runtime adapter", "## Version and compatibility", "## Package and project roots",
+                "## Install", "## Project trust", "## Hooks", "## The TDD gate",
+                "## Author and reviewer roles", "## Context budget and claims", "## Memory index",
+                "## Construct mapping", "## What does not change",
+            )
         positions = [text.find(heading + "\n") for heading in headings]
         assert -1 not in positions and positions == sorted(positions), "grok adapter must have every required section in order"
     elif case == "compat-skills":
-        roots = _required_section("h-mad-grok", "## Package and project roots", "package and project roots")
-        for root in ("HMAD_SKILL_ROOT", "~/.claude/skills/h-mad", "~/.agents/skills/h-mad"):
-            assert root in roots, f"grok Package and project roots must state {root}"
+        if adapter_id == "handoff-grok":
+            roots = _required_section(adapter_id, "## Resolve the skill package", "resolve the skill package")
+            for root in ("HANDOFF_SKILL_ROOT", "loaded skill path"):
+                assert root in roots, f"handoff-grok Resolve the skill package must state {root}"
+        else:
+            roots = _required_section(adapter_id, "## Package and project roots", "package and project roots")
+            for root in ("HMAD_SKILL_ROOT", "~/.claude/skills/h-mad", "~/.agents/skills/h-mad"):
+                assert root in roots, f"grok Package and project roots must state {root}"
     else:
         trust = _required_section("h-mad-grok", "## Project trust", "project trust")
         assert "/hooks-trust" in trust and "--trust" in trust, "grok Project trust must name both trust controls"
@@ -386,7 +411,7 @@ def test_claude_projects_store_row(case: str, field: str, token: str) -> None:
         assert "h_mad_check_memory_index.py" in section, "grok Memory index must name the checker"
 
 
-@pytest.mark.parametrize("adapter_id", ["h-mad-grok"], ids=["h-mad-grok"])
+@pytest.mark.parametrize("adapter_id", ["h-mad-grok", "handoff-grok"], ids=["h-mad-grok", "handoff-grok"])
 def test_grok_source_cells_format(adapter_id: str) -> None:
     _required_section(adapter_id, "## Construct mapping", "grok source cells format")
     table = host_parity.adapter_table(ADAPTERS[adapter_id].read_text(encoding="utf-8"))
