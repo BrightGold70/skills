@@ -4,8 +4,11 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
+import stat
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 DROPPED_ENV = ("HPW_AGENT_BACKEND", "HMAD_HOST", "HMAD_CODEX_UNAVAILABLE", "CODEX_PROJECT_DIR")
@@ -77,3 +80,103 @@ def marker_shim(python: Path, marker: Path) -> Path:
 
 def sleeper(path: Path, pidfile: Path, seconds: int) -> Path:
     return _shell_script(path, f"sleep {int(seconds)} &\necho $! > {shlex.quote(str(pidfile))}\nwait")
+
+
+@dataclass(frozen=True)
+class CorpusRow:
+    name: str
+    root: Path
+    cwd: Path
+    command: str
+    expected_new: str
+
+
+def shell_corpus(tmp: Path, scripts_dir: Path) -> list[CorpusRow]:
+    """Build the 251-cell shell-policy differential from one real venv tree."""
+    def argv_for(root: Path) -> tuple[tuple[str, str, bool], ...]:
+        return (
+            ("pytest", "-m pytest tests/test_x.py", True),
+            ("c-write", '-c "open(\'x\',\'w\')"', False),
+            ("pip", "-m pip install x", False),
+            ("script", "script.py", False),
+            ("semicolon", "-m pytest tests/test_x.py; touch y", False),
+            ("state-write", f"{scripts_dir}/h_mad_state_write.py {root}/docs/.bkit-memory.json --set x=y", True),
+        )
+
+    base = tmp / "base" / "root"
+    project = base / "hematology-paper-writer"
+    project.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(base)], check=True, stdin=subprocess.DEVNULL,
+                   timeout=30.0, env=hermetic_env())
+    write_state(base, {'agent "q"\\newline\n[H-MAD:MARKER]%': {"phase": "step5"}})
+    test = project / "tests" / "test_x.py"
+    test.parent.mkdir()
+    test.write_text("def test_red():\n    assert False\n", encoding="utf-8")
+    build_venv(project / ".venv", with_pytest=True)
+    _shell_script(project / ".venv" / "bin" / "python-evil", "exit 0")
+    outside = tmp / "outside-venv"
+    build_venv(outside, with_pytest=True)
+
+    rows: list[CorpusRow] = []
+    states = ("contained", "venv-symlink-out", "bin-symlink-out", "cfg-missing", "cfg-symlink")
+    for state in states:
+        root = tmp / state / "root"
+        root.parent.mkdir()
+        shutil.copytree(base, root, symlinks=True)
+        sub = root / "hematology-paper-writer"
+        venv = sub / ".venv"
+        (root / "sibling").mkdir()
+        if state == "venv-symlink-out":
+            shutil.rmtree(venv)
+            venv.symlink_to(outside, target_is_directory=True)
+            assert not os.path.realpath(venv).startswith(str(root) + os.sep)
+        elif state == "bin-symlink-out":
+            shutil.rmtree(venv / "bin")
+            (venv / "bin").symlink_to(outside / "bin", target_is_directory=True)
+            assert not os.path.realpath(venv / "bin").startswith(str(root) + os.sep)
+        elif state == "cfg-missing":
+            (venv / "pyvenv.cfg").unlink()
+            assert not os.path.lexists(venv / "pyvenv.cfg")
+        elif state == "cfg-symlink":
+            cfg = venv / "pyvenv.cfg"
+            cfg.unlink()
+            real = sub / "cfg-real"
+            real.write_text("home=inside\n", encoding="utf-8")
+            cfg.symlink_to(real)
+            assert cfg.is_symlink() and not stat.S_ISREG(cfg.lstat().st_mode)
+
+        versioned = f"python{sys.version_info.major}.{sys.version_info.minor}"
+        spellings = (
+            ("absolute", str(venv / "bin/python"), root, True),
+            ("root-prefix", "hematology-paper-writer/.venv/bin/python", root, True),
+            ("sub-cwd", ".venv/bin/python", sub, True),
+            ("sub-dot", "./.venv/bin/python", sub, True),
+            ("sibling", "../hematology-paper-writer/.venv/bin/python", root / "sibling", True),
+            ("doubled", "hematology-paper-writer/.venv/bin/python", sub, False),
+            ("versioned", f".venv/bin/{versioned}", sub, True),
+            ("python-evil", ".venv/bin/python-evil", sub, True),
+        )
+        for spelling, token, cwd, resolves in spellings:
+            for args_name, args, allowed_argv in argv_for(root):
+                allow = state == "contained" and resolves and allowed_argv
+                rows.append(CorpusRow(f"{state}/{spelling}/{args_name}", root, cwd,
+                                      f"{token} {args}", "allow" if allow else "deny"))
+
+    root = tmp / "contained" / "root"
+    sub = root / "hematology-paper-writer"
+    for args_name, args, _ in argv_for(root):
+        rows.append(CorpusRow(f"outside/{args_name}", root, sub,
+                              f"{outside}/bin/python {args}", "deny"))
+    for name, token, args, expected in (
+        ("usr-python-pytest", "/usr/bin/python3", "-m pytest tests/test_x.py", "allow"),
+        ("usr-python-state-write", "/usr/bin/python3",
+         f"{scripts_dir}/h_mad_state_write.py {root}/docs/.bkit-memory.json --set x=y", "allow"),
+        ("other-venv", "venv/bin/python", "-m pytest tests/test_x.py", "deny"),
+        ("venv-pytest", ".venv/bin/pytest", "tests/test_x.py", "deny"),
+        ("bare-python-pytest", "python3", "-m pytest tests/test_x.py", "allow"),
+    ):
+        rows.append(CorpusRow(f"control/{name}", root, sub, f"{token} {args}", expected))
+    assert len(rows) == 251
+    assert sum(row.expected_new == "allow" for row in rows) == 17
+    assert len({row.name for row in rows}) == len(rows)
+    return rows

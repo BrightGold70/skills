@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
 import subprocess
 import sys
@@ -11,7 +12,7 @@ import time
 
 import pytest
 
-from tdd_gate_support import build_venv, fake_venv, hermetic_env, sleeper, write_plan, write_state
+from tdd_gate_support import build_venv, fake_venv, hermetic_env, shell_corpus, sleeper, write_plan, write_state
 
 
 CODEX_GATE = Path(__file__).resolve().parents[1] / "hooks" / "h-mad-codex-tdd-gate.py"
@@ -42,13 +43,15 @@ def _payload(target: str = TARGET, *, cwd: str | None = None) -> dict:
     return payload
 
 
-def _run(root: Path, payload: dict, *, gate: Path = CODEX_GATE, timeout: float = 60.0):
+def _run(root: Path, payload: dict, *, gate: Path = CODEX_GATE, timeout: float = 60.0,
+         path: str | None = None):
     start = time.monotonic()
     try:
         process = subprocess.run(
             [sys.executable, str(gate)], input=json.dumps(payload), capture_output=True,
             text=True, cwd=root,
-            env=hermetic_env(CODEX_PROJECT_DIR=str(root), HMAD_STUB_HOSTILE="all"),
+            env=hermetic_env(CODEX_PROJECT_DIR=str(root), HMAD_STUB_HOSTILE="all",
+                             **({"PATH": path} if path is not None else {})),
             timeout=timeout, check=False,
         )
     except subprocess.TimeoutExpired:
@@ -227,3 +230,97 @@ def test_codex_gate_keeps_no_private_resolver():
     source = CODEX_GATE.read_text(encoding="utf-8")
     for token in ("_target_phase5_status", "_derived_test", "_test_exit", "h_mad_derive_test_path.sh"):
         assert token not in source, f"hook still owns private resolution: {token}"
+
+
+@pytest.fixture(scope="module")
+def shell_rows(tmp_path_factory):
+    scripts_dir = CODEX_GATE.parent.parent / "scripts"
+    return shell_corpus(tmp_path_factory.mktemp("shell-policy"), scripts_dir)
+
+
+def _shell_verdict(root: Path, cwd: Path, command: str) -> tuple[str, str]:
+    verdict, reason, _ = _run(
+        root, {"tool_name": "shell_command", "cwd": str(cwd),
+               "tool_input": {"command": command}}, path="/usr/bin:/bin",
+    )
+    return verdict, reason
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("contained/sub-cwd/pytest", "allow"),
+    ("contained/root-prefix/pytest", "allow"),
+    ("venv-symlink-out/sub-cwd/pytest", "deny"),
+    ("venv-symlink-out/root-prefix/pytest", "deny"),
+    ("contained/doubled/pytest", "deny"),
+    ("contained/sub-cwd/c-write", "deny"),
+    ("contained/root-prefix/c-write", "deny"),
+    ("contained/doubled/c-write", "deny"),
+    ("venv-symlink-out/sub-cwd/c-write", "deny"),
+    ("venv-symlink-out/root-prefix/c-write", "deny"),
+    ("venv-symlink-out/doubled/c-write", "deny"),
+], ids=[
+    "sub-cwd-contained", "root-cwd-contained", "sub-cwd-escaping", "root-cwd-escaping",
+    "doubled-path", "c-sub-cwd-contained", "c-root-cwd-contained", "c-doubled-contained",
+    "c-sub-cwd-escaping", "c-root-cwd-escaping", "c-doubled-escaping",
+])
+def test_shell_venv_token(shell_rows, name, expected):
+    row = next(row for row in shell_rows if row.name == name)
+    verdict, reason = _shell_verdict(row.root, row.cwd, row.command)
+    assert verdict == expected, f"{name}: venv token must be {expected}: {verdict}: {reason}"
+
+
+@pytest.mark.parametrize("case,expected", [
+    ("contained-venv", "allow"),
+    ("usr-bin-python3-control", "allow"),
+    ("escaping-venv", "deny"),
+    ("script-outside-scripts", "deny"),
+], ids=["contained-venv", "usr-bin-python3-control", "escaping-venv", "script-outside-scripts"])
+def test_shell_control_allowlist_under_a_venv(shell_rows, case, expected):
+    by_name = {row.name: row for row in shell_rows}
+    if case == "contained-venv":
+        row = by_name["contained/sub-cwd/pytest"]
+    elif case == "usr-bin-python3-control":
+        row = by_name["control/usr-python-pytest"]
+    elif case == "escaping-venv":
+        row = by_name["venv-symlink-out/sub-cwd/pytest"]
+    else:
+        row = by_name["contained/sub-cwd/pytest"]
+        script = row.cwd / "h_mad_wire_registry.py"
+        script.write_text("# script outside h-mad/scripts\n", encoding="utf-8")
+        command = f".venv/bin/python {script} verify"
+        verdict, reason = _shell_verdict(row.root, row.cwd, command)
+        assert verdict == expected, f"scripts-root rule must deny {command}: {verdict}: {reason}"
+        return
+    verdict, reason = _shell_verdict(row.root, row.cwd, row.command)
+    assert verdict == expected, f"{case}: shell control must be {expected}: {verdict}: {reason}"
+
+
+def test_venv_token_keys_on_the_lexical_name(tmp_path):
+    root = _root(tmp_path)
+    sub = root / "hematology-paper-writer"
+    python = fake_venv(sub, "exit 0")
+    python.unlink()
+    python.symlink_to("/bin/cat")
+    (sub / "notes.txt").write_text("notes\n", encoding="utf-8")
+    verdict, reason = _shell_verdict(root, sub, ".venv/bin/python notes.txt")
+    assert verdict == "deny", f"lexical python token must retain python argv rules: {verdict}: {reason}"
+
+
+def test_shell_policy_corpus_allows_exactly_the_expected_rows(shell_rows):
+    actual = set()
+    expected = {row.name for row in shell_rows if row.expected_new == "allow"}
+    for row in shell_rows:
+        verdict, reason = _shell_verdict(row.root, row.cwd, row.command)
+        assert verdict in {"allow", "deny"}, f"{row.name}: invalid verdict {verdict}: {reason}"
+        if verdict == "allow":
+            actual.add(row.name)
+    assert actual == expected, f"shell-policy corpus allowed mismatch: missing={expected - actual}, extra={actual - expected}"
+
+
+def test_venv_token_still_obeys_the_argv_rules(shell_rows):
+    row = next(row for row in shell_rows if row.name == "contained/sub-cwd/pytest")
+    command = ".venv/bin/python -c pass"
+    assert runpy.run_path(str(CODEX_GATE))["SIMPLE_SHELL_COMMAND"].fullmatch(command), \
+        "argv-rule oracle must pass the lexical shell subset"
+    verdict, reason = _shell_verdict(row.root, row.cwd, command)
+    assert verdict == "deny", f"contained venv must still reject python -c: {verdict}: {reason}"
