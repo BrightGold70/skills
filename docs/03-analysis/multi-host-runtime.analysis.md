@@ -254,3 +254,13 @@ Run 2026-09-29 from the worktree after the `closed_diff()` fix, BASE_SHA `3b5c43
 - `--arm install-b` (real default roots, all four links present) → `BYTE-IDENTITY: PASS arm=install-b cases=10`.
 - Negative control 5, `env HOME=<empty scratch>` → `BYTE-IDENTITY: UNREADABLE reason=links_absent`, exit 2.
 - Negative control 6, `--base 9df441ca --arm budget` → `BYTE-IDENTITY: FAIL arm=budget case=run-ok-unset`.
+
+### Task 18 — coupled-suite gate (orchestrator, 2026-09-29, HEAD ec9e2933)
+
+1. AC-12.1 full suite (`env -u HMAD_HOST`): 1 failed (baseline `test_top_level_key_set_still_matches`) / 4256 passed, plus 1 collection-time error that did not recur (run concurrently with another worktree's full suite and a codex dispatch).
+2. Same with ambient `CLAUDE_ZZZ_PROBE=1`: 1 failed (baseline) / 4256 passed, 0 errors.
+3. AC-8.3: `test_h_mad_context_budget.py` 31 passed (`env -u HMAD_HOST`) and 31 passed (`HMAD_HOST=claude`).
+4. Node-id floor: 0 base node ids missing at HEAD (3893 base → 4257 head), compared under `LC_ALL=C` sort — a raw `comm` of the two files reported 1631 because they were sorted under different collations.
+5. Append-only: `h-mad/tests/conftest.py` +22/−0; no other pre-existing test file modified or deleted.
+6. Anchors: `ANCHORS_OK specs=103 mutations=1024 drifted=0`.
+7. Wire-pin gate: `WIREPIN: PASS tasks=19 wiring=3 unpinned=0 mislabeled=0`.
