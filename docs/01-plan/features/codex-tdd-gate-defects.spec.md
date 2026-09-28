@@ -104,26 +104,42 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   - Arm E1: the hook reads stdin JSON. If `tool_input.file_path` ends in `SENTINEL_E1.py`, it
     writes a reason to stderr and runs `exit 1`. Otherwise it runs `exit 0`.
   - Arm E2 (positive control): the same hook, but with `exit 2`.
+  - Arm EJ: the same hook, but on the sentinel it prints
+    `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":…}}`
+    and exits 0. This is form (b) of AC-6.5.
   - Arm E0 (negative control): the same hook, but with `exit 0` in both cases.
-  - **Precondition for every arm**, checked before any real tool call: capture a real Claude Code
+  - **Replay check for every arm**, before any real tool call: capture a real Claude Code
     PreToolUse payload for a Write of the sentinel file. Take it from a logging hook, not from
-    hand-written JSON. Replay it into the arm's hook by hand and read the rc: E1 must give 1, E2
-    must give 2 and E0 must give 0. If the rc is anything else, the arm is **not run** and the
-    probe records `UNMEASURED` for it.
+    hand-written JSON. Replay it into the arm's hook by hand: E1 must give rc 1, E2 rc 2, EJ rc 0
+    with the deny object above on stdout, and E0 rc 0. If the result is anything else, the arm is
+    **not run** and the probe records `UNMEASURED` for it.
+  - **Invocation precondition for every arm**: each arm's sentinel name carries a fresh nonce; the
+    arm counts as run only if its hook logged `HIT <nonce>` for `tool_name=Write` on that sentinel.
+    A `HIT` written by the hand replay does not count. An arm with no such line is `UNMEASURED`.
   - Then ask a Claude Code session to Write the sentinel file, and record whether the file exists
     afterwards.
 - **Outcomes** (the probe's only readings):
   - `E1_BLOCKS`: E1 absent, E2 absent, E0 present. `exit 1` blocks.
   - `E1_DOES_NOT_BLOCK`: E1 present, E2 absent, E0 present. This confirms the defect.
-  - `INCONCLUSIVE`: any other combination, or any arm `UNMEASURED`. Nothing in FR-6's
+  - `INCONCLUSIVE`: any other combination, or any of E1, E2, E0 `UNMEASURED`. Nothing in FR-6's
     blocking-form ACs is implemented until a re-run yields one of the two readings above.
+- **Per-form readings** (`FORM_A` reads arm E2, `FORM_B` reads arm EJ), each one of:
+  - `BLOCKS`: the arm's sentinel is absent and E0's is present.
+  - `DOES_NOT_BLOCK`: the arm's sentinel is present and E0's is present.
+  - `INCONCLUSIVE`: E0's sentinel is absent, or E0 or the arm is `UNMEASURED`.
+
+  `E1_BLOCKS` and `E1_DOES_NOT_BLOCK` both require E2 absent, so under either reading
+  `FORM_A=BLOCKS`. `FORM_B` is independent of the three-valued reading.
 - **Acceptance Criteria**:
   - AC-0.1: The probe's recipe and its one reading are committed under
     `docs/03-analysis/probes/codex-tdd-gate-defects/`, together with the Claude Code version it ran
     on. The reading is stamped at the skills sha, the capture of the replayed payload is stored,
-    and the three hand-replay rcs are recorded.
-  - AC-0.2: The recorded reading is exactly one of `E1_BLOCKS`, `E1_DOES_NOT_BLOCK` or
-    `INCONCLUSIVE`, and FR-6 selects its branch from it (AC-6.5 or AC-6.6).
+    the four hand-replay results (E1, E2, EJ, E0) are recorded, and each arm's `HIT <nonce>` log
+    is stored.
+  - AC-0.2: The recorded reading is exactly one of `E1_BLOCKS`, `E1_DOES_NOT_BLOCK`,
+    `INCONCLUSIVE`, together with a per-form reading `FORM_A`/`FORM_B` ∈ {BLOCKS, DOES_NOT_BLOCK,
+    INCONCLUSIVE}. FR-6 selects its branch from the first (AC-6.5, AC-6.6 or AC-6.7) and its form
+    from the second.
 
 ### FR-1: One shared judge serves both gates (D1)
 
@@ -259,10 +275,15 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   - AC-3.3 [OD-1]: the fixture is a contained venv whose `bin/python` is a symlink to an
     interpreter outside the root, which is the real HemaSuite shape. It is accepted. This AC flips
     to DENY if the operator keeps D2's literal wording, and then AC-3.1 is the only allowed shape.
-  - AC-3.4: A Codex `shell_command` payload `hematology-paper-writer/.venv/bin/python -m pytest
-    tests/test_x.py` with `cwd` set to the sub-project is allowed during step5 when the venv is
-    contained. It is denied when the venv escapes.
-    `hematology-paper-writer/.venv/bin/python -c "open('x','w')"` is denied in both cases.
+  - AC-3.4: During step5, the Codex `shell_command` payloads
+    `.venv/bin/python -m pytest tests/test_x.py` with `cwd` set to the sub-project, and
+    `hematology-paper-writer/.venv/bin/python -m pytest hematology-paper-writer/tests/test_x.py`
+    with `cwd` at the root, are each allowed when the venv is contained, and each denied when the
+    venv escapes. `hematology-paper-writer/.venv/bin/python -m pytest …` with `cwd` at the
+    sub-project names a path that does not exist
+    (`<root>/hematology-paper-writer/hematology-paper-writer/.venv/bin/python`) and is denied.
+    The same three token/`cwd` pairs with `-c "open('x','w')"` in place of `-m pytest …` are each
+    denied, whether the venv is contained or escapes.
   - AC-3.5: The existing test `test_codex_hook_rejects_untrusted_executable_paths` passes
     unmodified.
 
@@ -357,13 +378,14 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     on PATH and `codex_status` available reaches the Codex-authorship refusal. Today it exits 0
     silently.
   - AC-6.2: The existing positional-argument tests in `test_h_mad_tdd_gate_state_resolution.py` and
-    `test_h_mad_tdd_gate_codex.py` pass. Their rc assertions change only as AC-6.5 requires.
+    `test_h_mad_tdd_gate_codex.py` pass. Their rc assertions change only as AC-6.5 or AC-6.6 requires.
   - AC-6.3 [OD-5]: No `pytest` on PATH, and the resolved test passes. The result is a refusal with
     `kind=pytest-missing` or `test-passing`, never an allow.
   - AC-6.4: A **new** production file, whose target does not exist yet, with a passing resolved
     test is refused `test-passing`. Today it is allowed without a run.
-  - AC-6.5 (branch `E1_DOES_NOT_BLOCK`): every refusal site emits one blocking form, chosen in the
-    design. The recommended form is **(b)**, for parity with the Codex gate's `_deny`.
+  - AC-6.5 (branch `E1_DOES_NOT_BLOCK`): every refusal site emits one blocking form: the form FR-0
+    proves blocks; if both (a) and (b) are proven, (b), for parity with the Codex gate's `_deny`.
+    A form is proven when its per-form reading is `BLOCKS` (`FORM_A` for (a), `FORM_B` for (b)).
     - **(a)** rc = 2 with the reason on stderr.
     - **(b)** rc = 0 and exactly one stdout JSON object with
       `hookSpecificOutput.hookEventName == "PreToolUse"`,
@@ -373,11 +395,34 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     For each refusal site, a test asserts that exact form, and asserts that rc is not 1. A test
     that asserts only "non-zero" does not satisfy this AC. `grep -c '^\s*exit 1\s*$'` on the hook
     returns 0.
-  - AC-6.6 (branch `E1_BLOCKS`): the exit codes are unchanged. For each refusal site, a test asserts
-    rc = 1 **and** the `[H-MAD-TDD-GATE] BLOCK:` stderr prefix, so that a later change of form is
-    visible. The FR-0 reading is cited in the test module's docstring.
+  - AC-6.6 (branch `E1_BLOCKS`): `exit 1` is **not** kept. Every refusal site uses one form, so
+    that one form serves both gates where FR-0 allows it: if FR-0 proves (b) (`FORM_B=BLOCKS`),
+    every site uses (b), the form of the Codex gate's `_deny`; if FR-0 proves only (a), every site
+    uses (a), rc = 2. `E1_BLOCKS` requires E2 absent, so (a) is always proven on this branch and
+    one of the two always applies. The per-site tests and the `grep -c '^\s*exit 1\s*$'` → 0
+    check are AC-6.5's, and the FR-0 reading is cited in the test module's docstring.
+    - **Existing assertions that change** (the plan's census, re-read in this revision by test
+      function over `h-mad/tests/test_h_mad_tdd_gate_codex.py` and
+      `h-mad/tests/test_h_mad_tdd_gate_state_resolution.py`):
+      - `returncode == 1` in `test_blocks_claude_prod_write_when_codex_available`,
+        `test_gate_finds_state_one_directory_down`, `test_repo_root_layout_still_works` and
+        `test_a_production_file_under_a_test_named_directory_is_still_gated`: under (a) they
+        become rc 2; under (b) they become a deny decision read from stdout JSON.
+      - Under (b) only, the stderr assertions move to the decision's reason: `codex` and
+        `dispatch` in `test_blocks_claude_prod_write_when_codex_available`, `H-MAD-TDD-GATE` in
+        `test_gate_finds_state_one_directory_down`, and "must be authored by codex" absent in
+        `test_state_codex_status_exhausted_allows_fallback`, `test_env_override_allows_fallback`
+        and `test_codex_absent_does_not_trigger_codex_gate`, which are vacuous on stderr alone
+        under (b).
+      - Under (b) only, the `returncode == 0` assertions stop discriminating allow from deny and
+        must read the decision: `test_test_file_allowed_even_with_codex_available`,
+        `test_non_step5_ignores_codex_gate`, `test_no_state_anywhere_still_allows`,
+        `test_state_outside_the_project_is_not_adopted`, `test_real_test_files_are_still_exempt`
+        and `test_test_directories_are_still_exempt`.
+      - Under (a), the stderr and `returncode == 0` assertions stand unchanged.
   - AC-6.7 (branch `INCONCLUSIVE`): neither AC-6.5 nor AC-6.6 is implemented, and Phase 4 does not
-    start for this FR. AC-6.1 through AC-6.4 are independent of the branch and still ship.
+    start for this FR. AC-6.1 through AC-6.4 may be implemented, but the feature does not merge;
+    the reading halts to the operator until a re-run is conclusive.
 
 ### FR-7: Document the trust boundary (D2)
 
@@ -403,6 +448,15 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
 ## Live verification (not pytest ACs)
 
 - **V-0**: FR-0's probe. It runs before FR-6's blocking form is implemented.
+- **V-1r (offline):** replay the Task 7 incident from HemaSuite git objects (Task 7's parent tree
+  plus its test file = RED; Task 7's commit = GREEN) against the gate under test, read-only on
+  HemaSuite. Pass: RED patch allowed, GREEN patch denied `test-passing`,
+  `.venv/bin/python -m pytest …` from the sub-project cwd allowed, `.venv/bin/python -c …` denied.
+  It is a merge condition; the live V-1 keeps its multi-host-runtime dependency. At HemaSuite
+  `ffa87323` the objects are `31bfcfe4` (Task 7, "delete the certificate lock") and its parent
+  `1fbf8022` (Task 6), both ancestors of `ffa87323` and held on branch
+  `feature/28-review-manifest-guideline-evidence`; if either becomes unreachable, locate Task 7
+  by its subject on that branch instead.
 - **V-1**: This check runs before HemaSuite re-arms the Codex gate. **Dependency:** it needs
   `~/.agents/skills/h-mad`, which is absent today (`ls` reports "No such file or directory"). That
   install is owned by feature `multi-host-runtime`, and V-1 cannot run until it lands. V-1 has two
@@ -443,9 +497,11 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   targets are relative to it. OD-2 rests on the blocked report and on the reproduced denial, not
   on a captured payload, so V-1 captures one.
 - Claude Code honours `hookSpecificOutput.permissionDecision: "deny"` on exit 0, as the Codex gate
-  already assumes. This is not measured here. If FR-0 is re-run, E2 is its only exit-code control.
+  already assumes. This is not measured here; FR-0's arm EJ measures it (`FORM_B`), and E2 remains
+  its only exit-code control.
 - The impl-plan for an ACTIVE feature sits at `<state dir>/docs/01-plan/features/<feature>.impl-plan.md`.
   This holds for HemaSuite #28.
 
 ## Version History
 - v1.0: Initial specification draft from brainstorm v1.1 (76b2501); D1–D4 bind; OD-1..OD-7 raised from tree measurements at ae7593a1 / HemaSuite ffa87323, each owed operator confirmation (2026-09-28).
+- v1.1: Applies plan v1.1 (85d61ba8) owed items S-1..S-6: FR-0 adds arm EJ, a nonce HIT invocation precondition and per-form FORM_A/FORM_B readings (AC-0.1, AC-0.2); AC-6.5 form = the one FR-0 proves, (b) when both; AC-6.6 amended by orchestrator decision to the single-form rule (no exit 1 under E1_BLOCKS) with the changed existing assertions named; AC-6.7 no merge while INCONCLUSIVE; V-1r offline replay added as a merge condition; AC-3.4 payloads corrected for cwd. Swept: AC-6.2 cites AC-6.6, Assumptions cites EJ. S-7..S-12 not applied (2026-09-28).
