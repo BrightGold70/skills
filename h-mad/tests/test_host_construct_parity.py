@@ -107,6 +107,8 @@ def _baseline(tmp_path: Path) -> host_parity.ParityPaths:
         "h-mad": tmp_path / "h-mad" / "SKILL.md",
         "handoff": tmp_path / "handoff" / "SKILL.md",
     }
+    for path in skills.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
     skills["h-mad"].write_text("# h\n\nCall advisor() before CLAUDE.md is read.\n", encoding="utf-8")
     skills["handoff"].write_text("# f\n\nRead CLAUDE.md first.\n", encoding="utf-8")
     adapters = {}
