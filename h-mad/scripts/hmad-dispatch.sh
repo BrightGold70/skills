@@ -2806,7 +2806,7 @@ _codex_input_too_large() {  # <log> <pre_lines> -> "max_chars=N actual_chars=M" 
   printf 'max_chars=%s actual_chars=%s' "${maxc:-?}" "${actc:-?}"
 }
 
-_cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox]
+_cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox] [grok: --sandbox <profile>]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
   # to reap: this verb returns the agent's own exit code, no idle poll. The agent's
@@ -2829,8 +2829,8 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   _need "${1:-}" agent || return $?
   _need "${2:-}" promptfile || return $?
   local agent="$1" promptfile="$2"; shift 2
-  case "$agent" in codex|agy) ;;
-    *) echo "hmad-dispatch: exec: unknown agent '$agent' (expected codex|agy)" >&2; return 2 ;;
+  case "$agent" in codex|agy|grok) ;;
+    *) echo "hmad-dispatch: exec: unknown agent '$agent' (expected codex|agy|grok)" >&2; return 2 ;;
   esac
   [ -f "$promptfile" ] || { echo "hmad-dispatch: no such prompt file: $promptfile" >&2; return 2; }
 
@@ -2906,8 +2906,8 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
     --out) out="$2"; shift 2 ;;
     --log) log="$2"; shift 2 ;;             # stream live transcript here for `tail -f`
     --timeout) timeout="$2"; shift 2 ;;
-    --sandbox) sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox
-    --effort) effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort
+    --sandbox) sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox; grok: passed verbatim
+    --effort) effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort; grok: --reasoning-effort
     *) _unknown_opt exec "$1"; return $? ;;
   esac; done
 
@@ -3008,6 +3008,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   case "$agent" in
     codex) : "${HPW_AGENT_BACKEND:=codex}" ;;
     agy)   : "${HPW_AGENT_BACKEND:=gemini}" ;;
+    grok)  ;;   # grok's default is applied in child_env only
   esac
   export HPW_AGENT_BACKEND
   # Dispatch-start marker for the heartbeat's elapsed field. Set before the start
@@ -3015,7 +3016,36 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   _HMAD_EXEC_T0="$SECONDS"
   _exec_stamp start "$agent" "$label" "$cd_dir" || true
   local heartbeat_sec="${HMAD_EXEC_HEARTBEAT_SEC:-120}"
-  if [ "$agent" = codex ]; then
+  local child_env=() _v grok_state="" grok_final=""
+  for _v in $(compgen -e); do case "$_v" in CLAUDE*) child_env+=(-u "$_v") ;; esac; done
+  child_env+=("HPW_AGENT_BACKEND=${HPW_AGENT_BACKEND:-claude}")
+  if [ "$agent" = grok ]; then
+    # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:
+    # the prompt travels as a file, never as an argv element (AC-3.5).
+    local gargs=(--cwd "$cd_dir" --always-approve --output-format streaming-json
+                 --prompt-file "$bounded_prompt")
+    [ -n "$model" ]   && gargs+=(--model "$model")
+    [ -n "$effort" ]  && gargs+=(--reasoning-effort "$effort")
+    [ -n "$sandbox" ] && gargs+=(--sandbox "$sandbox")
+    if [ -f "$log" ]; then pre_lines="$(wc -l < "$log" 2>/dev/null | tr -d " ")"; fi
+    [ -n "$pre_lines" ] || pre_lines=0
+    _HMAD_EXEC_BEAT_LOG="$log"
+    ( cd "$cd_dir" && _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
+      "$wait_secs" env "${child_env[@]}" grok "${gargs[@]}" ) < /dev/null >> "$log" 2>&1 || rc=$?
+    _HMAD_EXEC_BEAT_LOG=""
+    grok_state="$(_grok_region_state "$log" "$pre_lines")"
+    grok_final="$(_grok_final_message "$log" "$pre_lines")"
+    if [ "$grok_state" = complete ] && [ -n "$grok_final" ]; then
+      verdict="$grok_final"
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$grok_final" | _write_out_atomic "$out"
+      printf '%s\n' "$grok_final"
+      echo "hmad-dispatch: exec: grok stopReason=$(_grok_stop_reason "$log" "$pre_lines")" >&2
+      [ -n "$auto_log" ] && _render_progress "$log" 40 >&2 || true
+      [ -n "$auto_log" ] && rm -f "$log"
+    else
+      final_empty=1
+    fi
+  elif [ "$agent" = codex ]; then
     local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || { rm -f "$bounded_prompt"; return 1; }
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
                 --output-last-message "$last" --skip-git-repo-check)
@@ -3050,7 +3080,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       final_empty=1
     fi
     rm -f "$last"
-  else
+  elif [ "$agent" = agy ]; then
     # agy `--print` prints ONLY the response to stdout (verified), so no last-message
     # file. Headless needs --dangerously-skip-permissions or a tool request blocks
     # until the print timeout; agy is already launched that way in panes. cwd is agy's
@@ -3179,7 +3209,17 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       last_step="$(_agy_last_step "$log" "$pre_lines")"
       [ -n "$last_step" ] && echo "hmad-dispatch: exec: last step reached — ${last_step}" >&2
     fi
-    local recovered
+    if [ "$agent" = grok ]; then
+      case "$grok_state" in
+        truncated) echo "hmad-dispatch: exec: TRUNCATED — no end event in this dispatch's grok stream" >&2 ;;
+        nojq)      echo "hmad-dispatch: exec: grok stream not parsed — jq not on PATH" >&2 ;;
+        jqfail)    echo "hmad-dispatch: exec: grok stream not parsed — jq failed" >&2 ;;
+      esac
+      local grok_last
+      grok_last="$(_grok_last_tool "$log" "$pre_lines")"
+      [ -n "$grok_last" ] && echo "hmad-dispatch: exec: last step reached — ${grok_last}" >&2
+    fi
+    local recovered=""
     local echo_expected=0
     [ "$agent" = codex ] && echo_expected=1
     if [ "$agent" = agy ]; then
@@ -3204,7 +3244,13 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       # `exec agy` recovery has always used and it costs nothing to keep behind
       # the structured path, so the change is additive rather than a swap.
       [ -n "$recovered" ] || recovered="$(_verdict_after_boundary "$log" "$boundary" 0 "$pre_lines")"
-    else
+    elif [ "$agent" = grok ]; then
+      # A grok log is recovered only through its structured stream.
+      recovered="$grok_final"
+      if [ -n "$recovered" ] && ! _recovered_has_verdict "$recovered"; then
+        recovered=""
+      fi
+    elif [ "$agent" = codex ]; then
       recovered="$(_verdict_after_boundary "$log" "$boundary" "$echo_expected")"
     fi
     if [ -n "$recovered" ]; then
@@ -3253,7 +3299,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   fi
 
   _exec_stamp exit "$agent" "$label" "$cd_dir" "$rc" "${verdict:-no-verdict}" || true
-  _cmd_notify "$agent exec" "rc=$rc verdict=${verdict:-no-verdict}" || true
+  _cmd_notify "$agent exec" "rc=$rc verdict=${verdict:-no-verdict}" 2>/dev/null || true
 
   # A 124 says the WATCHDOG killed the child, not that the work is missing (#22).
   #
