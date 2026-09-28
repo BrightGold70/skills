@@ -34,6 +34,26 @@ The tree premises were read at `50560eb` (HEAD at v1.0 authoring). `git diff --n
 this design's readings describe the same `h-mad/` tree. The v1.1 revision was authored at
 `0df3d47`, and `git diff --name-only 50560eb 0df3d47 -- h-mad handoff | wc -l` → 0 files, so every
 `50560eb` reading below still describes the tree. The readings new in v1.1 are stamped `0df3d47`.
+The v1.2 revision was authored at `0b3f969`. `git diff --name-only 0df3d47 0b3f969 -- h-mad
+handoff` → 1 file, `h-mad/invariants.base.md` (the operator's agent-CLI clause, §"Invariant
+Compliance"). No script, hook or test changed, so every earlier reading still describes the code.
+The readings new in v1.2 are stamped `0b3f969`.
+
+## Supersedes the plan on
+
+Plan v1.3's audit is closed, so the plan is not edited. Two of its statements are superseded by
+spec v1.3 and this design, and the Phase-5a impl-plan follows the design on both:
+
+1. **Classifier precedence.** Plan §"Architecture Considerations" says the classifiers apply
+   "the same precedence (agy first, then grok, then codex)". Spec v1.3 FR-5 puts the codex
+   banner ahead of grok: agy, then the codex banner in the head window, then grok, then
+   codex-text. D4, D6 and D7 implement that order, and AC-11.3 tests it on all three surfaces.
+   The plan's order would reintroduce the regression AC-11.3 exists to catch: a codex transcript
+   that echoes grok-typed lines read as grok.
+2. **AC count.** Plan §"Success Criteria" says "All 55 spec ACs across FR-1–FR-11 pass automated
+   tests". Spec v1.3 has 58 distinct AC ids (V3). The three added ids are AC-4.10, AC-5.2b and
+   AC-11.3, and the Test Plan names all 58. The implementation gate counts against the spec's
+   ids, re-derived with V3's command, and never against the plan's 55.
 
 ## Architecture Overview
 
@@ -64,22 +84,33 @@ three rules, and each rule has one cross-surface test (Test Plan, `test_grok_two
 - **precedence:** agy, then the codex banner in the head window, then grok, then codex-text
   (spec FR-5). The two Python surfaces call one helper for the banner (D6);
 - **grok detection:** a line is a grok event iff it parses as a JSON object whose top-level
-  `type` is a string in the seven-type vocabulary, whatever the key order (D4, D6);
+  `type` is a string in the seven-type vocabulary, whatever the key order, and whose nesting
+  depth is at most 64 (D3.5 "The depth bound", D4, D6);
 - **the type vocabulary** itself, one literal per language, asserted equal as sets.
 
-**Class sweep (which readers classify by content).** At `0df3d47`,
-`grep -rn 'OpenAI Codex\|_CODEX_BANNER\|_CODEX_HEADER_RE\|scan_codex_text\|_exec_log_format' h-mad/scripts h-mad/hooks h-mad/bin`
-finds the banner in exactly the three classifiers above, plus two non-members:
+**Class sweep (which readers classify by content).** The needle has to see a classifier that
+keys on `scan()` or `agy_events` alone, not only one that names the banner. At `0b3f969`,
 
-- `h_mad_archreview_cycle.py` reads logs through `scan()` alone and refuses every non-agy log as
+```bash
+grep -rln 'from h_mad_review_evidence import\|agy_events\|_exec_log_format\|OpenAI Codex' \
+  h-mad/scripts h-mad/hooks h-mad/bin | grep -v __pycache__
+```
+
+lists exactly 4 source files (unit: files): `hmad-dispatch.sh`, `h_mad_audit_cycle.py`,
+`h_mad_review_evidence.py` and `h_mad_archreview_cycle.py`. The first three are the classifiers
+above. The rest of the population is:
+
+- `h_mad_archreview_cycle.py`, found by its `from h_mad_review_evidence import scan` and its
+  `agy_events` test. It reads logs through `scan()` alone and refuses every non-agy log as
   `unsupported_format`. It stays agy-only (spec Out-of-Scope, "A grok 6a-prime reviewer"), so no
-  precedence applies to it.
-- `hmad-dispatch.sh`'s `_agent_pv_re()` comment names a codex product line. That function
-  identifies an agent in a terminal pane, which is the pane path, outside `exec`.
+  precedence applies to it. A banner-keyed needle does not find this file (v1.1's needle did not).
+- inside `hmad-dispatch.sh`, the `_agent_pv_re()` comment names a codex product line. That
+  function identifies an agent in a terminal pane, which is the pane path, outside `exec`.
 
-`h_mad_resolved_model.py` picks its reader from the agent argument, never from content.
-**Residual:** a fourth content classifier added later is outside this sweep. Re-run the grep above
-at 5g.
+`h_mad_resolved_model.py` picks its reader from the agent argument, never from content, and the
+needle does not list it.
+**Residual:** a content classifier that imports none of these names and spells none of these
+tokens is outside this sweep. Re-run the command above at 5g.
 
 ## Detailed Design
 
@@ -350,17 +381,74 @@ All four read only the region, from `pre_lines` to EOF with no tail cap. That is
 `tail -n 2000`, and the grok last-tool line deliberately does **not** mirror that cap, because
 spec FR-4 counts N over the whole region.
 
-Each helper runs `_grok_region "$log" "$pre" | jq -nR …` and **streams** the region: `inputs`,
-one line at a time, never a slurp
-(`-s`). Memory is then bounded by what the program keeps, which is named per helper below.
-**Residual (spec NFR):** time is O(region) per parse, and nothing bounds a very long single
-dispatch.
+Each helper runs
+`_grok_region "$log" "$pre" | jq -nR -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS <program>"`
+and **streams** the region: `inputs`, one line at a time, never a slurp (`-s`). All four take
+`-r`, because each prints a bare word or a line of text. Without it `_grok_region_state` prints
+`"complete"` with its quotes, which is neither `complete` nor `truncated` and so reads `jqfail`
+on every run, and the other two lines would carry quotes. Memory is then bounded by what the
+program keeps, which is named per helper below. No helper stops before the end of its input
+(below, `_grok_region_state`). **Residual (spec NFR):** time is O(region) per parse, and nothing
+bounds a very long single dispatch.
 
-Each follows `_agy_last_step`'s hardening:
+**The line filter and the depth bound.** Every jq program in this feature that parses a log line
+calls one filter, `_grok_obj`. Those programs are the four readers here, D4's
+`_grok_log_has_events` and D5's renderer. The filter is defined once, in one shell variable that
+each program is prefixed with:
+
+```bash
+_GROK_MAX_DEPTH=64
+_GROK_JQ_DEFS='def _grok_over($d): if $d > $max then true
+    elif (type == "object" or type == "array") then any(.[]; _grok_over($d + 1))
+    else false end;
+  def _grok_obj: (fromjson? // empty) | select(type == "object")
+    | select(_grok_over(0) | not);'
+```
+
+- **Depth.** The depth of a parsed value is the length of the longest path jq's `paths` emits
+  from it: 0 for a scalar or an empty container. `_grok_over(0)` is true iff some value sits at
+  a path longer than `$max`. A line is a grok event only when its depth is at most 64. The
+  Python side applies the same bound to the same definition (D6 step 4), so a line nested beyond
+  64 is "not a grok event" on both surfaces. That makes the input domain identical on the depth
+  axis.
+- **Why depth is computed, not proxied.** jq has no depth builtin. `_grok_over` computes it
+  directly, and it stops descending at `$max + 1`, so a line costs at most the nodes in its first
+  65 levels. `[paths | length] | max` gives the same number but walks every path of an
+  arbitrarily deep line.
+- **Why 64, and why the parsers' own ceilings no longer matter.** F0's deepest line has depth 6
+  (`jq -nR '[inputs | fromjson? | [paths | length] | max // 0] | max' <F0>` → 6 at `0b3f969`).
+  Every parser on this host parses a depth-65 line. That covers jq 1.8.2 (`/opt/homebrew/bin`),
+  jq 1.7.1-apple (`/usr/bin`), jq 1.6 (`/opt/anaconda3/bin`), Python 3.11.8 and Python 3.14.7.
+  So at the boundary the bound decides, never a parser. Above the bound the ceilings differ: jq
+  1.7.1 and 1.6 reject a 1000-deep line; jq 1.8.2 parses 5000 and rejects 10,000; Python 3.11.8
+  raises `RecursionError` from 1000; Python 3.14.7 parses 10,000 and raises only at 200,000.
+  Every one of those outcomes is "not an event" on both surfaces.
+- **Executed at `0b3f969`** on single-line files `{"type":"text","data":"x","n":` + k nested
+  arrays + `}`, whose depth is k. The jq side ran `[inputs | _grok_obj] | length` on each of the
+  three jq builds. The Python side ran the D6 loop under 3.11.8 and 3.14.7. Unit: events counted
+  per file:
+
+  | k | every jq build | Python 3.11.8 | Python 3.14.7 |
+  |---|---|---|---|
+  | 64 | 1 | 1 | 1 |
+  | 65 | 0 | 0 (depth check) | 0 (depth check) |
+  | 1000 | 0 | 0 (`RecursionError`) | 0 (depth check) |
+  | 5000 | 0 | 0 (`RecursionError`) | 0 (depth check) |
+  | 10,000 | 0 | 0 (`RecursionError`) | 0 (depth check) |
+  | 200,000 | 0 | 0 (`RecursionError`) | 0 (`RecursionError`) |
+
+  The unbounded v1.1 filter (`fromjson? // empty | select(type == "object")`) counts 1 at k = 65
+  on all three jq builds, so the bound, not a parser ceiling, is what zeroes that row.
+- **Single-sourced by test.** The bound is written twice, as `_GROK_MAX_DEPTH=64` and as Python's
+  `GROK_MAX_DEPTH = 64`. A cross-surface test parses the shell literal and asserts it equals the
+  Python constant. The boundary tests (Test Plan, "Depth boundary") kill a change to either
+  spelling (rows L3, E6) and the removal of either side's depth filter (rows L4, E8).
+
+Each helper also follows `_agy_last_step`'s hardening:
 
 - `case "$pre" in ''|*[!0-9]*) pre=0 ;; esac`;
-- `select(type == "object")` after `fromjson? // empty`, so a stray scalar line cannot abort jq
-  with "Cannot index";
+- `_grok_obj`, whose `select(type == "object")` comes after `fromjson? // empty`, so a stray
+  scalar line cannot abort jq with "Cannot index";
 - `2>/dev/null || true` on the three helpers whose empty output is a safe degradation, so a jq
   failure under `set -e` does not abandon `_cmd_exec` before recovery. `_grok_region_state` is the
   exception: it reports the failure as a state (below).
@@ -372,7 +460,7 @@ region offset is spelled.
 and nothing else:
 
 ```jq
-reduce (inputs | (fromjson? // empty) | select(type == "object")) as $e
+reduce (inputs | _grok_obj) as $e
   ({last: "", cur: ""};
    if $e.type == "text" then .cur += (if ($e.data | type) == "string" then $e.data else "" end)
    elif ($e.type == "tool_call" or $e.type == "tool_call_update"
@@ -382,8 +470,8 @@ reduce (inputs | (fromjson? // empty) | select(type == "object")) as $e
 | if (.cur | length) > 0 then .cur elif (.last | length) > 0 then .last else empty end
 ```
 
-- It is run as `jq -nR -r`. The state is one string value, so a multi-line segment stays one
-  value on output. That is the `_agy_ndjson_response` lesson about `tail -1` truncating a
+- It is run as `jq -nR -r`, like every reader here. The state is one string value, so a
+  multi-line segment stays one value on output. That is the `_agy_ndjson_response` lesson about `tail -1` truncating a
   multi-line verdict. Memory holds the current and the last non-empty segment, never the region.
 - Every other `type`, including `thought`, `available_commands`, unobserved types and a missing
   `type`, is neither appended nor a closer.
@@ -391,7 +479,9 @@ reduce (inputs | (fromjson? // empty) | select(type == "object")) as $e
   never are (AC-4.3).
 - **Executed on F0 at `0df3d47`:** the program above prints `STATUS: DONE` (spec A1). A region
   holding one `text` event whose `data` carries an embedded newline, followed by `end`, prints
-  both lines as one value.
+  both lines as one value. **Re-executed at `0b3f969`** with the `_GROK_JQ_DEFS` prefix and
+  `-r`: F0 still prints `STATUS: DONE`. A region of `text` `a`, then a depth-65 `text` `b`, then
+  `end`, prints `a`, because the depth-65 line is not an event.
 - The caller's `$(…)` strips trailing newlines, and the success path re-adds exactly one with
   `printf '%s\n'` (AC-4.1).
 
@@ -404,9 +494,26 @@ reduce (inputs | (fromjson? // empty) | select(type == "object")) as $e
   `truncated`.
 
 The program is
-`if any(inputs | (fromjson? // empty) | select(type == "object"); .type == "end") then "complete" else "truncated" end`,
-and it stops at the first `end`. Its rc is captured (`st="$(…)" || rc=$?`) rather than masked, so
-a failure is reported and never read as `truncated`.
+`reduce (inputs | _grok_obj | select(.type == "end")) as $_ ("truncated"; "complete")`, run as
+`jq -nR -r`. It reads the whole region and never exits early. Its rc is captured
+(`st="$(…)" || rc=$?`) rather than masked, so a failure is reported and never read as
+`truncated`.
+
+- **Why no early exit.** v1.1's program was `any(…; .type == "end")`, which stops at the first
+  `end`. Its input is a pipe from `_grok_region`'s `tail`, and the rc is captured under
+  `set -o pipefail`. When jq stops while `tail` still has more than a pipe buffer to write,
+  `tail` dies of SIGPIPE and the pipeline exits 141. That reads as `jqfail` on a completed run.
+  **Executed at `0b3f969`** under `/bin/bash` with `set -euo pipefail`, on a region of one `end`
+  line followed by 20,000 `thought` lines. The v1.1 program gave `rc=141` in 3 of 3 runs. The
+  reduce form gave `st=complete rc=0` in 3 of 3 runs. On F0 it gives `complete`, on an empty
+  region and on F0's first 50 lines `truncated`, and on a depth-65 `end` line alone `truncated`
+  (unit: printed word per input).
+- **The class and its members.** The class is every new reader whose input is a pipe and whose
+  pipeline rc is captured, with a consumer that can stop early. The other members are checked
+  and none of them stops early: `_grok_final_message`, `_grok_stop_reason` and `_grok_last_tool`
+  reduce all of their input; `_grok_log_has_events` (D4) stops at its first match but reads the
+  file itself, not a pipe; and D5 slurps. **Residual:** a reader added later with `first`, `any`,
+  `limit` or `halt` over a captured-rc pipe re-enters the class.
 
 **The completeness rule and its residual.** "Complete" means at least one parseable `end` object
 in the region, the same rule as `scan_grok()["complete"]` (D6), and one cross-surface test pins
@@ -423,13 +530,14 @@ the two (Test Plan).
   F-BEAT covers whole-line beats only.
 
 **`_grok_stop_reason <log> <pre>`** prints the last `end` event's
-`(.stopReason // "-") | tostring`.
+`(.stopReason // "-") | tostring`, reducing over `inputs | _grok_obj | select(.type == "end")`.
+Executed at `0b3f969` on F0 with the prefix and `-r`: `end_turn`, unquoted.
 
 **`_grok_last_tool <log> <pre>`** prints `N tool calls completed; last tool: <toolName>
 <status>`, or nothing when the region holds no `tool_call` event (the AC-4.9 omission clause).
 
 ```jq
-reduce (inputs | (fromjson? // empty) | select(type == "object")
+reduce (inputs | _grok_obj
         | select(.type == "tool_call" or .type == "tool_call_update")) as $e
   ({names: {}, done: {}, seen: false, last: null};
    (if $e.type == "tool_call" then .seen = true else . end)
@@ -462,6 +570,8 @@ reduce (inputs | (fromjson? // empty) | select(type == "object")
     distinct ids and none completed, so a count-every-id mutant prints `2` here;
   - AC-4.10's fixture (F-NOTOOLS minus every `text` event, 89 lines): the same line as
     F-NOTOOLS, which is the spec's expected stderr.
+  - Re-executed on F0 at `0b3f969` with the prefix: under `-r` it prints the F0 line above,
+    unquoted. Without `-r` the same line comes back wrapped in `"`.
 
 #### D3.6 Grok arm outcome (the FR-4 table)
 
@@ -540,15 +650,19 @@ case $'\n'"$h" in *$'\n''OpenAI Codex v'*) return 0 ;; esac; return 1
   surfaces share one helper (D6), so they never disagree with each other.
 
 **`_grok_log_has_events <logfile>`** returns 0 iff some line is a grok event under the D6 rule
-(a JSON object whose top-level `type` is a string in the vocabulary). It has a primary and a
-fallback route:
+(a JSON object of depth at most 64 whose top-level `type` is a string in the vocabulary). It has
+a primary and a fallback route:
 
 ```bash
-jq -nR -e --arg re "$_GROK_TYPES_RE" '($re | split("|")) as $t
-  | first(inputs | (fromjson? // empty) | select(type == "object")
+jq -nR -e --argjson max "$_GROK_MAX_DEPTH" --arg re "$_GROK_TYPES_RE" \
+  "$_GROK_JQ_DEFS"' ($re | split("|")) as $t
+  | first(inputs | _grok_obj
           | select((.type | type) == "string") | .type as $x
           | select(any($t[]; . == $x))) | true' "$log" >/dev/null 2>&1
 ```
+
+Executed at `0b3f969` with the D3.5 prefix (unit: rc per file): F0 → 0; the depth-64 line → 0;
+the depth-65 line → 4; the 200,000-deep line → 4; an empty file → 4.
 
 - **rc 0 → grok. rc 4 → not grok.** Under `-e`, jq exits 4 when no output was produced. Any other
   rc, including `command -v jq` failing or a jq that crashes, takes the fallback. `first(…)` stops
@@ -568,27 +682,47 @@ jq 1.8.2 and Python 3.11.8: the jq route and the D6 rule were each run on 27 sin
 `type`-bearing object, a truncated object, duplicate `type` members in both orders, two objects on
 one line, surrounding whitespace, `NaN`, `Infinity`, `1e400`, a raw tab in a string, invalid
 UTF-8, F0 and F-TRUNC. 21 agreed. The 6 that disagreed fall into one class: **a line that one
-parser accepts as a JSON object and the other rejects.** The measured members are:
+parser accepts as a JSON object and the other rejects.** That matrix was run on v1.1's
+unbounded filter, and its members were:
 
 - a lowercase `nan` token (jq accepts it; `json.loads` does not);
 - a leading UTF-8 BOM (jq accepts it; `json.loads` does not);
 - a lone surrogate escape `\ud800` (jq rejects it; `json.loads` accepts it), 2 of the 6 inputs;
-- nesting 5000 deep (jq accepts it; Python 3.11 raises `RecursionError`, which D6 catches);
+- nesting 5000 deep (jq 1.8.2 accepts it; Python 3.11 raises `RecursionError`);
 - a bare CR between two objects on one line. Python's `read_text` turns it into a line break, and
   jq sees one line with extra data.
 
-The class is stated exactly; its membership is not enumerated, because any parser-grammar
-difference between jq and `json.loads` is a member. F0 carries no member: jq and the D6 line
+**The depth member is closed by the identical-domain rule** (D3.5 "The line filter and the depth
+bound"). Nesting is the one axis on which the parsers' ceilings differ by build and by
+interpreter, so no single parser acceptance can be shared across them. The bound puts both
+surfaces below every ceiling measured on this host, and above it both answer "not an event".
+Re-executed at `0b3f969` on a 5000-deep line: jq counts 0, and Python 3.11.8 and 3.14.7 count 0.
+The depth member is therefore not a disagreement in v1.2. The 27-input matrix was not re-run as a
+whole; its other five inputs do not involve depth, so the bound does not change them.
+
+**Residual (parser grammar, open).** The remaining class is **a line within the depth bound that
+one parser's grammar accepts as a JSON object and the other's rejects.** The members measured
+are the other four listed above (lowercase `nan`, BOM, lone surrogate, bare CR). Its membership
+is not enumerated, because any grammar difference between jq and `json.loads` is a member. On
+those lines the two surfaces can still disagree, so spec FR-5's "the same answer on every line"
+holds over the depth axis and does not hold over this class. That is a spec-level residual:
+FR-5's wording is owed a scoping to this domain, and the design does not rewrite the spec. F0
+carries no member: jq and the D6 line
 discipline each parse all 110 of F0's lines as objects (unit: lines; `jq -nR '[inputs |
 (fromjson? // empty) | select(type=="object")] | length'` → 110, and the D6 loop → 110). That zero
 rests on grok 1.0.41 emitting plain compact JSON, which is incidental: a grok build that emitted
 a member would disagree only on its own lines.
 
-- **Residual (fallback route only):** the grep does not parse. With jq absent or failing it also
-  disagrees with `scan_grok` on four classes: a line that is not valid JSON; a qualifying `type`
-  member present only in a nested value; duplicate `type` members; and a key or value spelled with
-  a JSON escape. The fallback picks a render lens only, and D5 prints `cannot render` on it
-  anyway.
+- **Residual (fallback route only), its input domain stated exactly.** The grep does not parse.
+  Its domain is the regex itself: with jq absent or failing, a log is grok iff some line matches
+  `^[[:space:]]*\{.*"type"[[:space:]]*:[[:space:]]*"(<the seven types>)"`. It disagrees with
+  `scan_grok` on exactly the lines where that match and the parsed rule differ. The parsed rule is
+  a JSON object of depth at most 64 whose top-level `type` is a string in the vocabulary. The
+  classes measured in that difference are five: a line that is not valid JSON; a qualifying
+  `type` member present only in a nested value; duplicate `type` members; a key or value spelled
+  with a JSON escape; and a line deeper than the bound. The last was executed at `0b3f969`: the
+  depth-65 line and the 200,000-deep line both match the grep, and the parsed rule counts neither.
+  The fallback picks a render lens only, and D5 prints `cannot render` on it anyway.
 - **Residual (spec FR-5):** a grok stream carrying only unobserved `type` values classifies as
   `codex-text`.
 
@@ -623,6 +757,10 @@ echoes the boundary. Inside the arm:
   `  (grok stream — jq failed, cannot render)`, in place of any partial output. The two
   cannot-render lines name different causes, and each is asserted with its exact wording by the
   test that owns its route (Test Plan).
+- **One line filter.** The program is prefixed with `$_GROK_JQ_DEFS` and given
+  `--argjson max "$_GROK_MAX_DEPTH"` (D3.5). It splits the slurped window on `"\n"` and passes
+  each line through `_grok_obj`. A line deeper than the bound therefore renders nothing, exactly
+  as a non-JSON line does, and it neither ends a run nor starts one.
 - **Bound.** The window is the last 400 lines of the whole log, exactly as the agy lens reads it.
   `progress` is a polling lens and takes no `pre_lines` (spec NFR "Performance"). The slurp here
   is bounded by that window, unlike the D3.5 readers.
@@ -684,20 +822,28 @@ _GROK_TYPES = frozenset({"thought", "text", "available_commands", "tool_call",
 def scan_grok(log_text: str) -> dict | None:
 ```
 
-**Parsing** is the D4 detection rule, written so that each step matches jq's `-R` +
-`fromjson?` + `select(type == "object")`:
+**Parsing** is the D4 detection rule, written so that each step matches jq's `-R` + `_grok_obj`
+(`fromjson?`, `select(type == "object")`, then the depth bound):
 
 1. `for line in log_text.split("\n")`. It is **not** `splitlines()`, which also splits on
    `\r`, `\x0b`, `\x0c`, `\x1c`–`\x1e`, `\x85`, U+2028 and U+2029, where jq `-R` splits on `\n`
    only.
 2. `json.loads(line)` inside `try`, catching **`(ValueError, RecursionError)`**. `json.loads`
    already ignores JSON whitespace around the value, so no `strip()` or `startswith("{")` step is
-   taken. `RecursionError` is caught because a deeply nested line raises it: measured at
-   `0df3d47` under Python 3.11.8, a line nested 200,000 deep raised `RecursionError`, not
-   `ValueError`. jq skips such a line through `fromjson?`, so the Python side must skip it too,
-   never abort.
+   taken. `RecursionError` is caught because a deeply nested line raises it, and the interpreter
+   decides where. Measured at `0b3f969`: Python 3.11.8 raises from 1000 deep, and Python 3.14.7
+   only at 200,000 (D3.5's table). The line is skipped, never an abort. Every line that raises it
+   on either interpreter is deeper than the bound, so the catch changes no answer that step 4
+   would give; it only keeps the reader alive. **The class** is every exception `json.loads` can
+   raise on one line, and the rule is that each is caught and the line skipped. **Residual:**
+   exception types not measured here, such as `MemoryError` on a huge line.
 3. Skip anything that is not a `dict`.
-4. **Type-check before membership:** `t = event.get("type")`, and the event counts only when
+4. **Depth bound:** skip the event when `_json_deeper_than(event, GROK_MAX_DEPTH)`, with
+   `GROK_MAX_DEPTH = 64`. The helper is iterative, never recursive: a stack of `(value, depth)`
+   pairs, starting at `(event, 0)`, which returns `True` as soon as a popped depth exceeds the
+   bound and otherwise pushes each child of a `dict` (its values) or `list` at `depth + 1`. That
+   is D3.5's `_grok_over`, the same definition on the same path lengths.
+5. **Type-check before membership:** `t = event.get("type")`, and the event counts only when
    `isinstance(t, str) and t in _GROK_TYPES`. The order matters. `[] in frozenset(...)` raises
    `TypeError: cannot use 'list' as a set element (unhashable type: 'list')` (executed at
    `0df3d47`), so a bare `event.get("type") in _GROK_TYPES` would abort evidence reading and audit
@@ -721,7 +867,10 @@ what makes the shell and Python detectors agree (AC-5.2b, D4's measured residual
   the two equal.
 - `unresolved` is `tools − ok`.
 - `thinking` sums `event["usage"]["reasoning_tokens"]` over `type == "usage"` events, keeping only
-  `int`/`float` values that are not `bool`. `end.usage` is excluded.
+  `int`/`float` values that are not `bool`. `end.usage` is excluded. The test is spelled
+  `type(value) in (int, float)`, which excludes `bool` because `type(True)` is `bool`. It is never
+  spelled as `scan()`'s anchored `isinstance(value, (int, float)) and not isinstance(value, bool)`
+  (§"Existing mutation anchors", rule 2).
 - `complete` is true when any `end` event is present.
 - `stop_reason` is the last `end` event's `stopReason` when it is a `str`, else `None`.
 
@@ -1049,7 +1198,7 @@ fixed here.
 Spec files are new JSON under `h-mad/tests/mutation-specs/`. Proposed names:
 
 - `tdd_gate_fallback_agent.json`, for rows G*;
-- `grok_exec.json`, for rows P*, D* and the W1–W5 and W8 force-fires;
+- `grok_exec.json`, for rows P*, L* and the W1–W5 and W8 force-fires;
 - `review_evidence_grok.json`, for rows E* and W6;
 - `audit_cycle_grok.json`, for rows A* and W7;
 - `assemble_tdd_agent.json`, for rows T* and W10;
@@ -1077,13 +1226,19 @@ Scoring is on the `MUTATION:` token, never `$?`.
 | P7 (W4) | `_grok_last_tool` | drop the "no `tool_call` → empty" guard | AC-4.9, with AC-4.6 as its positive pair |
 | P8 | `_grok_last_tool` | drop `and $e.status == "completed"` from the `done` condition, so every updated id counts | AC-4.10 (stderr `0 tool calls completed` becomes `2`) |
 | P9 | `_grok_region_state` | report a jq failure as `truncated` instead of `jqfail` | the jq-fails exec cell (stderr must carry `jq failed` and no `TRUNCATED`) |
-| D1 | `_exec_log_format` | `elif _codex_banner_in_head "$log"` → `elif false` | AC-11.3 `progress` arm (the mutant prints `grok-ndjson`) |
-| D2 | `_grok_log_has_events` fallback | `\{.*"type"` → `\{[[:space:]]*"type"` (first-key only) | AC-5.2b fallback cell on the jq-absent farm (`{"meta":1,"type":"text",…}` must still read `grok-ndjson`) |
+| L1 | `_exec_log_format` | `elif _codex_banner_in_head "$log"` → `elif false` | AC-11.3 `progress` arm (the mutant prints `grok-ndjson`) |
+| L2 | `_grok_log_has_events` fallback | `\{.*\"type\"` → `\{[[:space:]]*\"type\"` (first-key only; the `find` carries the backslash before each quote, because the fallback is a double-quoted bash string) | AC-5.2b fallback cell on the jq-absent farm (`{"meta":1,"type":"text",…}` must still read `grok-ndjson`) |
+| L3 | `_GROK_MAX_DEPTH` | `_GROK_MAX_DEPTH=64` → `_GROK_MAX_DEPTH=65` | depth-boundary test, `progress` arm (the depth-65 log must read `codex-text`) |
+| L4 | `_GROK_JQ_DEFS` | `\| select(_grok_over(0) \| not)` → the empty string (the depth filter dropped) | depth-boundary test, `progress` and `_grok_region_state` arms (F-DEEP65 must read `truncated`) |
+| L5 | `_codex_banner_in_head` | `head -c 4096` → `head -c 8192` | format-agreement test on the window-edge log (the mutant's `progress` reads `codex-text`, and `measure_effort` reads `grok`) |
 | E1 | `scan_grok` | `ok` from a substring test (`"completed" in line`) | AC-6.4 |
 | E2 | CLI | truncated branch prints the counted line | AC-6.3 (asserts no `tools=`) |
 | E3 | CLI | `grok = None if codex_banner_in_head(text) else scan_grok(text)` → `grok = scan_grok(text)` | AC-11.3 CLI arm (the mutant prints `format=grok`) |
 | E4 | `scan_grok` | `isinstance(t, str) and t in _GROK_TYPES` → `t in _GROK_TYPES` | malformed-type test: a `{"type":[]}` line raises `TypeError` in the mutant |
-| E5 | `codex_banner_in_head` | `CODEX_BANNER_HEAD = 4096` → `= 8192` | window-edge equality test (a banner past 4096 characters, then F0: the CLI and `measure_effort` must agree) |
+| E5 | `codex_banner_in_head` | `CODEX_BANNER_HEAD = 4096` → `= 8192` | window-edge equality test on the window-edge log, whose banner starts at character and byte 4096 (the mutant CLI prints the codex output, and `measure_effort` reads `grok`) |
+| E6 | `scan_grok` | `GROK_MAX_DEPTH = 64` → `GROK_MAX_DEPTH = 65` | depth-boundary test, `scan_grok` arm (the depth-65 log must give `None`) |
+| E7 | `scan_grok` | `except (ValueError, RecursionError):` → `except ValueError:` | malformed-`type` test: its 200,000-deep line raises `RecursionError` under both Python 3.11.8 and 3.14.7 (D3.5's table), so the mutant aborts |
+| E8 | `scan_grok` | the depth-skip `if _json_deeper_than(event, GROK_MAX_DEPTH):` → `if False:` | depth-boundary test, `scan_grok` arm (under 3.11.8 a depth-65 line parses, so only the skip removes it) |
 | A1 | `_effort_items` | drop the `grok-truncated` rendering | shape-enumeration test (render row must say "not measured") |
 | A2 (W7b) | `combine` | delete the `grok-truncated` route | AC-7.4 (the mutant yields `shape_unrouted`) |
 | A3 | `measure_effort` | `elif _CODEX_BANNER.search(text[:4096]):` → `elif _CODEX_BANNER.search(text[:4096]) and scan_grok(text) is None:` | AC-11.3 `measure_effort` arm (the mutant reads `grok`) |
@@ -1151,8 +1306,9 @@ is filed. This residual is exactly the class "text following `end` within one re
   `7 tests collected` (unit: tests).
 - **Residual (W1's kill rests on an incidental zero).** W1 kills only because no `grok` resolves
   on the existing tests' `<bindir>:/usr/bin:/bin` PATH. At `0df3d47`,
-  `PATH=/usr/bin:/bin command -v grok` fails (rc 1), because grok is installed at
-  `~/.grok/bin/grok`. That zero is incidental: a `grok` installed into `/usr/bin` would let the
+  `PATH=/usr/bin:/bin command -v grok` fails (rc 1), because every installed `grok` is off that
+  PATH: `which -a grok` at `0b3f969` lists `~/.grok/bin/grok`, `~/.local/bin/grok` and
+  `/opt/homebrew/bin/grok`, and `/bin/grok` does not exist. That zero is incidental: a `grok` installed into `/usr/bin` would let the
   mutant run the real CLI. The existing tests cannot be edited (FR-11), so the new AC-3.6 cell
   asserts `command -v grok` fails in its own env as a precondition, and the W1 row is re-run
   at 5g.
@@ -1177,18 +1333,42 @@ committed anchor in a file this design edits. Two rules cover it:
    - `review_evidence_format.json`, one row on `main()`'s `if counts["agy_events"] == 0:` and its
      first comment line: the grok insertion goes after the comment block (D6);
    - `exec_last_step.json`, two rows, one on S6's agy block and one on `_agy_last_step`'s `tail`
-     line: both unchanged, and the grok block is a sibling (D3).
-2. **No new code reproduces an anchor verbatim**, since a second copy makes the anchor match
-   twice. The near-collisions are new code that does the same job as an anchored line:
+     line: both unchanged, and the grok block is a sibling (D3);
+   - `codex_log_not_measured.json`, two more rows inside the two audit-cycle functions this
+     design edits: `combine()`'s `        if shape == "codex-text":` and `_effort_items()`'s
+     `        if effort.get("shape") == "codex-text":`. Both lines are kept, and the grok routes
+     are new lines beside them.
+   The anchors inside those two functions were listed at `0b3f969` by testing every committed
+   `find` whose file is `h_mad_audit_cycle.py` for containment in each function's source text:
+   4 rows (unit: mutation rows), namely the two above and the two floor lines under rule 2.
+2. **No new code contains an anchor as a substring.** The harness counts
+   `source.count(find)` (`h_mad_mutation_harness.py`, the `hits =` line of its anchor check), so
+   a single-line anchor also matches any new line that holds the same text at the same or a
+   deeper indentation, because the anchor's leading spaces are a suffix of the deeper indent. A
+   second match makes the anchor match twice. The near-collisions are new code that does the
+   same job as an anchored line, and each has an executable prescription:
    - `scan_grok`'s `thinking` sum beside `scan()`'s anchored
      `if isinstance(value, (int, float)) and not isinstance(value, bool):` + `thinking += int(value)`
-     (`audit_effort.json`);
-   - the `grok` floor beside the anchored `        if effort["ok"] <= DELIVERY_FLOOR:`
-     (`audit_effort.json`) and `        if result.effort.get("ok", 0) <= DELIVERY_FLOOR:`
-     (`codex_log_not_measured.json`). Route `grok` through those existing lines by widening the
-     shape test in front of them, rather than copying them;
+     (`audit_effort.json`). `scan_grok` spells the test `type(value) in (int, float)` (D6
+     "Counting"), which contains neither anchor line;
+   - the `grok` floor in `combine()`, beside the anchored
+     `        if result.effort.get("ok", 0) <= DELIVERY_FLOOR:` (`codex_log_not_measured.json`).
+     The shape tests in front of that line only `return` or `continue`, so there is nothing to
+     widen. Two new lines go after `if shape == "empty":`'s return and before the kept floor
+     line: `if shape == "grok-truncated":` returning `low_evidence_unmeasurable:p<i>`, then
+     `if shape not in ("parsed", "grok"):` returning `shape_unrouted:p<i>`. The kept floor line
+     then serves `parsed` and `grok` alike, and no floor test is written a second time;
+   - the `grok` floor in `_effort_items()`, beside the anchored
+     `        if effort["ok"] <= DELIVERY_FLOOR:` (`audit_effort.json`). The only shape test in
+     front of it is the anchored `codex-text` `continue`. A new `grok-truncated` block beside it
+     appends the not-measured line and `continue`s. The unanchored `line = (…)` assignment
+     becomes a choice by shape: `if effort.get("shape") == "grok":` builds the grok line, which
+     has no `failed` field, and `else:` keeps today's line, re-indented. The kept floor line then
+     appends the `low-evidence` suffix to either line;
    - `grok_from_log`'s `--log` handling beside the anchored `    if a.log:` + its comment line
-     (`resolved_model.json`);
+     (`resolved_model.json`). `grok_from_log(path)` takes the path as its parameter, and its
+     refusal is spelled `if path is None:`. `main()` calls it as D10 states, and no new line
+     reads `if a.log:`;
    - the grok helpers' region read beside `_agy_last_step`'s anchored `tail -n +"$((pre + 1))"`
      line. The different spelling `tail -n "+$(( pre + 1 ))"` keeps them apart (D3.4).
 
@@ -1206,8 +1386,8 @@ task, and a new anchor committed later is covered by it without any change here.
 
 ## Verified premises (design-level)
 
-V1–V11 were run at `50560eb`, and V12–V17 at `0df3d47` (the `h-mad/` tree is the same at both,
-per §Overview). Scratch artifacts were written under the session
+V1–V11 were run at `50560eb`, V12–V17 at `0df3d47`, and V18–V25 at `0b3f969` (the `h-mad/`
+code and tests are the same at all three, per §Overview). Scratch artifacts were written under the session
 scratchpad or a `TemporaryDirectory` and deleted after the run.
 
 - **V1 — the tree is the plan's tree.** `git diff --name-only 1680271 50560eb -- h-mad handoff |
@@ -1215,7 +1395,8 @@ scratchpad or a `TemporaryDirectory` and deleted after the run.
 - **V2 — F0 is unchanged.**
   `shasum -a 256 docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.ndjson` →
   `72f6258734f184ae999f84273b5abe3711202a1a8f43f392143173c8364fe569`; `git log --format=%h -1 --`
-  the same path → `d2fbb96`.
+  the same path → `d2fbb96`. Re-read at `0b3f969`: the same hash. The suite never reads this
+  path; it reads the in-skill copy (Test Strategy, "One fixture source").
 - **V3 — AC census.** `grep -oE '^  - AC-[0-9]+\.[0-9]+[a-z]?'
   docs/01-plan/features/grok-codex-fallback.spec.md | sort -u | wc -l` → 58 distinct ids on spec
   v1.3 at `0df3d47` (55 on spec v1.2 at `50560eb`). The three new ids are AC-4.10, AC-5.2b and
@@ -1282,6 +1463,33 @@ after the run):
 - **V16 — the hook's first read under `pipefail`** (D2).
 - **V17 — the committed anchors** in the edited files (§"Existing mutation anchors").
 
+Readings new in v1.2, executed at `0b3f969` (scratch files under the session scratchpad, deleted
+after the run):
+
+- **V18 — the depth bound on both surfaces** (D3.5's table): three jq builds, Python 3.11.8 and
+  3.14.7, at depths 64, 65, 1000, 5000, 10,000 and 200,000. Interpreters were read with
+  `--version` on `/opt/homebrew/bin/jq`, `/usr/bin/jq`, `/opt/anaconda3/bin/jq`, `python3.11`,
+  `python3` and `/opt/anaconda3/bin/python` (the suite's interpreter, 3.11.8).
+- **V19 — `_grok_region_state` without early exit** under `pipefail` (D3.5): the v1.1 form
+  `rc=141` in 3 of 3 runs, the reduce form `rc=0` in 3 of 3.
+- **V20 — the bounded readers on F0** (D3.5, D4): `STATUS: DONE`,
+  `2 tool calls completed; last tool: search_replace completed`, `end_turn`, and
+  `_grok_log_has_events` rc 0.
+- **V21 — row L2's `find` bytes.** With the design's fallback line written to a scratch file,
+  Python's `str.count` gave 0 for `\{.*"type"` and 1 for `\{.*\"type\"` (unit: occurrences).
+- **V22 — the window-edge log.** A 4095-character first line, then `OpenAI Codex v0.145.0`, then
+  F0. The banner starts at character 4096 (`text.index`). The shell window says no at
+  `head -c 4096` and yes at `head -c 8192`. Python's `text[:4096]` says no, and `text[:8192]`
+  says yes.
+- **V23 — the agent-CLI clause.** `grep -n 'Dispatched agent CLIs are not script dependencies'
+  h-mad/invariants.base.md` → 1 matching line, in §"No new external dependency".
+- **V24 — no `grok` in the tree's code or tests yet.** `grep -rln grok h-mad/scripts h-mad/hooks
+  h-mad/bin h-mad/tests` → 0 files. Every future reference is this feature's.
+- **V25 — farm facts.** `ls /bin` has no `jq` or `grok`. No current stub (`agy`, `cmux`,
+  `codex`, `lsof`, `orca`) has a same-named entry in `/usr/bin`. `_isolated_env` in
+  `test_hmad_dispatch.py` sets `e["PATH"] = f"{bindir}:/usr/bin:/bin"` after applying the caller's
+  env, and `run()` goes through it (Test Strategy, "Tool-absent cells").
+
 ## Components Changed / Added
 
 | Component | File path | Change type | Purpose |
@@ -1289,10 +1497,10 @@ after the run):
 | `fallback_agent` property | `h-mad/scripts/h_mad_state_schema.json` | modify | FR-1, D1 |
 | typed fallback read, BLOCK-GROK / BLOCK-INVALID | `h-mad/hooks/h-mad-tdd-gate.sh` | modify | FR-2, D2 |
 | `_cmd_exec` S1/S3/S4/S6/S8, grok arm, `child_env`, `local recovered=""` | `h-mad/scripts/hmad-dispatch.sh` | modify | FR-3, FR-4, D3 |
-| `_GROK_TYPES_RE`, `_codex_banner_in_head`, `_grok_log_has_events`, `_grok_region`, `_grok_region_state`, `_grok_final_message`, `_grok_stop_reason`, `_grok_last_tool` | `h-mad/scripts/hmad-dispatch.sh` | new | FR-4, FR-5, D3.4, D3.5, D4 |
+| `_GROK_TYPES_RE`, `_GROK_MAX_DEPTH`, `_GROK_JQ_DEFS`, `_codex_banner_in_head`, `_grok_log_has_events`, `_grok_region`, `_grok_region_state`, `_grok_final_message`, `_grok_stop_reason`, `_grok_last_tool` | `h-mad/scripts/hmad-dispatch.sh` | new | FR-4, FR-5, D3.4, D3.5, D4 |
 | `_exec_log_format`, `_render_progress` grok branch | `h-mad/scripts/hmad-dispatch.sh` | modify | FR-5, D4, D5 |
 | `_cmd_audit_cycle` `--surfaces` case + message; `_cmd_resolved_model` header | `h-mad/scripts/hmad-dispatch.sh` | modify | FR-7, FR-9, D8, D10 |
-| `_GROK_TYPES`, `scan_grok`, `CODEX_BANNER_HEAD`, `codex_banner_in_head`, `main` banner-then-grok branch | `h-mad/scripts/h_mad_review_evidence.py` | new / modify | FR-5, FR-6, D6 |
+| `_GROK_TYPES`, `GROK_MAX_DEPTH`, `_json_deeper_than`, `scan_grok`, `CODEX_BANNER_HEAD`, `codex_banner_in_head`, `main` banner-then-grok branch | `h-mad/scripts/h_mad_review_evidence.py` | new / modify | FR-5, FR-6, D6 |
 | imports (`scan_grok`; `_CODEX_HEADER_RE` as `_CODEX_BANNER`, replacing the local definition), `measure_effort` `else` body, `combine`, `_effort_items` | `h-mad/scripts/h_mad_audit_cycle.py` | modify | FR-7, D7 |
 | `--agent`, `--timeout` sentinel, `command_block(agent=)` | `h-mad/scripts/h_mad_assemble_tdd.py` | modify | FR-8, D9 |
 | `grok_from_log`, `choices`, `main` order | `h-mad/scripts/h_mad_resolved_model.py` | new / modify | FR-9, D10 |
@@ -1301,14 +1509,16 @@ after the run):
 | `exec grok` verb | `h-mad/references/agent-substrate.md` | modify | FR-10 |
 | grok stub | `h-mad/tests/stubs/grok` | new | FR-3–FR-5, FR-7 |
 | opt-in `CLAUDE*`-name capture knob `HMAD_STUB_CLAUDE_ENV_CAPTURE` | `h-mad/tests/stubs/codex`, `h-mad/tests/stubs/agy` | modify (test support) | AC-3.4, W2 (Test Strategy) |
+| in-skill copy of F0, byte-identical | `h-mad/tests/fixtures/grok-stream-json.2026-09-28.ndjson` | new | the root of every grok fixture; the suite runs with the skill alone |
 | F0-derived fixture builder | `h-mad/tests/grokfixtures.py` | new | one fixture source |
 | new test files (Test Plan) | `h-mad/tests/test_*.py` | new | FR-1–FR-11 |
 | mutation specs (six files) | `h-mad/tests/mutation-specs/*.json` | new | AC-2.7, W1–W11, rows above |
 
 ## Implementation Order
 
-1. **Fixtures and stubs.** Build `grokfixtures.py`, which carries the F0 sha256 check, every spec
-   fixture and the three F-SEP fixtures; the `stubs/grok`; the opt-in `CLAUDE*` knob in
+1. **Fixtures and stubs.** Copy F0 byte-for-byte to
+   `h-mad/tests/fixtures/grok-stream-json.2026-09-28.ndjson`. Build `grokfixtures.py`, which
+   carries the copy's sha256 check, every spec fixture and the three F-SEP fixtures; the `stubs/grok`; the opt-in `CLAUDE*` knob in
    `stubs/codex` and `stubs/agy`; and the tool-absent symlink-farm helper. There is no production
    code in this step. The full suite runs after it, to show the knob left every existing test
    unchanged.
@@ -1366,7 +1576,7 @@ after the run):
   - `EVIDENCE: UNREADABLE reason=truncated_no_end`, exit 2;
   - a log whose head window carries the codex banner keeps today's output, whatever else it
     carries;
-  - new importable `scan_grok(log_text: str) -> dict | None`, `_GROK_TYPES`,
+  - new importable `scan_grok(log_text: str) -> dict | None`, `_GROK_TYPES`, `GROK_MAX_DEPTH`,
     `codex_banner_in_head(text: str) -> bool` and `CODEX_BANNER_HEAD`.
 - **`h_mad_audit_cycle.measure_effort()`:** may return shapes `grok` and `grok-truncated`.
 - **`h_mad_assemble_tdd.py --agent {codex,grok}`:** the default is `codex`. `--timeout`'s default
@@ -1378,13 +1588,20 @@ after the run):
 ## Error Handling Strategy
 
 - **Gate.** Every non-FALL-THROUGH outcome is exit 1 with a `[H-MAD-TDD-GATE] BLOCK:` stderr line,
-  which is the hook's existing contract. A read failure is BLOCK-INVALID `<unreadable>`,
-  fail-closed. The no-`jq` exit 0 is the existing, disclosed fail-open.
+  which is the hook's existing contract. A failure of the `fallback_agent` read (the second read)
+  is BLOCK-INVALID `<unreadable>`, fail-closed. The no-`jq` exit 0 is the existing, disclosed
+  fail-open.
+  - **Out of scope, pre-existing:** a failure of the first read, which derives `ACTIVE`, exits
+    the hook with that pipeline's rc under `set -euo pipefail` before this feature's block is
+    reached (D2's scope-of-read-error bullet, V16: rc 5). This design does not change that path.
+    Whether the hook runner treats that rc as a block or lets the tool call proceed was not
+    measured, so its fail direction is unestablished.
 - **Wrapper.** Every grok reader degrades to empty, or to the `nojq`/`jqfail` state, and never
-  aborts `_cmd_exec` under `set -euo pipefail` (`|| true` or a captured rc,
-  `select(type == "object")`). A missing or failing `jq` routes to the EMPTY path with a "not
-  parsed" line that names which of the two happened. That is never a false success, and never a
-  false `TRUNCATED` (row P9). The one known false `TRUNCATED` is the unmeasured heartbeat residual
+  aborts `_cmd_exec` under `set -euo pipefail` (`|| true` or a captured rc, and `_grok_obj`). A
+  missing or failing `jq` routes to the EMPTY path with a "not parsed" line that names which of
+  the two happened. That is never a false success, and never a false `TRUNCATED` (row P9). No
+  reader exits before its input ends, so a SIGPIPE on the region pipe cannot produce a false
+  `jqfail` (D3.5, V19). The one known false `TRUNCATED` is the unmeasured heartbeat residual
   (D3.5), and its direction is a cannot-judge.
 - **Evidence CLI and combiner.** Cannot-judge is spelled distinctly at every layer:
   - `scan_grok` → `None`;
@@ -1413,8 +1630,20 @@ after the run):
   - The cell's PATH is exactly `<farm>:/bin`. `<farm>` holds the stubs the cell needs, plus one
     symlink for every entry of `/usr/bin` **except** the absent tool, built by one module-scoped
     helper in the new test files. The helper takes the absent names as its argument.
+  - **Farm cells never go through `run()` or `_isolated_env`.** `_isolated_env` in
+    `test_hmad_dispatch.py` applies the caller's env and then sets
+    `e["PATH"] = f"{bindir}:/usr/bin:/bin"` (V25), and `run()` uses it. A farm cell passed through
+    `run()` would therefore run on `<farm>:/usr/bin:/bin`, where `/usr/bin/jq` resolves. Each farm
+    cell calls `subprocess.run(["bash", WRAPPER, …], env=cell_env)` with an env it builds itself,
+    whose `PATH` is exactly `<farm>:/bin`. `BASH_ENV` and `ENV` are removed from that env, because
+    a non-interactive `bash` sources `BASH_ENV` and it could extend `PATH`.
   - **Precondition, asserted inside the cell's own env:** `command -v <tool>` fails for every
-    absent tool. A cell whose precondition fails errors, and never passes vacuously.
+    absent tool. It runs as `subprocess.run(["bash", "-c", "command -v <tool>"], env=cell_env)`,
+    with the very dict passed to the wrapper, never a separately built one. A cell whose
+    precondition fails errors, and never passes vacuously.
+  - **Stub names win over `/usr/bin` entries.** The helper links the stubs first and skips any
+    `/usr/bin` entry whose name is already linked. Otherwise `symlink_to` raises
+    `FileExistsError`. No current stub collides on this host (V25).
   - **Second assertion:** stderr carries no `command not found`, so a tool the farm dropped by
     mistake fails loudly for its real reason.
   - **Deviation, announced.** The orchestrator's brief asks for a `<bindir>` holding exactly the
@@ -1427,7 +1656,7 @@ after the run):
       `TRUNCATED`;
     - `progress` jq-absent: `format: grok-ndjson` through D4's fallback, and the line
       `(grok stream — jq not on PATH, cannot render)`;
-    - AC-5.2b on the fallback route (row D2);
+    - AC-5.2b on the fallback route (row L2);
     - AC-3.6 (`exec requires the grok CLI on PATH`): the farm excludes nothing, and the
       precondition is `command -v grok` fails. See also W1's residual.
   - **The "jq fails" route is a different cell.** A `jq` shim that exits 127 does not reach the
@@ -1438,6 +1667,9 @@ after the run):
   - **Residual:** a tool resolved through an absolute path in the wrapper bypasses PATH, and so
     bypasses the farm. `jq` and `grok` are both invoked by bare name (`command -v jq`,
     `command -v "$agent"`).
+  - **Residual (portability):** on a merged-`/usr` host, `/bin` is `/usr/bin`, so every farm
+    cell's `/bin` still reaches the tool and the cell errors on its precondition. That is loud,
+    never vacuous, but those cells cannot run on such a host.
 - **The codex and agy stubs gain one opt-in knob, `HMAD_STUB_CLAUDE_ENV_CAPTURE`.** When it is
   set, the stub writes the sorted names of its exported `CLAUDE*` variables, one per line, to that
   file (`compgen -e` filtered by a `case`, as D3.3 does). When it is unset, the stub does nothing
@@ -1462,8 +1694,16 @@ after the run):
   - exits `HMAD_STUB_GROK_RC`.
   Knob names follow the existing `HMAD_STUB_<AGENT>_*` convention seen in `stubs/agy` and
   `stubs/codex`.
-- **One fixture source.** Every grok stream in every test comes from `grokfixtures.py`, which
-  asserts F0's sha256 before deriving.
+- **One fixture source, inside the skill.** F0 is copied byte-for-byte to
+  `h-mad/tests/fixtures/grok-stream-json.2026-09-28.ndjson`, as spec §"Fixtures" (the F0 entry)
+  allows.
+  `grokfixtures.py` reads only that copy, never the `docs/` path. Before deriving anything it
+  asserts the copy's sha256 equals F0's committed hash,
+  `72f6258734f184ae999f84273b5abe3711202a1a8f43f392143173c8364fe569` (V2), written into the
+  module as a constant. Every grok stream in every test is built from that copy, so the suite runs
+  from a clone holding the skill alone. A dedicated test, `test_grok_fixture_copy_hash` (Test
+  Plan), asserts the same hash, so a changed copy fails as one named test, not only as an error
+  in every consumer.
 - **Base comparisons are against a pinned sha, not `merge-base`.** After merge, `merge-base HEAD
   main` is HEAD, and the comparison would become identity. The fork sha recorded at 5c is
   written into the test as a constant.
@@ -1483,15 +1723,15 @@ test file is edited (FR-11). Each row lists its ACs and the design tests it adds
 
 | File | Covers |
 |---|---|
-| `h-mad/tests/grokfixtures.py` | the F0 path + sha256 assert; builders for F-TRUNC, F-NOTOOLS, F-NOTEXT, F-NOTOOLTEXT, F-DECOY, F-BEAT, F-SPACED, F-TWOMODEL, F-SHARED, F-SEP-usage, F-SEP-tool_call, F-SEP-tool_call_update, the AC-7.3 three-completed stream, the mixed agy+F0 log, AC-4.10's stream (F-NOTOOLS minus every `text` event), AC-11.3's banner-then-F0 log, and the window-edge log (a first line long enough that the banner starts past character 4096, then the banner line, then F0) |
+| `h-mad/tests/grokfixtures.py` | the in-skill F0 copy's path (`h-mad/tests/fixtures/grok-stream-json.2026-09-28.ndjson`) + sha256 assert against the constant `72f6258734f184ae999f84273b5abe3711202a1a8f43f392143173c8364fe569`; builders for the depth lines (`{"type":"text","data":"x","n":` + k nested arrays + `}`, depth k, for k = 64 and 65), F-DEEP64 and F-DEEP65 (F-TRUNC followed by a `text` event `DEEP`, a `tool_call_update` with `toolCallId` `deep` and `status` `completed`, and an `end` event with `stopReason` `deep`, each carrying an `"n"` member of depth 64 or 65 respectively), the 200,000-deep line, and for F-TRUNC, F-NOTOOLS, F-NOTEXT, F-NOTOOLTEXT, F-DECOY, F-BEAT, F-SPACED, F-TWOMODEL, F-SHARED, F-SEP-usage, F-SEP-tool_call, F-SEP-tool_call_update, the AC-7.3 three-completed stream, the mixed agy+F0 log, AC-4.10's stream (F-NOTOOLS minus every `text` event), AC-11.3's banner-then-F0 log, and the window-edge log (a first line of exactly 4095 `x` characters and its newline, then `OpenAI Codex v0.145.0`, then F0; the banner starts at character and byte 4096, V22, just outside a 4096 window and inside any window of 4110 or more) |
 | `test_h_mad_state_fallback_agent.py` | AC-1.1–1.4 (AC-1.3 over `h-mad/tests/fixtures/state_incident_replay.json`) |
 | `test_h_mad_tdd_gate_fallback_agent.py` | AC-2.1 (80 cells, expected value from an in-test transcription of the table), AC-2.1b (24 BLOCK-INVALID + 3 JSON-`null` control + absent control + 8 BLOCK-CODEX), AC-2.2 (16 × 3 against the pinned base), AC-2.3–2.6; design test **read error fails closed** (a `jq` shim in `bindir` that execs the real `jq` except when its filter mentions `fallback_agent`, where it exits 5 → BLOCK-INVALID `<unreadable>`) |
 | `test_hmad_dispatch_exec_grok.py` | AC-3.1–3.7 (AC-3.3 through `HMAD_STUB_CLAUDE_ENV_CAPTURE` on the grok stub; AC-3.4 through the same knob on the codex and agy stubs; AC-3.6 on the farm with the `command -v grok` precondition), AC-4.1–4.10 (AC-4.10: AC-4.10's stream, stub rc 0 → rc 3 and stderr contains `0 tool calls completed; last tool: search_replace pending`); design tests: F-SEP ×3 (stdout `STATUS: DONE`); **jq absent** on the farm (precondition `command -v jq` fails; stderr has `grok stream not parsed — jq not on PATH`, no `TRUNCATED`, no `command not found`); **jq fails** with a 127 shim (stderr has `grok stream not parsed — jq failed` and no `TRUNCATED`, row P9) |
 | `test_hmad_dispatch_progress_grok.py` | AC-5.1, AC-5.2 (the four per-class equalities and the two absences, D5); design tests: **jq absent** on the farm (`format: grok-ndjson` and `(grok stream — jq not on PATH, cannot render)`); **jq fails** with the shim (`(grok stream — jq failed, cannot render)`) |
-| `test_h_mad_review_evidence_grok.py` | AC-6.1–6.4, AC-6.6; mixed agy+F0 CLI equality (W6); design test **malformed `type`**: F0 with `{"type":[]}`, `{"type":{}}`, `{"type":1}`, `{"type":null}` and a line nested 5000 deep placed **before** the first event and again **between** two events. `scan_grok` returns counts equal to F0's, and the CLI prints F0's `EVIDENCE:` line (row E4) |
+| `test_h_mad_review_evidence_grok.py` | AC-6.1–6.4, AC-6.6; mixed agy+F0 CLI equality (W6); design test **malformed `type`**: F0 with `{"type":[]}`, `{"type":{}}`, `{"type":1}`, `{"type":null}` and a line nested 200,000 deep (which raises `RecursionError` under both Python 3.11.8 and 3.14.7, so row E7 is killed on either interpreter) placed **before** the first event and again **between** two events. `scan_grok` returns counts equal to F0's, and the CLI prints F0's `EVIDENCE:` line (row E4) |
 | `test_h_mad_audit_cycle_grok.py` | AC-7.2–7.4; shape enumeration: the seven shapes `missing`, `empty`, `parsed`, `grok`, `grok-truncated`, `codex-text`, `unparseable`, each asserted to its D7 route and `_effort_items` rendering, plus a hand-built unknown shape → `shape_unrouted`; mixed agy+F0 `measure_effort` → `parsed` (W7a) |
 | `test_hmad_dispatch_audit_cycle_grok.py` | AC-7.1 |
-| `test_grok_two_instruments.py` | **Format agreement.** On F0, F-SPACED, F-TRUNC, an agy log, a codex-banner log, the mixed log, AC-11.3's log and the window-edge log, the `format:` of `hmad-dispatch progress` and `measure_effort()["shape"]` agree under the mapping `agy-ndjson ↔ parsed`, `grok-ndjson ↔ grok \| grok-truncated`, `codex-text ↔ codex-text \| unparseable`. The window-edge log is ASCII, so D4's window-units residual does not apply to it: its banner starts past character 4096 and past byte 4096, both windows miss it, all three surfaces read grok, and the test asserts they agree. <br> **AC-5.2b.** The two single-line logs of spec AC-5.2b, through `progress` (jq route, and fallback route on the farm) and through `scan_grok(...) is not None`: key-order line → `grok-ndjson` / non-`None`; bogus-type line → `codex-text` / `None`. <br> **AC-11.3**, one assertion per surface on the banner-then-F0 log: `progress` prints `format: codex-text`; the CLI prints today's codex-text output for those bytes (a `CODEXEVIDENCE:` line, then `EVIDENCE: UNREADABLE reason=unsupported_format`), rc 2, and no line contains `format=grok`; `measure_effort` → `codex-text` (rows D1, E3, A3). <br> **Window-edge equality** between the CLI and `measure_effort` on the window-edge log (row E5). <br> **Completeness and N, single-sourced (brief item 4).** On F0, F-TRUNC, F-NOTOOLS, F-SHARED's region and F-BEAT: `_grok_region_state` (via `run_fn`) is `complete` iff `scan_grok()["complete"]`, and the N in `_grok_last_tool`'s line equals `scan_grok()["ok"]` on the same region text. Expected values are V13's table. <br> **Vocabulary, single-sourced.** The `_GROK_TYPES_RE` literal parsed out of `hmad-dispatch.sh`, split on `\|`, equals `h_mad_review_evidence._GROK_TYPES` as a set (base §"Single-source contract") |
+| `test_grok_two_instruments.py` | **Format agreement.** On F0, F-SPACED, F-TRUNC, an agy log, a codex-banner log, the mixed log, AC-11.3's log and the window-edge log, the `format:` of `hmad-dispatch progress` and `measure_effort()["shape"]` agree under the mapping `agy-ndjson ↔ parsed`, `grok-ndjson ↔ grok \| grok-truncated`, `codex-text ↔ codex-text \| unparseable`. The window-edge log is ASCII, so D4's window-units residual does not apply to it: its banner starts at character and byte 4096, both windows miss it, all three surfaces read grok, and the test asserts they agree. That pins the shell's `head -c 4096` (row L5). <br> **Depth boundary (D3.5, D6).** The depth-64 single-line log → `format: grok-ndjson` and `scan_grok(...) is not None`; the depth-65 log → `format: codex-text` and `None` (rows L3, E6, E8). On F-DEEP64 and F-DEEP65, executed at `0b3f969` on both surfaces: F-DEEP64 gives `_grok_region_state` `complete`, final message `DEEP`, N 3, stop reason `deep`, and `scan_grok` complete `True` / ok 3; F-DEEP65 gives exactly F-TRUNC's values, which are `truncated`, `STATUS: DONE`, N 2, no stop reason, and complete `False` / ok 2 (row L4). `progress` on F-DEEP65 prints no `END stopReason=deep` line. The Python constant `GROK_MAX_DEPTH` equals the `_GROK_MAX_DEPTH=` literal parsed out of `hmad-dispatch.sh`. <br> **`test_grok_fixture_copy_hash`.** The sha256 of `h-mad/tests/fixtures/grok-stream-json.2026-09-28.ndjson` equals `72f6258734f184ae999f84273b5abe3711202a1a8f43f392143173c8364fe569`. It reads nothing outside `h-mad/`. <br> **AC-5.2b.** The two single-line logs of spec AC-5.2b, through `progress` (jq route, and fallback route on the farm) and through `scan_grok(...) is not None`: key-order line → `grok-ndjson` / non-`None`; bogus-type line → `codex-text` / `None`. <br> **AC-11.3**, one assertion per surface on the banner-then-F0 log: `progress` prints `format: codex-text`; the CLI prints today's codex-text output for those bytes (a `CODEXEVIDENCE:` line, then `EVIDENCE: UNREADABLE reason=unsupported_format`), rc 2, and no line contains `format=grok`; `measure_effort` → `codex-text` (rows L1, E3, A3). <br> **Window-edge equality** between the CLI and `measure_effort` on the window-edge log (row E5). <br> **Completeness and N, single-sourced (brief item 4).** On F0, F-TRUNC, F-NOTOOLS, F-SHARED's region and F-BEAT: `_grok_region_state` (via `run_fn`) is `complete` iff `scan_grok()["complete"]`, and the N in `_grok_last_tool`'s line equals `scan_grok()["ok"]` on the same region text. Expected values are V13's table. <br> **Vocabulary, single-sourced.** The `_GROK_TYPES_RE` literal parsed out of `hmad-dispatch.sh`, split on `\|`, equals `h_mad_review_evidence._GROK_TYPES` as a set (base §"Single-source contract") |
 | `test_h_mad_assemble_tdd_agent.py` | AC-8.1–8.5 (AC-8.2 includes `--timeout=900` and `--ti 900` under `--agent grok`) |
 | `test_h_mad_resolved_model_grok.py` | AC-9.1–9.3 |
 | `test_grok_fallback_docs.py` | AC-10.1 via `docsections.titled_section`, which asserts a missing heading and never skips; AC-10.2 |
@@ -1533,6 +1773,9 @@ test file is edited (FR-11). Each row lists its ACs and the design tests it adds
   shell/Python line has one cross-surface test in `test_grok_two_instruments.py`:
   - the seven-type vocabulary (`_GROK_TYPES_RE` and `_GROK_TYPES`, asserted equal as sets);
   - grok detection (AC-5.2b, plus D4's measured residual class);
+  - the depth bound (`_GROK_MAX_DEPTH` and `GROK_MAX_DEPTH`, asserted equal, and the depth-64/65
+    boundary on both surfaces). This makes the two detectors' input domain identical on the depth
+    axis. The parser-grammar class stays a stated residual (D4);
   - completeness and N (`_grok_region_state`/`_grok_last_tool` against `scan_grok`'s `complete`
     and `ok`, over five fixtures);
   - banner precedence (AC-11.3 on all three surfaces).
@@ -1540,8 +1783,24 @@ test file is edited (FR-11). Each row lists its ACs and the design tests it adds
   cycle). The window `4096` is written twice because one copy is a committed mutation anchor
   (D6), and the window-edge equality test pins the two.
 - **Standalone / no plugin dependency; no new external dependency.** It complies. The design adds
-  stdlib Python, `jq` where the agy path already requires it, and POSIX `env`. `grok` is a runtime
-  option of one verb, never needed by the suite.
+  stdlib Python, `jq` where the agy path already requires it, and POSIX `env`. `grok` is covered
+  by the clause in base §"No new external dependency" (V23): "Dispatched agent CLIs are not
+  script dependencies. `codex`, `agy` and `grok` are optional runtime agents: reached only
+  through a `hmad-dispatch` verb …, never imported, required, or invoked by a script or test for
+  its own work — tests reach them through stubs". The design meets each condition of it:
+  - **Reached only through a verb.** The one invocation is `exec grok`'s child (D3.2). No script
+    imports or requires `grok`. `resolved-model grok` (D10) and `scan_grok` (D6) read a log that
+    a dispatch already wrote, and never run the CLI.
+  - **Tests reach it through stubs.** Every test that dispatches grok puts `stubs/grok` on its
+    PATH. The suite makes no
+    live call (Test Strategy), and AC-3.6 runs with `command -v grok` failing, asserted as a
+    precondition.
+  - **An absent `grok` is a dispatch-time condition.** `command -v "$agent"` reports
+    `exec requires the grok CLI on PATH` (D3.1), and nothing else in the skill fails.
+  - **Not a script.** The Phase-5 live smoke (D13) runs the real `grok` by hand once, as a
+    verification step before merge. It is not a script or a test in the suite.
+  - **Residual.** W1's mutant would run a real `grok` if one resolved on `/usr/bin:/bin` (§"Wire
+    force-fires", W1's residual). None does at `0b3f969`, and the row is re-run at 5g.
 - **Portable time bounds.** It complies. The grok child is bounded by `_exec_run`'s watchdog, and
   no `timeout`/`gtimeout` is introduced.
 - **Doc-template superset compliance.** It complies. The document carries every Phase-4 template
@@ -1562,9 +1821,10 @@ test file is edited (FR-11). Each row lists its ACs and the design tests it adds
 - **Connection enforcement.** It complies. W1–W11 each have a wire-scoped revert and a one-replace
   force-fire.
 - **Incident replay.** It complies. F0, the real probe transcript, is the root of every fixture.
-- **Assumption verification; behavioural premises carry their command.** It complies. V1–V17 and
-  every D-section reading carry the command and one reading, at `50560eb` or `0df3d47` as
-  stamped. The `h-mad/` tree is identical at the two.
+- **Assumption verification; behavioural premises carry their command.** It complies. V1–V25 and
+  every D-section reading carry the command and one reading, at `50560eb`, `0df3d47` or
+  `0b3f969` as stamped. The `h-mad/` code and tests are identical at the three; only
+  `h-mad/invariants.base.md` differs at `0b3f969` (§Overview).
 - **Counts a dispatch reports.** Every count here was re-derived at the sha it is stamped with,
   not carried.
 - **Wrapper–runtime reconciliation.** It complies through plan v1.3's live smoke (D13). The
@@ -1578,7 +1838,10 @@ test file is edited (FR-11). Each row lists its ACs and the design tests it adds
 **Project layer (`.h-mad/invariants.md`):**
 
 - **Skill self-containment.** It complies. No code or test reads outside `h-mad/`, apart from the
-  documented `~/.claude/...` install path the hook already uses. The HemaSuite `_MARKERS`
+  documented `~/.claude/...` install path the hook already uses. F0 reaches the suite as the
+  in-skill copy `h-mad/tests/fixtures/grok-stream-json.2026-09-28.ndjson`, checked against F0's
+  committed sha256 by `grokfixtures.py` and by `test_grok_fixture_copy_hash`. No test reads the
+  `docs/03-analysis/` original. The HemaSuite `_MARKERS`
   reference is a documentation citation only.
 - **Skill manifest integrity.** It complies. `SKILL.md`'s frontmatter is untouched, and the entry
   behaviour change is documented in `SKILL.md` (D12).
@@ -1586,3 +1849,4 @@ test file is edited (FR-11). Each row lists its ACs and the design tests it adds
 ## Version History
 - v1.0: Initial design draft (2026-09-28) from spec v1.2 and plan v1.3, tree read at 50560eb. Typed fail-closed fallback_agent read placed after BLOCK-CODEX; explicit grok arm first in _cmd_exec with S4/S8 else arms made explicit elifs; child-only env -u CLAUDE* scrub; jq segmenter, region state, last-tool readers scoped by pre_lines; grok-ndjson detection helper after agy; scan_grok and closed-world combine routing with a distinct shape_unrouted reason; presence-judged --timeout sentinel (default=None); last-end model reader first in main(); legs_changed switch executed; per-closer F-SEP fixtures and one-replace force-fires for W1-W11.
 - v1.1: Design audit cycle 1 owed items and spec v1.3 (2026-09-28), authored at 0df3d47. One precedence in all three classifiers (agy, codex banner in the head window, grok, codex-text): shell _codex_banner_in_head over 4096 bytes with the byte/char window residual stated, CLI codex_banner_in_head, measure_effort keeps its anchored elif ahead of grok. Key-order-independent grok detection: jq route with a grep fallback, agreement with scan_grok measured and its residual class stated. scan_grok type-checks before membership and catches RecursionError. D3.5 readers stream the region through one _grok_region helper with no tail cap; N is completed ids over the whole region, single-sourced with scan_grok ok by test; the false all-fixtures-agree claim and the 2000-line cap are removed. nojq/jqfail as distinct states and wordings. Heartbeat residual beside the completeness rule. Shape count 7. D5 run-state and AC-5.2 per spec v1.3. D9 keeps the anchored exec codex line. New section on existing mutation anchors. Tool-absent cells on a /usr/bin-minus-tool symlink farm with a command -v precondition. Opt-in HMAD_STUB_CLAUDE_ENV_CAPTURE knob in the codex/agy stubs. Test Plan rows for AC-4.10, AC-5.2b, AC-11.3, AC-5.3, AC-2.7; cross-surface completeness/N tests; mutation rows P8, P9, D1, D2, E3-E5, A3.
+- v1.2: Corrective revision after design audit round 2 (2026-09-28), authored at 0b3f969; not re-audited. Identical input domain on the depth axis: one bound, _GROK_MAX_DEPTH=64 / GROK_MAX_DEPTH=64, applied through one jq filter _grok_obj in every jq program and an iterative depth check in scan_grok, executed at depths 64/65/1000/5000/10000/200000 on three jq builds and Python 3.11.8/3.14.7; RecursionError catch kept and mutation-rowed (E7) on a 200,000-deep line; the parser-grammar class and the fallback grep's domain stated exactly as residuals. grok compliance now cites the base agent-CLI clause. In-skill F0 copy at h-mad/tests/fixtures/grok-stream-json.2026-09-28.ndjson with a sha256 test. New section Supersedes the plan on (precedence, 55 vs 58 ACs). Delta-review items: _grok_region_state reads the whole region (no SIGPIPE false jqfail), -r on all four readers, row L2 find bytes, anchor rule 2 as substring with executable prescriptions and two more kept anchors, farm cells bypass run()/_isolated_env, E5 fixture pinned at banner offset 4096 plus row L5, widened class-sweep needle, Error Handling first-read scope; log-format rows renamed L1/L2, W1 install paths, stub-name precedence. New rows L3-L5, E6-E8; V18-V25.
