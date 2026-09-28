@@ -6,3 +6,10 @@
 {"phase": "plan", "cycle": 2, "leg": "codex", "item": "live smoke invokes main-tree hmad-dispatch", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": false}
 {"phase": "plan", "cycle": 2, "leg": "codex", "item": "live smoke never reads back b.txt", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": false}
 {"phase": "plan", "cycle": 2, "leg": "codex", "item": "W4 force-fire non-discriminating (no zero-tool EMPTY case)", "origin": "propagation-gap", "by_cycle": 1, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-5.2 exactness narrowed", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "shell vs python grok classifier disagree on key order", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "scan_grok TypeError on unhashable type", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "no-jq test PATH retains /usr/bin/jq", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "FR-4 tail-bound unmet; agy reader not tail-bounded (spec false premise)", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "teammate", "item": "stubs capture no CLAUDE* vars; AC-3.4/W2 unobservable", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "teammate", "item": "codex transcript echoing grok JSON reclassified grok", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
