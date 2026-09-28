@@ -16,9 +16,10 @@ Tasks 3, 4 and 5 build the judge: Task 3 lands the whole module with its two cal
 their pre-wire form, Task 4 wires W4 (`score` → `_suite_summary`) and Task 5 wires W3
 (`resolve` → `_parse_tasks`). Task 6 rewires the Codex gate (W1, W5a) and Task 7 adds its venv
 shell-policy branch. Task 8 rewrites the Claude gate (W2, W5b, W6) in the form V-0 chose. Task 9
-lands the documentation, Task 10 authors and scores the 64 mutation rows in eight specs, and Task
+lands the documentation, Task 10 authors and scores the 87 mutation rows in eight specs, and Task
 11 is the 5g gate. 1 + 2 + 3 + 2 + 1 + 1 + 1 + 1 = 12. Four tasks are `wiring` (4, 5, 6, 8) and
-carry seven wires between them.
+carry seven wires between them. Task 8 waits on two preconditions: a conclusive V-0 and the design
+delta owed on D9's root-under-`tests/` residual (§"Open Questions", OQ-I3).
 
 ## Deviations from design v1.2
 
@@ -33,7 +34,12 @@ evidence. An auditor reading both documents follows this section where they diff
    `multi-host-runtime`'s impl-plan appends its own `hermetic_env` there (its Deviation 1) and the
    two features would then collide textually in one file. Tests import it the way
    `test_docsections.py` imports `docsections` (`from docsections import …`, read at `f6b258f0`;
-   `h-mad/tests/` has no `__init__.py`).
+   `h-mad/tests/` has no `__init__.py`). **It is test code, and every addition to it lands in the
+   RED commit of the task that adds it** (Tasks 1, 3, 7 and 8 list it on their Test file line), so
+   each RED split below counts the support code as present and no test module fails collection
+   on a missing helper. Both gates exempt the file: the Claude gate's `*/tests/*` and the Codex
+   gate's `_is_production_python` (`"tests"` among the path parts, read at `a1478ad3`). Residual:
+   each later addition must be re-checked against its own task's RED split.
 2. **W3 and W4 are staged.** The judge is the caller of both wires and does not exist before this
    feature, so a W3/W4 pin written against a missing judge would go RED on `ModuleNotFoundError`,
    which 5d refuses (`step5d:red_wrong_reason`). Task 3 therefore lands the two call-site lines in
@@ -65,7 +71,14 @@ evidence. An auditor reading both documents follows this section where they diff
      to the impl-plan;
    - H1B and H1C (the top-level `file_path` and `path` branches of the stdin reader): spec AC-8.1
      names only the `tool_input` branch, and invariant §"Test discrimination" asks for each
-     alternation branch alone.
+     alternation branch alone;
+   - v1.1, one row per new test that passes at RED (invariant §"Test discrimination": a guard
+     never seen failing is not trusted), listed in Task 10 §"Initially-green guards": S8, S9, S10,
+     S11, S12, E1, P1, P1B, P2, K3B, K5, G6B, G7, G8, H15, W5BF2, W5BF3 and D1;
+   - v1.1, rows for guards the revision adds: R5 (the name map reads stdout only), H16 and H17
+     (the one-line check keeps trailing newlines), C2G and C3G (spec AC-8.1 scores the
+     unreadable-chain refusal and the every-record escape on a named AC test, so C2's and C3's
+     mutants are re-scored on the Claude gate's AC-6.9 and AC-6.10 tests, as H14 already is).
 7. **One design mutant is not authored: `_absent_at`'s `[ -x "$D" ]` → true.** It is equivalent on
    every reachable input, so it would SURVIVE by construction. Every `D` the fast path tests was
    entered by `cd` (`d=$(cd "$d" && pwd -P)`, and `ROOT_ABS` likewise), which needs search
@@ -83,6 +96,38 @@ evidence. An auditor reading both documents follows this section where they diff
    does not state the child's stdin.
 10. **The name-map script path is a module attribute, `NAME_MAP`.** Design §"Test Plan" points
     "the module's name-map script path" at a sleeper script; the attribute is that seam.
+11. **The Claude gate captures each verb's output with an `rc=` sentinel** (v1.1, codex impl-plan
+    audit c1). Design D9 steps 8 and 10 give `SOUT=$(…) || SRC=$?` and `JOUT=$(…) || JRC=$?`, and
+    the same steps refuse "zero lines, more than one line". Command substitution strips every
+    trailing newline, so a valid line followed by a blank one reads as one line and that rule
+    cannot fire. Task 8 appends `; printf 'rc=%s' "$?"` inside the substitution, splits the rc off,
+    strips exactly one trailing newline, and refuses an empty value or one that still holds a
+    newline. Executed under `/bin/bash` 3.2.57 with `set -euo pipefail` (a scratch script, deleted):
+    `ALLOW\n` → one line, rc 0; `ALLOW\n\n` → refused; `ALLOW` (no newline) → one line; `` (empty)
+    and `\n` → refused; `A\nB\n` → refused; `ALLOW\n` then exit 1 → one line, rc 1 (the ALLOW-rc-1
+    rule still refuses it); `x rc=5\n` then exit 3 → line `x rc=5`, rc 3; a failing command → rc 1,
+    empty, refused; the script ran past every case (errexit does not fire inside the
+    substitution). The design's rule is kept; only its capture literal changes. Rows H16 and H17.
+12. **`_run_bounded` returns stdout and stderr separately** (v1.1, codex impl-plan audit c1).
+    Design D3 step 6 reads the name map's **stdout** alone ("A non-empty stdout resolves against
+    `root`"); a combined stream would turn a stderr-only diagnostic into a candidate and a
+    `test-missing` verdict. A candidate run is scored on `out + "\n" + err`, because a missing
+    pytest reports on stderr. Row R5.
+13. **Each candidate's DENY-reason entry** (v1.1, teammate impl-plan audit c1): design D7 says
+    "its summary line" and its Error Handling table says the reason names a start error. Task 3
+    fixes the entry: the start error, `f"{type(exc).__name__}: {exc}"`, when the interpreter
+    could not start, else the candidate's
+    summary line, else its last non-empty output line (a `no-summary` run has no summary line).
+14. **The refusal form is read from the hook lazily; the V-0 line is quoted in the test module's
+    docstring** (v1.1, teammate impl-plan audit c1). A module-level read of
+    `readonly REFUSAL_FORM=` fails collection at RED, because today's hook has no such line
+    (`grep -c REFUSAL_FORM h-mad/hooks/h-mad-tdd-gate.sh` → 0 matching lines at `a1478ad3`). The
+    tests do not read `v0.out` from `docs/`: an `h-mad/tests` module that reads a path outside
+    `h-mad/` breaks the project invariant §"Skill self-containment". AC-6.6 already requires the
+    docstring quote, so the test compares the hook's literal with it.
+15. **W4F's force literal is `_suite_summary("1 failed in 0.01s")`**, where the design's W3/W4
+    table writes `SuiteSummary(0, 1, 0, False, frozenset({"failed"}))`. The effect is the same
+    value, and the plan's form needs no `SuiteSummary` import in the judge.
 
 ## Preamble — where and how this plan runs
 
@@ -162,12 +207,22 @@ evidence. An auditor reading both documents follows this section where they diff
    `h-mad/scripts/h_mad_audit_gate.py` (`audit_gate_stamp.json`, `audit_leg_set_gate.json`,
    `audit_round_cap.json`, `audit_suite_gate.json`, `collect_report.json`) and
    `h-mad/scripts/h_mad_wire_pin_gate.py` (`wire_pin_numbered_labels.json`,
-   `wire_pin_one_wire_many_pins.json`, `wire_pin_shape_vocabulary.json`); no committed spec anchors
-   either hook (`git grep -l 'h-mad-codex-tdd-gate\|h-mad-tdd-gate' -- h-mad/tests/mutation-specs`
-   → 0 files, design). No new line may be byte-identical to an existing anchor.
+   `wire_pin_one_wire_many_pins.json`, `wire_pin_shape_vocabulary.json`), and `h-mad/SKILL.md`
+   (Task 9): a JSON walk of `h-mad/tests/mutation-specs/*.json` over each row's `file` at
+   `a1478ad3` gives `SKILL.md` 53 rows in 14 specs, `scripts/h_mad_audit_gate.py` 44 rows in 5,
+   `scripts/h_mad_wire_pin_gate.py` 11 rows in 3, and 0 rows for every other file this plan edits
+   (both hooks, `references/codex-runtime.md`, `references/agy-runtime.md`,
+   `references/codex-implementer-prompt.md`, `scripts/h_mad_derive_test_path.sh`, and the test
+   modules `test_h_mad_audit_suite_gate.py`, `test_h_mad_codex_runtime.py`,
+   `test_h_mad_tdd_gate_codex.py`, `test_h_mad_tdd_gate_state_resolution.py`). The sweep
+   therefore runs after Tasks 1, 2 and 9, and after Task 10 adds its own specs. No new line may be byte-identical to an existing
+   anchor.
 9. **Mutation tags.** Every line a Task 10 row anchors ends with a tag comment, `# M:` followed by the row id (`# M:S1`, `# M:W4`),
-   written verbatim as the task shows it, and each tag occurs once in its file. A spec row's
-   `find` is the whole tagged line, indentation included.
+   written verbatim as the task shows it, and each tag occurs once in its file, counted with a
+   line-end boundary (`grep -c '# M:H1$'`, because `# M:H1` is a prefix of `# M:H10`…`# M:H17`
+   and `# M:S1` of `# M:S10`…). A spec row's `find` is the whole tagged line, indentation
+   included. Rows S11, S12, K3B, K5, G6B, W5BF2, W5BF3, C2G and C3G reuse another row's tag; P1,
+   P1B, P2 and G8 quote an untagged line, as R2 and W3C do.
 10. **No bare time-limit command.** `h-mad/tests/test_h_mad_portable_timeout.py` scans
     `h-mad/scripts/*.py`, `h-mad/scripts/*.sh`, `h-mad/hooks/*.sh`, `h-mad/references/*.md` and
     `h-mad/SKILL.md` with `(?:^|[^-\w])timeout\s+\d+` (read at `f6b258f0`). Prose says "a 40 s
@@ -253,7 +308,7 @@ impl-plan commit.
 ## Task 1: suite-summary-line
 
 **Production file**: `h-mad/scripts/h_mad_audit_gate.py`
-**Test file**: `h-mad/tests/test_h_mad_audit_suite_gate.py`, `h-mad/tests/test_h_mad_tdd_gate_support.py` (new)
+**Test file**: `h-mad/tests/test_h_mad_audit_suite_gate.py`, `h-mad/tests/test_h_mad_tdd_gate_support.py` (new), `h-mad/tests/tdd_gate_support.py` (new, lands in the RED commit)
 **Task shape**: `new-behaviour`
 
 **Description**: Design §D7, the parser half and `run_suite`; spec FR-4 "Audit-gate changes" and
@@ -280,7 +335,7 @@ class SuiteSummary(NamedTuple):
 
 
 _SGR_RE = re.compile(r"\x1b\[[0-9;]*m")
-_CATEGORY = r"[a-z][a-z-]*(?: [a-z][a-z-]*)*"
+_CATEGORY = r"[a-z][a-z-]*(?: [a-z][a-z-]*)*"  # M:S9
 _PHRASE = r"\d+ " + _CATEGORY
 _SUMMARY_LINE_RE = re.compile(
     r"^(?:(?P<ph>" + _PHRASE + r"(?:, " + _PHRASE + r")*)|no tests ran)"
@@ -295,7 +350,7 @@ def _suite_summary(text: str) -> Optional[SuiteSummary]:
     untimed: Optional[SuiteSummary] = None
     for raw in text.splitlines():
         line = _SGR_RE.sub("", raw).strip().strip("=").strip()  # M:S4
-        match = _SUMMARY_LINE_RE.match(line)
+        match = _SUMMARY_LINE_RE.match(line)  # M:S8
         if match is None:
             continue
         if match.group("ph") is None:
@@ -311,7 +366,7 @@ def _suite_summary(text: str) -> Optional[SuiteSummary]:
                 elif category == "failed":  # M:S6
                     failed += int(number)  # M:W4C
                 elif category in ("error", "errors"):  # M:S7
-                    errors += int(number)
+                    errors += int(number)  # M:S10
             summary = SuiteSummary(passed, failed, errors, False, frozenset(phrases))
         if match.group("timed"):
             timed = summary
@@ -343,7 +398,12 @@ DROPPED_ENV = ("HPW_AGENT_BACKEND", "HMAD_CODEX_UNAVAILABLE", "CODEX_PROJECT_DIR
 
 def hermetic_env(**extra: str) -> dict[str, str]:
     """os.environ minus every CLAUDE* name and DROPPED_ENV, then `extra`."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE") and k not in DROPPED_ENV}  # M:E1
+    env.update(extra)
+    return env
 ```
+The file lands in this task's RED commit (Deviation 1), so the test below passes at RED; row E1
+is its observed failure.
 
 **Tests** (38 new collected items).
 In `test_h_mad_audit_suite_gate.py`, as new top-level functions (no existing class or function is
@@ -426,9 +486,16 @@ becomes "reaches the one predicate and still reads `no_summary`". It lives insid
   expected line (the five `no_summary` rows, `passed-and-error`, `failed-and-passed`,
   `stray-failed-on-stderr`, `subtests-passed` and `collected-zero`).
 - Item 2: 18 fail on the tuple assertion; 4 pass (rows 18–21: today `None`, expected `None`).
-- `test_h_mad_tdd_gate_support.py`: one collection error
-  (`ModuleNotFoundError: No module named 'tdd_gate_support'`), 0 items.
+- `test_h_mad_tdd_gate_support.py`: 1 passing (`tdd_gate_support.py` lands in the RED commit,
+  Deviation 1, so `hermetic_env` exists and the module imports).
+Over the task's 38 new items: 23 failing and 15 passing.
 **After GREEN**: 58 passed in the audit module (21 + 37), 1 in the support module.
+**Passing at RED, and the row that shows each one failing** (Task 10 §"Initially-green guards"):
+item 1 `subtests-passed` S1, `stray-failed-on-stderr` S3, the five `no_summary` rows S12,
+`passed-and-error` S10, `failed-and-passed` S11, `collected-zero` the existing
+`a-missing-summary-becomes-a-verdict` row of `audit_suite_gate.json` (its subject, the
+`summary is None` return, is unchanged); item 2 rows 18 and 20 S8, row 21 S9, row 19 none alone
+(stated residual); item 3 E1.
 **Regression guards**: the 21 existing audit-suite tests, unmodified in assertions, including
 `test_no_summary_is_UNREADABLE_not_PASS_and_not_FAIL` and
 `test_a_run_that_says_only_no_tests_ran_is_also_refused` (plan §"Regression census");
@@ -440,8 +507,8 @@ becomes "reaches the one predicate and still reads `no_summary`". It lives insid
   one of the three audit-gate change rows is updated" has no member (plan §"Regression census":
   no existing stub prints a failures-without-passes summary), so no assertion changes.
 
-**Mutation rows** (Task 10): S1, S2, S3, S4, S5, S6, S7A and S7B in
-`audit_suite_summary_line.json` — 8 rows.
+**Mutation rows** (Task 10): S1, S2, S3, S4, S5, S6, S7A, S7B, S8, S9, S10, S11, S12 and E1 in
+`audit_suite_summary_line.json` — 14 rows.
 
 **Dependencies on other tasks**: Task 0
 
@@ -506,9 +573,11 @@ assertion):
    read at `f6b258f0` (Convention 6: no `is`).
 8. `test_corpus_old_fields_unperturbed` (1): over this repository's `git ls-files '*.impl-plan.md'`
    minus `archive/` (10 files at `f6b258f0`; the count is re-read, never frozen), `_parse_tasks`
-   of each file and of the same text with every `_PATHS_FIELD_RE` line removed give the same list
+   of each file and of the same text with every path-label line removed give the same list
    of `id` values in the same order, and the same `shape`, `wire`, `pin`, `wires`, `pins` per task.
-   `git` runs under `hermetic_env()` with `timeout=60.0`.
+   A path-label line is one that the module's own constant `_PATHS_LABEL_LINE` matches: a copy of
+   the Task 2 `_PATHS_FIELD_RE` literal above, held in the test file, because the module imports
+   nothing that does not exist at RED. `git` runs under `hermetic_env()` with `timeout=60.0`.
 
 10 + 1 + 4 + 4 + 1 + 1 + 1 + 1 = 23.
 
@@ -524,8 +593,11 @@ and 3 passing (items 6, 7, 8: the unchanged fields and the unchanged regex hold 
   cross-repository base comparison is Task 11's `parse_corpus.py`.
 - [ ] Parser half of AC-2.2 and AC-2.3: items 1–4.
 
-**Mutation rows**: none owned here. R2 and W3C (Task 10) anchor in this file and are owned by Task 5,
-whose tests kill them.
+**Passing at RED, and the row that shows each one failing**: item 6 P1, item 8 P1B, item 7 P2
+(Task 10 §"Initially-green guards").
+
+**Mutation rows** (Task 10): P1, P1B and P2 in `tdd_judge_resolution.json` — 3 rows. R2 and W3C
+also anchor in this file and are owned by Task 5, whose tests kill them.
 
 **Dependencies on other tasks**: Task 0
 
@@ -534,11 +606,11 @@ whose tests kill them.
 ## Task 3: judge-core
 
 **Production file**: `h-mad/scripts/h_mad_tdd_judge.py` (new)
-**Test file**: `h-mad/tests/test_h_mad_tdd_judge.py` (new)
+**Test file**: `h-mad/tests/test_h_mad_tdd_judge.py` (new), `h-mad/tests/tdd_gate_support.py` (additions land in the RED commit)
 **Task shape**: `new-behaviour`
 
-**Description**: Design §D1, D2, D3 (without Task matching), D4, D6, D7's classifier, D10 and D13's
-`fallback` field. The two callee connections land in their pre-wire form (Deviation 2): the plan
+**Description**: Design §D1, D2, D3 (the whole resolver, matching and candidates included; only
+its Task list is the pre-wire `[]`), D4, D6, D7's classifier, D10 and D13's `fallback` field. The two callee connections land in their pre-wire form (Deviation 2): the plan
 loop's Task list is `[]` and the classifier's summary is `None`, so every candidate run that
 reaches rule 3 reads `no-summary` until Task 4. `tdd_gate_support.py` gains the fixture builders
 below.
@@ -549,7 +621,7 @@ from __future__ import annotations
 # stdlib only: argparse, json, os, re, signal, stat, subprocess, sys, time, urllib.parse,
 # pathlib.Path, typing.{NamedTuple, Optional, Sequence, Tuple, Union}
 _HERE = str(Path(__file__).resolve().parent)       # inserted at sys.path[0] when absent
-from h_mad_audit_gate import _SGR_RE  # noqa: E402
+from h_mad_audit_gate import _SGR_RE, _SUMMARY_LINE_RE  # noqa: E402
 
 KINDS = frozenset({"red-measured", "no-test-resolved", "test-missing", "venv-escapes-root",
                    "pytest-missing", "pytest-error", "no-tests-ran", "no-summary",
@@ -652,9 +724,14 @@ def main(argv: Optional[list] = None) -> int: ...
           return Resolution("impl-plan", tuple(present), missing, tuple(notes), None)
   ```
   `_is_present(p)` is `os.stat` succeeding with `S_ISREG`. The name map runs
-  `["bash", str(NAME_MAP), rel]` through `_run_bounded(…, cwd=real_root, deadline)`, notes
-  `name map: ` plus the resolved path, `name map: empty for ` plus the root-relative target, or
-  `name map: target outside root`, and ends in
+  `["bash", str(NAME_MAP), rel]` through `_run_bounded(…, cwd=real_root, deadline)` and reads its
+  **stdout alone** (design D3 step 6; Deviation 12):
+  ```python
+      returncode, out, err, timed_out, error = _run_bounded(["bash", str(NAME_MAP), rel], real_root, deadline)
+      mapped = out.strip()  # M:R5
+  ```
+  It notes `name map: ` plus the resolved path, `name map: empty for ` plus the root-relative
+  target (an empty `mapped`, whatever stderr holds), or `name map: target outside root`, and ends in
   `timeout`, `test-missing`, `no-test-resolved` or a one-candidate `Resolution("name-map", …)`.
   The one `test-missing` constructor:
   ```python
@@ -676,10 +753,11 @@ def main(argv: Optional[list] = None) -> int: ...
   `os.path.lexists(D/.venv/bin/python)`, returns the **unresolved** `str(D/.venv/bin/python)` when
   contained, a `venv-escapes-root` DENY naming `D/.venv` and its realpath when not, and `fallback`
   when no `D` exists.
-- **Bounded run** (D6). `_run_bounded(argv, cwd, deadline) -> Tuple[Optional[int], str, bool, str]`
-  (returncode, stdout + stderr, timed_out, start error): `remaining <= 0` → `(None, "", True, "")`
+- **Bounded run** (D6). `_run_bounded(argv, cwd, deadline) -> Tuple[Optional[int], str, str, bool, str]`
+  (returncode, stdout, stderr, timed_out, start error; the two streams are never joined here,
+  Deviation 12): `remaining <= 0` → `(None, "", "", True, "")`
   without starting; `subprocess.Popen(argv, cwd=…, stdin=subprocess.DEVNULL, stdout=PIPE,
-  stderr=PIPE, start_new_session=True)`, an `OSError` → `(None, "", False, "<Class>: <msg>")`;
+  stderr=PIPE, start_new_session=True)`, an `OSError` → `(None, "", "", False, "<Class>: <msg>")`;
   `communicate(timeout=remaining)`; on `TimeoutExpired`, `os.killpg(proc.pid, signal.SIGKILL)`
   (a `ProcessLookupError` ignored) then `communicate()`. The file holds no `subprocess.run`.
 - **Classifier** (D7):
@@ -708,14 +786,19 @@ def main(argv: Optional[list] = None) -> int: ...
 - **Judge** (D3 step 5, D6, D7 "Several candidates"): `deadline = time.monotonic() + budget_s`;
   `resolve(…, deadline=deadline)`; for each present `(test, cwd)`: `select_interpreter`, then
   ```python
-          returncode, proc_output, timed_out, error = _run_bounded(argv, cwd, deadline)
-          kind = "no-summary" if error else score(proc_output, timed_out)  # M:K3
+          returncode, out, err, timed_out, error = _run_bounded(argv, cwd, deadline)
+          kind = "no-summary" if error else score(out + "\n" + err, timed_out)  # M:K3
   ```
   with `argv = [interpreter, "-m", "pytest", str(test), "-x", "-q", "--no-header"]`. The first
   `red-measured` returns `ALLOW`; `venv-escapes-root`, `timeout` and `pytest-missing` return DENY
   at once; otherwise the DENY kind is the first of `pytest-error`, `no-summary`, `no-tests-ran`,
   `test-passing` any candidate produced, and the reason names every candidate with its kind and
-  its last non-empty output line, each missing candidate as `missing`, and the notes. A
+  one entry (Deviation 13): `error` itself (built as `f"{type(exc).__name__}: {exc}"`, so it
+  begins `PermissionError: ` for a mode-`0o644` interpreter) when the interpreter could not
+  start; else its summary line, the last line of `out + "\n" + err` that, after
+  `_SGR_RE.sub("", line).strip().strip("=").strip()`, `_SUMMARY_LINE_RE.match`es (imported beside
+  `_SGR_RE`, so the entry does not go through the W4 call); else its last non-empty output line.
+  Each missing candidate is named `missing`, then the notes follow. A
   `pytest-error` reason contains `import` and `inside the test body` (AC-4.6). The rc appears in
   reasons only.
 - **CLI** (D10): `argparse` with `state` and `judge` sub-commands, each `--root DIR [--target PATH]`
@@ -735,10 +818,18 @@ D12 precondition with the reason "builder's base interpreter has no pytest; run 
 base interpreter (sys.prefix == sys.base_prefix)"; `/opt/anaconda3/bin/python` prints `9.1.1 3.11.8 True`
 for pytest version, Python version and `sys.prefix == sys.base_prefix` at `f6b258f0`),
 `fake_venv(dir, sh_body)` (a `.venv` with a regular `pyvenv.cfg` and a `/bin/sh` `bin/python`
-script), `marker_shim(python, marker)` (design D12's marker shim) and `sleeper(path, pidfile)`
-(a `/bin/sh` script that writes `$$` or its child's pid to `pidfile` and sleeps 30 s).
+script), `marker_shim(python, marker)` (design D12's marker shim) and
+`sleeper(path, pidfile, seconds)` (a `/bin/sh` script that starts `sleep` for `seconds` seconds,
+the value written into the script body, as its child,
+writes that child's pid to `pidfile`, and waits on it). The in-process `timeout` rows below run
+at `budget_s=1.0` with `seconds=30`. The two gate-level `timeout` rows (Task 6 item 1, Task 8
+item 1) run at the default 40 s budget and pass `seconds=90`, so the sleeper is still alive when
+the budget runs out: the verdict is `timeout`, not a `no-summary` from a sleeper that exited on its
+own, and the pid-gone check after it is meaningful. 40 s plus hook start-up stays under those rows'
+`timeout=120.0`, and 90 s does too, so a missing kill fails on the pid assertion, never on the
+subprocess timeout.
 
-**Tests** (79 new collected items). An autouse fixture strips the ambient names (Convention 3).
+**Tests** (80 new collected items). An autouse fixture strips the ambient names (Convention 3).
 In-process calls use `judge.judge(…, fallback_interpreter=sys.executable)` unless stated.
 - Chain (17):
   1. `test_chain_reads_every_state_file_up_to_root` — root state step5 `feat`,
@@ -816,7 +907,7 @@ In-process calls use `judge.judge(…, fallback_interpreter=sys.executable)` unl
   3. `test_spent_budget_is_timeout_without_a_run` — `budget_s=0.0` with a marker shim venv →
      `timeout`, marker absent.
   4. `test_judge_source_has_no_subprocess_run` — the source text holds no `subprocess.run`.
-- Resolution before W3 (3):
+- Resolution before W3 (4):
   1. `test_unmapped_path_is_no_test_resolved` (AC-2.7) — a plan whose one Task names another file;
      target `tools/x.py` → `no-test-resolved`; the reason contains the plan path, `matched none`
      and `name map: empty for tools/x.py`.
@@ -825,14 +916,23 @@ In-process calls use `judge.judge(…, fallback_interpreter=sys.executable)` unl
   3. `test_unreadable_plan_is_named_in_test_missing` (AC-2.8, route 1) — the plan holds
      `b"\xff\xfe"`; same target → `test-missing`, reason contains
      `impl-plan unreadable: UnicodeDecodeError`.
+  4. `test_name_map_stderr_is_not_a_path` (design D3 step 6; Deviation 12) —
+     `monkeypatch.setattr(judge, "NAME_MAP", <script>)` where the `/bin/sh` script prints
+     `hematology-paper-writer/tests/test_w.py` to **stderr** only and exits 0; no plan; that file
+     does not exist; target `hematology-paper-writer/tools/w.py` → `no-test-resolved`, reason
+     contains `name map: empty for hematology-paper-writer/tools/w.py`. A reader of both streams
+     would take the stderr line as a candidate and return `test-missing` (row R5).
 - Scoring before W4 (5):
   1. `test_pytest_missing_denies[project-venv|gate-interpreter]` (AC-4.1) — a passing test;
      `build_venv(hpw, with_pytest=False)` as the project `.venv`, and, second id, no project venv
-     with `fallback_interpreter=<that venv>/bin/python` → `pytest-missing` each.
-  2. `test_timeout_kind` (AC-4.5) — `fake_venv` whose `bin/python` is the sleeper, `budget_s=1.0`
-     → `timeout` within 1.0 s + a 5.0 s margin, sleeper pid gone.
+     with `fallback_interpreter=<that venv>/bin/python`, where the venv is built at
+     `tmp_path / "gate-venv"` and the fixture root is `tmp_path / "root"`, so it is never the
+     first id's project venv and never on the test's parent chain → `pytest-missing` each.
+  2. `test_timeout_kind` (AC-4.5) — `fake_venv` whose `bin/python` is `sleeper(…, seconds=30)`,
+     `budget_s=1.0` → `timeout` within 1.0 s + a 5.0 s margin, sleeper pid gone.
   3. `test_interpreter_that_cannot_start_is_no_summary` — `fake_venv` whose `bin/python` has mode
-     `0o644` → `no-summary`, reason names `PermissionError`.
+     `0o644` → `no-summary`, reason names `PermissionError` (the start error is the candidate's
+     reason entry, Deviation 13).
   4. `test_escaping_venv_denies_before_any_run` (AC-3.2) — design D12 tree, `hpw/.venv` a symlink
      to `outside-venv` whose `bin/python` is a marker shim → `venv-escapes-root`; the marker file
      does not exist.
@@ -840,11 +940,12 @@ In-process calls use `judge.judge(…, fallback_interpreter=sys.executable)` unl
   — `ast.parse(source, feature_version=(3, 9))` over each file (design D1; the three imported
   modules import under `/usr/bin/python3` 3.9.6, design D1 premise).
 
-17 + 14 + 11 + 9 + 3 + 9 + 4 + 3 + 5 + 4 = 79.
+17 + 14 + 11 + 9 + 3 + 9 + 4 + 4 + 5 + 4 = 80.
 
 **Expected RED split**: the module imports `h_mad_tdd_judge` at module level, so RED is one
-collection error (`ModuleNotFoundError: No module named 'h_mad_tdd_judge'`), 0 items. **After
-GREEN**: 79 passed. `h-mad/tests/test_h_mad_portable_timeout.py` gains 2 collected nodes
+collection error (`ModuleNotFoundError: No module named 'h_mad_tdd_judge'`), 0 items; the
+`tdd_gate_support.py` additions are in the same RED commit and import cleanly. **After
+GREEN**: 80 passed. `h-mad/tests/test_h_mad_portable_timeout.py` gains 2 collected nodes
 (`…[h_mad_tdd_judge.py]` of its two `_SCANNED` parametrizations), which pass.
 **Regression guards**: the full suite; `test_h_mad_portable_timeout.py`.
 
@@ -852,8 +953,8 @@ GREEN**: 79 passed. `h-mad/tests/test_h_mad_portable_timeout.py` gains 2 collect
 - [ ] AC-2.7, AC-2.8 (route 1), AC-3.2, AC-4.1, AC-4.5: the tests named above.
 - [ ] Design D1 floor, D2 chain rules, D4 containment, D6 bound, D10 line grammar, D13 tag table.
 
-**Mutation rows** (Task 10): R3 in `tdd_judge_resolution.json`; V1, V2, V3 in
-`tdd_judge_venv.json`; K1 in `tdd_judge_scoring.json`; C1–C6 in `tdd_judge_chain.json` — 11 rows.
+**Mutation rows** (Task 10): R3, R5 in `tdd_judge_resolution.json`; V1, V2, V3 in
+`tdd_judge_venv.json`; K1 in `tdd_judge_scoring.json`; C1–C6 in `tdd_judge_chain.json` — 12 rows.
 
 **Dependencies on other tasks**: Task 1
 
@@ -868,10 +969,11 @@ GREEN**: 79 passed. `h-mad/tests/test_h_mad_portable_timeout.py` gains 2 collect
 **WIRE-PIN**: `h-mad/tests/test_h_mad_tdd_judge.py::test_scoring_kinds[red]`
 
 **Description**: W4 (plan §"Connection enforcement"; design D7). Two edits: the import line becomes
-`from h_mad_audit_gate import _SGR_RE, _suite_summary  # noqa: E402`, and `score`'s tagged line
-becomes `    summary = _suite_summary(proc_output)  # M:W4`. Nothing else changes.
+`from h_mad_audit_gate import _SGR_RE, _SUMMARY_LINE_RE, _suite_summary  # noqa: E402`, and
+`score`'s tagged line becomes `    summary = _suite_summary(proc_output)  # M:W4`. Nothing else
+changes.
 
-**Tests** (17 new collected items; 96 in the file). Fixtures use the hematology-paper-writer
+**Tests** (17 new collected items; 97 in the file). Fixtures use the hematology-paper-writer
 layout: root state step5 `feat`, no plan, target `hematology-paper-writer/tools/w.py`, name-map
 test `hematology-paper-writer/tests/test_w.py`.
 1. `test_scoring_kinds[red|green|empty|skipped-only|import-error|red-with-subtest|green-with-subtest]`
@@ -900,14 +1002,16 @@ test `hematology-paper-writer/tests/test_w.py`.
 
 7 + 2 + 1 + 1 + 1 + 2 + 1 + 1 + 1 = 17.
 
-**Expected RED split**: 15 failing and 2 passing among the new items; the 79 Task-3 items pass.
+**Expected RED split**: 15 failing and 2 passing among the new items; the 80 Task-3 items pass.
 Before the wire every run past rule 2 reads `no-summary`, so items 1, 3, 4, 6, 7, 8, 9 and
 `failed-line-rc0` fail on their verdict assertions (7 + 1 + 1 + 2 + 1 + 1 + 1 + 1 = 15).
 `silent-rc1` passes (it expects `no-summary`) and item 5 passes (rule 2 precedes the summary).
+The rows that show those two failing: K3B (`silent-rc1` under rc scoring reads `red-measured`) and
+K5 (rule 2 made to yield to a parsed summary: item 5 reads `red-measured`).
 **WIRE-PIN RED reason**: `judge()` exists and returns `Verdict("DENY", "no-summary", …)` for the
 RED fixture, so the assertion `verdict.decision == "ALLOW" and verdict.kind == "red-measured"`
 fails on the caller's return value; the module imports, so no import error is involved.
-**Regression guards**: the 79 Task-3 items; `test_h_mad_audit_suite_gate.py`.
+**Regression guards**: the 80 Task-3 items; `test_h_mad_audit_suite_gate.py`.
 **Wire-scoped revert**: the `# M:W4` line back to `    summary = None  # M:W4` → the pin fails.
 Row W4R. **Force-fire**: `    summary = _suite_summary("1 failed in 0.01s")  # M:W4` →
 `test_scoring_kinds[green]` reads RED and fails. Row W4F. **Callee-side**: `failed += 0` at
@@ -917,8 +1021,8 @@ Row W4R. **Force-fire**: `    summary = _suite_summary("1 failed in 0.01s")  # M
 - [ ] AC-2.6: item 6. AC-2.8 (route 2): item 9. AC-3.1: item 7. AC-3.3: item 8.
 - [ ] AC-4.2: item 1's seven ids. AC-4.3 and AC-4.6: `[import-error]`. AC-4.4: item 2.
 
-**Mutation rows** (Task 10): K2, K3, K4 in `tdd_judge_scoring.json`; W4R, W4F, W4C in
-`tdd_judge_wiring.json` — 6 rows.
+**Mutation rows** (Task 10): K2, K3, K3B, K4, K5 in `tdd_judge_scoring.json`; W4R, W4F, W4C in
+`tdd_judge_wiring.json` — 8 rows.
 
 **Dependencies on other tasks**: Task 3
 
@@ -937,7 +1041,7 @@ Row W4R. **Force-fire**: `    summary = _suite_summary("1 failed in 0.01s")  # M
 the plan loop's tagged line becomes `        tasks = _parse_tasks(text)  # M:W3`. Matching,
 authority, candidates and notes already exist (Task 3); they now see Tasks.
 
-**Tests** (16 new collected items; 112 in the file). The plan lives at
+**Tests** (16 new collected items; 113 in the file). The plan lives at
 `docs/01-plan/features/feat.impl-plan.md` beside the root state; paths in it are relative to
 `hematology-paper-writer/` unless stated. No fixture below creates `hematology-paper-writer/tests/test_w.py`
 unless it says so, so the name map never resolves in the pre-wire state.
@@ -967,16 +1071,16 @@ unless it says so, so the name map never resolves in the pre-wire state.
 
 1 + 7 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 = 16.
 
-**Expected RED split**: 15 failing and 1 passing among the new items; the 96 earlier items pass.
+**Expected RED split**: 15 failing and 1 passing among the new items; the 97 earlier items pass.
 Before the wire no Task matches, so each fixture falls to the name map, which finds no file:
 items 1, 2, 3, 5, 6, 8, 9, 10 read `test-missing` or `no-test-resolved` where they expect ALLOW,
 `test-passing` or the dropped-candidate note, and item 7 reads ALLOW through the name map where it
 expects `test-missing`. Item 4 passes (it expects `no-test-resolved`, which the unwired judge also
-returns); it is a guard that turns discriminating once Tasks match.
+returns); it is a guard that turns discriminating once Tasks match, and row R2 shows it failing.
 **WIRE-PIN RED reason**: `judge()` returns `Verdict("DENY", "test-missing", …)` naming
 `hematology-paper-writer/tests/test__parser.py`, so the assertion on `decision`, `source` and
 `test` fails on the caller's return value; no import error is involved.
-**Regression guards**: the 96 earlier items; `test_h_mad_parse_tasks_paths.py`.
+**Regression guards**: the 97 earlier items; `test_h_mad_parse_tasks_paths.py`.
 **Wire-scoped revert**: `        tasks = []  # M:W3` → the pin fails. Row W3R. **Force-fire**:
 `        tasks = [dict(t, production=[]) for t in _parse_tasks(text)]  # M:W3` → item 7 inverts
 (the name-map RED test ALLOWS). Row W3F. **Callee-side**: `_PATHS_FIELD_RE`'s `Production` label
@@ -1024,7 +1128,7 @@ state read are new behaviour landed in the same edit, and their RED split is sta
   ```python
       if isinstance(cwd, str) and cwd:  # M:G1
           c = Path(cwd).expanduser().resolve()
-          if c.is_dir() and (c == root or root in c.parents):
+          if c.is_dir() and (c == root or root in c.parents):  # M:G7
               return c
       return root
   ```
@@ -1071,8 +1175,9 @@ one JSON deny, `("invalid", stdout)` otherwise.
    root step5 record. Per id: RED name-map test → allow; `tools/x.py` (unmapped) →
    `kind=no-test-resolved`; no test file; `hpw/.venv` symlinked outside; `build_venv(…, with_pytest=False)`
    as `hpw/.venv`; top-level import error; empty test file; `fake_venv` printing nothing, exit 1;
-   GREEN test; `fake_venv` sleeper (`timeout=120.0`, about 40 s, and the sleeper pid is gone
-   afterwards); a tree-B copy (`B/hooks/h-mad-codex-tdd-gate.py` copied from the worktree,
+   GREEN test; `fake_venv` whose `bin/python` is `sleeper(…, seconds=90)` (`timeout=120.0`,
+   about 40 s at the default budget, and the sleeper pid is gone afterwards, which it would not
+   be on its own for another 50 s); a tree-B copy (`B/hooks/h-mad-codex-tdd-gate.py` copied from the worktree,
    `B/scripts/h_mad_tdd_judge.py` = `raise ImportError("broken judge for AC-5.4")`) → rc 0,
    stdout parses as one JSON deny whose reason contains `kind=judge-error`. Each deny reason
    contains `kind=` followed by its own id.
@@ -1115,10 +1220,20 @@ one JSON deny, `("invalid", stdout)` otherwise.
   imports the judge and denies "no derived test file exists"). `[red-measured]` passes: today's
   gate already allows a RED name-map test.
 - Items 2, 3, 4: fail (today: nearest-state allow; root-relative deny; unprefixed reason).
-- Item 5: passes (today ignores `cwd` and resolves against the root, as the new rule does here).
+- Item 5: passes (today ignores `cwd` and resolves against the root, as the new rule does here);
+  row G7 shows it failing.
 - Items 6 and 7: fail on the elapsed-time assertion (today's `read_text` blocks on the FIFO until
   the 5.0 s `timeout=` kills it).
-- Item 8: fails (today's `is_file()` reads the unsearchable state as absent and allows).
+- Item 8: fails, because today's gate crashes. `_target_phase5_status` calls
+  `state_file.is_file()`, and on a `chmod 000` parent `Path.is_file()` raises `PermissionError`
+  rather than returning `False`, so the hook exits rc 1 with a traceback and empty stdout; the
+  helper reads `("invalid", "")` and the deny assertion fails. Executed at `a1478ad3` under
+  `/opt/anaconda3/bin/python`: a `tempfile.TemporaryDirectory` root holding a step5 state in
+  `hematology-paper-writer/docs` at mode `000`, payload
+  `{"tool_name": "apply_patch", "tool_input": {"patch": "*** Update File: hematology-paper-writer/tools/w.py\n"}}`,
+  env `PATH=/usr/bin:/bin`, `HOME`, `CODEX_PROJECT_DIR=<root>` → `rc 1`, stdout `''`, last
+  stderr line `PermissionError: [Errno 13] Permission denied: '…/hematology-paper-writer/docs/.bkit-memory.json'`
+  (mode restored, directory removed).
 - Item 9: fails (the three functions exist).
 **WIRE-PIN 1 RED reason**: today's gate denies the GREEN fixture with "returned pytest exit 0, not
 test-failure exit 1", so the assertion that the stdout deny reason contains `kind=test-passing`
@@ -1144,8 +1259,8 @@ is denied; row W5AF.
 - [ ] AC-1.2 (Codex half): item 1. AC-5.1: items 3 and 4. AC-5.2: item 2. AC-5.3: the changed
   assertion and the two unmodified tests. AC-5.4: `[judge-error]`.
 
-**Mutation rows** (Task 10): G1, G2, G4, G5, W1R, W1F, W5AR, W5AF in
-`codex_gate_judge_wiring.json` — 8 rows.
+**Mutation rows** (Task 10): G1, G2, G4, G5, G7, W1R, W1F, W5AR, W5AF in
+`codex_gate_judge_wiring.json` — 9 rows.
 
 **Dependencies on other tasks**: Task 5
 
@@ -1154,7 +1269,7 @@ is denied; row W5AF.
 ## Task 7: codex-shell-venv
 
 **Production file**: `h-mad/hooks/h-mad-codex-tdd-gate.py`, `docs/03-analysis/probes/codex-tdd-gate-defects/shell_differential.py` (new)
-**Test file**: `h-mad/tests/test_h_mad_codex_tdd_gate_judge.py`
+**Test file**: `h-mad/tests/test_h_mad_codex_tdd_gate_judge.py`, `h-mad/tests/tdd_gate_support.py` (`shell_corpus` lands in the RED commit)
 **Task shape**: `new-behaviour`
 
 **Description**: Design §D8 "Shell policy" and "Differential"; spec FR-3 shell policy, AC-3.4,
@@ -1208,7 +1323,7 @@ AC-3.5, AC-3.6; plan §"Guard narrowing: shell policy".
   resolve the same scripts root. **Probe-run step**: expected `softened=14 tightened=0
   unexpected=0`; the reading goes to the analysis document §"Shell-policy differential".
 
-**Tests** (17 new collected items; 36 in the module):
+**Tests** (18 new collected items; 37 in the module):
 1. `test_shell_venv_token[sub-cwd-contained|root-cwd-contained|sub-cwd-escaping|root-cwd-escaping|doubled-path|c-sub-cwd-contained|c-root-cwd-contained|c-doubled-contained|c-sub-cwd-escaping|c-root-cwd-escaping|c-doubled-escaping]`
    (11; AC-3.4): the two contained `-m pytest` pairs allow; the two escaping ones deny; the doubled
    path denies; the six `-c "open('x','w')"` cells deny.
@@ -1220,13 +1335,28 @@ AC-3.5, AC-3.6; plan §"Guard narrowing: shell policy".
    `READ_ONLY_COMMANDS` and allow).
 4. `test_shell_policy_corpus_allows_exactly_the_expected_rows` (1): every corpus row through the
    worktree hook; the set of allowed rows equals the set whose `expected_new` is allow.
+5. `test_venv_token_still_obeys_the_argv_rules` (1): a contained venv, `shell_command`
+   `.venv/bin/python -c pass` from the sub-project `cwd` → deny. The test first asserts its own
+   oracle, `SIMPLE_SHELL_COMMAND.fullmatch(command)` is truthy (read from the loaded hook), so the
+   deny comes from the argv rules after the venv lookup, not from the lexical subset. This is the
+   discriminating twin of item 1's six `-c "open('x','w')"` cells, which the lexical subset
+   rejects before any executable is resolved (`(` and `)` are outside
+   `[A-Za-z0-9_./:@%+=,'" \t-]+`; executed at `a1478ad3`: `fullmatch` → `False` for that command,
+   `True` for `.venv/bin/python -c pass` and for `.venv/bin/python -m pytest tests/test_x.py`).
 
-11 + 4 + 1 + 1 = 17.
+11 + 4 + 1 + 1 + 1 = 18.
 
-**Expected RED split**: 4 failing and 13 passing. Today `_trusted_executable` refuses every
+**Expected RED split**: 4 failing and 14 passing. Today `_trusted_executable` refuses every
 `.venv/bin/…` token (its parent is not in `TRUSTED_BIN_DIRS`), so the two contained allow rows of
 item 1, `[contained-venv]` of item 2 and item 4 fail; the 9 other item-1 rows, the 3 other item-2
-rows and item 3 already deny (or allow, for the control) and pass as guards.
+rows, item 3 and item 5 already deny (or allow, for the control) and pass as guards.
+**Passing at RED, and the row that shows each one failing** (Task 10 §"Initially-green guards"):
+`[sub-cwd-escaping]` G6, `[root-cwd-escaping]` G6B, item 2 `[escaping-venv]` G6's mutant (the
+same containment call; reasoned), item 3 G3, item 5 G8. No row alone: `[doubled-path]` (held by
+`p.is_file()` and by V3's `pyvenv.cfg` rule, each alone), the six `c-*` cells (the lexical subset
+decides them before this feature's code runs; spec AC-3.4 requires them, OQ-I4),
+`[usr-bin-python3-control]` and `[script-outside-scripts]` (the pre-existing trusted-directory and
+scripts-root rules, which no committed spec anchors).
 **Regression guards**: `test_codex_hook_rejects_untrusted_executable_paths` passes unmodified
 (AC-3.5); the Task-6 items; `--self-check`.
 
@@ -1234,7 +1364,7 @@ rows and item 3 already deny (or allow, for the control) and pass as guards.
 - [ ] AC-3.4: item 1. AC-3.5: the guard above. AC-3.6: item 2 and the corpus rows.
 - [ ] The probe reads `softened=14 tightened=0 unexpected=0`, published with its sha.
 
-**Mutation rows** (Task 10): G3, G6 in `codex_gate_judge_wiring.json` — 2 rows.
+**Mutation rows** (Task 10): G3, G6, G6B, G8 in `codex_gate_judge_wiring.json` — 4 rows.
 
 **Dependencies on other tasks**: Task 6
 
@@ -1243,7 +1373,7 @@ rows and item 3 already deny (or allow, for the control) and pass as guards.
 ## Task 8: claude-gate-rewrite
 
 **Production file**: `h-mad/hooks/h-mad-tdd-gate.sh`, `docs/03-analysis/probes/codex-tdd-gate-defects/dd7_differential.py` (new)
-**Test file**: `h-mad/tests/test_h_mad_tdd_gate_judge.py` (new), `h-mad/tests/test_h_mad_tdd_gate_codex.py`, `h-mad/tests/test_h_mad_tdd_gate_state_resolution.py`
+**Test file**: `h-mad/tests/test_h_mad_tdd_gate_judge.py` (new), `h-mad/tests/test_h_mad_tdd_gate_codex.py`, `h-mad/tests/test_h_mad_tdd_gate_state_resolution.py`, `h-mad/tests/tdd_gate_support.py` (`hook_form`, `decision` and `dd7_cells` land in the RED commit)
 **Task shape**: `wiring`
 **WIRE 1**: `h-mad/hooks/h-mad-tdd-gate.sh:JOUT` → `h_mad_tdd_judge.main` (`judge` verb)
 **WIRE-PIN 1**: `h-mad/tests/test_h_mad_tdd_gate_judge.py::test_new_production_file_with_passing_test_is_refused`
@@ -1263,6 +1393,26 @@ task does not start and the feature halts to the operator (plan R1): every refus
 asserts the chosen form, so none of them can be written before the form is known. The literal is
 `readonly REFUSAL_FORM=a` when `CHOSEN=a` and `readonly REFUSAL_FORM=b` when `CHOSEN=b`. The test
 module's docstring quotes the `v0.out` line (AC-6.6).
+
+**Precondition 2: design delta owed (design §D9 step 3 "Residual, stated exactly" and §D9 "DD-7
+guard-narrowing differential").** HALT: `design delta owed`. Task 8 does not start until the
+design answers this. The codex impl-plan audit (c1) found a softened verdict outside the two the
+differential publishes: under a project root that itself lies beneath a `tests/` or `fixtures/`
+directory, a relative production target is gated today and exempt after DD-7. Executed at
+`a1478ad3` against today's gate under `/bin/bash` 3.2.57, with a `tempfile.TemporaryDirectory`
+root `<tmp>/tests/repo` holding one step5 record, a `codex` stub on `PATH` and stdin `/dev/null`:
+positional `x.py` → rc 1, `[H-MAD-TDD-GATE] BLOCK: Phase 5 implementation must be authored by
+Codex…` (gated); positional `<tmp>/tests/repo/x.py` → rc 0 (already exempt today). The canonical
+form `os.path.normpath(os.path.join(root, "x.py"))` matches `*/tests/*` in a `case` block →
+exempt. The design names this in §D9 ("A project whose root lies under a `tests/` or `fixtures/`
+directory is therefore fully exempt on the Claude side only … DD-7 extends it to relative ones")
+and still says "Any other softened cell is a defect", while its corpus requires a root holding no
+such segment, so its differential cannot see the cell. The finding's remedy (match the directory
+exemptions against the path below `ROOT_ABS`, and add a root-under-`tests/` shape to the corpus)
+changes D9's "both `case` blocks keep their pattern bytes" rule and the D9 corpus, so this plan
+does not choose it. The design either (i) adopts the remedy, and this task then re-derives items
+21–23, the probe's expected sets and row H15, or (ii) keeps the residual, names the softened cell
+in its expected set, and adds the root shape to the corpus. OQ-I3.
 
 **Script order and landed lines** (shebang `#!/bin/bash`; must run under `/bin/bash` 3.2.57; each
 tagged line verbatim and once):
@@ -1335,15 +1485,20 @@ tagged line verbatim and once):
    fi
    ```
 7. **Exemptions and `.py` filter** (DD-1): both `case` blocks keep their pattern bytes; the first
-   opens `case "${TARGET_PATH##*/}" in  # M:H6`; every arm calls `_allow`; then
-   `[[ "$TARGET_PATH" != *.py ]] && _allow`.
+   opens `case "${TARGET_PATH##*/}" in  # M:H6`; the second block's directory arm is the line
+   `  */tests/*|*/fixtures/*)  # M:H15` (today's pattern bytes plus the tag); every arm calls
+   `_allow`; then `[[ "$TARGET_PATH" != *.py ]] && _allow`.
 8. **Judge path**: `_find_judge` sets
    `  JUDGE=$(python3 -c 'import os,sys;print(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),"scripts","h_mad_tdd_judge.py"))' "${BASH_SOURCE[0]}")  # M:W6`
    unless `JUDGE` is already set.
 9. **Governance**: `_find_judge`, then `_read_state --target "$TARGET_PATH"  # M:H3`. `_read_state`
-   refuses `judge-error` naming `CLAUDE_PROJECT_DIR` on an empty `ROOT_ABS`, then
-   `  SOUT=$(python3 "$JUDGE" state --root "$ROOT_ABS" "$@" 2>/dev/null) || SRC=$?  # M:W5B`,
-   then refuses `judge-error` on a non-zero `SRC`, zero or several lines, or a line matching none of
+   refuses `judge-error` naming `CLAUDE_PROJECT_DIR` on an empty `ROOT_ABS`, then (Deviation 11)
+   ```bash
+     SOUT=$(python3 "$JUDGE" state --root "$ROOT_ABS" "$@" 2>/dev/null; printf 'rc=%s' "$?")  # M:W5B
+     SRC=${SOUT##*rc=}; SOUT=${SOUT%rc=*}; SOUT=${SOUT%$'\n'}  # M:H17
+     case "$SOUT" in *$'\n'*|"") _refuse judge-error "state verb printed zero or several lines" ;; esac
+   ```
+   then refuses `judge-error` on a non-zero `SRC`, or a line matching none of
    design D10's three state EREs; `none` → `_allow`; `unreadable` → `_refuse judge-error` with the
    decoded file and error; `active` → the three cross-checks (under `set -f`, the `record=` word
    count equals `records=`; `blocker=0` exactly when `codex-escape=yes`; `blocker` ≤ `records`),
@@ -1354,7 +1509,8 @@ tagged line verbatim and once):
     `h_mad_state_write.py` argument.
 11. **Judge**:
     ```bash
-    JOUT=$(python3 "$JUDGE" judge --root "$ROOT_ABS" --target "$TARGET_PATH" 2>/dev/null) || JRC=$?  # M:W2
+    JOUT=$(python3 "$JUDGE" judge --root "$ROOT_ABS" --target "$TARGET_PATH" 2>/dev/null; printf 'rc=%s' "$?")  # M:W2
+    JRC=${JOUT##*rc=}; JOUT=${JOUT%rc=*}; JOUT=${JOUT%$'\n'}  # M:H16
     case "$JOUT" in *$'\n'*|"") _refuse judge-error "judge verb printed zero or several lines" ;; esac
     if [ "$JRC" = 0 ] && [[ $JOUT =~ $JUDGE_ALLOW_RE ]]; then _allow; fi  # M:H4
     if [[ $JOUT =~ $JUDGE_DENY_RE ]]; then _refuse "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"; fi
@@ -1367,8 +1523,11 @@ What leaves (design D9): `_resolve_state_file`, every `jq` use and the no-`jq` a
 `ACTIVE`/`head -1` read, `CODEX_STATUS`, `DERIVE_SCRIPT` and the bare `pytest` run, and every
 `exit 1` (today 5 matching lines for `^\s*exit 1\s*$`, read at `f6b258f0`).
 
-**Test harness** (in the new module): `HOOK = Path(__file__).resolve().parents[1] / "hooks" / "h-mad-tdd-gate.sh"`;
-`FORM = re.search(r"^readonly REFUSAL_FORM=([ab])$", HOOK.read_text(), re.M).group(1)`.
+**Test harness** (in the new module): `HOOK = Path(__file__).resolve().parents[1] / "hooks" / "h-mad-tdd-gate.sh"`.
+The form is never read at import (Deviation 14). `tdd_gate_support.hook_form(hook) -> Optional[str]`
+returns the `[ab]` of the one line matching `^readonly REFUSAL_FORM=([ab])$` (`re.M`) in the hook's
+text, and `None` when no line matches; each test calls it at run time. `CHOSEN = re.search(r"CHOSEN=([ab]) ", __doc__).group(1)`
+reads the `v0.out` line the module docstring quotes (AC-6.6), a literal the test file itself holds.
 `_gate(root, *, payload=None, arg=None, bin_dir, extra_env=None, cwd=None, hook=HOOK, timeout=60.0)`
 runs `[str(hook)] + ([arg] if arg else [])` with `input=json.dumps(payload)` when a payload is
 given and `stdin=subprocess.DEVNULL` otherwise, `cwd=cwd or root`, and the explicit minimal env
@@ -1377,7 +1536,9 @@ plus `extra_env`. `tdd_gate_support.decision(result, form)` returns
 `Outcome(decision, kind, reason, rc)`: under `a`, rc 2 → deny with the stderr reason, rc 0 with
 empty stdout → allow; under `b`, rc 0 with exactly one JSON object whose `hookSpecificOutput` has
 `hookEventName == "PreToolUse"`, `permissionDecision == "deny"` and a non-empty reason → deny, rc
-0 with empty stdout → allow; anything else → `invalid`. `kind` is parsed from
+0 with empty stdout → allow; under `None` (today's hook, at RED), rc 0 with empty stdout → allow;
+in every form, any other result → `invalid`. Every call passes
+`hook_form(<the hook the test ran>)`. `kind` is parsed from
 `[H-MAD-TDD-GATE] BLOCK kind=…:`. Bin dirs hold `python3` → `sys.executable` (plan rule (ii)),
 `dirname` and `basename` → `/usr/bin/…`, and a `codex` stub only where stated. Fixtures default to
 a root step5 record with `codex_status` `exhausted` and the hematology-paper-writer name-map
@@ -1388,18 +1549,19 @@ Tree-B stubs: `B/h-mad/hooks/h-mad-tdd-gate.sh` copied from the worktree hook, a
 unless the fixture replaces it, and whose `judge` verb prints the fixture's output and exits with
 its rc.
 
-**Tests** (72 new collected items):
+**Tests** (74 new collected items):
 1. `test_claude_gate_kind[red-measured|no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-error]`
    (11; AC-1.2 Claude half): the Codex-gate fixtures of Task 6 item 1 in Claude's payload shape;
    `red-measured` → allow, every other id → deny with that kind; `timeout` uses `timeout=120.0`;
    `judge-error` is a tree-B judge printing `TDD-JUDGE: MAYBE`.
-2. `test_judge_stub_is_judge_error[empty-line|two-lines|maybe|unknown-kind|traceback-rc1|allow-rc1]`
-   (6; AC-1.3): tree-B judge printing an empty line; two ALLOW lines;
-   `TDD-JUDGE: MAYBE`; `TDD-JUDGE: DENY kind=bogus reason=x`; a traceback, exit 1; a valid ALLOW
-   line, exit 1 → deny `judge-error` in the chosen form, `rc != 1`.
-3. `test_state_stub_is_judge_error[zero-lines|two-lines|bad-value|none-rc1]` (4; AC-1.3): tree-B
-   `state` printing nothing; two lines; `TDD-STATE: maybe`; `TDD-STATE: none` with exit 1 → deny
-   `judge-error`.
+2. `test_judge_stub_is_judge_error[empty-line|two-lines|trailing-blank-line|maybe|unknown-kind|traceback-rc1|allow-rc1]`
+   (7; AC-1.3): tree-B judge printing an empty line; two ALLOW lines; a valid ALLOW line followed
+   by an empty line (`printf '%s\n\n'`, exit 0; Deviation 11); `TDD-JUDGE: MAYBE`;
+   `TDD-JUDGE: DENY kind=bogus reason=x`; a traceback, exit 1; a valid ALLOW line, exit 1 → deny
+   `judge-error` in the chosen form, `rc != 1`.
+3. `test_state_stub_is_judge_error[zero-lines|two-lines|trailing-blank-line|bad-value|none-rc1]`
+   (5; AC-1.3): tree-B `state` printing nothing; two lines; `TDD-STATE: none` followed by an
+   empty line, exit 0; `TDD-STATE: maybe`; `TDD-STATE: none` with exit 1 → deny `judge-error`.
 4. `test_claude_code_payload_reaches_codex_authorship` (1; AC-6.1) — `codex` stub on PATH,
    `codex_status` absent → deny `codex-authorship`.
 5. `test_stdin_target_beats_positional` (1; AC-6.1, OD-B) — the same payload plus the exempt
@@ -1475,11 +1637,12 @@ its rc.
 31. `test_claude_gate_keeps_no_private_state_reader` (1) — the hook holds no `orchestrator_state`,
     no `_resolve_state_file` and no `jq`.
 32. `test_refusal_form_is_a_readonly_literal` (1) — exactly one line matches
-    `^readonly REFUSAL_FORM=[ab]$`, and no line reads `REFUSAL_FORM` from the environment.
+    `^readonly REFUSAL_FORM=[ab]$`, `hook_form(HOOK) == CHOSEN`, and no line reads
+    `REFUSAL_FORM` from the environment.
 33. `test_state_without_step5_is_allowed` (1) — root holds only a step3 record, `codex` stub on
     PATH, production target → allow.
 
-11 + 6 + 4 + 1 + 1 + 1 + 2 + 1 + 1 + 5 + 1 + 1 + 1 + 3 + 2 + 2 + 3 + 1 + 3 + 2 + 3 + 3 + 1 + 1 + 1 + 1 + 1 + 4 + 1 + 1 + 1 + 1 + 1 = 72.
+11 + 7 + 5 + 1 + 1 + 1 + 2 + 1 + 1 + 5 + 1 + 1 + 1 + 3 + 2 + 2 + 3 + 1 + 3 + 2 + 3 + 3 + 1 + 1 + 1 + 1 + 1 + 4 + 1 + 1 + 1 + 1 + 1 = 74.
 
 **Existing modules, the named changes only** (spec AC-6.2; §"Regression provenance"):
 - Both modules' `HOOK` constant becomes
@@ -1492,7 +1655,8 @@ its rc.
   `test_repo_root_layout_still_works` and
   `test_a_production_file_under_a_test_named_directory_is_still_gated`. The stderr and
   `returncode == 0` assertions stand.
-- **Under `REFUSAL_FORM=b`**: every assertion moves to `tdd_gate_support.decision`, exactly as spec
+- **Under `REFUSAL_FORM=b`**: every assertion moves to `tdd_gate_support.decision(result,
+  hook_form(HOOK))`, the form read at run time as in the new module (Deviation 14), exactly as spec
   AC-6.2 lists: the 4 rc-1 tests read a deny (with `codex`/`dispatch`, and `H-MAD-TDD-GATE`, in its
   reason); the 3 "must be authored by codex" absences read the helper's reason; the 6
   `returncode == 0` tests read an allow.
@@ -1509,13 +1673,18 @@ absolute `<root>/tests/../x.py` (design D9 "DD-7 guard-narrowing differential");
 analysis document §"DD-7 differential".
 
 **Expected RED split** (against today's gate; the migrated modules already point `HOOK` at the
-worktree): 67 failing and 5 passing among the 72 new items; in the two migrated modules, 4
-failing and 9 passing under either form.
+worktree): 69 failing and 5 passing among the 74 new items; in the two migrated modules, 4
+failing and 9 passing under either form. The module collects at RED: nothing reads the form at
+import (Deviation 14), and `hook_form`, `decision` and `dd7_cells` are in the RED commit
+(Deviation 1). With today's hook `hook_form` returns `None` (`grep -c REFUSAL_FORM
+h-mad/hooks/h-mad-tdd-gate.sh` → 0 at `a1478ad3`), so a refusal reads `invalid` and an allow reads
+allow.
 - The 5 passing new items are guards today's gate already satisfies: `test_claude_gate_kind[red-measured]`
   (today reads no `tool_input`, so the target is empty and it allows),
   `test_empty_target_rule[no-step5-root]`, `test_outside_root_target_is_governed_by_root[no-step5]`,
   `test_relative_targets[dot-tests-relative]` (today's `*/tests/*` matches `./tests/x.py`) and
-  `test_state_without_step5_is_allowed`.
+  `test_state_without_step5_is_allowed`. The rows that show each failing: W2F, W5BF2, W5BF3, H15
+  and W5BF (Task 10 §"Initially-green guards").
 - Every other new item fails on its outcome assertion: today's gate reads no `tool_input` (payload
   tests allow), refuses with `exit 1` (no chosen form), exits rc 5 on `{not json`, allows on a
   dangling or unsearchable state and on a missing parent, stands down without `jq`, never calls a
@@ -1531,13 +1700,18 @@ so no import error is involved.
 **Regression guards**: the 9 unchanged-assertion tests of the two migrated modules;
 `test_h_mad_hook_wiring.py`, `test_h_mad_install_check.py` and `test_h_mad_install_check_docs.py`
 (they name the gate but do not run it, plan §"Success Criteria").
-**Wire-scoped reverts**: `JOUT="TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=removed"  # M:W2`
-→ WIRE-PIN 1 allows (row W2R); `  SOUT="TDD-STATE: none"  # M:W5B` → WIRE-PIN 2 allows (row W5BR);
-`  JUDGE="$HOME/.claude/skills/h-mad/scripts/h_mad_tdd_judge.py"  # M:W6` → `B/marker` absent
-(row W6R). **Force-fires**: `JOUT="TDD-JUDGE: DENY kind=judge-error reason=forced"  # M:W2` →
+**Wire-scoped reverts** (each keeps the `rc=` sentinel the next line splits off):
+`JOUT=$'TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=removed\nrc=0'  # M:W2`
+→ WIRE-PIN 1 allows (row W2R); `  SOUT=$'TDD-STATE: none\nrc=0'  # M:W5B` → WIRE-PIN 2 allows
+(row W5BR); `  JUDGE="$HOME/.claude/skills/h-mad/scripts/h_mad_tdd_judge.py"  # M:W6` → `B/marker`
+absent (row W6R). **Force-fires**:
+`JOUT=$'TDD-JUDGE: DENY kind=judge-error reason=forced\nrc=0'  # M:W2` →
 `test_claude_gate_kind[red-measured]` is refused (row W2F);
-`  SOUT="TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent"  # M:W5B`
-→ `test_state_without_step5_is_allowed` is refused (row W5BF);
+`  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\nrc=0'  # M:W5B`
+→ `test_state_without_step5_is_allowed` is refused (row W5BF), and so are
+`test_empty_target_rule[no-step5-root]` (row W5BF2: the empty-target branch reads the forced
+`active` and refuses) and `test_outside_root_target_is_governed_by_root[no-step5]` (row W5BF3:
+`codex-escape=no` with the `codex` stub on `PATH` refuses `codex-authorship`);
 `  JUDGE="/Users/kimhawk/orca/skills/h-mad/scripts/h_mad_tdd_judge.py"  # M:W6` (tree A, the main
 checkout; any fixed path fails the tree-B test the same way) → `B/marker` absent (row W6F).
 
@@ -1550,9 +1724,11 @@ checkout; any fixed path fails the tree-B test the same way) → `B/marker` abse
   AC-6.12: item 18. AC-6.13: item 19. AC-6.14: item 20. AC-6.15: items 21, 22, 23 and the probe.
 
 **Mutation rows** (Task 10): H1A, H1B, H1C, H2, H3, H4, H5, H6, H7, H8, H10, H11, H12, H13, H14,
-W2R, W2F, W5BR, W5BF, W6R, W6F, T1, T2 in `claude_gate_judge_wiring.json` — 23 rows.
+H15, H16, H17, C2G, C3G, W2R, W2F, W5BR, W5BF, W5BF2, W5BF3, W6R, W6F, T1, T2 in
+`claude_gate_judge_wiring.json` — 30 rows.
 
-**Dependencies on other tasks**: Task 7 (and the V-0 precondition)
+**Dependencies on other tasks**: Task 7 (and the V-0 precondition, and precondition 2's design
+delta)
 
 ---
 
@@ -1589,13 +1765,22 @@ W2R, W2F, W5BR, W5BF, W6R, W6F, T1, T2 in `claude_gate_judge_wiring.json` — 23
 
 **Tests** (11 new collected items). Sections come from `docsections.titled_section`, which fails
 loudly on a missing heading; the `Hook: ` block from a module helper that asserts exactly one line
-starts with `Hook: ` and returns it with the `- ` lines under it.
+starts with `Hook: ` and returns it with the `- ` lines under it:
+```python
+def _hook_block(text: str) -> str:
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("Hook: ")]
+    assert len(starts) == 1, f"expected one 'Hook: ' line, found {len(starts)}"  # M:D1
+```
+followed by the lines from `starts[0]` up to the first line after it that does not begin with `- `.
+
 1. `test_trust_boundary_states_the_venv_rule` (AC-7.1): `.venv`, `realpath`, `venv-escapes-root`,
    `summary line`.
 2. `test_helper_scripts_registers_the_judge` (AC-7.2): `h_mad_tdd_judge.py`, `TDD-STATE:`,
    `TDD-JUDGE:`, `judge-error`.
 3. `test_tdd_gate_section_names_the_chosen_form` (AC-7.2): `rc 2` under `a`; `permissionDecision`
-   under `b`, and no `exit-code protocol` under `b`. The form is read from the hook as in Task 8.
+   under `b`, and no `exit-code protocol` under `b`. The form is `tdd_gate_support.hook_form(HOOK)`,
+   called at run time as in Task 8 (Task 8 has landed, so it is `a` or `b`).
 4. `test_hook_line_names_both_gates` (AC-7.2).
 5. `test_hook_bullets_state_the_shipped_rule` (AC-7.2): `impl-plan` and `failed`.
 6. `test_skill_gate_bullet_states_the_every_record_rule`.
@@ -1608,6 +1793,12 @@ starts with `Hook: ` and returns it with the `- ` lines under it.
 
 **Expected RED split**: 7 failing (items 1–7: the wording is not there yet) and 4 passing (item 8
 exercises the test's own locators on doctored copies, which fail loudly before any doc edit).
+**Passing at RED, and the row that shows each one failing**: `[hook-line]` D1 (the helper made to
+fall back to the first line, `    starts = starts or [0]  # M:D1`, no longer raises, so
+`pytest.raises(AssertionError)` fails with `DID NOT RAISE`, a `Failed`, not a crash); the other
+three ids exercise `docsections.titled_section`, whose loud failure the committed
+`docsections.json` spec already mutates (8 rows at `a1478ad3`, one of them scored on
+`tests/test_docsections.py::test_a_missing_heading_fails_loudly`).
 **Regression guards**: the full suite, in particular every module that reads these documents:
 `test_h_mad_codex_runtime.py::test_codex_adapter_states_pytest_trust_boundary` (AC-7.1),
 `test_h_mad_assemble_tdd.py`, `test_h_mad_prompt_tails.py`, `test_h_mad_install_check_docs.py`,
@@ -1617,7 +1808,8 @@ and `test_h_mad_portable_timeout.py` (Convention 10).
 **Acceptance Criteria**:
 - [ ] AC-7.1: item 1 and the existing test. AC-7.2: items 2–5 and item 8.
 
-**Mutation rows**: none. **Dependencies on other tasks**: Task 8
+**Mutation rows** (Task 10): D1 in `claude_gate_judge_wiring.json` — 1 row. **Dependencies on
+other tasks**: Task 8
 
 ---
 
@@ -1627,16 +1819,20 @@ and `test_h_mad_portable_timeout.py` (Convention 10).
 `audit_suite_summary_line.json`, `tdd_judge_resolution.json`, `tdd_judge_venv.json`,
 `tdd_judge_scoring.json`, `tdd_judge_chain.json`, `tdd_judge_wiring.json`,
 `codex_gate_judge_wiring.json`, `claude_gate_judge_wiring.json` (none exists at `f6b258f0`).
-**Test file**: none. The killing tests belong to Tasks 1 and 3–8.
+**Test file**: none. The killing tests belong to Tasks 1–9.
 **Task shape**: `operational`
 
-**Description**: Author the eight specs with exactly the 64 rows below (spec FR-8, AC-8.1; design
+**Description**: Author the eight specs with exactly the 87 rows below (spec FR-8, AC-8.1; design
 §"Test Strategy"). Every spec has `root` `"../.."` (the `h-mad/` directory), `command` the named
-test module(s) as `["python3.11", "-m", "pytest", <module>, "-q"]` (`which python3.11` →
-`/opt/anaconda3/bin/python3.11`, Python 3.11.8, at `f6b258f0`), and `target_command`
-`["python3.11", "-m", "pytest", "-q"]`, so each row runs only its `test`. Every row carries
-`name`, `file`, `find`, `replace` and `test`; `find` is the whole tagged line of Convention 9 (or,
-for R2 and W3C, the untagged line quoted). Rows sharing a `find` are applied one at a time.
+test module(s) as `["/opt/anaconda3/bin/python", "-m", "pytest", <module>…, "-q"]`, and
+`target_command` `["/opt/anaconda3/bin/python", "-m", "pytest", "-q"]`, so each row runs only its
+`test` under the pinned interpreter (`ls -l /opt/anaconda3/bin/python` → a symlink to
+`python3.11`, `--version` → `Python 3.11.8`, at `a1478ad3`). Of the 99 committed specs, 98 name
+`python3.11` and 1 names `/opt/anaconda3/bin/python3.11` as `command[0]` (a JSON walk at
+`a1478ad3`), so an absolute interpreter has a precedent and nothing here rests on `PATH` at
+harness time. Every row carries `name`, `file`, `find`, `replace` and `test`; `find` is the whole
+tagged line of Convention 9 (or, for R2, W3C, P1, P1B, P2 and G8, the untagged line quoted). Rows
+sharing a `find` are applied one at a time.
 - **Pass condition, per spec**: `--check-anchors <spec>` → `ANCHORS_OK`; the run →
   `MUTATION: ALL_CAUGHT` with `crash_kills=0`. A crash kill is re-authored so that its test fails
   on an assertion. `SURVIVED`, `REFUSED` or any other token halts and is reported against the
@@ -1648,8 +1844,9 @@ for R2 and W3C, the untagged line quoted). Rows sharing a `find` are applied one
 - The claude spec's H5 row uses the tag of the chosen form only (`# M:H5A` under `a`, `# M:H5B`
   under `b`); the other branch is dead code and a row on it would be equivalent.
 
-**`audit_suite_summary_line.json`** — `command` `tests/test_h_mad_audit_suite_gate.py`; `file`
-`scripts/h_mad_audit_gate.py`:
+**`audit_suite_summary_line.json`** — `command` `tests/test_h_mad_audit_suite_gate.py`
+`tests/test_h_mad_tdd_gate_support.py`; `file` `scripts/h_mad_audit_gate.py` except E1
+(`tests/tdd_gate_support.py`):
 
 | Row | find tag | replace (the tagged line becomes) | test |
 |---|---|---|---|
@@ -1661,8 +1858,27 @@ for R2 and W3C, the untagged line quoted). Rows sharing a `find` are applied one
 | S6 | `M:S6` | `                elif category.endswith("failed"):  # M:S6` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[subtests-failed]` |
 | S7A | `M:S7` | `                elif category == "errors":  # M:S7` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[one-error]` |
 | S7B | `M:S7` | `                elif category == "error":  # M:S7` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[one-errors]` |
+| S8 | `M:S8` | `        match = re.search(_SUMMARY_LINE_RE.pattern.lstrip("^"), line)  # M:S8` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[failed-node-line]` |
+| S9 | `M:S9` | `_CATEGORY = r"[A-Za-z][a-z-]*(?: [a-z][a-z-]*)*"  # M:S9` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[capitalised-category]` |
+| S10 | `M:S10` | `                    failed += int(number)  # M:S10` | `tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[passed-and-error]` |
+| S11 | `M:W4C` | `                    failed += 0  # M:W4C` | `tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[failed-and-passed]` |
+| S12 | `M:S1` | `    if False:  # M:S1` | `tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[three-skipped]` |
+| E1 | `M:E1` | `    env = dict(os.environ)  # M:E1` | `tests/test_h_mad_tdd_gate_support.py::test_hermetic_env_drops_claude_names_and_backend` |
 
-**`tdd_judge_resolution.json`** — `command` `tests/test_h_mad_tdd_judge.py`:
+Executed readings for S8–S12 (a scratch copy of Task 1's literals, with a `run_suite`-shaped
+wrapper reproducing its `summary is None`, S1 and `passed == 0 and failed == 0` branches, under
+`/usr/bin/python3` 3.9.6 at `a1478ad3`, run in memory and never written): S8 turns
+`FAILED t.py::a - 1 failed` into `failed=1` and `collected 0 items` into phrases `{"items"}`
+(each `None` unmutated) and leaves `E   assert '1 failed' in x` at `None`; S9 turns
+`3 Apples in 0.1s` into phrases `{"Apples"}`; S10 turns `2 passed, 1 error in 0.1s` into
+`SUITE: FAIL passed=2 failed=1`; S11 turns `1 failed, 11 passed in 0.2s` into
+`SUITE: PASS passed=11 failed=0`; S12 turns `3 skipped in 0.1s` and `1 error in 0.06s` into
+`SUITE: UNREADABLE reason=no_tests_ran`. The first S8 candidate, `.match` → `.search`, killed
+nothing, because the pattern's own `^` anchors a search too; the row therefore strips that `^`
+in the same line.
+
+**`tdd_judge_resolution.json`** — `command` `tests/test_h_mad_tdd_judge.py`
+`tests/test_h_mad_parse_tasks_paths.py`:
 
 | Row | file | find | replace | test |
 |---|---|---|---|---|
@@ -1670,6 +1886,14 @@ for R2 and W3C, the untagged line quoted). Rows sharing a `find` are applied one
 | R2 | `scripts/h_mad_wire_pin_gate.py` | the `_NONE_VALUE_RE = re.compile(…)` line of Task 2 | `_NONE_VALUE_RE = re.compile(r"(?!)")` | `tests/test_h_mad_tdd_judge.py::test_none_valued_production_does_not_match` |
 | R3 | `scripts/h_mad_tdd_judge.py` | `M:R3` | the same line without `{_notes(notes)}` | `tests/test_h_mad_tdd_judge.py::test_unreadable_plan_is_named_in_test_missing` |
 | R4 | `scripts/h_mad_tdd_judge.py` | `M:R4` | `    present = list(candidates)  # M:R4` | `tests/test_h_mad_tdd_judge.py::test_mixed_candidates_missing_then_green_denies_test_passing` |
+| R5 | `scripts/h_mad_tdd_judge.py` | `M:R5` | `    mapped = (out + err).strip()  # M:R5` | `tests/test_h_mad_tdd_judge.py::test_name_map_stderr_is_not_a_path` |
+| P1 | `scripts/h_mad_wire_pin_gate.py` | the `current[key].extend(…)` line of Task 2 | `                current["pins"].extend(_PY_TOKEN_RE.findall(paths.group("value")))` | `tests/test_h_mad_parse_tasks_paths.py::test_existing_fields_unchanged` |
+| P1B | `scripts/h_mad_wire_pin_gate.py` | the same line | the same replacement | `tests/test_h_mad_parse_tasks_paths.py::test_corpus_old_fields_unperturbed` |
+| P2 | `scripts/h_mad_wire_pin_gate.py` | `    r"^\s*(?:[-*•]\s+)?\*{0,2}\s*(?P<label>Task\s+shape\|WIRE-PIN\|WIRE)"` (`_FIELD_RE`'s first pattern line, read at `a1478ad3`) | the same line with `\|WIRE)` → `\|WIRE\|Production)` | `tests/test_h_mad_parse_tasks_paths.py::test_field_re_is_unchanged` |
+
+P1 and P1B put path tokens into `pins`, a list of `(suffix, value)` tuples (`current["pins"].append((suffix, value))`,
+read at `a1478ad3`), so both comparisons fail on an assertion. P2 changes `_FIELD_RE.pattern`,
+which item 7 compares with its literal.
 
 **`tdd_judge_venv.json`** — `command` `tests/test_h_mad_tdd_judge.py`; `file` `scripts/h_mad_tdd_judge.py`:
 
@@ -1686,7 +1910,9 @@ for R2 and W3C, the untagged line quoted). Rows sharing a `find` are applied one
 | K1 | `M:K1` | `    if False:  # M:K1` | `tests/test_h_mad_tdd_judge.py::test_pytest_missing_denies[project-venv]` |
 | K2 | `M:K2` | `    if False:  # M:K2` | `tests/test_h_mad_tdd_judge.py::test_scoring_kinds[import-error]` |
 | K3 | `M:K3` | `        kind = "red-measured" if returncode == 1 else "test-passing"  # M:K3` | `tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[failed-line-rc0]` |
+| K3B | `M:K3` | the K3 replacement | `tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[silent-rc1]` |
 | K4 | `M:K4` | `    return "no-summary"  # M:K4` | `tests/test_h_mad_tdd_judge.py::test_scoring_kinds[skipped-only]` |
+| K5 | `M:K1` | `    if _pytest_missing(proc_output) and _suite_summary(proc_output) is None:  # M:K1` | `tests/test_h_mad_tdd_judge.py::test_whole_line_no_module_is_pytest_missing_even_after_red` |
 
 **`tdd_judge_chain.json`** — `command` `tests/test_h_mad_tdd_judge.py`; `file` `scripts/h_mad_tdd_judge.py`:
 
@@ -1712,7 +1938,7 @@ judge's tests only (design W3/W4 table):
 | W4C | `scripts/h_mad_audit_gate.py` | `M:W4C` | `                    failed += 0  # M:W4C` | `tests/test_h_mad_tdd_judge.py::test_scoring_kinds[red]` |
 
 **`codex_gate_judge_wiring.json`** — `command`
-`["python3.11", "-m", "pytest", "tests/test_h_mad_codex_tdd_gate_judge.py", "tests/test_h_mad_codex_runtime.py", "-q"]`;
+`["/opt/anaconda3/bin/python", "-m", "pytest", "tests/test_h_mad_codex_tdd_gate_judge.py", "tests/test_h_mad_codex_runtime.py", "-q"]`;
 `file` `hooks/h-mad-codex-tdd-gate.py`:
 
 | Row | find | replace | test |
@@ -1723,13 +1949,17 @@ judge's tests only (design W3/W4 table):
 | G4 | `M:G4` | `        text = state_file.read_text(encoding="utf-8")  # M:G4` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_fifo_state_off_the_chain_denies_shell_without_blocking` |
 | G5 | `M:G5` | `    for raw in (targets if phase5_status != "inactive" else []):  # M:G5` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_unsearchable_docs_on_the_chain_denies_although_the_scan_is_inactive` |
 | G6 | `M:G6` | `    if False:  # M:G6` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[sub-cwd-escaping]` |
+| G6B | `M:G6` | `    if False:  # M:G6` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[root-cwd-escaping]` |
+| G7 | `M:G7` | `        if c.is_dir():  # M:G7` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_payload_cwd_outside_the_root_falls_back_to_the_root` |
+| G8 | `    if executable.startswith("python") and len(argv) >= 3 and argv[1:3] == ["-m", "pytest"]:` (untagged, unchanged by this feature; 1 matching line at `a1478ad3`) | `    if executable.startswith("python"):` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_venv_token_still_obeys_the_argv_rules` |
 | W1R | `M:W1` | the Task 6 remove line | `tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[red-measured]` |
 | W1F | `M:W1` | the Task 6 force line | `tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[test-passing]` |
 | W5AR | `M:W5A` | the Task 6 remove line | `tests/test_h_mad_codex_tdd_gate_judge.py::test_root_step5_governs_a_subproject_with_its_own_state` |
 | W5AF | `M:W5A` | the Task 6 force line | `tests/test_h_mad_codex_runtime.py::test_codex_hook_scopes_nested_state_to_the_target_project` |
 
-**`claude_gate_judge_wiring.json`** — `command` `tests/test_h_mad_tdd_gate_judge.py`; `file`
-`hooks/h-mad-tdd-gate.sh` unless stated; `T` = `tests/test_h_mad_tdd_gate_judge.py`:
+**`claude_gate_judge_wiring.json`** — `command` `tests/test_h_mad_tdd_gate_judge.py`
+`tests/test_h_mad_tdd_gate_docs.py`; `file` `hooks/h-mad-tdd-gate.sh` unless stated; `T` =
+`tests/test_h_mad_tdd_gate_judge.py`:
 
 | Row | find | replace | test |
 |---|---|---|---|
@@ -1748,33 +1978,82 @@ judge's tests only (design W3/W4 table):
 | H12 | `M:H12` | `    sys.exit(0)  # M:H12` | `T::test_non_json_stdin_never_falls_back_to_positional` |
 | H13 | `M:H13` | `  _allow  # M:H13` | `T::test_empty_target_rule[active-root]` |
 | H14 | `M:H14`, in `scripts/h_mad_tdd_judge.py` | `            dirs = []  # M:H14` | `T::test_outside_root_target_is_governed_by_root[active]` |
+| H15 | `M:H15` | `  */fixtures/*)  # M:H15` | `T::test_relative_targets[dot-tests-relative]` |
+| H16 | `M:H16` | `JRC=${JOUT##*rc=}; JOUT=$(printf '%s' "${JOUT%rc=*}")  # M:H16` | `T::test_judge_stub_is_judge_error[trailing-blank-line]` |
+| H17 | `M:H17` | `  SRC=${SOUT##*rc=}; SOUT=$(printf '%s' "${SOUT%rc=*}")  # M:H17` | `T::test_state_stub_is_judge_error[trailing-blank-line]` |
+| C2G | `M:C2`, in `scripts/h_mad_tdd_judge.py` | `            continue  # M:C2` | `T::test_unreadable_chain_refuses_production` |
+| C3G | `M:C3`, in `scripts/h_mad_tdd_judge.py` | the same line with `all(` → `any(` | `T::test_codex_escape_needs_every_record[exhausted-then-none]` |
 | W2R | `M:W2` | the Task 8 remove line | `T::test_new_production_file_with_passing_test_is_refused` |
 | W2F | `M:W2` | the Task 8 force line | `T::test_claude_gate_kind[red-measured]` |
 | W5BR | `M:W5B` | the Task 8 remove line | `T::test_subproject_step5_under_root_step3_is_governed` |
 | W5BF | `M:W5B` | the Task 8 force line | `T::test_state_without_step5_is_allowed` |
+| W5BF2 | `M:W5B` | the Task 8 force line | `T::test_empty_target_rule[no-step5-root]` |
+| W5BF3 | `M:W5B` | the Task 8 force line | `T::test_outside_root_target_is_governed_by_root[no-step5]` |
 | W6R | `M:W6` | the Task 8 remove line | `T::test_symlinked_hook_runs_its_own_trees_judge` |
 | W6F | `M:W6` | the Task 8 force line | `T::test_symlinked_hook_runs_its_own_trees_judge` |
 | T1 | `M:T1` | `:  # M:T1` | `T::test_trap_member_refuses_in_form[realpath-stub]` |
 | T2 | `M:T2` | `  exit "$rc"  # M:T2` | `T::test_trap_member_refuses_in_form[unset-variable]` |
+| D1 | `M:D1`, in `tests/test_h_mad_tdd_gate_docs.py` | `    starts = starts or [0]  # M:D1` | `tests/test_h_mad_tdd_gate_docs.py::test_locators_fail_loudly[hook-line]` |
 
 (`T::` abbreviates the table only; each JSON `test` key is written in full,
 `tests/test_h_mad_tdd_gate_judge.py::` followed by the test name.) A `\|` in the table is a literal `|` in the spec.
+H16 and H17 restore command substitution's stripping of every trailing newline, the pre-v1.1
+capture (Deviation 11), so a line followed by a blank one reads as one valid line. C2G reads the
+root's `{not json` state as skippable, so the chain is `none` and the gate allows the production
+write that AC-6.9 refuses. C3G (reasoned, not executed: the code does not exist yet) sets
+`codex-escape=yes` while `blocker=2`, and the gate's `blocker=0`-iff-`codex-escape=yes`
+cross-check then refuses `judge-error`, not the `codex-authorship` AC-6.10 asserts.
 
-8 + 4 + 3 + 4 + 6 + 6 + 10 + 23 = 64 rows. Per owning task: Task 1 8, Task 3 11, Task 4 6,
-Task 5 6, Task 6 8, Task 7 2, Task 8 23; 8 + 11 + 6 + 6 + 8 + 2 + 23 = 64.
+14 + 8 + 3 + 6 + 6 + 6 + 13 + 31 = 87 rows. Per owning task: Task 1 14, Task 2 3, Task 3 12,
+Task 4 8, Task 5 6, Task 6 9, Task 7 4, Task 8 30, Task 9 1;
+14 + 3 + 12 + 8 + 6 + 9 + 4 + 30 + 1 = 87.
+
+**Initially-green guards** (invariant §"Test discrimination": a check never seen failing is not
+trusted). Every new item that passes at RED, with the row whose mutant makes it fail, or the
+reason no row of this feature can:
+
+| Task | Item passing at RED | Row |
+|---|---|---|
+| 1 | `test_run_suite_table_row[subtests-passed]` | S1 |
+| 1 | `test_run_suite_table_row[stray-failed-on-stderr]` | S3 |
+| 1 | `test_run_suite_table_row[one-error\|no-tests-ran\|three-skipped\|five-deselected\|one-xfailed]` | S12 (scored on `three-skipped`; executed on it and on `one-error`; one predicate decides all five) |
+| 1 | `test_run_suite_table_row[passed-and-error]` | S10 |
+| 1 | `test_run_suite_table_row[failed-and-passed]` | S11 |
+| 1 | `test_run_suite_table_row[collected-zero]` | the committed `audit_suite_gate.json` row `a-missing-summary-becomes-a-verdict` (its subject, the `summary is None` return, is unchanged) |
+| 1 | `test_suite_summary_reads_the_line[collected-zero\|failed-node-line]` | S8 (scored on `failed-node-line`; executed on both) |
+| 1 | `test_suite_summary_reads_the_line[capitalised-category]` | S9 |
+| 1 | `test_suite_summary_reads_the_line[quoted-assert]` | none alone: the `.match` start and the pattern's `$` each hold it (executed: S8 leaves it `None`); a stated residual |
+| 1 | `test_hermetic_env_drops_claude_names_and_backend` | E1 |
+| 2 | `test_existing_fields_unchanged`, `test_corpus_old_fields_unperturbed`, `test_field_re_is_unchanged` | P1, P1B, P2 |
+| 4 | `test_rc_selects_nothing[silent-rc1]`, `test_whole_line_no_module_is_pytest_missing_even_after_red` | K3B, K5 |
+| 5 | `test_none_valued_production_does_not_match` | R2 |
+| 6 | `test_codex_gate_kind[red-measured]`, `test_payload_cwd_outside_the_root_falls_back_to_the_root` | W1R, G7 |
+| 7 | `test_shell_venv_token[sub-cwd-escaping\|root-cwd-escaping]`, `test_venv_token_keys_on_the_lexical_name`, `test_venv_token_still_obeys_the_argv_rules` | G6, G6B, G3, G8 |
+| 7 | `test_shell_control_allowlist_under_a_venv[escaping-venv]` | G6's mutant (the same containment call; reasoned) |
+| 7 | `test_shell_venv_token[doubled-path]` | none alone: `p.is_file()` and V3's `pyvenv.cfg` rule each hold it |
+| 7 | the six `test_shell_venv_token[c-…]` cells | none: the pre-existing lexical subset rejects `(`/`)` before this feature's code runs (executed); spec AC-3.4 requires them (OQ-I4); item 5 is the discriminating twin |
+| 7 | `test_shell_control_allowlist_under_a_venv[usr-bin-python3-control\|script-outside-scripts]` | none of this feature: the pre-existing trusted-directory and scripts-root rules, which no committed spec anchors |
+| 8 | `test_claude_gate_kind[red-measured]`, `test_state_without_step5_is_allowed`, `test_empty_target_rule[no-step5-root]`, `test_outside_root_target_is_governed_by_root[no-step5]`, `test_relative_targets[dot-tests-relative]` | W2F, W5BF, W5BF2, W5BF3, H15 |
+| 9 | `test_locators_fail_loudly[hook-line]` | D1 |
+| 9 | `test_locators_fail_loudly[trust-boundary\|helper-scripts\|tdd-gate]` | the committed `docsections.json` (Task 9 §"Expected RED split") |
+
+Items that fail at RED are observed failing by their RED run. Task 3's 80 items are observed
+failing only as one collection error; their guards are the Task 3 rows.
 
 **Acceptance Criteria**:
 - [ ] AC-8.1: each guard spec AC-8.1 names has its row: Task-match authority R1; `none` rule R2;
   containment V1–V3; `pytest-missing` K1; `errors ≥ 1` K2; rc-blindness K3; payload `cwd` G1; chain
   reader C1 (and W5AR); `tool_input` read H1A; blocking form H5; non-zero-rc refusal H4;
-  `state`-verb governance W5BR; unreadable-chain refusal C2 (the judge's rule, which the Claude
-  AC-6.9 production fixture reads through the `state` verb); every-record escape C3; exemptions-before-governance H6; stdin-before-`$1` H2; fast-path
+  `state`-verb governance W5BR; unreadable-chain refusal C2G (C2's mutant scored on the named AC-6.9
+  test `test_unreadable_chain_refuses_production`); every-record escape C3G (C3's mutant scored on
+  the named AC-6.10 test `test_codex_escape_needs_every_record[exhausted-then-none]`); C2 and C3
+  stay as the judge-level rows; exemptions-before-governance H6; stdin-before-`$1` H2; fast-path
   non-regular state H7 and missing parent H8, each alone; empty-target refusal H13; outside-root
   chain H14; SGR strip S4; `subtests` category rule S5; rule 8 K4. Each alternation branch is its
   own row (S1/S2, S7A/S7B, H1A/H1B/H1C).
 - [ ] All eight specs `ALL_CAUGHT` with `crash_kills=0`.
 
-**Mutation rows**: the 64 above. **Dependencies on other tasks**: Task 9
+**Mutation rows**: the 87 above. **Dependencies on other tasks**: Task 9
 
 ---
 
@@ -1790,7 +2069,7 @@ never read `$?`.
 1. **Suite**: Convention 1's command → only the baseline node may fail, and only if Task 0
    recorded it failing at `BASE_SHA` for the same reason; the same command with
    `CLAUDE_ZZZ_PROBE=1` exported → the same summary. Collected count at 5g = the Task-0 count +
-   292 new items + 2 portable-timeout nodes (3893 + 294 = 4187 at a `f6b258f0` base; re-derived at
+   296 new items + 2 portable-timeout nodes (3893 + 298 = 4191 at a `f6b258f0` base; re-derived at
    the real base, never carried).
 2. **Node-id floor**: collect at `HEAD` as in Task 0 item 5, then
    `comm -23 "$(git rev-parse --absolute-git-dir)/hmad-ctg-base-nodeids.txt" <head file>` prints
@@ -1816,10 +2095,17 @@ never read `$?`.
 9. **Stale-prose re-read**: plan §"Stale-prose census"'s `git grep -c` re-run; every hit read
    against the shipped gate, and the path-constant census `grep -n 'Path.home() / ".claude"' h-mad/tests/*.py`
    re-read by hand for this feature's files.
-10. **`parse_corpus.py BASE_SHA HEMASUITE_ROOT`** (probe): loads the base
-    `h_mad_wire_pin_gate.py` from `git show` into a temporary directory and the head one from the
-    tree, runs both `_parse_tasks` over the tracked non-`archive/` `*.impl-plan.md` files of both
-    repositories, and prints `PARSECORPUS: files=N id_mismatch_files=N py_symbol_label_lines=N parenthesised_label_lines=N`
+10. **`parse_corpus.py BASE_SHA HEMASUITE_ROOT`** (probe): `h_mad_wire_pin_gate.py` does
+    `import h_mad_wire_registry` at module top, and that module does
+    `from h_mad_audit_gate import _acknowledged_from_text` (both read at `a1478ad3`), so the base
+    parser is not importable alone. The probe writes
+    `git show "$BASE_SHA":h-mad/scripts/<name>.py` for `h_mad_wire_pin_gate`, `h_mad_wire_registry`
+    and `h_mad_audit_gate` into one `tempfile.TemporaryDirectory`, then runs two child processes
+    (`[sys.executable, "-c", <reader>, <scripts dir>, <file>…]`, `stdin=subprocess.DEVNULL`,
+    `timeout=60.0`), one with the temporary directory and one with the worktree's `h-mad/scripts`
+    at `sys.path[0]`, so the two versions never share a `sys.modules`. Each child prints, per
+    file, the JSON of its `_parse_tasks` ids and old fields. The parent compares them over the
+    tracked non-`archive/` `*.impl-plan.md` files of both repositories, and prints `PARSECORPUS: files=N id_mismatch_files=N py_symbol_label_lines=N parenthesised_label_lines=N`
     (units: files, files, matching lines, matching lines). Pass: `id_mismatch_files=0` (AC-2.9).
     The two residual counts are design D5's owed reading (2 and 1 at skills `1ef1a782` /
     HemaSuite `3f0c9f3a`), recorded with their shas, never compared.
@@ -1870,7 +2156,7 @@ this list with `toplevel_diff.py`'s output). Nothing is removed.
 **Under `REFUSAL_FORM=b`** (13 more keys; 19 in all): every test function of both modules — the 6
 of `test_h_mad_tdd_gate_codex.py` and the 7 of `test_h_mad_tdd_gate_state_resolution.py`
 (collected 6 and 7 at `f6b258f0`) — with the assertion moves spec AC-6.2 lists; both modules gain
-`from tdd_gate_support import decision` (a new import, not a changed key).
+`from tdd_gate_support import decision, hook_form` (a new import, not a changed key).
 
 ## After Phase 5 (not tasks)
 
@@ -1947,9 +2233,21 @@ distinct ids at `f6b258f0`).
   until P0 is committed; Task 8 waits for a conclusive V-0.
 - **OQ-I2 (design owner).** Deviation 7: the design's `[ -x "$D" ]` mutant is equivalent on the
   walk. This plan keeps the line and drops the row; the design's §"Test Strategy" still lists it.
+- **OQ-I3 (design owner; design delta owed, Task 8 precondition 2).** Design §D9 step 3
+  "Residual, stated exactly" and §D9 "DD-7 guard-narrowing differential": under a root beneath a
+  `tests/` or `fixtures/` directory, DD-7 exempts a relative production target that today's gate
+  refuses (executed, Task 8 precondition 2). The design states the residual yet calls any softened
+  cell outside its expected set a defect, and its corpus cannot see this one. The codex impl-plan
+  audit (c1) asks for the exemptions to match the path below `ROOT_ABS`; that changes D9's
+  pattern-bytes rule, so the plan halts Task 8 rather than choose.
+- **OQ-I4 (spec owner).** Spec AC-3.4's six `-c "open('x','w')"` cells cannot observe the venv
+  branch: the Codex gate's lexical subset rejects `(` and `)` before any executable is resolved
+  (executed at `a1478ad3`). They are kept as the spec requires; Task 7 item 5
+  (`.venv/bin/python -c pass`) is the discriminating case. A spec revision may replace the argv.
 - **Carried** from plan and design: OQ-1 (no `.venv` and no pytest → `pytest-missing`), OQ-3
   (`2 passed, 1 error` scores PASS; pinned unchanged by Task 1's `passed-and-error` row), OQ-D2
   (`` `path.py::symbol` `` entries).
 
 ## Version History
 - v1.0: Initial implementation plan (2026-09-28), first 5a draft; answers no audit cycle. From design v1.2, spec v1.4 and plan v1.4; premises read at f6b258f0 (h-mad, handoff, probes and pytest.ini unchanged at a85abf7f). 12 tasks: Task 0 5c gate with the top-level-diff probe, parsers (Tasks 1-2), judge core plus staged W4/W3 wiring (Tasks 3-5), Codex gate W1/W5a and shell venv branch (Tasks 6-7), Claude gate rewrite W2/W5b/W6 behind the V-0 precondition (Task 8), docs (Task 9), 64 mutation rows in eight specs (Task 10), 5g gate (Task 11); 4 wiring tasks carrying 7 wires. Ten deviations recorded, one design mutant dropped as equivalent.
+- v1.1: Answers impl-plan audit cycle 1 (round 1 of 2; codex `audit.v1.p1`: 3 must; teammate `audit.v1.teammate`: 4 must, 6 should, 5 nit), 2026-09-28; premises re-read at `a1478ad3` (h-mad unchanged at `212aab9d`). Each premise was re-run before acting; no premise was refuted. **Codex must 1 (DD-7 root under `tests/`)**: premise holds (today's gate, root `<tmp>/tests/repo`: positional `x.py` rc 1, absolute rc 0; the canonical path matches `*/tests/*`); the remedy changes design §D9, so DEFERRED as a design delta: Task 8 precondition 2 halts, OQ-I3. **Codex must 2 (trailing blank line)**: FIXED, `rc=` sentinel capture executed under bash 3.2.57 (Deviation 11), `trailing-blank-line` ids in Task 8 items 2 and 3, rows H16/H17. **Codex must 3 (stderr as name-map path)**: FIXED, `_run_bounded` returns the streams apart, name map reads stdout (Deviation 12), `test_name_map_stderr_is_not_a_path`, row R5. **Teammate must 1 (FORM read at import)**: FIXED, lazy `hook_form`, `CHOSEN` from the module docstring's V-0 quote, not from `docs/` (Deviation 14). **Teammate must 2 (support code RED or GREEN)**: FIXED, lands in each task's RED commit, listed on the Test file line of Tasks 1, 3, 7, 8 (Deviation 1); Task 1 reads 23 failing / 15 passing of 38. **Teammate must 3 (30 s sleeper vs 40 s budget)**: FIXED, `sleeper(…, seconds)`, 90 s in the two gate rows. **Teammate must 4 (false RED premise)**: FIXED, Task 6 item 8 now carries the executed traceback reading (rc 1, `PermissionError`). **Teammate should 1**: FIXED (`_PATHS_LABEL_LINE` test constant). **Should 2**: FIXED (Deviation 13: start error, else summary line, else last line). **Should 3**: FIXED (rows C2G, C3G on the named AC-6.9 / AC-6.10 tests). **Should 4**: FIXED (`parse_corpus.py` copies three base files and runs two child processes). **Should 5**: FIXED (`/opt/anaconda3/bin/python` in every spec). **Should 6**: FIXED (Convention 8 names `SKILL.md`, 53 rows in 14 specs, and every other edited file at 0). **Nits**: N1 fixed (tag boundary in Convention 9), N2 fixed (Deviation 15), N3 fixed (Task 3 description), N4 fixed (gate-interpreter venv outside the root), N5 no change needed. **Proactive (dispatch rule: every initially-green guard needs a row)**: Task 10 §"Initially-green guards" added; new rows S8–S12, E1, P1, P1B, P2, K3B, K5, G6B, G7, G8, H15, W5BF2, W5BF3, D1; S8–S12 executed on scratch copies (the first S8 candidate killed nothing and was replaced); Task 7 item 5 added as the discriminating twin of spec AC-3.4's six `-c` cells, which the lexical subset decides first (OQ-I4). Counts: 296 new items (38 + 23 + 80 + 17 + 16 + 19 + 18 + 74 + 11); 87 mutation rows in eight specs; 12 tasks, 4 wiring, 7 wires, WIRE and WIRE-PIN lines unchanged.
