@@ -2045,6 +2045,78 @@ _agy_last_step() {  # <log> <pre_lines> -> "N step_update events; last tool: <na
       end' 2>/dev/null || true
 }
 
+_GROK_TYPES_RE='thought|text|available_commands|tool_call|tool_call_update|usage|end'
+_GROK_MAX_DEPTH=64
+_GROK_JQ_DEFS='def _grok_over($d): if $d > $max then true
+    elif (type == "object" or type == "array") then any(.[]; _grok_over($d + 1))
+    else false end;
+  def _grok_obj: (fromjson? // empty) | select(type == "object")
+    | select(_grok_over(0) | not);'
+
+_grok_region() {  # <log> <pre_lines> -> the lines after pre_lines; the only place the offset is spelled
+  local log="$1" pre="$2"
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  tail -n "+$(( pre + 1 ))" "$log" 2>/dev/null || true
+}
+
+_grok_final_message() {  # <log> <pre_lines> -> the last non-empty text segment, or nothing
+  local log="$1" pre="$2"
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  _grok_region "$log" "$pre" | jq -nR -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS"'
+    reduce (inputs | _grok_obj) as $e
+      ({last: "", cur: ""};
+       if $e.type == "text" then .cur += (if ($e.data | type) == "string" then $e.data else "" end)
+       elif ($e.type == "tool_call" or $e.type == "tool_call_update"
+             or $e.type == "usage" or $e.type == "end")
+         then (if (.cur | length) > 0 then .last = .cur else . end) | .cur = ""
+       else . end)
+    | if (.cur | length) > 0 then .cur elif (.last | length) > 0 then .last else empty end' \
+    2>/dev/null || true
+}
+
+_grok_region_state() {  # <log> <pre_lines> -> complete | truncated | nojq | jqfail
+  local log="$1" pre="$2" st="" rc=0
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  command -v jq >/dev/null 2>&1 || { echo nojq; return 0; }
+  st="$(_grok_region "$log" "$pre" | jq -nR -r --argjson max "$_GROK_MAX_DEPTH" \
+    "$_GROK_JQ_DEFS"' reduce (inputs | _grok_obj | select(.type == "end")) as $_ ("truncated"; "complete")' \
+    2>/dev/null)" || rc=$?
+  case "$rc:$st" in
+    0:complete|0:truncated) echo "$st" ;;
+    *) echo jqfail ;;
+  esac
+}
+
+_grok_stop_reason() {  # <log> <pre_lines> -> the last end event's stopReason, or nothing
+  local log="$1" pre="$2"
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  _grok_region "$log" "$pre" | jq -nR -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS"'
+    reduce (inputs | _grok_obj | select(.type == "end")) as $e (null; ($e.stopReason // "-") | tostring)
+    | values' 2>/dev/null || true
+}
+
+_grok_last_tool() {  # <log> <pre_lines> -> "N tool calls completed; last tool: <name> <status>" or nothing
+  local log="$1" pre="$2"
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  _grok_region "$log" "$pre" | jq -nR -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS"'
+    reduce (inputs | _grok_obj
+            | select(.type == "tool_call" or .type == "tool_call_update")) as $e
+      ({names: {}, done: {}, seen: false, last: null};
+       (if $e.type == "tool_call" then .seen = true else . end)
+       | (if $e.type == "tool_call" and ($e.toolCallId | type) == "string"
+          then .names[$e.toolCallId] = ($e.toolName // "?") else . end)
+       | (if $e.type == "tool_call_update" and $e.status == "completed"
+             and ($e.toolCallId | type) == "string"
+          then .done[$e.toolCallId] = true else . end)
+       | (if $e.status != null then .last = $e else . end))
+    | if .seen | not then empty
+      else "\(.done | length) tool calls completed; last tool: "
+           + (if .last == null then "none"
+              else (((.last.toolCallId | strings) as $i | .names[$i]) // "?")
+                   + " " + (.last.status | tostring) end)
+      end' 2>/dev/null || true
+}
+
 # Classify a transcript so `progress` renders it with the right lens.
 _exec_log_format() {  # <logfile> -> agy-ndjson | codex-text | empty | missing
   local log="$1"
