@@ -1,6 +1,6 @@
 # Implementation Plan: codex-tdd-gate-defects
 
-> Source: docs/02-design/features/codex-tdd-gate-defects.design.md (v1.2, binding, including its
+> Source: docs/02-design/features/codex-tdd-gate-defects.design.md (v1.3, binding, including its
 > §"Supersedes the plan or the spec on" rows DD-1…DD-13 and the D13 rebase contract),
 > docs/01-plan/features/codex-tdd-gate-defects.spec.md (v1.4, 49 ACs, binding),
 > docs/01-plan/features/codex-tdd-gate-defects.plan.md (v1.4: step P0, V-0, V-1r, §"Connection
@@ -16,12 +16,13 @@ Tasks 3, 4 and 5 build the judge: Task 3 lands the whole module with its two cal
 their pre-wire form, Task 4 wires W4 (`score` → `_suite_summary`) and Task 5 wires W3
 (`resolve` → `_parse_tasks`). Task 6 rewires the Codex gate (W1, W5a) and Task 7 adds its venv
 shell-policy branch. Task 8 rewrites the Claude gate (W2, W5b, W6) in the form V-0 chose. Task 9
-lands the documentation, Task 10 authors and scores the 87 mutation rows in eight specs, and Task
+lands the documentation, Task 10 authors and scores the 98 mutation rows in eight specs, and Task
 11 is the 5g gate. 1 + 2 + 3 + 2 + 1 + 1 + 1 + 1 = 12. Four tasks are `wiring` (4, 5, 6, 8) and
-carry seven wires between them. Task 8 waits on two preconditions: a conclusive V-0 and the design
-delta owed on D9's root-under-`tests/` residual (§"Open Questions", OQ-I3).
+carry seven wires between them. Task 8 follows design v1.3 §D9 (the root-relative
+directory-exemption subject, `RAW_TARGET`, the 126-cell DD-7 differential) and waits only on its
+FR-0 precondition, a conclusive V-0; no task waits on a design delta.
 
-## Deviations from design v1.2
+## Deviations from design v1.3
 
 The design is binding. Each item is an addition or a precision the design leaves open, with its
 evidence. An auditor reading both documents follows this section where they differ.
@@ -64,8 +65,14 @@ evidence. An auditor reading both documents follows this section where they diff
      design mutates the exact-category rule as one row, but the rule is three branches;
    - V1's killing fixture `venv-out-bin-back-in`: design §D12's rows cannot isolate conjunct 1,
      because a `.venv` symlinked out of the root also puts `.venv/bin` out, so conjunct 2 still
-     denies and a V1 mutant survives every D12 row. The new fixture points `.venv` outside and
-     that directory's `bin` back inside the root;
+     denies and a V1 mutant survives every D12 row. The new fixture points `.venv` at an outside
+     directory that holds a regular `pyvenv.cfg` and whose `bin` is a symlink back inside the
+     root. The regular `pyvenv.cfg` is load-bearing (v1.2, teammate impl-plan audit c2 should 2):
+     conjunct 3 reads `os.lstat(<root>/…/.venv/pyvenv.cfg)`, which follows the `.venv` symlink,
+     so without it the V1 mutant still returns `False` and survives. Executed on a scratch copy of
+     the three-conjunct literal (deleted) at `c93da638`: outside directory holding only the `bin`
+     symlink → unmutated `False`, V1 mutant `False`; the same plus a regular `pyvenv.cfg` →
+     unmutated `False`, V1 mutant `True`;
    - G6 (the Codex shell branch's containment call) and H3 (DD-2's revert, re-adding the no-`jq`
      allow): plan §"Spec v1.3 ACs: where each is tested" leaves AC-3.6 and AC-6.12 mutation specs
      to the impl-plan;
@@ -78,7 +85,15 @@ evidence. An auditor reading both documents follows this section where they diff
    - v1.1, rows for guards the revision adds: R5 (the name map reads stdout only), H16 and H17
      (the one-line check keeps trailing newlines), C2G and C3G (spec AC-8.1 scores the
      unreadable-chain refusal and the every-record escape on a named AC test, so C2's and C3's
-     mutants are re-scored on the Claude gate's AC-6.9 and AC-6.10 tests, as H14 already is).
+     mutants are re-scored on the Claude gate's AC-6.9 and AC-6.10 tests, as H14 already is);
+   - v1.2, one row per initially-green guard that v1.1 left without one (codex impl-plan audit c2
+     must 3): S8B (`quoted-assert`), G6C (`[escaping-venv]`, until then "reasoned"), G9
+     (`[usr-bin-python3-control]`), G10 (`[doubled-path]`) and G11 (`[script-outside-scripts]`),
+     each killed on a scratch copy (Task 10 §"Initially-green guards");
+   - v1.2, rows for the design v1.3 directory-exemption subject (Deviation 16): H15B (the
+     `*/fixtures/*` alternative alone), H18 and H18B (root membership, and its quoting), H19 (the
+     root-relative subject) and H20A and H20B (each spelling of the outside-root conjunction
+     alone).
 7. **One design mutant is not authored: `_absent_at`'s `[ -x "$D" ]` → true.** It is equivalent on
    every reachable input, so it would SURVIVE by construction. Every `D` the fast path tests was
    entered by `cd` (`d=$(cd "$d" && pwd -P)`, and `ROOT_ABS` likewise), which needs search
@@ -122,12 +137,28 @@ evidence. An auditor reading both documents follows this section where they diff
     docstring** (v1.1, teammate impl-plan audit c1). A module-level read of
     `readonly REFUSAL_FORM=` fails collection at RED, because today's hook has no such line
     (`grep -c REFUSAL_FORM h-mad/hooks/h-mad-tdd-gate.sh` → 0 matching lines at `a1478ad3`). The
-    tests do not read `v0.out` from `docs/`: an `h-mad/tests` module that reads a path outside
-    `h-mad/` breaks the project invariant §"Skill self-containment". AC-6.6 already requires the
-    docstring quote, so the test compares the hook's literal with it.
+    tests do not read `v0.out` from `docs/`, because `v0.out` is a run artifact in this feature's
+    probe directory (Task 0 item 2), whose presence and content at test time depend on which checkout
+    the suite runs in; a quote held by the test file itself does not. (v1.1 argued "Skill
+    self-containment" instead; that overstated it: Task 2 item 8 reads the repository's
+    `docs/**/*.impl-plan.md`, and existing modules set `REPO_ROOT = Path(__file__).resolve().parents[2]`,
+    `h-mad/tests/conftest.py:24`.) AC-6.6 already requires the docstring quote, so the test compares
+    the hook's literal with it.
 15. **W4F's force literal is `_suite_summary("1 failed in 0.01s")`**, where the design's W3/W4
     table writes `SuiteSummary(0, 1, 0, False, frozenset({"failed"}))`. The effect is the same
     value, and the plan's form needs no `SuiteSummary` import in the judge.
+16. **Design v1.3's directory-exemption subject is landed as a membership flag and one matcher**
+    (v1.2). Design §D9 step 3 decides "inside the root" by the `case` pattern `"$R"/*` and matches
+    `*/tests/*|*/fixtures/*` against `DIR_SUBJECT="/${TARGET_PATH#"$R"/}"` inside the root, and
+    against both the canonical `TARGET_PATH` and `RAW_TARGET` outside it. Task 8 lands the
+    membership decision as `IN_ROOT=yes|no` (step 3, after the normalization) and the two
+    alternatives once, in a function `_dir_match`, which both branches call; the second `case`
+    block keeps only the extension alternatives. The design's variable names `RAW_TARGET`, `R` and
+    `DIR_SUBJECT` are kept. Executed under `/bin/bash` 3.2.57 with `set -euo pipefail` in a scratch
+    script of Task 8 steps 4 and 7 only (deleted), at `c93da638`: the 126-cell corpus reads 18
+    refusals (6 per root shape), softened exactly the 6 and tightened exactly the 8 cells design
+    v1.3 names, against `git show HEAD:h-mad/hooks/h-mad-tdd-gate.sh` (Task 8 §"Executed
+    readings").
 
 ## Preamble — where and how this plan runs
 
@@ -219,10 +250,11 @@ evidence. An auditor reading both documents follows this section where they diff
    anchor.
 9. **Mutation tags.** Every line a Task 10 row anchors ends with a tag comment, `# M:` followed by the row id (`# M:S1`, `# M:W4`),
    written verbatim as the task shows it, and each tag occurs once in its file, counted with a
-   line-end boundary (`grep -c '# M:H1$'`, because `# M:H1` is a prefix of `# M:H10`…`# M:H17`
-   and `# M:S1` of `# M:S10`…). A spec row's `find` is the whole tagged line, indentation
-   included. Rows S11, S12, K3B, K5, G6B, W5BF2, W5BF3, C2G and C3G reuse another row's tag; P1,
-   P1B, P2 and G8 quote an untagged line, as R2 and W3C do.
+   line-end boundary (`grep -c '# M:H1$'`, because `# M:H1` is a prefix of `# M:H10`…`# M:H20`,
+   `# M:S1` of `# M:S10`… and `# M:G1` of `# M:G10`). A spec row's `find` is the whole tagged
+   line, indentation included. Rows S8B, S11, S12, K3B, K5, G6B, G6C, H15B, H18B, H20A, H20B,
+   W5BF2, W5BF3, C2G and C3G reuse another row's tag (H20A and H20B the tag `M:H20`); P1, P1B, P2,
+   G8 and G11 quote an untagged line, as R2 and W3C do.
 10. **No bare time-limit command.** `h-mad/tests/test_h_mad_portable_timeout.py` scans
     `h-mad/scripts/*.py`, `h-mad/scripts/*.sh`, `h-mad/hooks/*.sh`, `h-mad/references/*.md` and
     `h-mad/SKILL.md` with `(?:^|[^-\w])timeout\s+\d+` (read at `f6b258f0`). Prose says "a 40 s
@@ -318,8 +350,12 @@ impl-plan commit.
 - `from typing import FrozenSet, NamedTuple, Optional` lands after `from pathlib import Path`
   (the import block is `argparse`, `subprocess`, `hashlib`, `json`, `os`, `re`, `sys`,
   `from pathlib import Path`, read at `f6b258f0`).
-- `_SUITE_RE` (today at `h-mad/scripts/h_mad_audit_gate.py:440`) is deleted: `git grep -n _SUITE_RE`
-  → 2 matching lines, both in that file (the definition and `_suite_summary`'s loop).
+- `_SUITE_RE` (today at `h-mad/scripts/h_mad_audit_gate.py:440`) is deleted: `git grep -nw _SUITE_RE f6b258f0 -- h-mad handoff`
+  → 2 matching lines, both in that file (the definition, line 440, and `_suite_summary`'s loop,
+  line 450; the same count at `c93da638`). Without `-w` the scoped command gives 4 matching lines,
+  the other two being `<INLINE_SUITE_REFERENCE>` substrings in
+  `h-mad/references/codex-verifier-prompt.md`, and unscoped it gives 11 (v1.1 published the
+  unscoped command with the word-bounded figure).
 - `_suite_summary` is replaced in place. Its callers stay `run_suite` alone
   (`git grep -n "_suite_summary" -- h-mad handoff ':!h-mad/tests/fixtures'` → 2 matching lines at
   `f6b258f0`: the definition and `run_suite`'s call).
@@ -394,7 +430,13 @@ The new return orders its keys `reason, verdict, rc`, so it is not byte-identica
 
 **`tdd_gate_support.py` (new), first contents**:
 ```python
+"""Shared test support for codex-tdd-gate-defects (not collected: no test_ prefix)."""
+from __future__ import annotations
+
+import os
+
 DROPPED_ENV = ("HPW_AGENT_BACKEND", "HMAD_CODEX_UNAVAILABLE", "CODEX_PROJECT_DIR")
+
 
 def hermetic_env(**extra: str) -> dict[str, str]:
     """os.environ minus every CLAUDE* name and DROPPED_ENV, then `extra`."""
@@ -402,6 +444,13 @@ def hermetic_env(**extra: str) -> dict[str, str]:
     env.update(extra)
     return env
 ```
+This block is the whole file as Task 1 lands it; later tasks append below it and add their own
+imports to the import block. **Executed** (v1.2, codex impl-plan audit c2 must 2): the block
+written verbatim to a scratch directory (deleted) at `c93da638` imports and runs under
+`/usr/bin/python3` 3.9.6 and `/opt/anaconda3/bin/python` 3.11.8: with `CLAUDE_ZZZ_PROBE=1` and
+`HPW_AGENT_BACKEND=claude` exported, `hermetic_env(X="1")` holds neither, holds `X == "1"` and
+keeps `PATH`. The same block without `import os` (v1.1's literal) raises
+`NameError: name 'os' is not defined` on the first `hermetic_env()` call.
 The file lands in this task's RED commit (Deviation 1), so the test below passes at RED; row E1
 is its observed failure.
 
@@ -494,8 +543,8 @@ Over the task's 38 new items: 23 failing and 15 passing.
 item 1 `subtests-passed` S1, `stray-failed-on-stderr` S3, the five `no_summary` rows S12,
 `passed-and-error` S10, `failed-and-passed` S11, `collected-zero` the existing
 `a-missing-summary-becomes-a-verdict` row of `audit_suite_gate.json` (its subject, the
-`summary is None` return, is unchanged); item 2 rows 18 and 20 S8, row 21 S9, row 19 none alone
-(stated residual); item 3 E1.
+`summary is None` return, is unchanged); item 2 rows 18 and 20 S8, row 21 S9, row 19 S8B; item 3
+E1.
 **Regression guards**: the 21 existing audit-suite tests, unmodified in assertions, including
 `test_no_summary_is_UNREADABLE_not_PASS_and_not_FAIL` and
 `test_a_run_that_says_only_no_tests_ran_is_also_refused` (plan §"Regression census");
@@ -507,8 +556,8 @@ item 1 `subtests-passed` S1, `stray-failed-on-stderr` S3, the five `no_summary` 
   one of the three audit-gate change rows is updated" has no member (plan §"Regression census":
   no existing stub prints a failures-without-passes summary), so no assertion changes.
 
-**Mutation rows** (Task 10): S1, S2, S3, S4, S5, S6, S7A, S7B, S8, S9, S10, S11, S12 and E1 in
-`audit_suite_summary_line.json` — 14 rows.
+**Mutation rows** (Task 10): S1, S2, S3, S4, S5, S6, S7A, S7B, S8, S8B, S9, S10, S11, S12 and E1
+in `audit_suite_summary_line.json` — 15 rows.
 
 **Dependencies on other tasks**: Task 0
 
@@ -571,13 +620,23 @@ assertion):
    and `pins` as the same text with the two path lines deleted.
 7. `test_field_re_is_unchanged` (1): `_FIELD_RE.pattern` and `_FIELD_RE.flags` equal the literal
    read at `f6b258f0` (Convention 6: no `is`).
-8. `test_corpus_old_fields_unperturbed` (1): over this repository's `git ls-files '*.impl-plan.md'`
-   minus `archive/` (10 files at `f6b258f0`; the count is re-read, never frozen), `_parse_tasks`
-   of each file and of the same text with every path-label line removed give the same list
-   of `id` values in the same order, and the same `shape`, `wire`, `pin`, `wires`, `pins` per task.
-   A path-label line is one that the module's own constant `_PATHS_LABEL_LINE` matches: a copy of
-   the Task 2 `_PATHS_FIELD_RE` literal above, held in the test file, because the module imports
-   nothing that does not exist at RED. `git` runs under `hermetic_env()` with `timeout=60.0`.
+8. `test_corpus_old_fields_unperturbed` (1): the corpus is this repository's
+   `git -C <REPO_ROOT> ls-files '*.impl-plan.md'` minus every path holding an `/archive/` segment,
+   with `REPO_ROOT = Path(__file__).resolve().parents[2]` (the precedent at
+   `h-mad/tests/conftest.py:24`), each listed path read as `REPO_ROOT / path`. The directory is
+   named explicitly because the mutation harness runs every spec's `command` with `cwd=root`
+   (`h_mad_mutation_harness.py:380`), and every Task 10 spec's root is `h-mad/`, where the
+   cwd-relative `git ls-files '*.impl-plan.md'` lists 0 files (executed at `c93da638`; from the
+   repository top, 11 non-archive files). `_parse_tasks` of each file and of the same text with
+   every path-label line removed give the same list of `id` values in the same order, and the same
+   `shape`, `wire`, `pin`, `wires`, `pins` per task. A path-label line is one that the module's own
+   constant `_PATHS_LABEL_LINE` matches: a copy of the Task 2 `_PATHS_FIELD_RE` literal above, held
+   in the test file, because the module imports nothing that does not exist at RED. **Non-vacuity,
+   asserted before the comparison**: the corpus holds at least one file, and the removed lines
+   include at least one whose value holds a `.py` token (the P1 mutant's input). At `c93da638`
+   the corpus reads 11 files and 105 such lines across all 11 (a scratch reading, deleted; the
+   figures are re-read by the test, never frozen). `git` runs under `hermetic_env()` with
+   `timeout=60.0`.
 
 10 + 1 + 4 + 4 + 1 + 1 + 1 + 1 = 23.
 
@@ -733,7 +792,13 @@ def main(argv: Optional[list] = None) -> int: ...
   It notes `name map: ` plus the resolved path, `name map: empty for ` plus the root-relative
   target (an empty `mapped`, whatever stderr holds), or `name map: target outside root`, and ends in
   `timeout`, `test-missing`, `no-test-resolved` or a one-candidate `Resolution("name-map", …)`.
-  The one `test-missing` constructor:
+  The one `test-missing` constructor is the module-level helper
+  `_test_missing(candidates: Sequence[Path], notes: Sequence[str], root: Path) -> Verdict`, whose
+  whole body is the line below. The Task-match branch above calls it with `missing` as
+  `candidates`; the name-map branch wraps it as
+  `Resolution("name-map", (), (mapped_path,), tuple(notes), _test_missing((mapped_path,), notes, root))`
+  (`mapped_path` the name map's resolved candidate) and never returns `_deny(…)` from `resolve`
+  directly (`resolve` is typed `-> Resolution`):
   ```python
       return _deny("test-missing", f"no resolved test file exists ({_listing(candidates, root)}); author the failing test first{_notes(notes)}")  # M:R3
   ```
@@ -821,7 +886,10 @@ for pytest version, Python version and `sys.prefix == sys.base_prefix` at `f6b25
 script), `marker_shim(python, marker)` (design D12's marker shim) and
 `sleeper(path, pidfile, seconds)` (a `/bin/sh` script that starts `sleep` for `seconds` seconds,
 the value written into the script body, as its child,
-writes that child's pid to `pidfile`, and waits on it). The in-process `timeout` rows below run
+writes that child's pid to `pidfile`, and waits on it). "A `fake_venv` whose `bin/python` is
+`sleeper(…, seconds=N)`" means, in this order: `fake_venv(dir, "exit 0")`, then
+`sleeper(dir / ".venv" / "bin" / "python", pidfile, N)`, which overwrites the script `fake_venv` wrote and
+keeps it executable; `pyvenv.cfg` stays the regular file `fake_venv` made. The in-process `timeout` rows below run
 at `budget_s=1.0` with `seconds=30`. The two gate-level `timeout` rows (Task 6 item 1, Task 8
 item 1) run at the default 40 s budget and pass `seconds=90`, so the sleeper is still alive when
 the budget runs out: the verdict is `timeout`, not a `no-summary` from a sleeper that exited on its
@@ -891,7 +959,9 @@ In-process calls use `judge.judge(…, fallback_interpreter=sys.executable)` unl
      oracle is per row"): the two directory-symlink rows, `os.path.realpath(<mutated path>)`
      outside the root; `cfg-missing`, `os.path.lexists(cfg)` false; `cfg-symlink`,
      `os.path.islink(cfg)` and `not S_ISREG(os.lstat(cfg).st_mode)`; `venv-out-bin-back-in`,
-     `realpath(.venv)` outside and `realpath(.venv/bin)` inside the root (Deviation 6).
+     `realpath(.venv)` outside and `realpath(.venv/bin)` inside the root, and
+     `S_ISREG(os.lstat(<venv>/pyvenv.cfg).st_mode)` true, so that conjunct 3 cannot be what
+     denies (Deviation 6).
   2. `test_select_interpreter_takes_the_nearest_venv` — venvs at `hpw/.venv` and `.venv`, test in
      `hpw/tests` → `str(hpw/.venv/bin/python)`, unresolved.
   3. `test_select_interpreter_without_a_venv_uses_the_fallback`.
@@ -937,8 +1007,15 @@ In-process calls use `judge.judge(…, fallback_interpreter=sys.executable)` unl
      to `outside-venv` whose `bin/python` is a marker shim → `venv-escapes-root`; the marker file
      does not exist.
 - Floor (4): `test_three_nine_floor[h_mad_tdd_judge|h_mad_wire_pin_gate|h_mad_wire_registry|h_mad_audit_gate]`
-  — `ast.parse(source, feature_version=(3, 9))` over each file (design D1; the three imported
-  modules import under `/usr/bin/python3` 3.9.6, design D1 premise).
+  — two assertions per module (v1.2, codex impl-plan audit c2 should): `ast.parse(source,
+  feature_version=(3, 9))` over its file, and an actual import under the floor interpreter,
+  `subprocess.run(["/usr/bin/python3", "-c", f"import sys; sys.path.insert(0, {str(SCRIPTS)!r}); import {name}"], stdin=subprocess.DEVNULL, capture_output=True, text=True, env=hermetic_env(), timeout=60.0)`
+  with `SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"`, asserting `returncode == 0`
+  (the stderr is the failure message). `ast.parse` proves syntax only; the import proves every
+  name the module evaluates at import time exists on 3.9. The test first asserts
+  `Path("/usr/bin/python3").is_file()` (a missing floor interpreter fails, never skips). The three
+  existing modules import this way today (executed at `c93da638`: `h_mad_wire_pin_gate ok`,
+  `h_mad_wire_registry ok`, `h_mad_audit_gate ok`).
 
 17 + 14 + 11 + 9 + 3 + 9 + 4 + 4 + 5 + 4 = 80.
 
@@ -1279,7 +1356,7 @@ AC-3.5, AC-3.6; plan §"Guard narrowing: shell policy".
   def _contained_venv_executable(token: str, root: Path, cwd: object) -> Path | None:
       if "/" not in token:
           return None
-      p = Path(os.path.normpath(os.path.join(str(_payload_cwd_base(root, cwd)), os.path.expanduser(token))))
+      p = Path(os.path.normpath(os.path.join(str(_payload_cwd_base(root, cwd)), os.path.expanduser(token))))  # M:G10
       if not (p.name.startswith("python") and p.parent.name == "bin" and p.parent.parent.name == ".venv"):
           return None
       if not p.is_file():
@@ -1288,8 +1365,8 @@ AC-3.5, AC-3.6; plan §"Guard narrowing: shell policy".
           return None
       return p  # M:G3
   ```
-- `_safe_shell_command(command, root=None, cwd=None)` changes one line:
-  `    resolved_executable = (_contained_venv_executable(argv[0], root, cwd) if root is not None else None) or _trusted_executable(argv[0])`.
+- `_safe_shell_command(command, root=None, cwd=None)` changes its signature and one line:
+  `    resolved_executable = (_contained_venv_executable(argv[0], root, cwd) if root is not None else None) or _trusted_executable(argv[0])  # M:G9`.
   Every argv rule after it is unchanged; `--self-check` passes `root=None`, so the lookup is inert
   there.
 - `_main_guarded` passes `payload.get("cwd")`:
@@ -1328,7 +1405,15 @@ AC-3.5, AC-3.6; plan §"Guard narrowing: shell policy".
    (11; AC-3.4): the two contained `-m pytest` pairs allow; the two escaping ones deny; the doubled
    path denies; the six `-c "open('x','w')"` cells deny.
 2. `test_shell_control_allowlist_under_a_venv[contained-venv|usr-bin-python3-control|escaping-venv|script-outside-scripts]`
-   (4; AC-3.6): allow, allow, deny, deny (the last runs a `tools.py` under the root).
+   (4; AC-3.6): allow, allow, deny, deny. `[usr-bin-python3-control]` is
+   `/usr/bin/python3 -m pytest tests/test_x.py` from the sub-project `cwd`. `[escaping-venv]` is
+   `.venv/bin/python -m pytest tests/test_x.py` from the sub-project `cwd` with the sub-project's
+   `.venv` a symlink to `outside-venv`. `[script-outside-scripts]` is
+   `.venv/bin/python <root>/hematology-paper-writer/h_mad_wire_registry.py verify` from the
+   sub-project `cwd`, a contained venv, and the script path absolute (v1.2: v1.1 ran a `tools.py`,
+   which `_safe_hmad_script` also rejects because `SAFE_HMAD_SCRIPT_OPTIONS` has no `tools.py` key,
+   so no single mutant could make that cell fail; a script named like an allowed H-MAD script but
+   outside `scripts/` leaves the scripts-root rule as the one guard, row G11).
 3. `test_venv_token_keys_on_the_lexical_name` (1): a contained venv whose `bin/python` symlinks to
    `/bin/cat`, command `.venv/bin/python notes.txt` from the sub-project `cwd` → deny (the lexical
    `python*` rules reject a non-script argument; a realpath name `cat` would reach
@@ -1351,12 +1436,19 @@ AC-3.5, AC-3.6; plan §"Guard narrowing: shell policy".
 item 1, `[contained-venv]` of item 2 and item 4 fail; the 9 other item-1 rows, the 3 other item-2
 rows, item 3 and item 5 already deny (or allow, for the control) and pass as guards.
 **Passing at RED, and the row that shows each one failing** (Task 10 §"Initially-green guards"):
-`[sub-cwd-escaping]` G6, `[root-cwd-escaping]` G6B, item 2 `[escaping-venv]` G6's mutant (the
-same containment call; reasoned), item 3 G3, item 5 G8. No row alone: `[doubled-path]` (held by
-`p.is_file()` and by V3's `pyvenv.cfg` rule, each alone), the six `c-*` cells (the lexical subset
-decides them before this feature's code runs; spec AC-3.4 requires them, OQ-I4),
-`[usr-bin-python3-control]` and `[script-outside-scripts]` (the pre-existing trusted-directory and
-scripts-root rules, which no committed spec anchors).
+`[sub-cwd-escaping]` G6, `[root-cwd-escaping]` G6B, item 2 `[escaping-venv]` G6C, item 2
+`[usr-bin-python3-control]` G9 (the `or _trusted_executable(argv[0])` fallback removed), item 2
+`[script-outside-scripts]` G11 (the pre-existing scripts-root rule, an untagged line), item 1
+`[doubled-path]` G10 (the token joined to the root instead of the payload `cwd` base), item 3 G3,
+item 5 G8. G6C, G9, G10 and G11 were each killed on a scratch copy (Task 10 §"Initially-green
+guards").
+**No coverage claimed (v1.2, codex impl-plan audit c2 must 3): the six `c-*` cells of item 1.**
+They stay because spec AC-3.4 names them, and they claim conformance to AC-3.4's table only, not
+discrimination of any guard: two independent rules deny each of them (the lexical subset rejects
+`(` and `)` before any executable is resolved, and behind it the containment and trusted-directory
+rules deny the escaping cells while the argv rules deny a contained `python -c`), so no
+single-site mutant can make one of them fail, and no row is authored for them. The discrimination
+claim for the venv branch's argv rules is item 5's, row G8 (OQ-I4).
 **Regression guards**: `test_codex_hook_rejects_untrusted_executable_paths` passes unmodified
 (AC-3.5); the Task-6 items; `--self-check`.
 
@@ -1364,7 +1456,8 @@ scripts-root rules, which no committed spec anchors).
 - [ ] AC-3.4: item 1. AC-3.5: the guard above. AC-3.6: item 2 and the corpus rows.
 - [ ] The probe reads `softened=14 tightened=0 unexpected=0`, published with its sha.
 
-**Mutation rows** (Task 10): G3, G6, G6B, G8 in `codex_gate_judge_wiring.json` — 4 rows.
+**Mutation rows** (Task 10): G3, G6, G6B, G6C, G8, G9, G10, G11 in `codex_gate_judge_wiring.json`
+— 8 rows.
 
 **Dependencies on other tasks**: Task 6
 
@@ -1394,25 +1487,14 @@ asserts the chosen form, so none of them can be written before the form is known
 `readonly REFUSAL_FORM=a` when `CHOSEN=a` and `readonly REFUSAL_FORM=b` when `CHOSEN=b`. The test
 module's docstring quotes the `v0.out` line (AC-6.6).
 
-**Precondition 2: design delta owed (design §D9 step 3 "Residual, stated exactly" and §D9 "DD-7
-guard-narrowing differential").** HALT: `design delta owed`. Task 8 does not start until the
-design answers this. The codex impl-plan audit (c1) found a softened verdict outside the two the
-differential publishes: under a project root that itself lies beneath a `tests/` or `fixtures/`
-directory, a relative production target is gated today and exempt after DD-7. Executed at
-`a1478ad3` against today's gate under `/bin/bash` 3.2.57, with a `tempfile.TemporaryDirectory`
-root `<tmp>/tests/repo` holding one step5 record, a `codex` stub on `PATH` and stdin `/dev/null`:
-positional `x.py` → rc 1, `[H-MAD-TDD-GATE] BLOCK: Phase 5 implementation must be authored by
-Codex…` (gated); positional `<tmp>/tests/repo/x.py` → rc 0 (already exempt today). The canonical
-form `os.path.normpath(os.path.join(root, "x.py"))` matches `*/tests/*` in a `case` block →
-exempt. The design names this in §D9 ("A project whose root lies under a `tests/` or `fixtures/`
-directory is therefore fully exempt on the Claude side only … DD-7 extends it to relative ones")
-and still says "Any other softened cell is a defect", while its corpus requires a root holding no
-such segment, so its differential cannot see the cell. The finding's remedy (match the directory
-exemptions against the path below `ROOT_ABS`, and add a root-under-`tests/` shape to the corpus)
-changes D9's "both `case` blocks keep their pattern bytes" rule and the D9 corpus, so this plan
-does not choose it. The design either (i) adopts the remedy, and this task then re-derives items
-21–23, the probe's expected sets and row H15, or (ii) keeps the residual, names the softened cell
-in its expected set, and adds the root shape to the corpus. OQ-I3.
+**Design v1.3 (v1.2 of this plan; answers v1.1's precondition 2 and OQ-I3, now lifted).** Design
+v1.3 §D9 adopted remedy (i): step 3 keeps `RAW_TARGET`, decides root membership lexically, and
+matches the directory exemptions against the root-relative `DIR_SUBJECT` inside the root and
+against both spellings outside it (Deviation 16). The DD-7 differential gains the root shapes
+`<tmp>/tests/repo` and `<tmp>/fixtures/repo` (126 cells). v1.1's executed reading still holds
+for today's gate and is now a RED reading of item 34: root `<tmp>/tests/repo`, positional `x.py`
+→ rc 1 (gated today); positional `<tmp>/tests/repo/x.py` → rc 0 (exempt today). Items 21–23, the
+probe's expected sets and row H15 are re-derived below; items 21 and 22 keep their outcomes.
 
 **Script order and landed lines** (shebang `#!/bin/bash`; must run under `/bin/bash` 3.2.57; each
 tagged line verbatim and once):
@@ -1470,9 +1552,19 @@ tagged line verbatim and once):
      TARGET_PATH=""
    fi
    ```
-4. **Canonical target** (DD-7): `ROOT_ABS=$(cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null && pwd -P) || ROOT_ABS=""`;
-   for a non-empty target,
-   `  TARGET_PATH=$(python3 -c 'import os,sys;print(os.path.normpath(os.path.join(sys.argv[1],sys.argv[2])))' "$ROOT_ABS" "$TARGET_PATH")  # M:H11`.
+4. **Canonical target and root membership** (DD-7; design v1.3 §D9 step 3):
+   ```bash
+   RAW_TARGET=$TARGET_PATH
+   ROOT_ABS=$(cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null && pwd -P) || ROOT_ABS=""
+   if [ -n "$TARGET_PATH" ]; then
+     TARGET_PATH=$(python3 -c 'import os,sys;print(os.path.normpath(os.path.join(sys.argv[1],sys.argv[2])))' "$ROOT_ABS" "$TARGET_PATH")  # M:H11
+   fi
+   R=${ROOT_ABS%/}
+   IN_ROOT=no
+   if [ -n "$ROOT_ABS" ]; then case "$TARGET_PATH" in "$R"/*) IN_ROOT=yes ;; esac; fi  # M:H18
+   ```
+   `"$R"` is quoted so that glob characters in the root's name are literal; for root `/`, `R` is
+   empty and `/*` admits every absolute target (design v1.3).
 5. **Fast path** (step 4): `_chain_may_hold_state "$ROOT_ABS" "$TARGET_PATH" || _allow`, per design
    D9 step 4, with the parent computation as one line:
    `  d=$(dirname "$2"); while [ ! -e "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done; d=$(cd "$d" 2>/dev/null && pwd -P) || return 0  # M:H8`.
@@ -1484,10 +1576,61 @@ tagged line verbatim and once):
      _refuse judge-error "could not identify the write target"  # M:H13
    fi
    ```
-7. **Exemptions and `.py` filter** (DD-1): both `case` blocks keep their pattern bytes; the first
-   opens `case "${TARGET_PATH##*/}" in  # M:H6`; the second block's directory arm is the line
-   `  */tests/*|*/fixtures/*)  # M:H15` (today's pattern bytes plus the tag); every arm calls
-   `_allow`; then `[[ "$TARGET_PATH" != *.py ]] && _allow`.
+7. **Exemptions and `.py` filter** (DD-1; design v1.3 §D9 steps 3 and 6; Deviation 16). The
+   functions of item 2 gain the one directory matcher, today's two alternatives verbatim:
+   ```bash
+   _dir_match() { case "$1" in */tests/*|*/fixtures/*) return 0 ;; esac; return 1; }  # M:H15
+   ```
+   Then, in this order:
+   ```bash
+   case "${TARGET_PATH##*/}" in  # M:H6
+     test_*.py|*_test.py|conftest*.py) _allow ;;
+   esac
+   if [ "$IN_ROOT" = yes ]; then
+     DIR_SUBJECT="/${TARGET_PATH#"$R"/}"; if _dir_match "$DIR_SUBJECT"; then _allow; fi  # M:H19
+   elif _dir_match "$TARGET_PATH" && _dir_match "$RAW_TARGET"; then  # M:H20
+     _allow
+   fi
+   case "$TARGET_PATH" in
+     *.md|*.yaml|*.yml|*.json|*.toml|*.txt|*.rst|*.cfg|*.ini) _allow ;;
+     *.sh|*.bash|Makefile|Dockerfile|*.dockerignore|*.gitignore) _allow ;;
+   esac
+   [[ "$TARGET_PATH" != *.py ]] && _allow
+   ```
+   The basename block and the extension alternatives keep today's pattern bytes and the
+   canonical `TARGET_PATH` as subject; only the directory alternatives move into `_dir_match`.
+   Every matcher call sits in an `if` or `elif` condition, never as a bare failing command, so
+   `set -e` never fires on a non-match.
+   **Executed readings** (v1.2), under `/bin/bash` 3.2.57 with `set -euo pipefail`, in a scratch
+   script holding the lines of steps 4 and 7 above, with each `_allow` replaced by a printed `allow`,
+   a non-exempt `.py` printed as `gated`, and an environment switch selecting one mutant of Task
+   10's H15, H15B, H18, H18B, H19, H20A or H20B at a time (deleted), at `c93da638`; the old gate is
+   `git show HEAD:h-mad/hooks/h-mad-tdd-gate.sh` (last changed at `dde1c7ad`), run with a
+   `codex` stub, `jq` and `python3` on `PATH`, stdin `/dev/null`, `cwd` and `CLAUDE_PROJECT_DIR`
+   at the root, one ACTIVE step5 record; a gated active cell counts as a refusal, and every
+   no-state cell allows under both (the fast path):
+   - the 126 cells of item 23: old refusals 6 / 5 / 5 and new 6 / 6 / 6 (roots `repo`,
+     `tests/repo`, `fixtures/repo`); softened exactly the 6 active relative `tests/x.py` and
+     `fixtures/x.py` cells of the three shapes; tightened exactly the 8 active `./tests/../x.py`
+     and `<root>/tests/../x.py` cells of the three shapes and `<root>/x.py` of the `tests/repo`
+     and `fixtures/repo` shapes: design v1.3's sets;
+   - root `<tmp>/tests/repo`: `x.py` and `<root>/x.py` gated; `../x.py` gated (canonical
+     `<tmp>/tests/x.py` outside the root, `RAW_TARGET` `../x.py` matches neither alternative);
+     `<tmp>/tests/../x.py` gated (canonical `<tmp>/x.py` matches neither);
+   - root `<tmp>/repo`: `tests/x.py`, `./tests/x.py` and `fixtures/x.py` allow; root
+     `<tmp>/re[p]o`: `tests/x.py` allows.
+   The old gate on those cells (same fixture): `tests/repo` `x.py` rc 1, `<root>/x.py` rc 0,
+   `../x.py` rc 1, `<tmp>/tests/../x.py` rc 0; `repo` `tests/x.py` rc 1 and `fixtures/x.py` rc 1;
+   `re[p]o` `tests/x.py` rc 1.
+   **Residual, stated (design v1.3 §D9 step 3).** The patterns key on the lexically normalized
+   path, not the file the host opens: (a) a symlinked directory named `tests` or `fixtures`, or
+   under one, pointing at production code is exempt; (b) a `..` after a symlinked component
+   normalizes to a different file, and can exempt only a target whose raw spelling already holds a
+   `tests` or `fixtures` segment; (c) outside the root only, a root reached through a symlinked
+   spelling whose own path carries a `tests` or `fixtures` segment exempts an absolute target
+   spelled through it, because that target is outside `ROOT_ABS` lexically and both its spellings
+   match. The old gate exempted (a) and (c) identically; design v1.3 records (c) as old rc 0,
+   v1.3 allow. No test pins a residual.
 8. **Judge path**: `_find_judge` sets
    `  JUDGE=$(python3 -c 'import os,sys;print(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),"scripts","h_mad_tdd_judge.py"))' "${BASH_SOURCE[0]}")  # M:W6`
    unless `JUDGE` is already set.
@@ -1549,7 +1692,7 @@ Tree-B stubs: `B/h-mad/hooks/h-mad-tdd-gate.sh` copied from the worktree hook, a
 unless the fixture replaces it, and whose `judge` verb prints the fixture's output and exits with
 its rc.
 
-**Tests** (74 new collected items):
+**Tests** (80 new collected items):
 1. `test_claude_gate_kind[red-measured|no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-error]`
    (11; AC-1.2 Claude half): the Codex-gate fixtures of Task 6 item 1 in Claude's payload shape;
    `red-measured` → allow, every other id → deny with that kind; `timeout` uses `timeout=120.0`;
@@ -1603,16 +1746,25 @@ its rc.
 20. `test_outside_root_target_is_governed_by_root[active|no-step5]` (2; AC-6.14) — a target in a
     sibling temp directory, `codex` stub on PATH, `codex_status` absent → deny
     `codex-authorship`; with a root holding only a step3 record → allow.
-21. `test_relative_targets[tests-relative|dot-tests-relative|sub-relative]` (3; AC-6.15) — `$1`
-    `tests/x.py` and `./tests/x.py` → allow; `sub/x.py` → the same outcome as `<root>/sub/x.py`,
-    both deny `codex-authorship` (codex stub on PATH).
+21. `test_relative_targets[tests-relative|dot-tests-relative|fixtures-relative|sub-relative]` (4;
+    AC-6.15) — root `<tmp>/repo`: `$1` `tests/x.py`, `./tests/x.py` and `fixtures/x.py` → allow;
+    `sub/x.py` → the same outcome as `<root>/sub/x.py`, both deny `codex-authorship` (codex stub on
+    PATH). Re-derived under design v1.3: each directory cell's subject is `/tests/x.py` or
+    `/fixtures/x.py`, and `sub/x.py`'s is `/sub/x.py`, so the outcomes are v1.1's; `fixtures-relative`
+    is new in v1.2 (the `*/fixtures/*` alternative alone, row H15B).
 22. `test_traversal_target_is_gated[relative|dot-relative|absolute]` (3; DD-7, OD-G) —
     `tests/../x.py`, `./tests/../x.py`, `<root>/tests/../x.py` → deny `codex-authorship`.
-23. `test_dd7_differential_matches_the_published_cells` (1; D9 differential) — the 42 cells of
-    `tdd_gate_support.dd7_cells` (3 spellings × 7 paths × 2 states, positional entry point,
-    `stdin=DEVNULL`, bin with a `codex` stub, `jq` and `python3`) through the worktree hook: exactly
-    6 cells refuse (the active `x.py` and `tests/../x.py` cells, 3 each) and 36 allow. The fixture
-    root's own path holds no `tests` or `fixtures` segment (asserted).
+    Re-derived under design v1.3: all three normalize to `<root>/x.py`, subject `/x.py`; unchanged.
+23. `test_dd7_differential_matches_the_published_cells` (1; D9 differential, design v1.3) — the
+    126 cells of `tdd_gate_support.dd7_cells` (3 spellings × 7 paths × 2 states × 3 root shapes
+    `<tmp>/repo`, `<tmp>/tests/repo`, `<tmp>/fixtures/repo`; positional entry point,
+    `stdin=DEVNULL`, `cwd` and `CLAUDE_PROJECT_DIR` at the shape's root, bin with a `codex` stub,
+    `jq` and `python3`; the active state one step5 record with `codex_status` absent) through the
+    worktree hook: exactly 18 cells refuse, `codex-authorship` in the chosen form (per shape the 6
+    active cells relative `x.py`, `./x.py`, `<root>/x.py`, `tests/../x.py`, `./tests/../x.py` and
+    `<root>/tests/../x.py`), and the other 108 allow. The three roots are made under pytest's
+    `tmp_path`, whose resolved path holds no `tests` or `fixtures` segment (asserted), so the root
+    shape alone decides the root's ancestry.
 24. `test_control_character_stdin_target_never_falls_back` (1) — `tool_input.file_path` holding
     `"a\nb.py"`, exempt `$1` → deny `judge-error`.
 25. `test_non_json_stdin_never_falls_back_to_positional` (1; DD-13) — stdin `not json`, exempt
@@ -1627,7 +1779,12 @@ its rc.
     its argv contains `os.path.realpath` and otherwise `exec`s `sys.executable`; a tree-B hook copy
     in which the test replaces the single `_refuse() {` line (asserted to occur once) with
     `_refuse() {` + newline + `  : "$HMAD_UNSET_PROBE_VAR"`, and a `codex` stub so the first
-    refusal is reached. Each → deny `judge-error` in the chosen form and `rc != 1`.
+    refusal is reached. Each → deny `judge-error` in the chosen form and `rc != 1`. No id asserts
+    the rc the reason names: under `/bin/bash` 3.2.57, `local rc=$?` inside the EXIT trap reads 0
+    after a `set -u` abort (executed at `c93da638` on a scratch copy of the trap with that line,
+    deleted: `trap rc=0`, final rc 2), so `[unset-variable]`'s reason reads
+    `gate exited rc=0 before deciding`. Under T2's mutant (`exit "$rc"`) that id exits 0 with empty
+    stdout, an allow, so T2 is killed on the deny assertion.
 29. `test_symlinked_hook_runs_its_own_trees_judge` (1; W6) — tree B's judge writes `B/marker` and
     prints `TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=tree-b.py`; the hook is run
     through a symlink `L/h-mad-tdd-gate.sh` placed outside both trees → allow, and `B/marker`
@@ -1641,8 +1798,19 @@ its rc.
     `REFUSAL_FORM` from the environment.
 33. `test_state_without_step5_is_allowed` (1) — root holds only a step3 record, `codex` stub on
     PATH, production target → allow.
+34. `test_root_under_a_test_directory_is_governed[tests-root-relative|tests-root-absolute]` (2;
+    AC-6.15, design v1.3) — root `<tmp>/tests/repo`, one step5 record with `codex_status` absent,
+    `codex` stub on PATH, `stdin=DEVNULL`: `$1` `x.py` and `$1` `<root>/x.py` → deny
+    `codex-authorship` each (the root's own `tests` segment never exempts; row H19).
+35. `test_outside_root_exemption_needs_both_spellings[dotdot-relative|traversal-absolute]` (2;
+    design v1.3) — the same fixture: `$1` `../x.py` (canonical `<tmp>/tests/x.py` matches, raw
+    `../x.py` does not; row H20B) and `$1` `<tmp>/tests/../x.py` (raw matches, canonical
+    `<tmp>/x.py` does not; row H20A) → deny `codex-authorship` each (AC-6.14: an outside-root
+    target is governed by the root's state).
+36. `test_root_name_glob_characters_are_literal` (1; design v1.3) — root `<tmp>/re[p]o`, one step5
+    record, `$1` `tests/x.py` → allow (the quoted `"$R"/*` membership; row H18B).
 
-11 + 7 + 5 + 1 + 1 + 1 + 2 + 1 + 1 + 5 + 1 + 1 + 1 + 3 + 2 + 2 + 3 + 1 + 3 + 2 + 3 + 3 + 1 + 1 + 1 + 1 + 1 + 4 + 1 + 1 + 1 + 1 + 1 = 74.
+11 + 7 + 5 + 1 + 1 + 1 + 2 + 1 + 1 + 5 + 1 + 1 + 1 + 3 + 2 + 2 + 3 + 1 + 3 + 2 + 4 + 3 + 1 + 1 + 1 + 1 + 1 + 4 + 1 + 1 + 1 + 1 + 1 + 2 + 2 + 1 = 80.
 
 **Existing modules, the named changes only** (spec AC-6.2; §"Regression provenance"):
 - Both modules' `HOOK` constant becomes
@@ -1666,14 +1834,17 @@ its rc.
 
 **Probe deliverable**: `dd7_differential.py --old HOOK --new HOOK` runs both hooks over
 `dd7_cells` and prints `DD7: softened <cell>` / `DD7: tightened <cell>` lines and
-`DD7: DONE cells=42 softened=N tightened=N`. **Probe-run step**, old =
-`git show "$BASE_SHA":h-mad/hooks/h-mad-tdd-gate.sh`: expected softened exactly the active relative
-`tests/x.py` and relative `fixtures/x.py`, tightened exactly the active `./tests/../x.py` and
-absolute `<root>/tests/../x.py` (design D9 "DD-7 guard-narrowing differential"); published in the
-analysis document §"DD-7 differential".
+`DD7: DONE cells=126 softened=N tightened=N`, each cell named by its root shape, spelling, path
+and state. **Probe-run step**, old = `git show "$BASE_SHA":h-mad/hooks/h-mad-tdd-gate.sh`:
+expected `softened=6` (the active relative `tests/x.py` and relative `fixtures/x.py` cells in each
+of the three root shapes) and `tightened=8` (the active `./tests/../x.py` and absolute
+`<root>/tests/../x.py` cells in each shape, and the active absolute `<root>/x.py` cells of the
+`tests/repo` and `fixtures/repo` shapes), exactly the sets of design v1.3 §D9 "DD-7
+guard-narrowing differential" and of this task's executed readings (step 7); any other changed
+cell is a defect and halts. Published in the analysis document §"DD-7 differential".
 
 **Expected RED split** (against today's gate; the migrated modules already point `HOOK` at the
-worktree): 69 failing and 5 passing among the 74 new items; in the two migrated modules, 4
+worktree): 75 failing and 5 passing among the 80 new items; in the two migrated modules, 4
 failing and 9 passing under either form. The module collects at RED: nothing reads the form at
 import (Deviation 14), and `hook_form`, `decision` and `dd7_cells` are in the RED commit
 (Deviation 1). With today's hook `hook_form` returns `None` (`grep -c REFUSAL_FORM
@@ -1689,7 +1860,13 @@ allow.
   tests allow), refuses with `exit 1` (no chosen form), exits rc 5 on `{not json`, allows on a
   dangling or unsearchable state and on a missing parent, stands down without `jq`, never calls a
   judge (tree-B markers and stubs unused), and still contains `exit 1`, `jq` and
-  `h_mad_derive_test_path.sh`.
+  `h_mad_derive_test_path.sh`. The six v1.2 items fail on today's verdicts, read in step 7's
+  executed readings: `test_relative_targets[fixtures-relative]` (rc 1, `invalid` where allow is
+  expected), `test_root_under_a_test_directory_is_governed[tests-root-relative]` (rc 1, `invalid`
+  where deny is expected) and `[tests-root-absolute]` (rc 0, allow),
+  `test_outside_root_exemption_needs_both_spellings[dotdot-relative]` (rc 1, `invalid`) and
+  `[traversal-absolute]` (rc 0, allow), and `test_root_name_glob_characters_are_literal` (rc 1,
+  `invalid`).
 - Migrated modules: the 4 rc-1 tests fail (today exits 1); the other 9 pass under `a` and under `b`.
 **WIRE-PIN 1 RED reason**: today's gate skips pytest when the target does not exist and exits 0,
 so `decision(...).decision == "deny"` fails on the gate's outcome. **WIRE-PIN 2 RED reason**:
@@ -1721,14 +1898,14 @@ checkout; any fixed path fails the tree-B test the same way) → `B/marker` abse
 - [ ] AC-6.5 (branch `E1_DOES_NOT_BLOCK`) or AC-6.6 (branch `E1_BLOCKS`), per `v0.out`: items 10,
   11, 32. AC-6.7: the precondition.
 - [ ] AC-6.8: item 12. AC-6.9: items 13 and 14. AC-6.10: items 15 and 16. AC-6.11: item 17.
-  AC-6.12: item 18. AC-6.13: item 19. AC-6.14: item 20. AC-6.15: items 21, 22, 23 and the probe.
+  AC-6.12: item 18. AC-6.13: item 19. AC-6.14: items 20 and 35. AC-6.15: items 21, 22, 23, 34,
+  35, 36 and the probe.
 
 **Mutation rows** (Task 10): H1A, H1B, H1C, H2, H3, H4, H5, H6, H7, H8, H10, H11, H12, H13, H14,
-H15, H16, H17, C2G, C3G, W2R, W2F, W5BR, W5BF, W5BF2, W5BF3, W6R, W6F, T1, T2 in
-`claude_gate_judge_wiring.json` — 30 rows.
+H15, H15B, H16, H17, H18, H18B, H19, H20A, H20B, C2G, C3G, W2R, W2F, W5BR, W5BF, W5BF2, W5BF3,
+W6R, W6F, T1, T2 in `claude_gate_judge_wiring.json` — 36 rows.
 
-**Dependencies on other tasks**: Task 7 (and the V-0 precondition, and precondition 2's design
-delta)
+**Dependencies on other tasks**: Task 7 (and the FR-0 V-0 precondition)
 
 ---
 
@@ -1822,7 +1999,7 @@ other tasks**: Task 8
 **Test file**: none. The killing tests belong to Tasks 1–9.
 **Task shape**: `operational`
 
-**Description**: Author the eight specs with exactly the 87 rows below (spec FR-8, AC-8.1; design
+**Description**: Author the eight specs with exactly the 98 rows below (spec FR-8, AC-8.1; design
 §"Test Strategy"). Every spec has `root` `"../.."` (the `h-mad/` directory), `command` the named
 test module(s) as `["/opt/anaconda3/bin/python", "-m", "pytest", <module>…, "-q"]`, and
 `target_command` `["/opt/anaconda3/bin/python", "-m", "pytest", "-q"]`, so each row runs only its
@@ -1831,7 +2008,7 @@ test module(s) as `["/opt/anaconda3/bin/python", "-m", "pytest", <module>…, "-
 `python3.11` and 1 names `/opt/anaconda3/bin/python3.11` as `command[0]` (a JSON walk at
 `a1478ad3`), so an absolute interpreter has a precedent and nothing here rests on `PATH` at
 harness time. Every row carries `name`, `file`, `find`, `replace` and `test`; `find` is the whole
-tagged line of Convention 9 (or, for R2, W3C, P1, P1B, P2 and G8, the untagged line quoted). Rows
+tagged line of Convention 9 (or, for R2, W3C, P1, P1B, P2, G8 and G11, the untagged line quoted). Rows
 sharing a `find` are applied one at a time.
 - **Pass condition, per spec**: `--check-anchors <spec>` → `ANCHORS_OK`; the run →
   `MUTATION: ALL_CAUGHT` with `crash_kills=0`. A crash kill is re-authored so that its test fails
@@ -1859,6 +2036,7 @@ sharing a `find` are applied one at a time.
 | S7A | `M:S7` | `                elif category == "errors":  # M:S7` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[one-error]` |
 | S7B | `M:S7` | `                elif category == "error":  # M:S7` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[one-errors]` |
 | S8 | `M:S8` | `        match = re.search(_SUMMARY_LINE_RE.pattern.lstrip("^"), line)  # M:S8` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[failed-node-line]` |
+| S8B | `M:S8` | `        match = re.search(_SUMMARY_LINE_RE.pattern.lstrip("^").rstrip("$"), line)  # M:S8` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[quoted-assert]` |
 | S9 | `M:S9` | `_CATEGORY = r"[A-Za-z][a-z-]*(?: [a-z][a-z-]*)*"  # M:S9` | `tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[capitalised-category]` |
 | S10 | `M:S10` | `                    failed += int(number)  # M:S10` | `tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[passed-and-error]` |
 | S11 | `M:W4C` | `                    failed += 0  # M:W4C` | `tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[failed-and-passed]` |
@@ -1875,7 +2053,10 @@ wrapper reproducing its `summary is None`, S1 and `passed == 0 and failed == 0` 
 `SUITE: PASS passed=11 failed=0`; S12 turns `3 skipped in 0.1s` and `1 error in 0.06s` into
 `SUITE: UNREADABLE reason=no_tests_ran`. The first S8 candidate, `.match` → `.search`, killed
 nothing, because the pattern's own `^` anchors a search too; the row therefore strips that `^`
-in the same line.
+in the same line. S8B (v1.2; a scratch copy of Task 1's `_suite_summary` literal written to the
+session scratch directory and deleted, `/usr/bin/python3` 3.9.6 at `c93da638`): stripping both
+the `^` and the `$` turns `E   assert '1 failed' in x` into `(0, 1, 0, False, {"failed"})`
+(`None` unmutated, and `None` under S8), so the `quoted-assert` row fails on its tuple assertion.
 
 **`tdd_judge_resolution.json`** — `command` `tests/test_h_mad_tdd_judge.py`
 `tests/test_h_mad_parse_tasks_paths.py`:
@@ -1952,6 +2133,10 @@ judge's tests only (design W3/W4 table):
 | G6B | `M:G6` | `    if False:  # M:G6` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[root-cwd-escaping]` |
 | G7 | `M:G7` | `        if c.is_dir():  # M:G7` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_payload_cwd_outside_the_root_falls_back_to_the_root` |
 | G8 | `    if executable.startswith("python") and len(argv) >= 3 and argv[1:3] == ["-m", "pytest"]:` (untagged, unchanged by this feature; 1 matching line at `a1478ad3`) | `    if executable.startswith("python"):` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_venv_token_still_obeys_the_argv_rules` |
+| G6C | `M:G6` | `    if False:  # M:G6` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_control_allowlist_under_a_venv[escaping-venv]` |
+| G9 | `M:G9` | `    resolved_executable = _contained_venv_executable(argv[0], root, cwd) if root is not None else _trusted_executable(argv[0])  # M:G9` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_control_allowlist_under_a_venv[usr-bin-python3-control]` |
+| G10 | `M:G10` | `    p = Path(os.path.normpath(os.path.join(str(root), os.path.expanduser(token))))  # M:G10` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[doubled-path]` |
+| G11 | `            script.relative_to(scripts_root)` (untagged, unchanged by this feature; 1 matching line at `c93da638`) | `            script.relative_to(script.anchor)` | `tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_control_allowlist_under_a_venv[script-outside-scripts]` |
 | W1R | `M:W1` | the Task 6 remove line | `tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[red-measured]` |
 | W1F | `M:W1` | the Task 6 force line | `tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[test-passing]` |
 | W5AR | `M:W5A` | the Task 6 remove line | `tests/test_h_mad_codex_tdd_gate_judge.py::test_root_step5_governs_a_subproject_with_its_own_state` |
@@ -1978,7 +2163,13 @@ judge's tests only (design W3/W4 table):
 | H12 | `M:H12` | `    sys.exit(0)  # M:H12` | `T::test_non_json_stdin_never_falls_back_to_positional` |
 | H13 | `M:H13` | `  _allow  # M:H13` | `T::test_empty_target_rule[active-root]` |
 | H14 | `M:H14`, in `scripts/h_mad_tdd_judge.py` | `            dirs = []  # M:H14` | `T::test_outside_root_target_is_governed_by_root[active]` |
-| H15 | `M:H15` | `  */fixtures/*)  # M:H15` | `T::test_relative_targets[dot-tests-relative]` |
+| H15 | `M:H15` | `_dir_match() { case "$1" in */fixtures/*) return 0 ;; esac; return 1; }  # M:H15` | `T::test_relative_targets[dot-tests-relative]` |
+| H15B | `M:H15` | `_dir_match() { case "$1" in */tests/*) return 0 ;; esac; return 1; }  # M:H15` | `T::test_relative_targets[fixtures-relative]` |
+| H18 | `M:H18` | `:  # M:H18` | `T::test_relative_targets[tests-relative]` |
+| H18B | `M:H18` | the same line with `"$R"/*)` → `$R/*)` | `T::test_root_name_glob_characters_are_literal` |
+| H19 | `M:H19` | `  DIR_SUBJECT=$TARGET_PATH; if _dir_match "$DIR_SUBJECT"; then _allow; fi  # M:H19` | `T::test_root_under_a_test_directory_is_governed[tests-root-relative]` |
+| H20A | `M:H20` | `elif _dir_match "$RAW_TARGET"; then  # M:H20` | `T::test_outside_root_exemption_needs_both_spellings[traversal-absolute]` |
+| H20B | `M:H20` | `elif _dir_match "$TARGET_PATH"; then  # M:H20` | `T::test_outside_root_exemption_needs_both_spellings[dotdot-relative]` |
 | H16 | `M:H16` | `JRC=${JOUT##*rc=}; JOUT=$(printf '%s' "${JOUT%rc=*}")  # M:H16` | `T::test_judge_stub_is_judge_error[trailing-blank-line]` |
 | H17 | `M:H17` | `  SRC=${SOUT##*rc=}; SOUT=$(printf '%s' "${SOUT%rc=*}")  # M:H17` | `T::test_state_stub_is_judge_error[trailing-blank-line]` |
 | C2G | `M:C2`, in `scripts/h_mad_tdd_judge.py` | `            continue  # M:C2` | `T::test_unreadable_chain_refuses_production` |
@@ -2004,13 +2195,34 @@ write that AC-6.9 refuses. C3G (reasoned, not executed: the code does not exist 
 `codex-escape=yes` while `blocker=2`, and the gate's `blocker=0`-iff-`codex-escape=yes`
 cross-check then refuses `judge-error`, not the `codex-authorship` AC-6.10 asserts.
 
-14 + 8 + 3 + 6 + 6 + 6 + 13 + 31 = 87 rows. Per owning task: Task 1 14, Task 2 3, Task 3 12,
-Task 4 8, Task 5 6, Task 6 9, Task 7 4, Task 8 30, Task 9 1;
-14 + 3 + 12 + 8 + 6 + 9 + 4 + 30 + 1 = 87.
+15 + 8 + 3 + 6 + 6 + 6 + 17 + 37 = 98 rows. Per owning task: Task 1 15, Task 2 3, Task 3 12,
+Task 4 8, Task 5 6, Task 6 9, Task 7 8, Task 8 36, Task 9 1;
+15 + 3 + 12 + 8 + 6 + 9 + 8 + 36 + 1 = 98.
+
+Executed readings for the v1.2 codex-gate rows (a scratch copy of today's
+`h-mad/hooks/h-mad-codex-tdd-gate.py` with Task 6's `_payload_cwd_base` and Task 7's helper and
+one-line change applied verbatim, and `_load_judge()` returning a stub whose `venv_contained` is
+Task 3's three-conjunct literal; `_safe_shell_command(command, root, cwd)` called in process under
+`/usr/bin/python3` 3.9.6 at `c93da638`; deleted). Unmutated, the cells read: `[doubled-path]`
+`False`, `[escaping-venv]` `False`, `[usr-bin-python3-control]` `True`,
+`[script-outside-scripts]` `False`, the contained `-m pytest` cell `True`. Each mutant flips its
+own cell: G10 `[doubled-path]` → `True`; G6C (G6's replacement) `[escaping-venv]` → `True`; G9
+`[usr-bin-python3-control]` → `False`; G11 `[script-outside-scripts]` → `True`. The same copy
+also executed the v1.1 rows G6 and G6B (`[sub-cwd-escaping]` and `[root-cwd-escaping]` → `True`),
+G3 (the `/bin/cat` venv, `.venv/bin/python notes.txt` → `True`) and G8 (`.venv/bin/python -c
+pass` → `True`). The v1.2 claude-gate rows (H15, H15B, H18, H18B, H19, H20A, H20B) were executed
+in Task 8 step 7's scratch script: each flips the verdict of the cell its row's test runs, and
+of the 126 differential cells H15 changes 18, H15B 9, H18 12, H19 12, and H18B, H20A and H20B
+none (their cells lie outside that corpus). E1's mutant, on the scratch copy
+of Task 1's support block, keeps `CLAUDE_ZZZ_PROBE` in `hermetic_env()`.
 
 **Initially-green guards** (invariant §"Test discrimination": a check never seen failing is not
-trusted). Every new item that passes at RED, with the row whose mutant makes it fail, or the
-reason no row of this feature can:
+trusted). Every new item that passes at RED, with the row whose mutant makes it fail; the six
+`c-…` cells are the only items with no row, and they claim no coverage (v1.2). Rows marked
+executed were killed on a scratch copy before this revision; E1 and S8–S12 likewise. P1, P1B,
+P2, K3B, K5, R2, W1R, G7, W2F, W5BF, W5BF2, W5BF3 and D1 mutate code that does not exist yet
+(or, for P1B, a test whose corpus v1.2 re-rooted), so their first killing run is this task's
+harness run, which halts on `SURVIVED`:
 
 | Task | Item passing at RED | Row |
 |---|---|---|
@@ -2022,18 +2234,19 @@ reason no row of this feature can:
 | 1 | `test_run_suite_table_row[collected-zero]` | the committed `audit_suite_gate.json` row `a-missing-summary-becomes-a-verdict` (its subject, the `summary is None` return, is unchanged) |
 | 1 | `test_suite_summary_reads_the_line[collected-zero\|failed-node-line]` | S8 (scored on `failed-node-line`; executed on both) |
 | 1 | `test_suite_summary_reads_the_line[capitalised-category]` | S9 |
-| 1 | `test_suite_summary_reads_the_line[quoted-assert]` | none alone: the `.match` start and the pattern's `$` each hold it (executed: S8 leaves it `None`); a stated residual |
+| 1 | `test_suite_summary_reads_the_line[quoted-assert]` | S8B (executed; S8 alone leaves it `None`) |
 | 1 | `test_hermetic_env_drops_claude_names_and_backend` | E1 |
 | 2 | `test_existing_fields_unchanged`, `test_corpus_old_fields_unperturbed`, `test_field_re_is_unchanged` | P1, P1B, P2 |
 | 4 | `test_rc_selects_nothing[silent-rc1]`, `test_whole_line_no_module_is_pytest_missing_even_after_red` | K3B, K5 |
 | 5 | `test_none_valued_production_does_not_match` | R2 |
 | 6 | `test_codex_gate_kind[red-measured]`, `test_payload_cwd_outside_the_root_falls_back_to_the_root` | W1R, G7 |
-| 7 | `test_shell_venv_token[sub-cwd-escaping\|root-cwd-escaping]`, `test_venv_token_keys_on_the_lexical_name`, `test_venv_token_still_obeys_the_argv_rules` | G6, G6B, G3, G8 |
-| 7 | `test_shell_control_allowlist_under_a_venv[escaping-venv]` | G6's mutant (the same containment call; reasoned) |
-| 7 | `test_shell_venv_token[doubled-path]` | none alone: `p.is_file()` and V3's `pyvenv.cfg` rule each hold it |
-| 7 | the six `test_shell_venv_token[c-…]` cells | none: the pre-existing lexical subset rejects `(`/`)` before this feature's code runs (executed); spec AC-3.4 requires them (OQ-I4); item 5 is the discriminating twin |
-| 7 | `test_shell_control_allowlist_under_a_venv[usr-bin-python3-control\|script-outside-scripts]` | none of this feature: the pre-existing trusted-directory and scripts-root rules, which no committed spec anchors |
-| 8 | `test_claude_gate_kind[red-measured]`, `test_state_without_step5_is_allowed`, `test_empty_target_rule[no-step5-root]`, `test_outside_root_target_is_governed_by_root[no-step5]`, `test_relative_targets[dot-tests-relative]` | W2F, W5BF, W5BF2, W5BF3, H15 |
+| 7 | `test_shell_venv_token[sub-cwd-escaping\|root-cwd-escaping]`, `test_venv_token_keys_on_the_lexical_name`, `test_venv_token_still_obeys_the_argv_rules` | G6, G6B, G3, G8 (each executed, v1.2) |
+| 7 | `test_shell_control_allowlist_under_a_venv[escaping-venv]` | G6C (executed) |
+| 7 | `test_shell_venv_token[doubled-path]` | G10 (executed) |
+| 7 | `test_shell_control_allowlist_under_a_venv[usr-bin-python3-control]` | G9 (executed) |
+| 7 | `test_shell_control_allowlist_under_a_venv[script-outside-scripts]` | G11 (executed; v1.2 fixture, Task 7 item 2) |
+| 7 | the six `test_shell_venv_token[c-…]` cells | no coverage claimed (Task 7 §"No coverage claimed"): spec AC-3.4 conformance only; the discrimination claim is item 5's, G8 (OQ-I4) |
+| 8 | `test_claude_gate_kind[red-measured]`, `test_state_without_step5_is_allowed`, `test_empty_target_rule[no-step5-root]`, `test_outside_root_target_is_governed_by_root[no-step5]`, `test_relative_targets[dot-tests-relative]` | W2F, W5BF, W5BF2, W5BF3, H15 (H15 executed, v1.2) |
 | 9 | `test_locators_fail_loudly[hook-line]` | D1 |
 | 9 | `test_locators_fail_loudly[trust-boundary\|helper-scripts\|tdd-gate]` | the committed `docsections.json` (Task 9 §"Expected RED split") |
 
@@ -2053,7 +2266,7 @@ failing only as one collection error; their guards are the Task 3 rows.
   own row (S1/S2, S7A/S7B, H1A/H1B/H1C).
 - [ ] All eight specs `ALL_CAUGHT` with `crash_kills=0`.
 
-**Mutation rows**: the 87 above. **Dependencies on other tasks**: Task 9
+**Mutation rows**: the 98 above. **Dependencies on other tasks**: Task 9
 
 ---
 
@@ -2069,7 +2282,7 @@ never read `$?`.
 1. **Suite**: Convention 1's command → only the baseline node may fail, and only if Task 0
    recorded it failing at `BASE_SHA` for the same reason; the same command with
    `CLAUDE_ZZZ_PROBE=1` exported → the same summary. Collected count at 5g = the Task-0 count +
-   296 new items + 2 portable-timeout nodes (3893 + 298 = 4191 at a `f6b258f0` base; re-derived at
+   302 new items + 2 portable-timeout nodes (3893 + 304 = 4197 at a `f6b258f0` base; re-derived at
    the real base, never carried).
 2. **Node-id floor**: collect at `HEAD` as in Task 0 item 5, then
    `comm -23 "$(git rev-parse --absolute-git-dir)/hmad-ctg-base-nodeids.txt" <head file>` prints
@@ -2218,8 +2431,8 @@ of `test_h_mad_tdd_gate_codex.py` and the 7 of `test_h_mad_tdd_gate_state_resolu
 | AC-6.11 | Task 8, `test_fast_path_defers[dangling-state-symlink]`, `test_fast_path_defers[missing-parent]` |
 | AC-6.12 | Task 8, `test_no_jq_on_path_still_judges` |
 | AC-6.13 | Task 8, `test_empty_target_rule[…]` |
-| AC-6.14 | Task 8, `test_outside_root_target_is_governed_by_root[…]` |
-| AC-6.15 | Task 8, `test_relative_targets[…]`, `test_traversal_target_is_gated[…]`, `test_dd7_differential_matches_the_published_cells`, `dd7_differential.py` |
+| AC-6.14 | Task 8, `test_outside_root_target_is_governed_by_root[…]`, `test_outside_root_exemption_needs_both_spellings[…]` |
+| AC-6.15 | Task 8, `test_relative_targets[…]`, `test_traversal_target_is_gated[…]`, `test_dd7_differential_matches_the_published_cells`, `test_root_under_a_test_directory_is_governed[…]`, `test_outside_root_exemption_needs_both_spellings[…]`, `test_root_name_glob_characters_are_literal`, `dd7_differential.py` |
 | AC-7.1 | Task 9, `test_trust_boundary_states_the_venv_rule` and the existing test |
 | AC-7.2 | Task 9, items 2–5 and 8 |
 | AC-8.1 | Task 10 |
@@ -2233,17 +2446,15 @@ distinct ids at `f6b258f0`).
   until P0 is committed; Task 8 waits for a conclusive V-0.
 - **OQ-I2 (design owner).** Deviation 7: the design's `[ -x "$D" ]` mutant is equivalent on the
   walk. This plan keeps the line and drops the row; the design's §"Test Strategy" still lists it.
-- **OQ-I3 (design owner; design delta owed, Task 8 precondition 2).** Design §D9 step 3
-  "Residual, stated exactly" and §D9 "DD-7 guard-narrowing differential": under a root beneath a
-  `tests/` or `fixtures/` directory, DD-7 exempts a relative production target that today's gate
-  refuses (executed, Task 8 precondition 2). The design states the residual yet calls any softened
-  cell outside its expected set a defect, and its corpus cannot see this one. The codex impl-plan
-  audit (c1) asks for the exemptions to match the path below `ROOT_ABS`; that changes D9's
-  pattern-bytes rule, so the plan halts Task 8 rather than choose.
+- **OQ-I3 (closed in v1.2).** Answered by design v1.3 §D9 (`85b81698`): the root-relative
+  directory-exemption subject, `RAW_TARGET` outside the root, and the 126-cell differential. Task
+  8 implements it (Deviation 16, items 21–23 and 34–36, rows H15B, H18, H18B, H19, H20A, H20B);
+  nothing waits on it.
 - **OQ-I4 (spec owner).** Spec AC-3.4's six `-c "open('x','w')"` cells cannot observe the venv
   branch: the Codex gate's lexical subset rejects `(` and `)` before any executable is resolved
-  (executed at `a1478ad3`). They are kept as the spec requires; Task 7 item 5
-  (`.venv/bin/python -c pass`) is the discriminating case. A spec revision may replace the argv.
+  (executed at `a1478ad3`). They are kept as the spec requires and claim no coverage (v1.2);
+  Task 7 item 5 (`.venv/bin/python -c pass`, row G8) is the discriminating case. A spec revision
+  may replace the argv. Not a halt: no task waits on it.
 - **Carried** from plan and design: OQ-1 (no `.venv` and no pytest → `pytest-missing`), OQ-3
   (`2 passed, 1 error` scores PASS; pinned unchanged by Task 1's `passed-and-error` row), OQ-D2
   (`` `path.py::symbol` `` entries).
@@ -2251,3 +2462,4 @@ distinct ids at `f6b258f0`).
 ## Version History
 - v1.0: Initial implementation plan (2026-09-28), first 5a draft; answers no audit cycle. From design v1.2, spec v1.4 and plan v1.4; premises read at f6b258f0 (h-mad, handoff, probes and pytest.ini unchanged at a85abf7f). 12 tasks: Task 0 5c gate with the top-level-diff probe, parsers (Tasks 1-2), judge core plus staged W4/W3 wiring (Tasks 3-5), Codex gate W1/W5a and shell venv branch (Tasks 6-7), Claude gate rewrite W2/W5b/W6 behind the V-0 precondition (Task 8), docs (Task 9), 64 mutation rows in eight specs (Task 10), 5g gate (Task 11); 4 wiring tasks carrying 7 wires. Ten deviations recorded, one design mutant dropped as equivalent.
 - v1.1: Answers impl-plan audit cycle 1 (round 1 of 2; codex `audit.v1.p1`: 3 must; teammate `audit.v1.teammate`: 4 must, 6 should, 5 nit), 2026-09-28; premises re-read at `a1478ad3` (h-mad unchanged at `212aab9d`). Each premise was re-run before acting; no premise was refuted. **Codex must 1 (DD-7 root under `tests/`)**: premise holds (today's gate, root `<tmp>/tests/repo`: positional `x.py` rc 1, absolute rc 0; the canonical path matches `*/tests/*`); the remedy changes design §D9, so DEFERRED as a design delta: Task 8 precondition 2 halts, OQ-I3. **Codex must 2 (trailing blank line)**: FIXED, `rc=` sentinel capture executed under bash 3.2.57 (Deviation 11), `trailing-blank-line` ids in Task 8 items 2 and 3, rows H16/H17. **Codex must 3 (stderr as name-map path)**: FIXED, `_run_bounded` returns the streams apart, name map reads stdout (Deviation 12), `test_name_map_stderr_is_not_a_path`, row R5. **Teammate must 1 (FORM read at import)**: FIXED, lazy `hook_form`, `CHOSEN` from the module docstring's V-0 quote, not from `docs/` (Deviation 14). **Teammate must 2 (support code RED or GREEN)**: FIXED, lands in each task's RED commit, listed on the Test file line of Tasks 1, 3, 7, 8 (Deviation 1); Task 1 reads 23 failing / 15 passing of 38. **Teammate must 3 (30 s sleeper vs 40 s budget)**: FIXED, `sleeper(…, seconds)`, 90 s in the two gate rows. **Teammate must 4 (false RED premise)**: FIXED, Task 6 item 8 now carries the executed traceback reading (rc 1, `PermissionError`). **Teammate should 1**: FIXED (`_PATHS_LABEL_LINE` test constant). **Should 2**: FIXED (Deviation 13: start error, else summary line, else last line). **Should 3**: FIXED (rows C2G, C3G on the named AC-6.9 / AC-6.10 tests). **Should 4**: FIXED (`parse_corpus.py` copies three base files and runs two child processes). **Should 5**: FIXED (`/opt/anaconda3/bin/python` in every spec). **Should 6**: FIXED (Convention 8 names `SKILL.md`, 53 rows in 14 specs, and every other edited file at 0). **Nits**: N1 fixed (tag boundary in Convention 9), N2 fixed (Deviation 15), N3 fixed (Task 3 description), N4 fixed (gate-interpreter venv outside the root), N5 no change needed. **Proactive (dispatch rule: every initially-green guard needs a row)**: Task 10 §"Initially-green guards" added; new rows S8–S12, E1, P1, P1B, P2, K3B, K5, G6B, G7, G8, H15, W5BF2, W5BF3, D1; S8–S12 executed on scratch copies (the first S8 candidate killed nothing and was replaced); Task 7 item 5 added as the discriminating twin of spec AC-3.4's six `-c` cells, which the lexical subset decides first (OQ-I4). Counts: 296 new items (38 + 23 + 80 + 17 + 16 + 19 + 18 + 74 + 11); 87 mutation rows in eight specs; 12 tasks, 4 wiring, 7 wires, WIRE and WIRE-PIN lines unchanged.
+- v1.2: Corrective revision after the 5b round cap, answering impl-plan audit cycle 2 (codex `audit.v2.p1`: 3 must, 1 should; teammate `audit.v2.teammate`: 1 must, 3 should, 4 nit) and propagating design v1.3 (`85b81698`; spec v1.4 and plan v1.4 sentences at `8322fa04`), 2026-09-28; premises re-read at `c93da638`. Every premise was re-run before acting; none was refuted. **Design v1.3 propagation / codex must 1 / teammate should 1**: FIXED. Task 8 precondition 2 and OQ-I3 lifted (OQ-I3 closed); Source header and Deviations heading read v1.3; step 4 keeps `RAW_TARGET` and sets `R` and `IN_ROOT`; step 7 matches `_dir_match` on `DIR_SUBJECT` inside the root and on both spellings outside it (Deviation 16); the symlinked-root residual (c) stated; item 21 gains `fixtures-relative`, items 21–22 re-derived (unchanged outcomes); item 23 and the probe move to 126 cells, 18 refusals, softened 6, tightened 8; new items 34–36; rows H15 (re-anchored on `_dir_match`), H15B, H18, H18B, H19, H20A, H20B, each executed with the 126-cell corpus under `/bin/bash` 3.2.57 in a scratch script (deleted). **Codex must 2**: FIXED, the support module's first contents carry the docstring, `from __future__ import annotations` and `import os`; executed under 3.9.6 and 3.11.8, and v1.1's literal reproduced `NameError`. **Codex must 3**: FIXED. `quoted-assert` → S8B; `[doubled-path]` → G10; `[escaping-venv]` → G6C (until then reasoned); `[usr-bin-python3-control]` → G9; `[script-outside-scripts]` → G11, with the fixture changed to a script named `h_mad_wire_registry.py` outside `scripts/` (v1.1's `tools.py` was held by two rules, so no single mutant could make it fail); each killed on a scratch copy. The six `c-…` cells now claim no coverage (two independent rules deny each, so no single-site row can make one fail); G8 on Task 7 item 5 is AC-3.4's discrimination claim. G3, G6, G6B, G8, H15 and E1 were also executed. **Codex should (floor import)**: FIXED, each Task 3 floor id also imports its module under `/usr/bin/python3`; the three existing modules import today. **Teammate must (P1B cwd)**: FIXED, Task 2 item 8 runs `git -C <REPO_ROOT>` and reads paths from `REPO_ROOT`, with non-vacuity asserted (≥ 1 file, ≥ 1 removed `.py`-token line; 11 files and 105 lines at `c93da638`; 0 files from `h-mad/` without `-C`). **Teammate should 2 (V1 fixture)**: FIXED, the outside directory holds a regular `pyvenv.cfg`, and the row's oracle asserts it (executed: mutant `False` without it, `True` with it). **Teammate should 3 (`_SUITE_RE` census)**: FIXED, `git grep -nw … -- h-mad handoff` → 2 lines, with the 4-line and 11-line readings of the other spellings. **Nits**: N1 fixed (`_test_missing(candidates, notes, root)` signature, name-map wrapping); N2 fixed (item 28 states the `rc=0` reason after a `set -u` abort; T2 still killed on deny; executed); N3 fixed (Deviation 14 rationale); N4 fixed (`fake_venv` then `sleeper` over its `bin/python`). **Remaining halts**: none on a design delta; Task 0's P0 gate and Task 8's FR-0 V-0 precondition are unchanged operator preconditions. Counts: 302 new items (38 + 23 + 80 + 17 + 16 + 19 + 18 + 80 + 11); 98 mutation rows in eight specs (15 + 8 + 3 + 6 + 6 + 6 + 17 + 37); 12 tasks, 4 wiring, 7 wires, WIRE and WIRE-PIN lines unchanged.
