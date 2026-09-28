@@ -211,6 +211,19 @@ def _trusted_executable(token: str) -> Path | None:
     return resolved if candidate.parent in TRUSTED_BIN_DIRS else None
 
 
+def _contained_venv_executable(token: str, root: Path, cwd: object) -> Path | None:
+    if "/" not in token:
+        return None
+    path = Path(os.path.normpath(os.path.join(str(_payload_cwd_base(root, cwd)), os.path.expanduser(token))))  # M:G10
+    if not (path.name.startswith("python") and path.parent.name == "bin" and path.parent.parent.name == ".venv"):
+        return None
+    if not path.is_file():
+        return None
+    if not _load_judge().venv_contained(path.parent.parent.parent, root):  # M:G6
+        return None
+    return path  # M:G3
+
+
 def _path_within(path: str, parent: Path) -> bool:
     candidate = Path(path).expanduser()
     candidate = candidate.resolve() if candidate.is_absolute() else (Path.cwd() / candidate).resolve()
@@ -258,7 +271,7 @@ def _safe_hmad_script(script: Path, args: list[str], root: Path) -> bool:
     return True
 
 
-def _safe_shell_command(command: str, root: Path | None = None) -> bool:
+def _safe_shell_command(command: str, root: Path | None = None, cwd: object = None) -> bool:
     # The command will ultimately be evaluated by the user's shell.  Accept a
     # deliberately small lexical subset instead of trying to enumerate every
     # execution primitive supported by bash/zsh (for example, zsh's `=(...)`
@@ -274,7 +287,7 @@ def _safe_shell_command(command: str, root: Path | None = None) -> bool:
         return False
     if "=" in argv[0] and not argv[0].startswith(("/", ".")):
         return False
-    resolved_executable = _trusted_executable(argv[0])
+    resolved_executable = (_contained_venv_executable(argv[0], root, cwd) if root is not None else None) or _trusted_executable(argv[0])  # M:G9
     if resolved_executable is None:
         return False
     executable = resolved_executable.name
@@ -339,7 +352,7 @@ def _main_guarded() -> int:
 
     if command and phase5_status == "unknown":
         return _deny("H-MAD state is unreadable; refusing shell execution fail-closed.")
-    if command and phase5_status == "active" and not _safe_shell_command(command, root):
+    if command and phase5_status == "active" and not _safe_shell_command(command, root, payload.get("cwd")):
         return _deny(
             "H-MAD Phase 5 permits only explicit test, read-only, and H-MAD control commands "
             "through Bash. Use apply_patch for writes so the Codex TDD gate can verify a "

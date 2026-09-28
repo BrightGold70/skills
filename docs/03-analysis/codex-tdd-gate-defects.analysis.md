@@ -85,3 +85,20 @@ An additional temporary-repository check changed a test that imports an
 unchanged sibling module and has an unchanged `conftest.py`; the probe returned
 `TOPDIFF: DONE files=3 changed=1 removed=0`, confirming both supporting files
 were included.
+
+### Shell-policy differential
+
+Task 7 compared the hook at `BASE_SHA=d68635159ad5ec64b03d2852dc25536c4e3ea657`
+with the uncommitted GREEN hook in this worktree. The old hook came from
+`git show "$BASE_SHA":h-mad/hooks/h-mad-codex-tdd-gate.py`; the probe staged
+it beside a symlink to this worktree's `h-mad/scripts` so both hooks resolved
+the same scripts root. SHA-256: old hook
+`cde57cc8d6604143e7c91886fb362561a80da6d8a9664db721ec0e18b3a9dfe0`,
+new hook `90513b85f2f8fe0124d203839dca340ef8f3fb93866f8d3226826e66b84627ae`,
+probe `e038929d578f58aec4c008dd87f6936e59862f5dbb612ba370f687b34ff24edd`.
+
+`/opt/anaconda3/bin/python docs/03-analysis/probes/codex-tdd-gate-defects/shell_differential.py --old /private/tmp/hmad-codex-tdd-gate-old.py --new h-mad/hooks/h-mad-codex-tdd-gate.py`
+returned exit 0 and `SHELLDIFF: DONE rows=251 softened=14 tightened=0 unexpected=0`.
+The 14 changed rows are the seven contained venv token spellings with each of
+`-m pytest` and the allowed `h_mad_state_write.py` invocation. All 234 deny
+rows and three pre-existing allow controls retained their verdicts.
