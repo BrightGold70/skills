@@ -11,12 +11,20 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUDGET = REPO_ROOT / "h-mad" / "scripts" / "h_mad_context_budget.py"
+RESUME_DECISION = REPO_ROOT / "h-mad" / "scripts" / "h_mad_resume_decision.py"
+NOW = "2026-09-28T00:00:00Z"
 
 
 @pytest.fixture
 def host(monkeypatch):
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
     return importlib.import_module("h_mad_host")
+
+
+@pytest.fixture
+def resume_decision(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+    return importlib.import_module("h_mad_resume_decision")
 
 
 @pytest.mark.parametrize(
@@ -170,3 +178,149 @@ def test_budget_unknown_host_precedes_window_check(tmp_path, hermetic_env, value
     assert result.stdout == f"CTXBUDGET: UNKNOWN reason=unknown_host host={value}\n"
     assert result.returncode == 2
     assert "used=" not in result.stdout
+
+
+def _resume_state(tmp_path, state):
+    state_file = tmp_path / ".bkit-memory.json"
+    if state == "absent-file":
+        return state_file
+    if state == "unreadable-file":
+        state_file.write_text("{", encoding="utf-8")
+        return state_file
+    feature = "other" if state == "absent-feature" else "fx"
+    record = {"last_completed_phase": 4}
+    if state == "live-foreign-owner":
+        record.update(owner_session_id="sess-other", owner_heartbeat_ts=NOW)
+    state_file.write_text(
+        json.dumps({"version": 1, "orchestrator_state": {feature: record}}),
+        encoding="utf-8",
+    )
+    return state_file
+
+
+@pytest.mark.parametrize(
+    ("declaration", "expected_unknown"),
+    [
+        pytest.param(None, False, id="unset"),
+        pytest.param("", False, id="empty"),
+        pytest.param("claude", False, id="claude"),
+        pytest.param("codex", True, id="codex"),
+        pytest.param("agy", True, id="agy"),
+        pytest.param("grok", True, id="grok"),
+        pytest.param("zzz", True, id="zzz"),
+        pytest.param("Grok", True, id="Grok"),
+        pytest.param(" grok", True, id="space-grok"),
+    ],
+)
+def test_budget_and_decide_agree(
+    tmp_path, monkeypatch, hermetic_env, resume_decision, declaration, expected_unknown
+):
+    if declaration is None:
+        monkeypatch.delenv("HMAD_HOST", raising=False)
+    else:
+        monkeypatch.setenv("HMAD_HOST", declaration)
+    monkeypatch.setenv("CLAUDE_ZZZ_PROBE", "1")
+    transcript = _budget_transcript(tmp_path)
+    budget_env = hermetic_env(HOME=str(tmp_path / "home"), HMAD_STUB_HOSTILE="all")
+    if declaration is not None:
+        budget_env["HMAD_HOST"] = declaration
+    budget = subprocess.run(
+        [sys.executable, str(BUDGET), "--transcript", str(transcript)],
+        cwd=tmp_path,
+        env=budget_env,
+        capture_output=True,
+        text=True,
+        timeout=60.0,
+    )
+    budget_unknown = (
+        "reason=host_unsupported" in budget.stdout
+        or "reason=unknown_host" in budget.stdout
+    )
+    assert budget_unknown is expected_unknown, budget.stdout
+    decision = resume_decision.decide(_resume_state(tmp_path, "no-owner"), "fx", now=NOW)
+    assert (decision == "cannot_judge") is budget_unknown, (
+        f"decide and context budget disagree for HMAD_HOST={declaration!r}: "
+        f"decision={decision!r}, budget={budget.stdout!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "state",
+    ["live-foreign-owner", "no-owner", "absent-file", "unreadable-file", "absent-feature"],
+)
+@pytest.mark.parametrize("host_value", ["codex", "agy", "grok"])
+def test_decide_cannot_judge_without_session_id(
+    tmp_path, monkeypatch, resume_decision, host_value, state
+):
+    monkeypatch.setenv("HMAD_HOST", host_value)
+    result = resume_decision.decide(_resume_state(tmp_path, state), "fx", now=NOW)
+    assert result == "cannot_judge", (
+        f"decide must return cannot_judge without a session id on {host_value}/{state}; "
+        f"got {result!r}"
+    )
+
+
+@pytest.mark.parametrize("host_value", ["codex", "agy", "grok"])
+def test_decide_routes_normally_with_session_id(
+    tmp_path, monkeypatch, resume_decision, host_value
+):
+    monkeypatch.setenv("HMAD_HOST", host_value)
+    result = resume_decision.decide(
+        _resume_state(tmp_path, "no-owner"), "fx", session_id="sess-mine", now=NOW
+    )
+    assert result == "enter_autonomous", (
+        f"decide must enter autonomous work with a session id on {host_value}; got {result!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("host_value", "state"),
+    [
+        pytest.param("zzz", "live-foreign-owner", id="zzz-live-foreign-owner"),
+        pytest.param("zzz", "no-owner", id="zzz-no-owner"),
+    ],
+)
+def test_decide_unknown_host_without_session_id(
+    tmp_path, monkeypatch, resume_decision, host_value, state
+):
+    monkeypatch.setenv("HMAD_HOST", host_value)
+    result = resume_decision.decide(_resume_state(tmp_path, state), "fx", now=NOW)
+    assert result == "cannot_judge", (
+        f"decide must return cannot_judge for unknown host without a session id "
+        f"on {state}; got {result!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("host_value", "state"),
+    [
+        pytest.param("grok", "live-foreign-owner", id="grok-live-foreign-owner"),
+        pytest.param("grok", "no-owner", id="grok-no-owner"),
+    ],
+)
+def test_decide_empty_session_id_is_no_id(
+    tmp_path, monkeypatch, resume_decision, host_value, state
+):
+    monkeypatch.setenv("HMAD_HOST", host_value)
+    result = resume_decision.decide(
+        _resume_state(tmp_path, state), "fx", session_id="", now=NOW
+    )
+    assert result == "cannot_judge", (
+        f"decide must treat an empty session id as absent on grok/{state}; got {result!r}"
+    )
+
+
+def test_resume_decision_cli_under_grok(tmp_path, hermetic_env):
+    state_file = _resume_state(tmp_path, "no-owner")
+    result = subprocess.run(
+        [sys.executable, str(RESUME_DECISION), "--state", str(state_file), "--feature", "fx"],
+        env=hermetic_env(HMAD_HOST="grok", HMAD_STUB_HOSTILE="all"),
+        capture_output=True,
+        text=True,
+        timeout=60.0,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "cannot_judge\n", (
+        f"resume decision CLI must print cannot_judge on grok without a session id; "
+        f"got {result.stdout!r}"
+    )
