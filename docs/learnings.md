@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-28 · gotcha · [0.5] · `h-mad,tdd-gate,hooks,handoff:2026-09-28-three-parallel-hmad-features` — h-mad-tdd-gate.sh never reads tool_input.file_path, so under Claude Code it exits 0 before any BLOCK branch: the Claude-side Phase-5 authorship gate is inert. Treat it as advisory until codex-tdd-gate-defects ships.
+- 2026-09-28 · gotcha · [0.7] · `git,stash,worktree,zsh,revert-test,session:2026-09-28` — git stash is shared across worktrees: a push that stashes nothing (bad pathspec, e.g. unsplit zsh $VAR) then pop applies a FOREIGN stash. Name the stash (-m) and grep stash@{0} for it before popping.
 - 2026-09-15 · gotcha · [0.7] · `skill-candidates,census,handoff:2026-09-15-two-false-task-premises` — The skill-candidates census reads a row's CONTINUATION lines for its verdict, so prose quoting `candidate: yes` scores as that row's verdict. A scout note saying '27 open candidate: yes rows' added a phantom open row.
 - 2026-09-15 · gotcha · [0.5] · `h-mad,orca,process-leak,handoff:2026-09-15-two-false-task-premises` — pytest can leak an hmad-dispatch exec-pane wrapper that outlives its session, reparents to PID 1, and polls a deleted tmpdir for 22h at 0% CPU. pgrep -af may print bare PIDs with argv stripped — re-read with ps -o command=.
 - 2026-09-15 · gotcha · [0.7] · `h-mad,mutation-specs,handoff:2026-09-15-two-false-task-premises` — h-mad has TWO near-identical spec discoverers: _own_committed_mutation_specs(root) is a per-skill tests/mutation-specs glob; _committed_mutation_specs() is tree-wide git ls-files + classifier. Adjacent names, opposite scopes.
