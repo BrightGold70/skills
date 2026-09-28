@@ -1,0 +1,66 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_judge.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "W3R",
+      "_mechanism": "Task 10 W3R: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_hemasuite_layout_resolves_from_the_task must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        tasks = _parse_tasks(text)  # M:W3",
+      "replace": "        tasks = []  # M:W3",
+      "test": "tests/test_h_mad_tdd_judge.py::test_hemasuite_layout_resolves_from_the_task"
+    },
+    {
+      "name": "W3F",
+      "_mechanism": "Task 10 W3F: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_task_match_is_authoritative_over_the_name_map must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        tasks = _parse_tasks(text)  # M:W3",
+      "replace": "        tasks = [dict(t, production=[]) for t in _parse_tasks(text)]  # M:W3",
+      "test": "tests/test_h_mad_tdd_judge.py::test_task_match_is_authoritative_over_the_name_map"
+    },
+    {
+      "name": "W3C",
+      "_mechanism": "Task 10 W3C: alter the scripts/h_mad_wire_pin_gate.py branch; tests/test_h_mad_tdd_judge.py::test_hemasuite_layout_resolves_from_the_task must reject the changed behavior.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "    r\"^\\s*(?:[-*•]\\s+)?\\*{0,2}\\s*(?P<label>Production(?:\\s+files?)?|Test(?:\\s+files?)?)\"",
+      "replace": "    r\"^\\s*(?:[-*•]\\s+)?\\*{0,2}\\s*(?P<label>Productionx(?:\\s+files?)?|Test(?:\\s+files?)?)\"",
+      "test": "tests/test_h_mad_tdd_judge.py::test_hemasuite_layout_resolves_from_the_task"
+    },
+    {
+      "name": "W4R",
+      "_mechanism": "Task 10 W4R: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_scoring_kinds[red] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    summary = _suite_summary(proc_output)  # M:W4",
+      "replace": "    summary = None  # M:W4",
+      "test": "tests/test_h_mad_tdd_judge.py::test_scoring_kinds[red]"
+    },
+    {
+      "name": "W4F",
+      "_mechanism": "Task 10 W4F: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_scoring_kinds[green] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    summary = _suite_summary(proc_output)  # M:W4",
+      "replace": "    summary = _suite_summary(\"1 failed in 0.01s\")  # M:W4",
+      "test": "tests/test_h_mad_tdd_judge.py::test_scoring_kinds[green]"
+    },
+    {
+      "name": "W4C",
+      "_mechanism": "Task 10 W4C: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_tdd_judge.py::test_scoring_kinds[red] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        best = SuiteSummary(totals[\"passed\"], totals[\"failed\"],",
+      "replace": "        best = SuiteSummary(totals[\"passed\"], 0,",
+      "test": "tests/test_h_mad_tdd_judge.py::test_scoring_kinds[red]"
+    }
+  ]
+}

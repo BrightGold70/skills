@@ -1,0 +1,66 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_judge.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "K1",
+      "_mechanism": "Task 10 K1: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_pytest_missing_denies[project-venv] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if _pytest_missing(proc_output):  # M:K1",
+      "replace": "    if False:  # M:K1",
+      "test": "tests/test_h_mad_tdd_judge.py::test_pytest_missing_denies[project-venv]"
+    },
+    {
+      "name": "K2",
+      "_mechanism": "Task 10 K2: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_scoring_kinds[import-error] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if summary.errors >= 1:  # M:K2",
+      "replace": "    if False:  # M:K2",
+      "test": "tests/test_h_mad_tdd_judge.py::test_scoring_kinds[import-error]"
+    },
+    {
+      "name": "K3",
+      "_mechanism": "Task 10 K3: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[failed-line-rc0] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        kind = \"no-summary\" if error else score(out + \"\\n\" + err, timed_out)  # M:K3",
+      "replace": "        kind = \"red-measured\" if returncode == 1 else \"test-passing\"  # M:K3",
+      "test": "tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[failed-line-rc0]"
+    },
+    {
+      "name": "K3B",
+      "_mechanism": "Task 10 K3B: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[silent-rc1] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        kind = \"no-summary\" if error else score(out + \"\\n\" + err, timed_out)  # M:K3",
+      "replace": "        kind = \"red-measured\" if returncode == 1 else \"test-passing\"  # M:K3",
+      "test": "tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[silent-rc1]"
+    },
+    {
+      "name": "K4",
+      "_mechanism": "Task 10 K4: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_scoring_kinds[skipped-only] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    return \"no-tests-ran\"  # M:K4",
+      "replace": "    return \"no-summary\"  # M:K4",
+      "test": "tests/test_h_mad_tdd_judge.py::test_scoring_kinds[skipped-only]"
+    },
+    {
+      "name": "K5",
+      "_mechanism": "Task 10 K5: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_whole_line_no_module_is_pytest_missing_even_after_red must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if _pytest_missing(proc_output):  # M:K1",
+      "replace": "    if _pytest_missing(proc_output) and _suite_summary(proc_output) is None:  # M:K1",
+      "test": "tests/test_h_mad_tdd_judge.py::test_whole_line_no_module_is_pytest_missing_even_after_red"
+    }
+  ]
+}

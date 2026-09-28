@@ -1,0 +1,315 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_gate_judge.py",
+    "tests/test_h_mad_tdd_gate_docs.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "H1A",
+      "_mechanism": "Task 10 H1A: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_claude_code_payload_reaches_codex_authorship must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "        for value in (tool_input.get('file_path'), payload.get('file_path'), payload.get('path')):  # M:H1",
+      "replace": "        for value in (payload.get('file_path'), payload.get('path')):  # M:H1",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_code_payload_reaches_codex_authorship"
+    },
+    {
+      "name": "H1B",
+      "_mechanism": "Task 10 H1B: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_stdin_target_fields[top-level-file-path] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "        for value in (tool_input.get('file_path'), payload.get('file_path'), payload.get('path')):  # M:H1",
+      "replace": "        for value in (tool_input.get('file_path'), payload.get('path')):  # M:H1",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_stdin_target_fields[top-level-file-path]"
+    },
+    {
+      "name": "H1C",
+      "_mechanism": "Task 10 H1C: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_stdin_target_fields[top-level-path] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "        for value in (tool_input.get('file_path'), payload.get('file_path'), payload.get('path')):  # M:H1",
+      "replace": "        for value in (tool_input.get('file_path'), payload.get('file_path')):  # M:H1",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_stdin_target_fields[top-level-path]"
+    },
+    {
+      "name": "H2",
+      "_mechanism": "Task 10 H2: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_stdin_target_beats_positional must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  TARGET_PATH=$TP  # M:H2",
+      "replace": "  TARGET_PATH=${1:-$TP}  # M:H2",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_stdin_target_beats_positional"
+    },
+    {
+      "name": "H3",
+      "_mechanism": "Task 10 H3: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_no_jq_on_path_still_judges must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "_read_state --target \"$TARGET_PATH\"  # M:H3",
+      "replace": "command -v jq >/dev/null 2>&1 || _allow; _read_state --target \"$TARGET_PATH\"  # M:H3",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_no_jq_on_path_still_judges"
+    },
+    {
+      "name": "H4",
+      "_mechanism": "Task 10 H4: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_judge_stub_is_judge_error[allow-rc1-TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=x\\n-1] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "if [ \"$JRC\" = 0 ] && [[ $JOUT =~ $JUDGE_ALLOW_RE ]]; then _allow; fi  # M:H4",
+      "replace": "if [[ $JOUT =~ $JUDGE_ALLOW_RE ]]; then _allow; fi  # M:H4",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_judge_stub_is_judge_error[allow-rc1-TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=x\\n-1]"
+    },
+    {
+      "name": "H5",
+      "_mechanism": "Task 10 H5: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_refusal_sites_use_the_chosen_form[codex-authorship] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "    printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"%s\"}}\\n' \"$(_json_str \"$MSG\")\" || exit 2  # M:H5B",
+      "replace": "    :  # M:H5B",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_refusal_sites_use_the_chosen_form[codex-authorship]"
+    },
+    {
+      "name": "H6",
+      "_mechanism": "Task 10 H6: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_exempt_write_on_unreadable_chain_is_allowed[state-file] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "case \"${TARGET_PATH##*/}\" in  # M:H6",
+      "replace": "_find_judge; _read_state --target \"$TARGET_PATH\"; case \"${TARGET_PATH##*/}\" in  # M:H6",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_exempt_write_on_unreadable_chain_is_allowed[state-file]"
+    },
+    {
+      "name": "H7",
+      "_mechanism": "Task 10 H7: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_fast_path_defers[dangling-state-symlink] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "_lexists() { [ -e \"$1\" ] || [ -L \"$1\" ]; }  # M:H7",
+      "replace": "_lexists() { [ -e \"$1\" ]; }  # M:H7",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_fast_path_defers[dangling-state-symlink]"
+    },
+    {
+      "name": "H8",
+      "_mechanism": "Task 10 H8: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_fast_path_defers[missing-parent] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  d=$(dirname \"$target\"); while [ ! -e \"$d\" ] && [ \"$d\" != / ]; do d=$(dirname \"$d\"); done; d=$(cd \"$d\" 2>/dev/null && pwd -P) || return 0  # M:H8",
+      "replace": "  d=$(dirname \"$2\"); d=$(cd \"$d\" 2>/dev/null && pwd -P) || return 1  # M:H8",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_fast_path_defers[missing-parent]"
+    },
+    {
+      "name": "H10",
+      "_mechanism": "Task 10 H10: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_fast_path_defers[unsearchable-docs] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  [ -x \"$1/docs\" ] && return 0  # M:H10",
+      "replace": "  true && return 0  # M:H10",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_fast_path_defers[unsearchable-docs]"
+    },
+    {
+      "name": "H11",
+      "_mechanism": "Task 10 H11: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_traversal_target_is_gated[absolute] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  TARGET_PATH=$(python3 -c 'import os,sys;print(os.path.normpath(os.path.join(sys.argv[1],sys.argv[2])))' \"$ROOT_ABS\" \"$TARGET_PATH\")  # M:H11",
+      "replace": "  TARGET_PATH=$(python3 -c 'import os,sys;print(os.path.join(sys.argv[1],sys.argv[2]))' \"$ROOT_ABS\" \"$TARGET_PATH\")  # M:H11",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_traversal_target_is_gated[absolute]"
+    },
+    {
+      "name": "H12",
+      "_mechanism": "Task 10 H12: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_non_json_stdin_never_falls_back_to_positional must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "sys.exit(4)  # M:H12",
+      "replace": "    sys.exit(0)  # M:H12",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_non_json_stdin_never_falls_back_to_positional"
+    },
+    {
+      "name": "H13",
+      "_mechanism": "Task 10 H13: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_empty_target_rule[active-root] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  _refuse judge-error \"could not identify the write target\"  # M:H13",
+      "replace": "  _allow  # M:H13",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_empty_target_rule[active-root]"
+    },
+    {
+      "name": "H14",
+      "_mechanism": "Task 10 H14: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_gate_judge.py::test_outside_root_target_is_governed_by_root[active] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "            dirs = [real_root]  # M:H14",
+      "replace": "            dirs = []  # M:H14",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_outside_root_target_is_governed_by_root[active]"
+    },
+    {
+      "name": "H15",
+      "_mechanism": "Task 10 H15: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_relative_targets[dot-tests-relative-./tests/x.py-allow] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "_dir_match() { case \"$1\" in */tests/*|*/fixtures/*) return 0 ;; esac; return 1; }  # M:H15",
+      "replace": "_dir_match() { case \"$1\" in */fixtures/*) return 0 ;; esac; return 1; }  # M:H15",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_relative_targets[dot-tests-relative-./tests/x.py-allow]"
+    },
+    {
+      "name": "H15B",
+      "_mechanism": "Task 10 H15B: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_relative_targets[fixtures-relative-fixtures/x.py-allow] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "_dir_match() { case \"$1\" in */tests/*|*/fixtures/*) return 0 ;; esac; return 1; }  # M:H15",
+      "replace": "_dir_match() { case \"$1\" in */tests/*) return 0 ;; esac; return 1; }  # M:H15",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_relative_targets[fixtures-relative-fixtures/x.py-allow]"
+    },
+    {
+      "name": "H18",
+      "_mechanism": "Task 10 H18: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_relative_targets[tests-relative-tests/x.py-allow] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "if [ -n \"$ROOT_ABS\" ]; then case \"$TARGET_PATH\" in \"$R\"/*) IN_ROOT=yes ;; esac; fi  # M:H18",
+      "replace": ":  # M:H18",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_relative_targets[tests-relative-tests/x.py-allow]"
+    },
+    {
+      "name": "H18B",
+      "_mechanism": "Task 10 H18B: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_root_name_glob_characters_are_literal must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "if [ -n \"$ROOT_ABS\" ]; then case \"$TARGET_PATH\" in \"$R\"/*) IN_ROOT=yes ;; esac; fi  # M:H18",
+      "replace": "if [ -n \"$ROOT_ABS\" ]; then case \"$TARGET_PATH\" in $R/*) IN_ROOT=yes ;; esac; fi  # M:H18",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_root_name_glob_characters_are_literal"
+    },
+    {
+      "name": "H19",
+      "_mechanism": "Task 10 H19: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_root_under_a_test_directory_is_governed[tests-root-relative] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  DIR_SUBJECT=\"/${TARGET_PATH#\"$R\"/}\"; if _dir_match \"$DIR_SUBJECT\"; then _allow; fi  # M:H19",
+      "replace": "  DIR_SUBJECT=$TARGET_PATH; if _dir_match \"$DIR_SUBJECT\"; then _allow; fi  # M:H19",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_root_under_a_test_directory_is_governed[tests-root-relative]"
+    },
+    {
+      "name": "H20A",
+      "_mechanism": "Task 10 H20A: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_outside_root_exemption_needs_both_spellings[traversal-absolute] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "elif _dir_match \"$TARGET_PATH\" && _dir_match \"$RAW_TARGET\"; then  # M:H20",
+      "replace": "elif _dir_match \"$RAW_TARGET\"; then  # M:H20",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_outside_root_exemption_needs_both_spellings[traversal-absolute]"
+    },
+    {
+      "name": "H20B",
+      "_mechanism": "Task 10 H20B: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_outside_root_exemption_needs_both_spellings[dotdot-relative] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "elif _dir_match \"$TARGET_PATH\" && _dir_match \"$RAW_TARGET\"; then  # M:H20",
+      "replace": "elif _dir_match \"$TARGET_PATH\"; then  # M:H20",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_outside_root_exemption_needs_both_spellings[dotdot-relative]"
+    },
+    {
+      "name": "H16",
+      "_mechanism": "Task 10 H16: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_judge_stub_is_judge_error[trailing-blank-line-TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=x\\n\\n-0] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "JRC=${JOUT##*rc=}; JOUT=${JOUT%rc=*}; JOUT=${JOUT%$'\\n'}  # M:H16",
+      "replace": "JRC=${JOUT##*rc=}; JOUT=$(printf '%s' \"${JOUT%rc=*}\")  # M:H16",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_judge_stub_is_judge_error[trailing-blank-line-TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=x\\n\\n-0]"
+    },
+    {
+      "name": "H17",
+      "_mechanism": "Task 10 H17: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_state_stub_is_judge_error[trailing-blank-line-TDD-STATE: none\\n\\n-0] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  SRC=${SOUT##*rc=}; SOUT=${SOUT%rc=*}; SOUT=${SOUT%$'\\n'}  # M:H17",
+      "replace": "  SRC=${SOUT##*rc=}; SOUT=$(printf '%s' \"${SOUT%rc=*}\")  # M:H17",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_state_stub_is_judge_error[trailing-blank-line-TDD-STATE: none\\n\\n-0]"
+    },
+    {
+      "name": "C2G",
+      "_mechanism": "Task 10 C2G: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_gate_judge.py::test_unreadable_chain_refuses_production must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "            return Chain(\"unreadable\", (), path, data)  # M:C2",
+      "replace": "            continue  # M:C2",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_unreadable_chain_refuses_production"
+    },
+    {
+      "name": "C3G",
+      "_mechanism": "Task 10 C3G: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_gate_judge.py::test_codex_escape_needs_every_record[exhausted-then-none] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    escape = bool(chain.records) and all(r.codex_status in ESCAPE_STATUSES for r in chain.records)  # M:C3",
+      "replace": "    escape = bool(chain.records) and any(r.codex_status in ESCAPE_STATUSES for r in chain.records)  # M:C3",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_codex_escape_needs_every_record[exhausted-then-none]"
+    },
+    {
+      "name": "W2R",
+      "_mechanism": "Task 10 W2R: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_new_production_file_with_passing_test_is_refused must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "JOUT=$(python3 \"$JUDGE\" judge --root \"$ROOT_ABS\" --target \"$TARGET_PATH\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W2",
+      "replace": "JOUT=$'TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=removed\\nrc=0'  # M:W2",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_new_production_file_with_passing_test_is_refused"
+    },
+    {
+      "name": "W2F",
+      "_mechanism": "Task 10 W2F: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_claude_gate_kind[red-measured] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "JOUT=$(python3 \"$JUDGE\" judge --root \"$ROOT_ABS\" --target \"$TARGET_PATH\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W2",
+      "replace": "JOUT=$'TDD-JUDGE: DENY kind=judge-error reason=forced\\nrc=0'  # M:W2",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_gate_kind[red-measured]"
+    },
+    {
+      "name": "W5BR",
+      "_mechanism": "Task 10 W5BR: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_subproject_step5_under_root_step3_is_governed must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
+      "replace": "  SOUT=$'TDD-STATE: none\\nrc=0'  # M:W5B",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_subproject_step5_under_root_step3_is_governed"
+    },
+    {
+      "name": "W5BF",
+      "_mechanism": "Task 10 W5BF: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_state_without_step5_is_allowed must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
+      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_state_without_step5_is_allowed"
+    },
+    {
+      "name": "W5BF2",
+      "_mechanism": "Task 10 W5BF2: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_empty_target_rule[no-step5-root] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
+      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_empty_target_rule[no-step5-root]"
+    },
+    {
+      "name": "W5BF3",
+      "_mechanism": "Task 10 W5BF3: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_outside_root_target_is_governed_by_root[no-step5] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
+      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_outside_root_target_is_governed_by_root[no-step5]"
+    },
+    {
+      "name": "W6R",
+      "_mechanism": "Task 10 W6R: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_symlinked_hook_runs_its_own_trees_judge must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  JUDGE=$(python3 -c 'import os,sys;print(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\",\"h_mad_tdd_judge.py\"))' \"${BASH_SOURCE[0]}\")  # M:W6",
+      "replace": "  JUDGE=\"$HOME/.claude/skills/h-mad/scripts/h_mad_tdd_judge.py\"  # M:W6",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_symlinked_hook_runs_its_own_trees_judge"
+    },
+    {
+      "name": "W6F",
+      "_mechanism": "Task 10 W6F: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_symlinked_hook_runs_its_own_trees_judge must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  JUDGE=$(python3 -c 'import os,sys;print(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\",\"h_mad_tdd_judge.py\"))' \"${BASH_SOURCE[0]}\")  # M:W6",
+      "replace": "  JUDGE=\"/Users/kimhawk/orca/skills/h-mad/scripts/h_mad_tdd_judge.py\"  # M:W6",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_symlinked_hook_runs_its_own_trees_judge"
+    },
+    {
+      "name": "T1",
+      "_mechanism": "Task 10 T1: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_trap_member_refuses_in_form[realpath-stub] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "trap _on_exit EXIT  # M:T1",
+      "replace": ":  # M:T1",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_trap_member_refuses_in_form[realpath-stub]"
+    },
+    {
+      "name": "T2",
+      "_mechanism": "Task 10 T2: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_trap_member_refuses_in_form[unset-variable] must reject the changed behavior.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  _refuse judge-error \"gate exited rc=$rc before deciding\"  # M:T2",
+      "replace": "  exit \"$rc\"  # M:T2",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_trap_member_refuses_in_form[unset-variable]"
+    },
+    {
+      "name": "D1",
+      "_mechanism": "Task 10 D1: alter the tests/test_h_mad_tdd_gate_docs.py branch; tests/test_h_mad_tdd_gate_docs.py::test_locators_fail_loudly[hook-line] must reject the changed behavior.",
+      "file": "tests/test_h_mad_tdd_gate_docs.py",
+      "find": "    assert len(starts) == 1, f\"expected one 'Hook: ' line, found {len(starts)}\"  # M:D1",
+      "replace": "    starts = starts or [0]  # M:D1",
+      "test": "tests/test_h_mad_tdd_gate_docs.py::test_locators_fail_loudly[hook-line]"
+    }
+  ]
+}
