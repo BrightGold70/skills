@@ -39,12 +39,16 @@ exists to drift from the real one.
 - **F0**: `docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.ndjson`. One reading:
   110 lines, 83,256 bytes, sha256
   `72f6258734f184ae999f84273b5abe3711202a1a8f43f392143173c8364fe569`, at commit `d2fbb96`.
-  - The command that re-derives these figures is in the probe's sidecar. A test may copy F0
-    under `h-mad/tests/fixtures/`, but it must assert that the copy's sha256 equals F0's.
+  - The commands that re-derive these figures are in the probe sidecar
+    (`docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.md`), section
+    "Re-derivation commands". Two figures below are not in that section, and each carries its own
+    command here: the `status: null` count and the line-prefix count. A test may copy F0 under
+    `h-mad/tests/fixtures/`, but it must assert that the copy's sha256 equals F0's.
   - Measured on F0 with `jq`: event `type` counts are `thought` 70, `text` 21,
     `available_commands` 9, `usage` 3, `tool_call_update` 4, `tool_call` 2, `end` 1.
   - It has 2 distinct `toolCallId`s whose `tool_call_update.status == "completed"`, and 2
-    `tool_call_update` events with `status: null`.
+    `tool_call_update` events with `status: null`, counted with
+    `jq -c 'select(.type=="tool_call_update" and .status==null)' <F0> | wc -l`.
   - The sum of `usage.reasoning_tokens` over the 3 `usage` events is 121.
   - `end.modelUsage` has exactly one key, `grok-4.7-build`, and `end.stopReason` is `end_turn`.
   - Every line begins with the bytes `{"type":"`. That gives 110 matching lines, counted with
@@ -147,6 +151,29 @@ exists to drift from the real one.
 
     The expected value is computed by a function in the test that transcribes the table. It is
     never computed by calling the hook.
+  - AC-2.1b (**the BLOCK-INVALID class, each member alone**): AC-2.1 draws only `"codex"` from the
+    invalid row, so this test exercises one representative of every JSON type the row covers,
+    plus the values most easily mistaken for absent or `null`. The axis is the JSON type of the
+    stored value; the members are:
+    - `false` and `true` (boolean);
+    - `0` (number);
+    - `"null"`, `""` and `"Grok"` (string: the word null, the empty string, and a case variant of
+      a valid value);
+    - `{}` (object);
+    - `[]` (array).
+
+    Each of the 8 values is its own parametrized case, never a combined fixture, so a healthy
+    sibling cannot cover a sick one. Each case runs under each of the three codex_out routes
+    alone: `HMAD_CODEX_UNAVAILABLE=1` with `codex_status` absent and `codex` on PATH;
+    `codex_status: "exhausted"` with the variable unset and `codex` on PATH; and `codex` off PATH
+    with the variable unset and `codex_status` absent. That is 24 cells, and each asserts exit 1,
+    the BLOCK-INVALID class, and AC-2.4's stderr. The same 8 values with codex_out false yield
+    BLOCK-CODEX, as the table's first row says.
+
+    **Control:** a stored JSON `null` under the same three routes is FALL-THROUGH (3 cells), and so
+    is an absent key. The string `"null"` and the JSON `null` must therefore produce different
+    outcomes. **Residual:** other strings are covered by the table's rule and are exercised only
+    by `"codex"` (AC-2.1) and the three strings above; numbers other than `0` are not exercised.
   - AC-2.2 (**regression, absent field**): For `fallback_agent` absent, the hook's exit code and
     stderr in each of the 16 cells equal those of the hook at the feature's base commit, byte for
     byte. The 16 cells are 4 `codex_status` × 2 env × 2 PATH, and the base hook is read with
@@ -194,6 +221,12 @@ exists to drift from the real one.
       from `grok --help` at 1.0.41.
     - `--sandbox <s>` is passed through verbatim, and no default is supplied. No profile value has
       been probed, and grok's `--help` lists none.
+    - **`GROK_SANDBOX` is inherited, not scrubbed.** At 1.0.41 `grok --help` shows `--sandbox`
+      reading `[env: GROK_SANDBOX=]`. An operator's exported `GROK_SANDBOX` therefore reaches the
+      grok child and selects a sandbox profile although argv carries no `--sandbox`. The wrapper
+      neither removes nor sets it, and the spec supplies no default. When `--sandbox <s>` is given
+      it is in argv beside any inherited value; which one grok honours was not probed. FR-10
+      discloses this.
     - `--timeout` bounds only the wrapper's watchdog. Grok has no print-timeout flag.
   - **Transcript:** the child runs with working directory `<cd_dir>`. Its stdout and stderr are
     appended to `--log` with a direct redirect, as the codex path does. That preserves grok's rc
@@ -411,6 +444,8 @@ exists to drift from the real one.
   - `--agent grok` changes the printed command block's dispatch line to `hmad-dispatch exec grok`.
   - It changes the default `--timeout` to **1500** when `--timeout` is not given. That is the
     trial's value; codex's default stays 900. An explicit `--timeout` always wins.
+    - "Not given" means `--timeout` is absent from the assembler's argv. It is judged on presence,
+      never on value, so an explicit `--timeout 900` under `--agent grok` stays 900.
   - The assembled prompt file is **byte-identical** across agents, because the template is shared
     and unchanged.
   - `--model` and `--effort` are forwarded unchanged. `exec grok` translates them (FR-3).
@@ -421,7 +456,8 @@ exists to drift from the real one.
     arguments, and so is the prompt file.
   - AC-8.2: `--agent grok` prints a block whose first line begins
     `hmad-dispatch exec grok ` and contains `--timeout 1500`. `--agent grok --timeout 600`
-    contains `--timeout 600`.
+    contains `--timeout 600`, and `--agent grok --timeout 900` contains `--timeout 900`, never
+    `--timeout 1500`. `--agent codex` with no `--timeout` contains `--timeout 900`.
   - AC-8.3: The prompt files written by `--agent codex` and `--agent grok` for identical other
     arguments have equal sha256.
   - AC-8.4: `--agent gpt` exits 2 with argparse's usage error and writes no prompt file.
@@ -468,6 +504,10 @@ exists to drift from the real one.
   - `h-mad/SKILL.md` §"Codex authors Phase 5 — enforced, not just instructed" documents
     `fallback_agent` and the FR-2 table. It states that `HMAD_CODEX_UNAVAILABLE` does not override
     `fallback_agent=grok`.
+    - It also discloses that grok writes have **no write-time test-first gate**: codex's writes
+      pass through `h-mad/hooks/h-mad-codex-tdd-gate.py` and grok's pass through nothing. The
+      enforcement that remains is the one named in Out-of-Scope ("A write-time test-first gate
+      for grok").
   - §"Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot" documents
     `exec grok` and `--agent grok`, with its 1500 s default.
   - §"Teammate audit leg — when codex is unavailable" documents grok as the **preferred
@@ -478,7 +518,7 @@ exists to drift from the real one.
   - §"Never gate on one audit pass" cross-references that routing.
   - `h-mad/references/state-schema.md` documents the field.
   - `h-mad/references/agent-substrate.md` §"Verbs" documents `exec grok`, its argv and its
-    environment handling.
+    environment handling, including the inherited `GROK_SANDBOX` (FR-3).
   - **D4 statement.** The teammate-leg section, and the `exec grok` documentation, each state all
     three of the following:
     - grok is measured only on one RED and one stream probe;
@@ -488,13 +528,14 @@ exists to drift from the real one.
 - **Acceptance Criteria**:
   - AC-10.1: A doc test locates each named heading by its exact text, and the test **fails** when
     a heading is absent. It never skips. Within each section it asserts:
-    - in the Phase-5 section: `fallback_agent` and `HMAD_CODEX_UNAVAILABLE`;
+    - in the Phase-5 section: `fallback_agent`, `HMAD_CODEX_UNAVAILABLE` and
+      `no write-time test-first gate`;
     - in the exec section: `exec grok` and `--agent grok`;
     - in the teammate section: `--surfaces agy,grok` and `unmeasured`.
     **Residual:** a renamed heading fails the test, and the fix is to update the test's heading
     string in the same commit as the rename.
   - AC-10.2: `h-mad/references/state-schema.md` contains `fallback_agent`, and
-    `h-mad/references/agent-substrate.md` contains `exec grok`.
+    `h-mad/references/agent-substrate.md` contains both `exec grok` and `GROK_SANDBOX`.
 
 ### FR-11: Regression — every non-grok path is unchanged
 
@@ -522,8 +563,9 @@ exists to drift from the real one.
   - Grok latency is unmeasured beyond the one 543 s trial, which is why the assembler default is
     1500 s (FR-8).
 - **Security**:
-  - `--always-approve` gives grok unrestricted tool execution in `<cd_dir>`. No sandbox profile is
-    applied by default, because none has been probed. That is a wider grant than codex's default
+  - `--always-approve` gives grok unrestricted tool execution in `<cd_dir>`. The wrapper applies
+    no sandbox profile by default, because none has been probed; an operator's `GROK_SANDBOX` can
+    still apply one (FR-3). That is a wider grant than codex's default
     `workspace-write`, the operator accepts it by setting `fallback_agent=grok`, and FR-10
     documents it.
   - The wrapper never reads, logs or forwards `XAI_API_KEY` itself. Grok inherits it from the
@@ -549,7 +591,17 @@ exists to drift from the real one.
   stays `UNREADABLE reason=unsupported_format`.
 - **A failed-tool-status branch.** No failure spelling has been observed (probe finding 2), and
   `unresolved` stands in until one is captured.
-- **Choosing a grok `--sandbox` profile** (probe finding 5).
+- **Choosing a grok `--sandbox` profile** (probe finding 5), and scrubbing or defaulting
+  `GROK_SANDBOX` (FR-3).
+- **A write-time test-first gate for grok.**
+  - Codex's writes are gated at write time by `h-mad/hooks/h-mad-codex-tdd-gate.py`, wired
+    through Codex's own `hooks.json` (`h-mad/references/codex-runtime.md`). No grok equivalent
+    exists in this skill, and whether grok offers any hook surface at all was not probed. A grok
+    Phase-5 dispatch therefore writes production code with no write-time test-first gate.
+  - The mitigation is what remains mandatory: the RED and GREEN verdicts, the orchestrator's
+    independent pytest re-run, and the 5e revert test that establishes GREEN (`h-mad/SKILL.md`,
+    "GREEN is established by the revert test").
+  - FR-10 discloses the gap in the Phase-5 section.
 - **A grok input-size ceiling or refusal detector.** No codex-style `input_too_large` analogue
   exists until a refusal is captured.
 - **Completion-event reaping (`--complete-log`) for grok.** No grok linger has been observed.
@@ -584,3 +636,4 @@ exists to drift from the real one.
 
 ## Version History
 - v1.0: Initial specification draft (2026-09-28). The brainstorm's decisions D1–D4 are applied, and so are the orchestrator's decisions on OQ1–OQ5. OQ3's final-message wording is corrected by measurement against F0 (Assumption A1).
+- v1.1: Plan-v1.0 owed items, operator-decided (2026-09-28). F0 bullet names the sidecar's Re-derivation commands section and carries the two commands it lacks. AC-2.1b exercises the BLOCK-INVALID class one value at a time (false, true, 0, "null", "", "Grok", {}, []) with a JSON-null FALL-THROUGH control. FR-3 and FR-10 disclose the inherited GROK_SANDBOX. Out-of-Scope adds the missing grok write-time test-first gate, disclosed by FR-10. FR-8 defines not-given as absent from argv, with AC-8.2 pinning an explicit 900.
