@@ -198,7 +198,7 @@ def test_claims_lines_execute_across_invocations(adapter_id: str, tmp_path: Path
     assert "cannot_judge" in control.stdout, "oracle without the file's session id must report cannot_judge"
 
 
-@pytest.mark.parametrize("adapter_id", HOST_ADAPTERS, ids=HOST_ADAPTERS)
+@pytest.mark.parametrize("adapter_id", (*HOST_ADAPTERS, "handoff-codex"), ids=(*HOST_ADAPTERS, "handoff-codex"))
 def test_not_applicable_rows_state_a_reason(adapter_id: str) -> None:
     _required_section(adapter_id, "## Construct mapping", "not-applicable rows state a reason")
     table = host_parity.adapter_table(ADAPTERS[adapter_id].read_text(encoding="utf-8"))
@@ -210,6 +210,22 @@ def test_not_applicable_rows_state_a_reason(adapter_id: str) -> None:
         assert len(re.findall(r"[A-Za-z]{2,}", mapping)) >= 3, f"{row.id} not-applicable mapping needs a reason of at least three words"
         assert re.fullmatch(r"(?i)(?:n/?a|not[- ]applicable|none)\.?", mapping) is None, f"{row.id} needs more than a status word"
         assert row.mapping != row.source, f"{row.id} reason must differ from source"
+
+
+@pytest.mark.parametrize(
+    "case,field,token",
+    [
+        ("status", "status", "not-applicable"),
+        ("notepad", "mapping", ".omc/notepad.md"),
+        ("update-plan", "mapping", "update_plan"),
+    ],
+    ids=["handoff-codex-status", "handoff-codex-notepad", "handoff-codex-update-plan"],
+)
+def test_task_tools_row(case: str, field: str, token: str) -> None:
+    row = _row("handoff-codex", "task-tools", f"task-tools {case}")
+    assert token in getattr(row, field), f"handoff-codex task-tools {case} must state {token}"
+    if case == "update-plan":
+        assert "lead" in row.mapping.lower(), "handoff-codex task-tools must identify update_plan as a lead"
 
 
 @pytest.mark.parametrize(
