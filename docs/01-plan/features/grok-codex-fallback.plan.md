@@ -161,12 +161,13 @@ codex_out routes alone (`HMAD_CODEX_UNAVAILABLE=1`; `codex_status: "exhausted"`;
 PATH) — 24 BLOCK-INVALID cells, each asserting exit 1 and AC-2.4's stderr — with a control in
 which a stored JSON `null` under the same three routes is FALL-THROUGH (3 cells), as is an absent
 key. The control is what separates the string `"null"` from JSON `null`, so it is the cell that
-kills a reintroduced `-r` collapse; the `false` cells kill a reintroduced `//`. The plan keeps
-one addition beyond the spec's assertions: the spec states that the same 8 values with codex_out
-false yield BLOCK-CODEX (the table's first row) but does not require a test of it, and a read
-that returned BLOCK-INVALID regardless of `codex_out` would pass all 24 cells. So the same test
-file carries those 8 BLOCK-CODEX cells (codex on PATH, variable unset, `codex_status` absent),
-one value per case.
+kills a reintroduced `-r` collapse; the `false` cells kill a reintroduced `//`. AC-2.1b also
+asserts, in its own words, "The same 8 values with codex_out false yield BLOCK-CODEX, as the
+table's first row says." Those 8 BLOCK-CODEX cells are therefore **part of AC-2.1b**, not a plan
+addition (plan v1.1 called them one; that was wrong). They are the cells that kill a read which
+returns BLOCK-INVALID regardless of `codex_out`, which would pass all 24 BLOCK-INVALID cells. The
+same test file carries them (codex on PATH, variable unset, `codex_status` absent), one value per
+case.
 
 **Regression is proven against the base, not asserted.** AC-2.2 compares against
 `git show <base>:h-mad/hooks/h-mad-tdd-gate.sh`; AC-8.1 against the base commit's assembler
@@ -184,7 +185,9 @@ one sha; the command is what a later reader re-runs. The commits since (`805e4f3
 `42511c3`) touch only this feature's documents and probe sidecar:
 `git diff --stat 1680271 42511c3 -- h-mad handoff` prints nothing (run at `42511c3`), so the tree
 premises P2–P13 and the suite baseline were not re-run for v1.1 and stand at `1680271`. P1 and
-the AC census were re-run at `42511c3`.
+the AC census were re-run at `42511c3`. For v1.2, `git diff --name-only 1680271 8c631d3 -- h-mad
+handoff | wc -l` → 0 files (run at `8c631d3`), and the commands P8, P10 and P13 had lacked are
+now written inline and were run at `8c631d3`, as was P11's new proxy.
 
 - **P1 — F0 matches the spec's figures.** Run:
 
@@ -262,6 +265,17 @@ the AC census were re-run at `42511c3`.
   message name agents. `validate_surface()` in `h_mad_audit_cycle.py` accepts any
   `^[A-Za-z0-9][A-Za-z0-9_-]*$` token, and `h-mad/tests/test_h_mad_audit_surface_discovery.py`
   pins the surface set as open. So FR-7's transport change is the `case` plus its message.
+  Commands (run at `8c631d3`):
+
+  ```bash
+  sed -n '/^_cmd_audit_cycle()/,/^}/p' h-mad/scripts/hmad-dispatch.sh \
+    | grep -n '_cmd_exec \|h_mad_assemble_audit\|agy|codex\|case "\$_s"'
+  # reading: one `_cmd_exec "${agent[$i]}" "${prompt[$i]}" …` call, one `h_mad_assemble_audit.py
+  # --feature … --phase …` call (no agent argument), and `case "$_s" in agy|codex)` with its
+  # "unknown agent '$_s' (agy|codex)" message — the only agent names in the function
+  grep -n 'SURFACE_RE = \|def validate_surface' h-mad/scripts/h_mad_audit_cycle.py
+  # reading: SURFACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$"); validate_surface defined
+  ```
 - **P9 — the assembler's defaults.** `--timeout` is an argparse `default=900`, and `--model` /
   `--effort` default to `None` (`grep -n 'add_argument("--timeout"\|^DEFAULT_MODEL\|^DEFAULT_EFFORT'
   h-mad/scripts/h_mad_assemble_tdd.py`). FR-8's "1500 when `--timeout` is not given" therefore
@@ -272,7 +286,11 @@ the AC census were re-run at `42511c3`.
   The block's dispatch line is built in one f-string beginning `hmad-dispatch exec codex`.
 - **P10 — `resolved-model` pass-through.** `_cmd_resolved_model` forwards `"$@"` to
   `h_mad_resolved_model.py`, whose agent is `choices=("codex", "agy")`. FR-9's wrapper side is a
-  usage-comment change; the gate is the `choices` tuple.
+  usage-comment change; the gate is the `choices` tuple. Commands (run at `8c631d3`):
+  `sed -n '/^_cmd_resolved_model()/,/^}/p' h-mad/scripts/hmad-dispatch.sh` → a body of `_need`
+  plus `python3 "$(dirname "${BASH_SOURCE[0]}")/h_mad_resolved_model.py" "$@"`, header comment
+  `# <codex|agy> [--log <f>]`; `grep -n 'choices=' h-mad/scripts/h_mad_resolved_model.py` → one
+  matching line, `ap.add_argument("agent", choices=("codex", "agy"))`.
 - **P11 — grok CLI surface (local `grok --help`, no model call).** `grok --version` →
   `grok 1.0.41`. `--reasoning-effort` lists `[aliases: --effort]`; `--output-format` lists
   `streaming-json` ("NDJSON: one ACP session update per line"); `-p, --single` and
@@ -281,16 +299,36 @@ the AC census were re-run at `42511c3`.
   applies a sandbox although FR-3 supplies no default (Risks). Plan v1.0 raised this; spec v1.1
   now mandates it — FR-3 states the variable is inherited, neither scrubbed nor set, FR-10
   requires `agent-substrate.md` to disclose it, and AC-10.2 pins the needle `GROK_SANDBOX` there;
-  scrubbing or defaulting it is spec Out-of-Scope. The claim that
-  `-p` with `--prompt-file` exits rc 2 is carried from the brainstorm and was **not** re-run here
-  (running it risks a live model call, which D4 forbids).
+  scrubbing or defaulting it is spec Out-of-Scope. **`-p` with `--prompt-file` exits rc 2** —
+  plan v1.1 carried this unverified from the brainstorm; v1.2 executed it with no possibility of
+  a model call, network denied by the macOS sandbox and an empty `HOME` (so no stored
+  credential), at `8c631d3`:
+
+  ```bash
+  printf 'hi\n' > pf.txt; mkdir -p h
+  HOME=$PWD/h perl -e 'alarm 20; exec @ARGV' \
+    sandbox-exec -p '(version 1)(allow default)(deny network*)' grok -p x --prompt-file pf.txt
+  echo rc=$?; rm -f pf.txt; rmdir h
+  # reading (grok 1.0.41): rc=2, stderr "error: the argument '--single <PROMPT>' cannot be used
+  # with '--prompt-file <PATH>'" — a clap argument conflict, raised before any session starts
+  ```
+
+  `grok --help` alone is not a proxy: it lists `-p, --single <PROMPT>` and `--prompt-file
+  <PATH>` but prints no conflict wording (`grok --help 2>&1 | grep -ci conflict` → 0 lines). The
+  scratch files were deleted after the run.
 - **P12 — the evidence verdict extractor.** `h_mad_extract_verdict.py <file> --key STATUS` on a
   file holding only `All done.` exits 2 and prints `ERROR: no STATUS: line in scrape …`
   (executed with a scratch file, then deleted). AC-4.3's expectation is therefore the tool's
   existing behaviour, not a new requirement on it.
 - **P13 — the codex write gate does not cover grok.** `h-mad/hooks/h-mad-codex-tdd-gate.py` is
   a Codex PreToolUse adapter wired through Codex's own `hooks.json`
-  (`h-mad/references/codex-runtime.md`). No grok-side adapter exists in this skill, and whether
+  (`h-mad/references/codex-runtime.md`). No grok-side adapter exists in this skill. Commands (run
+  at `8c631d3`): `grep -c 'h-mad-codex-tdd-gate' h-mad/references/codex-runtime.md` → 2 matching
+  lines (unit: lines), the first naming the adapter's wiring "through the active Codex `hooks.json`"; `git ls-files h-mad/hooks` →
+  4 files, `h-mad-advisor-warn.sh`, `h-mad-codex-tdd-gate.py`, `h-mad-tdd-gate.sh`,
+  `memory-index-guard.sh` (unit: files); `git ls-files h-mad | grep -ci grok` → 0 paths (unit:
+  tracked paths; zero because the feature is unbuilt — load-bearing only in that it confirms no
+  grok adapter exists yet, and it moves the moment Phase 5 adds `h-mad/tests/stubs/grok`). Whether
   grok offers a hook surface at all was not probed, so a grok Phase-5 dispatch writes
   production code with **no write-time test-first gate**. What remains is the RED/GREEN
   verdicts, the orchestrator's independent pytest re-run, and the 5e revert test that
@@ -312,7 +350,12 @@ pytest -q -p no:cacheprovider h-mad/tests handoff/tests 2>&1 | tail -2
 
 Under this machine's RTK command-rewrite hook, a bare `pytest --collect-only` prints `Pytest: No
 tests collected` — the summary is rewritten, not the collection. Run the counts as `rtk proxy
-pytest …` there. These counts **move by construction**: every test this feature adds raises
+pytest …` there. **Interpreter.** Bare `pytest` here is `/opt/anaconda3/bin/pytest`, whose
+shebang is `#!/opt/anaconda3/bin/python` (`which pytest; head -1 "$(which pytest)"`, run at
+`8c631d3`), so every `pytest` command in this plan is `/opt/anaconda3/bin/python -m pytest` —
+the same interpreter the audit gate's `--suite-cmd "/opt/anaconda3/bin/python -m pytest h-mad/tests
+-q"` names. Bare `python3` resolves first to `/opt/homebrew/bin/python3`, which has no pytest;
+never substitute it. These counts **move by construction**: every test this feature adds raises
 them. Re-measure at 5c on the branch base and again at the pre-merge gate; the floor is defined
 over node ids (Success Criteria), not over this number.
 
@@ -346,7 +389,8 @@ AC-2.7's spec is the gate's first.
   `measure_effort()` (Python, picks a verdict route) must classify a grok log the same way, with
   the same precedence (agy first, then grok, then codex). The seven observed `type` values are
   the shared criterion; the plan requires one test that feeds the same fixtures to both and
-  asserts agreement (F0, F-SPACED, F-TRUNC, an agy log, a codex banner log).
+  asserts agreement (F0, F-SPACED, F-TRUNC, an agy log, a codex banner log, and the mixed
+  agy+F0 log that discriminates the precedence — see W5–W7).
 - **Child-only environment.** The `^CLAUDE` scrub and the `HPW_AGENT_BACKEND:=claude` default
   apply to the grok child's process only. `_exec_run` launches the child; the scrub must not
   leak into the wrapper shell (AC-3.3's "after the dispatch" clause) or into the codex/agy
@@ -383,7 +427,7 @@ AC-2.7's spec is the gate's first.
 | `exec grok` verb, argv, env handling, inherited `GROK_SANDBOX` (FR-3; AC-10.2 needle) | `h-mad/references/agent-substrate.md` §"Verbs" | FR-10 |
 | `grok` stub | `h-mad/tests/stubs/grok` | FR-3–FR-5, FR-7 |
 | F0-derived fixture builder (one helper) and F0 sha256 check | `h-mad/tests/` (new helper module) | FR-4–FR-7, FR-9 |
-| New test files for FR-1–FR-10, including the 80-cell gate matrix, the 16-cell × 3 base comparison, AC-2.1b's 24 BLOCK-INVALID cells with its 3-cell JSON-`null` control plus the plan's 8 BLOCK-CODEX cells, and the two-instrument agreement test | `h-mad/tests/` (new files) | FR-1–FR-11 |
+| New test files for FR-1–FR-10, including the 80-cell gate matrix, the 16-cell × 3 base comparison, AC-2.1b's 24 BLOCK-INVALID cells with its 3-cell JSON-`null` control and its 8 BLOCK-CODEX cells, the two-instrument agreement test, and the mixed agy+F0 precedence fixture (W5–W7) | `h-mad/tests/` (new files) | FR-1–FR-11 |
 | Heading-located doc test (fails, never skips, on a missing heading) | `h-mad/tests/` (new file) | FR-10 |
 | Gate mutation spec, three rows (AC-2.7) | `h-mad/tests/mutation-specs/` (new JSON) | FR-2 |
 | Mutation specs for the parser, evidence and shape guards (see Success Criteria) | `h-mad/tests/mutation-specs/` (new JSON) | FR-4, FR-6, FR-7 |
@@ -398,24 +442,62 @@ symbol is a wrong-reason RED and halts.
 
 | Wire | Call site → callee | `WIRE-PIN` (remove) | Force-fire must fail |
 |---|---|---|---|
-| W1 | `_cmd_exec` agent dispatch → grok argv builder | AC-3.1 fails: argv lacks `--prompt-file`, carries `--print` | — (grok arm unreachable for codex/agy by the `case`) |
-| W2 | `_cmd_exec` → grok child env scrub | AC-3.3 fails: a `CLAUDE*` var reaches the stub | scrub applied to codex/agy → AC-3.4 fails |
-| W3 | `_cmd_exec` → grok segmenter, scoped by `pre_lines` | AC-4.1 fails; with scoping dropped, AC-4.7 recovers the old `STATUS: DONE` | — |
+| W1 | `_cmd_exec` agent dispatch → grok argv builder | AC-3.1 fails: argv lacks `--prompt-file`, carries `--print` | grok argv builder taken for every agent → `test_hmad_dispatch_exec.py::test_codex_exec_runs_headless_with_the_right_flags` and `::test_agy_exec_runs_print_headless_prompt_as_last_arg` fail: the codex/agy stub's recorded argv carries `--prompt-file`/`--always-approve`, not its own flags |
+| W2 | `_cmd_exec` → grok child env scrub | AC-3.3 fails: a `CLAUDE*` var reaches the stub | scrub applied to codex/agy → AC-3.4 fails: the codex/agy stub no longer sees the caller's `CLAUDE*` vars |
+| W3 | `_cmd_exec` → grok segmenter, scoped by `pre_lines` | AC-4.1 fails: stdout is not `STATUS: DONE` | (a) segmenter run for every agent → `test_hmad_dispatch_exec.py::test_agy_exec_stdout_is_the_response` fails: an agy log holds no grok `text` event, so stdout is empty and rc is 3; (b) scoping forced off (segmenter reads the whole `--log`) → AC-4.7 fails: the previous dispatch's `STATUS: DONE` is recovered and rc is 0 |
 | W4 | `_cmd_exec` EMPTY path → grok last-tool line | AC-4.6 fails: no `2 tool calls completed` line | line emitted with no `tool_call` in region → the omission clause fails |
-| W5 | `_exec_log_format` → `grok-ndjson` → `_render_progress` grok branch | AC-5.1/5.2 fail | grok checked before agy → AC-5.1's agy+F0 case fails |
-| W6 | evidence CLI `main` → `scan_grok` | AC-6.1 fails: F0 prints `UNREADABLE reason=unsupported_format` | `scan_grok` consulted before agy → existing agy CLI tests fail |
-| W7 | `measure_effort` → `scan_grok`; `combine` → `grok-truncated` routing | AC-7.2/7.3 fail; AC-7.4 fails | `grok-truncated` scored as a count → AC-7.4 fails |
-| W8 | `_cmd_audit_cycle --surfaces` → `_cmd_exec grok` | AC-7.1 fails | — |
+| W5 | `_exec_log_format` → `grok-ndjson` → `_render_progress` grok branch | AC-5.1/5.2 fail | grok checked before agy → AC-5.1's "one agy `{"event":"init"}` line and F0 prints `format: agy-ndjson`" fails (prints `grok-ndjson`). Discriminates: the log holds both families, so only the order decides |
+| W6 | evidence CLI `main` → `scan_grok` | AC-6.1 fails: F0 prints `UNREADABLE reason=unsupported_format` | `scan_grok` consulted before agy → the **mixed agy+F0 test** fails: the CLI's stdout and rc on (agy transcript + F0) must be byte-identical to its stdout and rc on the agy transcript alone, and the mutant prints a `format=grok` line. The existing agy-only CLI tests do **not** kill this: on an agy-only log `scan_grok` returns `None` and the mutant falls through to the agy path |
+| W7 | `measure_effort` → `scan_grok`; `combine` → `grok-truncated` routing | AC-7.2/7.3 fail; AC-7.4 fails | (a) `scan_grok` consulted before `scan()`'s agy count → the **mixed agy+F0 test** fails: `measure_effort()` on the mixed log must equal its result on the agy transcript alone (shape `parsed`), and the mutant returns shape `grok`; (b) `grok-truncated` scored as a count → AC-7.4 fails |
+| W8 | `_cmd_audit_cycle --surfaces` → `_cmd_exec grok` | AC-7.1 fails | every pass dispatched as `grok` regardless of its surface token → `test_hmad_dispatch_audit_cycle.py::test_verb_two_distinct_dispatches` fails its `argv[:1] == ["agy"]` assertion on each `_cmd_exec` call |
 | W9 | hook → `fallback_agent` of `ACTIVE` | AC-2.1 BLOCK-GROK cells fail | read from another feature → AC-2.5 fails |
-| W10 | assembler `--agent` → dispatch line and timeout default | AC-8.2 fails (incl. its explicit `--timeout 900` case) | state read → AC-8.5 fails |
-| W11 | `h_mad_resolved_model` `choices` → grok reader | AC-9.1 fails (argparse refuses `grok`) | — |
+| W10 | assembler `--agent` → dispatch line and timeout default | AC-8.2 fails (incl. its explicit `--timeout 900` case) | (a) grok block emitted with no `--agent` → AC-8.1 (byte-identical to base) and `test_h_mad_assemble_tdd.py::TestCli::test_a_clean_assembly_prints_pass_and_the_command_block` (asserts `hmad-dispatch exec codex`) fail; (b) agent read from state → AC-8.5 fails |
+| W11 | `h_mad_resolved_model` `choices` → grok reader | AC-9.1 fails (argparse refuses `grok`) | grok reader used for every agent → `test_h_mad_resolved_model.py::test_codex_reads_the_resolved_model_out_of_its_session_header` and `::test_agreement_between_the_two_newest_is_answerable` fail: a codex session header and an agy cli-log dir carry no `end` event, so the grok reader exits 2 with `RESOLVED-MODEL: UNKNOWN` |
+
+**Rule over the column.** A force-fire must (1) name a mutation that makes the new callee run
+where it must not, (2) name an existing or planned test whose input **contains what the callee
+matches**, so the mutant's output differs, and (3) name the observation that differs. A
+precedence mutation (a new reader consulted before an old one) is killed only by an input both
+readers accept; an input only the old reader accepts is a fall-through and kills nothing — v1.1's
+W6 had exactly that flaw. Sweep of all eleven rows against the rule: W1, W3, W8, W10 and W11 now
+name existing nodes whose inputs the forced callee rejects or misreads; W2, W4 and W9 name spec
+ACs whose inputs discriminate (AC-3.4 sets `CLAUDE*` vars; AC-4.6's omission clause has no
+`tool_call`; AC-2.5 stores a different feature's value); **W5** was already sound, because AC-5.1
+itself feeds a log holding both an agy line and F0; **W6 and W7(a)** shared the fall-through flaw,
+since `measure_effort()` uses the same agy-first order, and both now use the mixed agy+F0
+fixture. The mixed fixture is a **plan-authored test, not a spec AC**: an agy transcript of one
+`view_file` step `ACTIVE` then `DONE`, followed by F0's 110 lines, built by the shared F0 helper.
+
+**The mixed fixture already discriminates on today's tree** (executed at `8c631d3` with scratch
+files, then deleted): on the agy two-line transcript alone and on that transcript + F0,
+`h_mad_review_evidence.py` printed the same `EVIDENCE: PASS tools=1 ok=1 failed=0 thinking=0`
+with rc 0 both times (`cmp` → identical); `_exec_log_format` returned `agy-ndjson` for both; and
+`measure_effort()` returned the same dict (shape `parsed`, `agy_events` 2) for both. So the
+equality holds on the unmutated code and the only way to break it is to let a grok reader win on
+a log that also carries agy events. Residual: whether each force-fire *kills* is a prediction
+until Phase 5 runs the mutation — the mutants cannot exist before the grok code does.
+
+Every existing node named above collects, verified at `8c631d3` (unit: tests):
+
+```bash
+T=h-mad/tests; /opt/anaconda3/bin/python -m pytest --collect-only -q -p no:cacheprovider \
+  "$T/test_hmad_dispatch_exec.py::test_codex_exec_runs_headless_with_the_right_flags" \
+  "$T/test_hmad_dispatch_exec.py::test_agy_exec_runs_print_headless_prompt_as_last_arg" \
+  "$T/test_hmad_dispatch_exec.py::test_agy_exec_stdout_is_the_response" \
+  "$T/test_hmad_dispatch_audit_cycle.py::test_verb_two_distinct_dispatches" \
+  "$T/test_h_mad_resolved_model.py::test_codex_reads_the_resolved_model_out_of_its_session_header" \
+  "$T/test_h_mad_resolved_model.py::test_agreement_between_the_two_newest_is_answerable" \
+  "$T/test_h_mad_assemble_tdd.py::TestCli::test_a_clean_assembly_prints_pass_and_the_command_block" \
+  2>&1 | tail -1
+# reading at 8c631d3: 7 tests collected
+```
 
 ## Risks and Mitigation
 
 | Risk | Impact | Mitigation |
 |---|---|---|
 | A binary `codex`/else test in `_cmd_exec` routes grok into the agy arm | grok receives agy's argv, and the OVERSIZE refusal fires on a file-delivered prompt | Every `$agent`-branching line in `_cmd_exec` gets a grok arm or a named test (census above); AC-3.1 and AC-3.5 are the behavioural backstop |
-| The gate reads `fallback_agent` with `//` or `-r` | `false` and the string `"null"` fall through and let Claude write | Type-preserving read; AC-2.1b (8 values × 3 codex_out routes, each alone, with the JSON-`null` control) plus the plan's 8 BLOCK-CODEX cells; fail-closed on read failure |
+| The gate reads `fallback_agent` with `//` or `-r` | `false` and the string `"null"` fall through and let Claude write | Type-preserving read; AC-2.1b (8 values × 3 codex_out routes, each alone, with the JSON-`null` control, and its 8 BLOCK-CODEX cells with codex_out false); fail-closed on read failure |
 | `combine()` scores an unrouted `grok-truncated` as a count | A cannot-measure leg reads as hollow, or as delivered | Closed-world shape routing plus a shape-enumeration test; W7 force-fire |
 | Two instruments classify a grok log differently | `progress` shows one lens while the gate routes another | Shared seven-type criterion and one agreement test over both |
 | A2: grok's stream schema changes | Parsers misread; a false zero or a false verdict | `None` / `UNREADABLE` / `grok-truncated` paths keep it a cannot-judge; FR-5's residual documented; the F0 sha check makes a fixture edit visible |
@@ -424,6 +506,7 @@ symbol is a wrong-reason RED and halts.
 | `--always-approve` grants unrestricted tool execution in `<cd_dir>` | Wider than codex's `workspace-write` default | Stated in FR-10 docs; accepted by the operator's choice of `fallback_agent=grok` |
 | Stray `graft/` directory seen in the probe (finding 6) | Tree-delta output after a grok run over-counts | Tree delta reported, not trusted, for grok until a clean re-probe (spec Out-of-Scope) |
 | Switching the audit legs from `doc-auditor` to `grok` mid-document | `h_mad_audit_gate.py` emits a `legs_changed:` reason when two cycles' leg sets differ (`grep -n legs_changed h-mad/scripts/h_mad_audit_gate.py`); its effect on a doc switching to `grok` was read, not executed | Phase 4 executes the case and the teammate-leg section documents the observed outcome |
+| `exec grok` ships verified only against the stub, whose envelope is the author's model of F0 | The wrapper meets the real CLI for the first time in an operator's run | One bounded live smoke of `exec grok` before merge (Convention Prerequisites); a disagreement with F0 fixes the parsers against the observed envelope; a smoke that cannot run halts Phase 5 for the operator |
 | No `jq` on PATH | The hook exits 0 before the block (existing fail-open); `exec grok` cannot parse | Hook behaviour unchanged by design and documented; `exec grok` takes the EMPTY path, never a false success (spec NFR) |
 | The feature edits the live skill | A run in flight reads a half-built skill | Feature branch in a git worktree; both coupled suites before merge |
 | A pre-existing test is deleted or edited while the count floor stays green | FR-11's guarantee silently false | Node-id floor (Success Criteria), and `git diff --numstat <base>` over pre-existing test files shows zero deleted lines |
@@ -436,8 +519,33 @@ symbol is a wrong-reason RED and halts.
 - Codex authors Phase 5 under the TDD gate, RED before GREEN per module. If codex is out during
   this feature's own Phase 5, the fallback is today's `codex_status=exhausted` path — the
   feature's own `fallback_agent` does not exist on the live skill until merge (Architecture).
-- No task and no AC makes a live xAI call (D4). The grok CLI is never on the test `PATH`; only
-  the stub is.
+- **No AC and no pytest test makes a live xAI call** (spec: "No AC in this spec may require a
+  live xAI call"); the grok CLI is never on the test `PATH`, only the stub is. **Exactly one live
+  call is planned: a plumbing smoke of the new verb, not a quality measurement (D4 stays
+  deferred).** `h-mad/invariants.base.md` requires "A wrapper verb over an **external runtime's
+  CLI** MUST be exercised **live against that runtime**", and the only live grok run so far (F0)
+  went through `hmad-dispatch run`, not `exec grok`. So, in Phase 5, **after** the tasks that
+  ship FR-3 and FR-4 are GREEN and **before** merge, the orchestrator runs once from the feature
+  worktree, in a scratch directory holding an `a.txt`, with F0's own prompt
+  (`docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.prompt.txt`, about
+  $0.04 at F0's measured `total_cost_usd=0.0393`):
+
+  ```bash
+  hmad-dispatch exec grok <F0 prompt file> --cd <scratch dir> --timeout 300 \
+    --out <scratch>/smoke.out --log <scratch>/smoke.log; echo "rc=$?"
+  grep -c '^STATUS: DONE' <scratch>/smoke.out      # a line-start STATUS: DONE (unit: lines)
+  hmad-dispatch progress <scratch>/smoke.log       # must print format: grok-ndjson
+  hmad-dispatch resolved-model grok --log <scratch>/smoke.log   # one RESOLVED-MODEL line, rc 0
+  ```
+
+  The record — the command, the rc, the `--out` content, the `progress` output and the
+  `resolved-model` output — goes into the Phase-5 report and the feature's probe directory.
+  Pass: rc 0, `--out` holds a line-start `STATUS: DONE`, `progress` names `grok-ndjson`, and
+  `resolved-model` prints one validated line. Any other result is a halt: if the live envelope
+  disagrees with F0, the parsers are fixed against the observed envelope (the invariant's second
+  clause) and the smoke re-runs. **If the smoke cannot run** — no key, no quota, no grok on
+  PATH — Phase 5 halts and asks the operator; a skipped smoke never passes silently, and merge
+  does not proceed on "not run".
 - Every guard mutation-verified with `h_mad_mutation_harness.py`; score on its `MUTATION:` token,
   never on `$?`. `SURVIVED` / `REFUSED` halts.
 - Every wire in §"Connection enforcement" declared `wiring`-shaped with `WIRE` / `WIRE-PIN`, so the
@@ -462,10 +570,13 @@ symbol is a wrong-reason RED and halts.
   cancel in a count.
 - Pre-existing test files are append-only: `git diff --numstat <base> -- <each pre-existing test
   file touched>` shows `0` in the deleted column.
-- AC-2.1b (counted in the 54 above) and, beyond it, the plan's 8 BLOCK-CODEX cells: each of the
-  8 AC-2.1b values alone with codex_out false yields BLOCK-CODEX.
-- The two-instrument agreement test passes on F0, F-SPACED, F-TRUNC, an agy log and a codex
-  banner log.
+- AC-2.1b (counted in the 54 above) in full, including its own 8 BLOCK-CODEX cells: each of the
+  8 values alone with codex_out false yields BLOCK-CODEX.
+- The two-instrument agreement test passes on F0, F-SPACED, F-TRUNC, an agy log, a codex
+  banner log and the mixed agy+F0 log (§"Connection enforcement"), on which both instruments
+  must pick agy.
+- The Phase-5 live wrapper smoke (Convention Prerequisites) ran and its record is complete; a
+  skipped smoke is a halt, not a pass.
 - The shape-enumeration test asserts an explicit `combine()` route for every shape
   `measure_effort()` returns.
 - Mutation verification `ALL_CAUGHT` for: the three AC-2.7 gate rows; and, as further rows, the
@@ -484,7 +595,8 @@ symbol is a wrong-reason RED and halts.
 ## Out-of-Scope (confirmed from spec)
 
 - Live measurement (D4): grok GREEN, mutation-kill, wiring-pin and audit-leg precision, cost,
-  quota and latency — a separate follow-up feature.
+  quota and latency — a separate follow-up feature. The single Phase-5 plumbing smoke of `exec
+  grok` (Convention Prerequisites) is in scope and measures none of these.
 - The grok pane path: `send`, `ask`, `launch`, `exec-pane`, `pin`, `verify`, `resolve` (AC-3.7).
 - A grok 6a-prime reviewer; `h_mad_archreview_cycle.py` stays agy-only.
 - A failed-tool-status branch; `unresolved` stands in until a failure spelling is captured.
@@ -498,7 +610,7 @@ symbol is a wrong-reason RED and halts.
 
 ## Next Steps
 
-Operator reviews and approves v1.1 → Phase 3 audit cycle on the live skill's surfaces (grok is
+Operator reviews and approves v1.2 → Phase 3 audit cycle on the live skill's surfaces (grok is
 not a surface until this feature merges; if codex is out, the teammate leg per `h-mad/SKILL.md`
 §"Teammate audit leg — when codex is unavailable" applies) → gate until must-fix = 0 → Phase 4 design.
 Of v1.0's owed items, the sidecar commands and the P13 write-gate disclosure are closed by spec
@@ -508,3 +620,4 @@ orchestrator-approved superset of FR-10.
 ## Version History
 - v1.0: Initial plan draft (2026-09-28), from spec v1.0 at 1680271. Premises P1-P13 and the suite baseline executed at 1680271; adds the closed-world combine() routing rule, the type-preserving fallback_agent read with an invalid-class supplement, the _cmd_exec agent-arm census, the node-id suite floor, and the W1-W11 wiring table.
 - v1.1: Revised to spec v1.1 at 42511c3 (2026-09-28). The invalid-class supplement folds into the spec AC-2.1b (8 values x 3 codex_out routes = 24 BLOCK-INVALID cells, JSON-null FALL-THROUGH control); the plan keeps 8 BLOCK-CODEX cells beyond it. P1 records that the sidecar carries the re-derivation commands since 7d2f780, except the null-status and line-prefix counts the spec writes inline. P11 and P13 cite the now spec-mandated GROK_SANDBOX disclosure and write-gate Out-of-Scope entry, the latter mitigated also by the 5e revert test. FR-8 sentinel is presence-judged (AC-8.2 explicit 900). AC census re-derived with a suffix-aware grammar: 54 distinct ids (the v1.0 grammar hid AC-2.1b).
+- v1.2: Answers plan audit cycle 1 at 8c631d3 (2026-09-28). One bounded live plumbing smoke of exec grok added as a Phase-5 pre-merge step (not an AC, not a D4 measurement; a smoke that cannot run halts for the operator). Wiring table: force-fire named for W1, W3, W8, W10 and W11 against existing test nodes (collection verified); W6 and W7 precedence mutations killed by a new mixed agy+F0 fixture, executed as equal on the unmutated tree; W5 confirmed to discriminate via AC-5.1. The 8 BLOCK-CODEX cells are reworded as part of AC-2.1b, not a plan addition. P8, P10 and P13 carry their commands; the P11 rc-2 claim executed under a network-denied sandbox. Interpreter pinned to /opt/anaconda3/bin/python -m pytest.
