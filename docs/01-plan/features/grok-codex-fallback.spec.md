@@ -65,7 +65,11 @@ exists to drift from the real one.
   `jq -c 'select(.type!="tool_call" and .type!="tool_call_update" and .type!="text")' <F0>`.
 - **F-DECOY**: F0 with its final text segment (`STATUS: DONE`) replaced by `All done.` and three
   decoys inserted, none of which may be recovered as a verdict:
-  - a `thought` event whose `data` is `STATUS: DONE`;
+  - a `thought` event whose `data` is `STATUS: DONE`, placed **inside the final text segment**:
+    the replacement segment is split into two `text` deltas (`All ` and `done.`) and the `thought`
+    sits between them. A `thought` is not a segment closer (FR-4), so the segment stays
+    `All done.`, and a mutant that appends `thought` data yields `All STATUS: DONEdone.`, which
+    AC-4.3 observes;
   - a `tool_call` whose `rawInput` contains the string `STATUS: DONE`;
   - a bare non-JSON line `STATUS: DONE`.
 - **F-BEAT**: F0 with a `#hmad-beat` wrapper heartbeat line and a blank line inserted between
@@ -310,9 +314,13 @@ exists to drift from the real one.
   - Only `text` deltas ever form a message. `thought` data, tool `rawInput`/`rawOutput`, and
     non-JSON lines never do.
   - On the EMPTY path, stderr also names the last step reached:
-    `N tool calls completed; last tool: <toolName> <status>`. N counts distinct `toolCallId`s.
-    This mirrors agy's #77b line, and the stderr line is omitted when the region holds no
-    `tool_call`.
+    `N tool calls completed; last tool: <toolName> <status>`. This mirrors agy's #77b line, and
+    the stderr line is omitted when the region holds no `tool_call`.
+    - **N** is the number of distinct `toolCallId`s that have a `tool_call_update` whose
+      `status == "completed"`, counted over the **whole region**. It is the same number as
+      `scan_grok`'s `ok` (FR-6) on the same lines, and the two must be derived by one rule, not
+      two. A `toolCallId` that appears only in a `tool_call`, or whose updates are all `null` or
+      another status, does not count.
   - When `--log` was not given, a successful run's auto-log is dumped to stderr as the FR-5 digest,
     never raw, and then removed. This matches the agy path.
 - **Acceptance Criteria**:
@@ -339,6 +347,17 @@ exists to drift from the real one.
     line is omitted when the region holds no `tool_call`": a mutant that emits the line
     unconditionally passes AC-4.6 and fails here. AC-4.6 is its positive pair, because an absence
     assertion alone passes vacuously when the line is never emitted at all.
+  - AC-4.10 (**N counts completed, not seen**): F-NOTOOLS with every `text` event removed (its
+    `end` survives, so the region is complete and takes the EMPTY path), stub rc 0: rc is 3 and
+    stderr contains `0 tool calls completed; last tool: search_replace pending`. The region holds
+    2 distinct `toolCallId`s and none completed, so a mutant counting every id prints `2` and
+    fails here. The last tool is the `search_replace` `tool_call`, because every
+    `tool_call_update` status is `null`. One reading on F0 at the sha256 stated under Fixtures:
+    89 lines, 0 completed ids, last non-null-status tool event `search_replace pending`, 1 `end`,
+    derived with
+    `jq -c 'if .type=="tool_call_update" then .status=null else . end | select(.type!="text")' <F0>`
+    and, on that output,
+    `jq -s '[.[]|select(.type=="tool_call_update" and .status=="completed")|.toolCallId]|unique|length'`.
 
 ### FR-5: `hmad-dispatch progress` learns `grok-ndjson`
 
@@ -347,9 +366,28 @@ exists to drift from the real one.
   - `grok-ndjson` is chosen when any line matches, whitespace-tolerantly, a JSON object whose
     `"type"` value is one of the seven types observed in F0: `thought`, `text`,
     `available_commands`, `tool_call`, `tool_call_update`, `usage`, `end`.
-  - **Precedence:** `agy-ndjson` first, then `grok-ndjson`, then `codex-text`. A log carrying agy
-    events therefore renders exactly as today.
-  - **Residual:** a grok stream carrying only unobserved `type` values classifies as `codex-text`.
+    - The match is **independent of key order**: `{"meta":1,"type":"text","data":"x"}` is a grok
+      line exactly as `{"type":"text","data":"x"}` is. The shell detector and the Python
+      detector (`scan_grok`'s non-`None` test, FR-6) must return the same answer on every line,
+      whatever the key order and whatever the whitespace. How the shell side achieves that is the
+      design's choice.
+  - **Precedence:** `agy-ndjson` first, then the **codex banner**, then `grok-ndjson`, then
+    `codex-text` by default.
+    - The codex banner is `^OpenAI Codex v` (the existing `_CODEX_BANNER` in
+      `h-mad/scripts/h_mad_audit_cycle.py`) found within the log's head window: `text[:4096]` as
+      `measure_effort` reads it today. The shell equivalent reads the first 4096 bytes. The two
+      windows differ only when the head holds multi-byte characters, and the banner is ASCII at
+      line 1 of a codex transcript.
+    - A log carrying agy events therefore renders exactly as today. A codex transcript whose tool
+      output echoes grok-typed JSON lines at column 0 stays `codex-text`.
+    - This precedence is shared by all three classifiers: this one, the
+      `h_mad_review_evidence.py` CLI (FR-6) and `measure_effort` (FR-7).
+  - **Residuals:**
+    - A grok stream carrying only unobserved `type` values classifies as `codex-text`.
+    - A caller-supplied `--log` that holds a prior codex dispatch followed by a grok dispatch
+      carries the banner in its head, so it reads as `codex-text` in all three classifiers. That
+      log is **skipped** as codex-text is today; it is never falsely gated. FR-4's final-message
+      derivation reads the dispatch's own region and does not consult this classifier.
 
   `_render_progress` renders `grok-ndjson` one line per event, with these exceptions:
   - a `tool_call` renders `tool <toolName> <status>` plus an `rawInput` digest of at most 70
@@ -367,12 +405,32 @@ exists to drift from the real one.
 - **Acceptance Criteria**:
   - AC-5.1: `progress` on F0 prints `format: grok-ndjson`, and F-SPACED does too. A log holding one
     agy `{"event":"init"}` line and F0 prints `format: agy-ndjson`.
-  - AC-5.2: `progress --lines 400` on F0 prints exactly these lines, and no line containing a
-    single `thought` or `text` delta's text alone:
+  - AC-5.2: `progress --lines 400` on F0 prints **exactly** these per-class counts for the
+    listed classes:
     - 2 lines matching `tool read_file|tool search_replace` with status `pending`;
     - 2 lines with status `completed`;
     - 1 `END stopReason=end_turn turns=3` line;
     - 3 `turn usage` lines.
+
+    "Exactly" binds the listed classes only. Beside them, the output MAY carry the collapsed
+    `thought` and `text` run lines (at most one per maximal run), plus the unchanged header. No
+    output line carries delta text. Because F0's deltas are tokens (36 of its 91 `thought`/`text`
+    events have a `data` of 1 to 3 characters, counted with
+    `jq -r 'select(.type=="thought" or .type=="text")|.data|length' <F0> | awk '$1<=3' | wc -l`),
+    a per-delta substring test cannot be written, so "no delta text" is tested as two
+    assertions:
+    - no output line, stripped of surrounding whitespace, equals any single `thought` or `text`
+      event's `data` stripped the same way, over every event whose stripped `data` is non-empty;
+    - neither F0 text segment (``I'll read `a.txt`, then create `b.txt` with the word "probe".``
+      and `STATUS: DONE`, FR-4) occurs anywhere in the output.
+
+    The test asserts the four counts with equality and these two absences. It does not assert a
+    total line count. **Residual:** a collapsed run line that echoes a fragment of a `thought` run
+    shorter than a whole segment and not equal to one delta is not caught.
+  - AC-5.2b (**key order**): A log whose single line is `{"meta":1,"type":"text","data":"x"}` gives
+    `format: grok-ndjson` from `progress`, and `scan_grok` returns non-`None` on the same text.
+    A log whose single line is `{"meta":1,"type":"bogus","data":"x"}` gives `format: codex-text`,
+    and `scan_grok` returns `None`. The shell and Python detectors agree on both lines.
   - AC-5.3: The `progress` test suite's existing agy and codex rendering tests pass unchanged.
 
 ### FR-6: Tool-call evidence for grok in `h_mad_review_evidence.py`
@@ -394,8 +452,12 @@ exists to drift from the real one.
   - `complete`: whether at least one `end` event is present.
   - `stop_reason`: the last `end.stopReason`, or `None`.
 
-  The CLI's order is: agy events present → today's path, byte-identical. Otherwise `scan_grok` is
-  consulted:
+  - `ok` is the same number as FR-4's `N tool calls completed` on the same lines, derived by one
+    rule (FR-4).
+
+  The CLI's order follows FR-5's precedence. Agy events present → today's path, byte-identical.
+  Otherwise, the codex banner in the head window (FR-5) → today's codex-text path, byte-identical,
+  and `scan_grok` is not consulted. Otherwise `scan_grok` is consulted:
   - **complete** → `EVIDENCE: <PASS|NONE> tools=N ok=K unresolved=U thinking=T format=grok` with
     ` stop_reason=<v>` appended when present. PASS iff `ok >= 1`, the same rule as agy. Exit 0.
   - **not complete** → `EVIDENCE: UNREADABLE reason=truncated_no_end`, exit 2, and **no counts**.
@@ -426,10 +488,11 @@ exists to drift from the real one.
   - `h_mad_audit_cycle.py` gains a log **shape** `grok`, with the same shape precedence as FR-5.
     The effort reader computes this order:
     - agy events → `parsed`, as today;
+    - else the codex banner in the head window (`_CODEX_BANNER` over `text[:4096]`, the check
+      `measure_effort` makes today) → `codex-text`, as today;
     - else, when `scan_grok` returns non-`None` and `complete` → shape `grok`, with `ok`/`tools`
       from `scan_grok`;
     - else, when `scan_grok` is non-`None` but not complete → shape `grok-truncated`;
-    - else the codex banner → `codex-text`, as today;
     - else `unparseable`, as today.
   - The shapes are then scored as follows:
     - `grok` is scored against `DELIVERY_FLOOR` exactly as `parsed` is. That makes a grok leg
@@ -565,13 +628,25 @@ exists to drift from the real one.
   - AC-11.2: The existing exec tests pass unchanged. These are `test_hmad_dispatch_exec.py`,
     `test_hmad_dispatch_exec_completion.py`, `test_hmad_dispatch_exec_stamp.py` and
     `test_hmad_dispatch_progress.py`. It is the full-suite run that proves this, not a scoped one.
+  - AC-11.3 (**codex banner wins**): A log whose first line is a codex banner line beginning
+    `OpenAI Codex v`, followed by every line of F0 (so it carries grok-typed lines at column 0,
+    including `end`), keeps its codex classification on all three surfaces:
+    - `progress` prints `format: codex-text`;
+    - the `h_mad_review_evidence.py` CLI prints what today's codex-text path prints for the same
+      bytes, and no line containing `format=grok`;
+    - `measure_effort` reports shape `codex-text`, never `grok` or `grok-truncated`.
 
 ## Non-Functional Requirements
 
 - **Performance**:
   - No new polling process is added; grok rides `_exec_run`'s existing heartbeat.
-  - The FR-4 and FR-5 parsers read only the dispatch's region, tail-bounded as the agy readers
-    are.
+  - The FR-4 parsers (final message, stop reason, and the `N tool calls completed` line) are
+    **region-bounded**, exactly as `_agy_ndjson_response` is: each reads from the dispatch's
+    `pre_lines` offset to EOF, with no tail cap. N is counted over the whole region (FR-4).
+    **Residual:** a very long single dispatch costs O(region) per parse, and nothing bounds it.
+  - FR-5's `progress` rendering is a polling lens, not a dispatch-scoped reader, and takes no
+    `pre_lines`. It is bounded as the agy `progress` lens is today, by the last 400 lines of the
+    log.
   - Grok latency is unmeasured beyond the one 543 s trial, which is why the assembler default is
     1500 s (FR-8).
 - **Security**:
@@ -650,3 +725,4 @@ exists to drift from the real one.
 - v1.0: Initial specification draft (2026-09-28). The brainstorm's decisions D1–D4 are applied, and so are the orchestrator's decisions on OQ1–OQ5. OQ3's final-message wording is corrected by measurement against F0 (Assumption A1).
 - v1.1: Plan-v1.0 owed items, operator-decided (2026-09-28). F0 bullet names the sidecar's Re-derivation commands section and carries the two commands it lacks. AC-2.1b exercises the BLOCK-INVALID class one value at a time (false, true, 0, "null", "", "Grok", {}, []) with a JSON-null FALL-THROUGH control. FR-3 and FR-10 disclose the inherited GROK_SANDBOX. Out-of-Scope adds the missing grok write-time test-first gate, disclosed by FR-10. FR-8 defines not-given as absent from argv, with AC-8.2 pinning an explicit 900.
 - v1.2: Plan audit round 2 owed items (2026-09-28): plan.audit.v2.p1 codex must 3 and plan.delta-review.v1.2 must 2 / should 2. New fixture F-NOTOOLTEXT (F0 minus every tool_call, tool_call_update and text event; end survives, 83 lines) and new AC-4.9 pinning the FR-4 omission clause (EMPTY path, no tool calls completed line), with AC-4.6 as its positive pair. FR-10 D4 statement reworded to a QUALITY claim so the plan v1.2 live exec grok plumbing smoke does not falsify it (orchestrator decision); the AC-10.1 needle unmeasured is unchanged.
+- v1.3: Design audit cycle 1 owed items, orchestrator-decided (2026-09-28). NFR: the FR-4 parsers are region-bounded like _agy_ndjson_response (pre_lines to EOF, no tail cap, residual O(region)); progress stays bounded like the agy lens. FR-5/FR-6/FR-7: the head-window codex banner takes precedence over grok detection in all three classifiers, with the prior-codex-then-grok --log residual (skipped, never falsely gated) and new AC-11.3. FR-5: grok detection is key-order independent and the shell and Python detectors agree (new AC-5.2b). FR-4: N is distinct toolCallIds with a completed update over the whole region, single-sourced with scan_grok ok (new AC-4.10 on F-NOTOOLS minus text). AC-5.2 exactness binds the listed classes; collapsed run lines may appear without delta text. F-DECOY pins the thought decoy inside the final text segment. AC census 55 to 58 distinct IDs.
