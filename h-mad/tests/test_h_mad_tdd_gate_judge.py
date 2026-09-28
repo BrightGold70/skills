@@ -83,7 +83,7 @@ def _assert(result, expected: str, kind: str = "", hook: Path = HOOK):
 
 
 def _tree_b(tmp_path: Path, *, judge_line: str = "TDD-JUDGE: DENY kind=judge-error reason=stub",
-            judge_rc: int = 0, state_line: str = "TDD-STATE: active codex-escape=yes blocker=0 records=1 record=feat,exhausted,/x/docs/.bkit-memory.json,absent",
+            judge_rc: int = 0, state_line: str = "TDD-STATE: active codex-escape=yes blocker=0 records=1 fallback=none record=feat,exhausted,/x/docs/.bkit-memory.json,absent",
             state_rc: int = 0, marker: bool = False) -> tuple[Path, Path]:
     tree = tmp_path / "B"
     hook = tree / "h-mad/hooks/h-mad-tdd-gate.sh"
