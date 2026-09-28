@@ -1,0 +1,221 @@
+"""Executable and section-scoped contracts for host runtime adapters."""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+import host_parity
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ADAPTERS = {
+    f"{skill}-{host}": REPO_ROOT / skill / "references" / f"{host}-runtime.md"
+    for skill in ("h-mad", "handoff")
+    for host in ("codex", "agy", "grok")
+}
+sys.path.insert(0, str(REPO_ROOT / "h-mad" / "scripts"))
+from h_mad_doc_block_exec import AmbiguousHeading, _fence_events, fence_aware_end, find_heading  # noqa: E402
+
+
+SID_READ = '"$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"'
+ADAPTER_ID = "h-mad-codex"
+
+
+def _section(text: str, heading: str) -> str:
+    try:
+        found = find_heading(text, heading)
+    except AmbiguousHeading:
+        raise LookupError(f"heading doubled: {heading}")  # M:L2
+    if found is None:
+        raise LookupError(f"heading absent: {heading}")  # M:L1
+    start, level = found
+    return text[start:fence_aware_end(text, start, level)]
+
+
+def _fenced_lines(section: str) -> list[str]:
+    return [section[e.start:e.end].rstrip("\r\n") for e in _fence_events(section) if e.kind == "body"]
+
+
+def _row(adapter_id: str, construct_id: str) -> host_parity.Row:
+    text = ADAPTERS[adapter_id].read_text(encoding="utf-8")
+    _section(text, "## Construct mapping")
+    table = host_parity.adapter_table(text)
+    assert table.problems == [], f"{adapter_id} Construct mapping problems: {table.problems}"
+    rows = [row for row in table.rows if row.id == construct_id]
+    assert len(rows) == 1, f"{adapter_id} Construct mapping needs exactly one {construct_id} row"
+    return rows[0]
+
+
+def _claims() -> str:
+    return _section(ADAPTERS[ADAPTER_ID].read_text(encoding="utf-8"), "## Context budget and claims")
+
+
+@pytest.mark.parametrize(
+    "property_name,expected",
+    [
+        ("status", "not-applicable"),
+        ("hmad-dispatch-exec", "hmad-dispatch exec"),
+        ("spawn-agent", "collaboration.spawn_agent"),
+        ("fork-turns", "fork_turns"),
+    ],
+    ids=["h-mad-codex-status", "h-mad-codex-hmad-dispatch-exec", "h-mad-codex-spawn-agent", "h-mad-codex-fork-turns"],
+)
+def test_advisor_row(property_name: str, expected: str) -> None:
+    row = _row(ADAPTER_ID, "advisor")
+    if property_name == "status":
+        assert row.status == expected, "advisor must be not-applicable on Codex"
+    else:
+        assert expected in row.mapping, f"advisor mapping must contain {expected}"
+
+
+@pytest.mark.parametrize("token", ["uuid.uuid4()", "owned_elsewhere"], ids=["h-mad-codex-uuid4", "h-mad-codex-owned-elsewhere"])
+def test_session_id_env_row(token: str) -> None:
+    assert token in _row(ADAPTER_ID, "session-id-env").mapping, f"session-id-env mapping must contain {token}"
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "create-claim", "claim", "beat", "set", "release", "oracle", "mint",
+        "oracle-first", "no-dollar-sid", "prose-once-at-bootstrap", "prose-never-deleted",
+    ],
+    ids=lambda case: f"{ADAPTER_ID}-{case}",
+)
+def test_claims_section_fenced_lines(case: str) -> None:
+    section = _claims()
+    lines = _fenced_lines(section)
+    state_lines = [line for line in lines if "h_mad_state_write.py" in line]
+    oracle_lines = [line for line in lines if "h_mad_resume_decision.py" in line]
+    conditions = {
+        "create-claim": lambda line: "--create --claim " + SID_READ in line,
+        "claim": lambda line: "--claim " + SID_READ in line and "--create" not in line,
+        "beat": lambda line: "--beat" in line and "--session-id " + SID_READ in line,
+        "set": lambda line: "--set" in line and "--session-id " + SID_READ in line,
+        "release": lambda line: "--release" in line and "--session-id " + SID_READ in line,
+        "oracle": lambda line: "h_mad_resume_decision.py" in line and "--session-id " + SID_READ in line,
+        "mint": lambda line: all(token in line for token in ("set -C", "uuid.uuid4()", "h-mad-session-id.<feature>", "SID: NOT_MINTED")),
+    }
+    if case in conditions:
+        assert any(conditions[case](line) for line in lines), f"{case} needs its own fenced command with full session-id read"
+    elif case == "oracle-first":
+        assert oracle_lines and state_lines, "oracle-first requires oracle and state-write commands"
+        assert lines.index(oracle_lines[0]) < min(lines.index(line) for line in state_lines), "resume oracle must precede every state write"
+    elif case == "no-dollar-sid":
+        assert not any("$SID" in line for line in lines), "fenced commands must not rely on $SID across invocations"
+        assert any(SID_READ in line for line in lines), "fenced commands must read the session id from its file"
+    elif case == "prose-once-at-bootstrap":
+        assert "once at bootstrap" in section, "mint procedure must say once at bootstrap"
+    else:
+        assert "never deleted or reused without the operator" in section, "session id file must require operator action before deletion or reuse"
+
+
+@pytest.mark.parametrize("adapter_id", [ADAPTER_ID])
+def test_claims_lines_execute_across_invocations(adapter_id: str, tmp_path: Path, hermetic_env) -> None:
+    lines = _fenced_lines(_section(ADAPTERS[adapter_id].read_text(encoding="utf-8"), "## Context budget and claims"))
+    mint = next((line for line in lines if "SID: MINTED" in line and "SID: NOT_MINTED" in line), None)
+    create = next((line for line in lines if "--create --claim " + SID_READ in line), None)
+    oracle = next((line for line in lines if "h_mad_resume_decision.py" in line and "--session-id " + SID_READ in line), None)
+    assert mint and create and oracle, "mint, create-claim and resume-oracle fenced lines are required"
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", str(repo)], capture_output=True, text=True, check=True, timeout=60.0)
+    (repo / "docs").mkdir()
+    state_path = repo / "docs" / ".bkit-memory.json"
+    state_path.write_text("{}", encoding="utf-8")
+    empty_home = tmp_path / "home"
+    empty_home.mkdir()
+    env = hermetic_env(HMAD_SKILL_ROOT=str(REPO_ROOT / "h-mad"), HOME=str(empty_home))
+
+    def run(line: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", "-c", line.replace("<feature>", "fixture-feature")],
+            cwd=repo, env=env, capture_output=True, text=True, timeout=60.0,
+        )
+
+    first = run(mint)
+    assert first.returncode == 0 and "SID: MINTED" in first.stdout, f"mint must succeed: {first.stdout} {first.stderr}"
+    sid_file = repo / ".git" / "h-mad-session-id.fixture-feature"
+    original = sid_file.read_bytes()
+    second = run(mint)
+    assert second.returncode == 0 and "SID: NOT_MINTED" in second.stdout, f"second mint must refuse overwrite: {second.stdout} {second.stderr}"
+    assert sid_file.read_bytes() == original, "second mint must preserve original session id bytes"
+
+    claimed = run(create)
+    assert claimed.returncode == 0, f"create-claim must run with the minted id: {claimed.stdout} {claimed.stderr}"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["orchestrator_state"]["fixture-feature"]["owner_session_id"] == original.decode().strip(), "create-claim must use the file's session id"
+
+    decision = run(oracle)
+    assert decision.returncode == 0, f"resume oracle must run with the minted id: {decision.stdout} {decision.stderr}"
+    assert "cannot_judge" not in decision.stdout and "owned_elsewhere" not in decision.stdout, "owner's resume oracle must not reject its own claim"
+    control = run(oracle.replace(SID_READ, '""'))
+    assert "cannot_judge" in control.stdout, "oracle without the file's session id must report cannot_judge"
+
+
+@pytest.mark.parametrize("adapter_id", [ADAPTER_ID])
+def test_not_applicable_rows_state_a_reason(adapter_id: str) -> None:
+    _section(ADAPTERS[adapter_id].read_text(encoding="utf-8"), "## Construct mapping")
+    table = host_parity.adapter_table(ADAPTERS[adapter_id].read_text(encoding="utf-8"))
+    assert table.problems == [], f"Construct mapping table must parse: {table.problems}"
+    rows = [row for row in table.rows if row.status == "not-applicable"]
+    assert rows, "Construct mapping must include at least one not-applicable row"
+    for row in rows:
+        mapping = re.sub(r"`[^`]*`", " ", row.mapping).strip()
+        assert len(re.findall(r"[A-Za-z]{2,}", mapping)) >= 3, f"{row.id} not-applicable mapping needs a reason of at least three words"
+        assert re.fullmatch(r"(?i)(?:n/?a|not[- ]applicable|none)\.?", mapping) is None, f"{row.id} needs more than a status word"
+        assert row.mapping != row.source, f"{row.id} reason must differ from source"
+
+
+@pytest.mark.parametrize(
+    "token", ["CTXBUDGET: UNKNOWN reason=host_unsupported", "80%", "substitute: none"],
+    ids=["h-mad-codex-unknown", "h-mad-codex-80pct", "h-mad-codex-substitute-none"],
+)
+def test_context_budget_section(token: str) -> None:
+    assert token in _claims(), f"Context budget and claims must state {token}"
+
+
+@pytest.mark.parametrize("adapter_id", [ADAPTER_ID])
+def test_budget_line_runs_and_reports_host(adapter_id: str, tmp_path: Path, hermetic_env) -> None:
+    section = _section(ADAPTERS[adapter_id].read_text(encoding="utf-8"), "## Context budget and claims")
+    pattern = re.compile(r'^HMAD_HOST=codex python3 "\$HMAD_SKILL_ROOT/scripts/h_mad_context_budget\.py"$')
+    lines = [line for line in _fenced_lines(section) if pattern.fullmatch(line)]
+    assert len(lines) == 1, "Context budget and claims needs exactly one fenced Codex budget command"
+    empty_home = tmp_path / "home"
+    empty_home.mkdir()
+    result = subprocess.run(
+        ["bash", "-c", lines[0]],
+        env=hermetic_env(HMAD_SKILL_ROOT=str(REPO_ROOT / "h-mad"), HOME=str(empty_home)),
+        capture_output=True, text=True, timeout=60.0,
+    )
+    assert result.returncode == 0, f"Codex budget command must run: {result.stderr}"
+    assert result.stdout.strip() == "CTXBUDGET: UNKNOWN reason=host_unsupported host=codex", "Codex budget must report unsupported host"
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["agents-h-mad", "agents-handoff", "ln-s", "never-overwritten", "codex-hooks-json", "does-not-re-arm"],
+    ids=lambda case: f"{ADAPTER_ID}-{case}",
+)
+def test_install_section(case: str) -> None:
+    section = _section(ADAPTERS[ADAPTER_ID].read_text(encoding="utf-8"), "## Install")
+    lines = _fenced_lines(section)
+    if case == "agents-h-mad":
+        assert "ln -s /path/to/checkout/h-mad ~/.agents/skills/h-mad" in lines, "Install must fence the h-mad symlink command"
+    elif case == "agents-handoff":
+        assert "ln -s /path/to/checkout/handoff ~/.agents/skills/handoff" in lines, "Install must fence the handoff symlink command"
+    elif case == "ln-s":
+        assert sum(line.startswith("ln -s ") for line in lines) == 2, "Install must provide both ln -s commands"
+    elif case == "never-overwritten":
+        assert "an existing non-symlink at either path is an operator decision and is never overwritten" in section, "Install must protect existing non-symlinks"
+    elif case == "codex-hooks-json":
+        assert ".codex/hooks.json" in section and '{"hooks": {}}' in section, "Install must describe the tracked empty Codex hooks file"
+    else:
+        assert "does not re-arm" in section, "Install must explain that linking does not re-arm the Codex TDD gate"
+        assert 'python3 "$HMAD_SKILL_ROOT/scripts/h_mad_install_check.py" --agents-skills-dir ~/.agents/skills' in section, "Install must include the host-specific checker"
