@@ -271,7 +271,8 @@ def test_fast_path_defers(tmp_path, variant):
     elif variant == "missing-parent":
         (docs / ".bkit-memory.json").unlink()
         write_state(root / "hematology-paper-writer", {HOSTILE_KEY: {"phase": "step5", "codex_status": "exhausted"}})
-        _file(root, TEST, "def test_green():\n    assert True\n")
+        # impl-plan Task 8 item 17: the GREEN test is tests/test_x.py, the name the judge derives for newdir/x.py.
+        _file(root, "hematology-paper-writer/tests/test_x.py", "def test_green():\n    assert True\n")
         target = root / "hematology-paper-writer/newdir/x.py"
     else:
         (docs / ".bkit-memory.json").unlink()
