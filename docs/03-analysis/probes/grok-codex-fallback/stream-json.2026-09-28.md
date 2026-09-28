@@ -37,3 +37,17 @@ Every line is a flat JSON object. Its `type` is one of the following (count in t
 4. **A completion signal exists:** a single `end` event with `stopReason`. A stream without `end` is a truncated run.
 5. `--sandbox <PROFILE>` lists no possible values in `--help`. `--permission-mode` takes `default, acceptEdits, auto, dontAsk, bypassPermissions, plan`. The trial used `--always-approve`, and no sandbox profile was probed.
 6. A stray `graft/` directory appeared in the workspace. The cause is unverified: it may be a graft hook inherited through the environment, not grok itself. Before trusting tree-delta reporting for grok, re-check it with a clean environment.
+
+## Re-derivation commands
+
+Added 2026-09-28 after the plan-author found that the spec cites this sidecar for these commands, but the sidecar did not contain them. The expected readings are: 110 lines; 83,256 bytes; sha256 `72f6258734f184ae999f84273b5abe3711202a1a8f43f392143173c8364fe569`; 2 distinct completed `toolCallId`s; reasoning sum 121; last `text` at event index 106 and last `usage` at 108.
+
+```bash
+F=docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.ndjson
+wc -l < "$F"; wc -c < "$F"; shasum -a 256 "$F"
+jq -r .type "$F" | sort | uniq -c
+jq -r 'select(.type=="tool_call_update" and .status=="completed")|.toolCallId' "$F" | sort -u | wc -l
+jq -s '[.[]|select(.type=="usage")|.usage.reasoning_tokens]|add' "$F"
+jq -c 'select(.type=="end")|[.stopReason,(.modelUsage|keys),.num_turns]' "$F"
+jq -s -c 'to_entries|[(map(select(.value.type=="text"))|last.key),(map(select(.value.type=="usage"))|last.key)]' "$F"
+```
