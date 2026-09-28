@@ -13,3 +13,6 @@
 {"phase": "design", "cycle": 1, "leg": "codex", "item": "FR-4 tail-bound unmet; agy reader not tail-bounded (spec false premise)", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
 {"phase": "design", "cycle": 1, "leg": "teammate", "item": "stubs capture no CLAUDE* vars; AC-3.4/W2 unobservable", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
 {"phase": "design", "cycle": 1, "leg": "teammate", "item": "codex transcript echoing grok JSON reclassified grok", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "shell/python detector disagree on 5000-deep nesting (RecursionError)", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "grok CLI vs no-new-CLI invariant", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "F0 fixture outside h-mad/; suite not skill-self-contained", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}

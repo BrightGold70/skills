@@ -39,6 +39,13 @@
   agent dispatch substrate (cmux or orca, via `hmad-dispatch`); `jq` where the existing hook
   already uses it; `pytest`).
   Introducing a new third-party package or new CLI is a violation.
+- **Dispatched agent CLIs are not script dependencies.** `codex`, `agy` and `grok` are optional
+  runtime *agents*: reached only through a `hmad-dispatch` verb (`exec`, `send`, …), never imported,
+  required, or invoked by a script or test for its own work — tests reach them through stubs, and an
+  absent agent CLI is a dispatch-time condition the verb reports, never a failure of the skill.
+  The list is closed: adding an agent to it is an operator decision recorded here, not something a
+  document or a dispatch may assume. (`grok` added 2026-09-28, operator decision on
+  `grok-codex-fallback` design audit v2.)
 
 ## Portable time bounds
 - A time-bounded command MUST NOT be written as `timeout <s> <cmd>` or `gtimeout <s> <cmd>`.
