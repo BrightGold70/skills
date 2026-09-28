@@ -406,6 +406,7 @@ def command_block(
     *, feature: str, module: str, phase: str, prompt: Path, out: Path,
     log: Path, timeout: int, python: str, test_path: str,
     project_root: Path, model: str | None = None, effort: str | None = None,
+    agent: str = "codex",
 ) -> str:
     key = "STATUS"
     step = "5d" if phase == "red" else "5e"
@@ -417,7 +418,7 @@ def command_block(
         over += f" --model {q(model)}"
     if effort:
         over += f" --effort {q(effort)}"
-    return "\n".join([
+    block = "\n".join([
         f"hmad-dispatch exec codex {q(str(prompt))}{over} \\",
         f"  --cd {q(str(project_root))} \\",
         f"  --out {q(str(out))} --log {q(str(log))} --timeout {q(str(timeout))} &",
@@ -437,6 +438,12 @@ def command_block(
         # leaking into whatever they run next.
         f"(cd {q(str(project_root))} && {q(python)} -m pytest {q(test_path)} -v)",
     ])
+    prefix = "hmad-dispatch exec codex "
+    if agent != "codex":
+        if not block.startswith(prefix):
+            raise RuntimeError("command block no longer starts with the codex line")
+        block = f"hmad-dispatch exec {agent} " + block[len(prefix):]
+    return block
 
 
 def _filename_slug(*parts: str) -> str:
@@ -485,7 +492,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--log", type=Path)
     ap.add_argument("--prompt", type=Path)
     ap.add_argument("--report-file", default="")
-    ap.add_argument("--timeout", type=int, default=900)
+    ap.add_argument("--agent", choices=("codex", "grok"), default="codex")
+    ap.add_argument("--timeout", type=int, default=None)
     ap.add_argument("--model", default=DEFAULT_MODEL,
                     help="OVERRIDE; unset inherits the codex CLI's own configured model")
     ap.add_argument("--effort", default=DEFAULT_EFFORT,
@@ -494,6 +502,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sandbox", help="passed through; read-only is refused for a phase that runs pytest")
     ap.add_argument("--template", type=Path, default=TEMPLATE)
     args = ap.parse_args(argv)
+    timeout = args.timeout if args.timeout is not None else (1500 if args.agent == "grok" else 900)
 
     slug = _filename_slug(args.feature, args.module, args.phase)
     impl_plan = args.impl_plan or (
@@ -537,8 +546,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(command_block(
         feature=args.feature, module=args.module, phase=args.phase, prompt=prompt,
-        out=out, log=log, timeout=args.timeout, model=args.model, effort=args.effort,
+        out=out, log=log, timeout=timeout, model=args.model, effort=args.effort,
         python=args.python, test_path=args.test_path, project_root=args.project_root,
+        agent=args.agent,
     ))
     print(f"[H-MAD] {args.feature} tdd-assemble {args.phase} {meta['task']}")
     return 0
