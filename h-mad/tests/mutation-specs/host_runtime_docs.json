@@ -1,0 +1,66 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_host_runtime_docs.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "R1",
+      "_mechanism": "Remove the codex adapter link from h-mad routing documentation.",
+      "file": "SKILL.md",
+      "find": "[references/codex-runtime.md](references/codex-runtime.md)",
+      "replace": "the codex adapter",
+      "test": "tests/test_host_runtime_docs.py::test_host_runtime_names_every_adapter[h-mad-codex]"
+    },
+    {
+      "name": "R2",
+      "_mechanism": "Remove the agy adapter link from h-mad routing documentation.",
+      "file": "SKILL.md",
+      "find": "[references/agy-runtime.md](references/agy-runtime.md)",
+      "replace": "the agy adapter",
+      "test": "tests/test_host_runtime_docs.py::test_host_runtime_names_every_adapter[h-mad-agy]"
+    },
+    {
+      "name": "R3",
+      "_mechanism": "Remove the codex adapter link from handoff routing documentation.",
+      "file": "../handoff/SKILL.md",
+      "find": "[references/codex-runtime.md](references/codex-runtime.md)",
+      "replace": "the codex adapter",
+      "test": "tests/test_host_runtime_docs.py::test_host_runtime_names_every_adapter[handoff-codex]"
+    },
+    {
+      "name": "R4",
+      "_mechanism": "Remove the agy adapter link from handoff routing documentation.",
+      "file": "../handoff/SKILL.md",
+      "find": "[references/agy-runtime.md](references/agy-runtime.md)",
+      "replace": "the agy adapter",
+      "test": "tests/test_host_runtime_docs.py::test_host_runtime_names_every_adapter[handoff-agy]"
+    },
+    {
+      "name": "L1",
+      "_mechanism": "L1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/test_host_runtime_docs.py",
+      "find": "        raise LookupError(f\"heading absent: {heading}\")  # M:L1",
+      "replace": "        return \"\"",
+      "test": "tests/test_host_runtime_docs.py::test_host_runtime_locator_fails_loudly[renamed]"
+    },
+    {
+      "name": "L2",
+      "_mechanism": "L2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/test_host_runtime_docs.py",
+      "find": "        raise LookupError(f\"heading doubled: {heading}\")  # M:L2",
+      "replace": "        return \"\"",
+      "test": "tests/test_host_runtime_docs.py::test_host_runtime_locator_fails_loudly[doubled]"
+    }
+  ]
+}

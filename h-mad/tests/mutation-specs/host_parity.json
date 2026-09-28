@@ -1,0 +1,602 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_host_construct_parity.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "D01",
+      "_mechanism": "D01: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"missing_file\"))  # M:D01",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-missing-file]"
+    },
+    {
+      "name": "D02",
+      "_mechanism": "D02: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"invalid_json\"))  # M:D02",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-invalid-json]"
+    },
+    {
+      "name": "D03",
+      "_mechanism": "D03: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"not_object\"))  # M:D03",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-not-object]"
+    },
+    {
+      "name": "D04",
+      "_mechanism": "D04: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"no_constructs\"))  # M:D04",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-no-constructs]"
+    },
+    {
+      "name": "D05",
+      "_mechanism": "D05: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"constructs_not_array\"))  # M:D05",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-constructs-not-array]"
+    },
+    {
+      "name": "D06",
+      "_mechanism": "D06: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"element_not_object\"))  # M:D06",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-element-not-object]"
+    },
+    {
+      "name": "D07",
+      "_mechanism": "Misclassify only the missing id key while retaining the registry-unreadable early exit, so the fixture fails on its exact reason assertion.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=f\"missing_key:{key}\"))  # M:D07-D10",
+      "replace": "                if key != \"id\":\n                    failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=f\"missing_key:{key}\"))  # M:D07-D10\n                else:\n                    failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"missing_key:misclassified\"))",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-missing-key-id]"
+    },
+    {
+      "name": "D08",
+      "_mechanism": "Misclassify only the missing pattern key while retaining the registry-unreadable early exit, so the fixture fails on its exact reason assertion.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=f\"missing_key:{key}\"))  # M:D07-D10",
+      "replace": "                if key != \"pattern\":\n                    failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=f\"missing_key:{key}\"))  # M:D07-D10\n                else:\n                    failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"missing_key:misclassified\"))",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-missing-key-pattern]"
+    },
+    {
+      "name": "D09",
+      "_mechanism": "Misclassify only the missing skills key while retaining the registry-unreadable early exit, so the fixture fails on its exact reason assertion.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=f\"missing_key:{key}\"))  # M:D07-D10",
+      "replace": "                if key != \"skills\":\n                    failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=f\"missing_key:{key}\"))  # M:D07-D10\n                else:\n                    failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"missing_key:misclassified\"))",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-missing-key-skills]"
+    },
+    {
+      "name": "D10",
+      "_mechanism": "D10: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=f\"missing_key:{key}\"))  # M:D07-D10",
+      "replace": "                if key != \"description\": failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=f\"missing_key:{key}\"))  # M:D07-D10",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-missing-key-description]"
+    },
+    {
+      "name": "D11",
+      "_mechanism": "D11: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=f\"extra_key:{key}\"))  # M:D11",
+      "replace": "                pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-extra-key]"
+    },
+    {
+      "name": "D12",
+      "_mechanism": "D12: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"bad_id\"))  # M:D12",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-bad-id]"
+    },
+    {
+      "name": "D13",
+      "_mechanism": "D13: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"empty_description\"))  # M:D13",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-empty-description]"
+    },
+    {
+      "name": "D14",
+      "_mechanism": "D14: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"empty_skills\"))  # M:D14",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-empty-skills]"
+    },
+    {
+      "name": "D15",
+      "_mechanism": "D15: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"bad_skill\"))  # M:D15",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-bad-skill]"
+    },
+    {
+      "name": "D16",
+      "_mechanism": "D16: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        failures.append(Failure(\"DUPLICATE_ID\", registry_file, identifier))  # M:D16",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[duplicate-id]"
+    },
+    {
+      "name": "D17",
+      "_mechanism": "D17: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"BAD_PATTERN\", registry_file, identifier if isinstance(identifier, str) else \"-\"))  # M:D17",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[bad-pattern]"
+    },
+    {
+      "name": "D18",
+      "_mechanism": "D18: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                    failures.append(Failure(\"STALE_ENTRY\", skill_file, identifier))  # M:D18",
+      "replace": "                    pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[stale-entry]"
+    },
+    {
+      "name": "D19",
+      "_mechanism": "D19: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"UNDECLARED_SKILL\", skill_file, identifier))  # M:D19",
+      "replace": "                pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[undeclared-skill]"
+    },
+    {
+      "name": "D20",
+      "_mechanism": "D20: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"UNREGISTERED\", skill_file, token=token))  # M:D20",
+      "replace": "                pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[unregistered]"
+    },
+    {
+      "name": "D21",
+      "_mechanism": "D21: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        problems.append((\"TABLE_MISSING\", \"no_heading\", \"-\"))  # M:D21",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[tm-no-heading]"
+    },
+    {
+      "name": "D22",
+      "_mechanism": "D22: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        problems.append((\"TABLE_MISSING\", \"no_table\", \"-\"))  # M:D22",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[tm-no-table]"
+    },
+    {
+      "name": "D23",
+      "_mechanism": "D23: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        problems.append((\"TABLE_MISSING\", \"heading_twice\", \"-\"))  # M:D23",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[tm-heading-twice]"
+    },
+    {
+      "name": "D24",
+      "_mechanism": "D24: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        problems.append((\"TABLE_MALFORMED\", \"header\", \"-\"))  # M:D24",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[tmal-header]"
+    },
+    {
+      "name": "D25",
+      "_mechanism": "D25: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            problems.append((\"TABLE_MALFORMED\", \"cell_count\", row_id))  # M:D25",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[tmal-cell-count]"
+    },
+    {
+      "name": "D26",
+      "_mechanism": "D26: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"ROW_MISSING\", adapter_file, identifier))  # M:D26",
+      "replace": "                pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[row-missing]"
+    },
+    {
+      "name": "D27",
+      "_mechanism": "D27: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"ROW_UNKNOWN_ID\", adapter_file, row.id))  # M:D27",
+      "replace": "                pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[row-unknown-id]"
+    },
+    {
+      "name": "D28",
+      "_mechanism": "D28: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"ROW_WRONG_SKILL\", adapter_file, row.id))  # M:D28",
+      "replace": "                pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[row-wrong-skill]"
+    },
+    {
+      "name": "D29",
+      "_mechanism": "D29: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"ROW_DUPLICATE\", adapter_file, row.id))  # M:D29",
+      "replace": "                pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[row-duplicate]"
+    },
+    {
+      "name": "D30",
+      "_mechanism": "D30: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"STATUS_INVALID\", adapter_file, row.id))  # M:D30",
+      "replace": "                pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[status-invalid]"
+    },
+    {
+      "name": "D31",
+      "_mechanism": "D31: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "replace": "                if (cell_name, kind) != (\"mapping\", \"no_alnum\"): failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ce-mapping-no-alnum]"
+    },
+    {
+      "name": "D32",
+      "_mechanism": "D32: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "replace": "                if (cell_name, kind) != (\"mapping\", \"tbd\"): failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ce-mapping-tbd]"
+    },
+    {
+      "name": "D33",
+      "_mechanism": "D33: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "replace": "                if (cell_name, kind) != (\"mapping\", \"todo\"): failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ce-mapping-todo]"
+    },
+    {
+      "name": "D34",
+      "_mechanism": "D34: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "replace": "                if (cell_name, kind) != (\"source\", \"no_alnum\"): failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ce-source-no-alnum]"
+    },
+    {
+      "name": "D35",
+      "_mechanism": "D35: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "replace": "                if (cell_name, kind) != (\"source\", \"tbd\"): failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ce-source-tbd]"
+    },
+    {
+      "name": "D36",
+      "_mechanism": "D36: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "replace": "                if (cell_name, kind) != (\"source\", \"todo\"): failures.append(Failure(\"CELL_EMPTY\", adapter_file, row.id, f\"{cell_name}:{kind}\"))  # M:D31-D36",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ce-source-todo]"
+    },
+    {
+      "name": "D37",
+      "_mechanism": "D37: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"BAD_PATTERN\", registry_file, identifier if isinstance(identifier, str) else \"-\"))  # M:D37",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[split-bad-pattern-non-str]"
+    },
+    {
+      "name": "D38",
+      "_mechanism": "D38: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"bad_id\"))  # M:D38",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[split-bad-id-non-str]"
+    },
+    {
+      "name": "D39",
+      "_mechanism": "D39: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"bad_skill\"))  # M:D39",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[split-bad-skill-non-list]"
+    },
+    {
+      "name": "D40",
+      "_mechanism": "D40: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"bad_skill\"))  # M:D40",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[split-bad-skill-duplicate-name]"
+    },
+    {
+      "name": "D41",
+      "_mechanism": "D41: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            failures.append(Failure(\"REGISTRY_UNREADABLE\", registry_file, reason=\"empty_description\"))  # M:D41",
+      "replace": "            pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[split-empty-description-non-str]"
+    },
+    {
+      "name": "D42",
+      "_mechanism": "D42: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        problems.append((\"TABLE_MALFORMED\", \"header\", \"-\"))  # M:D42",
+      "replace": "        pass",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[split-header-bad-delimiter]"
+    },
+    {
+      "name": "Sa",
+      "_mechanism": "Sa: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "    if any(f.kind == \"REGISTRY_UNREADABLE\" for f in failures):  # M:Sa",
+      "replace": "    if False:  # M:Sa",
+      "test": "tests/test_host_construct_parity.py::test_suppression_rule_leaves_one_pair[a]"
+    },
+    {
+      "name": "Sb",
+      "_mechanism": "Sb: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        if any(skill in element[\"skills\"] for element in elements if element[\"id\"] in bad_patterns):  # M:Sb",
+      "replace": "        if False:  # M:Sb",
+      "test": "tests/test_host_construct_parity.py::test_suppression_rule_leaves_one_pair[b]"
+    },
+    {
+      "name": "Sc",
+      "_mechanism": "Disable the duplicate-id skip in ROW_MISSING emission; the duplicate fixture then reports the deleted handoff row.",
+      "file": "tests/host_parity.py",
+      "find": "            if identifier in duplicates:\n                continue",
+      "replace": "            if False:\n                continue",
+      "test": "tests/test_host_construct_parity.py::test_suppression_rule_leaves_one_pair[c]"
+    },
+    {
+      "name": "Sd-header",
+      "_mechanism": "Sd-header: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        if any(kind == \"TABLE_MALFORMED\" and reason == \"header\" for kind, reason, _ in table.problems):  # M:Sd-header",
+      "replace": "        if False:  # M:Sd-header",
+      "test": "tests/test_host_construct_parity.py::test_suppression_rule_leaves_one_pair[d]"
+    },
+    {
+      "name": "Se",
+      "_mechanism": "Se: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                present.add(identifier)  # M:Se",
+      "replace": "                pass",
+      "test": "tests/test_host_construct_parity.py::test_suppression_rule_leaves_one_pair[e]"
+    },
+    {
+      "name": "Sd-missing",
+      "_mechanism": "Sd-missing: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        if any(kind == \"TABLE_MISSING\" for kind, _, _ in table.problems):  # M:Sd-missing",
+      "replace": "        if False:  # M:Sd-missing",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[tm-no-heading]"
+    },
+    {
+      "name": "A1",
+      "_mechanism": "A1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "    \"A1\": r\"\\b[A-Z][A-Za-z0-9]*\\(\",  # M:A1\n",
+      "replace": "",
+      "test": "tests/test_host_construct_parity.py::test_default_axes_report_each_fixture[A1]"
+    },
+    {
+      "name": "A2",
+      "_mechanism": "A2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "    \"A2\": r\"`[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9]*)+`\",  # M:A2\n",
+      "replace": "",
+      "test": "tests/test_host_construct_parity.py::test_default_axes_report_each_fixture[A2]"
+    },
+    {
+      "name": "A3",
+      "_mechanism": "A3: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "    \"A3\": r\"\\bCLAUDE[A-Z0-9_]*\\b\",  # M:A3\n",
+      "replace": "",
+      "test": "tests/test_host_construct_parity.py::test_default_axes_report_each_fixture[A3]"
+    },
+    {
+      "name": "A4",
+      "_mechanism": "A4: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "    \"A4\": a4_pattern(A4_BRANCHES.values()),  # M:A4\n",
+      "replace": "",
+      "test": "tests/test_host_construct_parity.py::test_default_axes_report_each_fixture[A4-tilde]"
+    },
+    {
+      "name": "B1",
+      "_mechanism": "B1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "    \"tilde\": r\"~\",  # M:B1\n",
+      "replace": "",
+      "test": "tests/test_host_construct_parity.py::test_default_axes_report_each_fixture[A4-tilde]"
+    },
+    {
+      "name": "B2",
+      "_mechanism": "B2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "    \"home\": r\"\\$HOME\",  # M:B2\n",
+      "replace": "",
+      "test": "tests/test_host_construct_parity.py::test_default_axes_report_each_fixture[A4-home]"
+    },
+    {
+      "name": "B3",
+      "_mechanism": "B3: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "    \"home_braced\": r\"\\$\\{HOME\\}\",  # M:B3\n",
+      "replace": "",
+      "test": "tests/test_host_construct_parity.py::test_default_axes_report_each_fixture[A4-home-braced]"
+    },
+    {
+      "name": "X-Error",
+      "_mechanism": "Replace the Error exclusion with an ineffective suffix and require the default exclusion assertion to fail.",
+      "file": "tests/host_parity.py",
+      "find": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \"Warning\", \"Expired\", \"Exit\", \"Interrupt\")  # M:X",
+      "replace": "EXCLUSION_SUFFIXES = (\".*\", \"Exception\", \"Warning\", \"Expired\", \"Exit\", \"Interrupt\")  # M:X",
+      "test": "tests/test_host_construct_parity.py::test_exclusion_suffix_hides_its_fixture[Error]"
+    },
+    {
+      "name": "X-Exception",
+      "_mechanism": "Replace the Exception exclusion with an ineffective suffix and require the default exclusion assertion to fail.",
+      "file": "tests/host_parity.py",
+      "find": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \"Warning\", \"Expired\", \"Exit\", \"Interrupt\")  # M:X",
+      "replace": "EXCLUSION_SUFFIXES = (\"Error\", \".*\", \"Warning\", \"Expired\", \"Exit\", \"Interrupt\")  # M:X",
+      "test": "tests/test_host_construct_parity.py::test_exclusion_suffix_hides_its_fixture[Exception]"
+    },
+    {
+      "name": "X-Warning",
+      "_mechanism": "Replace the Warning exclusion with an ineffective suffix and require the default exclusion assertion to fail.",
+      "file": "tests/host_parity.py",
+      "find": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \"Warning\", \"Expired\", \"Exit\", \"Interrupt\")  # M:X",
+      "replace": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \".*\", \"Expired\", \"Exit\", \"Interrupt\")  # M:X",
+      "test": "tests/test_host_construct_parity.py::test_exclusion_suffix_hides_its_fixture[Warning]"
+    },
+    {
+      "name": "X-Expired",
+      "_mechanism": "Replace the Expired exclusion with an ineffective suffix and require the default exclusion assertion to fail.",
+      "file": "tests/host_parity.py",
+      "find": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \"Warning\", \"Expired\", \"Exit\", \"Interrupt\")  # M:X",
+      "replace": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \"Warning\", \".*\", \"Exit\", \"Interrupt\")  # M:X",
+      "test": "tests/test_host_construct_parity.py::test_exclusion_suffix_hides_its_fixture[Expired]"
+    },
+    {
+      "name": "X-Exit",
+      "_mechanism": "Replace the Exit exclusion with an ineffective suffix and require the default exclusion assertion to fail.",
+      "file": "tests/host_parity.py",
+      "find": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \"Warning\", \"Expired\", \"Exit\", \"Interrupt\")  # M:X",
+      "replace": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \"Warning\", \"Expired\", \".*\", \"Interrupt\")  # M:X",
+      "test": "tests/test_host_construct_parity.py::test_exclusion_suffix_hides_its_fixture[Exit]"
+    },
+    {
+      "name": "X-Interrupt",
+      "_mechanism": "Replace the Interrupt exclusion with an ineffective suffix and require the default exclusion assertion to fail.",
+      "file": "tests/host_parity.py",
+      "find": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \"Warning\", \"Expired\", \"Exit\", \"Interrupt\")  # M:X",
+      "replace": "EXCLUSION_SUFFIXES = (\"Error\", \"Exception\", \"Warning\", \"Expired\", \"Exit\", \".*\")  # M:X",
+      "test": "tests/test_host_construct_parity.py::test_exclusion_suffix_hides_its_fixture[Interrupt]"
+    },
+    {
+      "name": "E1",
+      "_mechanism": "E1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                    inner.append(\"\")  # M:E1",
+      "replace": "                    pass",
+      "test": "tests/test_host_construct_parity.py::test_expand_branches_optional_group_adds_empty_alternative"
+    },
+    {
+      "name": "F1",
+      "_mechanism": "F1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "        if event.kind == \"prose\" and start <= event.start < end and text[event.start:event.end].lstrip(\" \")[:1] == \"|\":  # M:F1",
+      "replace": "        if event.kind in (\"prose\", \"body\") and start <= event.start < end and text[event.start:event.end].lstrip(\" \")[:1] == \"|\":  # M:F1",
+      "test": "tests/test_host_construct_parity.py::test_fenced_pipe_table_is_not_the_table"
+    },
+    {
+      "name": "C1",
+      "_mechanism": "C1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "                elif cell.lower() in (\"tbd\", \"todo\"):  # M:C1",
+      "replace": "                elif cell in (\"tbd\", \"todo\"):  # M:C1",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ce-mapping-tbd]"
+    },
+    {
+      "name": "P1",
+      "_mechanism": "P1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "    for element in field_checked:  # M:P1",
+      "replace": "    for element in elements:  # M:P1",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-missing-key-pattern]"
+    },
+    {
+      "name": "K1",
+      "_mechanism": "K1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "            row_id = _cell_id(cells[0]) if cells else \"-\"  # M:K1",
+      "replace": "            row_id = cells[0].strip() if cells else \"-\"  # M:K1",
+      "test": "tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[tmal-cell-count]"
+    },
+    {
+      "name": "G1",
+      "_mechanism": "G1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "import json",
+      "replace": "import json\nimport subprocess",
+      "test": "tests/test_host_construct_parity.py::test_host_parity_has_no_direct_launcher_import"
+    },
+    {
+      "name": "G2",
+      "_mechanism": "G2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "import json",
+      "replace": "import json\nimport os\n_LAUNCH = os.system",
+      "test": "tests/test_host_construct_parity.py::test_host_parity_has_no_direct_launcher_import"
+    },
+    {
+      "name": "G3",
+      "_mechanism": "G3: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "import json",
+      "replace": "import json\nimport os\n_LAUNCH = os.popen",
+      "test": "tests/test_host_construct_parity.py::test_host_parity_has_no_direct_launcher_import"
+    },
+    {
+      "name": "G4",
+      "_mechanism": "G4: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "import json",
+      "replace": "import json\ndef _fence_scan(t):\n    return t.startswith(\"#\")",
+      "test": "tests/test_host_construct_parity.py::test_host_parity_has_no_fence_scanner"
+    },
+    {
+      "name": "G5",
+      "_mechanism": "G5: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "import json",
+      "replace": "import json\n_FENCE = \"~~~\"",
+      "test": "tests/test_host_construct_parity.py::test_host_parity_has_no_fence_scanner"
+    },
+    {
+      "name": "G6",
+      "_mechanism": "G6: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/host_parity.py",
+      "find": "          exclusion_suffixes: Sequence[str] = EXCLUSION_SUFFIXES) -> ParityResult:",
+      "replace": "          exclusion_suffixes: Sequence[str] = EXCLUSION_SUFFIXES) -> ParityResult:\n    __import__(\"subprocess\").run([\"codex\"], timeout=60.0)",
+      "test": "tests/test_host_construct_parity.py::test_gate_runs_no_host_cli"
+    },
+    {
+      "name": "G7",
+      "_mechanism": "G7: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/test_host_construct_parity.py",
+      "find": "    return [i for i in seed_ids if i not in registry_ids and not retired.get(i)]",
+      "replace": "    return [i for i in seed_ids if i not in registry_ids and i not in retired]",
+      "test": "tests/test_host_construct_parity.py::test_seed_check_honours_retirement[retired-empty-reason]"
+    }
+  ]
+}

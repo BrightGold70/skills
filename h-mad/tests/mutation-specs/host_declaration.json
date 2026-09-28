@@ -1,0 +1,213 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_host_declaration.py",
+    "tests/test_h_mad_context_budget.py",
+    "tests/test_h_mad_resume_decision.py",
+    "tests/test_h_mad_feature_lock.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "H1",
+      "_mechanism": "H1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_host.py",
+      "find": "    value = env.get(HOST_ENV)",
+      "replace": "    value = env.get(HOST_ENV)\n    value = value.strip() if value is not None else None",
+      "test": "tests/test_h_mad_host_declaration.py::test_classify_host[space-grok]"
+    },
+    {
+      "name": "H2",
+      "_mechanism": "H2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_host.py",
+      "find": "    value = env.get(HOST_ENV)",
+      "replace": "    value = env.get(HOST_ENV)\n    value = value.lower() if value is not None else None",
+      "test": "tests/test_h_mad_host_declaration.py::test_classify_host[Grok]"
+    },
+    {
+      "name": "H3",
+      "_mechanism": "H3: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_host.py",
+      "find": "    if value is None or value in (\"\", \"claude\"):",
+      "replace": "    if value is None or value == \"claude\":",
+      "test": "tests/test_h_mad_host_declaration.py::test_classify_host[empty]"
+    },
+    {
+      "name": "W1a",
+      "_mechanism": "Move the host refusal behind reason=bad_window while preserving every line.",
+      "file": "scripts/h_mad_context_budget.py",
+      "find": "    host_class, host_value = classify_host()\n    if host_class == \"declared\":\n        print(f\"ERROR: HMAD_HOST={host_value} has no Claude transcript to measure\", file=sys.stderr)\n        print(f\"CTXBUDGET: UNKNOWN reason=host_unsupported host={host_value}\")\n        return 2\n    if host_class == \"unknown\":\n        print(\"ERROR: HMAD_HOST is not a known host value\", file=sys.stderr)\n        shown = host_value if re.fullmatch(r\"[A-Za-z0-9._-]+\", host_value) else json.dumps(host_value)\n        print(f\"CTXBUDGET: UNKNOWN reason=unknown_host host={shown}\")\n        return 2\n    ceiling = args.ceiling\n    if ceiling is None:\n        ceiling = RUN_CEILING if args.mode == \"run\" else DEFAULT_CEILING\n\n    if args.window <= 0:\n        print(\"ERROR: --window must be positive\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=bad_window\")\n        return 2\n",
+      "replace": "    ceiling = args.ceiling\n    if ceiling is None:\n        ceiling = RUN_CEILING if args.mode == \"run\" else DEFAULT_CEILING\n\n    if args.window <= 0:\n        print(\"ERROR: --window must be positive\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=bad_window\")\n        return 2\n    host_class, host_value = classify_host()\n    if host_class == \"declared\":\n        print(f\"ERROR: HMAD_HOST={host_value} has no Claude transcript to measure\", file=sys.stderr)\n        print(f\"CTXBUDGET: UNKNOWN reason=host_unsupported host={host_value}\")\n        return 2\n    if host_class == \"unknown\":\n        print(\"ERROR: HMAD_HOST is not a known host value\", file=sys.stderr)\n        shown = host_value if re.fullmatch(r\"[A-Za-z0-9._-]+\", host_value) else json.dumps(host_value)\n        print(f\"CTXBUDGET: UNKNOWN reason=unknown_host host={shown}\")\n        return 2\n",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_host_check_precedes_window_check[grok]"
+    },
+    {
+      "name": "W1b",
+      "_mechanism": "Move the host refusal behind reason=no_transcript while preserving every line.",
+      "file": "scripts/h_mad_context_budget.py",
+      "find": "    host_class, host_value = classify_host()\n    if host_class == \"declared\":\n        print(f\"ERROR: HMAD_HOST={host_value} has no Claude transcript to measure\", file=sys.stderr)\n        print(f\"CTXBUDGET: UNKNOWN reason=host_unsupported host={host_value}\")\n        return 2\n    if host_class == \"unknown\":\n        print(\"ERROR: HMAD_HOST is not a known host value\", file=sys.stderr)\n        shown = host_value if re.fullmatch(r\"[A-Za-z0-9._-]+\", host_value) else json.dumps(host_value)\n        print(f\"CTXBUDGET: UNKNOWN reason=unknown_host host={shown}\")\n        return 2\n    ceiling = args.ceiling\n    if ceiling is None:\n        ceiling = RUN_CEILING if args.mode == \"run\" else DEFAULT_CEILING\n\n    if args.window <= 0:\n        print(\"ERROR: --window must be positive\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=bad_window\")\n        return 2\n\n    transcript = resolve_transcript(args.transcript, Path(args.cwd))\n    if transcript is None:\n        print(\"ERROR: no readable session transcript\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=no_transcript\")\n        return 2\n",
+      "replace": "    ceiling = args.ceiling\n    if ceiling is None:\n        ceiling = RUN_CEILING if args.mode == \"run\" else DEFAULT_CEILING\n\n    if args.window <= 0:\n        print(\"ERROR: --window must be positive\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=bad_window\")\n        return 2\n\n    transcript = resolve_transcript(args.transcript, Path(args.cwd))\n    if transcript is None:\n        print(\"ERROR: no readable session transcript\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=no_transcript\")\n        return 2\n    host_class, host_value = classify_host()\n    if host_class == \"declared\":\n        print(f\"ERROR: HMAD_HOST={host_value} has no Claude transcript to measure\", file=sys.stderr)\n        print(f\"CTXBUDGET: UNKNOWN reason=host_unsupported host={host_value}\")\n        return 2\n    if host_class == \"unknown\":\n        print(\"ERROR: HMAD_HOST is not a known host value\", file=sys.stderr)\n        shown = host_value if re.fullmatch(r\"[A-Za-z0-9._-]+\", host_value) else json.dumps(host_value)\n        print(f\"CTXBUDGET: UNKNOWN reason=unknown_host host={shown}\")\n        return 2\n",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_host_check_precedes_transcript_lookup[grok]"
+    },
+    {
+      "name": "W1c",
+      "_mechanism": "Move the host refusal behind reason=no_usage while preserving every line.",
+      "file": "scripts/h_mad_context_budget.py",
+      "find": "    host_class, host_value = classify_host()\n    if host_class == \"declared\":\n        print(f\"ERROR: HMAD_HOST={host_value} has no Claude transcript to measure\", file=sys.stderr)\n        print(f\"CTXBUDGET: UNKNOWN reason=host_unsupported host={host_value}\")\n        return 2\n    if host_class == \"unknown\":\n        print(\"ERROR: HMAD_HOST is not a known host value\", file=sys.stderr)\n        shown = host_value if re.fullmatch(r\"[A-Za-z0-9._-]+\", host_value) else json.dumps(host_value)\n        print(f\"CTXBUDGET: UNKNOWN reason=unknown_host host={shown}\")\n        return 2\n    ceiling = args.ceiling\n    if ceiling is None:\n        ceiling = RUN_CEILING if args.mode == \"run\" else DEFAULT_CEILING\n\n    if args.window <= 0:\n        print(\"ERROR: --window must be positive\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=bad_window\")\n        return 2\n\n    transcript = resolve_transcript(args.transcript, Path(args.cwd))\n    if transcript is None:\n        print(\"ERROR: no readable session transcript\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=no_transcript\")\n        return 2\n\n    used = last_context_tokens(transcript)\n    if used is None:\n        print(f\"ERROR: no usage record in {transcript}\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=no_usage\")\n        return 2\n",
+      "replace": "    ceiling = args.ceiling\n    if ceiling is None:\n        ceiling = RUN_CEILING if args.mode == \"run\" else DEFAULT_CEILING\n\n    if args.window <= 0:\n        print(\"ERROR: --window must be positive\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=bad_window\")\n        return 2\n\n    transcript = resolve_transcript(args.transcript, Path(args.cwd))\n    if transcript is None:\n        print(\"ERROR: no readable session transcript\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=no_transcript\")\n        return 2\n\n    used = last_context_tokens(transcript)\n    if used is None:\n        print(f\"ERROR: no usage record in {transcript}\", file=sys.stderr)\n        print(\"CTXBUDGET: UNKNOWN reason=no_usage\")\n        return 2\n    host_class, host_value = classify_host()\n    if host_class == \"declared\":\n        print(f\"ERROR: HMAD_HOST={host_value} has no Claude transcript to measure\", file=sys.stderr)\n        print(f\"CTXBUDGET: UNKNOWN reason=host_unsupported host={host_value}\")\n        return 2\n    if host_class == \"unknown\":\n        print(\"ERROR: HMAD_HOST is not a known host value\", file=sys.stderr)\n        shown = host_value if re.fullmatch(r\"[A-Za-z0-9._-]+\", host_value) else json.dumps(host_value)\n        print(f\"CTXBUDGET: UNKNOWN reason=unknown_host host={shown}\")\n        return 2\n",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_host_check_precedes_usage_read[grok]"
+    },
+    {
+      "name": "E1",
+      "_mechanism": "E1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_context_budget.py",
+      "find": "        shown = host_value if re.fullmatch(r\"[A-Za-z0-9._-]+\", host_value) else json.dumps(host_value)",
+      "replace": "        shown = host_value",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_unknown_host_encoding[space-grok]"
+    },
+    {
+      "name": "E2",
+      "_mechanism": "E2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_context_budget.py",
+      "find": "        shown = host_value if re.fullmatch(r\"[A-Za-z0-9._-]+\", host_value) else json.dumps(host_value)",
+      "replace": "        shown = json.dumps(host_value)",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_unknown_host_encoding[zzz]"
+    },
+    {
+      "name": "E3",
+      "_mechanism": "E3: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_context_budget.py",
+      "find": "re.fullmatch(r\"[A-Za-z0-9._-]+\", host_value)",
+      "replace": "re.match(r\"^[A-Za-z0-9._-]+$\", host_value)",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_unknown_host_encoding[zzz-newline]"
+    },
+    {
+      "name": "WR1",
+      "_mechanism": "WR1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_context_budget.py",
+      "find": "    host_class, host_value = classify_host()",
+      "replace": "    host_class, host_value = \"claude\", None",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_host_unsupported_valid_transcript[grok]"
+    },
+    {
+      "name": "FF1",
+      "_mechanism": "FF1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_context_budget.py",
+      "find": "    if host_class == \"declared\":",
+      "replace": "    if True:",
+      "test": "tests/test_h_mad_context_budget.py::TestVerdict::test_ok_below_the_ceiling"
+    },
+    {
+      "name": "W2a",
+      "_mechanism": "Move the host check after W2a early return with no line changes.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    host_verdict = _host_verdict(session_id)\n    if host_verdict is not None:\n        return host_verdict\n    if not state_file.is_file():\n        return \"start_fresh\"\n",
+      "replace": "    if not state_file.is_file():\n        return \"start_fresh\"\n    host_verdict = _host_verdict(session_id)\n    if host_verdict is not None:\n        return host_verdict\n",
+      "test": "tests/test_h_mad_host_declaration.py::test_decide_cannot_judge_without_session_id[grok-absent-file]"
+    },
+    {
+      "name": "W2b",
+      "_mechanism": "Move the host check after W2b early return with no line changes.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    host_verdict = _host_verdict(session_id)\n    if host_verdict is not None:\n        return host_verdict\n    if not state_file.is_file():\n        return \"start_fresh\"\n    try:\n        state = json.loads(state_file.read_text())\n    except (json.JSONDecodeError, OSError):\n        # NOT `start_fresh`. The file is there and something is in it; we could not\n        # read it. \"I could not check\" and \"nothing is claimed\" lead to opposite\n        # correct actions, so they must not share a token -- a truncated write on a\n        # store holding dozens of records would otherwise route a second session to\n        # initialise a feature another session is actively working.\n        return \"cannot_judge\"\n    orchestrator_state = state.get(\"orchestrator_state\") or {}\n    feat_state = orchestrator_state.get(feature)\n    if not feat_state:\n        return \"start_fresh\"\n",
+      "replace": "    if not state_file.is_file():\n        return \"start_fresh\"\n    try:\n        state = json.loads(state_file.read_text())\n    except (json.JSONDecodeError, OSError):\n        # NOT `start_fresh`. The file is there and something is in it; we could not\n        # read it. \"I could not check\" and \"nothing is claimed\" lead to opposite\n        # correct actions, so they must not share a token -- a truncated write on a\n        # store holding dozens of records would otherwise route a second session to\n        # initialise a feature another session is actively working.\n        return \"cannot_judge\"\n    orchestrator_state = state.get(\"orchestrator_state\") or {}\n    feat_state = orchestrator_state.get(feature)\n    if not feat_state:\n        return \"start_fresh\"\n    host_verdict = _host_verdict(session_id)\n    if host_verdict is not None:\n        return host_verdict\n",
+      "test": "tests/test_h_mad_host_declaration.py::test_decide_cannot_judge_without_session_id[grok-absent-feature]"
+    },
+    {
+      "name": "V1",
+      "_mechanism": "V1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    if host_class == \"claude\" or session_id:",
+      "replace": "    if host_class == \"claude\":",
+      "test": "tests/test_h_mad_host_declaration.py::test_decide_routes_normally_with_session_id[grok]"
+    },
+    {
+      "name": "V2",
+      "_mechanism": "V2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    return CANNOT_JUDGE_WITHOUT_SESSION",
+      "replace": "    return None",
+      "test": "tests/test_h_mad_host_declaration.py::test_decide_cannot_judge_without_session_id[grok-no-owner]"
+    },
+    {
+      "name": "WR2",
+      "_mechanism": "WR2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    host_verdict = _host_verdict(session_id)\n    if host_verdict is not None:\n        return host_verdict\n",
+      "replace": "",
+      "test": "tests/test_h_mad_host_declaration.py::test_decide_cannot_judge_without_session_id[grok-no-owner]"
+    },
+    {
+      "name": "FF2",
+      "_mechanism": "FF2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    if host_class == \"claude\" or session_id:",
+      "replace": "    if session_id:",
+      "test": "tests/test_h_mad_feature_lock.py::TestResumeDecisionSurfacesOwnership::test_no_session_id_preserves_legacy_behaviour"
+    },
+    {
+      "name": "AG-unset",
+      "_mechanism": "AG-unset: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    if host_class == \"claude\" or session_id:",
+      "replace": "    if session_id:",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_and_decide_agree[unset]"
+    },
+    {
+      "name": "AG-empty",
+      "_mechanism": "AG-empty: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    if host_class == \"claude\" or session_id:",
+      "replace": "    if session_id:",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_and_decide_agree[empty]"
+    },
+    {
+      "name": "AG-claude",
+      "_mechanism": "AG-claude: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    if host_class == \"claude\" or session_id:",
+      "replace": "    if session_id:",
+      "test": "tests/test_h_mad_host_declaration.py::test_budget_and_decide_agree[claude]"
+    },
+    {
+      "name": "HE1",
+      "_mechanism": "HE1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/conftest.py",
+      "find": "               if not k.startswith(\"CLAUDE\") and k not in _AMBIENT_HOST_KEYS}",
+      "replace": "               if k not in _AMBIENT_HOST_KEYS}",
+      "test": "tests/test_h_mad_host_declaration.py::test_hermetic_env_drops_claude_names_and_backend"
+    },
+    {
+      "name": "HE2",
+      "_mechanism": "HE2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/conftest.py",
+      "find": "_AMBIENT_HOST_KEYS = (\"HPW_AGENT_BACKEND\", \"HMAD_HOST\", \"HMAD_CONTEXT_WINDOW\")",
+      "replace": "_AMBIENT_HOST_KEYS = (\"HMAD_HOST\", \"HMAD_CONTEXT_WINDOW\")",
+      "test": "tests/test_h_mad_host_declaration.py::test_hermetic_env_drops_claude_names_and_backend"
+    },
+    {
+      "name": "HE3",
+      "_mechanism": "HE3: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/conftest.py",
+      "find": "_AMBIENT_HOST_KEYS = (\"HPW_AGENT_BACKEND\", \"HMAD_HOST\", \"HMAD_CONTEXT_WINDOW\")",
+      "replace": "_AMBIENT_HOST_KEYS = (\"HPW_AGENT_BACKEND\", \"HMAD_CONTEXT_WINDOW\")",
+      "test": "tests/test_h_mad_host_declaration.py::test_hermetic_env_drops_claude_names_and_backend"
+    },
+    {
+      "name": "HE4",
+      "_mechanism": "HE4: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "tests/conftest.py",
+      "find": "_AMBIENT_HOST_KEYS = (\"HPW_AGENT_BACKEND\", \"HMAD_HOST\", \"HMAD_CONTEXT_WINDOW\")",
+      "replace": "_AMBIENT_HOST_KEYS = (\"HPW_AGENT_BACKEND\", \"HMAD_HOST\")",
+      "test": "tests/test_h_mad_host_declaration.py::test_hermetic_env_drops_claude_names_and_backend"
+    }
+  ]
+}

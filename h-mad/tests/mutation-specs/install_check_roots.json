@@ -1,0 +1,131 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_install_check_roots.py",
+    "tests/test_h_mad_install_check.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "I1",
+      "_mechanism": "I1: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        if owner is None or owner[0] in installed_set:",
+      "replace": "        if owner is None or owner[0] not in installed_set:",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_root_cell[debugger-copy]"
+    },
+    {
+      "name": "I2",
+      "_mechanism": "I2: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        issues += check_siblings(sibling_repo, skills_link.parent)",
+      "replace": "        issues += split_agy_root(check_siblings(sibling_repo, skills_link.parent), skills_link.parent, checkout_skill_names(sibling_repo), AGY_INSTALLED_NAMES)[0]",
+      "test": "tests/test_h_mad_install_check_roots.py::test_claude_root_debugger_copy_still_fails"
+    },
+    {
+      "name": "I3a",
+      "_mechanism": "I3a: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "    agents = env[AGENTS_SKILLS_ENV] if AGENTS_SKILLS_ENV in env else str(home / \".agents\" / \"skills\")",
+      "replace": "    agents = str(home / \".agents\" / \"skills\")",
+      "test": "tests/test_h_mad_install_check_roots.py::test_env_override_is_read[agents]"
+    },
+    {
+      "name": "I3b",
+      "_mechanism": "I3b: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "    agy = env[AGY_SKILLS_ENV] if AGY_SKILLS_ENV in env else str(home / \".gemini\" / \"config\" / \"skills\")",
+      "replace": "    agy = str(home / \".gemini\" / \"config\" / \"skills\")",
+      "test": "tests/test_h_mad_install_check_roots.py::test_env_override_is_read[agy]"
+    },
+    {
+      "name": "I4a",
+      "_mechanism": "I4a: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "env[AGENTS_SKILLS_ENV] if AGENTS_SKILLS_ENV in env else",
+      "replace": "env[AGENTS_SKILLS_ENV] if env.get(AGENTS_SKILLS_ENV) else",
+      "test": "tests/test_h_mad_install_check_roots.py::test_empty_env_override_is_unreadable[agents]"
+    },
+    {
+      "name": "I4b",
+      "_mechanism": "I4b: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "env[AGY_SKILLS_ENV] if AGY_SKILLS_ENV in env else",
+      "replace": "env[AGY_SKILLS_ENV] if env.get(AGY_SKILLS_ENV) else",
+      "test": "tests/test_h_mad_install_check_roots.py::test_empty_env_override_is_unreadable[agy]"
+    },
+    {
+      "name": "I5a",
+      "_mechanism": "I5a: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "    agents_dir = args.agents_skills_dir if args.agents_skills_dir is not None else default_agents",
+      "replace": "    agents_dir = os.environ[AGENTS_SKILLS_ENV] if AGENTS_SKILLS_ENV in os.environ else (args.agents_skills_dir if args.agents_skills_dir is not None else default_agents)",
+      "test": "tests/test_h_mad_install_check_roots.py::test_explicit_option_beats_env_override[agents]"
+    },
+    {
+      "name": "I5b",
+      "_mechanism": "I5b: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "    agy_dir = args.agy_skills_dir if args.agy_skills_dir is not None else default_agy",
+      "replace": "    agy_dir = os.environ[AGY_SKILLS_ENV] if AGY_SKILLS_ENV in os.environ else (args.agy_skills_dir if args.agy_skills_dir is not None else default_agy)",
+      "test": "tests/test_h_mad_install_check_roots.py::test_explicit_option_beats_env_override[agy]"
+    },
+    {
+      "name": "I6",
+      "_mechanism": "I6: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "if line.startswith(f\"SIBLING_{kind}:{skills_dir / name} \"))",
+      "replace": "if line.startswith(f\"SIBLING_{kind}:{skills_dir / name}\"))",
+      "test": "tests/test_h_mad_install_check_roots.py::test_split_prefix_does_not_capture_a_longer_name"
+    },
+    {
+      "name": "I7",
+      "_mechanism": "I7: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "    if issues:\n        print(f\"INSTALL: FAIL issues={len(issues)}\")",
+      "replace": "    for line in details:\n        print(line)\n    if issues:\n        print(f\"INSTALL: FAIL issues={len(issues)}\")",
+      "test": "tests/test_h_mad_install_check_roots.py::test_detail_lines_sorted_and_after_verdict"
+    },
+    {
+      "name": "WR3a",
+      "_mechanism": "WR3a: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        agents_skills_dir=agents_dir,\n",
+      "replace": "",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agents_root[copy]"
+    },
+    {
+      "name": "WR3b",
+      "_mechanism": "WR3b: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        agy_skills_dir=agy_dir,\n",
+      "replace": "",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_root_cell[h-mad-copy]"
+    },
+    {
+      "name": "FF3a",
+      "_mechanism": "FF3a: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        if agents_skills_dir is not None:",
+      "replace": "        agents_skills_dir = agents_skills_dir if agents_skills_dir is not None else os.environ.get(AGENTS_SKILLS_ENV)\n        if agents_skills_dir is not None:",
+      "test": "tests/test_h_mad_install_check_roots.py::test_check_without_root_keywords_reads_no_new_root"
+    },
+    {
+      "name": "FF3b",
+      "_mechanism": "FF3b: remove or alter the named behavior so its focused assertion detects the regression.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        if agy_skills_dir is not None:",
+      "replace": "        agy_skills_dir = agy_skills_dir if agy_skills_dir is not None else os.environ.get(AGY_SKILLS_ENV)\n        if agy_skills_dir is not None:",
+      "test": "tests/test_h_mad_install_check_roots.py::test_check_without_root_keywords_reads_no_new_root"
+    }
+  ]
+}
