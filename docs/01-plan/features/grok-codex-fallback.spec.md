@@ -367,10 +367,25 @@ exists to drift from the real one.
     `"type"` value is one of the seven types observed in F0: `thought`, `text`,
     `available_commands`, `tool_call`, `tool_call_update`, `usage`, `end`.
     - The match is **independent of key order**: `{"meta":1,"type":"text","data":"x"}` is a grok
-      line exactly as `{"type":"text","data":"x"}` is. The shell detector and the Python
-      detector (`scan_grok`'s non-`None` test, FR-6) must return the same answer on every line,
-      whatever the key order and whatever the whitespace. How the shell side achieves that is the
-      design's choice.
+      line exactly as `{"type":"text","data":"x"}` is.
+    - **Agreement, scoped to an input domain.** The shell detector's jq route and the Python
+      detector (`scan_grok`'s non-`None` test, FR-6) must return the same answer on every line
+      in the **agreement domain**, whatever the key order and whatever the whitespace. How the
+      shell side achieves that is the design's choice. The agreement domain is every
+      LF-delimited line that is one RFC 8259 JSON text and satisfies all of these:
+      - its nesting depth is within the design's bound: at most 64, where depth is the length
+        of the longest path to a value, 0 for a scalar or an empty container (design D3.5, "The
+        line filter and the depth bound");
+      - it carries no leading byte order mark;
+      - it contains no string escape that denotes an unpaired UTF-16 surrogate (such as
+        `\ud800`), which RFC 8259's grammar permits;
+      - it contains no CR byte.
+    - **Outside the agreement domain**, neither detector may crash. Each line there either is
+      classified as not a grok event by both detectors, or falls into a disagreement stated as a
+      residual below:
+      - a line nested deeper than the bound is not a grok event on both detectors, and the
+        detectors must not raise on it;
+      - a line in the parser-grammar class is a residual (below, and Assumption A5).
   - **Precedence:** `agy-ndjson` first, then the **codex banner**, then `grok-ndjson`, then
     `codex-text` by default.
     - The codex banner is `^OpenAI Codex v` (the existing `_CODEX_BANNER` in
@@ -388,6 +403,14 @@ exists to drift from the real one.
       carries the banner in its head, so it reads as `codex-text` in all three classifiers. That
       log is **skipped** as codex-text is today; it is never falsely gated. FR-4's final-message
       derivation reads the dispatch's own region and does not consult this classifier.
+    - **Parser grammar (Assumption A5).** A line that jq's grammar accepts as a JSON object and
+      `json.loads` rejects, or the reverse, can be classified differently by the two detectors.
+      Its measured members are a lowercase `nan` token, a leading UTF-8 BOM, a lone surrogate
+      escape, and a bare CR between two objects on one line.
+    - **Fallback route.** With jq absent or failing, the shell detector's grep fallback does not
+      parse, and the agreement requirement does not bind it. Its input domain and the classes on
+      which it differs from `scan_grok` are the design's (D4, "Residual (fallback route
+      only)").
 
   `_render_progress` renders `grok-ndjson` one line per event, with these exceptions:
   - a `tool_call` renders `tool <toolName> <status>` plus an `rawInput` digest of at most 70
@@ -431,6 +454,10 @@ exists to drift from the real one.
     `format: grok-ndjson` from `progress`, and `scan_grok` returns non-`None` on the same text.
     A log whose single line is `{"meta":1,"type":"bogus","data":"x"}` gives `format: codex-text`,
     and `scan_grok` returns `None`. The shell and Python detectors agree on both lines.
+    - **Depth boundary** (the design's "Depth boundary" test): a single-line log
+      `{"type":"text","data":"x","n":` + k `[` + k `]` + `}`, whose depth is k,
+      gives `format: grok-ndjson` and non-`None` from `scan_grok` at k = 64, and
+      `format: codex-text` and `None` at k = 65. Neither detector raises on either line.
   - AC-5.3: The `progress` test suite's existing agy and codex rendering tests pass unchanged.
 
 ### FR-6: Tool-call evidence for grok in `h_mad_review_evidence.py`
@@ -720,9 +747,29 @@ exists to drift from the real one.
 - **A4: `claude` must be on PATH for HPW.** `HPW_AGENT_BACKEND=claude` inside the grok child
   needs `claude` on PATH, because HemaSuite's resolver checks the selected backend with
   `augmented_which`. It held in the trial.
+- **A5: the two grok detectors agree only within FR-5's agreement domain.** jq and Python's
+  `json.loads` implement different JSON grammars, and no bound shared by both closes that.
+  - **Residual, the parser-grammar class:** a line within the depth bound that one parser
+    accepts as a JSON object and the other rejects. Its membership is not enumerated, because
+    any grammar difference between jq and `json.loads` is a member. The members measured by the
+    design (D4, "Residual (parser grammar, open)") are four:
+    - a lowercase `nan` token (jq accepts it; `json.loads` does not);
+    - a leading UTF-8 BOM (jq accepts it; `json.loads` does not);
+    - a lone surrogate escape `\ud800` (jq rejects it; `json.loads` accepts it);
+    - a bare CR between two objects on one line (Python's `read_text` splits the line; jq sees
+      one line with extra data).
+  - The lone surrogate is inside RFC 8259's grammar, which is why FR-5's domain excludes it by
+    name rather than relying on "RFC 8259 JSON text" alone.
+  - **Why F0 is unaffected:** F0 carries no member; jq and the design's line discipline each
+    parse all 110 of its lines as objects (design D4). That zero rests on grok 1.0.41 emitting
+    plain compact JSON, which is incidental: a grok build that emitted a member would disagree
+    only on its own lines.
+  - The depth axis is not in this class. The design's bound makes a line deeper than 64 "not a
+    grok event" on both detectors (design D3.5).
 
 ## Version History
 - v1.0: Initial specification draft (2026-09-28). The brainstorm's decisions D1–D4 are applied, and so are the orchestrator's decisions on OQ1–OQ5. OQ3's final-message wording is corrected by measurement against F0 (Assumption A1).
 - v1.1: Plan-v1.0 owed items, operator-decided (2026-09-28). F0 bullet names the sidecar's Re-derivation commands section and carries the two commands it lacks. AC-2.1b exercises the BLOCK-INVALID class one value at a time (false, true, 0, "null", "", "Grok", {}, []) with a JSON-null FALL-THROUGH control. FR-3 and FR-10 disclose the inherited GROK_SANDBOX. Out-of-Scope adds the missing grok write-time test-first gate, disclosed by FR-10. FR-8 defines not-given as absent from argv, with AC-8.2 pinning an explicit 900.
 - v1.2: Plan audit round 2 owed items (2026-09-28): plan.audit.v2.p1 codex must 3 and plan.delta-review.v1.2 must 2 / should 2. New fixture F-NOTOOLTEXT (F0 minus every tool_call, tool_call_update and text event; end survives, 83 lines) and new AC-4.9 pinning the FR-4 omission clause (EMPTY path, no tool calls completed line), with AC-4.6 as its positive pair. FR-10 D4 statement reworded to a QUALITY claim so the plan v1.2 live exec grok plumbing smoke does not falsify it (orchestrator decision); the AC-10.1 needle unmeasured is unchanged.
 - v1.3: Design audit cycle 1 owed items, orchestrator-decided (2026-09-28). NFR: the FR-4 parsers are region-bounded like _agy_ndjson_response (pre_lines to EOF, no tail cap, residual O(region)); progress stays bounded like the agy lens. FR-5/FR-6/FR-7: the head-window codex banner takes precedence over grok detection in all three classifiers, with the prior-codex-then-grok --log residual (skipped, never falsely gated) and new AC-11.3. FR-5: grok detection is key-order independent and the shell and Python detectors agree (new AC-5.2b). FR-4: N is distinct toolCallIds with a completed update over the whole region, single-sourced with scan_grok ok (new AC-4.10 on F-NOTOOLS minus text). AC-5.2 exactness binds the listed classes; collapsed run lines may appear without delta text. F-DECOY pins the thought decoy inside the final text segment. AC census 55 to 58 distinct IDs.
+- v1.4: FR-5 agreement scoped to an input domain, orchestrator-decided (2026-09-28), answering design v1.2's owed spec-level residual. The jq route and scan_grok must agree on every LF-delimited line that is one RFC 8259 JSON text of depth at most 64 (design D3.5) with no leading BOM, no unpaired-surrogate escape and no CR byte; outside it neither detector crashes, a line beyond the bound is not a grok event on both, and the parser-grammar class (lowercase nan, BOM, lone surrogate, bare CR) is a stated residual in new Assumption A5. The grep fallback is named as outside the agreement requirement (design D4). AC-5.2b gains the design's existing depth-64/65 boundary case; AC IDs unchanged.
