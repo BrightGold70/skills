@@ -17,7 +17,7 @@ from typing import NamedTuple, Optional, Sequence, Tuple, Union
 _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
-from h_mad_audit_gate import _SGR_RE, _SUMMARY_LINE_RE  # noqa: E402
+from h_mad_audit_gate import _SGR_RE, _SUMMARY_LINE_RE, _suite_summary  # noqa: E402
 
 KINDS = frozenset({"red-measured", "no-test-resolved", "test-missing",
                    "venv-escapes-root", "pytest-missing", "pytest-error",
@@ -299,7 +299,7 @@ def score(proc_output: str, timed_out: bool) -> str:
         return "timeout"
     if _pytest_missing(proc_output):  # M:K1
         return "pytest-missing"
-    summary = None  # M:W4
+    summary = _suite_summary(proc_output)  # M:W4
     if summary is None:
         return "no-summary"
     if summary.no_tests_ran:
