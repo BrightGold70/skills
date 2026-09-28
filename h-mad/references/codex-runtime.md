@@ -33,6 +33,14 @@ import time; do not run unreviewed or adversarial tests under this contract. Use
 sandbox with production paths mounted read-only when executing untrusted test code. The hook's
 `--self-check` establishes parser and policy behavior only; it does not strengthen this boundary.
 
+For pytest, the judge walks from the test file toward the project root and chooses the nearest
+`.venv` with `.venv/bin/python`. Before using it, the judge requires realpath containment of both
+`.venv` and `.venv/bin` within the root and a regular, non-symlink `pyvenv.cfg`; a candidate that
+fails these checks is DENY `venv-escapes-root`. With no candidate, it uses the fallback interpreter.
+These checks leave the interpreter itself, installed packages, and test code trusted: a Python
+executable can still be a symlink outside the root. The verdict is scored from pytest's
+summary line (`N failed` or other summary counts), never its rc.
+
 ## Collaboration mapping
 
 - Replace a named teammate author with `collaboration.spawn_agent` using `fork_turns: "none"`.
