@@ -1,185 +1,208 @@
 #!/bin/bash
-# h-mad-tdd-gate.sh — PreToolUse hook gating Write/Edit during /h-mad Phase 5.
-# Fast no-op when no Phase 5 run is active. Blocks production writes
-# missing a corresponding failing test.
-# v2.2: phase tag is "step5" (not "step7" as in v1).
-#
-# Install as a PreToolUse hook in ~/.claude/settings.json:
-#   "hooks": {
-#     "PreToolUse": [
-#       { "matcher": "Write|Edit", "hooks": [{ "type": "command", "command": "bash ~/.claude/skills/h-mad/hooks/h-mad-tdd-gate.sh \"$CLAUDE_TOOL_INPUT_PATH\"" }] }
-#     ]
-#   }
-
+# Claude Code PreToolUse gate for production Python writes during H-MAD step 5.
 set -euo pipefail
+readonly REFUSAL_FORM=b
+DECIDED=""
+TRC=0 SRC=0 JRC=0
+JUDGE=""
 
-_resolve_state_file() {
-  # Find the orchestrator state that governs the file being written.
-  #
-  # This used to be a bare "${CLAUDE_PROJECT_DIR:-.}/docs/.bkit-memory.json",
-  # which assumes the state sits at the repo root. HemaSuite keeps its state at
-  # `hematology-paper-writer/docs/.bkit-memory.json`, so that path never existed
-  # and the fast-path below ("no state file -> allow") fired on EVERY write: a
-  # full Phase 5 ran there believing production writes were gated. They were not,
-  # and nothing said so — a gate that stands down silently is indistinguishable
-  # from a gate that approves.
-  local target="$1"
-  local root="${CLAUDE_PROJECT_DIR:-.}" root_abs=""
-  root_abs="$(cd "$root" 2>/dev/null && pwd -P)" || root_abs=""
-
-  # 1. Repo-root layout — the common single-project case, and back-compat.
-  if [ -n "$root_abs" ] && [ -f "$root_abs/docs/.bkit-memory.json" ]; then
-    printf '%s\n' "$root_abs/docs/.bkit-memory.json"
-    return 0
+_allow() { DECIDED=allow; exit 0; }
+_json_str() {
+  local value=${1//\\/\\\\}
+  value=${value//\"/\\\"}
+  printf '%s' "$value" | LC_ALL=C /usr/bin/tr '[:cntrl:]' ' '
+}
+_refuse() {
+  MSG="[H-MAD-TDD-GATE] BLOCK kind=$1: $2"
+  printf '%s\n' "$MSG" >&2
+  if [ "$REFUSAL_FORM" = b ]; then
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$(_json_str "$MSG")" || exit 2  # M:H5B
+    DECIDED=refused
+    exit 0
   fi
-
-  # 2. Sub-project layout — walk UP from the file being written.
-  [ -n "$target" ] || return 1
-  local dir
-  dir="$(cd "$(dirname "$target")" 2>/dev/null && pwd -P)" || return 1
-  # Only walk within the project. A state file in a PARENT of this project
-  # belongs to a different project, and adopting it would let one repo's Phase 5
-  # gate writes in an unrelated sibling — a false block with nothing in the
-  # current repo to explain it.
-  if [ -n "$root_abs" ]; then
-    case "$dir/" in
-      "$root_abs"/*) ;;
-      *) return 1 ;;
-    esac
-  fi
-  while [ -n "$dir" ] && [ "$dir" != "/" ]; do
-    if [ -f "$dir/docs/.bkit-memory.json" ]; then
-      printf '%s\n' "$dir/docs/.bkit-memory.json"
-      return 0
-    fi
-    [ -n "$root_abs" ] && [ "$dir" = "$root_abs" ] && break
-    dir="$(dirname "$dir")"
-  done
+  DECIDED=refused
+  exit 2  # M:H5A
+}
+_on_exit() {
+  local rc=$?
+  trap - EXIT
+  set +euo pipefail
+  case "$DECIDED" in
+    allow) exit 0 ;;
+    refused) exit "$rc" ;;
+  esac
+  _refuse judge-error "gate exited rc=$rc before deciding"  # M:T2
+  exit 2
+}
+_lexists() { [ -e "$1" ] || [ -L "$1" ]; }  # M:H7
+_absent_at() {
+  _lexists "$1/docs/.bkit-memory.json" && return 1
+  [ -x "$1" ] || return 1
+  _lexists "$1/docs" || return 0
+  [ -x "$1/docs" ] && return 0  # M:H10
+  [ -e "$1/docs" ] && [ ! -d "$1/docs" ] && return 0
   return 1
 }
-
-# Claude Code PreToolUse hooks receive tool input as JSON via stdin.
-# Positional arg is supported for direct invocation / testing.
-if [ -n "${1:-}" ]; then
-  TARGET_PATH="$1"
-else
-  # Read JSON from stdin; extract file_path field
-  INPUT=$(cat 2>/dev/null || true)
-  TARGET_PATH=$(echo "$INPUT" | python3 -c "
-import sys, json
-try:
-    d = json.loads(sys.stdin.read())
-    print(d.get('file_path', d.get('path', '')))
-except Exception:
-    print('')
-" 2>/dev/null || true)
-fi
-
-# Resolved AFTER the target path, because a sub-project's state is found by
-# walking up from the file being written — there is nothing else to search from.
-STATE_FILE="$(_resolve_state_file "$TARGET_PATH" || true)"
-
-# Fast path: no state file anywhere → no orchestrator → allow.
-# This fail-open is correct for a project that simply does not use h-mad. It was
-# wrong only because the search could not see a state file that existed.
-# An unresolved search yields "", and `[ ! -f "" ]` is true, so this one test
-# covers both "not found" and "found but gone".
-[ ! -f "$STATE_FILE" ] && exit 0
-
-# Need jq to parse state
-if ! command -v jq >/dev/null 2>&1; then
-  # No jq available → fail open (allow). Hook never blocks unless it can confirm step5.
-  exit 0
-fi
-
-# Check if any feature is in step5
-ACTIVE=$(jq -r '
-  .orchestrator_state // {} |
-  to_entries[] |
-  select(.value.phase == "step5") |
-  .key
-' "$STATE_FILE" 2>/dev/null | head -1)
-
-[ -z "$ACTIVE" ] && exit 0
-
-# Phase 5 active — apply TDD gate.
-# Empty target path → allow (not a file write)
-[ -z "$TARGET_PATH" ] && exit 0
-
-# Allow test files, fixtures, docs, config files unconditionally.
-# Test FILES are matched on the basename, not the whole path. `*test_*.py`
-# matched "test_" anywhere, including a parent directory — so a production file
-# under `test_helpers/` (or any dir with `test_` in its name) was silently
-# exempted from the gate. Same silent-stand-down class as the state-file bug
-# above, and found by its test harness: pytest's own tmp dirs are named
-# `test_<name>0`, which exempted every fixture written under them.
-case "${TARGET_PATH##*/}" in
-  test_*.py|*_test.py|conftest*.py)
-    exit 0 ;;
-esac
-# Test DIRECTORIES stay path-matched, anchored to a full segment.
-case "$TARGET_PATH" in
-  */tests/*|*/fixtures/*)
-    exit 0 ;;
-  *.md|*.yaml|*.yml|*.json|*.toml|*.txt|*.rst|*.cfg|*.ini)
-    exit 0 ;;
-  *.sh|*.bash|Makefile|Dockerfile|*.dockerignore|*.gitignore)
-    exit 0 ;;
-esac
-
-# Only gate .py production files
-[[ "$TARGET_PATH" != *.py ]] && exit 0
-
-# --- Codex-authorship enforcement -------------------------------------------
-# Codex writes via its OWN process (subprocess `codex exec`, or its pane); those
-# writes never reach this PreToolUse hook. Only Claude's Write/Edit tool does. So
-# a production write arriving HERE during step5 is Claude self-implementing — the
-# exact thing Phase 5 delegates to Codex. Block it when Codex is available, and
-# name the dispatch. The ONLY escape is an auditable declaration that Codex is
-# unavailable: state `codex_status` = unavailable|exhausted, or the
-# HMAD_CODEX_UNAVAILABLE env override. Silent self-authoring is never allowed.
-CODEX_STATUS=$(jq -r --arg k "$ACTIVE" \
-  '.orchestrator_state[$k].codex_status // "available"' "$STATE_FILE" 2>/dev/null || echo available)
-if [ -z "${HMAD_CODEX_UNAVAILABLE:-}" ] \
-   && [ "$CODEX_STATUS" != "unavailable" ] && [ "$CODEX_STATUS" != "exhausted" ] \
-   && command -v codex >/dev/null 2>&1; then
-  echo "[H-MAD-TDD-GATE] BLOCK: Phase 5 implementation must be authored by Codex, not Claude." >&2
-  echo "Dispatch this module to Codex: hmad-dispatch exec codex <promptfile>  (or: send codex)." >&2
-  echo "Codex looks available (codex on PATH; codex_status=$CODEX_STATUS). If it is out of quota, record it —" >&2
-  echo "  python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $ACTIVE --set codex_status=exhausted \"$STATE_FILE\"" >&2
-  echo "then Claude may author the fallback (still test-first). Or export HMAD_CODEX_UNAVAILABLE=1 for a one-off." >&2
-  exit 1
-fi
-# Codex unavailable / declared exhausted → fall through: Claude may author the
-# fallback, still under the test-first gate below.
-
-# Production-code write → require derivable test that currently fails.
-DERIVE_SCRIPT="$HOME/.claude/skills/h-mad/scripts/h_mad_derive_test_path.sh"
-if [ ! -x "$DERIVE_SCRIPT" ]; then
-  echo "[H-MAD-TDD-GATE] BLOCK: derivation script missing at $DERIVE_SCRIPT" >&2
-  exit 1
-fi
-
-TEST_PATH=$("$DERIVE_SCRIPT" "$TARGET_PATH")
-if [ -z "$TEST_PATH" ]; then
-  echo "[H-MAD-TDD-GATE] BLOCK: cannot derive test path for $TARGET_PATH" >&2
-  echo "Either add the path pattern to h_mad_derive_test_path.sh or write the test manually first." >&2
-  exit 1
-fi
-
-if [ ! -f "$TEST_PATH" ]; then
-  echo "[H-MAD-TDD-GATE] BLOCK: no test file at $TEST_PATH for $TARGET_PATH" >&2
-  echo "Write a failing test first (RED-phase) before implementing." >&2
-  exit 1
-fi
-
-# Test file exists. If target file being MODIFIED (already exists), confirm test currently fails.
-if [ -f "$TARGET_PATH" ]; then
-  if pytest "$TEST_PATH" -x -q --no-header >/dev/null 2>&1; then
-    echo "[H-MAD-TDD-GATE] BLOCK: $TEST_PATH already passing; no new code needed?" >&2
-    echo "Either update the test to RED first, or skip this Edit." >&2
-    exit 1
+_chain_may_hold_state() {
+  local root=$1 target=$2 d
+  if [ -n "$root" ]; then _absent_at "$root" || return 0; fi
+  [ -n "$target" ] || return 1
+  case "$target" in /*) ;; *) return 0 ;; esac
+  case "/$target/" in */./*|*/../*) return 0 ;; esac
+  d=$(dirname "$target"); while [ ! -e "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done; d=$(cd "$d" 2>/dev/null && pwd -P) || return 0  # M:H8
+  if [ -n "$root" ]; then
+    case "$d/" in "$root"/*) ;; *) return 1 ;; esac
   fi
+  while :; do
+    _absent_at "$d" || return 0
+    if [ -n "$root" ] && [ "$d" = "$root" ]; then return 1; fi
+    [ "$d" = / ] && return 1
+    d=$(dirname "$d")
+  done
+}
+_dir_match() { case "$1" in */tests/*|*/fixtures/*) return 0 ;; esac; return 1; }  # M:H15
+_pct_decode() { [ "$1" = % ] && return 0; printf '%b' "${1//%/\\x}"; }
+_find_judge() {
+  [ -n "$JUDGE" ] && return 0
+  JUDGE=$(python3 -c 'import os,sys;print(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),"scripts","h_mad_tdd_judge.py"))' "${BASH_SOURCE[0]}")  # M:W6
+}
+_read_state() {
+  [ -n "$ROOT_ABS" ] || _refuse judge-error "project root (CLAUDE_PROJECT_DIR) cannot be entered"
+  SOUT=$(python3 "$JUDGE" state --root "$ROOT_ABS" "$@" 2>/dev/null; printf 'rc=%s' "$?")  # M:W5B
+  SRC=${SOUT##*rc=}; SOUT=${SOUT%rc=*}; SOUT=${SOUT%$'\n'}  # M:H17
+  case "$SOUT" in *$'\n'*|"") _refuse judge-error "state verb printed zero or several lines" ;; esac
+  [ "$SRC" = 0 ] || _refuse judge-error "state verb exited rc=$SRC"
+  if [ "$SOUT" = 'TDD-STATE: none' ]; then _allow; fi
+  if [[ $SOUT =~ $STATE_UNREADABLE_RE ]]; then
+    local file
+    file=$(_pct_decode "${BASH_REMATCH[1]}")
+    _refuse judge-error "H-MAD state is unreadable ($file: ${BASH_REMATCH[2]})"
+  fi
+  [[ $SOUT =~ $STATE_ACTIVE_RE ]] || _refuse judge-error "state verb printed no well-formed state line"
+  ESCAPE=${BASH_REMATCH[1]}
+  BLOCKER=${BASH_REMATCH[2]}
+  RECORDS=${BASH_REMATCH[3]}
+  local word count=0 record=""
+  set -f
+  for word in $SOUT; do
+    case "$word" in record=*)
+      count=$((count + 1))
+      if [ "$count" = "$BLOCKER" ]; then record=${word#record=}; fi
+      ;;
+    esac
+  done
+  set +f
+  [ "$count" = "$RECORDS" ] || _refuse judge-error "state record count mismatch"
+  if [ "$ESCAPE" = yes ]; then
+    [ "$BLOCKER" = 0 ] || _refuse judge-error "state blocker mismatch"
+  else
+    [ "$BLOCKER" != 0 ] || _refuse judge-error "state blocker mismatch"
+  fi
+  [ "$BLOCKER" -le "$RECORDS" ] || _refuse judge-error "state blocker out of range"
+  BLOCKER_RECORD=$record
+}
+
+trap _on_exit EXIT  # M:T1
+
+READER=$(cat <<'PY'
+import json, os, select, sys, time
+if os.isatty(0):
+    data = b''
+else:
+    data = b''
+    end = time.monotonic() + 2.0
+    while True:
+        remaining = end - time.monotonic()
+        if remaining <= 0:
+            break
+        ready, _, _ = select.select([0], [], [], remaining)
+        if not ready:
+            break
+        chunk = os.read(0, 65536)
+        if not chunk:
+            break
+        data += chunk
+if not data:
+    sys.exit(0)
+try:
+    payload = json.loads(data.decode('utf-8'))
+    tool_input = payload.get('tool_input') if isinstance(payload, dict) else None
+    tool_input = tool_input if isinstance(tool_input, dict) else {}
+    if isinstance(payload, dict):
+        for value in (tool_input.get('file_path'), payload.get('file_path'), payload.get('path')):  # M:H1
+            if isinstance(value, str) and value:
+                if any(ord(c) < 32 or ord(c) == 127 for c in value):
+                    sys.exit(3)
+                print(value)
+                sys.exit(0)
+except (UnicodeError, ValueError, TypeError):
+    pass
+sys.exit(4)  # M:H12
+PY
+)
+TP=$(python3 -c "$READER") || TRC=$?
+if [ "$TRC" = 0 ] && [ -n "$TP" ]; then
+  TARGET_PATH=$TP  # M:H2
+elif [ "$TRC" = 0 ]; then
+  TARGET_PATH=${1:-}
+else
+  TARGET_PATH=""
 fi
 
-exit 0
+RAW_TARGET=$TARGET_PATH
+ROOT_ABS=$(cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null && pwd -P) || ROOT_ABS=""
+if [ -n "$TARGET_PATH" ]; then
+  TARGET_PATH=$(python3 -c 'import os,sys;print(os.path.normpath(os.path.join(sys.argv[1],sys.argv[2])))' "$ROOT_ABS" "$TARGET_PATH")  # M:H11
+fi
+R=${ROOT_ABS%/}
+IN_ROOT=no
+if [ -n "$ROOT_ABS" ]; then case "$TARGET_PATH" in "$R"/*) IN_ROOT=yes ;; esac; fi  # M:H18
+
+_chain_may_hold_state "$ROOT_ABS" "$TARGET_PATH" || _allow
+
+STATE_UNREADABLE_RE='^TDD-STATE: unreadable file=([^ ]+) error=([A-Za-z_-][A-Za-z0-9_-]*)$'
+STATE_ACTIVE_RE='^TDD-STATE: active codex-escape=(yes|no) blocker=(0|[1-9][0-9]*) records=([1-9][0-9]*)( record=[^ ,]+,[^ ,]+,[^ ,]+,(absent|null|grok|claude|invalid:[^ ,]+))+$'
+JUDGE_ALLOW_RE='^TDD-JUDGE: ALLOW kind=red-measured source=(impl-plan|name-map) test=[^ ]+$'
+JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-error) reason=(.+)$'
+
+if [ -z "$TARGET_PATH" ]; then
+  _find_judge
+  _read_state
+  _refuse judge-error "could not identify the write target"  # M:H13
+fi
+
+case "${TARGET_PATH##*/}" in  # M:H6
+  test_*.py|*_test.py|conftest*.py) _allow ;;
+esac
+if [ "$IN_ROOT" = yes ]; then
+  DIR_SUBJECT="/${TARGET_PATH#"$R"/}"; if _dir_match "$DIR_SUBJECT"; then _allow; fi  # M:H19
+elif _dir_match "$TARGET_PATH" && _dir_match "$RAW_TARGET"; then  # M:H20
+  _allow
+fi
+case "$TARGET_PATH" in
+  *.md|*.yaml|*.yml|*.json|*.toml|*.txt|*.rst|*.cfg|*.ini) _allow ;;
+  *.sh|*.bash|Makefile|Dockerfile|*.dockerignore|*.gitignore) _allow ;;
+esac
+[[ "$TARGET_PATH" != *.py ]] && _allow
+
+_find_judge
+_read_state --target "$TARGET_PATH"  # M:H3
+if [ -z "${HMAD_CODEX_UNAVAILABLE:-}" ] && [ "$ESCAPE" = no ] && command -v codex >/dev/null 2>&1; then
+  BLOCKER_KEY=${BLOCKER_RECORD%%,*}
+  BLOCKER_FILE=${BLOCKER_RECORD#*,}; BLOCKER_FILE=${BLOCKER_FILE#*,}; BLOCKER_FILE=${BLOCKER_FILE%%,*}
+  BLOCKER_KEY=$(_pct_decode "$BLOCKER_KEY")
+  BLOCKER_FILE=$(_pct_decode "$BLOCKER_FILE")
+  _refuse codex-authorship "Phase 5 implementation must be authored by Codex, not Claude.
+Dispatch this module to Codex: hmad-dispatch exec codex <promptfile>  (or: send codex).
+Codex looks available (codex on PATH). If it is out of quota, record it —
+  python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $BLOCKER_KEY --set codex_status=exhausted \"$BLOCKER_FILE\"
+then Claude may author the fallback (still test-first). Or export HMAD_CODEX_UNAVAILABLE=1 for a one-off."
+fi
+
+JOUT=$(python3 "$JUDGE" judge --root "$ROOT_ABS" --target "$TARGET_PATH" 2>/dev/null; printf 'rc=%s' "$?")  # M:W2
+JRC=${JOUT##*rc=}; JOUT=${JOUT%rc=*}; JOUT=${JOUT%$'\n'}  # M:H16
+case "$JOUT" in *$'\n'*|"") _refuse judge-error "judge verb printed zero or several lines" ;; esac
+if [ "$JRC" = 0 ] && [[ $JOUT =~ $JUDGE_ALLOW_RE ]]; then _allow; fi  # M:H4
+if [[ $JOUT =~ $JUDGE_DENY_RE ]]; then _refuse "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"; fi
+_refuse judge-error "judge verb rc=$JRC printed no well-formed verdict line"
+_refuse judge-error "gate fell through without a decision"

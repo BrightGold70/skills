@@ -1,0 +1,24 @@
+REPRO: D3 nopytest (0, 'deny', 'H-MAD Phase 5 requires a failing test before hematology-paper-writer/tools/w.py: kind=pytest-missing; hematology-paper-writer/tests/test_w.py: pytest-missing (rc=1; /opt/homebrew/opt/python@3.14/bin/python3.14: No module named pytest); /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpx7v9tv3c/repo/docs/01-plan/features/feat.impl-plan.md: absent; name map: /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpx7v9tv3c/repo/hematology-paper-writer/tests/test_w.py')
+REPRO: D3 control-withpytest (0, 'deny', 'H-MAD Phase 5 requires a failing test before hematology-paper-writer/tools/w.py: kind=test-passing; hematology-paper-writer/tests/test_w.py: test-passing (rc=0; 1 passed in 0.00s); /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpakvk5lvy/repo/docs/01-plan/features/feat.impl-plan.md: absent; name map: /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpakvk5lvy/repo/hematology-paper-writer/tests/test_w.py')
+REPRO: OD-2 cwd-relative (0, 'deny', 'H-MAD Phase 5 requires a failing test before hematology-paper-writer/tools/w.py: kind=test-passing; hematology-paper-writer/tests/test_w.py: test-passing (rc=0; 1 passed in 0.00s); /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpufloem89/repo/docs/01-plan/features/feat.impl-plan.md: absent; name map: /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpufloem89/repo/hematology-paper-writer/tests/test_w.py')
+REPRO: OD-3 nearest-state (0, 'deny', 'H-MAD Phase 5 requires a failing test before hematology-paper-writer/tools/w.py: kind=test-passing; hematology-paper-writer/tests/test_w.py: test-passing (rc=0; 1 passed in 0.00s); /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmp_a0xxv11/repo/docs/01-plan/features/feat.impl-plan.md: absent; name map: /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmp_a0xxv11/repo/hematology-paper-writer/tests/test_w.py')
+REPRO: OD-3 control-nosubstate (0, 'deny', 'H-MAD Phase 5 requires a failing test before hematology-paper-writer/tools/w.py: kind=test-passing; hematology-paper-writer/tests/test_w.py: test-passing (rc=0; 1 passed in 0.00s); /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpqevc42rq/repo/docs/01-plan/features/feat.impl-plan.md: absent; name map: /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpqevc42rq/repo/hematology-paper-writer/tests/test_w.py')
+REPRO: OD-4 tool_input (0, 'deny', '[H-MAD-TDD-GATE] BLOCK kind=codex-authorship: Phase 5 implementation must be authored by C')
+REPRO: OD-4 control-toplevel (0, 'deny', '[H-MAD-TDD-GATE] BLOCK kind=codex-authorship: Phase 5 implementation must be authored by C')
+REPRO: OD-3c claude-root-first (0, 'deny', '[H-MAD-TDD-GATE] BLOCK kind=pytest-missing: hematology-paper-writer/tests/test_w.py: pytes')
+REPRO: OD-3c control-noroot (0, 'deny', '[H-MAD-TDD-GATE] BLOCK kind=pytest-missing: hematology-paper-writer/tests/test_w.py: pytes')
+REPRO: D1 claude-absolute (0, 'deny', '[H-MAD-TDD-GATE] BLOCK kind=pytest-missing: hematology-paper-writer/tests/test_w.py: pytes')
+REPRO: OD-5 nopytest (0, 'deny', '[H-MAD-TDD-GATE] BLOCK kind=pytest-missing: hematology-paper-writer/tests/test_w.py: pytes')
+REPRO: OD-5 control-withpytest (0, 'deny', '[H-MAD-TDD-GATE] BLOCK kind=pytest-missing: hematology-paper-writer/tests/test_w.py: pytes')
+REPRO: summary red rc=1 last='1 failed in 0.02s'
+REPRO: summary green rc=0 last='1 passed in 0.00s'
+REPRO: summary importerr rc=2 last='1 error in 0.06s'
+REPRO: summary empty rc=5 last='no tests ran in 0.00s'
+REPRO: summary nopytest rc=1 last='/opt/homebrew/opt/python@3.14/bin/python3.14: No module named pytest'
+REPRO: run_suite '3 failed in 0.10s' summary=SuiteSummary(passed=0, failed=3, errors=0, no_tests_ran=False, phrases=frozenset({'failed'})) verdict=FAIL reason=-
+REPRO: run_suite '1 error in 0.06s' summary=SuiteSummary(passed=0, failed=0, errors=1, no_tests_ran=False, phrases=frozenset({'error'})) verdict=UNREADABLE reason=no_summary
+REPRO: run_suite '2 passed, 1 error in 0.1s' summary=SuiteSummary(passed=2, failed=0, errors=1, no_tests_ran=False, phrases=frozenset({'passed', 'error'})) verdict=PASS reason=-
+REPRO: run_suite '1 failed, 1 error in 0.1s' summary=SuiteSummary(passed=0, failed=1, errors=1, no_tests_ran=False, phrases=frozenset({'failed', 'error'})) verdict=FAIL reason=-
+REPRO: run_suite '3 failed, 1 skipped in 0.1s' summary=SuiteSummary(passed=0, failed=3, errors=0, no_tests_ran=False, phrases=frozenset({'failed', 'skipped'})) verdict=FAIL reason=-
+REPRO: run_suite 'no tests ran in 0.01s' summary=SuiteSummary(passed=0, failed=0, errors=0, no_tests_ran=True, phrases=frozenset()) verdict=UNREADABLE reason=no_summary
+REPRO: run_suite '1 failed, 11 passed in 0.2s' summary=SuiteSummary(passed=11, failed=1, errors=0, no_tests_ran=False, phrases=frozenset({'failed', 'passed'})) verdict=FAIL reason=-

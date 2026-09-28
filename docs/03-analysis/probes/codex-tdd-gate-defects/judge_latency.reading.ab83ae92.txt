@@ -1,0 +1,5 @@
+LATENCY: run=1 s=17.51 verdict=DENY kind=test-passing
+LATENCY: run=2 s=11.07 verdict=DENY kind=test-passing
+LATENCY: run=3 s=10.73 verdict=DENY kind=test-passing
+LATENCY: runs=3 worst_s=17.51 budget_s=40.0
+latency rc=0

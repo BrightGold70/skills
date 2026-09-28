@@ -51,8 +51,8 @@ optional `reason` shown to the user and agent.
 
 ## The TDD gate
 
-`hooks/h-mad-tdd-gate.sh` is written to Claude Code's exit-code protocol and
-`hooks/h-mad-codex-tdd-gate.py` to Codex's; **neither speaks agy's stdout-JSON contract**, so
+`hooks/h-mad-tdd-gate.sh` uses Claude Code's `permissionDecision` JSON deny on rc 0;
+`hooks/h-mad-codex-tdd-gate.py` uses Codex's hook contract. **Neither speaks agy's stdout-JSON contract**, so
 wiring either one here produces a hook that runs, emits nothing agy understands, and blocks
 nothing. An agy gate must read the `toolCall.name`/`toolCall.args` payload and emit
 `{"decision": "deny", "reason": "..."}` to refuse a production-code write during active `step5`,

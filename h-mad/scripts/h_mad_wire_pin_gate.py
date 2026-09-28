@@ -78,6 +78,14 @@ _FIELD_RE = re.compile(
     re.IGNORECASE,
 )
 
+_PATHS_FIELD_RE = re.compile(
+    r"^\s*(?:[-*•]\s+)?\*{0,2}\s*(?P<label>Production(?:\s+files?)?|Test(?:\s+files?)?)"
+    r"\s*(?::\s*\*{0,2}|\*{0,2}\s*:)\s*(?P<value>.*)$",
+    re.IGNORECASE,
+)
+_PY_TOKEN_RE = re.compile(r"`([^`]+\.py)`")
+_NONE_VALUE_RE = re.compile(r"^[\s*_`]*none(?![\w/-]|\.\w)", re.IGNORECASE)
+
 # Values that look filled in and are not. `<...>` is the template placeholder the
 # generator is supposed to replace; the rest are the ways a generator says nothing.
 _FILLER = {"tbd", "n/a", "na", "none", "-", "--", "todo", "?", "x"}
@@ -172,6 +180,8 @@ def _parse_tasks(text: str) -> list[dict]:
                 "pin": None,
                 "wires": [],
                 "pins": [],
+                "production": [],
+                "tests": [],
             }
             tasks.append(current)
             continue
@@ -179,6 +189,10 @@ def _parse_tasks(text: str) -> list[dict]:
             continue
         field = _FIELD_RE.match(line)
         if not field:
+            paths = _PATHS_FIELD_RE.match(line)
+            if paths is not None and _NONE_VALUE_RE.match(paths.group("value")) is None:
+                key = "production" if paths.group("label").lower().startswith("production") else "tests"
+                current[key].extend(_PY_TOKEN_RE.findall(paths.group("value")))
             continue
         label = " ".join(field.group("label").split()).lower()
         value = field.group("value")

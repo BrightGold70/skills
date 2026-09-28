@@ -1,0 +1,21 @@
+V-1r: direct red tree=1fbf8022 tests/test_certificate_lock_removed.py last=7 failed, 2 passed, 1 warning in 2.88s
+V-1r: direct red tree=1fbf8022 tests/test_review_guideline_pdf_excerpts.py last=21 passed, 1 warning in 1.02s
+V-1r: direct red tree=1fbf8022 tests/test_review_qualitative_assets.py last=30 passed, 1 warning in 5.33s
+V-1r: direct red tree=1fbf8022 tests/test_review_intake_wiring.py last=18 passed, 1 warning in 1.79s
+V-1r: direct green tree=31bfcfe4 tests/test_certificate_lock_removed.py last=9 passed, 1 warning in 2.74s
+V-1r: direct green tree=31bfcfe4 tests/test_review_guideline_pdf_excerpts.py last=10 passed, 1 warning in 1.04s
+V-1r: direct green tree=31bfcfe4 tests/test_review_qualitative_assets.py last=30 passed, 1 warning in 5.53s
+V-1r: direct green tree=31bfcfe4 tests/test_review_intake_wiring.py last=17 passed, 1 warning in 1.85s
+V-1r: gate red patch rc=0 out=<empty>
+V-1r: gate red shell-pytest rc=0 out=<empty>
+V-1r: gate red shell-write rc=0 out={"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "H-MAD Phase 5 permits only explicit test, read-only, and H-MAD control commands through Bash. Use apply_patch for writes so the Codex TDD gate can verify a failing test first."}}
+V-1r: gate green patch rc=0 out={"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "H-MAD Phase 5 requires a failing test before hematology-paper-writer/tools/review_round/guideline_excerpts.py: kind=test-passing; hematology-paper-writer/tests/test_certificate_lock_removed.py: test-passing (rc=0; 9 passed, 1 warning in 1.33s); hematology-paper-writer/tests/test_review_guideline_pdf_excerpts.py: test-passing (rc=0; 10 passed, 1 warning in 0.87s); hematology-paper-writer/tests/test_review_qualitative_assets.py: test-passing (rc=0; 30 passed, 1 warning in 5.46s); hematology-paper-writer/tests/test_review_intake_wiring.py: test-passing (rc=0; 17 passed, 1 warning in 1.49s); /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-v1r.MV2Uad/green/docs/01-plan/features/review-manifest-guideline-evidence.impl-plan.md: matched"}}
+V-1r: gate green shell-pytest rc=0 out=<empty>
+V-1r: gate green shell-write rc=0 out={"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "H-MAD Phase 5 permits only explicit test, read-only, and H-MAD control commands through Bash. Use apply_patch for writes so the Codex TDD gate can verify a failing test first."}}
+V-1r: CHECK red-patch-allows PASS
+V-1r: CHECK green-patch-denies-test-passing PASS
+V-1r: CHECK red-shell-pytest-allows PASS
+V-1r: CHECK green-shell-pytest-allows PASS
+V-1r: CHECK red-shell-write-denies PASS
+V-1r: CHECK green-shell-write-denies PASS
+V-1r: DONE VERDICT=PASS fails=0/6 skills=ab83ae92 hemasuite_red=1fbf8022 hemasuite_green=31bfcfe4 scratch=/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T//hmad-v1r.MV2Uad

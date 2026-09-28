@@ -1,0 +1,5 @@
+V-0: replay E1 rc=1 decision=none
+V-0: replay E2 rc=2 decision=none
+V-0: replay EJ rc=0 decision=deny
+V-0: replay E0 rc=0 decision=none
+V-0: READING=E1_DOES_NOT_BLOCK FORM_A=BLOCKS FORM_B=BLOCKS CHOSEN=b E1=present E2=absent EJ=absent E0=present claude=2.1.283 (Claude Code) scratch=/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T//hmad-v0.3XE4dM

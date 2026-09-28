@@ -1,0 +1,42 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_judge.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "V1",
+      "_mechanism": "Task 10 V1: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_venv_contained_rows[venv-out-bin-back-in-False] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if not _inside(os.path.realpath(venv), real_root):  # M:V1",
+      "replace": "    if False:  # M:V1",
+      "test": "tests/test_h_mad_tdd_judge.py::test_venv_contained_rows[venv-out-bin-back-in-False]"
+    },
+    {
+      "name": "V2",
+      "_mechanism": "Task 10 V2: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_venv_contained_rows[bin-symlink-out-False] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if not _inside(os.path.realpath(venv / \"bin\"), real_root):  # M:V2",
+      "replace": "    if False:  # M:V2",
+      "test": "tests/test_h_mad_tdd_judge.py::test_venv_contained_rows[bin-symlink-out-False]"
+    },
+    {
+      "name": "V3",
+      "_mechanism": "Task 10 V3: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_venv_contained_rows[cfg-missing-False] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        return stat.S_ISREG(os.lstat(venv / \"pyvenv.cfg\").st_mode)  # M:V3",
+      "replace": "        return True  # M:V3",
+      "test": "tests/test_h_mad_tdd_judge.py::test_venv_contained_rows[cfg-missing-False]"
+    }
+  ]
+}

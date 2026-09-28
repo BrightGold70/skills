@@ -1,0 +1,66 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_judge.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "C1",
+      "_mechanism": "Task 10 C1: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_chain_reads_every_state_file_up_to_root must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        records.extend(_active_records(data, path))  # M:C1",
+      "replace": "        records.extend(_active_records(data, path)); break  # M:C1",
+      "test": "tests/test_h_mad_tdd_judge.py::test_chain_reads_every_state_file_up_to_root"
+    },
+    {
+      "name": "C2",
+      "_mechanism": "Task 10 C2: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_first_unreadable_file_decides[root-unreadable-sub-step5] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "            return Chain(\"unreadable\", (), path, data)  # M:C2",
+      "replace": "            continue  # M:C2",
+      "test": "tests/test_h_mad_tdd_judge.py::test_first_unreadable_file_decides[root-unreadable-sub-step5]"
+    },
+    {
+      "name": "C3",
+      "_mechanism": "Task 10 C3: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_state_line_escape_and_blocker[exhausted-then-available] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    escape = bool(chain.records) and all(r.codex_status in ESCAPE_STATUSES for r in chain.records)  # M:C3",
+      "replace": "    escape = bool(chain.records) and any(r.codex_status in ESCAPE_STATUSES for r in chain.records)  # M:C3",
+      "test": "tests/test_h_mad_tdd_judge.py::test_state_line_escape_and_blocker[exhausted-then-available]"
+    },
+    {
+      "name": "C4",
+      "_mechanism": "Task 10 C4: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_non_regular_state_is_unreadable[fifo-not-a-regular-file] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        if not stat.S_ISREG(os.fstat(fd).st_mode):  # M:C4",
+      "replace": "        if False:  # M:C4",
+      "test": "tests/test_h_mad_tdd_judge.py::test_non_regular_state_is_unreadable[fifo-not-a-regular-file]"
+    },
+    {
+      "name": "C5",
+      "_mechanism": "Task 10 C5: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_state_line_escape_and_blocker[exhausted-then-available] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    blocker = next((i for i, r in enumerate(chain.records, 1) if r.codex_status not in ESCAPE_STATUSES), 0)  # M:C5",
+      "replace": "    blocker = 1  # M:C5",
+      "test": "tests/test_h_mad_tdd_judge.py::test_state_line_escape_and_blocker[exhausted-then-available]"
+    },
+    {
+      "name": "C6",
+      "_mechanism": "Task 10 C6: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_unsearchable_directory_is_unreadable[chmod-dir] must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    except (FileNotFoundError, NotADirectoryError):  # M:C6",
+      "replace": "    except OSError:  # M:C6",
+      "test": "tests/test_h_mad_tdd_judge.py::test_unsearchable_directory_is_unreadable[chmod-dir]"
+    }
+  ]
+}

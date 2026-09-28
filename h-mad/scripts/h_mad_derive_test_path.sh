@@ -1,7 +1,7 @@
 #!/bin/bash
 # h_mad_derive_test_path.sh — map a production .py path to its test path.
 # Returns empty string for unknown patterns or non-.py files.
-# Used by ~/.claude/hooks/h-mad-tdd-gate.sh and the /h-mad skill.
+# Used by h_mad_tdd_judge.py.
 
 set -euo pipefail
 

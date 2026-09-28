@@ -1,0 +1,155 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_codex_tdd_gate_judge.py",
+    "tests/test_h_mad_codex_runtime.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "G1",
+      "_mechanism": "Task 10 G1: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_payload_cwd_base_resolves_a_subproject_relative_target must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if isinstance(cwd, str) and cwd:  # M:G1",
+      "replace": "    if False:  # M:G1",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_payload_cwd_base_resolves_a_subproject_relative_target"
+    },
+    {
+      "name": "G2",
+      "_mechanism": "Task 10 G2: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[judge-error] must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    except Exception as exc:  # M:G2",
+      "replace": "    except ZeroDivisionError as exc:  # M:G2",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[judge-error]"
+    },
+    {
+      "name": "G3",
+      "_mechanism": "Task 10 G3: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_venv_token_keys_on_the_lexical_name must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    return path  # M:G3",
+      "replace": "    return Path(os.path.realpath(path))  # M:G3",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_venv_token_keys_on_the_lexical_name"
+    },
+    {
+      "name": "G4",
+      "_mechanism": "Task 10 G4: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_fifo_state_off_the_chain_denies_shell_without_blocking must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if not stat.S_ISREG(os.fstat(descriptor).st_mode):  # M:G4",
+      "replace": "        text = state_file.read_text(encoding=\"utf-8\")  # M:G4",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_fifo_state_off_the_chain_denies_shell_without_blocking"
+    },
+    {
+      "name": "G5",
+      "_mechanism": "Task 10 G5: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_unsearchable_docs_on_the_chain_denies_although_the_scan_is_inactive must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    for raw in targets:  # M:G5",
+      "replace": "    for raw in (targets if phase5_status != \"inactive\" else []):  # M:G5",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_unsearchable_docs_on_the_chain_denies_although_the_scan_is_inactive"
+    },
+    {
+      "name": "G6",
+      "_mechanism": "Task 10 G6: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[sub-cwd-escaping] must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if not _load_judge().venv_contained(path.parent.parent.parent, root):  # M:G6",
+      "replace": "    if False:  # M:G6",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[sub-cwd-escaping]"
+    },
+    {
+      "name": "G6B",
+      "_mechanism": "Task 10 G6B: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[root-cwd-escaping] must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if not _load_judge().venv_contained(path.parent.parent.parent, root):  # M:G6",
+      "replace": "    if False:  # M:G6",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[root-cwd-escaping]"
+    },
+    {
+      "name": "G7",
+      "_mechanism": "Task 10 G7: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_payload_cwd_outside_the_root_falls_back_to_the_root must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if candidate.is_dir() and (candidate == root or root in candidate.parents):  # M:G7",
+      "replace": "        if c.is_dir():  # M:G7",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_payload_cwd_outside_the_root_falls_back_to_the_root"
+    },
+    {
+      "name": "G8",
+      "_mechanism": "Task 10 G8: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_venv_token_still_obeys_the_argv_rules must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if executable.startswith(\"python\") and len(argv) >= 3 and argv[1:3] == [\"-m\", \"pytest\"]:",
+      "replace": "    if executable.startswith(\"python\"):",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_venv_token_still_obeys_the_argv_rules"
+    },
+    {
+      "name": "G6C",
+      "_mechanism": "Task 10 G6C: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_control_allowlist_under_a_venv[escaping-venv] must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if not _load_judge().venv_contained(path.parent.parent.parent, root):  # M:G6",
+      "replace": "    if False:  # M:G6",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_control_allowlist_under_a_venv[escaping-venv]"
+    },
+    {
+      "name": "G9",
+      "_mechanism": "Task 10 G9: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_control_allowlist_under_a_venv[usr-bin-python3-control] must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    resolved_executable = (_contained_venv_executable(argv[0], root, cwd) if root is not None else None) or _trusted_executable(argv[0])  # M:G9",
+      "replace": "    resolved_executable = _contained_venv_executable(argv[0], root, cwd) if root is not None else _trusted_executable(argv[0])  # M:G9",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_control_allowlist_under_a_venv[usr-bin-python3-control]"
+    },
+    {
+      "name": "G10",
+      "_mechanism": "Task 10 G10: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[doubled-path] must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    path = Path(os.path.normpath(os.path.join(str(_payload_cwd_base(root, cwd)), os.path.expanduser(token))))  # M:G10",
+      "replace": "    path = Path(os.path.normpath(os.path.join(str(root), os.path.expanduser(token))))  # M:G10",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_venv_token[doubled-path]"
+    },
+    {
+      "name": "G11",
+      "_mechanism": "Task 10 G11: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_control_allowlist_under_a_venv[script-outside-scripts] must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "            script.relative_to(scripts_root)",
+      "replace": "            script.relative_to(script.anchor)",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_shell_control_allowlist_under_a_venv[script-outside-scripts]"
+    },
+    {
+      "name": "W1R",
+      "_mechanism": "Task 10 W1R: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[red-measured] must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        verdict = judge.judge(root, absolute, chain.records)  # M:W1",
+      "replace": "        verdict = judge.Verdict(\"DENY\", \"judge-error\", \"wire removed\", \"\", None)  # M:W1",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[red-measured]"
+    },
+    {
+      "name": "W1F",
+      "_mechanism": "Task 10 W1F: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[test-passing] must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        verdict = judge.judge(root, absolute, chain.records)  # M:W1",
+      "replace": "        verdict = judge.Verdict(\"ALLOW\", \"red-measured\", \"\", \"impl-plan\", None)  # M:W1",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[test-passing]"
+    },
+    {
+      "name": "W5AR",
+      "_mechanism": "Task 10 W5AR: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_tdd_gate_judge.py::test_root_step5_governs_a_subproject_with_its_own_state must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        chain = judge.read_chain(root, absolute)  # M:W5A",
+      "replace": "        chain = judge.Chain(\"none\", (), None, \"\")  # M:W5A",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_root_step5_governs_a_subproject_with_its_own_state"
+    },
+    {
+      "name": "W5AF",
+      "_mechanism": "Task 10 W5AF: alter the hooks/h-mad-codex-tdd-gate.py branch; tests/test_h_mad_codex_runtime.py::test_codex_hook_scopes_nested_state_to_the_target_project must reject the changed behavior.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        chain = judge.read_chain(root, absolute)  # M:W5A",
+      "replace": "        chain = judge.Chain(\"active\", (judge.Record(\"forced\", \"available\", root / \"docs\" / \".bkit-memory.json\", \"absent\"),), None, \"\")  # M:W5A",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_scopes_nested_state_to_the_target_project"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_judge.py",
+    "tests/test_h_mad_parse_tasks_paths.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "R1",
+      "_mechanism": "Task 10 R1: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_task_match_is_authoritative_over_the_name_map must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if matched:  # M:R1",
+      "replace": "    if matched and present:  # M:R1",
+      "test": "tests/test_h_mad_tdd_judge.py::test_task_match_is_authoritative_over_the_name_map"
+    },
+    {
+      "name": "R2",
+      "_mechanism": "Task 10 R2: alter the scripts/h_mad_wire_pin_gate.py branch; tests/test_h_mad_tdd_judge.py::test_none_valued_production_does_not_match must reject the changed behavior.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "_NONE_VALUE_RE = re.compile(r\"^[\\s*_`]*none(?![\\w/-]|\\.\\w)\", re.IGNORECASE)",
+      "replace": "_NONE_VALUE_RE = re.compile(r\"(?!)\")",
+      "test": "tests/test_h_mad_tdd_judge.py::test_none_valued_production_does_not_match"
+    },
+    {
+      "name": "R3",
+      "_mechanism": "Task 10 R3: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_unreadable_plan_is_named_in_test_missing must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    return _deny(\"test-missing\", f\"no resolved test file exists ({_listing(candidates, root)}); author the failing test first{_notes(notes)}\")  # M:R3",
+      "replace": "    return _deny(\"test-missing\", f\"no resolved test file exists ({_listing(candidates, root)}); author the failing test first\")  # M:R3",
+      "test": "tests/test_h_mad_tdd_judge.py::test_unreadable_plan_is_named_in_test_missing"
+    },
+    {
+      "name": "R4",
+      "_mechanism": "Task 10 R4: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_mixed_candidates_missing_then_green_denies_test_passing must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    present = [c for c in candidates if _is_present(c[0])]  # M:R4",
+      "replace": "    present = list(candidates)  # M:R4",
+      "test": "tests/test_h_mad_tdd_judge.py::test_mixed_candidates_missing_then_green_denies_test_passing"
+    },
+    {
+      "name": "R5",
+      "_mechanism": "Task 10 R5: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_name_map_stderr_is_not_a_path must reject the changed behavior.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    mapped = out.strip()  # M:R5",
+      "replace": "    mapped = (out + err).strip()  # M:R5",
+      "test": "tests/test_h_mad_tdd_judge.py::test_name_map_stderr_is_not_a_path"
+    },
+    {
+      "name": "P1",
+      "_mechanism": "Task 10 P1: alter the scripts/h_mad_wire_pin_gate.py branch; tests/test_h_mad_parse_tasks_paths.py::test_existing_fields_unchanged must reject the changed behavior.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "                current[key].extend(_PY_TOKEN_RE.findall(paths.group(\"value\")))",
+      "replace": "                current[\"pins\"].extend(_PY_TOKEN_RE.findall(paths.group(\"value\")))",
+      "test": "tests/test_h_mad_parse_tasks_paths.py::test_existing_fields_unchanged"
+    },
+    {
+      "name": "P1B",
+      "_mechanism": "Task 10 P1B: alter the scripts/h_mad_wire_pin_gate.py branch; tests/test_h_mad_parse_tasks_paths.py::test_corpus_old_fields_unperturbed must reject the changed behavior.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "                current[key].extend(_PY_TOKEN_RE.findall(paths.group(\"value\")))",
+      "replace": "                current[\"pins\"].extend(_PY_TOKEN_RE.findall(paths.group(\"value\")))",
+      "test": "tests/test_h_mad_parse_tasks_paths.py::test_corpus_old_fields_unperturbed"
+    },
+    {
+      "name": "P2",
+      "_mechanism": "Task 10 P2: alter the scripts/h_mad_wire_pin_gate.py branch; tests/test_h_mad_parse_tasks_paths.py::test_field_re_is_unchanged must reject the changed behavior.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "    r\"^\\s*(?:[-*•]\\s+)?\\*{0,2}\\s*(?P<label>Task\\s+shape|WIRE-PIN|WIRE)\"",
+      "replace": "    r\"^\\s*(?:[-*•]\\s+)?\\*{0,2}\\s*(?P<label>Task\\s+shape|WIRE-PIN|WIRE|Production)\"",
+      "test": "tests/test_h_mad_parse_tasks_paths.py::test_field_re_is_unchanged"
+    }
+  ]
+}

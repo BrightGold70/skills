@@ -10,6 +10,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 # Suffix of the sidecar a passing gate writes beside the audit file. Kept next to
 # the audit rather than in orchestrator state because the pairing IS the claim:
@@ -421,12 +422,12 @@ def run_suite(test_root: Path, command: list[str] | None = None,
         return {"verdict": "UNREADABLE", "reason": exc.__class__.__name__.lower()}
     tail = (run.stdout or "") + (run.stderr or "")
     summary = _suite_summary(tail)
-    if summary is None:
+    if summary is None or not summary.phrases.intersection({"passed", "failed"}):
         # No parseable summary line: pytest did not get far enough to report.
         # That is a cannot-judge, NOT a failure — and never a pass. Reading a
         # missing summary as either is how a run that collected nothing scores.
         return {"verdict": "UNREADABLE", "reason": "no_summary", "rc": run.returncode}
-    passed, failed = summary
+    passed, failed = summary.passed, summary.failed
     if passed == 0 and failed == 0:
         # A run that collected nothing MEASURED nothing, and it exits 0. `pytest -k`
         # with a selection that matches no test is the standing example in this
@@ -437,21 +438,51 @@ def run_suite(test_root: Path, command: list[str] | None = None,
     return {"verdict": verdict, "passed": passed, "failed": failed, "rc": run.returncode}
 
 
-_SUITE_RE = re.compile(r"(?:(\d+) failed[,.]? )?(?:(\d+) passed)")
+class SuiteSummary(NamedTuple):
+    passed: int
+    failed: int
+    errors: int
+    no_tests_ran: bool
+    phrases: frozenset[str]
 
 
-def _suite_summary(text: str) -> tuple[int, int] | None:
-    """`(passed, failed)` from pytest's own summary line, or None.
+_SGR_RE = re.compile(r"\x1b\[[0-9;]*m")
+_CATEGORY = r"[a-z][a-z-]*(?: [a-z][a-z-]*)*"
+_SUMMARY_LINE_RE = re.compile(
+    rf"(?P<counts>\d+ {_CATEGORY}(?:, \d+ {_CATEGORY})*|no tests ran)"
+    r"(?P<timed> in \d+(?:\.\d+)?s(?: \(\d+:\d{2}:\d{2}\))?)?"
+)
+_SUMMARY_PHRASE_RE = re.compile(rf"(\d+) ({_CATEGORY})")
+
+
+def _suite_summary(text: str) -> SuiteSummary | None:
+    """Read the best whole pytest summary line, or None.
 
     Scored on the SUMMARY, never on the exit code: this repo has been fooled by
     rc in both directions — a skipped selection and a killed run both exit 0.
     """
-    best = None
-    for match in _SUITE_RE.finditer(text):
-        failed, passed = match.group(1), match.group(2)
-        if passed is None and failed is None:
+    best: SuiteSummary | None = None
+    best_rank = (-1, -1)
+    for index, raw_line in enumerate(text.splitlines()):
+        line = _SGR_RE.sub("", raw_line).strip().strip("=").strip()
+        match = _SUMMARY_LINE_RE.fullmatch(line)
+        if match is None:
             continue
-        best = (int(passed or 0), int(failed or 0))
+        rank = (bool(match.group("timed")), index)
+        if rank < best_rank:
+            continue
+        counts = match.group("counts")
+        phrases = [] if counts == "no tests ran" else [
+            _SUMMARY_PHRASE_RE.fullmatch(phrase) for phrase in counts.split(", ")
+        ]
+        categories = frozenset(phrase.group(2) for phrase in phrases)
+        totals = {category: sum(int(phrase.group(1)) for phrase in phrases
+                                if phrase.group(2) == category)
+                  for category in ("passed", "failed", "error", "errors")}
+        best = SuiteSummary(totals["passed"], totals["failed"],
+                            totals["error"] + totals["errors"],
+                            counts == "no tests ran", categories)
+        best_rank = rank
     return best
 
 

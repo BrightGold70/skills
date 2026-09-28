@@ -16,10 +16,10 @@ You are Codex implementing module `<INLINE_MODULE_NAME>` for feature `<INLINE_FE
 
 Working directory: `<INLINE_REPO_ROOT>`.
 Branch: `feature/NNN-<INLINE_FEATURE_SLUG>` (already checked out by Phase 5c).
-Hook: PreToolUse hook at `~/.claude/hooks/h-mad-tdd-gate.sh` is ARMED during this phase. It will BLOCK any Write/Edit on a production-code path unless:
-- The path is a test file (`*test_*.py`, `*/tests/*`, `*conftest*`, `*/fixtures/*`) — allowed unconditionally.
+Hook: Codex's `h-mad-codex-tdd-gate.py` guards `apply_patch` and shell writes; Claude's `h-mad-tdd-gate.sh` guards `Write` and `Edit`. Both are ARMED during this phase and block production-code writes unless:
+- The path is a test file (`test_*.py`, `*_test.py`, `conftest*.py`, `*/tests/*`, `*/fixtures/*`) — allowed unconditionally.
 - The path is markdown / yaml / json / toml / txt / rst — allowed unconditionally.
-- The path is production code AND a derived test file exists AND the test file is currently failing.
+- For production code, resolve the test from the impl-plan Task first, else the name map; allow the write only if that test exists and pytest's summary shows `N failed`.
 
 This means during RED phase (5d) you write tests freely (test paths bypass the hook); during GREEN phase (5e) you can only modify production code if a matching failing test exists.
 

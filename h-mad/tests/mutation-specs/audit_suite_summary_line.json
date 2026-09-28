@@ -1,0 +1,139 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_suite_gate.py",
+    "tests/test_h_mad_tdd_gate_support.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "S1",
+      "_mechanism": "Task 10 S1: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[subtests-passed] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if summary is None or not summary.phrases.intersection({\"passed\", \"failed\"}):",
+      "replace": "    if not ({\"failed\"} & summary.phrases):",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[subtests-passed]"
+    },
+    {
+      "name": "S2",
+      "_mechanism": "Task 10 S2: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[three-failed] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if summary is None or not summary.phrases.intersection({\"passed\", \"failed\"}):",
+      "replace": "    if not ({\"passed\"} & summary.phrases):",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[three-failed]"
+    },
+    {
+      "name": "S3",
+      "_mechanism": "Task 10 S3: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[stray-failed-on-stderr] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        rank = (bool(match.group(\"timed\")), index)",
+      "replace": "        rank = (not bool(match.group(\"timed\")), index)",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[stray-failed-on-stderr]"
+    },
+    {
+      "name": "S4",
+      "_mechanism": "Task 10 S4: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[coloured] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        line = _SGR_RE.sub(\"\", raw_line).strip().strip(\"=\").strip()",
+      "replace": "        line = raw_line.strip().strip(\"=\").strip()",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[coloured]"
+    },
+    {
+      "name": "S5",
+      "_mechanism": "Task 10 S5: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[subtests-failed-run] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "                                if phrase.group(2) == category)",
+      "replace": "                                if phrase.group(2).endswith(category))",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[subtests-failed-run]"
+    },
+    {
+      "name": "S6",
+      "_mechanism": "Task 10 S6: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[subtests-failed] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "                                if phrase.group(2) == category)",
+      "replace": "                                if phrase.group(2).endswith(category))",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[subtests-failed]"
+    },
+    {
+      "name": "S7A",
+      "_mechanism": "Task 10 S7A: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[one-error] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "                            totals[\"error\"] + totals[\"errors\"],",
+      "replace": "                            totals[\"errors\"],",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[one-error]"
+    },
+    {
+      "name": "S7B",
+      "_mechanism": "Task 10 S7B: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[one-errors] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "                            totals[\"error\"] + totals[\"errors\"],",
+      "replace": "                            totals[\"error\"],",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[one-errors]"
+    },
+    {
+      "name": "S8",
+      "_mechanism": "Task 10 S8: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[failed-node-line] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        match = _SUMMARY_LINE_RE.fullmatch(line)",
+      "replace": "        match = _SUMMARY_LINE_RE.search(line)",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[failed-node-line]"
+    },
+    {
+      "name": "S8B",
+      "_mechanism": "Task 10 S8B: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[quoted-assert] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        match = _SUMMARY_LINE_RE.fullmatch(line)",
+      "replace": "        match = _SUMMARY_LINE_RE.search(line)",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[quoted-assert]"
+    },
+    {
+      "name": "S9",
+      "_mechanism": "Task 10 S9: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[capitalised-category] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "_CATEGORY = r\"[a-z][a-z-]*(?: [a-z][a-z-]*)*\"",
+      "replace": "_CATEGORY = r\"[A-Za-z][a-z-]*(?: [a-z][a-z-]*)*\"",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_suite_summary_reads_the_line[capitalised-category]"
+    },
+    {
+      "name": "S10",
+      "_mechanism": "Task 10 S10: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[passed-and-error] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        best = SuiteSummary(totals[\"passed\"], totals[\"failed\"],",
+      "replace": "        best = SuiteSummary(totals[\"passed\"], totals[\"failed\"] + totals[\"error\"] + totals[\"errors\"],",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[passed-and-error]"
+    },
+    {
+      "name": "S11",
+      "_mechanism": "Task 10 S11: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[failed-and-passed] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        best = SuiteSummary(totals[\"passed\"], totals[\"failed\"],",
+      "replace": "        best = SuiteSummary(totals[\"passed\"], 0,",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[failed-and-passed]"
+    },
+    {
+      "name": "S12",
+      "_mechanism": "Task 10 S12: alter the scripts/h_mad_audit_gate.py branch; tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[three-skipped] must reject the changed behavior.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if summary is None or not summary.phrases.intersection({\"passed\", \"failed\"}):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_run_suite_table_row[three-skipped]"
+    },
+    {
+      "name": "E1",
+      "_mechanism": "Task 10 E1: alter the tests/tdd_gate_support.py branch; tests/test_h_mad_tdd_gate_support.py::test_hermetic_env_drops_claude_names_and_backend must reject the changed behavior.",
+      "file": "tests/tdd_gate_support.py",
+      "find": "    env = {k: v for k, v in os.environ.items() if not k.startswith(\"CLAUDE\") and k not in DROPPED_ENV}  # M:E1",
+      "replace": "    env = dict(os.environ)  # M:E1",
+      "test": "tests/test_h_mad_tdd_gate_support.py::test_hermetic_env_drops_claude_names_and_backend"
+    }
+  ]
+}
