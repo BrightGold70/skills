@@ -592,6 +592,123 @@ def test_escaping_venv_denies_before_any_run(tmp_path):
     assert not marker.exists()
 
 
+# Scoring through the W4 summary connection: 17 items.
+@pytest.mark.parametrize("case,body,decision,kind", [
+    ("red", "def test_red():\n    assert False\n", "ALLOW", "red-measured"),
+    ("green", "def test_green():\n    assert True\n", "DENY", "test-passing"),
+    ("empty", "", "DENY", "no-tests-ran"),
+    ("skipped-only", "import pytest\n@pytest.mark.skip\ndef test_skipped():\n    assert False\n",
+     "DENY", "no-tests-ran"),
+    ("import-error", "import not_a_module_xyz\n", "DENY", "pytest-error"),
+    ("red-with-subtest", "def test_red(subtests):\n    with subtests.test('a'):\n"
+     "        assert True\n        assert False\n", "ALLOW", "red-measured"),
+    ("green-with-subtest", "def test_green(subtests):\n    with subtests.test('a'):\n"
+     "        assert True\n        assert True\n", "DENY", "test-passing"),
+], ids=["red", "green", "empty", "skipped-only", "import-error",
+        "red-with-subtest", "green-with-subtest"])
+def test_scoring_kinds(tmp_path, case, body, decision, kind):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root, body=body)
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == (decision, kind), f"{case}: {verdict}"
+    if case == "import-error":
+        assert "import" in verdict.reason and "inside the test body" in verdict.reason
+
+
+@pytest.mark.parametrize("case,script,decision,kind", [
+    ("failed-line-rc0", "printf '1 failed in 0.01s\\n'\nexit 0", "ALLOW", "red-measured"),
+    ("silent-rc1", "exit 1", "DENY", "no-summary"),
+], ids=["failed-line-rc0", "silent-rc1"])
+def test_rc_selects_nothing(tmp_path, case, script, decision, kind):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    fake_venv(root / "hematology-paper-writer", script)
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == (decision, kind), f"{case}: {verdict}"
+
+
+def test_stray_failed_line_after_a_passing_summary_is_test_passing(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    fake_venv(root / "hematology-paper-writer",
+              "printf '2 passed in 0.1s\\n1 failed\\n'\nexit 0")
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == ("DENY", "test-passing"), verdict
+
+
+def test_quoted_no_module_phrase_is_not_pytest_missing(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    fake_venv(root / "hematology-paper-writer",
+              "printf 'E   assert \"No module named pytest\" in out\\n1 failed in 0.01s\\n'\nexit 1")
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == ("ALLOW", "red-measured"), verdict
+
+
+def test_whole_line_no_module_is_pytest_missing_even_after_red(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    fake_venv(root / "hematology-paper-writer",
+              "printf 'x: No module named pytest\\n1 failed in 0.01s\\n'\nexit 1")
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == ("DENY", "pytest-missing"), verdict
+
+
+@pytest.mark.parametrize("target_form", ["absolute", "relative"])
+def test_name_map_source_allows_via_the_cli(tmp_path, target_form):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    write_state(root, {"feat": _step()})
+    argument = str(target) if target_form == "absolute" else target.relative_to(root).as_posix()
+    result = _cli("judge", "--root", str(root), "--target", argument)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == (
+        "TDD-JUDGE: ALLOW kind=red-measured source=name-map "
+        "test=hematology-paper-writer/tests/test_w.py\n"
+    )
+
+
+def test_contained_venv_shim_runs_pytest(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    marker = tmp_path / "selected-interpreter"
+    python = fake_venv(root / "hematology-paper-writer", "exit 0")
+    marker_shim(python, marker)
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == ("ALLOW", "red-measured"), verdict
+    assert marker.read_text(encoding="utf-8").strip() == str(python)
+
+
+def test_real_venv_interpreter_symlink_is_accepted(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    hpw = root / "hematology-paper-writer"
+    python = build_venv(hpw / ".venv", with_pytest=True)
+    assert python.is_symlink() and not os.path.realpath(python).startswith(str(root) + os.sep)
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == ("ALLOW", "red-measured"), verdict
+
+
+def test_unreadable_plan_with_a_passing_name_map_test_is_test_passing(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root, body="def test_green():\n    assert True\n")
+    write_state(root, {"feat": _step()})
+    plan = write_plan(root, "feat", "placeholder")
+    plan.write_bytes(b"\xff\xfe")
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == ("DENY", "test-passing"), verdict
+    assert "impl-plan unreadable" in verdict.reason
+
+
 # 3.9 syntax and import floor: 4 items.
 @pytest.mark.parametrize("name", ["h_mad_tdd_judge", "h_mad_wire_pin_gate",
                                   "h_mad_wire_registry", "h_mad_audit_gate"])
