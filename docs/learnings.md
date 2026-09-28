@@ -9,6 +9,10 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-29 · gotcha · [0.7] · `zsh,shell,measurement,handoff:2026-09-29-three-features-in-5c` — zsh does not word-split unquoted $VAR: pytest $TS ran nothing ('no tests ran') and nearly read as a result; spell paths or use arrays
+- 2026-09-29 · gotcha · [0.7] · `shell,locale,h-mad,handoff:2026-09-29-three-features-in-5c` — comm between sorted node-id lists is only valid under one collation: raw comm gave 1631 missing, LC_ALL=C re-sort gave 0
+- 2026-09-29 · pattern · [0.7] · `h-mad,tdd,codex,handoff:2026-09-29-three-features-in-5c` — ~1/3 of codex GREEN BLOCKs were RED-test defects; fix as a test-only amendment commit and SWEEP every occurrence of the defect before re-dispatch
+- 2026-09-29 · gotcha · [0.9] · `codex,h-mad,sandbox,handoff:2026-09-29-three-features-in-5c` — codex exec sandbox cannot write inside .git nor run git worktree add; orchestrator must run git-dir writes (nodeid lists, suite captures, worktree probes) outside and hand codex the file
 - 2026-09-28 · gotcha · [0.5] · `h-mad,audit-gate,handoff:2026-09-28-three-features-past-design` — h_mad_audit_gate.py counts nested sub-bullets as findings: a teammate report with 3 top-level musts scored must=27 untagged=49; do not trust GATE counts on nested-bullet reports
 - 2026-09-28 · pattern · [0.5] · `h-mad,round-cap,propagation,handoff:2026-09-28-three-features-past-design` — After an audit round cap, the final corrective design owes sentences to spec/plan authored in parallel; grep-check each owed sentence against the other doc before committing the pair — caught 6 missing spec sentences
 - 2026-09-28 · gotcha · [0.7] · `h-mad,tdd,hermetic-env,handoff:2026-09-28-three-features-past-design` — Subprocess tests asserting CLAUDE* env names break under a Claude Code orchestrator (~15 ambient CLAUDE* exports); strip ^CLAUDE + HPW_AGENT_BACKEND before setting test names; prove with extra CLAUDE_ZZZ_PROBE=1
