@@ -16,3 +16,7 @@
 {"phase": "design", "cycle": 2, "leg": "codex", "item": "shell/python detector disagree on 5000-deep nesting (RecursionError)", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": false}
 {"phase": "design", "cycle": 2, "leg": "codex", "item": "grok CLI vs no-new-CLI invariant", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
 {"phase": "design", "cycle": 2, "leg": "codex", "item": "F0 fixture outside h-mad/; suite not skill-self-contained", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task16 missing dependency on Task13", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "wire-scoped removal not executed/scored", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "unmodified-test gate blind to added skip decorator", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task17 smoke pass conditions not asserting", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}

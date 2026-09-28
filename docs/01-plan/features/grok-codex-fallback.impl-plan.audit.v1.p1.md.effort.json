@@ -1,0 +1,13 @@
+{
+  "agy_events": 0,
+  "collected": "grok-codex-fallback.impl-plan.audit.v1.p1.md",
+  "failed": 0,
+  "log": "/tmp/audit_grok-codex-fallback_impl-plan_cycle1_p1.log",
+  "ok": 0,
+  "pass": 1,
+  "readable": true,
+  "shape": "codex-text",
+  "status": null,
+  "thinking": 0,
+  "tools": 0
+}
