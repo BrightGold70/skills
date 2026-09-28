@@ -536,6 +536,178 @@ def test_name_map_stderr_is_not_a_path(tmp_path, monkeypatch):
     assert "name map: empty for hematology-paper-writer/tools/w.py" in verdict.reason
 
 
+# Plan task resolution: W3 caller-to-parser connection (16 items).
+def _task_plan(root, *sections):
+    write_state(root, {"feat": _step()})
+    text = "\n\n".join(
+        f"## Task {number}: agent \"quoted\" \\ input\n"
+        "[H-MAD:MARKER] human note with `odd * markdown`\n"
+        + section
+        for number, section in enumerate(sections, 1)
+    )
+    return write_plan(root, "feat", text + "\n")
+
+
+def _plan_test(root, rel, *, red=True):
+    path = root / "hematology-paper-writer" / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("def test_fixture():\n    assert " + ("False" if red else "True") + "\n",
+                    encoding="utf-8")
+    return path
+
+
+def test_hemasuite_layout_resolves_from_the_task(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root, "hematology-paper-writer/cli/_parser.py")
+    expected = _plan_test(root, "tests/test_certificate_lock_removed.py")
+    _task_plan(root, "**Production file**: `tools/review_round/guideline_excerpts.py`, "
+                     "`cli/_parser.py`\n**Test file**: `tests/test_certificate_lock_removed.py`")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.source, verdict.test) == ("ALLOW", "impl-plan", expected), \
+        f"judge must follow the plan task to its RED test: {verdict!r}"
+    assert verdict.kind == "red-measured"
+
+
+@pytest.mark.parametrize("production_label,test_label", [
+    pytest.param("Production file", "Test file", id="production-file"),
+    pytest.param("Production files", "Test file", id="production-files"),
+    pytest.param("Production", "Test file", id="production"),
+    pytest.param("Production file", "Test file", id="test-file"),
+    pytest.param("Production file", "Test files", id="test-files"),
+    pytest.param("Production file", "Test", id="test"),
+    pytest.param("Production file", "Test file:", id="test-colon-inside"),
+])
+def test_label_spelling_resolves_the_same(tmp_path, production_label, test_label):
+    root = _root(tmp_path)
+    target = _target(root)
+    expected = _plan_test(root, "tests/test_from_plan.py")
+    _task_plan(root, f"**{production_label}**: `tools/w.py`\n"
+                     f"**{test_label}**{' ' if test_label.endswith(':') else ':'} `tests/test_from_plan.py`")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.source, verdict.test) == ("ALLOW", "impl-plan", expected), \
+        f"judge must resolve {production_label!r}/{test_label!r} task labels: {verdict!r}"
+
+
+def test_tests_prose_line_contributes_no_candidate(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    expected = _plan_test(root, "tests/test_from_plan.py")
+    absent = root / "hematology-paper-writer/tests/test_absent.py"
+    _task_plan(root, "**Production file**: `tools/w.py`\n"
+                     "**Test file**: `tests/test_from_plan.py`\n"
+                     "**Tests** (5 functions, `tests/test_absent.py`)")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+    resolution = judge.resolve(root, target, _records(root), deadline=time.monotonic() + 40)
+
+    assert (verdict.decision, verdict.source, verdict.test) == ("ALLOW", "impl-plan", expected), \
+        f"judge must use the Task test, not Tests prose: {verdict!r}"
+    assert absent not in resolution.missing
+    assert all(path != absent for path, _ in resolution.present)
+
+
+def test_none_valued_production_does_not_match(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root, "docs/x/derive_readings.py")
+    _task_plan(root, "**Production file**: none (writes `docs/x/derive_readings.py`)\n"
+                     "**Test file**: `tests/test_t.py`")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.kind) == ("DENY", "no-test-resolved"), \
+        f"none-valued Production must not create a task match: {verdict!r}"
+    assert "test_t.py" not in verdict.reason
+
+
+def test_several_candidates_first_red_allows(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _plan_test(root, "tests/test_one.py", red=False)
+    red_test = _plan_test(root, "tests/test_two.py")
+    _task_plan(root, "**Production file**: `tools/w.py`\n**Test file**: `tests/test_one.py`",
+                     "**Production file**: `tools/w.py`\n**Test file**: `tests/test_two.py`")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.source, verdict.test) == ("ALLOW", "impl-plan", red_test), \
+        f"judge must continue past a GREEN candidate to the RED task test: {verdict!r}"
+
+
+def test_several_candidates_all_green_names_both(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _plan_test(root, "tests/test_one.py", red=False)
+    _plan_test(root, "tests/test_two.py", red=False)
+    _task_plan(root, "**Production file**: `tools/w.py`\n**Test file**: `tests/test_one.py`",
+                     "**Production file**: `tools/w.py`\n**Test file**: `tests/test_two.py`")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.kind) == ("DENY", "test-passing"), \
+        f"judge must measure both GREEN task tests: {verdict!r}"
+    assert "test_one.py" in verdict.reason and "test_two.py" in verdict.reason
+    assert "matched" in verdict.reason
+
+
+def test_task_match_is_authoritative_over_the_name_map(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    _task_plan(root, "**Production file**: `tools/w.py`\n**Test file**: `tests/test_plan_only.py`")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.kind) == ("DENY", "test-missing"), \
+        f"matched Task must override the RED name-map test: {verdict!r}"
+    assert "test_plan_only.py" in verdict.reason
+    assert "test_w.py" not in verdict.reason
+
+
+def test_mixed_candidates_missing_then_red_allows_the_red(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    red_test = _plan_test(root, "tests/test_two.py")
+    _task_plan(root, "**Production file**: `tools/w.py`\n**Test file**: `tests/test_one.py`",
+                     "**Production file**: `tools/w.py`\n**Test file**: `tests/test_two.py`")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.source, verdict.test) == ("ALLOW", "impl-plan", red_test), \
+        f"missing first candidate must not hide the RED second candidate: {verdict!r}"
+
+
+def test_mixed_candidates_missing_then_green_denies_test_passing(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _plan_test(root, "tests/test_two.py", red=False)
+    _task_plan(root, "**Production file**: `tools/w.py`\n**Test file**: `tests/test_one.py`",
+                     "**Production file**: `tools/w.py`\n**Test file**: `tests/test_two.py`")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.kind) == ("DENY", "test-passing"), \
+        f"GREEN candidate must be measured even when an earlier candidate is missing: {verdict!r}"
+    assert "test_one.py: missing" in verdict.reason
+    assert "test_two.py: test-passing" in verdict.reason
+
+
+def test_candidate_outside_root_is_dropped_and_noted(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _task_plan(root, "**Production file**: `tools/w.py`\n"
+                     "**Test file**: `../../outside/test_x.py`")
+
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.kind) == ("DENY", "test-missing"), \
+        f"outside-root Task candidate must be dropped: {verdict!r}"
+    assert "candidate outside root dropped" in verdict.reason
+
+
 # Scoring before the W4 summary connection: 5 items.
 @pytest.mark.parametrize("case", ["project-venv", "gate-interpreter"])
 def test_pytest_missing_denies(tmp_path, case):
