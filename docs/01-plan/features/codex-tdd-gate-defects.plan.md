@@ -22,11 +22,23 @@ as the spec recommends. The defects are live. At skills `2f262f8a`:
 P3 below reproduces each case with a control. This feature merges first of the three in-flight
 `h-mad/` features because it closes a live safety gap.
 
-This revision (v1.2) answers plan audit cycle 2 (codex, 4 musts) and the v1.1 delta review (4
+Revision v1.2 answered plan audit cycle 2 (codex, 4 musts) and the v1.1 delta review (4
 musts, 7 shoulds), under orchestrator decisions D-A…D-D (operator-approved 2026-09-28). Spec v1.1
 (`96bf1cd1`) settled S-1…S-6. S-7, S-8, S-9, S-11 and S-12 are cited as "spec v1.2 (S-n)"; spec v1.2
 was being written in parallel with this revision, and the sentences this plan depends on are listed
 in the author report. S-10 is withdrawn (D-A): the wire registry keeps its own grammar.
+
+Revision v1.3 is a propagation revision, not an audit round. It carries into this plan what spec
+v1.3 and design v1.1 (both committed at `b20ef027`) say the plan owes, and nothing else:
+- the Claude gate's order, with exemptions before governance (DD-1, OD-A);
+- the removal of the no-`jq` allow (DD-2);
+- the one `run_suite` predicate that replaces "two explicit branches" (DD-3);
+- the SGR strip and the open category axis in the summary-line rule (DD-4, OD-D);
+- the process-group time bound (DD-10);
+- the shell-policy differential's control-allowlist row and builder-derived versioned spelling
+  (OD-C; DD-6 withdrawn);
+- R2's citation of design D13;
+- where the ACs spec v1.3 added or extended are tested (§"Spec v1.3 ACs: where each is tested").
 
 ## Scope
 
@@ -39,7 +51,7 @@ In scope, by file. Every path was verified present at `2f262f8a` with `ls`, exce
 | `h-mad/hooks/h-mad-tdd-gate.sh` | payload read; governance and the Codex-authorship key from the judge's `state` verb; judge CLI call; one refusal function at every refusal site and on every implicit exit | FR-6 |
 | `h-mad/scripts/h_mad_wire_pin_gate.py` | `_parse_tasks` extended in place with `production` and `tests` | FR-2, OD-7 |
 | `h-mad/scripts/h_mad_wire_registry.py` | **not edited** (D-A). `_production_claims` keeps its own grammar; see "Second Production grammar (residual)" | spec v1.2 FR-2 residual and AC-2.9 |
-| `h-mad/scripts/h_mad_audit_gate.py` | `_suite_summary` extended in place; `run_suite`'s one scoring change | FR-4, OD-7 |
+| `h-mad/scripts/h_mad_audit_gate.py` | `_suite_summary` extended in place; `run_suite`'s three verdict changes (spec v1.3 FR-4 "Audit-gate changes") and its one predicate (DD-3) | FR-4, OD-7 |
 | `h-mad/references/codex-runtime.md` | §"Trust boundary" | FR-7 |
 | `h-mad/SKILL.md`, `h-mad/references/agy-runtime.md`, `h-mad/references/codex-implementer-prompt.md` | registry entry for the judge; the gate prose the change makes false (see "Stale-prose census") | invariant §"Skill manifest integrity"; spec v1.2 (S-11) |
 | `h-mad/tests/` | new test modules; the named updates only, including the module-level `HOOK` constant of the two Claude-gate modules (layer 6, "worktree artifacts reached through `$HOME/.claude`") | FR-8 and the ACs |
@@ -70,7 +82,9 @@ In scope, by file. Every path was verified present at `2f262f8a` with `ls`, exce
 
 FR-0 through FR-8 of `docs/01-plan/features/codex-tdd-gate-defects.spec.md` v1.1 (`96bf1cd1`)
 apply, with OD-1…OD-7 resolved as the spec recommends. Where this plan relies on S-7, S-8, S-9,
-S-11 or S-12, it cites spec v1.2 (S-n).
+S-11 or S-12, it cites spec v1.2 (S-n). Spec v1.3 (`b20ef027`) adds OD-A…OD-D and the ACs listed
+under §"Spec v1.3 ACs: where each is tested". Design v1.1 (`b20ef027`) owns every mechanism this
+plan names by DD-n or D-n.
 
 **Merge conditions:**
 - V-0 must read conclusively (not `INCONCLUSIVE`) with a chosen form (spec v1.1 AC-6.7, S-4).
@@ -94,9 +108,10 @@ The live V-1 stays blocked on `multi-host-runtime`, and it is not a merge condit
    - `_production_claims` is not touched (D-A; see "Second Production grammar (residual)").
    - `_suite_summary` gains independent `failed`, `passed` and `errors` counts, and a
      `no tests ran` reading, and it scores only a whole pytest summary line (the "summary-line
-     rule" under "Regression census"), never a count phrase found elsewhere in the output.
-   - Every existing caller keeps its current result, except the single `run_suite` change the spec
-     names. The table under "Regression census" is the contract and is pinned cell by cell.
+     rule" under "Regression census"), never a count phrase found elsewhere in the output. SGR
+     colour sequences are stripped from each line before it is matched (DD-4).
+   - Every existing caller keeps its current result, except the three `run_suite` verdict changes
+     spec v1.3 FR-4 lists ("Audit-gate changes"). The table under "Regression census" is the contract and is pinned cell by cell.
 3. **The judge.** A pure core takes (root, absolute target, ACTIVE features with their state
    files) and returns a verdict and a `kind`. The chain reader lives here. The CLI has two verbs:
    - `judge` prints exactly one `TDD-JUDGE:` line (FR-1).
@@ -108,23 +123,46 @@ The live V-1 stays blocked on `multi-host-runtime`, and it is not a merge condit
    gates reach one state reader for every state decision (OD-3).
 4. **Codex gate.** Import the judge. `_relative_target` resolves against a payload `cwd` inside the
    root (OD-2). Any exception on the main path becomes `_deny(...)` with `judge-error` (AC-5.4).
-5. **Shell policy.** `_trusted_executable` admits `<D>/.venv/bin/python*` under FR-3's containment
-   rule, with relative tokens resolved against the payload `cwd`. The argv rules are unchanged. The
-   relaxation ships with the differential corpus under "Guard narrowing: shell policy".
-6. **Claude gate.** In order:
-   1. Read `tool_input.file_path`, then the top-level `file_path`, then `$1` (OD-4).
-   2. `_resolve_state_file` keeps only the existence fast path (spec FR-6). Its answer ("some state
-      file exists within the root on the target's chain") is correct for existence, and only for
-      existence.
-   3. The `state` verb decides governance. No step5 record → allow. Unreadable → refuse `judge-error`,
-      fail-closed like the Codex gate (spec v1.2 (S-8), AC-6.9; today the Claude gate fails open
-      here).
-   4. Exemptions, then the Codex-authorship check over the `state` verb's ACTIVE records. The escape
-      applies only when **every** ACTIVE record on the chain declares `unavailable`/`exhausted` or
+5. **Shell policy.** A contained `<D>/.venv/bin/python*` token is admitted under FR-3's
+   containment rule, with relative tokens resolved against the payload `cwd` (design D8 adds
+   `_contained_venv_executable` ahead of the unchanged `_trusted_executable`). The argv rules are
+   unchanged, so a venv token gets exactly the `python*` rules, the H-MAD control allowlist
+   included (spec v1.3 FR-3 and AC-3.6, OD-C; design DD-6 is withdrawn). The relaxation ships with
+   the differential corpus under "Guard narrowing: shell policy".
+6. **Claude gate.** The decision order is spec v1.3 FR-6 "Order" (OD-A, design DD-1); design D9
+   owns the mechanism. The first step that decides ends the run:
+   0. **Target** (OD-4, OD-B). The stdin payload is read first: the first non-empty string among
+      `tool_input.file_path`, the top-level `file_path` and the top-level `path`. `$1` is consulted
+      only when stdin yields no target. A stdin target that holds a control character, or a stdin
+      read that fails, is no target, and `$1` is not consulted in its place: the empty-target rule
+      decides (design D9 step 2). A relative target is made absolute against the project root
+      before any check (DD-7, spec v1.3 AC-6.15).
+   1. **Fast path.** No state file name on the target's chain → allow. It replaces
+      `_resolve_state_file` (design D9 step 4, `_chain_may_hold_state`) and may allow only a write
+      the `state` verb would read as none: a non-regular or dangling-symlink state path, and a
+      target whose parent does not exist yet under an ancestor that holds a state file, both defer
+      to the `state` verb (spec v1.3 AC-6.11).
+   2. **Empty target** (DD-8). Governance of the root alone: `active` or `unreadable` → refuse
+      `judge-error`; `none` → allow (spec v1.3 AC-6.13).
+   3. **Exemptions and the `.py` filter** → allow. Their patterns keep their bytes. No state is read
+      for an exempt write, so an exempt write is allowed even on an unreadable chain and the broken
+      state file can be repaired (spec v1.3 AC-6.9, the three exempt fixtures).
+   4. **Governance.** The `state` verb decides. No step5 record → allow. Unreadable, or any `state`
+      failure mode → refuse `judge-error`, fail-closed like the Codex gate (spec v1.2 (S-8),
+      AC-6.9; today the Claude gate fails open here). A target outside the root is governed by the
+      root's state (DD-9, spec v1.3 AC-6.14).
+   5. **Codex authorship** over the `state` verb's ACTIVE records. The escape applies only when
+      **every** ACTIVE record on the chain declares `unavailable`/`exhausted` or
       `HMAD_CODEX_UNAVAILABLE` is set (spec v1.2 (S-8), AC-6.10).
-   5. The `judge` verb for every governed `.py` write, whether or not the target exists (OD-5). The
-      blocking form follows V-0's `CHOSEN=` reading (AC-6.5 / AC-6.6): (b) when `FORM_B=BLOCKS`,
-      otherwise (a) rc 2, on either conclusive branch. `exit 1` is never a chosen form.
+   6. **Judge.** The `judge` verb for every governed `.py` write, whether or not the target exists
+      (OD-5). The blocking form follows V-0's `CHOSEN=` reading (AC-6.5 / AC-6.6): (b) when
+      `FORM_B=BLOCKS`, otherwise (a) rc 2, on either conclusive branch. `exit 1` is never a chosen
+      form.
+
+   The gate no longer reads `jq`, so its `command -v jq` allow is removed (DD-2, spec v1.3 FR-6
+   "Removed", AC-6.12). Today that allow is the gate's
+   `if ! command -v jq >/dev/null 2>&1; then` block (`grep -n 'command -v jq'
+   h-mad/hooks/h-mad-tdd-gate.sh` → 1 matching line at `34c0e962`).
 7. **Docs and mutation specs.** FR-7, the stale-prose census below, and the FR-8 specs.
 
 **The judge is found relative to the hook's own resolved path, never through `$HOME/.claude/skills`.**
@@ -239,12 +277,15 @@ per-member fixtures are the backstop for a refusal the greps cannot see, such as
 inside a compound line.
 
 **The run_suite change is stated as a table, not a sentence.** Today's behaviour is measured
-(P6). The after-column is the spec's one change plus what extending the parser necessarily moves.
+(P6). The after-column is spec v1.3 FR-4's three audit-gate changes plus what extending the parser
+necessarily moves.
 
 **What we deliberately do not touch:**
 - `h_mad_derive_test_path.sh`'s three prefixes;
 - `_any_phase5_status` (shell policy);
-- the Claude gate's no-state, no-`jq` and exemption fail-opens;
+- the Claude gate's no-state and exemption fail-opens (the no-state one bounded by the fast-path
+  rule in layer 6; the exemptions keep their pattern bytes and move ahead of governance). The
+  no-`jq` allow is **not** kept: it is removed (DD-2, spec v1.3 FR-6 "Removed", AC-6.12);
 - the `codex_status` / `HMAD_CODEX_UNAVAILABLE` escapes;
 - the audit gate's exit-check logic.
 
@@ -409,7 +450,10 @@ today. Invariant §"Guard narrowing" requires the relaxation to be shown exact.
     - `../hematology-paper-writer/.venv/bin/python` from a sibling `cwd`;
     - root-prefixed from the sub-project `cwd`, which resolves to a doubled path that does not
       exist (spec v1.1 AC-3.4, S-6);
-    - `.venv/bin/python3.14`;
+    - the versioned name `.venv/bin/python<X.Y>`, where `<X.Y>` is derived from the fixture's
+      builder interpreter (`f"python{sys.version_info[0]}.{sys.version_info[1]}"`, design D12),
+      never a literal: a literal version exists only under one builder, so the row would silently
+      stop testing a versioned name under any other;
     - a `python-evil` file placed in the contained venv's `bin/`, which matches `python*`.
   - **Venv state:**
     - contained;
@@ -423,17 +467,27 @@ today. Invariant §"Guard narrowing" requires the relaxation to be shown exact.
     - `-c "open('x','w')"`;
     - `-m pip install x`;
     - `script.py`;
-    - `-m pytest tests/test_x.py; touch y`.
+    - `-m pytest tests/test_x.py; touch y`;
+    - `<the hook's h-mad/scripts>/h_mad_state_write.py <root>/docs/.bkit-memory.json`, an argv
+      that `_safe_hmad_script` accepts under `/usr/bin/python3` (spec v1.3 AC-3.6, OD-C; design D8
+      "Differential").
   - **Control rows**, which must not change: `/usr/bin/python3 -m pytest …`,
+    `/usr/bin/python3 <the hook's h-mad/scripts>/h_mad_state_write.py …` (AC-3.6's control),
     `venv/bin/python -m pytest …`, `.venv/bin/pytest …` and `python3 -m pytest …`.
 - **Old versus new.** The old verdicts come from `git show <base>:h-mad/hooks/h-mad-codex-tdd-gate.py`,
   run against the same fixtures. The new verdicts come from the worktree head.
 - **Accounting.** Publish rows, softened (deny→allow) and tightened (allow→deny). The expected
-  softened set is exactly {contained venv} × {spellings that resolve into it} × {`-m pytest …`}.
-  The `python-evil` row is the one further expected softening. It is the spec's stated residual
-  ("a `.venv/bin/python` inside a contained venv that symlinks to an arbitrary binary … is
-  accepted") applied to the `python*` glob, and it is listed by name. Any other softened row is a
-  defect, and any tightened row is justified by name.
+  softened set is exactly {contained venv} × {spellings that resolve into it, `python-evil`
+  included} × {`-m pytest tests/test_x.py`, the `h_mad_state_write.py` row} (design D8
+  "Differential"). The control-allowlist row is softened because FR-3 has always let a contained
+  venv interpreter pass the existing argv rules, H-MAD control allowlist included (spec v1.3
+  AC-3.6; OD-C withdrew design DD-6's narrowing to `-m pytest …`). The `python-evil` spelling is
+  the spec's stated residual ("a `.venv/bin/python` inside a contained venv that symlinks to an
+  arbitrary binary … is accepted") applied to the `python*` glob, and it is listed by name. Any
+  other softened row is a defect, and any tightened row is justified by name.
+- **AC-3.6's refusals are rows of the same corpus:** the `h_mad_state_write.py` argv under the
+  escaping venv states (denied), and a script path outside the hook's `h-mad/scripts/` under the
+  contained-venv token (denied).
 - **Guarantee checked against the real system, not a heuristic.** Containment rests on
   `os.path.realpath`. A fixture asserts that `realpath` follows each symlink in the venv-state axis
   as the rule assumes.
@@ -441,9 +495,10 @@ today. Invariant §"Guard narrowing" requires the relaxation to be shown exact.
 ## Regression census for OD-7 (`run_suite` scoring)
 
 **Question:** which existing tests, mutation specs, stamps or documents depend on a summary with
-failures and no passes reading `UNREADABLE no_summary`? Every command below ran at `2f262f8a`.
+failures and no passes reading `UNREADABLE no_summary`? Every command below ran at `2f262f8a`
+unless its reading names another sha.
 
-**Behaviour today and after.** Today is the P6 reading. After is spec FR-4 plus what the parser
+**Behaviour today and after.** Today is the P6 reading. After is spec v1.3 FR-4 plus what the parser
 extension necessarily moves. Each row becomes one parametrized test case in the audit-gate suite,
 with its own stub. The first column is what the stub prints.
 
@@ -452,9 +507,19 @@ with its own stub. The first column is what the stub prints.
 alone, that rule would score a stray `1 failed` printed after a passing summary as a failure: a
 passing test would read `red-measured` and allow a production write. So the extended parser scores
 only a **summary line**:
+- SGR colour sequences (`ESC [ … m`) are removed from each line **first**, before any stripping
+  or matching (spec v1.3 FR-4 "Colour", DD-4). Without the strip, pytest's `--color=yes` summary
+  is not a whole-line match and would read `UNREADABLE`; today it is a fail-open the other way
+  (the coloured-row reading below);
 - a whole line, after stripping surrounding whitespace and pytest's `=` padding, that consists only
-  of comma-separated `<N> <word>` count phrases (or `no tests ran`), optionally followed by
-  ` in <duration>` and a parenthesised wall-clock;
+  of comma-separated `<N> <category>` count phrases (or `no tests ran`), optionally followed by
+  ` in <duration>` and a parenthesised wall-clock. A category is one or more lowercase words
+  (design D7), so pytest 9.1.1's two-word `subtests passed` / `subtests failed` /
+  `subtests skipped` are summary phrases. Only a phrase whose category is exactly `passed`,
+  `failed`, or `error`/`errors` adds to a count, so `2 subtests passed` adds nothing to `passed`
+  (spec v1.3 FR-4 "Category axis"). A line with a category holding a digit, an uppercase letter
+  or other punctuation is not a summary line, and fails closed (`no-summary` / `no_summary`);
+  that residual is the design's (D7);
 - a line that carries ` in <duration>` beats any line that does not, wherever each sits; among lines
   of the same kind, the last wins;
 - a count phrase inside a longer line (a traceback, a `FAILED …` line, a diagnostic) is never read.
@@ -477,15 +542,28 @@ stray line. The judge's timeout and `pytest-missing` branches run first (FR-4 cl
 
 | Stub prints | `_suite_summary` today | `run_suite` today | `run_suite` after | Why |
 |---|---|---|---|---|
-| `3 failed in 0.10s` | `None` | UNREADABLE `no_summary` | **FAIL** | the spec's one change |
+| `3 failed in 0.10s` | `None` | UNREADABLE `no_summary` | **FAIL** | spec v1.3 FR-4 audit-gate change 1 |
 | `3 failed, 1 skipped in 0.1s` | `None` | UNREADABLE `no_summary` | **FAIL** | same class: failures, no passes |
 | `1 failed, 1 error in 0.1s` | `None` | UNREADABLE `no_summary` | **FAIL** | same class; see OQ-3 |
-| `1 error in 0.06s` | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | spec v1.2 (S-7) non-change; kept by an explicit branch |
-| `no tests ran in 0.01s` | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | spec v1.2 (S-7) non-change; kept by an explicit branch |
+| `1 error in 0.06s` | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | spec v1.3 FR-4 non-change; kept by the one predicate |
+| `no tests ran in 0.01s` | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | spec v1.3 FR-4 non-change; kept by the one predicate |
 | `2 passed, 1 error in 0.1s` | `(2, 0)` | **PASS** | PASS | kept by the spec's "existing callers keep their results"; see OQ-3 |
 | `1 failed, 11 passed in 0.2s` | `(11, 1)` | FAIL | FAIL | unchanged |
 | `collected 0 items` (no summary) | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | unchanged |
 | stdout `2 passed in 0.1s`, then stderr `1 failed` | `(2, 0)` | PASS | PASS | the summary-line rule; the discriminating case |
+| coloured `1 failed, 1 passed in 0.04s` (the `--color=yes` bytes, design D7) | `(1, 0)` | **PASS** | **FAIL** | spec v1.3 FR-4 audit-gate change 2 (DD-4): a fail-open closed |
+| `3 skipped in 0.1s` | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | the one predicate; `5 deselected in 0.1s` and `1 xfailed in 0.1s` read the same (spec v1.3 AC-4.7) |
+| `2 passed, 2 subtests passed in 0.00s` | `(2, 0)` | PASS | PASS | spec v1.3 FR-4: 2 passed, the subtests phrase counts toward nothing |
+| `2 failed, 1 subtests passed in 0.02s` | `None` | UNREADABLE `no_summary` | **FAIL** | spec v1.3 FR-4 audit-gate change 3; 0 passed |
+
+The four rows after the discriminating case come from design D7's table (spec v1.3 FR-4). Their
+"`_suite_summary` today" cells were re-read at `34c0e962` (h-mad/ unchanged since `1ef1a782`:
+`git diff --stat 1ef1a782 34c0e962 -- h-mad handoff` is empty) by calling today's parser under
+`/usr/bin/python3` from `h-mad/scripts` with `sys.dont_write_bytecode=True`, nothing written:
+the coloured bytes
+`\x1b[31m\x1b[31m\x1b[1m1 failed\x1b[0m, \x1b[32m1 passed\x1b[0m\x1b[31m in 0.04s\x1b[0m\x1b[0m`
+→ `(1, 0)`; `3 skipped in 0.1s` → `None`; `2 failed, 1 subtests passed in 0.02s` → `None`;
+`2 passed, 2 subtests passed in 0.00s` → `(2, 0)`. No row moves toward PASS.
 
 The last row's "today" was measured at `dfd5f02e` by calling `_suite_summary('2 passed in 0.1s\n1 failed\n')`
 and `run_suite` on a stub printing that pair, under `/opt/homebrew/bin/python3`: `(2, 0)` and
@@ -494,15 +572,25 @@ to read `failed` alone without the summary-line rule scores it FAIL, and that is
 row catches. The same pair fed to the judge (AC-4.4-style shim, rc 0) reads DENY `test-passing`,
 never ALLOW `red-measured`; the impl-plan pins it beside AC-4.4.
 
-**Two explicit branches.** Once the parser returns counts for `1 error` and for `no tests ran`,
-`run_suite`'s `passed == 0 and failed == 0` test would otherwise catch both and re-label them
-`no_tests_ran`.
+**One predicate, not one branch per instance** (spec v1.3 FR-4 "Audit-gate non-change", DD-3).
+Once the parser returns counts for `1 error`, for `no tests ran` and for any summary whose
+phrases carry no `passed` and no `failed`, `run_suite`'s `passed == 0 and failed == 0` test would
+otherwise catch every one of them and re-label it `no_tests_ran`.
 - For `1 error` that is false, because tests were collected and errored.
-- For `no tests ran` it changes the `SUITE:` reason that `main` and `h_mad_audit_cycle` print.
+- For `no tests ran`, `3 skipped in …`, `5 deselected in …` and `1 xfailed in …` it changes the
+  `SUITE:` reason that `main` and `h_mad_audit_cycle` print.
 
-Spec v1.2 (S-7) states both as non-changes: each keeps `UNREADABLE no_summary`, and `no_tests_ran`
-stays reserved for a parsed summary with 0 passed, 0 failed and 0 errors, such as `0 passed in …`.
-AC-4.7 pins both with exact-reason fixtures. The design names both branches and their mutations.
+The axis is "a parsed summary with no `passed` phrase and no `failed` phrase", not the two members
+plan v1.2 named: a branch per member left the other three moving to `no_tests_ran` (design D7).
+So `run_suite` gains one predicate, between the `summary is None` return and
+`if passed == 0 and failed == 0:`, over exact category strings: a summary whose phrase set holds
+neither `passed` nor `failed` scores `UNREADABLE no_summary`, as today. `subtests passed` alone
+does not satisfy it. `no_tests_ran` stays reserved for a parsed summary with a `passed` or
+`failed` phrase and 0 passed, 0 failed, such as `0 passed in …`. The judge's rule 8
+(`no-tests-ran`) does not reach `run_suite`. AC-4.7 pins five members with exact-reason fixtures
+(`no tests ran`, `1 error`, `3 skipped`, `5 deselected`, `1 xfailed`), each run alone. The
+design names the predicate and its mutation (`audit_suite_summary_line.json`: each word of the
+`{"passed","failed"}` set mutated alone).
 
 **Tests that pin today's behaviour.**
 
@@ -556,9 +644,9 @@ covers three cases:
 - a **new** line byte-identical to an anchored one. The harness refuses an anchor that matches
   other than exactly once ("anchor matched N times … expected exactly 1").
 
-The two explicit branches above are the known case: each returns an `UNREADABLE`/`no_summary`
-dict that could duplicate the anchored `no_summary` return. Such a line is written so that it is
-not byte-identical to the anchor, or the anchor is narrowed. Any re-anchor lands **in the same
+The one predicate above is the known case: it returns an `UNREADABLE`/`no_summary` dict that
+could duplicate the anchored `no_summary` return. It is written so that it is not byte-identical
+to the anchor (design D7 orders its dict keys for exactly this), or the anchor is narrowed. Any re-anchor lands **in the same
 commit**, and the re-anchored mutation is re-run and must still be CAUGHT by the same test.
 
 `ANCHORS_OK` with `drifted=0` is a 5g gate. The `specs=` and `mutations=` figures grow by
@@ -627,9 +715,14 @@ halves of a doc change").
   `h-mad/scripts/`. The hooks reach it by their own resolved path. pytest is the only non-stdlib
   tool, and it is already a declared dependency.
 - **No knob.** No environment variable or config key is added (spec NFR Security).
-- **Time bound.** The judge bounds pytest with `subprocess.run(timeout=…)`, never with
-  `timeout`/`gtimeout` (invariant §"Portable time bounds"). The design owns the value and the
-  latency measurement.
+- **Time bound.** The judge starts each pytest run with `subprocess.Popen(…,
+  start_new_session=True)`, reads it with `communicate(timeout=…)`, and on timeout kills the whole
+  process group with `os.killpg` before reading the verdict `timeout` (DD-10, design D6). It
+  never uses `timeout`/`gtimeout` (invariant §"Portable time bounds"). `subprocess.run(timeout=…)`
+  is not enough: design D6 measured it returning after 1.0 s with the shim's child `sleep` still
+  alive, and a surviving pytest child can write into the tree after the gate has decided. The
+  design owns the value (one 40 s budget per judge call), the latency measurement, and the 5g
+  host-deadline probe for the Claude half of the spec's and design's OQ-D1.
 
 ## Deliverables
 
@@ -638,11 +731,36 @@ halves of a doc change").
 | `reproduce.py`, `v0-blocking-contract.sh`, `v1-offline-replay.sh` and `wire-registry-grammar.py`, each with its reading; V-0's captured payload, replay rcs and `claude --version` | probe | AC-0.1, AC-0.2 |
 | Shared judge module and CLI (`judge` → `TDD-JUDGE:`, `state` → `TDD-STATE:`) | module / CLI | FR-1–FR-5 |
 | `_parse_tasks` `production` / `tests` fields (`_production_claims` untouched, D-A) | module | FR-2 |
-| `_suite_summary` counts including errors and `no tests ran`, under the summary-line rule; the `run_suite` table above | module | FR-4 |
+| `_suite_summary` counts including errors and `no tests ran`, under the summary-line rule (SGR strip, open category axis); `run_suite`'s one predicate; the `run_suite` table above | module | FR-4 |
 | Codex gate rewiring, `cwd` base, chain reader, venv shell policy with its differential | hook | FR-3, FR-5 |
 | Claude gate payload read, `state` and `judge` calls, refusal function with `EXIT` trap | hook | FR-6 |
 | §"Trust boundary" text; SKILL.md registry and gate bullets; agy-runtime.md sentence; codex-implementer-prompt.md bullets | docs | FR-7, OQ-2 |
 | One mutation spec per FR-8 guard, plus the wire mutations below | mutation specs | FR-8 |
+
+## Spec v1.3 ACs: where each is tested
+
+Spec v1.3 (`b20ef027`) added or extended these ACs. Each is a pytest AC through the hook's or the
+audit gate's real entry point, one fixture per case, each case run alone. "FR-8" means the guard is
+in spec v1.3 AC-8.1's list, so its mutation spec must turn the named fixture red, scored on the
+pytest summary, with each alternation branch mutated alone. The impl-plan assigns them to Tasks;
+this table fixes the layer and the fixture, not the Task split.
+
+| AC | Layer | Fixture(s) | Guard |
+|---|---|---|---|
+| AC-3.6 (OD-C) | 5 | Rows of the shell-policy differential: the `h_mad_state_write.py` argv under the contained-venv token → allow; the same argv under `/usr/bin/python3` → allow (control); the same argv under each escaping venv state → deny; a script outside the hook's `h-mad/scripts/` under the contained-venv token → deny | differential accounting ("Guard narrowing: shell policy") |
+| AC-4.2 additions | 2, 3 | A skipped-only test file → DENY `no-tests-ran` (rule 8); a RED test with a passing subtest → ALLOW `red-measured`; a GREEN test with a passing subtest → DENY `test-passing` | FR-8: rule 8 (skipped-only fixture) |
+| AC-4.7 additions | 2 | `run_suite` stubs, one per output: `no tests ran in 0.01s`, `1 error in 0.06s`, `3 skipped in 0.1s`, `5 deselected in 0.1s`, `1 xfailed in 0.1s` → exactly `SUITE: UNREADABLE reason=no_summary`; the coloured bytes → `FAIL`; `2 failed, 1 subtests passed in 0.02s` → `FAIL`, 0 passed; `2 passed, 2 subtests passed in 0.00s` → `PASS`, 2 passed | FR-8: the SGR strip (coloured fixture), the `subtests` category rule; the one predicate (design D7) |
+| AC-6.1 addition (OD-B) | 6 step 0 | A stdin payload naming a production target, with an exempt `<root>/tests/x.py` as `$1` → still refused | FR-8: stdin-before-`$1` precedence |
+| AC-6.9 exempt fixtures (OD-A) | 6 step 3 | On a `{not json` chain: writes to `docs/.bkit-memory.json`, `tests/test_x.py` and `notes.md` → each allowed, beside the production `.py` write → refused `judge-error` | FR-8: exemptions-before-governance order; the unreadable-chain refusal |
+| AC-6.11 (a), (b) | 6 step 1 | (a) the only state name on the chain is a dangling symlink → refused `judge-error`; (b) no root state, `sub/docs/.bkit-memory.json` step5, target `<root>/sub/newdir/x.py` with `newdir` absent and a passing resolved test → refused | FR-8: non-regular-state and missing-parent handling, each its own mutation |
+| AC-6.12 (DD-2) | 6 | A bin dir with no `jq` (the existing `_bin` helper in `test_h_mad_tdd_gate_state_resolution.py` symlinks `jq`, so this fixture does not use it unchanged), governed write, passing resolved test → refused `test-passing` | the `jq`-free path; the design's remove-DD-2 revert re-adds the allow and must turn it red |
+| AC-6.13 (DD-8) | 6 step 2 | Empty target: root ACTIVE step5 → refused `judge-error`; root state unreadable → refused `judge-error`; root with no step5 record → allowed | FR-8: empty-target refusal |
+| AC-6.14 (DD-9) | 6 step 4 | A target outside the root: root ACTIVE step5 with `codex` on PATH → Codex-authorship refusal; root with no step5 → allowed | FR-8: outside-root chain |
+| AC-6.15 (DD-7, kept by design v1.1) | 6 step 0 | Relative `tests/x.py` and `./tests/x.py` → allowed as exempt; relative `sub/x.py` → the verdict the absolute `<root>/sub/x.py` gets | design D9's DD-7 old-versus-new differential; expected softened set exactly two cells (relative `tests/x.py`, relative `fixtures/x.py`) |
+
+**Residual.** AC-3.6, AC-6.12 and AC-6.15 are not in spec v1.3 AC-8.1's guard list. AC-3.6 and
+AC-6.15 are bounded by their differentials instead of a mutation; AC-6.12 is bounded by the
+revert its DD row states. Whether they also get FR-8 mutation specs is the impl-plan's call.
 
 ## Connection enforcement (the feature is partly wiring-shaped)
 
@@ -678,7 +796,7 @@ Wire W7 (`_production_claims` → `_parse_tasks`) is withdrawn with the rewrite 
 | Risk | Impact | Mitigation |
 |---|---|---|
 | R1: V-0 reads `INCONCLUSIVE`, or no form is proven (`CHOSEN=none`) | FR-6's refusal form cannot be chosen | **Halt to the operator. The feature does not merge.** The halt reason from the probe is fixed and V-0 is re-run. AC-6.1–AC-6.4 may be implemented in the worktree meanwhile, but nothing merges (spec v1.1 AC-6.7) |
-| R2: `grok-codex-fallback`'s impl-plan asserts the Claude gate's `exit 1` | After this merges with form (a) or (b), its BLOCK-GROK / BLOCK-INVALID tests and mutation anchors assert a form the gate no longer uses. Its worktree is already in Phase 5 (`git worktree list` → `~/orca/skills-grok-codex-fallback` on `feature/216-grok-codex-fallback`, at `2f262f8a`) | The R2 census below the table → 7 gate-assertion lines: 3 `exit 1 ;;` case arms, 2 AC prose lines, 2 mutation rows. Owed to that impl-plan (report). Its new refusals must use this feature's refusal function |
+| R2: `grok-codex-fallback`'s impl-plan asserts the Claude gate's `exit 1` | After this merges with form (a) or (b), its BLOCK-GROK / BLOCK-INVALID tests and mutation anchors assert a form the gate no longer uses. Its worktree is already in Phase 5 (`git worktree list` → `~/orca/skills-grok-codex-fallback` on `feature/216-grok-codex-fallback`, at `2f262f8a`) | The R2 census below the table → 7 gate-assertion lines: 3 `exit 1 ;;` case arms, 2 AC prose lines, 2 mutation rows. Owed to that impl-plan (report). Its new refusals must use this feature's refusal function. The rebase contract is design D13: the `fallback_agent` value arrives as the fourth `record=` field of the `state` line (no `jq`, DD-2), the fold over records lives in the judge, the refusals are `_refuse fallback-grok` / `_refuse fallback-invalid` in the chosen form, and grok's Task 12 re-plans onto it (owed by grok's documents, not done here) |
 | R3: `_parse_tasks`' dict gains keys | A consumer that iterates or serialises the dict changes output | P4's three consumers' suites run unmodified, and spec v1.2 AC-2.9's same-ids-same-order check over the corpus. The registry's own grammar is untouched (D-A) |
 | R4: no `.venv` in a governed project, and the hook's `python3` has no pytest | Every Claude-fallback write in this repository is DENY `pytest-missing` (P8): fail-closed but blocking | The deny reason names the remedy (create a contained `.venv`). OQ-1 goes to the operator. No knob (spec) |
 | R5: the worktree hook calls the main tree's scripts, or a worktree test runs the main tree's hook | Tests green for the wrong reason | Hook-relative judge path and the two-tree W6 test; both test modules' `HOOK` resolved from `Path(__file__)` (layer 6) |
@@ -694,7 +812,7 @@ lines:
 
 ```bash
 grep -n 'exit 1' docs/01-plan/features/grok-codex-fallback.impl-plan.md | grep -cE 'exit 1 ;;$|BLOCK-|test_gate_matrix'
-# reading at 2f262f8a, and again at dfd5f02e (file last changed 5a9cd8ed): 7
+# reading at 2f262f8a, again at dfd5f02e, and again at 34c0e962 (file last changed 5a9cd8ed): 7
 ```
 
 The broader v1.0 command (plan v1.0's R2 cell) matches 16 lines, 9 of them `exit 1` in that
@@ -1374,7 +1492,8 @@ WRG
 - Installing `~/.agents/skills/h-mad` (owned by `multi-host-runtime`; the live V-1 depends on it).
 - Changing the name map's three prefixes.
 - How the grok host treats `exit 1` (owned by `multi-host-runtime`).
-- The Claude gate's no-state, no-`jq` and file-type-exemption fail-opens.
+- The Claude gate's no-state and file-type-exemption fail-opens. The no-`jq` fail-open is in
+  scope and removed (spec v1.3 FR-6 "Removed", AC-6.12; DD-2).
 - Venvs not named `.venv`, and `.venv/bin/pytest` as a shell entry point.
 
 ## Spec items (S-1…S-12)
@@ -1389,6 +1508,12 @@ The plan cites each where it is used. None is adopted beyond what the named spec
   AC-7.2), S-12 (AC-6.2 carries the form-conditional list).
 - **Withdrawn:** S-10, by orchestrator decision D-A. Spec v1.2 states the two-parser residual in
   FR-2 and pins the registry in AC-2.9.
+- **Spec v1.3 (`b20ef027`)** answered design audit cycle 1 with OD-A…OD-D and adopted DD-1…DD-5
+  and DD-7…DD-9; this plan carries them (v1.3). Spec v1.4 was being written in parallel with plan
+  v1.3, to take six design v1.1 sentences (FR-4 rule 2's whole-line `pytest-missing` match, the
+  FR-4 category residual, FR-5's Codex-side unreadable refusal, FR-6's control-character target,
+  FR-7's `Hook:` line, and the OQ-D1 split). Where this plan states one of those facts it uses the
+  design's wording; the author report lists each.
 
 ## Open Questions
 
@@ -1412,6 +1537,7 @@ The plan cites each where it is used. None is adopted beyond what the named spec
 2. The orchestrator runs step P0 and commits the probes and their readings. V-0 is run before the
    FR-6 form task, and an inconclusive V-0 halts to the operator.
 3. Plan v1.2 is the final corrective revision after audit cycle 2 (the document-audit round cap).
+   Plan v1.3 is a propagation revision from spec v1.3 and design v1.1, not an audit round.
 4. The Phase 4 design names the judge file, the `state` verb's line format, the timeout value, the
    `EXIT`-trap shape and the blocking form.
 
@@ -1419,3 +1545,4 @@ The plan cites each where it is used. None is adopted beyond what the named spec
 - v1.0: Initial plan draft (2026-09-28) from spec v1.0 at cf7e194f with OD-1..OD-7 accepted as recommended. Premises, the reproductions with controls, the OD-7 run_suite regression census, the stale-prose census and the coupled-suite baseline measured at 01121ca7. Step P0 embeds reproduce.py and v0-blocking-contract.sh with their sha256; OQ-1..OQ-4 raised.
 - v1.1: Plan audit cycle 1 answered (2026-09-28; reports at be1ac452, codex p1 6 musts + 1 should, teammate 6 musts + 6 shoulds + 2 nits); premises re-run at 2f262f8a in bash --noprofile --norc. V-0 rewritten: arm EJ tests the JSON-deny form beside exit 2, per-arm nonce HIT lines replace the any-nonempty-log proof, CHOSEN= reading; exercised offline against a fake claude in 7 modes. INCONCLUSIVE V-0 now halts to the operator and blocks merge (R1). New V-1r probe replays the HemaSuite Task 7 incident offline from git objects 1fbf8022/31bfcfe4 (pre-merge: 6/6 gate lines deny, controls RED/GREEN) and is a merge condition. Claude gate governance and Codex-authorship key move to the judge's chain reader (state verb; OD-3c reproduced). EXIT-trap rule closes the set -euo pipefail implicit-exit class. _production_claims rewritten over _parse_tasks (wire-registry-grammar probe: 4 files, 16 lines, 64 lines). reproduce.py reports stdout permissionDecision (24 lines). Shell-policy guard-narrowing differential, Claude-gate assertion census by function name, function-body diff beside the node-id floor, anchor-occurrence rule, ANCHORS and R2 commands fixed. Spec-owed items S-1..S-12 cited as pending spec v1.1, not adopted.
 - v1.2: Final corrective revision after plan audit cycle 2 (2026-09-28; codex p1 4 musts, v1.1 delta review 4 musts + 7 shoulds + 2 nits, both at dfd5f02e) under orchestrator decisions D-A..D-D. D-C: V-0 never chooses exit 1; CHOSEN is b when FORM_B=BLOCKS else a on either conclusive reading; rc1 removed from the script, run-gate grep, Choice, offline modes, reproduce post-merge row and census pass condition. V-0 also scores presence at the session's logged HIT paths and records EJ UNMEASURED as FORM_B=INCONCLUSIVE; exercised offline against a fake claude in 11 modes (v1.1 bytes read a false E1_BLOCKS in the other-directory mode). V-1r now scores all six gate lines (CHECK lines, VERDICT, exit 0/2/1); pre-merge reading VERDICT=FAIL fails=4/6 exit 2 at dfd5f02e, positive control PASS 0/6 and single-branch control FAIL 1/6 against a stub gate. v0 and v1r sha256 re-pinned; the P0 block executed as written into a scratch dir (rc 0). FR-4 summary-line rule with the stdout-2-passed/stderr-1-failed row. W6 uses two distinct hook/judge trees. Test HOOK constants resolve from Path(__file__) (worktree-via-HOME axis census, 6 lines / 4 files). D-A: _production_claims not edited, two-parser residual stated, W7 and S-10 withdrawn. D-B: existing assertions migrate form-conditionally. Function-body diff widened to every top-level statement plus conftest and imported helpers. S-1..S-6 cited as spec v1.1, S-7/8/9/11/12 as spec v1.2. R2 command moved to a fenced block; reproduce.py interpreter pinned.
+- v1.3: Propagation revision (2026-09-28), not an audit round: carries what spec v1.3 and design v1.1 (both at b20ef027) say the plan owes. Layer 6 reordered to spec v1.3 FR-6 Order (fast path, empty target, exemptions, governance, Codex authorship, judge; DD-1/OD-A), with stdin-first target read and DD-7/DD-8/DD-9. No-jq allow removed from "What we deliberately do not touch" and Out-of-Scope (DD-2, AC-6.12). "Two explicit branches" replaced by the one run_suite predicate (DD-3); summary-line rule gains the SGR strip and open category axis (DD-4, OD-D); run_suite table gains four rows, today cells re-read at 34c0e962. Time bound is Popen+killpg (DD-10). Shell-policy differential gains the h_mad_state_write.py row and control, builder-derived python<X.Y>, widened softened set (OD-C/AC-3.6). R2 cites design D13; R2 census re-run at 34c0e962 -> 7. New section "Spec v1.3 ACs: where each is tested" (AC-3.6, AC-4.2, AC-4.7, AC-6.1, AC-6.9, AC-6.11..AC-6.15).
