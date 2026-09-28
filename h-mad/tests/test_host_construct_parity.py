@@ -374,7 +374,7 @@ def test_catch_all_axis_alone_reports_its_fixture(tmp_path, axis):
     token = AXIS_TOKENS[axis]
     paths = _empty_registry_with_token(tmp_path, token)
     if axis.startswith("A4-"):
-        branch = host_parity.A4_BRANCHES[axis.removeprefix("A4-")]
+        branch = host_parity.A4_BRANCHES[axis.removeprefix("A4-").replace("-", "_")]
         axes = {"A4": host_parity.a4_pattern([branch])}
     else:
         axes = {axis: host_parity.CATCH_ALL_AXES[axis]}
