@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import stat
@@ -10,6 +11,72 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
+
+
+@dataclass(frozen=True)
+class Outcome:
+    decision: str
+    kind: str
+    reason: str
+    rc: int
+
+
+def hook_form(hook: Path) -> Optional[str]:
+    matches = re.findall(r"^readonly REFUSAL_FORM=([ab])$", hook.read_text(encoding="utf-8"), re.M)
+    return matches[0] if len(matches) == 1 else None
+
+
+def decision(result: subprocess.CompletedProcess, form: Optional[str]) -> Outcome:
+    reason = ""
+    if result.returncode == 0 and not result.stdout:
+        return Outcome("allow", "", "", 0)
+    if form == "a" and result.returncode == 2 and not result.stdout:
+        reason = result.stderr
+    elif form == "b" and result.returncode == 0:
+        try:
+            obj = json.loads(result.stdout)
+            output = obj["hookSpecificOutput"]
+            if (not isinstance(obj, dict) or output["hookEventName"] != "PreToolUse"
+                    or output["permissionDecision"] != "deny"
+                    or not isinstance(output["permissionDecisionReason"], str)
+                    or not output["permissionDecisionReason"]):
+                raise ValueError("malformed denial")
+            reason = output["permissionDecisionReason"]
+        except (ValueError, TypeError, KeyError):
+            pass
+    if reason:
+        match = re.search(r"\[H-MAD-TDD-GATE\] BLOCK kind=([^:]+):", reason)
+        return Outcome("deny", match.group(1) if match else "", reason, result.returncode)
+    return Outcome("invalid", "", result.stdout + result.stderr, result.returncode)
+
+
+@dataclass(frozen=True)
+class DD7Cell:
+    shape: str
+    spelling: str
+    path: str
+    state: str
+    target: str
+    expected: str
+
+    @property
+    def name(self) -> str:
+        return f"{self.shape}/{self.spelling}/{self.path}/{self.state}"
+
+
+def dd7_cells(root: Path, shape: str) -> list[DD7Cell]:
+    """Seven lexical paths, three spellings, and both state modes per root shape."""
+    paths = ("x.py", "tests/x.py", "fixtures/x.py", "tests/../x.py",
+             "sub/test_x.py", "notes.md", "build.sh")
+    return [
+        DD7Cell(shape, spelling, path, state,
+                str(root / path) if spelling == "absolute" else
+                f"./{path}" if spelling == "dot" else path,
+                "deny" if state == "active" and path in ("x.py", "tests/../x.py") else "allow")
+        for spelling in ("relative", "dot", "absolute")
+        for path in paths for state in ("active", "none")
+    ]
 
 DROPPED_ENV = ("HPW_AGENT_BACKEND", "HMAD_HOST", "HMAD_CODEX_UNAVAILABLE", "CODEX_PROJECT_DIR")
 

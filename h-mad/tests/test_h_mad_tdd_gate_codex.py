@@ -17,7 +17,9 @@ import stat
 import subprocess
 from pathlib import Path
 
-HOOK = Path.home() / ".claude" / "hooks" / "h-mad-tdd-gate.sh"
+from tdd_gate_support import decision, hook_form
+
+HOOK = Path(__file__).resolve().parents[1] / "hooks" / "h-mad-tdd-gate.sh"
 
 _STATE_STEP5 = {
     "version": 1,
@@ -63,7 +65,7 @@ def _run(tmp_path: Path, target: str, *, codex: bool, env_extra=None,
            "CLAUDE_PROJECT_DIR": str(proj)}
     if env_extra:
         env.update(env_extra)
-    return subprocess.run([str(HOOK), target], capture_output=True, text=True,
+    return subprocess.run([str(HOOK), target], stdin=subprocess.DEVNULL, capture_output=True, text=True,
                           check=False, env=env)
 
 
@@ -74,9 +76,10 @@ def test_blocks_claude_prod_write_when_codex_available(tmp_path):
     # The core enforcement: Codex on PATH, no unavailable declaration -> a prod
     # write reaching the hook is Claude self-authoring -> BLOCK, name the dispatch.
     r = _run(tmp_path, PROD, codex=True)
-    assert r.returncode == 1, r.stdout + r.stderr
-    assert "codex" in r.stderr.lower()
-    assert "dispatch" in r.stderr.lower(), "the block must tell Claude to dispatch"
+    outcome = decision(r, hook_form(HOOK))
+    assert outcome.decision == "deny", outcome
+    assert "codex" in outcome.reason.lower()
+    assert "dispatch" in outcome.reason.lower(), "the block must tell Claude to dispatch"
 
 
 def test_state_codex_status_exhausted_allows_fallback(tmp_path):
@@ -84,25 +87,25 @@ def test_state_codex_status_exhausted_allows_fallback(tmp_path):
     # (Falls through to the TDD-order gate; the path is unknown to derive, so that
     # gate blocks with its OWN reason — the codex gate must NOT be what fires.)
     r = _run(tmp_path, PROD, codex=True, codex_status="exhausted")
-    assert "must be authored by codex" not in r.stderr.lower(), \
+    assert "must be authored by codex" not in decision(r, hook_form(HOOK)).reason.lower(), \
         "codex gate fired despite an exhausted declaration"
 
 
 def test_env_override_allows_fallback(tmp_path):
     r = _run(tmp_path, PROD, codex=True, env_extra={"HMAD_CODEX_UNAVAILABLE": "1"})
-    assert "must be authored by codex" not in r.stderr.lower()
+    assert "must be authored by codex" not in decision(r, hook_form(HOOK)).reason.lower()
 
 
 def test_codex_absent_does_not_trigger_codex_gate(tmp_path):
     # No codex on PATH -> can't dispatch -> the codex gate must not fire.
     r = _run(tmp_path, PROD, codex=False)
-    assert "must be authored by codex" not in r.stderr.lower()
+    assert "must be authored by codex" not in decision(r, hook_form(HOOK)).reason.lower()
 
 
 def test_test_file_allowed_even_with_codex_available(tmp_path):
     # Claude MUST still be able to write the RED test itself; only prod is gated.
     r = _run(tmp_path, "hematology-paper-writer/tests/test_widget.py", codex=True)
-    assert r.returncode == 0, r.stderr
+    assert decision(r, hook_form(HOOK)).decision == "allow", r.stderr
 
 
 def test_non_step5_ignores_codex_gate(tmp_path):
@@ -113,7 +116,7 @@ def test_non_step5_ignores_codex_gate(tmp_path):
         "orchestrator_state": {"feat": {"feature": "feat", "phase": None}},
     }))
     b = _bin(tmp_path, codex=True)
-    r = subprocess.run([str(HOOK), PROD], capture_output=True, text=True, check=False,
+    r = subprocess.run([str(HOOK), PROD], stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False,
                        env={"PATH": f"{b}:/usr/bin:/bin", "HOME": str(Path.home()),
                             "CLAUDE_PROJECT_DIR": str(tmp_path)})
-    assert r.returncode == 0, r.stderr
+    assert decision(r, hook_form(HOOK)).decision == "allow", r.stderr
