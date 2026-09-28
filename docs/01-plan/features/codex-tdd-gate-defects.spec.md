@@ -531,6 +531,9 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     because today's `*/tests/*` and `*/fixtures/*` patterns need a leading segment. If design
     v1.1 drops DD-7, relative targets are left as given, and this bullet and AC-6.15 do not
     apply.
+    The exemption patterns are matched against the part of the path after the project root,
+    so the root's own ancestors (a root beneath `tests/` or `fixtures/`) never make a target exempt
+    (design v1.3 §D9 step 3).
   - **Empty target** [design DD-8]. When neither stdin nor the positional argument yields a
     target, or the stdin target is no target under "Payload" above, the gate reads the root's governance: `active` or `unreadable`, or any `state` failure
     mode, → refuse `judge-error`; `none` → allow. Today an empty target with an ACTIVE record is

@@ -80,6 +80,8 @@ In scope, by file. Every path was verified present at `2f262f8a` with `ls`, exce
   - **Claude gate** (FR-6 "Relative target", design DD-7 and D9 step 3). A relative target is made
     absolute against the project root, never against the payload `cwd`. This happens before any
     check, the exemptions included.
+    The `*/tests/*` and `*/fixtures/*` exemptions match the root-relative remainder only, so a root
+    beneath `tests/` or `fixtures/` exempts nothing (design v1.3 §D9 step 3).
   - **Canonicalization is owed by design v1.2 and is not in the tree.** The target is to be
     canonicalized (`..` resolved) before any exemption pattern matches, so `tests/../x.py` is
     production (design audit cycle 2). Design v1.1 at `b20ef027` does not do this. Its D9 step 3
