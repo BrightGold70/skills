@@ -30,6 +30,8 @@ from pathlib import Path
 
 import pytest
 
+from tdd_gate_support import hermetic_env
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO_ROOT / "h-mad" / "scripts"
 SCRIPT = SCRIPTS / "h_mad_audit_gate.py"
@@ -55,7 +57,7 @@ Fine.
 
 def run(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(SCRIPT), *args],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, stdin=subprocess.DEVNULL)
 
 
 def token(out: str, prefix: str) -> str:
@@ -140,9 +142,8 @@ class TestTheSuiteVerdictIsScoredOnTheSummary:
         """`pytest -k` collecting nothing exits 0 — this repo has been fooled.
 
         The summary PARSES here (`0 passed`), which is what makes this
-        discriminating: a stub printing only "no tests ran" never reaches the
-        verdict logic at all, so it exercised nothing and a mutant that dropped
-        the guard survived it.
+        discriminating: a stub printing only "no tests ran" reaches the one
+        predicate and still reads `no_summary`.
         """
         audit = tmp_path / "f.plan.audit.v1.codex.md"
         audit.write_text(CLEAN, encoding="utf-8")
@@ -248,3 +249,97 @@ class TestDocumented:
         text = (SCRIPTS.parent / "SKILL.md").read_text(encoding="utf-8")
         assert "--project-tests" in text
         assert "--exit-check" in text
+
+
+def _run_hermetic(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        env=hermetic_env(),
+        stdin=subprocess.DEVNULL,
+        timeout=60.0,
+        check=False,
+    )
+
+
+_COLOURED_STUB = (
+    r"printf '\033[31m\033[31m\033[1m1 failed\033[0m, "
+    r"\033[32m1 passed\033[0m\033[31m in 0.04s\033[0m\033[0m\n'"
+)
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ('echo "3 failed in 0.10s"; exit 1', "SUITE: FAIL passed=0 failed=3"),
+        ('echo "3 failed, 1 skipped in 0.1s"; exit 1', "SUITE: FAIL passed=0 failed=3"),
+        ('echo "1 failed, 1 error in 0.1s"; exit 1', "SUITE: FAIL passed=0 failed=1"),
+        ('echo "1 error in 0.06s"; exit 2', "SUITE: UNREADABLE reason=no_summary"),
+        ('echo "no tests ran in 0.01s"; exit 5', "SUITE: UNREADABLE reason=no_summary"),
+        ('echo "2 passed, 1 error in 0.1s"; exit 1', "SUITE: PASS passed=2 failed=0"),
+        ('echo "1 failed, 11 passed in 0.2s"; exit 1', "SUITE: FAIL passed=11 failed=1"),
+        ('echo "collected 0 items"; exit 0', "SUITE: UNREADABLE reason=no_summary"),
+        ('echo "2 passed in 0.1s"; echo "1 failed" >&2; exit 0', "SUITE: PASS passed=2 failed=0"),
+        (_COLOURED_STUB + "; exit 1", "SUITE: FAIL passed=1 failed=1"),
+        ('echo "3 skipped in 0.1s"; exit 0', "SUITE: UNREADABLE reason=no_summary"),
+        ('echo "5 deselected in 0.1s"; exit 5', "SUITE: UNREADABLE reason=no_summary"),
+        ('echo "1 xfailed in 0.1s"; exit 0', "SUITE: UNREADABLE reason=no_summary"),
+        ('echo "2 passed, 2 subtests passed in 0.00s"; exit 0', "SUITE: PASS passed=2 failed=0"),
+        ('echo "2 failed, 1 subtests passed in 0.02s"; exit 1', "SUITE: FAIL passed=0 failed=2"),
+    ],
+    ids=[
+        "three-failed", "three-failed-one-skipped", "failed-and-error", "one-error",
+        "no-tests-ran", "passed-and-error", "failed-and-passed", "collected-zero",
+        "stray-failed-on-stderr", "coloured", "three-skipped", "five-deselected",
+        "one-xfailed", "subtests-passed", "subtests-failed-run",
+    ],
+)
+def test_run_suite_table_row(tmp_path: Path, body: str, expected: str) -> None:
+    audit = tmp_path / "f.plan.audit.v1.codex.md"
+    audit.write_text(CLEAN, encoding="utf-8")
+    stub = fake_suite(tmp_path, "suite.sh", body)
+    result = _run_hermetic(
+        str(audit), "--project-tests", str(tmp_path), "--suite-cmd", str(stub)
+    )
+    assert result.returncode == 0, result.stderr
+    assert token(result.stdout, "SUITE:") == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("1 failed in 0.01s", (0, 1, 0, False, frozenset({"failed"}))),
+        ("1 error in 0.06s", (0, 0, 1, False, frozenset({"error"}))),
+        ("no tests ran in 0.00s", (0, 0, 0, True, frozenset())),
+        ("2 passed in 0.1s\n1 failed", (2, 0, 0, False, frozenset({"passed"}))),
+        ("1 failed, 8 passed", (8, 1, 0, False, frozenset({"failed", "passed"}))),
+        ("\x1b[31m1 failed\x1b[0m, \x1b[32m1 passed\x1b[0m\x1b[31m in 0.04s\x1b[0m", (1, 1, 0, False, frozenset({"failed", "passed"}))),
+        ("9 passed, 1 warning in 1.09s", (9, 0, 0, False, frozenset({"passed", "warning"}))),
+        ("==== 1 failed, 2 passed in 65.20s (0:01:05) ====", (2, 1, 0, False, frozenset({"failed", "passed"}))),
+        ("1 xfailed in 0.1s", (0, 0, 0, False, frozenset({"xfailed"}))),
+        ("2 passed, 2 subtests passed in 0.00s", (2, 0, 0, False, frozenset({"passed", "subtests passed"}))),
+        ("2 failed, 1 subtests passed in 0.02s", (0, 2, 0, False, frozenset({"failed", "subtests passed"}))),
+        ("\x1b[31m3 failed\x1b[0m, \x1b[32m1 subtests passed\x1b[0m\x1b[31m in 0.02s\x1b[0m", (0, 3, 0, False, frozenset({"failed", "subtests passed"}))),
+        ("1 passed, 1 skipped in 0.00s", (1, 0, 0, False, frozenset({"passed", "skipped"}))),
+        ("3 skipped in 0.1s", (0, 0, 0, False, frozenset({"skipped"}))),
+        ("5 deselected in 0.1s", (0, 0, 0, False, frozenset({"deselected"}))),
+        ("2 subtests failed in 0.1s", (0, 0, 0, False, frozenset({"subtests failed"}))),
+        ("3 apples in 0.1s", (0, 0, 0, False, frozenset({"apples"}))),
+        ("collected 0 items", None),
+        ("E   assert '1 failed' in x", None),
+        ("FAILED t.py::a - 1 failed", None),
+        ("3 Apples in 0.1s", None),
+        ("1 errors in 0.1s", (0, 0, 1, False, frozenset({"errors"}))),
+    ],
+    ids=[
+        "one-failed", "one-error", "no-tests-ran", "stray-untimed-failed",
+        "untimed-failed-passed", "coloured", "passed-warning", "padded-wallclock",
+        "one-xfailed", "subtests-passed", "subtests-failed-run", "coloured-subtests",
+        "passed-skipped", "three-skipped", "five-deselected", "subtests-failed",
+        "three-apples", "collected-zero", "quoted-assert", "failed-node-line",
+        "capitalised-category", "one-errors",
+    ],
+)
+def test_suite_summary_reads_the_line(source: str, expected: tuple | None) -> None:
+    assert gate._suite_summary(source) == expected
