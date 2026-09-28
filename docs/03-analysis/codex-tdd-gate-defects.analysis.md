@@ -115,3 +115,67 @@ returned exit 0 and `SHELLDIFF: DONE rows=251 softened=14 tightened=0 unexpected
 The 14 changed rows are the seven contained venv token spellings with each of
 `-m pytest` and the allowed `h_mad_state_write.py` invocation. All 234 deny
 rows and three pre-existing allow controls retained their verdicts.
+
+## Task 10 re-verification (orchestrator)
+
+Codex returned `STATUS: DONE_WITH_CONCERNS`. The orchestrator re-ran each of the eight specs:
+`--check-anchors` gave `ANCHORS_OK` for all eight (15 + 37 + 17 + 6 + 8 + 6 + 3 + 6 = 98 rows),
+and the harness gave `ALL_CAUGHT … crash_kills=0` for all eight. One transient: in the sequential
+sweep `tdd_judge_wiring.json` read `MUTATION: BASELINE_NOT_GREEN`; its baseline command alone
+read `113 passed`, and an isolated harness re-run read `ALL_CAUGHT mutations=6 caught=6`. The
+likely mechanism is the in-tree `conftest.py` mutation below. Task 8's three wires: W2R, W5BR and
+W6R replace each wire with a constant and are killed by WIRE-PIN 1, 2 and 3; W2F, W5BF–W5BF3 and
+W6F force the opposite outcome. Deviation: Task 1's planned `# M:S…` tags are absent from the
+committed audit parser, so the S rows and W4C anchor on the equivalent lines (plan text stale).
+Committed as `ab83ae92`.
+
+**Finding (pre-existing, outside this feature):** `test_h_mad_pin_file_guard.py` (since
+`b1f8954c`, 2026-08-22) and `test_h_mad_wire_registry.py` run the mutation harness against the
+tracked `h-mad/tests/conftest.py` in place. `git status` taken mid-suite showed
+`M h-mad/tests/conftest.py`, clean a moment later. Any pytest running concurrently in the same
+tree imports the mutated conftest. This is the likely cause of the post-Task-9
+`test_wire_registry_guard_mutation_is_caught_by_harness` failure, which passed 3 of 3 alone.
+
+## Task 11 — phase-5 merge gate readings
+
+At worktree `HEAD` `ab83ae92`, `BASE_SHA=d68635159ad5ec64b03d2852dc25536c4e3ea657`.
+
+1. **Suite.** `1 failed, 4196 passed, 1 warning in 700.61s`; with `CLAUDE_ZZZ_PROBE=1` exported,
+   `1 failed, 4196 passed, 1 warning in 701.50s`. Both failures are
+   `test_top_level_key_set_still_matches` at `test_h_mad_check_plugin_hooks.py:138`, the same
+   reason Task 0 recorded. Collected 4197 = 3893 + 304. PASS.
+2. **Node-id floor.** `comm -23` (both sides `LC_ALL=C sort`) printed 0 lines. PASS.
+3. **Top-level diff.** First reading: `TOPDIFF: DONE files=5 changed=20 removed=0` against the
+   19 keys of §"Regression provenance" (form b). **FAIL at plan v1.2.** The extra key is
+   `test_h_mad_audit_suite_gate.py::run`; its only change (Task 1 RED `fbd78d91`) is
+   `stdin=subprocess.DEVNULL` (Convention 4). The provenance was amended (plan v1.3, 20 keys); the
+   re-run reads `changed=20`, equal key for key. PASS after amendment.
+4. **Anchors.** `ANCHORS: ANCHORS_OK specs=107 mutations=1005 ok=1005 drifted=0`. PASS.
+5. **Self-check.** `CODEX-TDD-GATE: PASS`. PASS.
+6. **V-1r.** `V-1r: DONE VERDICT=PASS fails=0/6 skills=ab83ae92 hemasuite_red=1fbf8022
+   hemasuite_green=31bfcfe4` (`probes/…/v1-offline-replay.reading.ab83ae92.txt`). PASS.
+7. **`reproduce.py` post-merge.** `D3 nopytest` and `OD-3 nearest-state` read `(0, 'deny', …)`
+   (Codex side); `OD-4 tool_input`, `OD-3c claude-root-first` and `OD-5 nopytest` read
+   `(0, 'deny', '[H-MAD-TDD-GATE] BLOCK kind=…')` (Claude side, form b). The plan's `(0, 'deny', '')`
+   expected an empty stderr; design line "the gate writes the reason to stderr under both forms"
+   says otherwise, and the shipped `_refuse` follows the design. Plan text stale; all five
+   fail-opens are closed. Reading: `probes/…/reproduce.reading.ab83ae92.txt`. PASS.
+8. **5g greps.** 0, 0, 0, no match, 0, empty diff. PASS.
+9. **Stale prose.** The census now lists `SKILL.md 6, agy-runtime.md 2,
+   codex-implementer-prompt.md 1, codex-runtime.md 2, h_mad_derive_test_path.sh 1,
+   h_mad_hook_wiring.py 1, h_mad_install_check.py 3, h_mad_tdd_judge.py 1`. All four known-false
+   candidates are rewritten (agy "exit-code protocol" gone; judge registered beside the mapper;
+   implementer prompt reads impl-plan-first and `N failed`; basename exemption list). The
+   path-constant census hits only `test_h_mad_install_check.py` and
+   `test_h_mad_resume_decision.py`, neither this feature's. PASS.
+10. **`parse_corpus.py`.** `PARSECORPUS: files=84 id_mismatch_files=0 py_symbol_label_lines=2
+    parenthesised_label_lines=1` (skills `ab83ae92`, HemaSuite `f6bc694f`); residuals equal
+    design D5's 2 and 1. Positive control (scratch only): a base parser mutated to drop `shape`
+    gave 14 mismatching files. PASS.
+11. **`judge_latency.py`.** `LATENCY: runs=3 worst_s=17.51 budget_s=40.0` (17.51, 11.07, 10.73;
+    each `DENY kind=test-passing`, i.e. all four candidates ran). PASS.
+12. **OQ-D1 host-deadline probe.** NOT RUN — needs a live Claude Code session write; operator
+    merge condition, open.
+13. **Wire-pin gate.** `WIREPIN: PASS tasks=12 wiring=4 unpinned=0 mislabeled=0`. PASS.
+
+Twelve of thirteen items pass; item 12 is open and blocks the merge.
