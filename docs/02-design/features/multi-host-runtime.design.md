@@ -18,9 +18,11 @@ a revert.
 
 Three constraints shape it:
 - **Existing mutation anchors must stay unique.** `h_mad_mutation_harness.py --check-anchors`
-  refuses an anchor that matches twice. The three existing mutation specs over the touched
-  scripts carry 17 anchors today: 16 in the three scripts (9 + 5 + 2) and one in
-  `h-mad/SKILL.md`'s `cannot_judge` row. No new code or text may repeat any of them.
+  refuses an anchor that matches twice. The class is every mutation spec whose `file` names a file
+  this feature edits, in **both** spec directories, `h-mad/tests/mutation-specs/` and
+  `handoff/tests/mutation-specs/` (DP3). Three of them anchor the three touched scripts, and many
+  more anchor the two `SKILL.md` files that strand 4 edits. No new code or text may repeat any of
+  their anchors, and the gate is `--check-anchors` over both directories printing `ANCHORS_OK`.
 - **Tests must run from the skill alone.** Everything a test imports lives under `h-mad/`.
 - **Hosts are reached only through `hmad-dispatch`,** and only by the operator's live smoke.
 
@@ -32,8 +34,9 @@ The key decisions:
 
 ## Supersedes the plan on
 
-Each item states the plan text it replaces, the evidence, and the revert. The owed spec and plan
-wording is listed in the author's report, not here.
+Each item states the plan text it replaces, the evidence, and the revert. The spec sentences this
+design depends on are listed in §"Spec restatements this design depends on", at the end of this
+section, so a spec revision can be checked against a named set.
 
 1. **V-11.1's grok clause reads the `available_commands` event, not a `system`/`init` line.**
    - What the plan and spec say: plan §"Convention Prerequisites" `v111`, and spec F11, expect a
@@ -43,10 +46,18 @@ wording is listed in the author's report, not here.
      `~/.grok/docs/user-guide/14-headless-mode.md`, `streaming-json` is a `type`-tagged event
      stream. The `system`/`init` line belongs to the other format, §"streaming-messages-json".
    - Measured: the committed probe log `docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.ndjson`
-     holds no `system` event. It holds 9 `available_commands` events, each with 316 `commands`,
-     and the names include `h-mad` and `handoff` (DP5).
+     holds no `system` event. It holds 9 `available_commands` events, each with the keys
+     `commands`, `tools` and `type`. `commands` is a list of 316 plain **strings**, and `"h-mad"`
+     and `"handoff"` occur in it as bare strings (DP5). No element is an object, so there is no
+     `.name` to read.
    - Consequence: under the plan's form, every grok smoke prints `FAIL V-11.1`, and `recover`
      then reverts a good integration.
+   - **A listing is a precondition, not proof.** `available_commands` shows that the skill is
+     *available*. The spec's V-11.1 also requires that the host *loaded* `SKILL.md`. For grok that
+     is proved only by an observed, completed `read_file` of a path ending `h-mad/SKILL.md`
+     (§D10). With no such read, the grok arm prints `UNVERIFIED`, which is a halt and never a
+     pass. `~/.grok/docs/user-guide/08-skills.md` says grok *inlines* a skill body, so this halt
+     may be the usual outcome (§D10 Residuals).
    - Revert: restore the plan's `init` check. That is correct only if `exec grok` is changed to
      `streaming-messages-json`, which is the sibling feature's decision.
 2. **V-11.1 orders input events, never text matches over the whole log.**
@@ -61,7 +72,14 @@ wording is listed in the author's report, not here.
      "a script ran first" and fails a correct run.
    - The rule over the class: an event counts only by what the host **asked for** (tool name plus
      input), never by what it **received** (output).
-   - Revert: keep the plan's `v111`, and drop rehearsal case R4 below, which that form fails.
+   - The same class has a second axis inside the input. **A mention is neither an execution nor a
+     read.** `grep -n x h-mad/scripts/h_mad_state_write.py` names a script without running it, and
+     `test -f …/grok-runtime.md` names the adapter without reading it. §D10 therefore classifies
+     each simple command by its argv: an **execution**, a **content read**, a known
+     non-executing command, or **unclassified**. Only the first two count. An unclassified
+     command that mentions a script halts as `UNVERIFIED` instead of being guessed.
+   - Revert: keep the plan's `v111`, and drop rehearsal cases R4, R6 and R7 below, which that form
+     fails.
 3. **`v111` and `v112` live in one committed probe file, `smoke_assert.py`.**
    - The smoke script and the Phase-6 rehearsal both call this file, which satisfies the plan's
      "the same definitions, not a copy" with one file instead of a sourced shell function.
@@ -85,14 +103,56 @@ wording is listed in the author's report, not here.
    - Plan §Deliverables says "the name × state rule". A second classifier would duplicate
      `check_siblings`'s logic.
    - Refactoring `check_siblings` itself would move four of `install_check_siblings.json`'s five
-     anchors (DP3).
+     anchors (DP3a).
 8. **AC-12.2 is claimed on both byte-identity arms.**
    - The plan did not claim AC-12.2 at the real defaults "until the spec restates it".
    - Spec v1.2 restated it (spec Version History v1.2), so arm B's closed diff is now the AC.
-9. **An unknown `HMAD_HOST` value is JSON-encoded in `host=`.**
+9. **An unknown `HMAD_HOST` value is printed bare only when it is safe; otherwise it is
+   JSON-encoded in `host=`.**
    - Spec FR-8 writes `host=<value>`. A value holding a newline would otherwise print a second
      stdout line, and a value holding a space would split the token.
+   - The rule: a value that **fully** matches `[A-Za-z0-9._-]+` (`re.fullmatch`) is printed bare,
+     so `zzz` gives `host=zzz` and `Grok` gives `host=Grok`, the bytes the spec's form gives.
+     Any other value is printed as `json.dumps(value)`, so `" grok"` gives `host=" grok"`.
+   - `re.fullmatch` is load-bearing. `re.match(r"^[A-Za-z0-9._-]+$", v)` accepts `"zzz\n"`,
+     because `$` matches before a trailing newline, and that would print two lines. A fixture
+     pins it (§Test Plan).
    - A declared host (`codex`, `agy`, `grok`) is printed bare, exactly as AC-8.1 requires.
+
+**Spec restatements this design depends on.** The design keeps its position on each item below.
+A spec revision is complete for this design when it carries each sentence, or one with the same
+content:
+- **AC-3.3.** Replace "Fourteen kinds means fourteen fixtures." with: "Each disjunct of the
+  fourteen kinds has its own fixture, and a disjunct may be split by type or shape but never
+  merged: 36 disjunct fixtures plus 6 splits, 42 in total, each asserting exactly its own
+  `(kind, reason)` pair."
+- **AC-4.2.** Replace the single A4 fixture with: "A4 is exercised per branch, with
+  `~/.claude/foo`, `$HOME/.claude/foo` and `${HOME}/.claude/foo` each alone, and removing one
+  branch clears only that branch's fixture."
+- **AC-5.2, reason (i).** "Reason (i) is written from the gate's refusal form measured at
+  `<base>`: `exit 1` gives 'the gate refuses by `exit 1`, which grok treats as fail-open' (token
+  `exit 1`); form (a), rc 2, gives no reason (i) (token `exit 2`); form (b),
+  `hookSpecificOutput.permissionDecision`, gives no reason (i) (token `permissionDecision`); any
+  other reading halts to the operator."
+- **AC-5.2, reason (ii).** "grok's camelCase `toolInput` supplies none of the gate's read paths."
+- **F11 and V-11.1, grok.** "For grok, the `streaming-json` `available_commands` event's
+  `commands` list, a list of plain strings, contains `h-mad`. That is a precondition. The load
+  itself is shown by a completed `read_file` tool call on a path ending `h-mad/SKILL.md`. Without
+  that observed read, the grok arm halts as unverified and never passes."
+- **V-11.1, every host.** "A read is an observed, successful content read: the host's file-read
+  tool, or `cat`, `head`, `tail`, `nl` or `sed` with the file as an operand. A command that only
+  names the file, such as `test -f`, `echo`, `grep -l` or `ls`, is not a read. A script run is an
+  interpreter invocation of the script, never a mention of its name."
+- **FR-8 unknown-host row.** "`<value>` is printed bare when it fully matches `[A-Za-z0-9._-]+`,
+  and as a JSON string otherwise."
+- **FR-8 order.** "The host check precedes the `--window` check, for a declared and an unknown
+  value alike."
+- **FR-9 unknown value.** "An unknown `HMAD_HOST` value is treated as declared: without a session
+  id, the oracle answers `cannot_judge`."
+- **AC-8.4, grok.** "grok has no context indicator the orchestrator can read, so the substitute
+  is none. The operator's `/context` is a separate manual action, not an orchestrator gate."
+- **FR-10 option defaults.** "An environment variable that is present, even empty, replaces the
+  default; an explicit option always wins."
 
 ## Architecture Overview
 
@@ -146,7 +206,7 @@ gains no runtime read of any `h-mad` file.
    "description": "Claude Code's user settings file, including the .local variant."}
   ```
 - **Where the seed lives before the registry exists.** The probe sidecar carries the same 22
-  entries as `seed.json` (D11). That is a frozen copy of the spec seed at `6494b3c`, and its only
+  entries as `seed.json` (D8). That is a frozen copy of the spec seed at `6494b3c`, and its only
   job is to measure `<base>` at 5c, before the registry exists. The committed registry starts from
   it and may diverge by the AC-4.6 record. After 5c the registry is authoritative, and `seed.json`
   is never read by a test.
@@ -182,6 +242,17 @@ def a4_pattern(branches: Iterable[str]) -> str: ...   # "(?:" + "|".join(b) + r"
 def expand_branches(pattern: str) -> list[str]: ...   # raises UnsupportedPattern
 
 @dataclass(frozen=True)
+class Row:
+    id: str; status: str; mapping: str; source: str   # cells after D2.4 steps 5 and 7
+
+@dataclass(frozen=True)
+class Table:
+    rows: list[Row]                  # well-formed body rows, in document order
+    problems: list[tuple[str, str, str]]  # (kind, reason, id): TABLE_MISSING / TABLE_MALFORMED
+
+def adapter_table(text: str) -> Table: ...   # D2.4, the ONE adapter table reader
+
+@dataclass(frozen=True)
 class ParityResult:
     failures: list[Failure]
     stages: tuple[str, ...]         # stages that ran: "registry", "skill", "adapter"
@@ -189,6 +260,12 @@ class ParityResult:
 def check(paths: ParityPaths, *, axes: Mapping[str, str] = CATCH_ALL_AXES,
           exclusion_suffixes: Sequence[str] = EXCLUSION_SUFFIXES) -> ParityResult: ...
 ```
+
+`adapter_table` is public because two callers need the same rows. `check()`'s adapter stage calls
+it and turns each `problems` entry into a `Failure` with `file=` added. The doc tests (D12) call
+it too, and read a row by id from `rows`. No other function in either module parses an adapter
+table. `test_host_runtime_docs.py` imports `adapter_table` from `host_parity` and never splits a
+table line itself.
 
 `live_paths(REPO_ROOT)` is where the six adapter paths are named, with `REPO_ROOT` taken as
 `Path(__file__).resolve().parents[2]`. Imports are `json`, `re`, `dataclasses`, `pathlib` and
@@ -210,8 +287,20 @@ same way `h-mad/tests/docsections.py` reaches it.
      - every member of `skills` must be one of the two names and appear once, else `bad_skill`.
    - **`DUPLICATE_ID`,** over the ids that passed `bad_id`. One line per id that occurs more than
      once.
-   - **`BAD_PATTERN`,** for each element whose `pattern` is not a `str`, or whose
-     `re.compile(pattern)` raises `re.error`.
+   - **`BAD_PATTERN`,** for each element **whose field checks ran** (no `missing_key:*` line)
+     and whose `pattern` is not a `str`, or whose `re.compile(pattern)` raises `re.error`.
+
+   **The rule over the later steps.** A step after the per-element step reads a field only from
+   elements whose field checks ran. Otherwise an absent key reads as `None` and is reported a
+   second time: an absent `pattern` is "not a `str`". The class has exactly two members today:
+   - `DUPLICATE_ID` reads `id`, and already filters on "passed `bad_id`", which implies the
+     field checks ran.
+   - `BAD_PATTERN` reads `pattern`, and takes the filter above.
+
+   Residual: a registry step added later must take the same filter, and the
+   `missing_key:pattern` fixture is the one that shows a step missing it. The filter hides an
+   element's pattern and duplicate status until its keys are repaired. That costs one more repair
+   cycle, and it is never a false clear, because the element already fails.
 
    Suppression rule (a): if any `REGISTRY_UNREADABLE` line exists, `check()` returns after this
    stage.
@@ -274,12 +363,15 @@ same way `h-mad/tests/docsections.py` reaches it.
    - Either failure, or a run shorter than two rows, gives `TABLE_MALFORMED reason=header`.
      Suppression rule (d) then drops every `ROW_*`, `STATUS_INVALID` and `CELL_EMPTY` line for
      that adapter.
-7. **Body rows.** Each row from row 3 on must have 4 cells, else
-   `TABLE_MALFORMED reason=cell_count id=<first cell if it matches the id rule, else ->`.
+7. **Backticks.** The `construct` and `status` cells may carry one surrounding pair of
+   backticks. They are removed **here, before any id is read**, by the one function `_cell_id`
+   that every later step uses. D9.3 writes ids backticked, so an id read before this step would be
+   `` `advisor` `` and would fail the id rule.
+8. **Body rows.** Each row from row 3 on must have 4 cells, else
+   `TABLE_MALFORMED reason=cell_count id=<_cell_id(first cell) if it matches the id rule, else ->`.
    Suppression rule (e) applies: such a row counts as present for its id and is not checked for
-   any other kind.
-8. The `construct` and `status` cells may carry one surrounding pair of backticks, which is
-   removed before comparison.
+   any other kind. The `cell_count` fixture writes its id backticked, so a backtick strip moved
+   after this step gives it two pairs (`cell_count` with `id=-`, and `ROW_MISSING`).
 
 **D2.5 Row kinds.** Every well-formed body row is checked against five kinds:
 - `ROW_UNKNOWN_ID`: the id is not in the registry.
@@ -385,9 +477,14 @@ if host_class == "declared":
     return 2
 if host_class == "unknown":
     print("ERROR: HMAD_HOST is not a known host value", file=sys.stderr)
-    print(f"CTXBUDGET: UNKNOWN reason=unknown_host host={json.dumps(host_value)}")
+    shown = host_value if re.fullmatch(r"[A-Za-z0-9._-]+", host_value) else json.dumps(host_value)
+    print(f"CTXBUDGET: UNKNOWN reason=unknown_host host={shown}")
     return 2
 ```
+
+The script already imports both `json` and `re` at module level
+(`grep -n '^import' h-mad/scripts/h_mad_context_budget.py`), so W1 adds no import beyond
+`classify_host`.
 
 - **What it guarantees.**
   - Stdout is exactly one line on both branches. `--transcript`, `--window` and `--mode` cannot
@@ -418,9 +515,9 @@ constant `CANNOT_JUDGE_WITHOUT_SESSION = "cannot_judge"`.
     (eight spaces). Neither new line contains it.
   - `resume_decision_cannot_judge.json`'s other anchor, `if not state_file.is_file():` followed
     by `return "start_fresh"`, is left untouched.
-  - The rule over every touched script: after the change, `h_mad_mutation_harness.py
-    --check-anchors` over the three existing specs must print `ANCHORS_OK`, 17 of 17. It prints
-    that at `6478b8b5` (DP3).
+  - The rule over every touched file: after the change, `h_mad_mutation_harness.py
+    --check-anchors` over both spec directories must print `ANCHORS_OK` with `drifted=0` (the
+    Anchors command in §Test Plan). It prints that today (DP3).
 - **An empty id is no id.** An empty `--session-id ""` is falsy, so it is treated as absent. That
   is the same truth test `_owned_elsewhere` uses.
 - **Unknown values.** An unknown value is treated as declared (plan §Implementation Strategy): it
@@ -445,10 +542,23 @@ def default_host_roots(environ: Mapping[str, str] | None = None) -> tuple[str, s
     """(agents_dir, agy_dir) resolved at CALL time: the env var when present (even empty),
     else Path.home()/".agents"/"skills" and Path.home()/".gemini"/"config"/"skills"."""
 
-def split_agy_root(lines: list[str], skills_dir: Path, installed: Iterable[str]
-                   ) -> tuple[list[str], list[str]]:
+def checkout_skill_names(repo: Path) -> list[str]:
+    """[p.parent.name for p in sorted(repo.glob("*/" + CHECKOUT_MARKER))] — the names
+    check_siblings iterates, in its order."""
+
+def split_agy_root(lines: list[str], skills_dir: Path, names: Iterable[str],
+                   installed: Iterable[str]) -> tuple[list[str], list[str]]:
     """Partition check_siblings(repo, skills_dir) output into (issues, details)."""
 ```
+
+`check()` passes `names=checkout_skill_names(sibling_repo)` and `installed=AGY_INSTALLED_NAMES`.
+`check_siblings` enumerates names with the same glob expression inside its own body
+(`h_mad_install_check.py`, the `for skill_md in sorted(repo.glob(...))` loop), and that body stays
+byte-identical, so the expression exists twice. The two copies are held together by
+`test_checkout_names_agree_with_check_siblings`. That test builds a checkout of three skills, each
+installed as a copy under a temp root, and asserts that the set of names in `check_siblings`'
+lines equals `set(checkout_skill_names(repo))`. If the copies drift, the partitioner's fail-closed
+rule below still keeps every unattributed line an issue.
 
 - **`check()` signature.** It becomes
   `check(skills_link, hook_link, repo=None, *, agents_skills_dir=None, agy_skills_dir=None,
@@ -460,9 +570,10 @@ def split_agy_root(lines: list[str], skills_dir: Path, installed: Iterable[str]
     `split_agy_root`. The issues are appended, and `details.extend(sorted details)` runs when
     `details` is not `None`.
   - Issue order: the Claude root first, then the agents root, then the agy root.
-- **`split_agy_root`.** For each checkout skill name `n` and kind `K`, a line counts as that pair
+- **`split_agy_root`.** For each name `n` in `names` and kind `K`, a line counts as that pair
   when it starts with `f"SIBLING_{K}:{skills_dir / n} "`. The trailing space separates `h-mad`
-  from any longer name.
+  from any longer name. All three `check_siblings` line forms put a space right after the link:
+  `… (expected`, `… -> …` for `DANGLING`, and `… -> …` for `WRONG_CHECKOUT`.
   - If `n` is in `installed`, the line stays an issue unchanged.
   - Otherwise it becomes the detail `AGY_SIBLING_COLLISION:{skills_dir / n} kind={K}`.
   - A line that matches no `(n, K)` pair stays an **issue**, which fails closed.
@@ -506,7 +617,7 @@ def _hermetic_host_skill_roots(monkeypatch, tmp_path):
 | `seed.json` | data | the 22 spec seed entries in the D1 format | — |
 | `seed_coverage.py` | `seed_coverage.py --sha <sha> --registry <path>` | hits per entry × skill, each flagged against the declaration; with `--branches`, every branch × declared-skill cell and every zero cell listed | `git show`; for `--branches`, it imports `expand_branches` from `h-mad/tests/host_parity.py` |
 | `byte_identity.py` | `byte_identity.py --base <sha> --arm {budget,decision,install-a,install-b}` | `BYTE-IDENTITY: PASS arm=<a> cases=N`, `FAIL arm=<a> case=<name>` plus a diff, or `UNREADABLE reason=<r>` | a detached `git worktree add` of `<base>` in a temp dir |
-| `smoke_assert.py` | `smoke_assert.py v111 --host H --log L` · `v112 --out O --record JSON --feature F` · `rehearse` | `PASS V-11.1` / `FAIL V-11.1 <why>`; `PASS V-11.2` / `FAIL V-11.2 <why>`; one line per rehearsal case, then `REHEARSAL: PASS n=N` / `FAIL` | the given files; `rehearsal/` fixtures |
+| `smoke_assert.py` | `smoke_assert.py v111 --host H --log L` · `v112 --out O --record JSON --feature F` · `rehearse` | `PASS V-11.1` / `FAIL V-11.1 <why>` / `UNVERIFIED V-11.1 <why>` / `UNREADABLE V-11.1 reason=<r>` (D10); `PASS V-11.2` / `FAIL V-11.2 <why>` / `UNREADABLE V-11.2 reason=<r>`; one line per rehearsal case, then `REHEARSAL: PASS n=N` / `FAIL` | the given files; `rehearsal/` fixtures |
 | `rehearsal/` | data | hand-made logs in each host's observed shape (D10) | — |
 
 - **Exit codes.** Each probe exits 0 on a verdict and 2 on unreadable input. Callers read the
@@ -540,7 +651,10 @@ def _hermetic_host_skill_roots(monkeypatch, tmp_path):
     - complete;
     - `last_completed_phase` 4 and 1.
 
-    Each budget and decision case runs with `HMAD_HOST` unset, and again with `claude`.
+    Each budget and decision case runs with `HMAD_HOST` unset, and again with `claude`. This arm
+    covers AC-8.3's "sample run's stdout is byte-identical" half only. Its other half, "every
+    existing test passes", is owned by two runs of the whole existing
+    `test_h_mad_context_budget.py` module (§Test Plan, Commands).
   - Install arm A: the `test_h_mad_install_check.py` shapes, namely healthy, stale copy, missing
     hook, split, dangling, absent link, sibling copy, sibling in another checkout, and empty path.
     Both env overrides point at absent paths.
@@ -576,7 +690,8 @@ tests use (D12).
 - **`## Package and project roots`** (h-mad grok). `HMAD_SKILL_ROOT` resolves from the loaded
   skill path. Today that path is `~/.claude/skills/h-mad`, through `compat.claude.skills`. Once
   the operator links it, `~/.agents/skills/h-mad` serves the same checkout (F4, F5).
-- **`## Install`** (h-mad codex, agy, grok; AC-10.4):
+- **`## Install`** (h-mad codex, agy, grok; AC-10.4). The handoff adapters have no `## Install`
+  section:
   - codex and grok: `ln -s /path/to/checkout/h-mad ~/.agents/skills/h-mad` and the matching
     `handoff` line;
   - agy: the same two commands under `~/.gemini/config/skills/`;
@@ -589,10 +704,19 @@ tests use (D12).
 
   The checkout is written as a placeholder path, never as a user-specific path, to keep the
   existing "never derive the package from a user-specific checkout" rule.
-- **agy install-check paragraph rewording.** It keeps "do not run it as a Phase gate here", and it
-  keeps the `SKILL_NOT_INSTALLED` explanation for the Claude link. It adds that
-  `--agy-skills-dir` checks this host's own root. The "typically" sentences (plan P10) become:
-  "the operator-installed link `~/.gemini/config/skills/<skill>` (§Install), when it exists".
+- **agy install-check paragraph rewording.** It keeps the tree's sentence "Do not run it as a
+  gate here" byte-identical (located in `h-mad/references/agy-runtime.md` by that string; it
+  occurs once), and it keeps the `SKILL_NOT_INSTALLED` explanation for the Claude link. It adds
+  that `--agy-skills-dir` checks this host's own root.
+- **The "typically" sentences (plan P10).** Each is located by the string "typically" inside its
+  adapter's `## Package and project roots` (h-mad) or `## Resolve the skill package` (handoff).
+  Each file holds the string once, so the locator is exact; if a second one appears, the edit
+  stops and asks. They become:
+  - h-mad: "the operator-installed link `~/.gemini/config/skills/h-mad` (§Install below), when it
+    exists";
+  - handoff: "the operator-installed link `~/.gemini/config/skills/handoff`, when it exists". It
+    has no section reference, because `handoff/references/agy-runtime.md` has no `## Install`
+    and handoff never points into an `h-mad` file.
 - **`## Project trust`** (h-mad grok; F7). The global `~/.claude/settings.json` hooks need no
   trust. A project Claude hook is silently skipped until `/hooks-trust` or `--trust`.
 - **`## Hooks`** (h-mad grok; F8, F9). It covers:
@@ -610,11 +734,28 @@ tests use (D12).
   **`<base>` reading** of plan P5 and the sibling's recorded FR-0 branch (plan Risks):
   - Reason (ii) holds in every branch: grok's `toolInput` supplies none of the gate's read paths.
   - Reason (iii) holds in every branch: a handler time limit fails open.
-  - Reason (i) takes the branch's wording.
+  - Reason (i) is written from the gate's **refusal form measured at `<base>`** (5c), read from
+    its refusal sites together with the sibling's recorded FR-0 branch:
 
-  The doc test therefore pins `step5:grok_tdd_hook_unverified`, `toolInput`, `fail-open` and
-  `pytest`. The reason-(i) wording is left to review, because it depends on a sibling measurement
-  not yet taken.
+    | refusal form at `<base>` | reason (i) as the adapter writes it | token the doc test pins |
+    |---|---|---|
+    | `exit 1` (today's form) | the gate refuses by `exit 1`, which grok treats as fail-open | `exit 1` |
+    | (a) rc 2, reason on stderr | none: rc 2 is grok's documented `PreToolUse` deny; the halt rests on (ii) and (iii) | `exit 2` |
+    | (b) rc 0, stdout `hookSpecificOutput.permissionDecision == "deny"` | none: `permissionDecision` is grok's canonical decision field (`10-hooks.md` §"Output (Blocking Hooks)"); the halt rests on (ii) and (iii) | `permissionDecision` |
+
+    Any other reading, such as a mix of forms across refusal sites, halts to the operator before
+    the grok adapter is written. It is never mapped to the nearest row.
+
+    This table follows `10-hooks.md`, which documents `hookSpecificOutput.permissionDecision` as
+    canonical (DP12). Plan §Risks calls form (b) "not a grok-documented deny form", and the tree
+    contradicts that; the plan owes the correction.
+
+  Every reason is pinned, so deleting any one of them turns the doc test RED. The test reads the
+  measured form from the constant `REFUSAL_FORM_AT_BASE` (`"exit1"`, `"a"` or `"b"`) in
+  `test_host_runtime_docs.py`, and step 5c writes that constant from its measurement. It has no
+  default, so a missing 5c reading is a collection error, never a silently chosen row. The always-pinned tokens are
+  `step5:grok_tdd_hook_unverified`, `toolInput` (reason ii), `fails open` (reason iii, the exact
+  phrase above) and `pytest`.
 - **`## Author and reviewer roles`** (h-mad grok; F2). It states:
   - `spawn_subagent` cannot select an agent by name;
   - the role travels as the text of `$HMAD_SKILL_ROOT/agents/<name>.md` in `prompt`;
@@ -623,22 +764,43 @@ tests use (D12).
   - no filesystem jail: diff `git status --short`, tracked and untracked, after each dispatch
     (NFR Security).
 - **`## Context budget and claims`** (h-mad codex, agy, grok; FR-8, FR-9, AC-8.4, AC-9.3). It
-  covers four points:
-  - **Inline declaration.** `HMAD_HOST=<host> python3 "$HMAD_SKILL_ROOT/scripts/…"` goes on every
-    h-mad script call. It is inline so that it does not depend on the shell keeping exports.
+  covers four points. Every command shape below sits in a fenced `bash` block inside the section,
+  with the adapter's **concrete** host value, never a `<host>` placeholder. `<h>` below stands for
+  `codex`, `agy` or `grok`, one per adapter.
+  - **Inline declaration.** Every h-mad script call carries `HMAD_HOST=<h>` inline, so it does not
+    depend on the shell keeping exports. The section carries this runnable line, verbatim with the
+    adapter's value:
+
+    ```bash
+    HMAD_HOST=<h> python3 "$HMAD_SKILL_ROOT/scripts/h_mad_context_budget.py"
+    ```
   - **The budget.** `CTXBUDGET: UNKNOWN reason=host_unsupported` is expected and never read as
-    `OK`. The 80% run ceiling is unenforced on this host. The substitute is named:
-    - grok: the operator's `/context` (`04-slash-commands.md`; interactive only, and not
-      reachable by the model);
-    - codex and agy: "none".
+    `OK`. The 80% run ceiling is unenforced on this host. Each adapter states
+    `substitute: none`: no host exposes a context indicator the orchestrator can read.
+    - grok adds that the operator's `/context` (`04-slash-commands.md`) is interactive only and
+      not reachable by the model. It is a separate manual action the operator may take, **not an
+      orchestrator gate**. The adapter says so in those words.
+    - codex and agy add nothing more.
   - **The session id.**
-    - grok: `GROK_SESSION_ID`, documented for hook processes only (F10), and used only once the
-      live smoke has recorded it present in the orchestrator's shell;
+    - grok: `GROK_SESSION_ID` is documented for hook processes only (F10). It is used in place of
+      a minted id **only after the live smoke records it present in the orchestrator's shell**,
+      and the adapter carries that condition in those words.
     - codex and agy: no documented variable (F13, F14).
-  - **The minted-id procedure.** One `python3 -c 'import uuid; print(uuid.uuid4())'` at
-    bootstrap. The id is passed as the value of `--claim` and as `--session-id` on every `--beat`,
-    `--set` and `--release`, and on every `h_mad_resume_decision.py` call. The failure mode: a
-    session that loses its id sees its own claim as `owned_elsewhere` until the staleness window
+  - **The minted-id procedure.** The id is minted **once at bootstrap** and reused for the
+    session. Each same-id use is its own fenced line, so each can be pinned alone:
+
+    ```bash
+    SID=$(python3 -c 'import uuid; print(uuid.uuid4())')
+    HMAD_HOST=<h> python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --claim "$SID"
+    HMAD_HOST=<h> python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --beat --session-id "$SID"
+    HMAD_HOST=<h> python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --set current_phase=5 --session-id "$SID"
+    HMAD_HOST=<h> python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --release --session-id "$SID"
+    HMAD_HOST=<h> python3 "$HMAD_SKILL_ROOT/scripts/h_mad_resume_decision.py" --state docs/.bkit-memory.json --feature "<feature>" --session-id "$SID"
+    ```
+
+    `--claim` takes the id as its value, and `--beat`, `--set` and `--release` take it through
+    `--session-id`, which is `h_mad_state_write.py`'s own argument shape (DP15). The failure mode:
+    a session that loses its id sees its own claim as `owned_elsewhere` until the staleness window
     lapses, and never gets a false clear.
 - **`## Memory index`** (h-mad grok; AC-5.6). grok's store is `~/.grok/memory/` (F12). Never
   point `h_mad_check_memory_index.py` at `~/.claude/projects` from a grok session.
@@ -660,7 +822,7 @@ cites.
 | `subagent-call` (h) | M: `collaboration.spawn_agent`, `fork_turns: "none"`, agent file text in the prompt [codex binary strings `spawn_agent`, `fork_turns` (DP11)] | M: `define_subagent` then `invoke_subagent` [observed: `init.tools` of `plan-audit-v1-p2-agy.log`] | M: `spawn_subagent` with the agent file text in `prompt` [`16-subagents.md`] |
 | `skill-call` (both) | M: the installed codex skill by name, loaded from `~/.agents/skills` (A2; V-11.1 decides) [A2] | M: the installed agy skill under `~/.gemini/config/skills` [agy docs `skills.md`] | M: the skill's slash command, e.g. `/handoff` [`08-skills.md`] |
 | `advisor` (h) | N: substitutes `hmad-dispatch exec agy\|grok`, or `collaboration.spawn_agent` with `fork_turns: "all"` (AC-6.3) [DP11] | N: substitutes `hmad-dispatch exec codex\|grok`, or `define_subagent`/`invoke_subagent` with the review context in the prompt (AC-6.3) [observed agy tools] | N: no advisor tool (F1); a child does not inherit the transcript (F2); substitutes `hmad-dispatch exec codex\|agy\|grok` or `spawn_subagent` with a self-contained prompt (AC-5.3) [`01-getting-started.md`, `16-subagents.md`] |
-| `send-message` (h) | N: no documented message-to-running-agent tool; dispatch a fresh author with the prior report path [DP11: no such string checked] | N: `send_message` is in agy's tool list, but its target semantics are undocumented in agy's docs dir; dispatch a fresh author [observed agy tools] | N: `send_subagent_message` is off by default (F3); continue with `spawn_subagent` `resume_from` [`16-subagents.md`] |
+| `send-message` (h) | N: no documented message-to-running-agent tool; the binary carries a `send_message` string, a lead whose semantics are undocumented; dispatch a fresh author with the prior report path [DP11: string `send_message`] | N: `send_message` is in agy's tool list, but its target semantics are undocumented in agy's docs dir; dispatch a fresh author [observed agy tools] | N: `send_subagent_message` is off by default (F3); continue with `spawn_subagent` `resume_from` [`16-subagents.md`] |
 | `hook-event` (h) | M: codex hook events via `hooks/h-mad-codex-tdd-gate.py` in the active codex hooks file [observed: `hook: PreToolUse` in `h-mad/tests/fixtures/codex-text-8-exec.log`] | M: `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`; no `SessionStart` [agy docs `hooks.md`] | M: Claude hooks from `~/.claude/settings.json` run under `compat.claude.hooks`, with camelCase payloads and exit-2 deny (F7–F9) [`10-hooks.md`] |
 | `session-id-env` (h) | N: no documented variable; minted id (FR-9) [F14] | N: no documented variable; minted id [F13] | M: `GROK_SESSION_ID` once the smoke records it in the shell, else a minted id (AC-5.5) [`10-hooks.md`] |
 | `claude-config-dir` (h) | N: the check it feeds reads Claude's settings scope; codex's config is its own [DP11] | N: agy's config root is `~/.gemini/config` [agy docs `hooks.md`] | N: grok reads `~/.claude/settings.json` by fixed path; honouring the variable is undocumented [`10-hooks.md`] |
@@ -674,7 +836,7 @@ cites.
 | `claude-home-bare` (h) | N: Claude's home; nothing is relinked [DP11] | N: Claude's home; agy's root is `~/.gemini/config` [agy docs `hooks.md`] | N: grok's home is `~/.grok` [`05-configuration.md`] |
 | `session-reset-command` (both) | M: codex `/new` or `/compact` [DP11: strings `/new`, `/compact`] | N: no documented reset command; start a fresh `agy` session [agy docs dir] | M: `/new` (alias `/clear`) and `/compact` [`04-slash-commands.md`] |
 | `skill-slash-invocation` (both) | M: invoke the skill by name (A2) [A2] | M: invoke the installed agy skill by name [agy docs `skills.md`] | M: `/h-mad`, `/handoff` [observed: `available_commands` in the sibling probe log (DP5)] |
-| `task-tools` (hand.) | N: no evidenced rung 1 (A3: `update_plan` is a lead); rung 2 `.omc/notepad.md`, then rung 3 inline (AC-6.4) [A3] | N: `manage_task` is a background-task manager, not a checklist; rung 2, then 3 (AC-6.4) [observed agy tools] | M: `todo_write`, user-visible pane (AC-5.4) [`01-getting-started.md`] |
+| `task-tools` (hand.) | N: no evidenced rung 1 (A3: `update_plan` is a lead); rung 2 `.omc/notepad.md`, then rung 3 inline (AC-6.4) [A3] | N: `manage_task` is a background-task manager, not a checklist; rung 2 `.omc/notepad.md`, then rung 3 inline (AC-6.4) [observed agy tools] | M: `todo_write`, user-visible pane (AC-5.4) [`01-getting-started.md`] |
 | `tool-search` (hand.) | N: no deferred todo tool to load [A3] | N: [observed agy tools] | N: `todo_write` is built in, never deferred [`01-getting-started.md`] |
 | `skill-root-env` (hand.) | M: `HANDOFF_SKILL_ROOT` from the loaded path [existing adapter rule; A2] | M: `HANDOFF_SKILL_ROOT` [agy docs `skills.md`] | M: `HANDOFF_SKILL_ROOT` [`08-skills.md`] |
 | `todo-tools-optin` (hand.) | N: [A3] | N: [observed agy tools] | N: `todo_write` needs no opt-in [`01-getting-started.md`] |
@@ -692,57 +854,175 @@ cites.
 
 ### D10 — Live smoke assertions (FR-11; supersedes items 1–3)
 
-`smoke_assert.py v111 --host H --log L` reads the log in H's shape (DP6) and reduces it to an
-ordered list of **input events**, each a `(tool, input_text)` pair:
+**Verdict tokens.** `smoke_assert.py v111` prints exactly one line, and it is one of four:
+- `PASS V-11.1`;
+- `FAIL V-11.1 <why>`: the log shows the contract broken;
+- `UNVERIFIED V-11.1 <why>`: the log cannot show the contract kept or broken;
+- `UNREADABLE V-11.1 reason=<r>`, exit 2: the log could not be parsed at all.
 
-| host | log shape | event = | input_text = |
-|---|---|---|---|
-| grok | `streaming-json` NDJSON | each `{"type":"tool_call"}` | `toolName` + `json.dumps(rawInput, sort_keys=True)` |
-| agy | NDJSON `{"event":"step_update","step_update":{…}}` | the first line per `step_index` with `step_type == "tool"` | `tool_name` + `json.dumps(tool_info.parameters, sort_keys=True)` |
-| codex | text | the line after each line equal to `exec` | that command line |
+Only `PASS` passes. The other three are halts (smoke delta below).
 
-The verdict is decided in this order:
-1. **Adapter read.** `a` is the first event whose `input_text` contains `<H>-runtime.md`. If there
-   is none: `FAIL V-11.1 no adapter read`.
-2. **Script run.** `s` is the first event whose tool is the host's shell tool and whose
-   `input_text` matches `h_mad_[a-z0-9_]+\.py|hmad-dispatch\b`. The shell tools are:
-   - grok: `run_terminal_command`;
-   - agy: `run_command`;
-   - codex: every exec event.
+**Reading the log.** `smoke_assert.py v111 --host H --log L` reads the log in H's shape (DP6) and
+reduces it to an ordered list of **input events**:
 
-   If `s` exists and `s < a`: `FAIL V-11.1 a script ran before the adapter was read`.
-3. **Skill loaded.** For grok, some `available_commands` event's `commands[].name` must include
-   `h-mad`, else `FAIL V-11.1 grok did not list h-mad`. For codex and agy, some event's
-   `input_text` must name `h-mad/SKILL.md`, else `FAIL V-11.1 no SKILL.md load`.
-4. Otherwise `PASS V-11.1`.
+| host | log shape | event = | command text / read tool | success = |
+|---|---|---|---|---|
+| grok | `streaming-json` NDJSON | each `{"type":"tool_call"}` | `run_terminal_command`: `rawInput["command"]`; `read_file`: `rawInput["target_file"]` | a later `tool_call_update` with the same `toolCallId` and `status == "completed"` |
+| agy | NDJSON `{"event":"step_update","step_update":{…}}` | the first line per `step_index` with `step_type == "tool"` | `run_command`: `tool_info.parameters["CommandLine"]`; `view_file`: every `str` value of `tool_info.parameters` | a later line with the same `step_index` and `state == "DONE"` |
+| codex | text | each line equal to `exec` | the first line after it that is not a `#hmad-beat` line | the first non-beat line after the command line begins ` succeeded in` |
 
-- **Residuals.**
-  - A host that reads the adapter through a glob such as `references/*.md` fails, which is the
-    conservative direction.
-  - A codex or agy host that loads `SKILL.md` without a tool call naming it (for example,
-    injected by the host's own skill loader, a shape no committed log shows) fails step 3. The
-    first smoke on that host then halts to the operator. Widening step 3 to the observed shape is
-    a design change with its own rehearsal case, never an in-place edit during Phase 7. That is a
-    halt, never a pass.
+- **Lines that are not events.** `hmad-dispatch` writes its own `#hmad-beat …` lines into the
+  same `--log` (`hmad-dispatch.sh`, the `printf '#hmad-beat` line), and the committed agy log
+  holds 2 of them (DP6).
+  - A line matching `^#hmad-beat ` is skipped, on every host.
+  - In the NDJSON hosts, any other line that is not a JSON object prints
+    `UNVERIFIED V-11.1 unparseable line <n>`. `hmad-dispatch` states that a beat can land mid-line
+    and corrupt one event. Skipping that line could drop the one script run that decides the
+    verdict, so it halts instead.
+  - In codex, a beat between `exec` and the command line is skipped by the "first non-beat line"
+    rule above.
+- **Unobserved keys.** The committed grok log has 0 `run_terminal_command` events, and the agy log
+  has 0 `view_file` steps (DP6), so `rawInput["command"]` and `view_file`'s parameter names are
+  taken from no log. An event whose expected key is missing or not a `str` prints
+  `UNVERIFIED V-11.1 <host> input shape unobserved`. The first live smoke tests the key, and a
+  wrong guess halts; it never passes.
+
+**Classifying a command.** Each command text is split into **simple commands** with
+`shlex.shlex(text, posix=True, punctuation_chars=";&|<>()\n")`, `whitespace = " \t\r"` and
+`whitespace_split = True`. A token made only of `;`, `&`, `|`, `(`, `)` or newline ends a simple
+command. A `<` or `>` token drops the token after it, which is the redirect target. A `ValueError`
+from `shlex` prints `UNVERIFIED V-11.1 unparseable command`. A simple command is taken after its
+leading `NAME=value` tokens are dropped. With `argv0` the basename of its first token, it falls
+in exactly one of the classes below, tested in the order written; the first that matches wins:
+- **shell wrapper**: `argv0` is `bash`, `sh` or `zsh`, and an option token matches
+  `^-[A-Za-z]*c[A-Za-z]*$`, a single-dash cluster, so `--norc` does not match. The token after it
+  is classified recursively, to depth 2; deeper nesting is unclassified. codex's
+  `/bin/zsh -lc "…" in <cwd>` is this shape, and the tokens after the script are ignored.
+- **execution**: either
+  - `argv0` matches `^python(3(\.\d+)?)?$`, and the first operand not starting `-` has a basename
+    matching `^h_mad_[a-z0-9_]+\.py$`;
+  - `argv0` matches `^h_mad_[a-z0-9_]+\.py$` or `^hmad-dispatch(\.sh)?$`;
+  - `argv0` is `bash`, `sh` or `zsh`, and the first operand has a basename matching
+    `^hmad-dispatch(\.sh)?$`.
+- **non-executing**: `argv0` is one of `cat`, `head`, `tail`, `nl`, `sed`, `grep`, `rg`, `ls`,
+  `test`, `[`, `echo`, `printf`, `wc` or `stat`. Within this class, a **content read of a file
+  `X`** is one whose `argv0` is `cat`, `head`, `tail`, `nl` or `sed` and some operand of which
+  names `X` (below). A content read is still non-executing.
+- **unclassified**: anything else.
+
+A **mention** is a match of `(?<![A-Za-z0-9_])h_mad_[a-z0-9_]+\.py\b|(?<![\w-])hmad-dispatch\b`
+anywhere in a simple command's tokens. The left guard keeps `test_h_mad_x.py` from counting. An
+unclassified simple command matters only if it mentions a script.
+
+**Which files count.** An operand or tool path **names** the adapter when it equals, or ends with
+`/` plus, one of `h-mad/references/<H>-runtime.md`, `$HMAD_SKILL_ROOT/references/<H>-runtime.md`
+or `${HMAD_SKILL_ROOT}/references/<H>-runtime.md`. It names `SKILL.md` by the same rule with
+`h-mad/SKILL.md`, `$HMAD_SKILL_ROOT/SKILL.md` or `${HMAD_SKILL_ROOT}/SKILL.md`. A
+`handoff/references/…` path never names the adapter. A **successful content read** of a file is:
+- an event of the host's read tool (grok `read_file`, agy `view_file`) whose path names the file;
+- or a shell event holding a content-read simple command of the file;
+
+and in both cases the event's success signal (table above) is present. `test -f`, `echo`,
+`grep -l`, `grep <pattern>`, `rg` and `ls` are never reads.
+
+**The verdict**, decided in this order:
+1. **Walk to the adapter read.** Walk the simple commands of every event in order, and within an
+   event in textual order, up to the first successful content read of the adapter. The first of
+   these that occurs decides:
+   - an execution: `FAIL V-11.1 a script ran before the adapter was read`. A run counts on its
+     input event whether it succeeded or not;
+   - an unclassified simple command that mentions a script:
+     `UNVERIFIED V-11.1 unclassified command before the adapter read`.
+2. **Adapter read.** If there was no successful content read of the adapter:
+   `FAIL V-11.1 no adapter read`.
+3. **Skill listed (grok only).** Some `available_commands` event's `commands` must be a list
+   holding the `str` `"h-mad"`. Non-`str` members are ignored. Otherwise:
+   `FAIL V-11.1 grok did not list h-mad`.
+4. **Skill loaded (every host).** There must be a successful content read of `SKILL.md`, in any
+   position. Otherwise: `UNVERIFIED V-11.1 no observed SKILL.md read`.
+5. Otherwise `PASS V-11.1`.
+
+- **Residuals, each stated exactly.**
+  - A host that reads the adapter through a glob (`cat references/*.md`), or by a path relative to
+    the skill directory (`cat references/<H>-runtime.md` with cwd set to it), gets
+    `FAIL V-11.1 no adapter read`. That direction is conservative.
+  - A partial read counts as a content read: `head -n 5` and `sed -n 1,10p` both count. The design
+    does not measure how much was read.
+  - Success is judged per event, not per simple command. `cat A || true` succeeds even if the
+    `cat` failed, and for grok and agy success is the tool call's completion, not the shell's exit
+    code.
+  - A heredoc body is tokenized as commands. A body line that looks like an execution gives a
+    `FAIL`, and one that mentions a script gives an `UNVERIFIED`. Neither is a pass.
+  - A wrapper outside the shell-wrapper rule (`env`, `timeout`, `nohup`, `exec`, `command`,
+    `time`, `xargs`, `eval`, backticks) makes a mentioning command unclassified, which gives
+    `UNVERIFIED`, never a pass.
+  - `sed` is classed as non-executing even though GNU `sed`'s `e` command executes. A
+    `sed -e 'e python3 h_mad_x.py'` before the adapter read would be missed. That is the one
+    member of the class the non-executing set does not close.
+  - **`SKILL.md` loaded without a tool call, on every host.** `08-skills.md` says grok *inlines* a
+    skill body (up to 25,000 tokens), and a codex or agy host may inject it the same way. None of
+    that shows in the input events, so step 4 prints `UNVERIFIED` and the smoke halts. For grok,
+    that may be the usual outcome, and it is the orchestrator's decision (OD-b). Widening step 4
+    to an observed injection shape is a design change with its own rehearsal case, never an
+    in-place edit during Phase 7.
 
 `v112` is the plan's `v112`, unchanged in logic, moved into Python.
 
 **Rehearsal cases.** They are committed under `rehearsal/` and run by `smoke_assert.py rehearse`
 in Phase 6. Each case prints its verdict, and the Phase-6 document records them all.
+Each case holds, unless it says otherwise, a successful `SKILL.md` read first, and for grok the
+verbatim `available_commands` line below. Each case changes one thing, so each branch of the
+classifier has its own fixture (`invariants.base.md` §"Test discrimination"):
 - For each host (codex, agy, grok):
   - R1: adapter read, then a script run → `PASS`;
-  - R2: a script run, then the adapter read → `FAIL`;
-  - R3: no adapter read → `FAIL`;
+  - R2: a script run, then the adapter read → `FAIL … a script ran before the adapter was read`;
+  - R3: no adapter read → `FAIL … no adapter read`;
   - R4: a `SKILL.md` read whose **output** mentions `h_mad_x.py`, then the adapter read, then a
     script run → `PASS`. This is the case that kills the text-matching form.
-- grok only: R5, no `available_commands` naming `h-mad` → `FAIL`.
+  - R6, filename-only negatives, four cases per host, each alone: a mention of the adapter by
+    `test -f`, by `echo`, by `grep -l x`, or by `ls`; then a script run; then a real adapter
+    read → `FAIL … a script ran before the adapter was read`. Each proves that its form is not a
+    read.
+  - R7, mention-not-execution, two cases per host, each alone:
+    `sed -n 1,80p …/h_mad_state_write.py` or `grep h_mad_resume_decision.py h-mad/SKILL.md`,
+    then the adapter read, then a run → `PASS`.
+  - R8: `eval "python3 …/h_mad_x.py"` before the adapter read →
+    `UNVERIFIED … unclassified command before the adapter read`.
+  - R9: R1 with a `#hmad-beat` line interleaved. In codex it sits between `exec` and the command
+    line; in grok and agy it sits between two events. → `PASS`.
+  - R10: an adapter read with no success signal, then a script run →
+    `FAIL … a script ran before the adapter was read`.
+  - R11: R1 with no `SKILL.md` read → `UNVERIFIED … no observed SKILL.md read`.
+- grok only:
+  - R5: R1 with every `available_commands` line removed → `FAIL … grok did not list h-mad`.
+  - **The verbatim line.** Every grok case except R5 carries the first `available_commands` line
+    of `docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.ndjson`, **copied
+    verbatim** with `grep -m1 '"type": *"available_commands"' <log>`. No grok fixture holds a
+    hand-written `available_commands` line, so a reader that expects `commands[].name` fails grok
+    R1. If the `grep` returns nothing, the fixtures are unbuildable and the rehearsal prints
+    `FAIL`.
+  - Grok R1 is therefore OD-b's verbatim case (`PASS`), and grok R11 is the case that shows the
+    listing alone never passes (`UNVERIFIED … no observed SKILL.md read`).
+  - The grok `read_file` events in these fixtures copy the shape of the `read_file` line in the
+    same log (`toolName`, `rawInput.target_file`, then a `tool_call_update` carrying the same
+    `toolCallId` and `"status": "completed"`), with only the path changed.
 - `v112`: the plan's four cases.
-- Replay on real artifacts (`invariants.base.md` §"Incident replay"): `v111` over the three
-  committed real logs, which are the sibling grok probe log, the agy log and
-  `codex-text-8-exec.log`. None of them is an h-mad status run, so each must print
-  `FAIL V-11.1 no adapter read`, and must not crash.
+- **Replay on real artifacts** (`invariants.base.md` §"Incident replay"): `v111` over the three
+  committed real logs. None of them is an h-mad status run. The expected verdicts below are
+  predicted from a scan of their input events (DP14), and none of them is `PASS`:
+  - the sibling grok probe log: `FAIL V-11.1 no adapter read`. Its only tool calls are one
+    `read_file` and one `search_replace` on scratch files;
+  - the agy log `plan-audit-v1-p2-agy.log`: `FAIL V-11.1 a script ran before the adapter was
+    read`. Its `grep … h_mad_state_write.py` steps are non-executing, and a later
+    `python3 h-mad/scripts/h_mad_extract_verdict.py …` step is an execution. Its two
+    `#hmad-beat` lines are skipped;
+  - `codex-text-8-exec.log`: `FAIL V-11.1 no adapter read`. Its `sed -n … h_mad_*.py` commands
+    are non-executing.
 
-The rehearsal fixtures are hand-made in the shapes those real logs show. A rehearsal case that does
+  A replay that prints a different verdict is investigated before 7f: either the classifier or
+  the prediction is wrong, and the Phase-6 document says which.
+
+The remaining rehearsal fixtures are hand-made in the shapes those real logs show. A rehearsal case that does
 not print its expected verdict blocks 7f. If `smoke_assert.py` changes after Phase 6, the
 rehearsal is re-run, and the smoke record states that.
 
@@ -752,10 +1032,16 @@ rehearsal is re-run, and the smoke record states that.
 
   ```bash
   P="$REPO/docs/03-analysis/probes/multi-host-runtime/smoke_assert.py"
-  r=$(python3 "$P" v112 --out "$S/out" --record "$B_REC" --feature "$F"); test "$r" = "PASS V-11.2" || stop "$r"
-  r=$(python3 "$P" v111 --host "$H" --log "$S/log"); test "$r" = "PASS V-11.1" || stop "$r"
+  r=$(python3 "$P" v112 --out "$S/out" --record "$B_REC" --feature "$F"); test "$r" = "PASS V-11.2" || stop "${r:-UNREADABLE V-11.2 reason=no_output}"
+  r=$(python3 "$P" v111 --host "$H" --log "$S/log"); test "$r" = "PASS V-11.1" || stop "${r:-UNREADABLE V-11.1 reason=no_output}"
   ```
 - Part 1 gains `test -f "$P" || { echo "HALT smoke_assert.py absent from main"; exit 1; }`.
+- `FAIL`, `UNVERIFIED` and `UNREADABLE` all take the same path. They are part-2 stops, so each
+  calls `recover` (plan: "a stop in part 2 … calls `recover`, the only path that reverts"). An
+  `UNVERIFIED` grok arm is therefore a halt that reverts, never a pass, and 7e never runs. If the
+  orchestrator wants `UNVERIFIED` to halt **without** reverting, that is a change to the plan's
+  part-2 rule and is not made here.
+- A crash that prints nothing still halts with a named reason, through the `${r:-…}` default.
 
 Every other line is as the plan wrote it: the preconditions, `recover`, the pinned prompt, and the
 `AH` H1 read. The `AH` value is still used by the prompt-names-the-adapter precondition.
@@ -799,7 +1085,12 @@ second cell, before the closing ` |`:
   the heading named; nothing is skipped.
 - **Discrimination.** Tokens are asserted **inside the located section or table row only**, so
   nearby prose cannot satisfy them (`invariants.base.md` §"Test discrimination").
-- **Rows.** Table rows are read with `host_parity`'s table parser.
+- **Rows.** Table rows are read with `host_parity.adapter_table` (D2.1). The test asserts that
+  `problems` is empty and that exactly one row carries the id, and then reads that row's cells.
+- **Fenced lines.** A pinned command line is looked for among the `body` events of
+  `_fence_events` inside the located section, so prose that quotes the line does not satisfy it.
+- **Each alternative is its own assertion.** Where a row below lists several tokens, each token is
+  a separate parametrized case, so a sibling token cannot cover a missing one.
 
 The pinned tokens, by AC:
 
@@ -807,13 +1098,16 @@ The pinned tokens, by AC:
 |---|---|---|
 | AC-2.3, AC-5.3, AC-6.3 | 3 h-mad adapters · `advisor` row | status `not-applicable`; mapping contains `hmad-dispatch exec` and, per host, `collaboration.spawn_agent` + `fork_turns` (codex), `invoke_subagent` (agy), `spawn_subagent` (grok) |
 | AC-2.4, AC-5.4, AC-6.4 | 3 handoff adapters · `task-tools` row | grok `mapped` + `todo_write` + `Ctrl+T`; agy `not-applicable` + `manage_task` + `.omc/notepad.md`; codex `not-applicable` + `.omc/notepad.md` + `update_plan` (as a lead) |
-| AC-2.5, AC-5.5, AC-6.5, AC-9.3 | 3 h-mad adapters · `session-id-env` row | all: `uuid.uuid4()` and `owned_elsewhere`; grok also `GROK_SESSION_ID` and `hook processes` |
+| AC-2.5, AC-5.5, AC-6.5 | 3 h-mad adapters · `session-id-env` row | all: `uuid.uuid4()` and `owned_elsewhere`; grok also `GROK_SESSION_ID` and `hook processes` |
+| AC-9.3 | 3 h-mad adapters · `## Context budget and claims`, fenced lines | five cases, each alone: a fenced line holding `--claim "$SID"`; one holding both `--beat` and `--session-id "$SID"`; one holding both `--set` and `--session-id "$SID"`; one holding both `--release` and `--session-id "$SID"`; one holding both `h_mad_resume_decision.py` and `--session-id "$SID"`. Also a fenced line beginning `SID=$(python3 -c 'import uuid; print(uuid.uuid4())')`, and the prose phrase `once at bootstrap` |
+| AC-9.3, AC-5.5 | h-mad grok · `## Context budget and claims` | `GROK_SESSION_ID` and the phrase `only after the live smoke records it present in the orchestrator's shell` |
 | AC-5.1 | both grok files · `## Version and compatibility` | `1.0.41`, `compat.claude.skills`; h-mad also `compat.claude.hooks` |
-| AC-5.2 | h-mad grok · `## The TDD gate` | `step5:grok_tdd_hook_unverified`, `toolInput`, `fail-open`, `pytest` |
+| AC-5.2 | h-mad grok · `## The TDD gate` | `step5:grok_tdd_hook_unverified`, `toolInput`, `fails open`, `pytest`, and the reason-(i) token of the `REFUSAL_FORM_AT_BASE` row (D9.2) |
 | AC-5.6 | h-mad grok · `claude-projects-store` row | `not-applicable`, `~/.grok/memory`, `h_mad_check_memory_index.py` |
 | AC-5.7 | both grok tables · every `source` cell | matches `\b\d\d-[a-z-]+\.md\b`, or contains `grok inspect`, or starts `observed:` |
 | AC-7.1, AC-7.3 | both `SKILL.md` · `## Host runtime` | contains all three `references/<host>-runtime.md` paths; a renamed or doubled heading fails loudly |
-| AC-8.4 | 3 h-mad adapters · `## Context budget and claims` | `HMAD_HOST=<host>`, `CTXBUDGET: UNKNOWN`, `80%`, and `/context` (grok) or `none` (codex, agy) |
+| AC-8.4 | 3 h-mad adapters · `## Context budget and claims` | `CTXBUDGET: UNKNOWN`, `80%` and `substitute: none`; grok also `/context` and `not an orchestrator gate` |
+| FR-8, AC-8.1 (executable) | 3 h-mad adapters · `## Context budget and claims`, fenced lines | exactly one fenced line matching `^HMAD_HOST=<h> python3 "\$HMAD_SKILL_ROOT/scripts/h_mad_context_budget\.py"$`, with `<h>` the adapter's own concrete value and never the text `<host>`. The test then **runs** that line with `bash -c`, `HMAD_SKILL_ROOT` set to the checkout's `h-mad`, `HOME` set to an empty `tmp_path` and `subprocess.run(timeout=…)`, and asserts stdout is exactly `CTXBUDGET: UNKNOWN reason=host_unsupported host=<h>` |
 | AC-9.4 | h-mad `SKILL.md` · `cannot_judge` row in `## Decision routing …` | `HMAD_HOST` and `--session-id` |
 | AC-10.4 | h-mad codex, grok · `## Install` | `~/.agents/skills/h-mad`, `~/.agents/skills/handoff`, `ln -s`, `never overwritten`, `.codex/hooks.json`, `does not re-arm` |
 | AC-10.4 | h-mad agy · `## Install` | `~/.gemini/config/skills/h-mad`, `~/.gemini/config/skills/handoff`, `ln -s`, `never overwritten` |
@@ -840,7 +1134,14 @@ The pinned tokens, by AC:
 | Routing | `h-mad/SKILL.md`, `handoff/SKILL.md` | modify | FR-7, AC-9.4 (D11) |
 | Probe sidecar | `docs/03-analysis/probes/multi-host-runtime/{calibrate.sh,seed.json,seed_coverage.py,byte_identity.py,smoke_assert.py,rehearsal/}` | new | FR-1, FR-4, FR-11, FR-12 (D8, D10) |
 | Phase-6 document | `docs/03-analysis/multi-host-runtime.analysis.md` | new | AC-4.5, AC-4.6, AC-6.1, rehearsal, byte-identity |
-| Live-smoke record | `docs/archive/<YYYY-MM>/multi-host-runtime/multi-host-runtime.live-smoke.md` | new | FR-11 |
+| Live-smoke record | `docs/03-analysis/multi-host-runtime.live-smoke.md` (the spec's path, where the smoke writes it) | new | FR-11 |
+
+**When the smoke record is archived.** The smoke writes the record at
+`docs/03-analysis/multi-host-runtime.live-smoke.md`. Archiving is not settled. The plan runs the
+smoke after 7f, and 7c runs before 7f (§"Supersedes" item 4). So 7c's
+`mv docs/03-analysis/${FEATURE}*` has already run when the record is written, and 7c does not pick
+it up. Moving the record into the archive needs a step after the smoke; this design does not add
+one. Which step does it is the orchestrator's decision.
 
 Deliberately untouched (plan): `h-mad/hooks/h-mad-tdd-gate.sh`,
 `h-mad/hooks/h-mad-codex-tdd-gate.py`, `h-mad/hooks/h-mad-advisor-warn.sh`,
@@ -849,29 +1150,36 @@ mutation specs, and `check_siblings`' body.
 
 ## Implementation Order
 
-1. **Before the design audit** (plan Next Steps): commit `calibrate.sh`, `seed.json` and
-   `seed_coverage.py` (per-entry mode). They need no feature code.
+1. **Before the design gate clears** (plan Next Steps): commit `calibrate.sh`, `seed.json` and
+   `seed_coverage.py` (per-entry mode). They need no feature code. This step is the
+   orchestrator's, because this document's author writes only the design. It had not happened
+   when design audit cycle 1 ran, so that cycle checked DP1 and DP2 against scratch readings.
 2. **5c** (plan "Rebase, then baseline"):
    - rebase;
    - record `<base>`;
    - run `calibrate.sh <base>` and `seed_coverage.py --sha <base> --registry seed.json`;
    - re-run P4, P5, P6, P9 and P15, and the suite baseline;
-   - run `--check-anchors` on the three existing specs;
+   - from P5, record the gate's refusal form at `<base>` as `REFUSAL_FORM_AT_BASE` (D9.2), or halt
+     on a reading outside its three rows;
+   - run `--check-anchors` over both spec directories (the Anchors command in §Test Plan);
    - take the AC-6.1 gap table from `git show <base>:<adapter>`;
    - run the four-link gate;
    - write the AC-4.6 record.
 3. **Strand 1.**
-   - First, `test_host_construct_parity.py`, RED. The registry node is RED with
-     `REGISTRY_UNREADABLE reason=missing_file`. Each adapter node is RED on its vacuity guard
-     (§Test Strategy), because no adapter stage ran.
-   - Then `host_parity.py`, then the registry.
-   - Registry node GREEN; adapter nodes RED on `TABLE_MISSING reason=no_heading`.
+   - First, `test_host_construct_parity.py`. Its RED is a collection error:
+     `ModuleNotFoundError: No module named 'host_parity'`. That is the only RED possible before the
+     module exists, and it is recorded as such.
+   - Then `host_parity.py`, with no registry yet. Now the stated reasons appear: the registry node
+     is RED with `REGISTRY_UNREADABLE reason=missing_file`, and each adapter node is RED on its
+     vacuity guard (§Test Strategy), because no adapter stage ran.
+   - Then the registry. Registry node GREEN; adapter nodes RED on
+     `TABLE_MISSING reason=no_heading`.
    - Take the `seed_coverage.py --branches` reading at `<base>`.
 4. **Strand 2** (three independent leaves):
    - `h_mad_host.py`, then the D4 and D5 wiring, with `test_h_mad_host_declaration.py` RED first;
    - `h_mad_install_check.py` D6 with `conftest.py` D7, with `test_h_mad_install_check_roots.py`
      RED first;
-   - after each leaf, run `--check-anchors` on the existing specs.
+   - after each leaf, run `--check-anchors` over both spec directories.
 5. **Strand 3.** One adapter at a time, in the order h-mad codex, h-mad agy, h-mad grok, handoff
    codex, handoff agy, handoff grok. Each adapter's live node and its D12 doc tests go from RED to
    GREEN.
@@ -906,9 +1214,11 @@ mutation specs, and `check_siblings`' body.
     replace the option default.
 - **New stdout tokens:**
   - `CTXBUDGET: UNKNOWN reason=host_unsupported host=<codex|agy|grok>`;
-  - `CTXBUDGET: UNKNOWN reason=unknown_host host=<json string>`;
+  - `CTXBUDGET: UNKNOWN reason=unknown_host host=<value>`, where `<value>` is bare when it fully
+    matches `[A-Za-z0-9._-]+`, and a JSON string otherwise (§"Supersedes" item 9);
   - `AGY_SIBLING_COLLISION:<link> kind=<NOT_SYMLINK|DANGLING|WRONG_CHECKOUT>`;
-  - `BYTE-IDENTITY: …`, `PASS|FAIL V-11.1|V-11.2 …`, `REHEARSAL: …` (probes).
+  - `BYTE-IDENTITY: …`, `PASS|FAIL|UNVERIFIED|UNREADABLE V-11.1 …`,
+    `PASS|FAIL|UNREADABLE V-11.2 …`, `REHEARSAL: …` (probes).
 - **Smoke line** (the plan's):
   `HMAD-STATUS feature=<f> last_completed_phase=<json> halt_reason=<json>`.
 
@@ -925,10 +1235,12 @@ mutation specs, and `check_siblings`' body.
   - `check(skills_link, hook_link, repo=None, *, agents_skills_dir: str | Path | None = None,
     agy_skills_dir: str | Path | None = None, details: list[str] | None = None) -> list[str]`;
   - `default_host_roots(environ=None) -> tuple[str, str]`;
-  - `split_agy_root(lines, skills_dir, installed) -> tuple[list[str], list[str]]`;
+  - `checkout_skill_names(repo) -> list[str]`;
+  - `split_agy_root(lines, skills_dir, names, installed) -> tuple[list[str], list[str]]`;
   - CLI `--agents-skills-dir PATH` and `--agy-skills-dir PATH`, whose defaults come from
     `default_host_roots()` at call time.
-- `host_parity` (test-side): as in D2.1.
+- `host_parity` (test-side): as in D2.1, including the public `adapter_table(text) -> Table`
+  that both `check()` and `test_host_runtime_docs.py` use.
 - Probe CLIs: as in D8.
 
 ## Error Handling Strategy
@@ -947,7 +1259,9 @@ mutation specs, and `check_siblings`' body.
 - **Fail-closed choices:**
   - an unattributable `check_siblings` line under the agy root stays an issue;
   - an unknown `HMAD_HOST` makes the oracle refuse to route;
-  - an unobserved host log shape fails V-11.1;
+  - an unobserved host log shape, an unparseable line or command, an unclassified command that
+    mentions a script, or a `SKILL.md` load with no observed read gives `UNVERIFIED V-11.1`,
+    which halts and is never a pass;
   - a probe that cannot remove its worktree prints `UNREADABLE`.
 
 ## Test Strategy
@@ -1005,8 +1319,11 @@ mutation specs, and `check_siblings`' body.
 - `test_budget_host_check_precedes_transcript_lookup[…]` (b);
 - `test_budget_host_check_precedes_usage_read[…]` (c);
 - `test_budget_host_check_precedes_window_check[…]` (d);
-- `test_budget_unknown_host[zzz|Grok| grok]`;
-- `test_budget_unknown_host_newline_value_prints_one_line`;
+- `test_budget_unknown_host_encoding[zzz|Grok| grok|zzz-newline]`, pinning both forms of OD-a:
+  `zzz` → `host=zzz` and `Grok` → `host=Grok` (bare); `" grok"` → `host=" grok"` and `"zzz\n"` →
+  `host="zzz\n"` (JSON). Each case also asserts that stdout is exactly one line;
+- `test_budget_unknown_host_precedes_window_check[zzz]` (AC-8.5 for an unknown value; fixture (d)
+  covers the declared ones);
 - `test_decide_cannot_judge_without_session_id[<host> × <live-foreign-owner|no-owner|absent-file|unreadable-file|absent-feature>]`;
 - `test_decide_routes_normally_with_session_id[codex|agy|grok]`, the control that kills an
   unconditional `cannot_judge`;
@@ -1023,23 +1340,36 @@ mutation specs, and `check_siblings`' body.
 - `test_default_roots_resolve_to_documented_paths`;
 - `test_detail_lines_sorted_and_after_verdict`;
 - `test_check_without_root_keywords_reads_no_new_root`;
-- `test_unattributable_sibling_line_stays_an_issue`.
+- `test_unattributable_sibling_line_stays_an_issue`;
+- `test_checkout_names_agree_with_check_siblings` (D6).
 
-**`test_host_runtime_docs.py`:** one test per row of D12's table.
+**`test_host_runtime_docs.py`:** one test per row of D12's table, parametrized per adapter and
+per token wherever a row lists several.
 
 **Mutation specs.** Each is scored on `MUTATION: ALL_CAUGHT`, with anchors confirmed by
 `--check-anchors`:
 
 | Spec | Mutation classes (each one mutant per member) | Killed by |
 |---|---|---|
-| `host_parity.json` | each disjunct's detection disabled alone (42, incl. splits); each suppression rule (a)–(e) removed; each axis dropped from `CATCH_ALL_AXES`; each `A4_BRANCHES` entry dropped; each suffix replaced by `.*`; one expander alternative dropped; `CELL_EMPTY`'s case fold removed; the table search made fence-blind (a `^\|` scan over the raw section) | its own fixture; the sample-count assertion; the mixed-case fixtures; a fixture holding a pipe table inside a fence before the real one |
-| `host_declaration.json` | `classify_host` given `.strip()`, `.lower()`, or `""`→unknown; W1 check moved after the transcript lookup, the usage read, the `--window` check; W2 check moved after the state read, after the feature lookup; `_host_verdict` ignoring `session_id`; the `cannot_judge` branch removed | fixtures ` grok`, `Grok`, `""`; (b), (c), (d); absent-file and absent-feature fixtures; `test_decide_routes_normally_with_session_id`; AC-9.1 |
+| `host_parity.json` | each disjunct's detection disabled alone (42, incl. splits); each suppression rule (a)–(e) removed; each axis dropped from `CATCH_ALL_AXES`; each `A4_BRANCHES` entry dropped; each suffix replaced by `.*`; one expander alternative dropped; `CELL_EMPTY`'s case fold removed; the table search made fence-blind (a `^\|` scan over the raw section); `BAD_PATTERN`'s field-checks-ran filter removed; the backtick strip moved after the `cell_count` id read | its own fixture; the sample-count assertion; the mixed-case fixtures; a fixture holding a pipe table inside a fence before the real one; the `missing_key:pattern` fixture; the backticked-id `cell_count` fixture |
+| `host_declaration.json` | `classify_host` given `.strip()`, `.lower()`, or `""`→unknown; W1 check moved after the transcript lookup, the usage read, the `--window` check; W2 check moved after the state read, after the feature lookup; `_host_verdict` ignoring `session_id`; the `cannot_judge` branch removed; the unknown value always printed bare; always JSON-encoded; `re.fullmatch` replaced by `re.match` with `^…$` | fixtures ` grok`, `Grok`, `""`; (b), (c), (d); absent-file and absent-feature fixtures; `test_decide_routes_normally_with_session_id`; AC-9.1; the ` grok` encoding case; the `zzz` encoding case; the `zzz-newline` encoding case |
 | `install_check_roots.json` | the agy name split inverted; the split applied to the Claude root; the env override read dropped; the trailing space removed from `split_agy_root`'s prefix; detail lines printed before the verdict | AC-10.5 cells; AC-10.6; the override control; a fixture with skills `h-mad` and `h-mad-x`; the ordering test |
 
 **Commands:**
-- `python3 -m pytest -q h-mad/tests handoff/tests handoff/scripts`, the full coupled suite
-  (AC-12.1), run with the interpreter the plan pins;
-- `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/*.json`;
+- `env -u HMAD_HOST python3 -m pytest -q h-mad/tests handoff/tests handoff/scripts`, the full
+  coupled suite (AC-12.1), run with the interpreter the plan pins and with `HMAD_HOST` explicitly
+  removed, so the operator's shell cannot decide which branch the suite exercises;
+- **AC-8.3**, the whole existing module, twice, each read by its pytest summary line:
+  - `env -u HMAD_HOST python3 -m pytest -q h-mad/tests/test_h_mad_context_budget.py`;
+  - `HMAD_HOST=claude python3 -m pytest -q h-mad/tests/test_h_mad_context_budget.py`.
+
+  Each run passes when its summary has no `failed` and no `error`, and both report the same
+  `passed` count. A run that collects nothing fails. The module's `_run` helper starts the script
+  with no `env=`, so `HMAD_HOST=claude` reaches every subprocess the module starts (DP13);
+- **Anchors**, both spec directories:
+  `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/*.json`
+  and `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors handoff/tests/mutation-specs/*.json`,
+  each read by its `ANCHORS:` token. The token must be `ANCHORS_OK` with `drifted=0`;
 - the plan's node-id floor and append-only `numstat` check.
 
 ## Invariant Compliance
@@ -1051,8 +1381,12 @@ mutation specs, and `check_siblings`' body.
 - **Single-source contract.** Complies:
   - host classification is one function;
   - agy-root classification reuses `check_siblings`;
-  - the adapter table parser is shared by the gate and the doc tests;
-  - `v111` and `v112` are one file used by the smoke and the rehearsal.
+  - the adapter table parser is one public function, `host_parity.adapter_table`, called by the
+    gate and the doc tests;
+  - `v111` and `v112` are one file used by the smoke and the rehearsal;
+  - one exception, stated with its guard: `checkout_skill_names` repeats `check_siblings`' glob
+    expression, because `check_siblings`' body must stay byte-identical for its anchors. The
+    agreement test (D6) holds the two together.
 - **Standalone / no plugin dependency.** Complies. Only stdlib is used, and test-side reads of
   sibling-skill files have precedent (spec A5).
 - **No new external dependency.** Complies. No test or script invokes codex, agy or grok. The
@@ -1111,7 +1445,8 @@ Each premise was run at `6478b8b5`, on the main checkout with a clean `h-mad`/`h
 `git diff --name-only 2f262f8a 6478b8b5 -- h-mad handoff | wc -l` → 0 files, so plan v1.2's tree
 premises stand. `main` advanced to `dfd5f02e` while this document was written, and
 `git diff --name-only 6478b8b5 dfd5f02e -- h-mad handoff | wc -l` → 0 files, so every reading below
-also holds there.
+also holds there. The v1.1 revision re-ran the readings it adds or changes at `1ef1a782`, and
+`git diff --name-only 6478b8b5 1ef1a782 -- h-mad handoff | wc -l` → 0 files.
 
 - **DP1 — calibration.** `git diff --stat 6494b3c HEAD -- h-mad/SKILL.md handoff/SKILL.md` → no
   output. The spec FR-4 command at `HEAD`, piped to `wc -l` and to `sort -u | wc -l`, gives:
@@ -1126,12 +1461,31 @@ also holds there.
   - 0 entries whose presence contradicts their declaration;
   - 13 entries carry branches, with 45 branches between them, and 54 branches across all 22
     entries;
-  - 61 branch × declared-skill cells, of which 25 are zero;
+  - branch × declared-skill cells, with the population named, because the two readings differ
+    on scope alone:
+    - over the 13 **branching** entries: 61 cells, of which 25 are zero;
+    - over **all** 54 branches, which is what `seed_coverage.py --branches` prints: 72 cells, of
+      which 25 are zero. The 9 non-branching entries add 11 cells: `skill-call` and `claude-md`
+      declare both skills, and the other 7 declare one. None of those 11 is zero, per the spec
+      seed table's hit columns;
   - 14 branches have 0 occurrences in every skill that declares them.
+
+  The Phase-6 comparison uses the all-branches population.
 
   **Moves** with either `SKILL.md` and with any registry change. It is re-derived by
   `seed_coverage.py --branches`.
-- **DP3 — existing anchors.** `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors
+- **DP3 — existing anchors, both directories** (at `1ef1a782`). The class is every spec whose
+  `file` names a file this feature edits, found by a JSON walk over `mutations[].file` matched by
+  basename against the edited files:
+  - `h-mad/tests/mutation-specs/`: 16 spec files, 14 of them naming `SKILL.md`. `--check-anchors`
+    over all 99 spec files → `ANCHORS: ANCHORS_OK specs=99 mutations=907 ok=907 drifted=0`;
+  - `handoff/tests/mutation-specs/`: 3 spec files naming `SKILL.md` (`read_auto_resolve.json`,
+    `skill_body_renderer_args.json`, `takeover_mode.json`). `--check-anchors` over all 7 spec
+    files → `ANCHORS: ANCHORS_OK specs=7 mutations=69 ok=69 drifted=0`.
+
+  **Moves** with any spec added to either directory. The three specs over the touched scripts
+  are read in detail below.
+- **DP3a — the three script specs.** `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors
   h-mad/tests/mutation-specs/{context_budget,install_check_siblings,resume_decision_cannot_judge}.json`
   → `ANCHORS: ANCHORS_OK specs=3 mutations=17 ok=17`. By spec that is 9 + 5 + 3 mutations. By target `file`, it is 9 in
   `h_mad_context_budget.py`, 5 in `h_mad_install_check.py`, 2 in `h_mad_resume_decision.py` and 1
@@ -1151,9 +1505,17 @@ also holds there.
     asserts it is the only recognition site.
 - **DP5 — grok's `streaming-json` has no init line and does list skills.** A JSON walk over
   `docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.ndjson` counts event types:
-  - 9 `available_commands`, each with 316 `commands`, whose names include `h-mad` and `handoff`;
+  - 9 `available_commands`. The first has the keys `commands`, `tools` and `type`, and its
+    `commands` is a list of 316 elements, all of them `str`. The first element is `"compact"`,
+    and `"h-mad"` is a member;
   - 70 `thought`, 21 `text`, 2 `tool_call`, 4 `tool_call_update`, 3 `usage`, 1 `end`;
-  - 0 `system`.
+  - 0 `system`, and 0 lines that are not JSON.
+
+  The 2 `tool_call` events are one `read_file`, whose `rawInput` key is `target_file`, and one
+  `search_replace`. Each is followed by a `tool_call_update` with the same `toolCallId` and
+  `"status": "completed"`. There are 0 `run_terminal_command` events, because the probe asked
+  only for a read and an edit. That zero is incidental, and it is why §D10 treats the shell key
+  as unobserved.
 
   `grep -n 'streaming-json\|stream-json' ~/.grok/docs/user-guide/14-headless-mode.md` places the
   `system`/`init` line under §"streaming-messages-json". The sibling design's `exec grok` argv line
@@ -1161,10 +1523,17 @@ also holds there.
 - **DP6 — host logs carry tool output.**
   - grok: that log's `tool_call_update.rawOutput` holds `FileContent.content`.
   - agy: `docs/03-analysis/probes/grok-codex-fallback/plan-audit-v1-p2-agy.log` has tool steps
-    shaped `step_update.{step_type:"tool", tool_name, tool_info:{parameters, output}}`, 16 ACTIVE
-    and 16 DONE.
-  - codex: `h-mad/tests/fixtures/codex-text-8-exec.log` shows `exec`, then the command line, then
-    ` succeeded in …`, then the output lines.
+    shaped `step_update.{step_type:"tool", tool_name, tool_info:{parameters, output}}`, with the
+    lifecycle in the key `state`: 16 `ACTIVE` and 16 `DONE`. All 32 are `run_command`, with the
+    command in `parameters["CommandLine"]`. There are 0 `view_file` steps, although `view_file`
+    is in the log's `init.tools` list. The log also holds 2 lines that are not JSON, and both
+    are `#hmad-beat … agy running …s` lines.
+  - codex: `h-mad/tests/fixtures/codex-text-8-exec.log` has 8 lines equal to `exec`. Each is
+    followed by a `/bin/zsh -lc "…" in <cwd>` command line and then a ` succeeded in …` line; the
+    output lines come after that. It has 0 failed-command lines, so the failure form is
+    unobserved, and §D10 counts anything other than ` succeeded in` as no success.
+  - `hmad-dispatch.sh` writes the beat with `printf '#hmad-beat %s %s running %ss\n'` into the
+    same log (`grep -n 'hmad-beat' h-mad/scripts/hmad-dispatch.sh`).
 - **DP7 — collection.** `pytest.ini` holds only `testpaths = h-mad/tests handoff/tests
   handoff/scripts`, and sets no `python_files`. `host_parity.py` is therefore not collected.
 - **DP8 — the bare-timeout scan.** `test_h_mad_portable_timeout.py` scans `references/*.md`,
@@ -1196,6 +1565,7 @@ also holds there.
   | `spawn_agent` | 45 |
   | `fork_turns` | 9 |
   | `.agents/skills` | 1 |
+  | `send_message` | 39 (read at `1ef1a782`) |
 
   These are leads, not documentation.
 - **DP12 — grok facts re-read.** `grok --version` → `grok 1.0.41 (4220f3b224a6) [stable]`.
@@ -1216,6 +1586,34 @@ also holds there.
     gates.
   - `04-slash-commands.md` has `/new` (alias `/clear`), `/compact` and `/context`.
   - `12-project-rules.md` lists `Claude.md`, `CLAUDE.md` and `AGENTS.md`.
+  - `10-hooks.md` §"Output (Blocking Hooks)": "The canonical `permissionDecision` decides when
+    present" (`grep -n permissionDecision`), which D9.2's form-(b) row rests on.
+  - `08-skills.md`: "Grok inlines at most the first 25,000 tokens of a skill body", which D10's
+    `SKILL.md` residual rests on. `01-getting-started.md` names `run_terminal_command` as the
+    shell tool and `read_file` as the read tool.
+- **DP13 — AC-8.3 runs today.** With `/opt/anaconda3/bin/python3`, at `1ef1a782`:
+  `env -u HMAD_HOST … -m pytest -q h-mad/tests/test_h_mad_context_budget.py` → `31 passed`, and
+  `HMAD_HOST=claude …` on the same module → `31 passed`. `_run` in that module is
+  `subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)`, with no
+  `env=`, so the variable reaches the script. **Moves** with the module; W1 must leave both
+  readings equal.
+- **DP14 — real-log input scan** (at `1ef1a782`). This is a scratch walk of the three replay logs'
+  input events for script, adapter and `SKILL.md` names. It is the basis of D10's predicted replay
+  verdicts, and the Phase-6 rehearsal re-derives them with `smoke_assert.py`:
+  - agy: steps 8, 16 and 18 are `grep -n … h-mad/scripts/h_mad_*.py`, which is non-executing, and
+    step 20 is `echo … ; python3 h-mad/scripts/h_mad_extract_verdict.py …`, which is an execution.
+    No step names `agy-runtime.md`;
+  - codex: two command lines mention an `h_mad_*.py` name, both as `sed -n` operands. The one at
+    `sed -n '1,110p' h-mad/tests/test_h_mad_collect_report_docs.py` is excluded by the mention's
+    left guard. No command names `codex-runtime.md`;
+  - grok: no input names a script, an adapter or `SKILL.md`.
+- **DP15 — `h_mad_state_write.py` argument shapes.** Its `add_argument` lines: `--claim`
+  (`metavar="SESSION_ID"`), `--release` (`store_true`), `--beat` (`store_true`), `--set`
+  (append, `KEY=VALUE`), and `--session-id`. The help text says `--session-id` is required with
+  `--beat`, needed by `--release` to release a session's own live claim, and optional with
+  `--set`, where it refreshes the heartbeat. `h_mad_resume_decision.py` is called with
+  `--state … --feature … --session-id …` (`h-mad/SKILL.md`, the resume-oracle command).
 
 ## Version History
 - v1.0: Initial design draft (2026-09-28) from spec v1.2 (b51c5b2a) and plan v1.2 (e32ffe5c); premises executed at 6478b8b5 (tree unchanged at dfd5f02e). Registry, host_parity checker (find_heading/fence_aware_end/_fence_events table parse, closed branch-expansion grammar reproducing P2b), shared h_mad_host classifier, W1-W3 host/root checks keeping all 17 existing mutation anchors unique, agy root by partitioning check_siblings, 22x3 construct matrix, D12 doc-test token table, probe sidecar. Supersedes the plan on nine items: grok V-11.1 reads available_commands (exec grok emits streaming-json, no init line); v111 orders input events not log text (logs carry tool output); smoke_assert.py single file; rehearsal in Phase 6; 42 kind fixtures (6 splits); h_mad_host module; agy partition; AC-12.2 on both arms; unknown host JSON-encoded.
+- v1.1: Design audit cycle 1 repairs (2026-09-28; codex p1 9 must, teammate 8 must/19 should; premises re-run at 1ef1a782). V-11.1: grok commands is a list of plain strings (listing = precondition only); every host needs an observed successful content read of the adapter before the first execution and of SKILL.md, else FAIL/UNVERIFIED; simple commands classified by argv (execution/content read/non-executing/unclassified), beat lines skipped, unparseable lines halt; UNVERIFIED/UNREADABLE tokens; rehearsal R6-R11, every grok case carrying a verbatim probe-log available_commands line; real-log replay verdicts predicted. BAD_PATTERN reads only elements whose field checks ran; backtick strip before the cell_count id. adapter_table public and shared with doc tests. split_agy_root takes names (checkout_skill_names + agreement test). FR-8 unknown host bare on fullmatch [A-Za-z0-9._-]+ else JSON. AC-8.3 full module run unset and claude; AC-8.4 substitute: none, grok /context a manual action not a gate; AC-9.3 per-argument fenced lines pinned; FR-8 runnable HMAD_HOST=<h> line executed by the doc test; AC-5.2 reason (i) keyed on the refusal form at base (permissionDecision documented by 10-hooks.md, contradicting plan Risks). Anchors checked over both spec directories. Spec restatements listed in the design. DP2 population stated (61 branching / 72 all). Live-smoke record path aligned to spec (docs/03-analysis/multi-host-runtime.live-smoke.md; archiving after 7c left to the orchestrator).
