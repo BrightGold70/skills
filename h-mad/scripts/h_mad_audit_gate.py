@@ -422,12 +422,10 @@ def run_suite(test_root: Path, command: list[str] | None = None,
         return {"verdict": "UNREADABLE", "reason": exc.__class__.__name__.lower()}
     tail = (run.stdout or "") + (run.stderr or "")
     summary = _suite_summary(tail)
-    if summary is None:
+    if summary is None or not summary.phrases.intersection({"passed", "failed"}):
         # No parseable summary line: pytest did not get far enough to report.
         # That is a cannot-judge, NOT a failure — and never a pass. Reading a
         # missing summary as either is how a run that collected nothing scores.
-        return {"verdict": "UNREADABLE", "reason": "no_summary", "rc": run.returncode}
-    if not summary.phrases.intersection({"passed", "failed"}):
         return {"verdict": "UNREADABLE", "reason": "no_summary", "rc": run.returncode}
     passed, failed = summary.passed, summary.failed
     if passed == 0 and failed == 0:
