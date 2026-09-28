@@ -145,3 +145,40 @@ Source command for each column: `git show "$BASE_SHA":<adapter path>`; SHA is `3
 ### AC-4.6 registry change record
 
 Command: `bash docs/03-analysis/probes/multi-host-runtime/calibrate.sh "$BASE_SHA"`; the full reading is in §Calibration above. Comparison command: `bash docs/03-analysis/probes/multi-host-runtime/calibrate.sh 6494b3c`. The 13 distinct h-mad tokens and 12 distinct handoff tokens, including their counts, are identical in the two readings. **New distinct tokens: none.** Thus there are no new Claude constructs and no false hits to classify. `seed_coverage.py --sha "$BASE_SHA" --registry docs/03-analysis/probes/multi-host-runtime/seed.json` prints `verdict=ok` for every one of the 22 entries and `SEEDCOV: PASS entries=22 stale=0 undeclared=0`; **non-ok entries: none**. Resulting registry changes by kind: **add none; retire none; amend `skills` none; amend `pattern` none**. Task 3 can build the registry directly from `seed.json`.
+
+### Registry branch coverage at BASE_SHA
+
+The Task 3 registry contains the 22 seed constructs unchanged, as recorded in the AC-4.6 change record above. The §Preamble derivation returned `BASE_SHA=3b5c4388b4f11b7011eacf7aae6f95a6445f433f`, matching this document's baseline.
+
+Command: `/opt/anaconda3/bin/python docs/03-analysis/probes/multi-host-runtime/seed_coverage.py --sha "$BASE_SHA" --registry h-mad/references/host-constructs.json --branches`
+
+```text
+ZERO id=claude-skills-dir branch="~/\\.claude/skills\\b" skill=handoff hits=0
+ZERO id=claude-skills-dir branch="\\$\\{HOME\\}/\\.claude/skills\\b" skill=h-mad hits=0
+ZERO id=claude-skills-dir branch="\\$\\{HOME\\}/\\.claude/skills\\b" skill=handoff hits=0
+ZERO id=claude-agents-dir branch="\\$\\{HOME\\}/\\.claude/agents\\b" skill=h-mad hits=0
+ZERO id=claude-hooks-dir branch="\\$\\{HOME\\}/\\.claude/hooks\\b" skill=h-mad hits=0
+ZERO id=claude-settings branch="~/\\.claude/settings\\.local\\.json" skill=h-mad hits=0
+ZERO id=claude-settings branch="~/\\.claude/settings\\.local\\.json" skill=handoff hits=0
+ZERO id=claude-settings branch="\\$HOME/\\.claude/settings\\.local\\.json" skill=h-mad hits=0
+ZERO id=claude-settings branch="\\$HOME/\\.claude/settings\\.local\\.json" skill=handoff hits=0
+ZERO id=claude-settings branch="\\$HOME/\\.claude/settings\\.json" skill=handoff hits=0
+ZERO id=claude-settings branch="\\$\\{HOME\\}/\\.claude/settings\\.local\\.json" skill=h-mad hits=0
+ZERO id=claude-settings branch="\\$\\{HOME\\}/\\.claude/settings\\.local\\.json" skill=handoff hits=0
+ZERO id=claude-settings branch="\\$\\{HOME\\}/\\.claude/settings\\.json" skill=h-mad hits=0
+ZERO id=claude-settings branch="\\$\\{HOME\\}/\\.claude/settings\\.json" skill=handoff hits=0
+ZERO id=claude-handoffs-dir branch="\\$HOME/\\.claude/handoffs\\b" skill=h-mad hits=0
+ZERO id=claude-handoffs-dir branch="\\$HOME/\\.claude/handoffs\\b" skill=handoff hits=0
+ZERO id=claude-handoffs-dir branch="\\$\\{HOME\\}/\\.claude/handoffs\\b" skill=h-mad hits=0
+ZERO id=claude-handoffs-dir branch="\\$\\{HOME\\}/\\.claude/handoffs\\b" skill=handoff hits=0
+ZERO id=claude-projects-store branch="\\$HOME/\\.claude/projects\\b" skill=h-mad hits=0
+ZERO id=claude-projects-store branch="\\$\\{HOME\\}/\\.claude/projects\\b" skill=h-mad hits=0
+ZERO id=claude-homunculus branch="\\$\\{HOME\\}/\\.claude/homunculus\\b" skill=handoff hits=0
+ZERO id=claude-home-bare branch="\\$HOME/\\.claude\\b(?!/)" skill=h-mad hits=0
+ZERO id=claude-home-bare branch="\\$\\{HOME\\}/\\.claude\\b(?!/)" skill=h-mad hits=0
+ZERO id=session-reset-command branch="`/compact\\b" skill=handoff hits=0
+ZERO id=skill-slash-invocation branch="`/h-mad\\b" skill=handoff hits=0
+SEEDCOV-BRANCHES: entries=22 branches=54 cells=72 zero=25 dead=14
+```
+
+These 25 `ZERO` cells are the Phase-6 branch-classification inputs.
