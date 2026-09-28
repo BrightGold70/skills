@@ -7,8 +7,8 @@
 mentions** across all six host adapters (`{h-mad,handoff}/references/{codex,agy,grok}-runtime.md`),
 a catch-all that fails on any unregistered Claude-looking construct in either `SKILL.md`, an explicit
 host declaration so the context budget and claims answer cannot-judge rather than a false verdict
-on a non-Claude host, `~/.agents/skills/{h-mad,handoff}` symlink coverage in
-`h_mad_install_check.py`, and one read-only live smoke per host as a verification step.
+on a non-Claude host, `~/.agents/skills/{h-mad,handoff}` and `~/.gemini/config/skills/{h-mad,handoff}`
+symlink coverage in `h_mad_install_check.py`, and one read-only live smoke per host as a verification step.
 
 ## Goal
 
@@ -303,7 +303,10 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
     refusal of a production write has been observed. It gives three reasons, each with its
     evidence:
     - (i) `h-mad/hooks/h-mad-tdd-gate.sh` refuses by `exit 1`, which grok treats as fail-open
-      (F9). `grep -n 'exit 1' h-mad/hooks/h-mad-tdd-gate.sh` shows every BLOCK branch.
+      (F9). `grep -n 'exit 1' h-mad/hooks/h-mad-tdd-gate.sh` shows every BLOCK branch. This
+      reason is about grok only. Whether `exit 1` blocks on Claude Code is not asserted by this
+      spec: that question is D4 of feature `codex-tdd-gate-defects`
+      (`docs/01-plan/features/codex-tdd-gate-defects-brainstorm.md`, commit `76b2501`).
     - (ii) the gate reads a top-level `file_path`/`path` from stdin, while grok nests tool input
       under `toolInput` (F8). An empty target path takes the gate's `[ -z "$TARGET_PATH" ] && exit
       0` allow branch.
@@ -441,32 +444,70 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
     cell `` `cannot_judge` `` in the decision-routing table. The residual: if that table is
     restructured, find the row by the token.
 
-### FR-10: `~/.agents/skills` install and install-check coverage
+### FR-10: `~/.agents/skills` and agy skill-root install and install-check coverage
 
-- **Description**: Hosts that read `~/.agents/skills` get `~/.agents/skills/h-mad` and
-  `~/.agents/skills/handoff` as **symlinks into this checkout**, never copies.
+- **Description**: Hosts get `h-mad` and `handoff` as **symlinks into this checkout**, never
+  copies, at two roots:
+  - `~/.agents/skills/h-mad` and `~/.agents/skills/handoff`;
+  - `~/.gemini/config/skills/h-mad` and `~/.gemini/config/skills/handoff` (the agy root; operator
+    decision on v1.0).
 
   Readers of each root:
   - `~/.agents/skills`: grok (F4, user tier) and codex (Assumption A2, unverified locally).
   - `~/.claude/skills`: Claude Code, and grok through `compat.claude.skills` (F4, F5).
-  - agy reads `~/.gemini/config/skills` and a workspace `.agents/`, not `~/.agents` (its adapter).
+  - `~/.gemini/config/skills`: agy. agy reads that root and a workspace `.agents/`, not
+    `~/.agents` (its adapter).
 
-  The install is a documented operator command in the codex and grok adapters. No script links
-  anything: `h_mad_install_check.py` "repairs nothing". `h_mad_install_check.py` gains
-  `--agents-skills-dir` (default `~/.agents/skills`). It applies the existing `check_siblings`
-  semantics to that directory, with the same sibling-repo derivation as today:
-  - a present-but-wrong entry is an issue, reported as `SIBLING_NOT_SYMLINK`, `SIBLING_DANGLING`
-    or `SIBLING_WRONG_CHECKOUT`;
-  - an absent entry is not an issue.
+  The install is a documented operator command in the codex, grok and agy adapters. No script
+  links anything: `h_mad_install_check.py` "repairs nothing". `h_mad_install_check.py` gains two
+  options, each with the same sibling-repo derivation as today:
+  - `--agents-skills-dir` (default `~/.agents/skills`). It applies the existing `check_siblings`
+    semantics to that directory unchanged:
+    - a present-but-wrong entry is an issue, reported as `SIBLING_NOT_SYMLINK`,
+      `SIBLING_DANGLING` or `SIBLING_WRONG_CHECKOUT`;
+    - an absent entry is not an issue.
+  - `--agy-skills-dir` (default `~/.gemini/config/skills`). Every entry under it whose name is
+    one of this checkout's top-level skills is classified into exactly one of four states:
+    absent, correct symlink, or one of the three present-but-wrong kinds (`NOT_SYMLINK`,
+    `DANGLING`, `WRONG_CHECKOUT`, with the same definitions as the `SIBLING_*` tokens). The
+    outcome depends only on whether the name is one this feature installs there:
+    | name | absent | correct symlink | present-but-wrong |
+    |---|---|---|---|
+    | `h-mad` or `handoff` | nothing | nothing | **issue**: `SIBLING_<KIND>:<link> …`, counted in `issues=N`, verdict `FAIL` |
+    | any other checkout skill name | nothing | nothing | **detail line only**: `AGY_SIBLING_COLLISION:<link> kind=<KIND>`, never counted, verdict unaffected |
+
+    Why the axis is the name and not the kind: agy ships its own skills in that root, and some
+    share a name with a checkout skill. A same-named plain directory is then agy's own skill, not
+    a stale copy of ours, and the check cannot tell the two apart. Only `h-mad` and `handoff` are
+    names the operator is told to link there, so only they can be wrong in a way this feature
+    owns. The same rule covers every other name, including collisions agy adds later; none of
+    them can turn the verdict to `FAIL`.
+
+    Detail lines are printed after the verdict block (after `OK` on `PASS`, after the issue
+    lines on `FAIL`), one per colliding name, sorted by name. They never start with `INSTALL:`
+    or `SIBLING_`, so the one-token invariant and any caller that counts `SIBLING_` lines are
+    unaffected. `issues=N` counts issues only.
+
+    Residual (stated, not closed): a stale plain-directory copy of any checkout skill other than
+    `h-mad` or `handoff` under the agy root is reported and never fails. That is the price of not
+    failing on agy's own same-named skills.
+
+  The existing `SIBLING_*` semantics for the `~/.claude/skills` root (the directory holding
+  `--skills-link`) are unchanged: there, every present-but-wrong checkout name is an issue,
+  whatever the name. The name split above applies to the agy root only.
 
   The verdict tokens are unchanged: `INSTALL: PASS`, exit 0; `INSTALL: FAIL issues=N`, exit 0;
-  `INSTALL: UNREADABLE`, exit 2. An empty `--agents-skills-dir` is `UNREADABLE`, like the two
-  existing path options.
+  `INSTALL: UNREADABLE`, exit 2. An empty `--agents-skills-dir` or `--agy-skills-dir` is
+  `UNREADABLE`, like the two existing path options.
 
-  Measured: `~/.agents/skills` holds 0 names that collide with this checkout's 316 top-level
-  skills. The command was an intersection of
-  `git ls-files '*/SKILL.md' | awk -F/ 'NF==2{print $1}' | sort -u` with the directory listing.
-  The check therefore reads `PASS` on the day it lands.
+  Measured at `76b2501`, each root intersected with this checkout's 316 top-level skill names
+  from `git ls-files '*/SKILL.md' | awk -F/ 'NF==2{print $1}' | sort -u`:
+  - `~/.agents/skills`: 0 colliding names.
+  - `~/.gemini/config/skills`: 1 colliding name, `debugger`, a plain directory. It is agy's own
+    skill. Under the rule above it prints one `AGY_SIBLING_COLLISION:… kind=NOT_SYMLINK` detail
+    line. `h-mad` and `handoff` are absent there, and absence passes.
+
+  The check therefore reads `PASS` on the day it lands, with one detail line on this machine.
 - **Acceptance Criteria**:
   - AC-10.1: Fixtures under `tmp_path` cover the following, with `h-mad` and `handoff` in the
     agents dir:
@@ -477,13 +518,41 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
     - the entry absent → no issue.
   - AC-10.2: Every existing `test_h_mad_install_check.py` test passes unchanged. The run with
     the agents dir absent entirely yields the same stdout as today.
-  - AC-10.3: `--agents-skills-dir ""` → `INSTALL: UNREADABLE`, exit 2.
-  - AC-10.4: The codex and grok h-mad adapters state the two `ln -s` commands. They state that an
-    existing non-symlink at either path is an operator decision and is never overwritten. They
-    also state that creating the link does **not** re-arm HemaSuite's codex TDD gate: that
-    project's tracked `.codex/hooks.json` reads `{"hooks": {}}` in this revision.
-  - Residual: absence passes. That is the existing sibling rule, so a host that needs
-    `~/.agents/skills/h-mad` and lacks it is caught by the live smoke (FR-11), not by this check.
+  - AC-10.3: `--agents-skills-dir ""` → `INSTALL: UNREADABLE`, exit 2. `--agy-skills-dir ""` →
+    `INSTALL: UNREADABLE`, exit 2.
+  - AC-10.4: The codex and grok h-mad adapters state the two `~/.agents/skills` `ln -s` commands.
+    The agy h-mad adapter states the two `~/.gemini/config/skills` `ln -s` commands. Each states
+    that an existing non-symlink at either path is an operator decision and is never overwritten.
+    The codex and grok adapters also state that creating the link does **not** re-arm HemaSuite's
+    codex TDD gate: that project's tracked `.codex/hooks.json` reads `{"hooks": {}}` in this
+    revision.
+  - AC-10.5 (agy root, one fixture per cell): fixtures under `tmp_path`, passed through
+    `--agy-skills-dir`, cover each cell of the FR-10 table separately:
+    - `h-mad` as a correct symlink → no issue, no detail line;
+    - `h-mad` as a plain directory, as a dangling link, and as a link into another checkout →
+      `SIBLING_NOT_SYMLINK`, `SIBLING_DANGLING`, `SIBLING_WRONG_CHECKOUT` respectively, and
+      `INSTALL: FAIL`;
+    - `handoff` in the same three wrong states → the same three tokens, each in its own fixture;
+    - `h-mad` and `handoff` absent → `INSTALL: PASS`;
+    - a non-installed checkout name (fixture name `debugger`) as a plain directory, as a dangling
+      link, and as a link into another checkout → `INSTALL: PASS` with exactly one
+      `AGY_SIBLING_COLLISION:` line whose `kind=` is `NOT_SYMLINK`, `DANGLING`, `WRONG_CHECKOUT`
+      respectively, and no `SIBLING_` line;
+    - a wrong `h-mad` plus a colliding `debugger` together → `INSTALL: FAIL issues=1`, one
+      `SIBLING_` line and one `AGY_SIBLING_COLLISION:` line.
+  - AC-10.6 (regression, `~/.claude/skills` root unchanged): with the same plain directory named
+    `debugger` placed in the `--skills-link` parent directory instead, the result is
+    `SIBLING_NOT_SYMLINK` and `INSTALL: FAIL`, exactly as today, and no `AGY_SIBLING_COLLISION:`
+    line is printed. Every existing sibling test (the class holding
+    `test_a_sibling_installed_as_a_copy_is_reported`) passes unchanged.
+  - Residual: absence passes at both new roots. That is the existing sibling rule, so a host that
+    needs `~/.agents/skills/h-mad` or `~/.gemini/config/skills/h-mad` and lacks it is caught by the
+    live smoke (FR-11), not by this check.
+  - Residual (test hermeticity): the existing tests do not pass the new options, so they read the
+    real `~/.agents/skills` and `~/.gemini/config/skills`. They stay byte-identical only because
+    their fixture checkouts are named like `checkout`, which collides with nothing in either real
+    root. That is incidental, not load-bearing: a fixture named like a real agy skill (for example
+    `debugger`) would print a detail line. New tests pass both options explicitly.
 
 ### FR-11: One read-only live smoke per host (D4). This is a verification step, not a test.
 
@@ -513,9 +582,6 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
   - V-11.4: The session-id probe result is recorded. For grok it decides AC-5.5's branch, present
     or minted.
   - V-11.5: Cost, where the host reports it, is recorded.
-  - V-11.6 (agy): agy loads skills from `~/.gemini/config/skills`, which holds no `h-mad` in this
-    revision. So the agy smoke halts to the operator unless an operator-created
-    `~/.gemini/config/skills/h-mad` symlink exists (see §"Owed decisions").
 
 ### FR-12: Regression — the Claude host and existing pins are unchanged
 
@@ -524,18 +590,8 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
     includes `test_h_mad_codex_runtime.py` and `test_handoff_codex_runtime.py` with their
     forbidden-token assertions unchanged.
   - AC-12.2: `h_mad_context_budget.py`, `h_mad_resume_decision.py` and `h_mad_install_check.py`
-    produce byte-identical stdout and exit codes with `HMAD_HOST` unset and the new option at its
-    default, on the existing tests' fixtures.
-
-## Owed decisions (surfaced, not chosen)
-
-- **agy install root.** The brainstorm's install covers `~/.agents/skills` only, but agy reads
-  `~/.gemini/config/skills`. Extending `h_mad_install_check.py`'s sibling check to that root with
-  unchanged semantics would report `INSTALL: FAIL` on the day it lands. Measured:
-  `~/.gemini/config/skills/debugger` is a plain directory with the same name as this checkout's
-  `debugger` skill, so it would read as `SIBLING_NOT_SYMLINK`. This spec therefore leaves agy's root
-  out of the check. The agy smoke (V-11.6) halts until the operator decides whether to create
-  `~/.gemini/config/skills/{h-mad,handoff}` symlinks.
+    produce byte-identical stdout and exit codes with `HMAD_HOST` unset and the new options at their
+    defaults, on the existing tests' fixtures (see FR-10's hermeticity residual).
 
 ## Non-Functional Requirements
 
@@ -555,6 +611,8 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
 - The codex TDD gate defects D1–D3 in `docs/handoffs/2026-09-28-main__codex-tdd-gate-defects.md`.
   This feature absorbs only that brief's install half. Re-arming HemaSuite's gate is an operator
   act.
+- Whether the Claude-side TDD gate's `exit 1` actually blocks on Claude Code. That is D4 of
+  feature `codex-tdd-gate-defects` (commit `76b2501`); this spec makes no claim either way.
 - Extending the catch-all's corpus to `references/`, `hooks/` or `scripts/` (residual r6).
 - A standalone grok install with its own `~/.grok` hooks (rejected by D1).
 - Detecting an omitted `HMAD_HOST` (FR-8 residual).
@@ -584,3 +642,4 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
 
 ## Version History
 - v1.0: Initial specification draft (2026-09-28) from the operator-approved brainstorm (D1–D4). Resolves OQ1–OQ5 against host docs; seeds a 22-entry construct registry and calibrates the catch-all at 6494b3c.
+- v1.1: Operator decision on the v1.0 agy question (2026-09-28): FR-10 installs and checks the agy root ~/.gemini/config/skills/{h-mad,handoff} via --agy-skills-dir; a present-but-wrong h-mad/handoff there FAILs, any other colliding checkout name (measured: debugger) prints an AGY_SIBLING_COLLISION detail line and never FAILs (AC-10.5); ~/.claude/skills SIBLING_* semantics pinned unchanged (AC-10.6). agy smoke residual V-11.6 and the Owed decisions section removed. AC-5.2(i) and Out-of-Scope point Claude-side exit-1 blocking to codex-tdd-gate-defects D4 (76b2501).
