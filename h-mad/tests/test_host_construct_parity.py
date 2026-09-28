@@ -384,8 +384,8 @@ def test_catch_all_axis_alone_reports_its_fixture(tmp_path, axis):
 @pytest.mark.parametrize("axis", ["A1", "A2", "A3", "A4", "A4-tilde", "A4-home", "A4-home-braced"])
 def test_removing_an_axis_or_branch_clears_its_fixture(tmp_path, axis):
     if axis.startswith("A4-"):
-        paths = _empty_registry_with_token(tmp_path, "\n".join(AXIS_TOKENS[f"A4-{name}"] for name in host_parity.A4_BRANCHES))
-        axes = {"A4": host_parity.a4_pattern(value for name, value in host_parity.A4_BRANCHES.items() if name != axis.removeprefix("A4-"))}
+        paths = _empty_registry_with_token(tmp_path, "\n".join(AXIS_TOKENS[f"A4-{name.replace('_', '-')}"] for name in host_parity.A4_BRANCHES))
+        axes = {"A4": host_parity.a4_pattern(value for name, value in host_parity.A4_BRANCHES.items() if name.replace("_", "-") != axis.removeprefix("A4-"))}
         got = {f.token for f in _h_mad_unregistered(host_parity.check(paths, axes=axes), paths)}
         assert AXIS_TOKENS[axis] not in got, got
         assert {value for key, value in AXIS_TOKENS.items() if key.startswith("A4-") and key != axis} <= got, got
