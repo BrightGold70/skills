@@ -549,10 +549,11 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
     needs `~/.agents/skills/h-mad` or `~/.gemini/config/skills/h-mad` and lacks it is caught by the
     live smoke (FR-11), not by this check.
   - Residual (test hermeticity): the existing tests do not pass the new options, so they read the
-    real `~/.agents/skills` and `~/.gemini/config/skills`. They stay byte-identical only because
-    their fixture checkouts are named like `checkout`, which collides with nothing in either real
-    root. That is incidental, not load-bearing: a fixture named like a real agy skill (for example
-    `debugger`) would print a detail line. New tests pass both options explicitly.
+    real `~/.agents/skills` and `~/.gemini/config/skills`. Their fixture repos ship skills named
+    `h-mad` and `handoff`, exactly the names the operator links under both roots, so at the real
+    defaults they print `SIBLING_WRONG_CHECKOUT` lines once the links exist. Tests are hermetic
+    through the `HMAD_AGENTS_SKILLS_DIR` / `HMAD_AGY_SKILLS_DIR` overrides, which a conftest
+    autouse fixture sets to absent paths. New tests pass both options explicitly.
 
 ### FR-11: One read-only live smoke per host (D4). This is a verification step, not a test.
 
@@ -590,8 +591,12 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
     includes `test_h_mad_codex_runtime.py` and `test_handoff_codex_runtime.py` with their
     forbidden-token assertions unchanged.
   - AC-12.2: `h_mad_context_budget.py`, `h_mad_resume_decision.py` and `h_mad_install_check.py`
-    produce byte-identical stdout and exit codes with `HMAD_HOST` unset and the new options at their
-    defaults, on the existing tests' fixtures (see FR-10's hermeticity residual).
+    produce byte-identical stdout and exit codes with `HMAD_HOST` unset and both new roots pointed
+    at absent paths (`HMAD_AGENTS_SKILLS_DIR`, `HMAD_AGY_SKILLS_DIR`), on the existing tests'
+    fixtures. At the real default roots with the four operator links present, exit codes are
+    identical and the only stdout differences are the new roots' `SIBLING_*` lines for those
+    links, `AGY_SIBLING_COLLISION:` lines for names already present under
+    `~/.gemini/config/skills`, and the verdict line they change.
 
 ## Non-Functional Requirements
 
@@ -643,3 +648,4 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
 ## Version History
 - v1.0: Initial specification draft (2026-09-28) from the operator-approved brainstorm (D1–D4). Resolves OQ1–OQ5 against host docs; seeds a 22-entry construct registry and calibrates the catch-all at 6494b3c.
 - v1.1: Operator decision on the v1.0 agy question (2026-09-28): FR-10 installs and checks the agy root ~/.gemini/config/skills/{h-mad,handoff} via --agy-skills-dir; a present-but-wrong h-mad/handoff there FAILs, any other colliding checkout name (measured: debugger) prints an AGY_SIBLING_COLLISION detail line and never FAILs (AC-10.5); ~/.claude/skills SIBLING_* semantics pinned unchanged (AC-10.6). agy smoke residual V-11.6 and the Owed decisions section removed. AC-5.2(i) and Out-of-Scope point Claude-side exit-1 blocking to codex-tdd-gate-defects D4 (76b2501).
+- v1.2: Wording owed by plan v1.2 (2026-09-28, e32ffe5c): AC-12.2 now states byte-identity with both new roots pointed at absent paths (HMAD_AGENTS_SKILLS_DIR, HMAD_AGY_SKILLS_DIR) and, at the real defaults with the four operator links present, identical exit codes and a closed stdout diff (new-root SIBLING_* lines, AGY_SIBLING_COLLISION: lines, the verdict line). FR-10 hermeticity residual corrected: the fixture repos ship h-mad and handoff, the names the operator links, so hermeticity is the env override set by a conftest autouse fixture, not the fixture name. Premises re-run against the tree; nothing else changed.
