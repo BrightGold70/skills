@@ -435,3 +435,111 @@ def test_hooks_section_advisor_warn_note(case: str, token: str) -> None:
     assert token in section, f"grok Hooks advisor warn note {case} must state {token}"
     if case == "hook-name":
         assert "a 5 s handler limit, after which the handler fails open" in section, "grok Hooks must state the 5 s fail-open handler limit"
+
+
+@pytest.mark.parametrize(
+    "skill,host",
+    [(skill, host) for skill in ("h-mad", "handoff") for host in ("codex", "agy", "grok")],
+    ids=[f"{skill}-{host}" for skill in ("h-mad", "handoff") for host in ("codex", "agy", "grok")],
+)
+def test_host_runtime_names_every_adapter(skill: str, host: str) -> None:
+    section = _section((REPO_ROOT / skill / "SKILL.md").read_text(encoding="utf-8"), "## Host runtime")
+    adapter = f"references/{host}-runtime.md"
+    assert adapter in section, f"{skill} Host runtime must name {adapter}"
+
+
+@pytest.mark.parametrize("case", ("renamed", "doubled"), ids=("renamed", "doubled"))
+def test_host_runtime_locator_fails_loudly(case: str) -> None:
+    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    heading = "## Host runtime"
+    assert text.count(heading + "\n") == 1, "fixture requires one Host runtime heading"
+    changed = text.replace(heading + "\n", "## Runtime hosts\n", 1) if case == "renamed" else text + "\n" + heading + "\n"
+    with pytest.raises(LookupError, match="heading absent" if case == "renamed" else "heading doubled"):
+        _section(changed, heading)
+
+
+@pytest.mark.parametrize("case,token", (("hmad-host", "HMAD_HOST"), ("session-id", "--session-id")), ids=("hmad-host", "session-id"))
+def test_cannot_judge_row_names_host_cause(case: str, token: str) -> None:
+    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    section = _section(text, '## Decision routing (for `/h-mad "<feature>"`)')
+    rows = [line for line in section.splitlines() if line.startswith("| `cannot_judge` |")]
+    assert len(rows) == 1, "Decision routing must have exactly one cannot_judge row"
+    assert token in rows[0], f"cannot_judge row must name {token} as a host cause ({case})"
+
+
+@pytest.mark.parametrize(
+    "case,token",
+    (
+        ("agents-root", "~/.agents/skills"),
+        ("agy-root", "~/.gemini/config/skills"),
+        ("agents-env", "HMAD_AGENTS_SKILLS_DIR"),
+        ("agy-env", "HMAD_AGY_SKILLS_DIR"),
+    ),
+    ids=("agents-root", "agy-root", "agents-env", "agy-env"),
+)
+def test_bootstrap_install_check_names_host_roots(case: str, token: str) -> None:
+    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    section = _section(text, "## First-run auto-bootstrap")
+    assert token in section, f"First-run auto-bootstrap must name {case}: {token}"
+
+
+@pytest.mark.parametrize(
+    "case,root",
+    (("agents", "~/.agents/skills"), ("agy", "~/.gemini/config/skills")),
+    ids=("agents", "agy"),
+)
+def test_sibling_remedy_names_every_root(case: str, root: str) -> None:
+    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    section = _section(text, "## First-run auto-bootstrap")
+    rows = [line for line in section.splitlines() if line.startswith("| `SIBLING_NOT_SYMLINK` |")]
+    assert len(rows) == 1, "First-run auto-bootstrap needs exactly one SIBLING_NOT_SYMLINK remedy"
+    assert root in rows[0], f"SIBLING_NOT_SYMLINK remedy must name {case} root {root}"
+
+
+def test_agy_collision_row_present() -> None:
+    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    section = _section(text, "## First-run auto-bootstrap")
+    rows = [line for line in section.splitlines() if line.startswith("| `AGY_SIBLING_COLLISION` |")]
+    assert len(rows) == 1, "First-run auto-bootstrap needs exactly one AGY_SIBLING_COLLISION row"
+
+
+@pytest.mark.parametrize(
+    "case,token",
+    (("agents-option", "--agents-skills-dir"), ("agy-option", "--agy-skills-dir"), ("agy-collision", "AGY_SIBLING_COLLISION:")),
+    ids=("agents-option", "agy-option", "agy-collision"),
+)
+def test_helper_registry_install_check_line(case: str, token: str) -> None:
+    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    section = _section(text, "## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)")
+    lines = [line for line in section.splitlines() if line.startswith("- `h_mad_install_check.py` —")]
+    assert len(lines) == 1, "Helper scripts needs exactly one install-check entry"
+    assert token in lines[0], f"install-check registry line must name {case}: {token}"
+
+
+@pytest.mark.parametrize(
+    "case,token",
+    (("host-unsupported", "host_unsupported"), ("unknown-host", "unknown_host")),
+    ids=("host-unsupported", "unknown-host"),
+)
+def test_helper_registry_budget_line(case: str, token: str) -> None:
+    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    section = _section(text, "## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)")
+    lines = [line for line in section.splitlines() if line.startswith("- `h_mad_context_budget.py` —")]
+    assert len(lines) == 1, "Helper scripts needs exactly one context-budget entry"
+    assert token in lines[0], f"context-budget registry line must name {case}: {token}"
+
+
+def test_helper_registry_lists_h_mad_host() -> None:
+    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    section = _section(text, "## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)")
+    lines = [line for line in section.splitlines() if line.startswith("- `h_mad_host.py` —")]
+    assert len(lines) == 1, "Helper scripts needs exactly one h_mad_host.py entry"
+    assert "HMAD_HOST" in lines[0], "h_mad_host.py registry line must name HMAD_HOST"
+
+
+def test_remedy_count_sentence_names_the_eleventh_row() -> None:
+    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    section = _section(text, "## First-run auto-bootstrap")
+    lines = [line for line in section.splitlines() if "all ten have one" in line]
+    assert len(lines) == 1, "First-run auto-bootstrap needs exactly one remedy-count sentence"
+    assert "the eleventh row, `AGY_SIBLING_COLLISION`" in lines[0], "remedy-count sentence must name the eleventh AGY_SIBLING_COLLISION row"
