@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import json
 import os
 import re
 import sys
@@ -93,6 +94,32 @@ def codex_from_config(path: str | None) -> None:
     _emit("codex", m.group(1), e.group(1) if e else "-", "configured", str(cfg))
 
 
+def grok_from_log(path: str | None) -> None:
+    if path is None:
+        _fail("a grok model is read only from its stream's `end` event; no grok config "
+              "source has been probed")
+    p = Path(path)
+    if not p.is_file():
+        _fail(f"no such grok log: {path}")
+    last_end = None
+    for line in p.read_text(encoding="utf-8", errors="replace").split("\n"):
+        try:
+            event = json.loads(line)
+        except (ValueError, RecursionError):
+            continue
+        if isinstance(event, dict) and event.get("type") == "end":
+            last_end = event
+    if last_end is None:
+        _fail(f"{path} has no `end` event (killed, still running, or copied mid-write)")
+    usage = last_end.get("modelUsage")
+    if not isinstance(usage, dict) or not usage:
+        _fail(f"the last `end` event in {path} carries no non-empty `modelUsage` object")
+    keys = sorted(usage)
+    if len(keys) != 1:
+        _fail(f"the last `end` event in {path} names {len(keys)} models: {', '.join(keys)}")
+    _emit("grok", keys[0], "-", "resolved", path)
+
+
 def agy_from_cli_logs(log_dir: str | None) -> None:
     d = log_dir or os.path.expanduser("~/.gemini/antigravity-cli/log")
     files = glob.glob(os.path.join(d, "cli-*.log"))
@@ -124,12 +151,15 @@ def agy_from_cli_logs(log_dir: str | None) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("agent", choices=("codex", "agy"))
-    ap.add_argument("--log", help="the dispatch's --log file (codex only)")
+    ap.add_argument("agent", choices=("codex", "agy", "grok"))
+    ap.add_argument("--log", help="the dispatch's --log file (codex, grok)")
     ap.add_argument("--config", help="override the codex config path")
     ap.add_argument("--agy-log-dir", help="override the agy cli log directory")
     a = ap.parse_args(argv)
 
+    if a.agent == "grok":
+        grok_from_log(a.log)
+        return 0
     if a.agent == "codex":
         codex_from_log(a.log) if a.log else codex_from_config(a.config)
         return 0
