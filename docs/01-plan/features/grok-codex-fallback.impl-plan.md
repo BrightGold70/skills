@@ -1,10 +1,16 @@
 # Implementation Plan: grok-codex-fallback
 
-> Source: docs/02-design/features/grok-codex-fallback.design.md (v1.2, binding, including its
-> §"Supersedes the plan on"), docs/01-plan/features/grok-codex-fallback.spec.md (v1.4, 58 ACs,
-> binding), docs/01-plan/features/grok-codex-fallback.plan.md (v1.3: wiring table W1–W11 and the
-> Phase-5 live smoke stay binding)
+> Source: docs/02-design/features/grok-codex-fallback.design.md (v1.3 at `6277d703`, binding,
+> including its §"Supersedes the plan on"), docs/01-plan/features/grok-codex-fallback.spec.md (v1.5
+> at `02283561`, 58 ACs, binding), docs/01-plan/features/grok-codex-fallback.plan.md (v1.3: wiring
+> table W1–W11 and the Phase-5 live smoke stay binding)
 > Branch target: feature/216-grok-codex-fallback
+> Naming: **merged §D13** is `codex-tdd-gate-defects` design §D13, "Rebase contract for
+> grok-codex-fallback D2" (archived at
+> `docs/archive/2026-09/codex-tdd-gate-defects/codex-tdd-gate-defects.design.md`); **grok design
+> §D13** is this feature's own design section "The Phase-5 live smoke". Every reference below
+> is qualified one of these two ways. Following grok design v1.3 §D2, **the fold field** is the line-level `fallback=` token and
+> **the record's tag** is the fourth subfield of a `record=` word.
 
 ## Executive Summary
 
@@ -13,7 +19,7 @@ F0 copy, the fixture builder and the stubs; Task 2 adds the schema property); tw
 leaves (Task 5, `scan_grok` plus the `scan()` RecursionError catch and `agy_events` type guard; Task 8, the shell stream
 readers); eight `wiring` tasks that connect each surface to its new callee (Tasks 3, 4, 6, 7, 9, 10,
 11, 12, carrying W1–W11 of plan v1.3 as 14 WIRE entries); one cross-surface agreement task (13); one
-task that authors and runs the 63 mutation rows in seven specs (14); the documentation (15); the full
+task that authors and runs the 65 mutation rows in seven specs (14); the documentation (15); the full
 coupled-suite gate (16); and last the live `exec grok` smoke through the worktree's own wrapper (17).
 2 + 2 + 8 + 1 + 1 + 1 + 1 + 1 = 17.
 
@@ -23,12 +29,22 @@ coupled-suite gate (16); and last the live `exec grok` smoke through the worktre
 `d9574614`); Tasks 12 and 14–17 are not started. Task 12 is re-planned onto the shipped gate
 (§"Deviations from design v1.2", item 5), and Task 14's Task-12 rows are re-derived with it.
 
+**State at v1.5.** Read at HEAD `6277d703`; the gate and the judge are still byte-identical to
+`8ef6009f` (`git diff --quiet 8ef6009f HEAD -- h-mad/hooks h-mad/scripts/h_mad_tdd_judge.py` exits
+0). Since v1.4, grok design v1.3 (`6277d703`) owns the fold field and adds the tag agreement check,
+spec v1.5 (`02283561`) restates FR-2, AC-2.2, AC-2.5 and AC-11.1 on the merged gate, and commit
+`f2ff9261` re-pinned `h-mad/tests/test_h_mad_assemble_tdd_agent.py`'s own `BASE_SHA` from
+`507214d` to `8ef6009f` (Preamble). Task 12 gains the agreement check (tests 17–19, rows G11 and
+G12) and plans the wire registry move for its two WIREs; Task 16's allowlist accepts only each
+file's stated change.
+
 ## Deviations from design v1.2
 
 The design is binding except where the orchestrator ruled otherwise on an audit finding. Each
-deviation below is recorded with its evidence. **For 5d and 5e this section overrides design v1.2
-wherever the two disagree** (design line 877 "`scan()` is untouched", its mutation total 43 and its
-six specs): an implementer or auditor reading both follows this section. Amending the design to match
+deviation below is recorded with its evidence. **For 5d and 5e this section overrides the design
+wherever the two disagree** (design v1.2 line 877 "`scan()` is untouched", at v1.3 lines 1006 and
+1026; its mutation rows, 43 at v1.2 and 49 at v1.3; and its six specs): an implementer or auditor
+reading both follows this section. The heading keeps its v1.2 name because other sections cite it. Amending the design to match
 is not a precondition of 5d; it is an open item for the orchestrator, named in this revision's report.
 The `path:line` pins in items 1–4 are readings at `507214d`, before Tasks 5–7 edited those files;
 they record why the repairs were made and are not claims about the committed tree.
@@ -85,9 +101,10 @@ they record why the repairs were made and are not claims about the committed tre
    (one per WIRE across the eight wiring tasks; Task 12 carries two since v1.4) as rows of a seventh
    spec, `grok_wire_reverts.json`, each with the callee intact and the task's WIRE-PIN as its `test`
    key.
-3. **Mutation total 63, not the design's 43.** 43 design rows + E9 (deviation 1) + E10
-   (deviation 4) + 4 fold and grammar rows G7–G10 (deviation 5) + 14 wire-revert rows (deviation 2)
-   = 63, in seven specs, not six. Committed spec count after Task 14: 114 (the 107 committed specs
+3. **Mutation total 65, not the design's 49.** Grok design v1.3 names 40 rows (G1–G12, P1–P9,
+   L1–L5, E1–E8, A1–A3, T1, R1–R2) plus 9 force-fires that alias no named row = 49 (design v1.2
+   had 43: G1–G6 instead of G1–G12). This plan adds E9 (deviation 1), E10 (deviation 4) and 14
+   wire-revert rows (deviation 2): 49 + 2 + 14 = 65, in seven specs, not six. Committed spec count after Task 14: 114 (the 107 committed specs
    read by `--check-anchors` at HEAD `d9574614`, plus 7).
 4. **`scan()`'s `agy_events` membership test is type-guarded** (a second change to `scan()`; impl-plan
    audit cycle 2, codex must-fix 2; orchestrator decision 3). `h-mad/scripts/h_mad_review_evidence.py:141`
@@ -123,7 +140,7 @@ they record why the repairs were made and are not claims about the committed tre
    **Anchors:** the two new lines contain none of the 926 committed finds (907 in
    `h-mad/tests/mutation-specs/`, 19 in `h-mad/tests/specs/`) as a substring (executed: 0 hits), and
    none of this plan's `review_evidence_grok.json` finds.
-5. **Task 12 is re-planned onto the merged judge gate, not design D2's `jq` read** (v1.4; the
+5. **Task 12 is re-planned onto the merged judge gate, not design v1.2 §D2's `jq` read** (v1.4; the
    rebase contract `codex-tdd-gate-defects` design §D13, archived at
    `docs/archive/2026-09/codex-tdd-gate-defects/codex-tdd-gate-defects.design.md`, and that
    feature's impl-plan §"After Phase 5 (not tasks)"). Design v1.2 §D2 builds on a gate that no
@@ -135,29 +152,35 @@ they record why the repairs were made and are not claims about the committed tre
    on any `jq` or `orchestrator_state` token in the hook. The value D2 read already arrives: the
    judge's `_fallback_tag` computes each ACTIVE record's tag (`absent`, `null`, `grok`, `claude`,
    or `invalid:` and the value's compact JSON), and `format_state_line` prints it as the fourth subfield of every `record=`
-   word. What this plan adds, per D13's contract items 1–5:
+   word. What this plan adds, per merged §D13's contract items 1–5:
    - **The fold, in the judge.** `_fallback_fold(records)` returns `invalid:B` for the first
      record whose tag begins `invalid:`, else `grok:B` for the first `grok` record, else `none`,
      where B is that record's 1-based chain position (for example `invalid:2` or `grok:1`). The most restrictive record wins and the outcome does not
-     depend on order (D13 item 2).
+     depend on order (merged §D13 item 2).
    - **The field, on the state line.** `format_state_line` appends ` fallback=` and the fold after
-     the `records=` field. **The spelling is this plan's choice**, because D13 item 1 leaves the field's
-     name, grammar and position to grok's design and design v1.2 predates D13, so no grok design
-     text fixes it; amending the design to match is an open item for the orchestrator. Grammar:
-     `fallback=(none|(grok|invalid):([1-9][0-9]*))`, a closed token (D10's `_enc` is not applied).
-   - **The gate reads it and applies no rule of its own.** `STATE_ACTIVE_RE` gains the field
-     whole-line in the same commit (D13 item 5); `_read_state` cross-checks B ≤ `records` and
-     captures the governing `record=` word; after the codex-authorship refusal (so only when codex
-     is out, D13 item 3) the gate refuses `fallback-grok` or `fallback-invalid` (D13 item 4). The
-     `*)` unreadable arm of D2 has no successor: a state read failure is refused `judge-error` by
-     `_read_state` before this block, and an unknown fold token fails the ERE.
-   - **Consequences for the spec, stated not decided here:** "exit 1" in FR-2's table is now the
-     chosen refusal form; "the ACTIVE feature" (`head -1`) is now every `step5` record on the
-     target's chain, so a second `step5` record holding `grok` blocks (Task 12 test 14), which spec
-     AC-2.5's "not `ACTIVE`" wording does not say; and D2's inherited no-`jq` fail-open is gone
-     (merged spec AC-6.12). AC-2.5's test keeps its `step3` discriminator, whose outcome is
-     unchanged.
-   - **Committed files Task 12 migrates** (D13 item 5, "in the same commit"): the grammar is
+     the `records=` field. v1.4 chose the spelling because merged §D13 item 1 leaves the field's
+     name, grammar and position to grok's design, and design v1.2 predated it. **Grok design v1.3
+     §D2 now owns it** and adopts this spelling unchanged (name `fallback=`, kept over
+     `fallback-fold=` with its reason stated there). Grammar:
+     `fallback=(none|(grok|invalid):([1-9][0-9]*))`, a closed token (merged §D10's `_enc` is not
+     applied).
+   - **The gate reads it and applies no rule over the records of its own.** `STATE_ACTIVE_RE`
+     gains the field whole-line in the same commit (merged §D13 item 5); `_read_state`
+     cross-checks B ≤ `records` and captures the governing `record=` word; after the
+     codex-authorship refusal (so only when codex is out, merged §D13 item 3) the gate checks that
+     the fold's kind agrees with the governing record's tag, refusing `judge-error` when it does
+     not (grok design v1.3 §D2 "Tag agreement"), then refuses `fallback-grok` or
+     `fallback-invalid` (merged §D13 item 4). The `*)` unreadable arm of design v1.2 §D2 has no
+     successor: a state read failure is refused `judge-error` by `_read_state` before this block,
+     and an unknown fold token fails the ERE.
+   - **The spec now states the merged gate** (spec v1.5, answering the v1.4 delta review's last
+     should-fix): FR-2's table reads deny with a kind instead of "exit 1"; "the ACTIVE feature" is
+     every `step5` record on the target's chain; AC-2.2 extracts the base gate with `git archive`;
+     AC-2.5 has three cases (a `step3` record holding `"grok"` falls through, a second `step5`
+     record holding `"grok"` blocks, an invalid record governs over `"grok"`); AC-11.1 names its
+     carve-out file by file. Design v1.2 §D2's inherited no-`jq` fail-open is gone (merged spec
+     AC-6.12).
+   - **Committed files Task 12 migrates** (merged §D13 item 5, "in the same commit"): the grammar is
      closed, so every committed consumer of the active line moves with it. Executed on a scratch
      copy of `h-mad/` at HEAD `d9574614` with the Task 12 code below applied and the test files
      unedited (copy deleted): 25 committed items fail — 24 in `test_h_mad_tdd_judge.py` (the 14
@@ -192,8 +215,16 @@ they record why the repairs were made and are not claims about the committed tre
   `8ef6009f9491796d5d16b96a54e3b3185a8a6f19`, the `codex-tdd-gate-defects` merge. Task 12 re-pins
   the constant to that value. No committed reader of the constant changes result: `test_grok_fixtures.py`
   checks only its 40-hex shape, and `test_h_mad_review_evidence_grok.py` runs `git show BASE_SHA:h-mad/scripts/h_mad_review_evidence.py`,
-  and `git diff --quiet 5a9cd8ed 8ef6009f -- h-mad/scripts/h_mad_review_evidence.py` exits 0. Task 3's
-  `test_h_mad_assemble_tdd_agent.py` pins its own `507214d` and is untouched.
+  and `git diff --quiet 5a9cd8ed 8ef6009f -- h-mad/scripts/h_mad_review_evidence.py` exits 0.
+  **The second constant (done, v1.5).** v1.4 said Task 3's `test_h_mad_assemble_tdd_agent.py`
+  "pins its own `507214d` and is untouched"; that list missed it. Its module constant
+  `BASE_SHA` (line 20; used by `git archive BASE_SHA h-mad` at line 77 for the no-agent comparison,
+  AC-8.1) was re-pinned from `"507214d"` to `"8ef6009f"` by commit `f2ff9261`
+  (`git show f2ff9261` → one line changed in that one file). It is an 8-hex prefix, not the 40-hex
+  `grokfixtures.BASE_SHA`; both name `8ef6009f9491796d5d16b96a54e3b3185a8a6f19`, and Task 16
+  step 3 checks that they agree. The file is not tracked at `8ef6009f` (`git cat-file -e
+  8ef6009f:h-mad/tests/test_h_mad_assemble_tdd_agent.py` fails; Task 3's commit `23aa6a98` added
+  it), so it is outside AC-11.1's pre-existing set.
 - **Both coupled suites, per task.** Every task's GREEN verification runs, from the worktree root,
   `/opt/anaconda3/bin/python -m pytest -q -p no:cacheprovider h-mad/tests handoff/tests handoff/scripts`
   in full, never the scoped file alone. The three paths are named explicitly: they are the root
@@ -259,8 +290,12 @@ they record why the repairs were made and are not claims about the committed tre
    runs in every task's full-suite run and enforces this.
 6. **Mutation spec form.** `root` is `"../.."` (the `h-mad/` directory, as in
    `exec_last_step.json`), `file` keys are `scripts/…` / `hooks/…`, `test` keys are
-   `tests/<file>.py::<name>`, `command` and `target_command` lead with `python3.11` (house form, 98
-   of 99 specs at `50560eb`). Score on the `MUTATION:` token, never `$?`.
+   `tests/<file>.py::<name>`, `command` and `target_command` lead with `python3.11` (house form:
+   `command[0]` of each `h-mad/tests/mutation-specs/*.json`, counted with `uniq -c`, reads 98
+   `python3.11`, 8 `/opt/anaconda3/bin/python` and 1 `/opt/anaconda3/bin/python3.11` at `6277d703`;
+   unit: files, 107 in all. The six committed specs Task 14 re-runs lead with
+   `/opt/anaconda3/bin/python`, which is harmless because `python3.11` resolves to
+   `/opt/anaconda3/bin/python3.11` on this host). Score on the `MUTATION:` token, never `$?`.
 7. **Probes are deleted.** A scratch probe written to confirm a suspected defect is deleted after it
    answers.
 
@@ -1543,9 +1578,9 @@ counts lines, and only this one carries the `case "$_s" in` prefix).
 **WIRE 2**: `h-mad/hooks/h-mad-tdd-gate.sh:_read_state` → `the state line's fallback= field, refused fallback-grok or fallback-invalid after the codex-authorship refusal`
 **WIRE-PIN 2**: `h-mad/tests/test_h_mad_tdd_gate_fallback_agent.py::test_block_grok_reads_the_active_features_fallback_agent`
 
-**Description**: FR-2 / design D2 as re-planned by §"Deviations from design v1.2", item 5, onto the
-merged gate (`codex-tdd-gate-defects` design §D13) / plan W9, which is two WIRE entries here: the
-judge half (the fold) and the gate half (the read). Read at HEAD `d9574614`, where both production
+**Description**: FR-2 / grok design v1.3 §D2 (which adopts §"Deviations from design v1.2",
+item 5) onto the merged gate (merged §D13) / plan W9, which is two WIRE entries here: the
+judge half (the fold) and the gate half (the read). Read at HEAD `6277d703`, where both production
 files are byte-identical to `8ef6009f` (`git diff --quiet 8ef6009f HEAD -- h-mad/hooks
 h-mad/scripts/h_mad_tdd_judge.py` exits 0):
 - the judge: `_fallback_tag(state)` maps one record to `absent`, `null`, `grok`, `claude` or
@@ -1562,11 +1597,19 @@ h-mad/scripts/h_mad_tdd_judge.py` exits 0):
   and the `JOUT=$(python3 "$JUDGE" judge …)  # M:W2` line follows its `fi`.
 
 The fold lands in the judge, the field on the state line, and the gate block between that `fi` and
-the `JOUT` line, so it runs only when codex is out (D13 item 3). No committed anchor line is edited
-(the edited judge line and the edited `_read_state` lines carry no `# M:` marker and are in no
-committed `find`), and `--check-anchors` on the scratch copy read `ANCHORS_OK` (deviation 5).
+the `JOUT` line, so it runs only when codex is out (merged §D13 item 3). No committed anchor line
+is edited (the edited judge line and the edited `_read_state` lines carry no `# M:` marker and are
+in no committed `find`). Executed for v1.5 on a deleted scratch copy (`git archive HEAD h-mad` at
+`6277d703`, the code block below and migrations 1–3 applied): `--check-anchors` on each of the six
+committed specs Task 14 re-runs read `ANCHORS_OK` (37 + 6 + 8 + 6 + 3 + 6 rows), and
+`test_h_mad_tdd_judge.py` with `test_h_mad_tdd_gate_judge.py` read `193 passed`.
 
-**Code structure** (landed literally; rows G1–G10, WR12-1 and WR12-2 anchor it):
+The new `# M:` markers are `F0` (the judge's state line), `F1` (the tag agreement check), `F2`
+(the fold's `grok` scan), `F3` (the gate's read of the field) and `F4` (the range check). They
+name lines for rows G8, G9, WR12-1 and WR12-2 and for a reader; no committed marker is `M:F*`
+(`grep -rn 'M:F' h-mad` → 0 matching lines at `6277d703`).
+
+**Code structure** (landed literally; rows G1–G12, WR12-1 and WR12-2 anchor it):
 ```python
 # h_mad_tdd_judge.py — new function, after _active_records and before read_chain:
 def _fallback_fold(records: Sequence[Record]) -> str:
@@ -1601,11 +1644,16 @@ STATE_ACTIVE_RE='^TDD-STATE: active codex-escape=(yes|no) blocker=(0|[1-9][0-9]*
 # fallback_agent (FR-2): reached only when codex is out, because the codex-authorship refusal
 # above fires in every other case. The judge folds every ACTIVE record into the state line's
 # `fallback=` field (any invalid record, else any grok record, else none) and names the
-# governing record by position; this block applies no rule of its own.
+# governing record by position; this block checks only that the fold's kind agrees with that
+# record's tag, and applies no rule over the records of its own.
 if [ "$FALLBACK" != none ]; then
   FB_KEY=$(_pct_decode "${FALLBACK_RECORD%%,*}")
   FB_FILE=${FALLBACK_RECORD#*,}; FB_FILE=${FB_FILE#*,}; FB_FILE=$(_pct_decode "${FB_FILE%%,*}")
   FB_TAG=${FALLBACK_RECORD##*,}
+  case "$FALLBACK" in
+    grok:*)    [ "$FB_TAG" = grok ] ;;
+    invalid:*) [ "${FB_TAG#invalid:}" != "$FB_TAG" ] ;;
+  esac || _refuse judge-error "state fallback=$FALLBACK disagrees with its record's tag $FB_TAG"  # M:F1
   case "$FALLBACK" in
     grok:*)
       _refuse fallback-grok "fallback_agent=grok — Phase 5 is authored by grok while codex is out, not by Claude.
@@ -1622,7 +1670,7 @@ fi
 Every refusal goes through `_refuse`, so the hook keeps no `exit 1`
 (`test_h_mad_tdd_gate_judge.py::test_hook_has_no_exit_1`) and no `jq` or `orchestrator_state` token
 (`test_claude_gate_keeps_no_private_state_reader`). `_pct_decode` of the `invalid:` payload yields
-`json.dumps(value, separators=(",", ":"))` byte for byte (D13 item 4). Executed on the scratch copy
+`json.dumps(value, separators=(",", ":"))` byte for byte (merged §D13 item 4). Executed on the scratch copy
 (deviation 5): `"null"` → first stderr line
 `[H-MAD-TDD-GATE] BLOCK kind=fallback-invalid: fallback_agent="null" is not valid (valid: grok|claude) — refusing the write, fail-closed.`;
 `{"a":[1,2]}` → `fallback_agent={"a":[1,2]}`; records `a` absent, `b` `grok`, `c` `false` →
@@ -1631,11 +1679,40 @@ Every refusal goes through `_refuse`, so the hook keeps no `exit 1`
 a `step3` `other` holding `grok` → rc 0 with empty stdout (ALLOW) when `python3` is an interpreter
 with pytest.
 
+**The tag agreement check** (grok design v1.3 §D2, "How the gate consumes it", item 4; answers the
+v1.4 delta review's first should-fix). The `# M:F1` statement refuses `judge-error` when the fold
+names a record whose tag is not of the fold's kind: `grok:B` needs the tag `grok`, and `invalid:B`
+needs a tag beginning `invalid:`. A `case` that matches neither arm exits 0, so `fallback=none`
+never reaches it (the enclosing `if` already skips it). It is the third member of the class "a
+line-level summary field that names a record", beside the committed `records`-against-count and
+`codex-escape`-against-`blocker` cross-checks. Executed for v1.5 on the scratch copy above, through
+`_tree_b` stub state lines with `codex-escape=yes`: `fallback=invalid:1` naming a record tagged
+`grok` → first stderr line
+`[H-MAD-TDD-GATE] BLOCK kind=judge-error: state fallback=invalid:1 disagrees with its record's tag grok`;
+`grok:1` naming `invalid:false` or `absent`, and `invalid:1` naming `claude`, → `judge-error`;
+`grok:1` naming `grok` → `fallback-grok`; `invalid:1` naming `invalid:false` → `fallback-invalid`.
+Each arm was then replaced by `true` alone (rows G11 and G12): the `grok:*` arm's mutant failed
+exactly the two items of test 17, and the `invalid:*` arm's mutant exactly the two items of test 18.
+**Residual** (grok design v1.3 §D2, stated there as (a)–(c)): the gate checks the fold only against
+the one record it names, because checking any other record would re-apply the fold, which merged
+§D13 item 1 forbids in the gate. A `fallback=none` while some record's tag is `grok` or begins `invalid:`
+still reaches the judge verb (fail-open with respect to FR-2); a `grok:B` beside an `invalid:` record
+still refuses, as `fallback-grok`; a `B` that is not the first of its kind names a later record in
+the remedy. All three are judge defects, pinned on the judge side by rows G7, G8 and WR12-1 and by
+tests 13–16.
+
 **Migration edits** (committed files outside the test file; all land in the RED commit, because
 they are test and spec files, and deviation 5 lists the 25 committed items they turn RED):
-1. `h-mad/tests/test_h_mad_tdd_judge.py` — `ACTIVE_RE`'s second string line
+1. `h-mad/tests/test_h_mad_tdd_judge.py` — `ACTIVE_RE`'s second string line (line 27)
    `    r"records=([1-9][0-9]*)( record=[^ ,]+,[^ ,]+,[^ ,]+,"` becomes
    `    r"records=([1-9][0-9]*) fallback=(none|(grok|invalid):([1-9][0-9]*))( record=[^ ,]+,[^ ,]+,[^ ,]+,"`.
+   **Residual (drift):** `ACTIVE_RE` is a hand-copied second spelling of the hook's
+   `STATE_ACTIVE_RE`, and no committed test reads the hook's literal (`grep -rn STATE_ACTIVE_RE
+   h-mad/tests` → 0 matching lines at `6277d703`). Test 16 reads the literal out of the hook, so the
+   fold field is single-sourced by test from Task 12 on; the rest of `ACTIVE_RE` stays a hand copy
+   that this migration keeps in step by hand. Merged §D13 item 5 asks for one round-trip row per
+   fold outcome in the merged §D10 round-trip test; those rows are test 16 here rather than rows of the
+   committed `test_fallback_tag`, because test 16 reads the hook's own literal.
 2. `h-mad/tests/test_h_mad_tdd_gate_judge.py` — `_tree_b`'s default `state_line` gains
    ` fallback=none` after `records=1`.
 3. `h-mad/tests/mutation-specs/claude_gate_judge_wiring.json` — rows `W5BF`, `W5BF2` and `W5BF3`:
@@ -1643,8 +1720,12 @@ they are test and spec files, and deviation 5 lists the 25 committed items they 
    line) is unchanged. Without this edit the three mutants' forced state line fails the new ERE and
    is refused `judge-error`, so the rows would stay caught through the ERE instead of the governance
    path they were written for.
-4. `h-mad/tests/grokfixtures.py` — `BASE_SHA = "8ef6009f9491796d5d16b96a54e3b3185a8a6f19"`
-   (Preamble, "Re-pinned after the rebase"). Test 6 compares against the gate at that commit.
+4. `h-mad/tests/grokfixtures.py` — line 13 `BASE_SHA = "5a9cd8ed693202e0291a9c6d5a3a63207b1f1b14"`
+   becomes `BASE_SHA = "8ef6009f9491796d5d16b96a54e3b3185a8a6f19"` (Preamble, "Re-pinned after the
+   rebase"). Test 6 compares against the gate at that commit. Not yet done at `6277d703`.
+5. `h-mad/tests/test_h_mad_assemble_tdd_agent.py` — `BASE_SHA = "507214d"` → `BASE_SHA =
+   "8ef6009f"` (line 20). **Done** by commit `f2ff9261`, before this revision; listed here because
+   v1.4's list missed it (Preamble, "The second constant"). Task 12 does not touch it again.
 
 **Test harness.** The hook under test is the worktree's (`test_h_mad_tdd_gate_judge.HOOK`,
 `Path(__file__).resolve().parents[1] / "hooks" / "h-mad-tdd-gate.sh"`). The file imports
@@ -1659,18 +1740,26 @@ exist, and the judge's name map resolves it to that test. It runs
 `_gate(root, arg="shared/widget.py", bin_dir=_bin(tmp_path, codex=codex_on_path), extra_env=env)`, where `codex_on_path` and `env` are the cell's axis values:
 `PATH` is `f"{bin_dir}:/usr/bin:/bin"`, where `_bin` links `python3` to the test runner's
 `sys.executable` (an interpreter with pytest; a bare `python3` without it turns every FALL-THROUGH
-into `pytest-missing`, executed), `dirname`, `basename`, and a `codex` stub when asked; `HOME` and
-`CLAUDE_PROJECT_DIR` are set and nothing else is inherited; `stdin` is `subprocess.DEVNULL` (D13's
+into `pytest-missing`, executed), `dirname`, `basename`, the real `jq` whenever `shutil.which("jq")`
+finds one (`_bin`'s `jq=True` default, `test_h_mad_tdd_gate_judge.py:42–55`; inert, because the
+merged gate runs no `jq`), and a `codex` stub when asked; in the environment, `HOME` and
+`CLAUDE_PROJECT_DIR` are set beside `PATH` and nothing else is inherited; `stdin` is `subprocess.DEVNULL` (merged §D13's
 harness item). A cell with `codex` off PATH first asserts
 `shutil.which("codex", path=f"{bin_dir}:/usr/bin:/bin") is None` (`/usr/bin/codex` and `/bin/codex` do not
 exist on this host). Outcomes are read with `decision(result, hook_form(HOOK))`: BLOCK-CODEX is
 `deny` kind `codex-authorship`; BLOCK-GROK is `deny` kind `fallback-grok`; BLOCK-INVALID is `deny`
 kind `fallback-invalid`; FALL-THROUGH is `allow` (rc 0, empty stdout, the judge measured the
-failing test). The stub tests (11, 12) use `_tree_b(tmp_path, state_line=…,
+failing test). The stub tests (11, 12, 17, 18, 19) build `root = _root(tmp_path)` (imported from
+`test_h_mad_tdd_gate_judge`, so the root holds a state file and the gate's
+`_chain_may_hold_state` fast path does not allow first), run `_gate(root, arg=str(root / TARGET),
+bin_dir=_bin(tmp_path), hook=hook)` with `TARGET` from the same module, and take `hook` from
+`_tree_b(tmp_path, state_line=<the test's line>,
 judge_line="TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=x\n")`, so a line the gate
-wrongly accepts reads as `allow`, never as a stub-made `judge-error`.
+wrongly accepts reads as `allow`, never as a stub-made `judge-error`. Their state lines all begin
+`TDD-STATE: active codex-escape=yes blocker=0 records=1` (codex out by the escape), and tests
+17–19 continue ` fallback=<fold> record=feat,exhausted,/x/docs/.bkit-memory.json,<tag>`.
 
-**Tests** (186 collected items):
+**Tests** (192 collected items):
 1. `test_gate_matrix` (80) — 4 `codex_status` × 5 `fallback_agent` (absent, `null`, `"claude"`,
    `"grok"`, `"codex"`) × 2 env × 2 PATH; the expected class comes from an in-test transcription of
    the FR-2 table (codex_out = env set, or `codex_status` in `unavailable|exhausted`, or `codex` off
@@ -1692,14 +1781,15 @@ wrongly accepts reads as `allow`, never as a stub-made `judge-error`.
    `tar -x -C base_dir`, with `REPO = Path(__file__).resolve().parents[2]` and `BASE_SHA` read from
    `grokfixtures`, because the merged
    hook finds its judge beside its own realpath: a lone `git show` of the hook file finds no judge
-   and refuses `judge-error` (AC-2.2; its "`git show`" wording is the pre-merge form).
+   and refuses `judge-error` (AC-2.2, which since spec v1.5 names `git archive <base> h-mad` and
+   the run from the base gate's own tree).
 7. `test_block_grok_stderr_names_the_four_things` — `hmad-dispatch exec grok`, `--agent grok`,
    `--set fallback_agent=claude`, `HMAD_CODEX_UNAVAILABLE does not override fallback_agent=grok`
    (AC-2.3).
 8. `test_block_grok_reads_the_active_features_fallback_agent` — `feat` holds `fallback_agent:
    "grok"`, `codex_status: "exhausted"`: BLOCK-GROK, and stderr names `--feature feat`. WIRE-PIN 2.
 9. `test_other_feature_grok_does_not_change_active_outcome` — `other` (`step3`) holds `"grok"`,
-   `feat` holds none, codex_out true: FALL-THROUGH (AC-2.5).
+   `feat` (`step5`) holds none, both `exhausted`: FALL-THROUGH (AC-2.5, first case).
 10. `test_exempt_files_stay_exempt_under_grok` (7) — targets `shared/test_widget.py`,
     `shared/tests/helpers.py`, `shared/fixtures/data.py`, `docs/notes.md`, `shared/config.toml`,
     `shared/run.sh`, `shared/widget.js`, with `feat` at `"grok"` and codex_out true: `allow` (AC-2.6).
@@ -1707,37 +1797,53 @@ wrongly accepts reads as `allow`, never as a stub-made `judge-error`.
     stub state lines `TDD-STATE: active codex-escape=yes blocker=0 records=1 record=feat,exhausted,/x/docs/.bkit-memory.json,absent`
     (`missing-field`), and the same line with ` fallback=codex:1` (`unknown-kind`) or
     ` fallback=grok:0` (`position-zero`) inserted after `records=1`: `deny` kind `judge-error` (the
-    closed grammar; the successor of v1.3's `*)` arm, D13).
+    closed grammar; the successor of v1.3's `*)` arm, merged §D13; FR-2 "Kinds").
 12. `test_state_stub_fallback_position_out_of_range_is_judge_error` — the same stub with
-    ` fallback=grok:2` and `records=1`: `deny` kind `judge-error` (D13 item 5's `B` ≤ `records`).
+    ` fallback=grok:2` and `records=1`: `deny` kind `judge-error` (merged §D13 item 5's `B` ≤
+    `records`; FR-2 "Kinds").
 13. `test_fold_invalid_record_governs_over_grok` — two `step5` records, `a` holding `"grok"` and `b`
     holding `false`, both `exhausted`: BLOCK-INVALID naming `fallback_agent=false` and
-    `--feature b` (D13 item 2).
+    `--feature b` (AC-2.5, third case; merged §D13 item 2).
 14. `test_second_active_record_holding_grok_blocks` — `a` with no key, `b` holding `"grok"`, both
-    `step5` and `exhausted`: BLOCK-GROK naming `--feature b` and `b`'s state file (D13 item 2; the
-    AC-2.5 wording change in deviation 5).
+    `step5` and `exhausted`: BLOCK-GROK naming `--feature b` and `b`'s state file (AC-2.5, second
+    case; merged §D13 item 2).
 15. `test_format_state_line_emits_the_fallback_fold` — `judge.format_state_line(judge.read_chain(root,
     None), root)` on one `step5` record holding `"grok"` contains ` records=1 fallback=grok:1 record=`.
     WIRE-PIN 1.
 16. `test_fold_outcome_round_trips_through_the_gate_ere[none|grok|invalid]` (3) — for a chain whose
     fold is `none`, `grok:1` and `invalid:2`, the `format_state_line` output fullmatches the
     `STATE_ACTIVE_RE` literal read out of the hook source (`^STATE_ACTIVE_RE='(.*)'$`, one match),
-    and that match's group 4 equals the fold (D13 item 5, one round-trip row per fold outcome; the
-    rows live in this new file rather than in the committed `test_fallback_tag`, whose only edit is
-    migration 1).
+    and that match's group 4 equals the fold (merged §D13 item 5, one round-trip row per fold
+    outcome; the rows live in this new file rather than in the committed `test_fallback_tag`, whose
+    only edit is migration 1).
+17. `test_state_stub_grok_fold_naming_a_non_grok_record_is_judge_error[invalid-false|absent]` (2)
+    — stub ` fallback=grok:1` with the record's tag `invalid:false` or `absent`: `deny` kind
+    `judge-error` (grok design v1.3 §D2 tag agreement, `grok:*` arm; row G11).
+18. `test_state_stub_invalid_fold_naming_a_valid_record_is_judge_error[grok|claude]` (2) — stub
+    ` fallback=invalid:1` with the record's tag `grok` or `claude`: `deny` kind `judge-error`, and
+    for `grok` stderr contains `disagrees with its record's tag grok` (the `invalid:*` arm; row G12).
+19. `test_state_stub_agreeing_fold_refuses_its_own_kind[grok|invalid]` (2) — the agreeing
+    controls: ` fallback=grok:1` with the tag `grok` → `deny` kind `fallback-grok`;
+    ` fallback=invalid:1` with the tag `invalid:false` → `deny` kind `fallback-invalid`, stderr
+    naming `fallback_agent=false` (the check passes agreeing lines through).
 
-**Expected RED split**: 61 failing, 125 passing (of the 186 new items), and the 25 committed items
+**Expected RED split**: 63 failing, 129 passing (of the 192 new items), and the 25 committed items
 of deviation 5 failing on migrations 1 and 2 (executed on a scratch copy at HEAD `d9574614` with
 only the two test edits applied: `25 failed, 168 passed` over the two files; copy deleted).
 Failing: the 28 matrix cells with codex_out true and `fallback_agent` `"grok"` or `"codex"`, the 24
-invalid-class cells, tests 7 and 8, the `missing-field` item of test 11, tests 13, 14 and 15, and
-the 3 items of test 16 (at RED the hook's ERE fullmatches the old line and group 4 is the last
-`record=` word).
-**Regression guards** (125): the 52 other matrix cells (10 with codex_out false, 42 with codex_out
+invalid-class cells, tests 7 and 8, the `missing-field` item of test 11, tests 13, 14 and 15, the
+3 items of test 16 (at RED the hook's ERE fullmatches the old line and group 4 is the last
+`record=` word), and the 2 items of test 19 (at RED the old ERE refuses the line `judge-error`).
+**Regression guards** (129): the 52 other matrix cells (10 with codex_out false, 42 with codex_out
 true and `fallback_agent` absent, `null` or `"claude"`), the 8 BLOCK-CODEX cells, the 3 + 3
 controls, the 48 base-comparison cells (the worktree gate equals the base gate at RED), test 9, the
-7 exemption cells, the `unknown-kind` and `position-zero` items of test 11 and test 12 (the old ERE
-already rejects those lines).
+7 exemption cells, the `unknown-kind` and `position-zero` items of test 11, test 12, and the 2 + 2
+items of tests 17 and 18 (the old ERE already rejects those lines `judge-error`; they discriminate
+at GREEN, through rows G11 and G12). Tests 17–19 were executed for v1.5 as a scratch probe (deleted;
+it also held one print-only item, excluded here): on the unedited hook their six items read 2
+failed (test 19's) and 4 passed; on the scratch copy with the code block applied, 6 passed.
+Test 17's ids are set explicitly (`ids=["invalid-false", "absent"]`), because a `:` in a
+parametrize id is legal but reads as a node-id separator.
 **WIRE-PIN RED reasons**: pin 1 — `format_state_line` returns a line with no ` fallback=` field,
 an assertion on the caller's return value; the test names no new symbol. Pin 2 — the hook runs the
 judge, which measures the failing test and allows: an assertion on the hook's decision.
@@ -1745,12 +1851,59 @@ judge, which measures the failing test and allows: an assertion on the hook's de
 the `# M:F0` line only: every state line says `none`, and pin 1 fails. WIRE 2 —
 `FALLBACK=${BASH_REMATCH[4]}` → `FALLBACK=none` in the `# M:F3` line only: the gate never enters
 the block, and pin 2 fails. Executed and scored as rows WR12-1 and WR12-2 (Task 14,
-`grok_wire_reverts.json`). D13 names forcing `Record.fallback` to `absent` as "the equivalent
-revert" of v1.3's WR12. That edit severs the merged feature's own wire (`_active_records` →
+`grok_wire_reverts.json`). Merged §D13 names forcing `Record.fallback` to `absent` as "the
+equivalent revert" of v1.3's WR12. That edit severs the merged feature's own wire (`_active_records` →
 `_fallback_tag`), which its committed `test_fallback_tag` rows already pin, so this plan scores the
 removal of the two wires Task 12 adds instead.
 **Force-fires**: rows G2 (BLOCK-GROK bypassed by the env) and G3 (the fold fed another feature's
 record; design W9's alias) (Task 14).
+
+**Wire registry move** (answers the v1.4 delta review's third should-fix; Task 12 owns it).
+`.h-mad/wires.jsonl` line 38 at `6277d703` still holds v1.3's single record for this task:
+`"id": "Task 12"`, `"caller": "h-mad/hooks/h-mad-tdd-gate.sh:Codex-authorship enforcement block"`,
+`"callee": "typed fallback_agent read of ACTIVE"`, `"status": "active"`; both names are text the
+merged gate deleted. The file has 38 lines, 13 of them `grok-codex-fallback` records (unit: matching
+lines). A record's identity is `(owning_feature, id)` (`_record_key`,
+`h-mad/scripts/h_mad_wire_registry.py:25`), and the wire-pin gate registers a numbered WIRE under the
+id `"<task id> (WIRE <n>)"` (`h-mad/scripts/h_mad_wire_pin_gate.py:370`), so re-registration adds
+`Task 12 (WIRE 1)` and `Task 12 (WIRE 2)` beside the old record and does not replace it. Deleting the
+old line is not the repair: at `8ef6009f` the registry holds no `grok-codex-fallback` record, so
+`compare` against that base would report nothing, which is the silent removal the tombstone fields
+exist to prevent. The v1.3 record became WIRE 2 (same pin, gate half), so it is retired as
+`renamed`. Task 12 runs both steps from the worktree root, as its first step, and commits
+`.h-mad/wires.jsonl` in its RED commit:
+
+```bash
+python3 h-mad/scripts/h_mad_wire_pin_gate.py docs/01-plan/features/grok-codex-fallback.impl-plan.md --feature grok-codex-fallback
+# read: WIREPIN: PASS tasks=17 wiring=8 unpinned=0 mislabeled=0   and   registration: registered=14 skipped=0
+python3 - <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, "h-mad/scripts")
+import h_mad_wire_registry as reg
+path = Path(".h-mad/wires.jsonl")
+old = [r for r in reg.load(path) if (r["owning_feature"], r["id"]) == ("grok-codex-fallback", "Task 12")]
+assert len(old) == 1 and old[0].get("status", "active") == "active", old
+tomb = dict(old[0], status="removed", removal_provenance="renamed",
+            removed_by_feature="grok-codex-fallback",
+            successor_pin="h-mad/tests/test_h_mad_tdd_gate_fallback_agent.py::test_block_grok_reads_the_active_features_fallback_agent")
+reg.register([tomb], path)
+print("TOMBSTONE: OK")
+PY
+```
+
+The first command upserts all 14 WIRE records as one batch: the 12 of Tasks 3–11 keep every field
+but `registered_ts`. The second keeps the old record's `caller`, `callee` and `pin`, and adds the
+fields `validate_record` (`h_mad_wire_registry.py:112–123`) requires of a removed record:
+`removal_provenance` in `superseded|pinned-a-defect|renamed`, `removed_by_feature`, and for
+`renamed` a `successor_pin`. The `register` CLI verb cannot write them (it has no status or
+provenance flag), hence the Python call. Executed for v1.5 on a scratch copy of the registry
+(deleted; the tree's registry unchanged): `WIREPIN: PASS tasks=17 wiring=8 unpinned=0
+mislabeled=0`, `registration: registered=14 skipped=0`, `TOMBSTONE: OK`, then 40 records, 15 of
+them `grok-codex-fallback`: `Task 12` removed/renamed, `Task 12 (WIRE 1)` and `Task 12 (WIRE 2)`
+active. At 5f, `partition` resolves a `renamed` record's `successor_pin` and runs it, so WIRE-PIN 2
+runs twice (once for `Task 12 (WIRE 2)`, once for the tombstone); this is harmless, and it is the
+same node.
 
 **Acceptance Criteria**:
 - [ ] AC-2.1: all 80 cells match the table.
@@ -1759,13 +1912,19 @@ record; design W9's alias) (Task 14).
       its own tree) in rc, stdout and stderr, in all 16 cells each.
 - [ ] AC-2.3, AC-2.4, AC-2.5, AC-2.6 as the tests state.
 - [ ] AC-2.7: the gate's mutation spec (Task 14) carries G1–G3, each killed by an AC-2.1 cell.
-- [ ] D13 items 2 and 5: the fold is order-independent and most-restrictive (tests 13, 14), and the
-      closed grammar refuses a missing, unknown or out-of-range field (tests 11, 12).
+- [ ] Merged §D13 items 2 and 5: the fold is order-independent and most-restrictive (tests 13, 14),
+      and the closed grammar refuses a missing, unknown or out-of-range field (tests 11, 12).
+- [ ] Grok design v1.3 §D2 tag agreement: a fold whose kind disagrees with its governing record's
+      tag is `judge-error`, each arm alone (tests 17, 18), and an agreeing fold refuses its own
+      kind (test 19).
 - [ ] The migrated committed files pass in full at GREEN: `test_h_mad_tdd_judge.py` and
       `test_h_mad_tdd_gate_judge.py` (193 items on the scratch copy), and the full coupled suite.
+- [ ] `.h-mad/wires.jsonl` holds `Task 12 (WIRE 1)` and `Task 12 (WIRE 2)` active and `Task 12`
+      removed with `removal_provenance` `renamed` (§"Wire registry move"), committed in the RED
+      commit.
 
-**Mutation rows** (Task 14): G1–G10 (`tdd_gate_fallback_agent.json`, 10) and WR12-1, WR12-2
-(`grok_wire_reverts.json`, 2) — 12 rows. Task 14 also re-runs the six committed specs with a row on
+**Mutation rows** (Task 14): G1–G12 (`tdd_gate_fallback_agent.json`, 12) and WR12-1, WR12-2
+(`grok_wire_reverts.json`, 2) — 14 rows. Task 14 also re-runs the six committed specs with a row on
 either production file (claude_gate_judge_wiring.json and the five `tdd_judge_*.json`).
 
 **Dependencies on other tasks**: Task 1
@@ -1826,7 +1985,7 @@ landed in Tasks 5–10).
 **Test file**: none (the killing tests belong to Tasks 3–12)
 **Task shape**: `operational`
 
-**Description**: Author the seven spec files with exactly the 63 rows below, then for each spec run
+**Description**: Author the seven spec files with exactly the 65 rows below, then for each spec run
 `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors <spec>` (read `ANCHORS:`) and
 `python3 h-mad/scripts/h_mad_mutation_harness.py <spec>` (read `MUTATION:`). The pass condition is
 `ANCHORS_OK` and `MUTATION: ALL_CAUGHT` for all seven; `SURVIVED` or `REFUSED` halts and is reported
@@ -1853,7 +2012,8 @@ below naming one file gives that file to every row of its table; `tdd_gate_fallb
 different files.
 
 **`tdd_gate_fallback_agent.json`** (re-derived in v1.4 onto Task 12's re-planned code; every v1.3
-row anchored on text the merged gate deleted); `command`
+row anchored on text the merged gate deleted; G11 and G12 added in v1.5 from grok design v1.3);
+`command`
 `["python3.11","-m","pytest","tests/test_h_mad_tdd_gate_fallback_agent.py","-q"]`; `target_command`
 `["python3.11","-m","pytest","-q"]`.
 
@@ -1869,6 +2029,8 @@ row anchored on text the merged gate deleted); `command`
 | G8 | `g8-fold-reads-the-first-record-only` | `scripts/h_mad_tdd_judge.py` | `    grok = next((i for i, r in enumerate(records, 1) if r.fallback == "grok"), 0)  # M:F2` | `    grok = 1 if records[0].fallback == "grok" else 0  # M:F2` | `tests/test_h_mad_tdd_gate_fallback_agent.py::test_second_active_record_holding_grok_blocks` |
 | G9 | `g9-fallback-position-unchecked` | `hooks/h-mad-tdd-gate.sh` | `  [ "$FALLBACK_POS" -le "$RECORDS" ] \|\| _refuse judge-error "state fallback position out of range"  # M:F4` | `  :  # M:F4` | `tests/test_h_mad_tdd_gate_fallback_agent.py::test_state_stub_fallback_position_out_of_range_is_judge_error` |
 | G10 | `g10-fallback-field-optional` | `hooks/h-mad-tdd-gate.sh` | ` fallback=(none\|(grok\|invalid):([1-9][0-9]*))(` | `( fallback=(none\|(grok\|invalid):([1-9][0-9]*)))?(` | `tests/test_h_mad_tdd_gate_fallback_agent.py::test_state_stub_fallback_field_is_judge_error` |
+| G11 | `g11-grok-fold-tag-unchecked` | `hooks/h-mad-tdd-gate.sh` | `    grok:*)    [ "$FB_TAG" = grok ] ;;` | `    grok:*)    true ;;` | `tests/test_h_mad_tdd_gate_fallback_agent.py::test_state_stub_grok_fold_naming_a_non_grok_record_is_judge_error` |
+| G12 | `g12-invalid-fold-tag-unchecked` | `hooks/h-mad-tdd-gate.sh` | `    invalid:*) [ "${FB_TAG#invalid:}" != "$FB_TAG" ] ;;` | `    invalid:*) true ;;` | `tests/test_h_mad_tdd_gate_fallback_agent.py::test_state_stub_invalid_fold_naming_a_valid_record_is_judge_error` |
 
 (`\|` in the table is a literal `|` in the source.) G1 and G2 overlap (G2's `find` is the second
 line of G1's); the harness applies one row at a time. G1, G2 and G3 are AC-2.7's three mutations,
@@ -1881,8 +2043,14 @@ G6 (`*)` arm) has no successor, because the arm has none (Task 12, test 11). G7�
 the fold's precedence and order, and the gate's two grammar checks. G9's mutant hands the
 `fallback-grok` refusal an empty governing record, so the killing test reads kind `fallback-grok`,
 not `judge-error`; G10's makes the field optional, so the `missing-field` stub line is accepted and
-the stub judge allows. Every `find` above counts 1 in the scratch copy of Task 12's code (executed;
-G7's `    if invalid:` and G1's, G2's and G4's included).
+the stub judge allows. G11 and G12 are grok design v1.3's rows, one per arm of the tag agreement
+check, each with its own test: each mutant makes its arm always true, so a disagreeing fold reaches
+the refusal of its own kind (executed for v1.5 on the scratch copy: G11's mutant failed exactly
+test 17's two items and G12's exactly test 18's two). Every `find` above counts 1 in the scratch
+copy of Task 12's code (executed for v1.5, all twelve G rows and WR12-1, WR12-2; G7's
+`    if invalid:` and G1's, G2's and G4's included). G1's and G4's two-line finds still count 1 beside
+the agreement `case`, because there each arm label is followed on its own line by a test, never by
+a newline.
 
 **`grok_exec.json`** — file `scripts/hmad-dispatch.sh`; `command`
 `["python3.11","-m","pytest","tests/test_hmad_dispatch_grok_readers.py","tests/test_hmad_dispatch_exec_grok.py","tests/test_hmad_dispatch_progress_grok.py","tests/test_hmad_dispatch_exec.py","tests/test_hmad_dispatch_audit_cycle.py","-q"]`;
@@ -2002,18 +2170,19 @@ the 14 WIRE entries of Tasks 3 (1), 4 (1), 6 (1), 7 (2), 9 (4), 10 (2), 11 (1) a
 WR12 (`(.orchestrator_state[$k] // {}) as $r`) anchored text the merged gate deleted; WR12-1 and
 WR12-2 replace it (Task 12, "Wire-scoped reverts").
 
-**Row count**: 10 + 19 + 11 + 4 + 2 + 3 + 14 = 63 (unit: mutation rows; the seven tables above,
-in order). By owning task: Task 12 12, Task 8 11, Task 9 7, Task 10 6, Task 11 2, Task 5 8, Task 6 4,
-Task 7 6, Task 3 3, Task 4 4 — sum 63. The design's rows are 34 named rows (G1–G6, P1–P9, L1–L5,
-E1–E8, A1–A3, T1, R1–R2) plus 9 force-fires that are not aliases of a named row (W1, W2, W3a, W5,
-W6, W7a, W8, W10a, W11) = 43; W3b = P5, W4 = P7, W7b = A2, W9 = G3, and W10b has no row. G1–G6 keep
-their six slots with re-derived content. This plan adds E9, E10, G7–G10 and the 14 wire reverts
-WR3–WR11 plus WR12-1 and WR12-2: 43 + 2 + 4 + 14 = 63 (§"Deviations from design v1.2", item 3).
+**Row count**: 12 + 19 + 11 + 4 + 2 + 3 + 14 = 65 (unit: mutation rows; the seven tables above,
+in order). By owning task: Task 12 14, Task 8 11, Task 9 7, Task 10 6, Task 11 2, Task 5 8, Task 6 4,
+Task 7 6, Task 3 3, Task 4 4 — sum 65. Grok design v1.3's rows are 40 named rows (G1–G12, P1–P9,
+L1–L5, E1–E8, A1–A3, T1, R1–R2) plus 9 force-fires that are not aliases of a named row (W1, W2, W3a,
+W5, W6, W7a, W8, W10a, W11) = 49; W3b = P5, W4 = P7, W7b = A2, W9 = G3, and W10b has no row. G1–G12
+are the design's rows by mechanism, with this plan's literals. This plan adds E9, E10 and the 14
+wire reverts WR3–WR11 plus WR12-1 and WR12-2: 49 + 2 + 14 = 65 (§"Deviations from design v1.2",
+item 3).
 
 **Expected RED split**: not applicable — no test is authored. The verdict is seven `ANCHORS: ANCHORS_OK` and
 seven `MUTATION: ALL_CAUGHT` tokens for the new specs, the same two tokens for each of the six
 committed specs re-run above, and the committed sweep test green in the full suite with 114 specs
-(107 at HEAD `d9574614` + 7).
+(107 at HEAD `6277d703` + 7).
 
 **Acceptance Criteria**:
 - [ ] AC-2.7: `tdd_gate_fallback_agent.json` is committed with G1–G3, and each is killed by an
@@ -2149,17 +2318,46 @@ git ls-tree -r --name-only "$BASE_SHA" -- h-mad/tests handoff/tests handoff/scri
 grep -qxF pytest.ini "$R/pre.txt" || { echo "FAIL: pytest.ini is not tracked at BASE_SHA"; exit 1; }
 while IFS= read -r f; do
   case "$f" in
-    h-mad/tests/stubs/codex|h-mad/tests/stubs/agy)
-      echo "--- permitted edit (Task 1): $f"
-      git --no-pager diff "$BASE_SHA" -- "$f" || { echo "FAIL: git diff $f"; exit 1; } ;;
-    h-mad/tests/test_h_mad_tdd_judge.py|h-mad/tests/test_h_mad_tdd_gate_judge.py|h-mad/tests/mutation-specs/claude_gate_judge_wiring.json)
-      echo "--- permitted edit (Task 12 migration): $f"
-      git --no-pager diff "$BASE_SHA" -- "$f" || { echo "FAIL: git diff $f"; exit 1; } ;;
+    h-mad/tests/stubs/codex|h-mad/tests/stubs/agy|h-mad/tests/test_h_mad_tdd_judge.py|h-mad/tests/test_h_mad_tdd_gate_judge.py|h-mad/tests/mutation-specs/claude_gate_judge_wiring.json)
+      echo "--- permitted edit (Task 1 stub or Task 12 migration): $f"
+      git --no-pager diff "$BASE_SHA" -- "$f" || { echo "FAIL: git diff $f"; exit 1; }
+      git show "$BASE_SHA:$f" > "$R/base.blob" || { echo "FAIL: git show $BASE_SHA:$f"; exit 1; }
+      python3 - "$f" "$R/base.blob" <<'PY' || { echo "FAIL: $f differs from BASE_SHA beyond its stated change"; exit 1; }
+import sys
+f, base = sys.argv[1], sys.argv[2]
+CAPTURE = rb'''if [ -n "${HMAD_STUB_CLAUDE_ENV_CAPTURE:-}" ]; then
+  for _n in $(compgen -e); do case "$_n" in CLAUDE*) printf '%s\n' "$_n" ;; esac; done \
+    | LC_ALL=C sort > "$HMAD_STUB_CLAUDE_ENV_CAPTURE"
+fi
+
+'''
+STATED = {
+    "h-mad/tests/stubs/codex": (CAPTURE, 1),
+    "h-mad/tests/stubs/agy": (CAPTURE, 1),
+    "h-mad/tests/test_h_mad_tdd_judge.py": (b" fallback=(none|(grok|invalid):([1-9][0-9]*))", 1),
+    "h-mad/tests/test_h_mad_tdd_gate_judge.py": (b" fallback=none", 1),
+    "h-mad/tests/mutation-specs/claude_gate_judge_wiring.json": (b" fallback=none", 3),
+}
+needle, n = STATED[f]
+with open(f, "rb") as h:
+    head = h.read()
+with open(base, "rb") as h:
+    old = h.read()
+ok = needle not in old and head.count(needle) == n and head.replace(needle, b"") == old
+print(f"  stated change: {f} count={head.count(needle)}/{n} rest_equals_base={head.replace(needle, b'') == old}")
+sys.exit(0 if ok else 1)
+PY
+      ;;
     *)
       git diff --quiet --exit-code "$BASE_SHA" -- "$f" \
         || { echo "FAIL: a file tracked at BASE_SHA under the test paths differs: $f"; exit 1; } ;;
   esac
 done < "$R/pre.txt"
+# 3b. the second base constant (feature-created, so outside pre.txt) names the same commit
+ab="$(sed -n 's/^BASE_SHA = "\([0-9a-f]*\)"$/\1/p' h-mad/tests/test_h_mad_assemble_tdd_agent.py)" \
+  || { echo "FAIL: cannot read test_h_mad_assemble_tdd_agent.BASE_SHA"; exit 1; }
+[ "${#ab}" -ge 7 ] && [ "${BASE_SHA#"$ab"}" != "$BASE_SHA" ] \
+  || { echo "FAIL: test_h_mad_assemble_tdd_agent.BASE_SHA ($ab) is not a prefix of grokfixtures.BASE_SHA"; exit 1; }
 # 4. the D8 census
 [ "$(grep -c 'codex|agy|grok\|agy|codex|grok' h-mad/scripts/hmad-dispatch.sh)" -eq 6 ] \
   || { echo "FAIL: the agy|codex|grok census is not 6 matching lines (design D8)"; exit 1; }
@@ -2211,14 +2409,29 @@ calls `pytest.skip`), mutation spec or `pytest.ini`, and a deleted file all fail
 that is 255 files (`git ls-tree -r --name-only 507214d -- h-mad/tests handoff/tests handoff/scripts
 pytest.ini | wc -l`; unit: files): 124 `test_*.py` / `conftest.py`, 130 other tracked files under
 the three paths, and `pytest.ini`. At the re-pinned `8ef6009f` the same command reads 270 files
-(read for v1.4). Five are a named allowlist whose diff is printed into the record instead of
-failing: `h-mad/tests/stubs/codex` and `h-mad/tests/stubs/agy`, which Task 1 edited (the only two
-tracked files under the three paths that differ from `8ef6009f` at HEAD `d9574614`,
-`git diff --name-status 8ef6009f HEAD` filtered to non-added files), and Task 12's three migration
-edits, `h-mad/tests/test_h_mad_tdd_judge.py`, `h-mad/tests/test_h_mad_tdd_gate_judge.py` and
-`h-mad/tests/mutation-specs/claude_gate_judge_wiring.json`. No other task edits a file tracked at
-`BASE_SHA` under the three paths (every other task's production and test files are new or live
-outside them). The node-id floor (`comm -23` empty) stays
+(read for v1.4; re-read at `6277d703`, 270). Five are a named allowlist, spec v1.5 AC-11.1's
+carve-out, and each is held to its **stated change only** (v1.5; answers the v1.4 delta review's
+second should-fix): the arm prints the file's diff into the record, then requires that the stated
+text is absent at `BASE_SHA`, occurs exactly N times at HEAD, and that deleting it from the HEAD
+bytes gives the `BASE_SHA` bytes exactly. The five, with the measured size of each change
+(`git diff --numstat`, unit: added and deleted lines):
+- `h-mad/tests/stubs/codex` and `h-mad/tests/stubs/agy` (Task 1): the 5-line
+  `HMAD_STUB_CLAUDE_ENV_CAPTURE` block including its trailing blank line, once each; `5 0` each at
+  `6277d703`. They are the only two tracked files under the three paths that differ from
+  `8ef6009f` at `6277d703` (`git diff --name-status 8ef6009f HEAD` filtered to non-added files);
+- `h-mad/tests/test_h_mad_tdd_judge.py` (migration 1): ` fallback=(none|(grok|invalid):([1-9][0-9]*))`
+  once; `1 1`;
+- `h-mad/tests/test_h_mad_tdd_gate_judge.py` (migration 2): ` fallback=none` once; `1 1`;
+- `h-mad/tests/mutation-specs/claude_gate_judge_wiring.json` (migration 3): ` fallback=none` three
+  times, one per `replace` of `W5BF`, `W5BF2` and `W5BF3`; `3 3`.
+
+A weakened assertion, an added line, a missing or partial migration, or any edit elsewhere in one
+of the five fails the arm. **Step 3b** covers the one test file this feature re-pinned that the
+loop cannot see: `h-mad/tests/test_h_mad_assemble_tdd_agent.py` is not tracked at `BASE_SHA` (Task 3
+created it), so its `BASE_SHA` re-pin (`f2ff9261`, Preamble) is not an AC-11.1 carve-out; 3b
+requires its 8-hex `BASE_SHA` to be a prefix of `grokfixtures.BASE_SHA`, so the two constants
+cannot drift apart. No other task edits a file tracked at `BASE_SHA` under the three paths (every
+other task's production and test files are new or live outside them). The node-id floor (`comm -23` empty) stays
 as a second, independent check. **Residual:** a skip decided by the environment inside an unchanged
 file (for example `claudebinary.py`'s probe of the Claude binary) changes no byte and no node id, so
 neither check sees it; the suite's summary line is printed for the record.
@@ -2254,25 +2467,36 @@ FR-5 instruction; a census line deleted →
 ids collected at BASE_SHA are gone` on the clean scenario (its `h-mad handoff` archive has no `docs/`),
 and v1.1's script with only its archive widened printed `FLOOR: PASS` on the extra-failing-test
 scenario and on the head-collection-error scenario, which is codex's finding reproduced.
-**Residual (v1.4):** the Task 12 allowlist arm was added after those runs and was not re-executed;
-it has the same shape as the executed Task 1 arm (a `case` pattern of literal paths printing a
-`git diff`).
+**The narrowed arm and step 3b, executed for v1.5** (closing v1.4's residual that the Task 12 arm
+was never run). Steps 3 and 3b, extracted byte for byte from the script above with the prelude,
+ran in a scratch `git clone --shared` of the worktree at `6277d703` (deleted) with
+`grokfixtures.BASE_SHA` re-pinned, once per scenario under `bash` and again under `zsh`, with the
+same result each time. Migrations 1–3 applied → `PASS` (every arm printed `count=N/N
+rest_equals_base=True`). Each forced failure stopped on its own line: migrations not applied →
+`FAIL: h-mad/tests/mutation-specs/claude_gate_judge_wiring.json differs from BASE_SHA beyond its
+stated change` (`count=0/3`); two of the three `W5BF` rows migrated → the same line (`count=2/3`);
+one line appended to the migrated `test_h_mad_tdd_gate_judge.py` → its own line
+(`rest_equals_base=False`); an assertion weakened in the migrated `test_h_mad_tdd_judge.py` → its
+own line; a line appended to `stubs/codex` → its own line; `conftest.py` edited → `FAIL: a file
+tracked at BASE_SHA under the test paths differs: h-mad/tests/conftest.py`;
+`test_h_mad_assemble_tdd_agent.BASE_SHA` put back to `507214d` → `FAIL:
+test_h_mad_assemble_tdd_agent.BASE_SHA (507214d) is not a prefix of grokfixtures.BASE_SHA`.
 
 **Expected RED split**: not applicable — no test is authored.
 
 **Acceptance Criteria**:
-- [ ] AC-11.1: the full suite passes with every pre-existing test unmodified (the one
+- [ ] AC-11.1: the full suite passes with every pre-existing test file unmodified (the one
       environment-dependent node named in the Preamble excepted, for its recorded reason), except
-      the two pre-existing test files Task 12 migrates. Spec AC-11.1 has no such exception; the
-      merged gate's closed grammar (D13 item 5) makes the migration unavoidable, and the conflict is
-      reported to the orchestrator rather than decided here.
+      spec v1.5 AC-11.1's five carve-out files, each changed by exactly its stated change (step 3's
+      narrowed arm).
 - [ ] AC-11.2: `test_hmad_dispatch_exec.py`, `test_hmad_dispatch_exec_completion.py`,
       `test_hmad_dispatch_exec_stamp.py`, `test_hmad_dispatch_progress.py` pass in that full run.
 - [ ] AC-5.3, AC-6.5, AC-7.5, AC-9.4: the named pre-existing files pass unchanged in that run.
 - [ ] Every file tracked at `BASE_SHA` under `h-mad/tests`, `handoff/tests`, `handoff/scripts`, and
       `pytest.ini`, is byte-identical to `BASE_SHA` (`git diff --quiet --exit-code` per file), except
       the five allowlisted files (two Task 1 stubs, three Task 12 migrations), whose diff is in the
-      record; the node-id floor (`comm -23` empty,
+      record and whose bytes equal `BASE_SHA`'s once their stated change is removed; step 3b's two
+      base constants agree; the node-id floor (`comm -23` empty,
       whole-tree base collect, both collect summaries free of `error`) holds as a second check; the
       census reads 6 matching lines; the class sweep equals its 4 expected files.
 - [ ] The script's last line is `FLOOR: PASS files=N suite_rc=R`, which certifies the suite verdict
@@ -2406,10 +2630,10 @@ ids). The implementation gate counts against these 58, never against plan v1.3's
 Sum: 4 + 8 + 7 + 10 + 4 + 6 + 5 + 5 + 4 + 2 + 3 = 58.
 
 **Test census** (unit: collected test items introduced by this plan): Task 1 12, Task 2 8, Task 3 11,
-Task 4 9, Task 5 17, Task 6 7, Task 7 19, Task 8 21, Task 9 30, Task 10 15, Task 11 2, Task 12 186,
-Task 13 23, Task 15 7 — total 367, of which 185 fail at RED and 182 are regression guards or
-first-run passes (the per-task splits sum to these: failing 10+4+9+9+16+4+10+21+23+10+2+61+0+6,
-passing 2+4+2+0+1+3+9+0+7+5+0+125+23+1). Not in the census: the 25 committed items Task 12's
+Task 4 9, Task 5 17, Task 6 7, Task 7 19, Task 8 21, Task 9 30, Task 10 15, Task 11 2, Task 12 192,
+Task 13 23, Task 15 7 — total 373, of which 187 fail at RED and 186 are regression guards or
+first-run passes (the per-task splits sum to these: failing 10+4+9+9+16+4+10+21+23+10+2+63+0+6,
+passing 2+4+2+0+1+3+9+0+7+5+0+129+23+1). Not in the census: the 25 committed items Task 12's
 migrations turn RED (deviation 5), which are pre-existing, not introduced.
 
 **Task graph**: Tasks 1 and 2 are independent (`Dependencies on other tasks: None`). After Task 1,
@@ -2429,3 +2653,4 @@ remaining order is Task 12, then Tasks 14 and 15, then 16, then 17. Wiring tasks
 - v1.2: Impl-plan audit cycle 2 answered (2026-09-28; codex p2 3 musts + 1 should, v1.1 delta review 1 must + 5 shoulds + 6 nits), corrective and not re-audited, verified at 01121ca7 (h-mad unchanged since 507214d). Task 16 floor: base collect on the whole tree at BASE_SHA, every step guarded (pipefail, suite rc plus FAILED/ERROR lines, collect summaries free of error), unmodified gate widened to all 255 tracked files under the test paths plus pytest.ini with the two Task 1 stubs allowlisted, class sweep compared with its 4 expected files, every guard proven by forced failure under bash and zsh; scan() agy_events membership type-guarded (Deviation 4, Task 5 test 13, row E10); Task 17 re-runs Task 16 and the affected specs after any live-envelope repair; Task 7 test 12 states both assertions; Convention 1 jq-shim rule names four members; Deviations override the design for 5d/5e; nits applied. 17 tasks, 8 wiring, 58 mutation rows in seven specs, 358 new test items.
 - v1.3: 5c baseline: branch feature/216-grok-codex-fallback in worktree /Users/kimhawk/orca/skills-grok-codex-fallback; 13 wires registered in .h-mad/wires.jsonl. No content change.
 - v1.4: Rebase re-plan (2026-09-29), answering no audit cycle: the branch was rebased onto main 8ef6009f (merge of codex-tdd-gate-defects), and that feature's design D13 and impl-plan "After Phase 5" owe this re-plan. Verified at HEAD d9574614 (Tasks 1-11 and 13 done; gate and judge byte-identical to 8ef6009f). Changes: (1) Task 12 re-planned onto the merged judge gate (Deviation 5): _fallback_fold in h_mad_tdd_judge.py, a fallback=(none|grok:B|invalid:B) field after records= on the TDD-STATE active line (spelling chosen here, owed to the design), the gate ERE and a B<=records cross-check in _read_state, _refuse fallback-grok / fallback-invalid after the codex-authorship refusal; two WIREs (judge fold, gate read); 186 tests, RED 61/125; migration edits to test_h_mad_tdd_judge.py ACTIVE_RE, test_h_mad_tdd_gate_judge.py _tree_b default, claude_gate_judge_wiring.json W5BF/W5BF2/W5BF3 replace texts, and grokfixtures.BASE_SHA re-pinned to 8ef6009f; all executed on a deleted scratch copy (25 committed items RED without the migrations, 255 of 255 gate/judge items green with them, ANCHORS_OK). (2) Task 14: tdd_gate_fallback_agent.json re-derived as G1-G10 across the gate and judge, WR12 replaced by WR12-1 and WR12-2, six committed gate/judge specs re-run; every one of the 63 finds counts 1 on the scratch copy. (3) Task 7 code block, WR7-2 note and test 11 (re.purge plus reload) match commits 39a86df9/9975729f; Task 9 S3 and S8 comments and the _clean_caller_env fixture match 10137f3b/b3e6cb70. (4) Task 15 drops the no-jq fail-open and names the fallback-grok kind; Task 16 re-pins BASE_SHA and allowlists Task 12's three migrations (270 tracked files at 8ef6009f); Task 17 re-checked, no gate dependence; the Preamble's name-map bullet now states the tree-relative judge; Convention 1 has three jq-shim members; Convention 5 re-read ANCHORS_OK specs=107 mutations=1005. Counts: 17 tasks, 8 wiring, 14 WIREs, 63 mutation rows in seven specs (114 committed after Task 14), 367 new test items (185 RED, 182 pass).
+- v1.5: Answers the impl-plan v1.4 delta review (`grok-codex-fallback.impl-plan.delta-review.v1.4.md`, advisory: 0 must, 5 should, 6 nit) and aligns with grok design v1.3 (`6277d703`) and spec v1.5 (`02283561`) (2026-09-29), verified at HEAD `6277d703` (gate and judge byte-identical to `8ef6009f`). Task 12 gains design v1.3 §D2's tag agreement check (`# M:F1`, `judge-error` when the fold's kind disagrees with its governing record's tag), tests 17–19 and rows G11/G12, executed per arm on a deleted scratch copy; it records migration 5 (`test_h_mad_assemble_tdd_agent.BASE_SHA` re-pinned to `8ef6009f` by `f2ff9261`, done) and plans the wire registry move (wire-pin gate with `--feature`, then a `renamed` tombstone of the v1.3 `Task 12` record), executed on a scratch registry. Task 14 carries G1–G12. Task 16's allowlist holds each of the five carve-out files to its stated change (count at HEAD plus exact base bytes once removed), and a new step 3b checks that the two base constants agree; both executed under bash and zsh on a scratch clone. ACs cite spec v1.5 (AC-2.2 `git archive`, AC-2.5 three cases, AC-11.1 carve-out); merged §D13 and grok design §D13 are qualified everywhere; Convention 6 re-counted; the drift residual sits beside migration 1. Counts: 17 tasks, 8 wiring, 14 WIREs, 65 mutation rows in seven specs (114 committed after Task 14), 373 new test items (187 RED, 186 pass).
