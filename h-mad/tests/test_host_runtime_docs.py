@@ -25,7 +25,9 @@ from h_mad_doc_block_exec import AmbiguousHeading, _fence_events, fence_aware_en
 
 SID_READ = '"$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"'
 ADAPTER_ID = "h-mad-codex"
-HOST_ADAPTERS = (ADAPTER_ID, "h-mad-agy")
+HOST_ADAPTERS = (ADAPTER_ID, "h-mad-agy", "h-mad-grok")
+REFUSAL_FORM_AT_BASE = "exit1"
+REFUSAL_TOKEN = {"exit1": "exit 1", "a": "exit 2", "b": "permissionDecision"}[REFUSAL_FORM_AT_BASE]
 
 
 def _section(text: str, heading: str) -> str:
@@ -45,14 +47,16 @@ def _fenced_lines(section: str) -> list[str]:
 
 def _required_section(adapter_id: str, heading: str, property_name: str) -> str:
     try:
+        if not ADAPTERS[adapter_id].is_file():
+            raise LookupError(f"adapter absent: {ADAPTERS[adapter_id]}")
         return _section(ADAPTERS[adapter_id].read_text(encoding="utf-8"), heading)
-    except LookupError as exc:
+    except (FileNotFoundError, LookupError) as exc:
         pytest.fail(f"{adapter_id} {property_name}: {exc}")
 
 
 def _row(adapter_id: str, construct_id: str, property_name: str) -> host_parity.Row:
-    text = ADAPTERS[adapter_id].read_text(encoding="utf-8")
     _required_section(adapter_id, "## Construct mapping", property_name)
+    text = ADAPTERS[adapter_id].read_text(encoding="utf-8")
     table = host_parity.adapter_table(text)
     assert table.problems == [], f"{adapter_id} Construct mapping problems: {table.problems}"
     rows = [row for row in table.rows if row.id == construct_id]
@@ -74,10 +78,14 @@ def _claims(adapter_id: str, property_name: str) -> str:
         ("h-mad-agy", "status", "not-applicable"),
         ("h-mad-agy", "hmad-dispatch-exec", "hmad-dispatch exec"),
         ("h-mad-agy", "invoke-subagent", "invoke_subagent"),
+        ("h-mad-grok", "status", "not-applicable"),
+        ("h-mad-grok", "hmad-dispatch-exec", "hmad-dispatch exec"),
+        ("h-mad-grok", "spawn-subagent", "spawn_subagent"),
     ],
     ids=[
         "h-mad-codex-status", "h-mad-codex-hmad-dispatch-exec", "h-mad-codex-spawn-agent", "h-mad-codex-fork-turns",
         "h-mad-agy-status", "h-mad-agy-hmad-dispatch-exec", "h-mad-agy-invoke-subagent",
+        "h-mad-grok-status", "h-mad-grok-hmad-dispatch-exec", "h-mad-grok-spawn-subagent",
     ],
 )
 def test_advisor_row(adapter_id: str, property_name: str, expected: str) -> None:
@@ -86,12 +94,22 @@ def test_advisor_row(adapter_id: str, property_name: str, expected: str) -> None
         assert row.status == expected, f"advisor must be not-applicable on {adapter_id}"
     else:
         assert expected in row.mapping, f"advisor mapping must contain {expected}"
+    if adapter_id == "h-mad-grok" and property_name == "spawn-subagent":
+        roles = _required_section(adapter_id, "## Author and reviewer roles", "author and reviewer roles")
+        for token in ("spawn_subagent", "prompt", "get_command_or_subagent_output", "git status --short"):
+            assert token in roles, f"grok Author and reviewer roles must state {token}"
 
 
 @pytest.mark.parametrize(
     "adapter_id,token",
-    [(adapter_id, token) for adapter_id in HOST_ADAPTERS for token in ("uuid.uuid4()", "owned_elsewhere")],
-    ids=[f"{adapter_id}-{suffix}" for adapter_id in HOST_ADAPTERS for suffix in ("uuid4", "owned-elsewhere")],
+    [(adapter_id, token) for adapter_id in HOST_ADAPTERS for token in (
+        ("uuid.uuid4()", "owned_elsewhere", "GROK_SESSION_ID", "hook processes")
+        if adapter_id == "h-mad-grok" else ("uuid.uuid4()", "owned_elsewhere")
+    )],
+    ids=[f"{adapter_id}-{suffix}" for adapter_id in HOST_ADAPTERS for suffix in (
+        ("uuid4", "owned-elsewhere", "grok-session-id", "hook-processes")
+        if adapter_id == "h-mad-grok" else ("uuid4", "owned-elsewhere")
+    )],
 )
 def test_session_id_env_row(adapter_id: str, token: str) -> None:
     assert token in _row(adapter_id, "session-id-env", f"session-id-env {token}").mapping, f"{adapter_id} session-id-env mapping must contain {token}"
@@ -197,9 +215,13 @@ def test_not_applicable_rows_state_a_reason(adapter_id: str) -> None:
 @pytest.mark.parametrize(
     "adapter_id,token",
     [(adapter_id, token) for adapter_id in HOST_ADAPTERS for token in (
-        "CTXBUDGET: UNKNOWN reason=host_unsupported", "80%", "substitute: none",
+        ("CTXBUDGET: UNKNOWN reason=host_unsupported", "80%", "substitute: none", "/context", "not an orchestrator gate")
+        if adapter_id == "h-mad-grok" else ("CTXBUDGET: UNKNOWN reason=host_unsupported", "80%", "substitute: none")
     )],
-    ids=[f"{adapter_id}-{suffix}" for adapter_id in HOST_ADAPTERS for suffix in ("unknown", "80pct", "substitute-none")],
+    ids=[f"{adapter_id}-{suffix}" for adapter_id in HOST_ADAPTERS for suffix in (
+        ("unknown", "80pct", "substitute-none", "slash-context", "not-a-gate")
+        if adapter_id == "h-mad-grok" else ("unknown", "80pct", "substitute-none")
+    )],
 )
 def test_context_budget_section(adapter_id: str, token: str) -> None:
     assert token in _claims(adapter_id, f"context budget {token}"), f"{adapter_id} Context budget and claims must state {token}"
@@ -228,10 +250,16 @@ def test_budget_line_runs_and_reports_host(adapter_id: str, tmp_path: Path, herm
     "adapter_id,case",
     [(ADAPTER_ID, case) for case in (
         "agents-h-mad", "agents-handoff", "ln-s", "never-overwritten", "codex-hooks-json", "does-not-re-arm",
-    )] + [("h-mad-agy", case) for case in ("gemini-h-mad", "gemini-handoff", "ln-s", "never-overwritten")],
+    )] + [("h-mad-agy", case) for case in ("gemini-h-mad", "gemini-handoff", "ln-s", "never-overwritten")]
+    + [("h-mad-grok", case) for case in (
+        "agents-h-mad", "agents-handoff", "ln-s", "never-overwritten", "codex-hooks-json", "does-not-re-arm",
+    )],
     ids=[f"{ADAPTER_ID}-{case}" for case in (
         "agents-h-mad", "agents-handoff", "ln-s", "never-overwritten", "codex-hooks-json", "does-not-re-arm",
-    )] + [f"h-mad-agy-{case}" for case in ("gemini-h-mad", "gemini-handoff", "ln-s", "never-overwritten")],
+    )] + [f"h-mad-agy-{case}" for case in ("gemini-h-mad", "gemini-handoff", "ln-s", "never-overwritten")]
+    + [f"h-mad-grok-{case}" for case in (
+        "agents-h-mad", "agents-handoff", "ln-s", "never-overwritten", "codex-hooks-json", "does-not-re-arm",
+    )],
 )
 def test_install_section(adapter_id: str, case: str) -> None:
     section = _required_section(adapter_id, "## Install", f"install {case}")
@@ -255,3 +283,108 @@ def test_install_section(adapter_id: str, case: str) -> None:
     else:
         assert "does not re-arm" in section, "Install must explain that linking does not re-arm the Codex TDD gate"
         assert 'python3 "$HMAD_SKILL_ROOT/scripts/h_mad_install_check.py" --agents-skills-dir ~/.agents/skills' in section, "Install must include the host-specific checker"
+
+
+@pytest.mark.parametrize(
+    "case,token",
+    [
+        ("grok-session-id", "GROK_SESSION_ID"),
+        ("smoke-condition", "only after the live smoke records it present in the orchestrator's shell"),
+    ],
+    ids=["grok-session-id", "smoke-condition"],
+)
+def test_grok_session_id_condition(case: str, token: str) -> None:
+    section = _claims("h-mad-grok", f"session id condition {case}")
+    assert token in section, f"grok session id condition {case} must state {token}"
+
+
+@pytest.mark.parametrize(
+    "case,token",
+    [
+        ("version", "1.0.41"),
+        ("compat-skills", "compat.claude.skills"),
+        ("compat-hooks", "compat.claude.hooks"),
+    ],
+    ids=["h-mad-grok-version", "h-mad-grok-compat-skills", "h-mad-grok-compat-hooks"],
+)
+def test_version_and_compatibility(case: str, token: str) -> None:
+    section = _required_section("h-mad-grok", "## Version and compatibility", f"version and compatibility {case}")
+    assert token in section, f"grok Version and compatibility must state {token}"
+    if case == "version":
+        assert "grok inspect" in section, "grok Version and compatibility must name the verification command"
+        text = ADAPTERS["h-mad-grok"].read_text(encoding="utf-8")
+        headings = (
+            "# grok runtime adapter", "## Version and compatibility", "## Package and project roots",
+            "## Install", "## Project trust", "## Hooks", "## The TDD gate",
+            "## Author and reviewer roles", "## Context budget and claims", "## Memory index",
+            "## Construct mapping", "## What does not change",
+        )
+        positions = [text.find(heading + "\n") for heading in headings]
+        assert -1 not in positions and positions == sorted(positions), "grok adapter must have every required section in order"
+    elif case == "compat-skills":
+        roots = _required_section("h-mad-grok", "## Package and project roots", "package and project roots")
+        for root in ("HMAD_SKILL_ROOT", "~/.claude/skills/h-mad", "~/.agents/skills/h-mad"):
+            assert root in roots, f"grok Package and project roots must state {root}"
+    else:
+        trust = _required_section("h-mad-grok", "## Project trust", "project trust")
+        assert "/hooks-trust" in trust and "--trust" in trust, "grok Project trust must name both trust controls"
+
+
+@pytest.mark.parametrize(
+    "case,token",
+    [
+        ("halt-token", "step5:grok_tdd_hook_unverified"),
+        ("tool-input", "toolInput"),
+        ("fails-open", "fails open"),
+        ("pytest", "pytest"),
+        ("reason-i", REFUSAL_TOKEN),
+    ],
+    ids=["halt-token", "tool-input", "fails-open", "pytest", "reason-i"],
+)
+def test_tdd_gate_section(case: str, token: str) -> None:
+    section = _required_section("h-mad-grok", "## The TDD gate", f"TDD gate {case}")
+    assert token in section, f"grok TDD gate {case} must state {token}"
+
+
+@pytest.mark.parametrize(
+    "case,field,token",
+    [
+        ("status", "status", "not-applicable"),
+        ("grok-memory", "mapping", "~/.grok/memory"),
+        ("memory-index-script", "mapping", "h_mad_check_memory_index.py"),
+    ],
+    ids=["status", "grok-memory", "memory-index-script"],
+)
+def test_claude_projects_store_row(case: str, field: str, token: str) -> None:
+    row = _row("h-mad-grok", "claude-projects-store", f"claude-projects-store {case}")
+    assert token in getattr(row, field), f"grok claude-projects-store {case} must state {token}"
+    if case == "memory-index-script":
+        section = _required_section("h-mad-grok", "## Memory index", "memory index")
+        assert "~/.grok/memory" in section, "grok Memory index must name its own store"
+        assert "h_mad_check_memory_index.py" in section, "grok Memory index must name the checker"
+
+
+@pytest.mark.parametrize("adapter_id", ["h-mad-grok"], ids=["h-mad-grok"])
+def test_grok_source_cells_format(adapter_id: str) -> None:
+    _required_section(adapter_id, "## Construct mapping", "grok source cells format")
+    table = host_parity.adapter_table(ADAPTERS[adapter_id].read_text(encoding="utf-8"))
+    assert table.problems == [], f"{adapter_id} Construct mapping problems: {table.problems}"
+    assert table.rows, f"{adapter_id} Construct mapping must have at least one row"
+    for row in table.rows:
+        assert (
+            re.search(r"\b\d\d-[a-z-]+\.md\b", row.source)
+            or row.source == "grok inspect"
+            or row.source.startswith("observed:")
+        ), f"{adapter_id} {row.id} source must cite a grok chapter, grok inspect, or observed evidence"
+
+
+@pytest.mark.parametrize(
+    "case,token",
+    [("hook-name", "h-mad-advisor-warn.sh"), ("ctxbudget", "CTXBUDGET"), ("ignore", "ignore")],
+    ids=["hook-name", "ctxbudget", "ignore"],
+)
+def test_hooks_section_advisor_warn_note(case: str, token: str) -> None:
+    section = _required_section("h-mad-grok", "## Hooks", f"advisor warn note {case}")
+    assert token in section, f"grok Hooks advisor warn note {case} must state {token}"
+    if case == "hook-name":
+        assert "a 5 s handler limit, after which the handler fails open" in section, "grok Hooks must state the 5 s fail-open handler limit"
