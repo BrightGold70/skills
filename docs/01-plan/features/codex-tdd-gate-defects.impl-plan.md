@@ -6,6 +6,7 @@
 > docs/01-plan/features/codex-tdd-gate-defects.plan.md (v1.4: step P0, V-0, V-1r, §"Connection
 > enforcement" W1–W6, §"Regression census", §"Success Criteria" stay binding)
 > Branch target: `feature/codex-tdd-gate-defects` (a git worktree; plan §"Convention Prerequisites")
+> 5c baseline: branch `feature/codex-tdd-gate-defects`, worktree `/Users/kimhawk/orca/skills-codex-tdd-gate-defects`, forked from main `a35707b8` (impl-plan v1.2 + delta review v1.2)
 
 ## Executive Summary
 
