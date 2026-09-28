@@ -47,7 +47,7 @@ owner. IDs are stable: a withdrawn row keeps its number.
 | DD-4 | Plan summary-line rule | SGR colour sequences are stripped before a line is matched | Measured: today `_suite_summary` reads a coloured `1 failed, 1 passed` as `(1, 0)`, which `run_suite` scores PASS. The plan's whole-line rule turns that into `UNREADABLE`. Stripping turns it into the correct `FAIL` | Drop the strip; coloured runs then read `no_summary` | Adopted by spec v1.3 (OD-D; FR-4 "Colour", audit-gate change 2) and by plan v1.3's SGR bullet |
 | DD-5 | Spec v1.2 FR-4 classification (7 rules, no final else) | Rule 8: any other parsed summary (0 failed, 0 passed, 0 errors, not `no tests ran`) → `no-tests-ran` | The v1.2 list is not total. Without rule 8 a skipped-only run has no kind | Rule 8 → `no-summary` instead. That keeps FR-1's kind table meaning "`no tests ran`" alone for `no-tests-ran`, and stretches `no-summary` instead. Both kinds DENY | Adopted by spec v1.3 (FR-4 rule 8; FR-1 kind table) |
 | DD-6 | — | **Withdrawn in v1.1** (orchestrator OD-C). The shell policy implements spec FR-3 as written: a contained venv interpreter passes the existing argv rules, H-MAD control allowlist included (D8) | v1.0 narrowed FR-3 to `-m pytest …` without the spec's agreement | — | Spec v1.3 AC-3.6. Adopted by plan v1.3's accounting sentence (control-allowlist row, D8 "Differential") |
-| DD-7 | (not stated in spec v1.2 or plan v1.2) | The Claude gate makes a relative target absolute against the project root, and lexically normalizes it (`..` and `.` folded, `os.path.normpath`), before any check, the exemptions included (D9 step 3; orchestrator OD-G) | Without this, the fast path resolves a relative target against the process cwd while the judge resolves it against the root, and the two disagree. Without the normalization, the root prefix turns `tests/../x.py`, a production file, into an exempt `<root>/tests/../x.py`. The D9 differential publishes the result: two softened cells and two tightened cells | Leave targets raw; the fast path then defers every relative target to the `state` verb | Kept (orchestrator OD-E, OD-G). Spec v1.4 FR-6 and AC-6.15 still read "conditional on design v1.1 keeping DD-7"; owed: the spec resolves the condition and states the normalization |
+| DD-7 | (not stated in spec v1.2 or plan v1.2) | The Claude gate makes a relative target absolute against the project root, and lexically normalizes it (`..` and `.` folded, `os.path.normpath`), before any check, the exemptions included (D9 step 3; orchestrator OD-G) | Without this, the fast path resolves a relative target against the process cwd while the judge resolves it against the root, and the two disagree. Without the normalization, the root prefix turns `tests/../x.py`, a production file, into an exempt `<root>/tests/../x.py`. The D9 differential publishes the result: six softened cells and eight tightened cells over three root shapes; the directory exemptions key on the part of the target below the root (v1.3) | Leave targets raw; the fast path then defers every relative target to the `state` verb | Kept (orchestrator OD-E, OD-G). Spec v1.4 FR-6 and AC-6.15 still read "conditional on design v1.1 keeping DD-7"; owed: the spec resolves the condition and states the normalization |
 | DD-8 | (not stated; today an empty target with an ACTIVE record is allowed) | An empty target on a governed root is refused `judge-error` | OD-4's root cause is payload-shape drift. A payload the gate cannot read yields an empty target, which today is a silent allow. The Codex gate already refuses "could not identify this write target" | Allow on an empty target, as today | Adopted by spec v1.3 (FR-6; AC-6.13) |
 | DD-9 | (not stated) | A Claude-gate target outside the project root has the root alone as its chain | A chain from outside the root is empty, so the target would read `none` and be allowed. Today the root-first reader governs it. This keeps today's refusal | Read `none` for an outside target | Adopted by spec v1.3 (FR-6; AC-6.14) |
 | DD-10 | Plan §"Architecture Considerations", the "Time bound" bullet: "The judge bounds pytest with `subprocess.run(timeout=…)`" | `Popen(start_new_session=True)` with `communicate(timeout=…)`, and `os.killpg` on timeout (D6) | Measured in D6: `subprocess.run(timeout=1)` returned and left the shim's `sleep` alive; the process-group kill left none. A surviving pytest child can write into the tree after the gate decided | `subprocess.run(timeout=…)`, accepting survivors | Adopted by plan v1.3's "Time bound" bullet. v1.2 extends the same bounded run to the name map (D3 step 6, OD-K) |
@@ -676,6 +676,24 @@ governance, Codex authorship, judge):
      sees a `..` segment in an absolute target: `tests/../x.py`, `./tests/../x.py` and
      `<root>/tests/../x.py` all become `<root>/x.py`, a production file.
    - It is lexical, never `realpath`: no symlink is resolved.
+   - **Directory-exemption subject** (v1.3; impl-plan OQ-I3). Before the replacement, step 3 keeps
+     `RAW_TARGET=$TARGET_PATH`. After it, step 3 sets `R=${ROOT_ABS%/}` and decides membership
+     lexically: the target is *inside the root* exactly when `ROOT_ABS` is non-empty and the
+     canonical `TARGET_PATH` matches the `case` pattern `"$R"/*` (the root quoted, so glob
+     characters in its name are literal; `R` is empty for root `/`, and `/*` then admits every
+     absolute target).
+     - Inside the root, step 6's `*/tests/*|*/fixtures/*` alternatives are matched against
+       `DIR_SUBJECT="/${TARGET_PATH#"$R"/}"`, the part below the root with one leading `/`. A
+       `tests` or `fixtures` segment of the root's own ancestry therefore never exempts a
+       write; only a segment below the root does.
+     - Outside the root (the root empty; a relative target whose `..` escapes it; an absolute
+       target elsewhere, or spelled through a path to the root other than its `pwd -P` spelling),
+       the directory exemption holds only when **both** the canonical `TARGET_PATH` and
+       `RAW_TARGET` match one of the two alternatives. `RAW_TARGET` is the old gate's own subject,
+       so no outside-root target is exempt that the old gate gated; the canonical term adds DD-7's
+       `..` tightening, so none is exempt that v1.2's rule gated.
+     - The basename block (`test_*.py|*_test.py|conftest*.py`) and the extension alternatives
+       keep `TARGET_PATH` as their subject: a basename and a suffix never contain a root segment.
    - **Residual, stated exactly.** The exemption patterns key on the lexically normalized path,
      not on the file the host opens. They differ in exactly two cases, and both involve a
      symlinked directory component of the target: (a) a symlink whose own name is `tests` or
@@ -684,7 +702,12 @@ governance, Codex authorship, judge):
      following the link and `normpath` applies before, so the normalized path names a different
      file. (a) holds today for absolute targets, since the old gate resolved no symlink either.
      (b) can exempt only a target whose raw spelling already carries a `tests` or `fixtures`
-     segment, because normalization removes segments and never adds one.
+     segment, because normalization removes segments and never adds one. A third case is
+     outside-root only: a root reached through a symlinked spelling whose own path carries a
+     `tests` or `fixtures` segment exempts an absolute target spelled through it, because such a
+     target is outside `ROOT_ABS` lexically and both its spellings match; the old gate exempted
+     it identically. The root's own ancestry is not a residual inside the root: the subject
+     rule above removes it.
 4. **Fast path** (spec v1.3 AC-6.11). `_chain_may_hold_state "$ROOT_ABS" "$TARGET_PATH" || _allow`.
    The function returns 1 only when it has *proved* that no `docs/.bkit-memory.json` name exists on
    the chain D2's reader walks. On every input where it cannot prove that, it returns 0, and the
@@ -741,7 +764,8 @@ governance, Codex authorship, judge):
    `_read_state` with no `--target`: `active` or `unreadable` → `_refuse judge-error "could not identify the write target"`,
    and `none` → `_allow`.
 6. **Exemptions and the `.py` filter** (DD-1, OD-A). Both `case` blocks keep their exact patterns,
-   then `[[ "$TARGET_PATH" != *.py ]] && _allow`. The patterns see step 3's canonical target.
+   then `[[ "$TARGET_PATH" != *.py ]] && _allow`. The patterns see step 3's canonical target,
+   except that `*/tests/*|*/fixtures/*` are decided by step 3's directory-exemption subject.
    Neither the `state` verb nor the `judge` verb is run for an exempt write (step 2's reader and
    step 3's normalization are the only `python3` processes before this step), and no state is
    read, so an exempt write on an unreadable chain is allowed and the broken state file can be
@@ -828,8 +852,9 @@ governance, Codex authorship, judge):
 narrowing").
 - **Corpus.** {relative, `./`-relative, absolute} × {`tests/x.py`, `fixtures/x.py`,
   `sub/tests/x.py`, `test_x.py`, `x.md`, `x.py`, `tests/../x.py`} × {no state, root state with one
-  ACTIVE step5 record}: 3 × 7 × 2 = 42 cells. The fixture root's own path must hold no `tests` or
-  `fixtures` segment. Each cell runs through the positional entry point with stdin `/dev/null`, process cwd
+  ACTIVE step5 record} × {root shape `<tmp>/repo`, `<tmp>/tests/repo`, `<tmp>/fixtures/repo`}:
+  3 × 7 × 2 × 3 = 126 cells. `<tmp>` itself must hold no `tests` or `fixtures` segment, so the
+  root shape alone decides the root's ancestry. Each cell runs through the positional entry point with stdin `/dev/null`, process cwd
   and `CLAUDE_PROJECT_DIR` both at the fixture root, and `PATH` = a bin dir holding a `codex`
   stub, `jq` and `python3`, then `/usr/bin:/bin`. So every gated production cell stops at the
   Codex-authorship refusal under both gates, and the comparison never depends on a test run.
@@ -845,18 +870,30 @@ narrowing").
   no-state cells allow (rc 0); of the 3 active cells, relative `tests/../x.py` is refused (rc 1),
   and `./tests/../x.py` and `<root>/tests/../x.py` are allowed (rc 0), because both match
   `*/tests/*` before any `..` is folded. So the old gate refuses 6 of the 21 active cells.
-- **Expected softened set:** exactly the two active cells relative `tests/x.py` and relative
-  `fixtures/x.py`. `./tests/x.py` is not softened, because `./tests/x.py` already matches
-  `*/tests/*` today (the old gate allowed it, as it did `./fixtures/x.py`). The three `x.py` cells
-  and relative `tests/../x.py` stay refused. Any other softened cell is a defect.
-- **Expected tightened set:** exactly the two active cells `./tests/../x.py` and absolute
-  `<root>/tests/../x.py`. Step 3 normalizes both to `<root>/x.py`, a production file, which the
-  old gate exempted. Any other tightened cell is a defect.
-- **Residual, stated.** The Claude gate's `*/tests/*` and `*/fixtures/*` match the whole absolute
-  path, root prefix included, while the Codex gate's `_is_production_python` tests only
-  root-relative parts. A project whose root lies under a `tests/` or `fixtures/` directory is
-  therefore fully exempt on the Claude side only. That was already true for absolute targets
-  before this feature, and DD-7 extends it to relative ones.
+- **The root shapes under `tests/` and `fixtures/`** (v1.3, impl-plan OQ-I3), old verdicts
+  executed at skills `89a67198` (gate last changed at `dde1c7ad`) under `/bin/bash` 3.2.57 in a
+  scratch tree (deleted), the same way: all 42 no-state cells allow, and of each shape's 21
+  active cells the old gate refuses exactly 5: relative `tests/x.py`, relative `fixtures/x.py`,
+  relative `x.py`, `./x.py`, and relative `tests/../x.py`. Absolute `<root>/x.py` is allowed
+  (rc 0), because the root prefix matches `*/tests/*` or `*/fixtures/*`.
+- **Expected verdicts per shape.** In every shape, the new gate refuses exactly the six active
+  `x.py` and `tests/../x.py` cells, and allows every other cell.
+- **Expected softened set:** exactly six active cells, relative `tests/x.py` and relative
+  `fixtures/x.py` in each of the three root shapes. `./tests/x.py` is not softened, because
+  `./tests/x.py` already matches `*/tests/*` today (the old gate allowed it, as it did
+  `./fixtures/x.py`). Any other softened cell is a defect; in particular relative `x.py` and
+  `./x.py` under a root beneath `tests/` or `fixtures/` stay refused, which v1.2's
+  whole-path subject would have softened.
+- **Expected tightened set:** exactly eight active cells: `./tests/../x.py` and absolute
+  `<root>/tests/../x.py` in each of the three shapes (step 3 normalizes both to `<root>/x.py`,
+  which the old gate exempted), and absolute `<root>/x.py` in the `tests/` and `fixtures/`
+  shapes (the directory-exemption subject drops the root prefix that exempted it). Any other
+  tightened cell is a defect.
+- **Residual, stated.** Inside the root, both gates now decide the directory exemptions on
+  root-relative segments only (the Codex gate's `_is_production_python` tests the root-relative
+  `relative`). Outside the root they still differ: the Codex gate refuses an outside-root write
+  fail-closed during an active Phase 5, while the Claude gate exempts one only when both its
+  spellings carry a `tests` or `fixtures` segment (step 3), a set the old gate also exempted.
 
 ### D10 — Line formats (FR-1; the `TDD-STATE:` format the spec owes)
 
@@ -1506,8 +1543,9 @@ stamps read the same h-mad tree:
   - the shell-policy relaxation (D8 "Differential", D12), whose expected set now includes the
     H-MAD control-allowlist row (OD-C);
   - DD-7's relative exemption (D9 "DD-7 guard-narrowing differential"), whose expected softened
-    set is exactly two cells and whose expected tightened set is exactly two cells (the
-    traversal row, OD-G), measured against the old gate.
+    set is exactly six cells and whose expected tightened set is exactly eight cells (the
+    traversal row, OD-G, and the root-under-`tests/`/`fixtures/` shapes, OQ-I3), measured
+    against the old gate.
   - The stdin-first target read (OD-B) is not a softening: when both sources name a target, the
     gate decides the one the host actually writes.
 - **Connection enforcement.** W1–W6 are mutated in both directions (plan table); W3 and W4 carry
@@ -1547,3 +1585,4 @@ stamps read the same h-mad tree:
 - v1.0: Initial design (2026-09-28) from spec v1.2 and plan v1.2 at skills 1ef1a782: judge h-mad/scripts/h_mad_tdd_judge.py with state/judge verbs; TDD-STATE and TDD-JUDGE line formats (D10); 40 s whole-judge budget with process-group kill (D6); summary-line grammar with SGR strip and closed word set (D7); Claude gate refusal function, REFUSAL_FORM literal and EXIT trap (D9); venv shell branch for -m pytest only (D8). DD-1..DD-9 depart from plan or spec wording, each with its revert. OQ-D1 (host hook timeouts), OQ-D2 raised.
 - v1.1: Answers design audit cycle 1 (codex p1: 9 must, 1 should; teammate: 3 must, 12 should) against spec v1.3 in the working tree, applying orchestrator OD-A..OD-F (2026-09-28). OD-A: DD-1 kept (exemptions before governance), exempt-write fixtures, Codex-side asymmetry stated. OD-B: stdin target first, $1 fallback only, bounded tty-safe reader, control-character targets unidentifiable. OD-C: DD-6 withdrawn; contained venv executable returned lexically and run through the existing argv rules, control-allowlist row added to the expected softened set. OD-D: open lowercase category grammar with exact-category counts; measured pytest 9.1.1 subtests lines and table rows. OD-E: DD-7 kept with a measured old-versus-new differential (two softened cells). OD-F: D13 rebase contract for grok-codex-fallback D2 and the fourth record field. Also: _chain_may_hold_state fast path replaces _resolve_state_file; non-regular state paths unreadable via O_NONBLOCK open plus fstat; plan notes on every DENY (AC-2.8); present/missing candidate split; blocker= and absolute state-file fields; empty --root a usage error; _payload_cwd_base; W3/W4 remove, force and callee-side mutants; D12 fixture rebuilt (system-site-packages venv, marker shim, per-row oracle, derived versioned spelling); OQ-D1 Claude half made a 5g merge condition; DD-10 and DD-11 added; false reason-pin absence corrected.
 - v1.2: Final corrective revision (2026-09-28): answers codex design audit cycle 2 (6 must, 1 should) and the advisory delta review of v1.1 (12 should, 6 nit), applying orchestrator OD-G..OD-L; not re-audited. OD-G: DD-7 target lexically normalized against the root before the fast path and every exemption; differential gains the tests/../x.py row (42 cells; two softened, two tightened) and a stated symlink residual. OD-H: no blocking state read; Codex _state_status reads through a non-blocking regular-file open (DD-12). OD-I: absence proven only by lstat ENOENT/ENOTDIR in D2 and by the _absent_at searchability rule in the fast path; the Codex per-target chain read runs whatever _any_phase5_status returns (DD-12). OD-J: one _enc encoder; the fallback subfield is a literal tag or invalid: plus one quote pass over the JSON, worked bytes given; empty values encode as a lone %. OD-K: the name map runs through D6's _run_bounded. OD-L: tests pass stdin explicitly (AC-6.2 migration); D13's re-plan list covers Task 12 and Task 14 with an enumerating grep, fold-field spelling left to grok's design. Also: stdin exit-4 rule (DD-13), D12 pytest precondition asserted, D7 open-axis noise residual, DD table Now column and Overview swept to spec v1.4 / plan v1.3, rule-2 wording aligned, AC-6.11b climb described as a precision step.
+- v1.3: Narrow corrective erratum (2026-09-28), §D9 only, answering impl-plan v1.1 OQ-I3 / Task 8 precondition 2 (codex impl-plan audit c1 must 1): under a root beneath `tests/` or `fixtures/`, v1.2 exempted relative `x.py` that the old gate refuses. §D9 step 3 now keeps `RAW_TARGET` and defines the directory-exemption subject: inside the root, `*/tests/*|*/fixtures/*` match `"/${TARGET_PATH#"$R"/}"` (root ancestry never exempts); outside the root, the exemption needs both the canonical and the raw spelling to match (never exempt where the old gate or v1.2 gated). DD-7 differential corpus gains the root shapes `<tmp>/tests/repo` and `<tmp>/fixtures/repo` (126 cells); softened set 6 cells, tightened 8. Executed at skills `89a67198`, /bin/bash 3.2.57, scratch dir (deleted): old gate = `git show HEAD:h-mad/hooks/h-mad-tdd-gate.sh`, new rule = a scratch simulation of steps 3 and 6 only (no production code changed), codex stub, jq and python3 on PATH, stdin /dev/null, cwd and CLAUDE_PROJECT_DIR at the root. Result: 126 cells; all 63 no-state cells allow under both; active refusals old 6/5/5 and new 6/6/6 (repo, tests/repo, fixtures/repo); 14 differing cells = the 6 softened and 8 tightened named in §D9. Root `<tmp>/tests/repo`: positional `x.py` old rc 1, v1.2 rule allow, v1.3 refuse; absolute `<root>/x.py` old rc 0, v1.3 refuse. Outside root: `../x.py` old rc 1, v1.2 allow, v1.3 refuse; `<tmp>/tests/../x.py` old rc 0, v1.3 refuse; an absolute target via a symlinked `…/tests/rl` spelling of a clean root old rc 0, v1.3 allow (stated residual). Swept outside §D9 to keep it true (announced): §D9 step 6 subject sentence, the Supersedes DD-7 row, §"Guard narrowing" counts. D10 and D13 untouched.
