@@ -57,6 +57,12 @@ exists to drift from the real one.
 - **F-NOTOOLS**: F0 with every `tool_call_update.status` set to `null`. It has tool calls, and
   none of them completed.
 - **F-NOTEXT**: F0 with every `text` event removed. It has an `end` event and no final message.
+- **F-NOTOOLTEXT**: F0 with every `tool_call`, `tool_call_update` and `text` event removed. The
+  derivation filters on `type` only, so F0's single `end` event survives: the region is complete,
+  has no non-empty segment, and takes the EMPTY path while holding no `tool_call`. One reading on
+  F0 at the sha256 stated above: 83 lines remain (`thought` 70, `available_commands` 9, `usage` 3,
+  `end` 1), derived with
+  `jq -c 'select(.type!="tool_call" and .type!="tool_call_update" and .type!="text")' <F0>`.
 - **F-DECOY**: F0 with its final text segment (`STATUS: DONE`) replaced by `All done.` and three
   decoys inserted, none of which may be recovered as a verdict:
   - a `thought` event whose `data` is `STATUS: DONE`;
@@ -328,6 +334,11 @@ exists to drift from the real one.
     Nothing is recovered from the previous dispatch's `STATUS: DONE`, stdout is empty, and rc is 3.
   - AC-4.8: With the stub killed by the watchdog (`--timeout 1`, a stub that sleeps after emitting
     F-TRUNC), rc is 124 and the existing rc-124 line reads `a verdict WAS recovered`.
+  - AC-4.9 (**omission clause**): For F-NOTOOLTEXT with stub rc 0, rc is 3, stderr contains
+    `EMPTY final message`, and stderr contains **no** `tool calls completed`. This pins "the stderr
+    line is omitted when the region holds no `tool_call`": a mutant that emits the line
+    unconditionally passes AC-4.6 and fails here. AC-4.6 is its positive pair, because an absence
+    assertion alone passes vacuously when the line is never emitted at all.
 
 ### FR-5: `hmad-dispatch progress` learns `grok-ndjson`
 
@@ -521,7 +532,8 @@ exists to drift from the real one.
     environment handling, including the inherited `GROK_SANDBOX` (FR-3).
   - **D4 statement.** The teammate-leg section, and the `exec grok` documentation, each state all
     three of the following:
-    - grok is measured only on one RED and one stream probe;
+    - grok's quality is measured only on one RED (HemaSuite #28) and one stream probe; the one
+      live `exec grok` smoke before merge is a plumbing check, not a measurement;
     - its GREEN, mutation, wiring and audit precision are unmeasured;
     - the one-codex-round-owed rule applies to grok-gated documents as it does to teammate-gated
       ones.
@@ -637,3 +649,4 @@ exists to drift from the real one.
 ## Version History
 - v1.0: Initial specification draft (2026-09-28). The brainstorm's decisions D1–D4 are applied, and so are the orchestrator's decisions on OQ1–OQ5. OQ3's final-message wording is corrected by measurement against F0 (Assumption A1).
 - v1.1: Plan-v1.0 owed items, operator-decided (2026-09-28). F0 bullet names the sidecar's Re-derivation commands section and carries the two commands it lacks. AC-2.1b exercises the BLOCK-INVALID class one value at a time (false, true, 0, "null", "", "Grok", {}, []) with a JSON-null FALL-THROUGH control. FR-3 and FR-10 disclose the inherited GROK_SANDBOX. Out-of-Scope adds the missing grok write-time test-first gate, disclosed by FR-10. FR-8 defines not-given as absent from argv, with AC-8.2 pinning an explicit 900.
+- v1.2: Plan audit round 2 owed items (2026-09-28): plan.audit.v2.p1 codex must 3 and plan.delta-review.v1.2 must 2 / should 2. New fixture F-NOTOOLTEXT (F0 minus every tool_call, tool_call_update and text event; end survives, 83 lines) and new AC-4.9 pinning the FR-4 omission clause (EMPTY path, no tool calls completed line), with AC-4.6 as its positive pair. FR-10 D4 statement reworded to a QUALITY claim so the plan v1.2 live exec grok plumbing smoke does not falsify it (orchestrator decision); the AC-10.1 needle unmeasured is unchanged.
