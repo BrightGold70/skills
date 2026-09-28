@@ -39,11 +39,14 @@ In scope — the systems spec v1.1 FR-1 to FR-12 touch:
 - the committed probe sidecar `docs/03-analysis/probes/multi-host-runtime/` and the Phase-6
   analysis document `docs/03-analysis/multi-host-runtime.analysis.md` (AC-4.5, AC-4.6, AC-6.1;
   the path h-mad's 6a step parses, `h-mad/SKILL.md` §"6a");
-- the live-smoke record `docs/archive/<YYYY-MM>/multi-host-runtime/multi-host-runtime.live-smoke.md`
-  (FR-11), written in Phase 7 into the directory 7c archived the feature's documents to
-  (`h-mad/references/inline-protocols.md` §"7c — Archive" `mv`s `docs/03-analysis/${FEATURE}*` there
-  before 7d, and the smoke runs after 7f, so a record written under `docs/03-analysis/` would sit
-  outside the archive).
+- the live-smoke record (FR-11), written in Phase 7 at the spec's path
+  `docs/03-analysis/multi-host-runtime.live-smoke.md` and committed at
+  `docs/archive/<YYYY-MM>/multi-host-runtime/multi-host-runtime.live-smoke.md`. 7c
+  (`h-mad/references/inline-protocols.md` §"7c — Archive") `mv`s `docs/03-analysis/${FEATURE}*`
+  before 7d, and the smoke runs after 7f, so 7c has already run when the record is written; a
+  docs-only step between the smoke and 7e re-runs 7c's `mv` and commits the record in the local
+  integration sequence, before the push (design §"Supersedes the plan on" item 10, orchestrator
+  decision OD-7; the procedure is in Convention Prerequisites).
 
 User-visible behaviour: an orchestrator on codex, agy or grok is routed by `SKILL.md` to its
 adapter; an `HMAD_HOST=<codex|agy|grok>` call to the context budget prints
@@ -195,7 +198,9 @@ kinds cascade by construction, so the fixture inventory and the suppression orde
   fixtures are members of this set, not additions. The `ROW_MISSING` fixture **is** AC-3.2's
   mention-only fixture (the adapter lacks the `advisor` row and mentions `advisor` three times in
   prose); it is not a second fixture. Each fixture asserts its produced `(kind, reason)` set equals
-  exactly its own one pair. The design may split a disjunct further; it may not merge two.
+  exactly its own one pair. The design may split a disjunct further; it may not merge two. It
+  splits six (design §D2.6, §"Supersedes the plan on" item 5; adopted by spec v1.3 AC-3.3): 36
+  disjunct fixtures plus 6 splits, **42 kind fixtures** in total.
 - Suppression order (each rule is a guard, with its own mutation): (a) any `REGISTRY_UNREADABLE`
   stops the run after the registry stage; nothing downstream is computed. (b) An entry with
   `BAD_PATTERN` is excluded from `STALE_ENTRY` and `UNDECLARED_SKILL`, and while any entry is
@@ -218,8 +223,8 @@ exclusion alone. The rule applies at every level, not only to the axes:
   fixture `~/.claude/foo` exercises the `~` branch only, and `${HOME}` has 0 occurrences in either
   `SKILL.md` (spec FR-4 calibration). A4 therefore gets three fixtures — `~/.claude/foo`,
   `$HOME/.claude/foo`, `${HOME}/.claude/foo` — each reported `UNREGISTERED` with A4 alone, and each
-  passing once its own branch is removed from A4. This goes beyond AC-4.2's text (owed to the spec,
-  report). A1–A3 contain no alternation; their `(…)*` / `(…)+` groups are repetition, not branches.
+  passing once its own branch is removed from A4. Spec v1.3's AC-4.2 states these per-branch
+  controls. A1–A3 contain no alternation; their `(…)*` / `(…)+` groups are repetition, not branches.
 - **Registry patterns.** The branch expansion, over every registry pattern: the three spellings of
   `H` (`~`, `$HOME`, `${HOME}`), every top-level `|`, every `|` inside a group, and every optional
   `(?:…)?` group taken present and absent, as a cartesian product per entry. Not branches (the
@@ -239,7 +244,8 @@ exclusion alone. The rule applies at every level, not only to the axes:
 
 **Host detection is a declaration, never a sniff.** FR-8 rejects environment-marker detection on
 evidence (this Claude shell carries `CODEX_COMPANION_SESSION_ID`). One value rule, shared by both
-readers: `HMAD_HOST` is compared **exactly** — no case folding, no whitespace strip. Unset and
+readers (one module, `h-mad/scripts/h_mad_host.py`: design §D3, §"Supersedes the plan on" item 6):
+`HMAD_HOST` is compared **exactly** — no case folding, no whitespace strip. Unset and
 empty (`""`) and `claude` take today's code path unchanged; `codex`, `agy`, `grok` are the declared
 non-Claude hosts; every other value (including `Grok` and ` grok`) is unknown.
 
@@ -247,15 +253,15 @@ non-Claude hosts; every other value (including `Grok` and ` grok`) is unknown.
   the `--window` check and before any transcript lookup. A declared non-Claude host prints
   `host_unsupported` whatever `--window` is; an unknown value prints `unknown_host` whatever
   `--window` is. Reason: a declared host makes every reading impossible, and both paths exit 2.
-  The spec does not state the order against `bad_window` (owed, report).
+  Spec v1.3 states this order (FR-8, AC-8.5).
 - `h_mad_resume_decision.decide` reads it as its **first statement**, before the state-file read.
   Under a declared non-Claude host with no `session_id`, `decide()` returns `cannot_judge` whatever
   the state file holds — absent, unreadable, feature absent, or feature present. This is the spec's
   literal FR-9 ("a call without `--session-id` prints `cannot_judge`"), and it is the conservative
   choice: the remedy (pass the minted id) is the same in every case. An unknown value is treated
   as a declared non-Claude host (`cannot_judge` without a session id), because falling back to the
-  legacy opt-out is exactly the false clear FR-9 exists to remove. The spec does not state the
-  unknown-value rule for FR-9 (owed, report).
+  legacy opt-out is exactly the false clear FR-9 exists to remove. Spec v1.3 states the
+  unknown-value rule for FR-9.
 
 **Regression is proven against the base, not asserted.** AC-8.3, AC-10.2's second clause and
 AC-12.2 compare stdout and exit code between the `<base>` scripts and the implemented scripts on
@@ -289,10 +295,10 @@ override does not reach it:
   reordered except the `INSTALL:` verdict line, and every added line is one of — a `SIBLING_*`
   line naming one of the four link paths, an `AGY_SIBLING_COLLISION:` line naming a name that
   P8's `comm -12` command lists for `~/.gemini/config/skills` at the probe's run, or the new
-  verdict line. Any other difference fails the probe. The spec's AC-12.2 ("the new options at
-  their defaults") cannot hold byte-identically on this machine once the links exist; the
-  restatement is owed to the spec (Next Steps), and this plan does not claim AC-12.2 at the real
-  defaults.
+  verdict line. Any other difference fails the probe. Spec v1.2 restated AC-12.2 in exactly
+  these two arms (byte-identity with both roots at absent paths; at the real defaults, equal exit
+  codes and this closed diff), so AC-12.2 is claimed on both arms (design §"Supersedes the plan
+  on" item 8).
 
 **What we deliberately do not touch:** `h-mad/hooks/h-mad-tdd-gate.sh`,
 `h-mad/hooks/h-mad-codex-tdd-gate.py` and `h-mad/hooks/h-mad-advisor-warn.sh` (the first two owned
@@ -412,9 +418,13 @@ Prerequisites), and the code facts v1.2 newly relies on (`h_mad_doc_block_exec.f
   `docs/.bkit-memory.json`.") and the rule "except under `/h-mad status`, which is documented
   read-only and must stay so". FR-11's smoke relies on that.
 - **P14 — spec AC census.** `grep -oE '^  - AC-[0-9]+\.[0-9]+[a-z]?'
-  docs/01-plan/features/multi-host-runtime.spec.md | sort -u | wc -l` → 50 distinct AC ids;
-  `grep -oE '^  - V-[0-9]+\.[0-9]+' … | sort -u | wc -l` → 5 distinct V ids (run at `4152e2be`).
-  Moves only if the spec is revised; §"AC ownership" lists every one of the 50.
+  docs/01-plan/features/multi-host-runtime.spec.md | sort -u | wc -l` → 51 distinct AC ids;
+  `grep -oE '^  - V-[0-9]+\.[0-9]+' … | sort -u | wc -l` → 5 distinct V ids (run at `34c0e962`,
+  spec v1.3 committed at `dffd0814`, working-tree spec unmodified at the run). The one id added
+  since plan v1.2's reading of 50 (at `4152e2be`) is AC-8.5 (the `diff` of the two sorted id lists
+  at `e32ffe5c` and `34c0e962` prints only `AC-8.5`). **Moves** whenever the spec is revised — a
+  spec v1.4 is in progress — so re-run this command against every new spec revision; §"AC
+  ownership" lists every one of the 51.
 - **P15 — the global advisor-warn hook reaches the budget script without `HMAD_HOST`.**
   `~/.claude/settings.json` registers `h-mad-advisor-warn.sh` as `PostToolUse` with matcher `"*"`
   (read with a JSON walk over `hooks`, run at `4152e2be`). The hook passes `--transcript` only from
@@ -465,8 +475,13 @@ gate.
   agy read the **main** tree too. The links point at the main checkout, never at the worktree, so
   no host sees unmerged work — and, by the same fact, no host run before the local merge measures
   this feature (P11). That is why the smoke sits between 7f and 7e.
-- **Skill self-containment.** The registry lives in `h-mad/references/`, and only tests read it
-  (FR-1). `handoff` gains no read of any `h-mad` file at runtime. The handoff adapters' tables name
+- **Skill self-containment.** The two new install roots `~/.agents/skills/...` (codex) and
+  `~/.gemini/config/skills/...` (agy) are allowed by `.h-mad/invariants.md` §"Skill
+  self-containment" only as amended at `76e7af19` (the exception now names both beside
+  `~/.claude/...`, "each overridable by its documented environment variable";
+  `grep -n 'agents/skills' .h-mad/invariants.md` → 1 matching line in that section, run at
+  `34c0e962`). The condition is met by `HMAD_AGENTS_SKILLS_DIR` and `HMAD_AGY_SKILLS_DIR` (below).
+  The registry lives in `h-mad/references/`, and only tests read it (FR-1). `handoff` gains no read of any `h-mad` file at runtime. The handoff adapters' tables name
   construct ids as strings only. Test-side cross-reads have precedent (spec Assumption A5).
 - **The gate reads files only.** No test and no script invokes codex, agy or grok (spec Scope;
   `invariants.base.md` §"No new external dependency"). AC-3.5 is owned by the stubbed-`PATH` test
@@ -507,9 +522,8 @@ gate.
     inside the test, calls the module-level default resolver that `main()` uses and asserts it
     returns the two documented paths; it does **not** run the CLI, so it never checks the real
     roots.
-  The env overrides are an interface the spec's FR-10 does not name, and the spec's hermeticity
-  residual is measured on the wrong axis (the checkout directory name, not the fixture skill
-  names); both are owed to the spec (report).
+  Spec v1.2 names the env overrides in FR-10 and measures its hermeticity residual on the fixture
+  skill names (`h-mad`, `handoff`), which is the axis above.
 
 ## Deliverables
 
@@ -517,7 +531,7 @@ gate.
 |---|---|---|
 | Registry with the seed entries re-derived at the post-rebase base | `h-mad/references/host-constructs.json` (new) | FR-1 |
 | Parity checker (paths, axes and exclusion suffixes as parameters; branch expansion; the adapter table located by `h_mad_doc_block_exec.find_heading` and bounded by `fence_aware_end`) | `h-mad/tests/host_parity.py` (new, not collected) | FR-3, FR-4 |
-| Live-tree nodes (six adapter nodes, one registry/`SKILL.md` node); the 36 disjunct fixtures, the ROW_MISSING one being AC-3.2's; the suppression-rule fixtures; the stubbed-`PATH` AC-3.5 test; the absent-adapter-file control (an adapter path that does not exist yields exactly `TABLE_MISSING reason=no_heading`; a control, not a 37th disjunct fixture); 4 axis-alone controls plus the two further A4 branch controls; 6 suffix controls; the per-branch registry sample test; the `TeamCreate` fixture; the AC-1.2 seed-id test | `h-mad/tests/test_host_construct_parity.py` (new) | FR-1, FR-3, FR-4 |
+| Live-tree nodes (six adapter nodes, one registry/`SKILL.md` node); the 42 kind fixtures (36 disjunct plus 6 splits, design §D2.6), the ROW_MISSING one being AC-3.2's; the suppression-rule fixtures; the stubbed-`PATH` AC-3.5 test; the absent-adapter-file control (an adapter path that does not exist yields exactly `TABLE_MISSING reason=no_heading`; a control, not a 43rd kind fixture); 4 axis-alone controls plus the two further A4 branch controls; 6 suffix controls; the per-branch registry sample test; the `TeamCreate` fixture; the AC-1.2 seed-id test | `h-mad/tests/test_host_construct_parity.py` (new) | FR-1, FR-3, FR-4 |
 | `## Construct mapping` table in each existing adapter, plus FR-8 / FR-9 / FR-10 text | `h-mad/references/codex-runtime.md`, `h-mad/references/agy-runtime.md`, `handoff/references/codex-runtime.md`, `handoff/references/agy-runtime.md` | FR-2, FR-6, FR-8, FR-9, FR-10 |
 | The "typically `~/.gemini/config/skills/<skill>`" sentence reworded to name the FR-10 install path (owed by the spec report) | `h-mad/references/agy-runtime.md`, `handoff/references/agy-runtime.md` | FR-6, FR-10 |
 | grok adapters with version pin, compat toggles, trust, hooks, roles, halt token, table; the h-mad one also states that the global advisor-warn hook's `CTXBUDGET` text on grok is a Claude transcript's reading and must be ignored (P15) | `h-mad/references/grok-runtime.md`, `handoff/references/grok-runtime.md` (new) | FR-2, FR-5, FR-8 |
@@ -531,9 +545,9 @@ gate.
 | Host-declaration tests for both scripts (below), and the shared-value-set agreement test | `h-mad/tests/test_h_mad_host_declaration.py` (new) | FR-8, FR-9 |
 | Install-check root tests (AC-10.1, AC-10.3, AC-10.5, AC-10.6, the absent-roots pin, the override and default controls), passing both new options explicitly except in the two controls | `h-mad/tests/test_h_mad_install_check_roots.py` (new) | FR-10 |
 | Mutation specs for the guards (Success Criteria) | `h-mad/tests/mutation-specs/` (new JSON, or new rows in `context_budget.json`, `resume_decision_cannot_judge.json`, `install_check_siblings.json`) | FR-3, FR-4, FR-8, FR-9, FR-10 |
-| Probe sidecar: the FR-4 calibration command; the seed-coverage probe reporting hits per entry and per branch × declared skill with every zero cell listed; the byte-identity probe; each taking the sha as an argument | `docs/03-analysis/probes/multi-host-runtime/` (new) | FR-1, FR-4, FR-8, FR-10, FR-12 (AC-4.5, AC-4.6, AC-8.3, AC-10.2, AC-12.2) |
-| Pre-change gap table (construct × adapter, `addressed`/`absent`, with its sha), the AC-4.6 record, the branch classification, the byte-identity reading (arms A and B) and the 5c link check | `docs/03-analysis/multi-host-runtime.analysis.md` (new; moved by 7c to `docs/archive/<YYYY-MM>/multi-host-runtime/`) | FR-4, FR-6 (AC-4.5, AC-4.6, AC-6.1), FR-12 |
-| Live-smoke record, one section per host | `docs/archive/<YYYY-MM>/multi-host-runtime/multi-host-runtime.live-smoke.md` (new; written after 7f into the directory 7c created, and committed on `main` before 7e) | FR-11 |
+| Probe sidecar: the FR-4 calibration command; the seed-coverage probe reporting hits per entry and per branch × declared skill with every zero cell listed; the byte-identity probe; each taking the sha as an argument; the smoke assertions `smoke_assert.py` (`v111`, `v112`, `rehearse`) and its `rehearsal/` cases (design §D8, §D10, §"Supersedes the plan on" item 3) | `docs/03-analysis/probes/multi-host-runtime/` (new) | FR-1, FR-4, FR-8, FR-10, FR-11, FR-12 (AC-4.5, AC-4.6, AC-8.3, AC-10.2, AC-12.2) |
+| Pre-change gap table (construct × adapter, `addressed`/`absent`, with its sha), the AC-4.6 record, the branch classification, the byte-identity reading (arms A and B), the 5c link check, and the smoke-assertion rehearsal record (every case's printed verdict and the real-log replays; design §"Supersedes the plan on" item 4) | `docs/03-analysis/multi-host-runtime.analysis.md` (new; moved by 7c to `docs/archive/<YYYY-MM>/multi-host-runtime/`) | FR-4, FR-6 (AC-4.5, AC-4.6, AC-6.1), FR-12 |
+| Live-smoke record, one section per host | written at `docs/03-analysis/multi-host-runtime.live-smoke.md` (the spec FR-11 path); archived to `docs/archive/<YYYY-MM>/multi-host-runtime/multi-host-runtime.live-smoke.md` by the docs-only step after the smoke (it re-runs 7c's `mv`) and committed on `main` in the local integration sequence, before 7e (Convention Prerequisites; design §"Supersedes the plan on" item 10, OD-7) | FR-11 |
 
 Host-declaration fixtures, named here because two of them are what kill W1's ordering mutants:
 per host in `codex agy grok`, run separately — (a) AC-8.1's valid-transcript fixture; (b) no
@@ -555,7 +569,7 @@ scripts: `ls h-mad/tests/mutation-specs | grep -i -E 'budget|resume|install'` �
 
 ## AC ownership
 
-Every one of the 50 spec AC ids (P14) has exactly one owner here; a test module owns it, or a
+Every one of the 51 spec AC ids (P14, spec v1.3 at `34c0e962`) has exactly one owner here; a test module owns it, or a
 record does. An AC named nowhere is the defect this table exists to prevent.
 
 | AC ids | Owner |
@@ -564,7 +578,7 @@ record does. An AC named nowhere is the defect this table exists to prevent.
 | AC-2.1, AC-2.2, AC-6.2, AC-7.2 | `test_host_construct_parity.py`'s live-tree nodes (the gate's `ROW_*`, `CELL_EMPTY` and `UNREGISTERED` checks are these ACs) |
 | AC-2.3–AC-2.5, AC-5.1–AC-5.7, AC-6.3–AC-6.5, AC-7.1, AC-7.3, AC-8.4, AC-9.3, AC-9.4, AC-10.4 | `test_host_runtime_docs.py` |
 | AC-6.6, AC-9.2 | the existing `test_h_mad_codex_runtime.py`, `test_handoff_codex_runtime.py`, `test_h_mad_resume_decision.py`, `test_h_mad_feature_lock.py`, unchanged, in the full suite |
-| AC-8.1, AC-8.2, AC-9.1 | `test_h_mad_host_declaration.py` |
+| AC-8.1, AC-8.2, AC-8.5, AC-9.1 | `test_h_mad_host_declaration.py` (AC-8.5, the order against `bad_window`: fixture (d) below per declared host, `test_budget_host_check_precedes_window_check`, and `test_budget_unknown_host_precedes_window_check[zzz]`, design §"Test Plan"; the unset-`HMAD_HOST` `--window 0` → `bad_window` clause is today's behaviour, held by the existing `test_h_mad_context_budget.py` and the AC-8.3 double run) |
 | AC-8.3 | the existing `test_h_mad_context_budget.py` run twice in the full-suite gate, once with `HMAD_HOST` unset and once with `HMAD_HOST=claude` exported for that run; plus the byte-identity probe |
 | AC-10.1, AC-10.3, AC-10.5, AC-10.6 | `test_h_mad_install_check_roots.py` |
 | AC-10.2 | first clause: the existing `test_h_mad_install_check.py`, unchanged, under the conftest override; second clause: the byte-identity probe at `<base>`, plus a permanent pin in `test_h_mad_install_check_roots.py` that the absent-roots run prints no line naming either root and no `AGY_SIBLING_COLLISION:` line |
@@ -606,14 +620,14 @@ landed (its baseline and anchor checks) before scoring it.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | `grok-codex-fallback` and `codex-tdd-gate-defects` both edit `h-mad/SKILL.md` and may add Claude constructs | The seed registry and calibration are stale at the real base; the catch-all fails or a new token is registered wrongly | Rebase before 5c; re-run the committed calibration and seed-coverage probes at the new base (AC-4.6); a false hit is fixed by narrowing an axis with a new control, never by registering a non-construct |
-| `codex-tdd-gate-defects` changes the Claude TDD gate, on one of three branches its FR-0 selects | AC-5.2's reasons (i) and (ii) may be false at `<base>`; which ones depends on the branch | Per branch, at `<base>` (sibling spec AC-6.5–AC-6.7): **`E1_BLOCKS`** (AC-6.6) and **`INCONCLUSIVE`** (AC-6.7) keep `exit 1`, so reason (i) stands as the spec states it. **`E1_DOES_NOT_BLOCK`** (AC-6.5) replaces it: form (a), rc 2, is grok's documented deny (F9), so reason (i) is false; form (b), rc 0 plus `hookSpecificOutput.permissionDecision == "deny"`, is not a grok-documented deny form (F9 documents exit 2 and a stdout `{"decision":"deny"}`), so reason (i) becomes "deny form undocumented on grok". Reason (ii): the sibling's payload read (its OD-4) reads `tool_input.file_path`, then top-level `file_path`, then argv; grok's camelCase `toolInput` (F8) supplies none of them, so reason (ii) is re-pointed, not removed. This plan does **not** restate AC-5.2. Re-run P5 at `<base>` and read the sibling's recorded FR-0 branch; if the result differs from the spec's AC-5.2 text, the spec's AC-5.2 and its doc test are revised from that measurement before Phase 5 writes the grok adapter (owed to the spec, report). The halt token `step5:grok_tdd_hook_unverified` stays in every branch |
+| `codex-tdd-gate-defects` changes the Claude TDD gate, on one of three branches its FR-0 selects | AC-5.2's reasons (i) and (ii) may be false at `<base>`; which ones depends on the branch | Reason (i) is keyed on the gate's **refusal form measured at `<base>`**, as spec v1.3 AC-5.2's three-row table states (design §"Spec restatements this design depends on", AC-5.2): `exit 1` (the sibling has not merged, or its `INCONCLUSIVE` branch, AC-6.7, left the gate unchanged; `grep -c '^\s*exit 1\s*$' h-mad/hooks/h-mad-tdd-gate.sh` → 5 matching lines at `34c0e962`) keeps reason (i), "the gate refuses by `exit 1`, which grok treats as fail-open"; form (a), rc 2 (`exit 2`), gives no reason (i), because rc 2 is grok's documented `PreToolUse` deny (F9); form (b), rc 0 plus `hookSpecificOutput.permissionDecision == "deny"`, gives no reason (i) either, because grok documents `hookSpecificOutput.permissionDecision` as its **canonical** decision field (`grep -n 'permissionDecision' ~/.grok/docs/user-guide/10-hooks.md` → 1 matching line: "The canonical `permissionDecision` decides when present", read at `34c0e962`; operator-local, uncommitted). Any other reading halts to the operator. v1.2 was wrong twice here: it called form (b) "not a grok-documented deny form", and it said `E1_BLOCKS` keeps `exit 1`, where the sibling spec's AC-6.6 reads "`exit 1` is **not** kept" (`git show 34c0e962:docs/01-plan/features/codex-tdd-gate-defects.spec.md | grep -n 'AC-6.6 (branch'`; the rule dates from its v1.1, text unchanged through v1.3), so on `E1_BLOCKS` the gate is at form (a) or (b). Reason (ii): the sibling's payload read (its OD-4) reads `tool_input.file_path`, then top-level `file_path`, then argv; grok's camelCase `toolInput` (F8) supplies none of them, so reason (ii) is re-pointed, not removed. 5c re-runs P5 at `<base>` and records the form as `REFUSAL_FORM_AT_BASE` (design Implementation Order step 2); the doc test pins that row's token. The halt token `step5:grok_tdd_hook_unverified` stays in every row |
 | `codex-tdd-gate-defects` adds a shared judge script that the Claude gate calls | AC-5.2 reason (iii) (pytest inside grok's 5 s timeout) may change in cost | Re-read the gate at the post-rebase base; reason (iii) is stated against that tree |
 | Sequencing with `codex-tdd-gate-defects` over `~/.agents/skills/h-mad` | That feature's spec §"Live verification" V-1 bullet says the install "is owned by feature `multi-host-runtime`, and V-1 cannot run until it lands", and its plan v1.0 §"Requirements" says V-1 "is blocked on `multi-host-runtime`", while the merge order puts that feature first — a cycle if "lands" means "merges" | Broken by the operator pre-step (Convention Prerequisites): the four links are created before, and independently of, any merge. They point at `main` and need no feature code. V-1 needs the link to exist, not this feature merged. This feature's FR-10 adds only the install-check and the adapter docs. The sibling plan already states V-1 "is not a merge condition of this feature" (its §"Requirements"), so the merge cycle was already dissolved for merges; what the pre-step buys is that V-1 can **run** before this feature merges. Owed to the sibling spec and plan, over the class "every sibling sentence that says the `~/.agents/skills/h-mad` install is owned by, or blocks V-1 on, `multi-host-runtime`" — `grep -n 'multi-host-runtime' docs/01-plan/features/codex-tdd-gate-defects.{spec,plan}.md` (run at `2f262f8a`) gives four such sentences: the spec's §"Live verification" V-1 bullet ("V-1 cannot run until it lands"), the spec's Out-of-Scope bullet "Installing `~/.agents/skills/h-mad`, including its `h_mad_install_check.py` entry. This is owned by `multi-host-runtime`", the plan's §"Requirements" ("V-1 is blocked on `multi-host-runtime`"), and the plan's Out-of-Scope bullet "Installing `~/.agents/skills/h-mad` (owned by `multi-host-runtime`; V-1 depends on it)". Each is restated as "needs the operator-created `~/.agents/skills/h-mad` link (pre-step in `multi-host-runtime`'s plan); `multi-host-runtime` owns only its install-check entry". The same grep's other hits (merge order, the shared-file table, grok's `exit 1`) are outside the class (report) |
-| The spec says this feature edits `h-mad/references/agent-substrate.md`, but no FR names it | A rebase conflict is expected where none exists, or an unplanned edit appears | `grep -n agent-substrate docs/01-plan/features/multi-host-runtime.spec.md` → only the sequencing bullet (unit: matching lines, 2; run at `ae7593a`). The plan treats the file as read-only here; raised to the spec |
+| The spec says this feature edits `h-mad/references/agent-substrate.md`, but no FR names it | A rebase conflict is expected where none exists, or an unplanned edit appears | The plan treats the file as read-only here. Spec v1.3 corrected the sequencing bullet: `git show 34c0e962:docs/01-plan/features/multi-host-runtime.spec.md \| grep -n agent-substrate` → 1 matching line outside the Version History, "`grok-codex-fallback` also edits `h-mad/references/agent-substrate.md`" (run at `34c0e962`; v1.2 read 2 matching lines at `ae7593a`, both in the bullet that named this feature) |
 | A seed pattern's branch is dead, hidden by a live sibling branch | A construct's rename goes unnoticed; the entry stays green on the other branch | The per-branch sample test (Implementation Strategy) proves every branch live against a literal sample; the probe prints every zero cell (P2b) and the Phase-6 document classifies each |
 | Existing install-check tests read the real new roots | Once the operator's links exist, their stdout changes while they still pass (AC-10.2, AC-12.2 broken silently) | The conftest env override, the `None`-default `check()` keywords, and the override and default controls (Architecture Considerations). The byte-identity probe's install-check arm A runs with both overrides at absent paths and must be byte-identical; its arm B runs at the real defaults with the four links present (checked at 5c) and must show only the closed set of added lines (Implementation Strategy); the Phase-6 record states `ls -ld` and `readlink -f` of all four |
 | A non-Claude orchestrator omits `HMAD_HOST` (spec FR-8 residual) | The slug walk measures a Claude transcript for the same cwd | The adapters instruct the inline declaration; the live smoke checks it is followed. No mechanism detects the omission (spec Out-of-Scope) |
-| On grok, the global advisor-warn hook injects a `CTXBUDGET` verdict computed from the newest Claude transcript for the cwd (P15) | FR-8's goal fails on a path the declaration does not reach: the grok orchestrator reads a Claude reading as its own | The h-mad grok adapter states it and says to ignore that text (doc test); the grok smoke records whether any `CTXBUDGET:` text appears in its log. A hook-side stand-down is out of this plan's FR set; whether the spec adds one is owed to the spec (report) |
+| On grok, the global advisor-warn hook injects a `CTXBUDGET` verdict computed from the newest Claude transcript for the cwd (P15) | FR-8's goal fails on a path the declaration does not reach: the grok orchestrator reads a Claude reading as its own | The h-mad grok adapter states it and says to ignore that text (doc test); the grok smoke records whether any `CTXBUDGET:` text appears in its log. There is no hook-side stand-down: spec v1.3 says the hook "does **not** stand down on grok in this feature" (FR-5 §"Hooks") and lists a stand-down under Out-of-Scope, so the adapter note and the smoke's `CTXBUDGET:` count are the whole mitigation |
 | The smoke measures pre-feature code and reads as a pass (P11) | FR-11's evidence is about the wrong tree | The smoke runs only after 7f's local merge, and asserts `main`'s `HEAD` is that merge, that the feature tip is its ancestor, and that each host's skill link resolves to `main`'s `h-mad` (Convention Prerequisites) |
 | codex does not load skills from `~/.agents/skills` (spec Assumption A2) | The codex smoke cannot find h-mad | The smoke halts, the merge is reverted, and the spec's A2 is corrected; never a pass |
 | A host cannot run (absent, unauthenticated, out of quota, deadline, non-zero rc, no final message) | No evidence for that host | Each run is bounded by `--timeout`; any of these halts. Nothing is pushed on "not run" (this plan's Phase-7 rule: 7e runs only after every host's smoke passed); the recovery block reverts the unpushed integration (Convention Prerequisites) |
@@ -693,8 +707,9 @@ landed (its baseline and anchor checks) before scoring it.
   through links into the main checkout (P11), so only once 7f has merged the feature branch into
   local `main` does a host run exercise this feature's code; no earlier smoke tests this feature.
   Order: 7d commit → 7f integrate → if 7f reports `identity=n`, the full coupled suite on `main` →
-  the smoke for each host in `codex agy grok` → the smoke record written and committed on `main`
-  (docs only) → 7e push. The Phase-7 gate runs before 7d and does not see the smoke; the smoke
+  the smoke for each host in `codex agy grok` → the smoke record written at
+  `docs/03-analysis/multi-host-runtime.live-smoke.md` → the archive step below, which moves it and
+  commits it on `main` (docs only) → 7e push. The Phase-7 gate runs before 7d and does not see the smoke; the smoke
   script below is its own gate.
 
   **The 7f invocation for this layout.** The feature branch lives in a worktree and `main` is
@@ -726,7 +741,9 @@ landed (its baseline and anchor checks) before scoring it.
   PRE=$(G rev-parse --verify "<first run: $MERGE^1; a re-run: the PRE its halt report recorded>^{commit}") || { echo "HALT PRE unresolvable"; exit 1; }
   TIP=$(G rev-parse --verify "feature/multi-host-runtime^{commit}") || { echo "HALT feature branch unresolvable"; exit 1; }
   D="$REPO/h-mad/bin/hmad-dispatch"; M="$REPO/docs/.bkit-memory.json"; A="$REPO/h-mad/references/$H-runtime.md"
+  P="$REPO/docs/03-analysis/probes/multi-host-runtime/smoke_assert.py"
   # --- part 1: preconditions. A stop here reverts nothing.
+  test -f "$P" || { echo "HALT smoke_assert.py absent from main"; exit 1; }
   test "$(G rev-parse HEAD)" = "$MERGE" || { echo "HALT main is not at MERGE"; exit 1; }
   G merge-base --is-ancestor "$TIP" HEAD || { echo "HALT feature tip not merged"; exit 1; }
   G merge-base --is-ancestor "$PRE" HEAD || { echo "HALT PRE is not an ancestor of HEAD"; exit 1; }
@@ -758,28 +775,6 @@ landed (its baseline and anchor checks) before scoring it.
     echo "RECOVERED pre=$PRE merge=$MERGE head=$(G rev-parse HEAD)"; exit 1
   }
   stop() { echo "$1"; recover; }
-  v111() {  # $1 = log. Adapter read before any h-mad script ran.
-    a=$(grep -n -m1 -F "$AH" "$1" | cut -d: -f1)
-    test -n "$a" || a=$(grep -n -m1 -F "references/$H-runtime.md" "$1" | cut -d: -f1)
-    test -n "$a" || { echo "FAIL V-11.1 no adapter read in log"; return 1; }
-    s=$(grep -n -m1 -E 'h_mad_[a-z0-9_]+\.py|hmad-dispatch ' "$1" | cut -d: -f1)
-    test -z "$s" || test "$a" -lt "$s" || { echo "FAIL V-11.1 a script ran before the adapter was read"; return 1; }
-    test "$H" != grok || python3 -c 'import json,sys
-  ok=False
-  for l in open(sys.argv[1]):
-      try: e=json.loads(l)
-      except ValueError: continue
-      if isinstance(e,dict) and e.get("type")=="system" and e.get("subtype")=="init": ok="h-mad" in (e.get("skills") or []); break
-  sys.exit(0 if ok else 1)' "$1" || { echo "FAIL V-11.1 grok init skills lacks h-mad"; return 1; }
-  }
-  v112() {  # $1 = final message, $2 = record JSON. Parsed fields equal the record, null included.
-    python3 -c 'import json,re,sys
-  out,rec,f=open(sys.argv[1]).read(),json.loads(sys.argv[2]),sys.argv[3]
-  m=list(re.finditer(r"^HMAD-STATUS feature=(\S+) last_completed_phase=(.*?) halt_reason=(.*)$",out,re.M))
-  assert len(m)==1, len(m)
-  g=m[0]
-  assert g[1]==f and json.loads(g[2])==rec["last_completed_phase"] and json.loads(g[3])==rec["halt_reason"]' "$1" "$2" "$F" || { echo "FAIL V-11.2 status line absent, doubled, or unequal to the record"; return 1; }
-  }
   # --- part 2: the host run. A stop here calls recover.
   "$D" exec "$H" "$S/prompt.txt" --cd "$REPO" --out "$S/out" --log "$S/log" --timeout 900; RC=$?
   test "$RC" -eq 0 || stop "HALT rc=$RC (124 = deadline)"
@@ -787,8 +782,8 @@ landed (its baseline and anchor checks) before scoring it.
   G status --short > "$S/after" || stop "HALT git status"
   cmp -s "$S/before" "$S/after" || stop "FAIL V-11.3 tree moved"
   test "$(shasum -a 256 "$M" | awk '{print $1}')" = "$B_SHA" || stop "FAIL V-11.3 state file sha256 changed"
-  v112 "$S/out" "$B_REC" || stop "FAIL V-11.2"
-  v111 "$S/log" || stop "FAIL V-11.1"
+  r=$(python3 "$P" v112 --out "$S/out" --record "$B_REC" --feature "$F"); test "$r" = "PASS V-11.2" || stop "${r:-UNREADABLE V-11.2 reason=no_output}"
+  r=$(python3 "$P" v111 --host "$H" --log "$S/log" --root "$REPO"); test "$r" = "PASS V-11.1" || stop "${r:-UNREADABLE V-11.1 reason=no_output}"
   echo "SMOKE-PASS host=$H merge=$MERGE"
   ```
 
@@ -805,14 +800,32 @@ landed (its baseline and anchor checks) before scoring it.
   HMAD-STATUS feature=multi-host-runtime last_completed_phase=<json> halt_reason=<json>
   ```
 
-  **The assertions are rehearsed before 7f**, on the rebased tree, by sourcing the same `v111` /
-  `v112` definitions (not a copy) with `H` and `AH` set and hand-made inputs in `$S`: V-11.1 — a
-  log naming the adapter H1 before an `h_mad_x.py` line must pass; the reverse order, and a log
-  with no adapter mention, must each print `FAIL V-11.1`; for `H=grok`, an `init` line without
-  `h-mad` must fail. V-11.2 — a message with one correct line must pass; a wrong `halt_reason`, a
-  non-null value where the record holds `null`, and two `HMAD-STATUS` lines must each print
-  `FAIL V-11.2`. Each rehearsal case records its printed verdict in the Phase-6 document; a case
-  that does not print its expected verdict blocks 7f.
+  **The assertions are the design's V-11.1 and V-11.2** (design §D10; §"Supersedes the plan on"
+  items 1–3): one committed file, `smoke_assert.py`, called by the smoke and by the rehearsal
+  alike, whose verdict is its stdout token, never `$?`. V-11.1 counts only what the host **asked
+  for** (tool name plus input), never tool output; a mention is neither an execution nor a read; a
+  read needs a success signal and returned text holding the file's first `# ` heading; the adapter
+  must be read before any h-mad script runs, and a script run must carry `HMAD_HOST=<H>` inline.
+  For grok, the `streaming-json` `available_commands` event listing `h-mad` is a precondition, and
+  the skill load is shown only by an observed `SKILL.md` read. The verdict is one of `PASS`, `FAIL`,
+  `UNVERIFIED` or `UNREADABLE`, and every token but `PASS` is a part-2 stop. **`UNVERIFIED`
+  reverts**: it takes the same `recover` path as `FAIL` (design OD-b option 1). This plan keeps
+  that rule; a no-revert halt would be a change to this part-2 rule and is not made. The design's
+  residual that grok inlines skill bodies, so the grok arm may halt `UNVERIFIED` on every run
+  (design §D10 Residuals), is the orchestrator's to accept. `v112` keeps this plan's logic (one
+  parsed `HMAD-STATUS` line equal to the record, `null` included), moved into Python.
+
+  **The assertions are rehearsed in Phase 6** (design §"Supersedes the plan on" item 4), on the
+  rebased tree, by `smoke_assert.py rehearse` over the committed `rehearsal/` cases (design §D10,
+  "Rehearsal cases": R1–R15 per host, grok's R5 and verbatim `available_commands` line, `v112`'s
+  four cases — a correct line passes; a wrong `halt_reason`, a non-null value where the record
+  holds `null`, and two `HMAD-STATUS` lines each print `FAIL V-11.2` — and the replay of the three
+  committed real logs). Each case's printed verdict is recorded in the Phase-6 document,
+  `docs/03-analysis/multi-host-runtime.analysis.md`; a case that does not print its expected
+  verdict blocks 7f. If `smoke_assert.py` changes after Phase 6, the rehearsal is re-run and the
+  smoke record says so. The rehearsal runs before 7c, so its record is archived with the Phase-6
+  document; `rehearsal/` and `smoke_assert.py` sit under `docs/03-analysis/probes/`, which 7c's
+  `mv docs/03-analysis/${FEATURE}*` glob does not match, so the smoke can still call them after 7c.
 
   The V-11.3 observables are the spec's: `git status --short` (tracked and untracked) before and
   after, and the sha256 of the whole `docs/.bkit-memory.json` — a write to any key, or a byte-only
@@ -823,18 +836,36 @@ landed (its baseline and anchor checks) before scoring it.
   the main checkout's state file while the smoke runs. V-11.2 compares the host's one
   `HMAD-STATUS` line, parsed, with the record read directly; residual: the line is the host's
   transcription of the status output, and a `last_completed_phase` value whose JSON text contains
-  ` halt_reason=` would mis-split. V-11.1 prefers the adapter's H1 text, which does not occur in
-  `h-mad/SKILL.md` (`grep -c -F` of each existing adapter's H1 on it → 0 matching lines, run at
-  `2f262f8a`), over the adapter path, which `SKILL.md`'s own `## Host runtime` text also contains;
-  residual: a log that records `SKILL.md`'s text but not the adapter's content can pass on the path
-  alone. `--timeout 900` is a bound chosen, not measured. The exact `exec` options beyond those
+  ` halt_reason=` would mis-split. V-11.1's residuals (unclassifiable commands, run-time-assembled
+  script names, unobserved input or output shapes) are the design's, stated in §D10; each ends in
+  `UNVERIFIED` or `FAIL`, never a pass. `AH`, the adapter's H1, is still read in part 1: it feeds
+  the prompt-names-the-adapter precondition. `--timeout 900` is a bound chosen, not measured. The exact `exec` options beyond those
   shown are whatever the merged wrapper documents for `$H` (`agent-substrate.md` §"Verbs"). For
   grok, the record also states `grep -c 'CTXBUDGET:' "$S/log"` (P15). The record — `readlink -f`
   of `$L`, host version, `MERGE`, `PRE`, command, rc, `--out`, the session-id probe (V-11.4) and
-  cost where reported (V-11.5) — goes into
-  `docs/archive/<YYYY-MM>/multi-host-runtime/multi-host-runtime.live-smoke.md`, the directory 7c
-  created. A host that cannot run is a halt, never a pass, and 7e never runs after any `HALT`,
-  `FAIL` or `RECOVERED`.
+  cost where reported (V-11.5) — is written at `docs/03-analysis/multi-host-runtime.live-smoke.md`
+  (the spec FR-11 path). A host that cannot run is a halt, never a pass, and 7e never runs after
+  any `HALT`, `FAIL`, `UNVERIFIED`, `UNREADABLE` or `RECOVERED`.
+
+  **Archiving the smoke record (orchestrator decision OD-7; design §"Supersedes the plan on" item
+  10 and §"When the smoke record is archived").** 7c runs before 7f and the smoke after it, so
+  7c's `mv` has already run when the record is written. After every host printed `SMOKE-PASS`, a
+  docs-only step runs on `main`, in this order, before 7e:
+  1. `A=$(ls -d docs/archive/*/multi-host-runtime)` must name exactly one directory, the one 7c
+     created; otherwise print `HALT archive directory not unique` and stop. It reads the directory
+     rather than recomputing `<YYYY-MM>`, so a month boundary between 7c and the smoke cannot split
+     the archive.
+  2. `mv docs/03-analysis/multi-host-runtime* "$A"/` — 7c's own glob and target, without 7c's
+     `2>/dev/null || true`, so a failed move is not masked. The glob does not match
+     `docs/03-analysis/probes/`.
+  3. `test -f "$A/multi-host-runtime.live-smoke.md"` and
+     `test ! -e docs/03-analysis/multi-host-runtime.live-smoke.md`; if either fails, print
+     `HALT smoke record not archived` and stop.
+  4. The docs-only commit on `main`, holding the record at its archive path; then 7e pushes.
+
+  The record is therefore written at the spec's path and committed at this plan's path, in the
+  same local integration sequence and before the push. A halt in this step is a halt before 7e;
+  it reverts nothing, because every host already passed.
 
   **Re-integration after a recovery**, once the cause is cleared, never by `reset --hard`: first
   `git revert --no-edit` each commit `recover` wrote, newest first, which restores the feature on
@@ -879,9 +910,8 @@ landed (its baseline and anchor checks) before scoring it.
 - AC-8.3, AC-10.2's second clause and AC-12.2 byte-identity is shown by the byte-identity probe at
   `<base>`: the budget and decision arms and install-check arm A byte-identical; install-check arm
   B, at the real defaults with the four links present, showing only its closed set of added lines
-  (Implementation Strategy). AC-12.2 at the real defaults is not claimed until the spec restates
-  it (Next Steps).
-- AC-3.3: the 36 disjunct fixtures, each asserting its produced `(kind, reason)` set equals its own
+  (Implementation Strategy). AC-12.2 is claimed on both arms, as spec v1.2 restated it.
+- AC-3.3: the 42 kind fixtures (36 disjunct plus 6 splits), each asserting its produced `(kind, reason)` set equals its own
   one pair; each suppression rule (a)–(e) has a fixture that would yield two kinds without it.
 - AC-4.2 and AC-4.3: each axis, each A4 branch and each suffix proved alone, and each proved to
   discriminate by its removal.
@@ -900,8 +930,9 @@ landed (its baseline and anchor checks) before scoring it.
 - Each of W1–W3 fails its `WIRE-PIN` under a wire-scoped revert, and each force-fire fails its
   named test.
 - The live smoke printed `SMOKE-PASS` for codex, agy and grok with complete records, each run on
-  `main` after 7f and before 7e, with `main`'s `HEAD` equal to the unpushed `MERGE`; every
-  rehearsal case printed its expected verdict before 7f; a halted host is a halt, not a pass, and a
+  `main` after 7f and before 7e, with `main`'s `HEAD` equal to the unpushed `MERGE`; the record is
+  archived and committed by the docs-only step before 7e; every rehearsal case printed its
+  expected verdict in Phase 6, before 7f; a halted host is a halt, not a pass, and a
   stop after the preconditions ends in `RECOVERED` or a named `HALT`, never in 7e.
 - Both coupled suites green in full before 7f.
 
@@ -920,23 +951,31 @@ landed (its baseline and anchor checks) before scoring it.
 
 ## Next Steps
 
-v1.2 is the corrective revision after the second and final plan audit round; it is not
-re-audited. Next: operator review, then Phase 4. Before Phase 4, the spec owes: (1) AC-5.2
-revised from the gate measured at `<base>` if the sibling's FR-0 branch makes its text false
-(Risks); (2) FR-10's hermeticity residual re-measured on the fixture-skill-name axis and the two
-env overrides named; (3) FR-8's order against `bad_window` and FR-9's unknown-value and
-normalisation rule; (4) AC-4.2's two further A4 branch controls, and AC-3.3's "fourteen kinds means
-fourteen fixtures" restated as one fixture per disjunct (36 here) with the `reason=` field; (5)
-whether the advisor-warn hook stands down on grok; (6) the sequencing bullet naming
-`agent-substrate.md` as edited by this feature when no FR edits it; (7) AC-12.2 restated, because
-"the new options at their defaults" cannot be byte-identical once the operator's links exist
-(Implementation Strategy, the byte-identity arms): byte-identity with both new roots pointed at
-absent paths, plus, at the real defaults, a closed set of added lines. The sibling
-`codex-tdd-gate-defects` spec and plan owe the restated V-1 dependency in all four sentences
-(Risks). The committed probe sidecar (Deliverables) should land before the design is audited, so
-the design can cite it rather than inline the commands.
+v1.3 is a propagation revision after Phases 3 and 4 exited at their round caps; it is not
+re-audited, and it adds no scope. It adopts design v1.2 (`34c0e962`) §"Supersedes the plan on"
+items 1–10: the grok `available_commands` precondition (1), input-event ordering (2) and the one
+`smoke_assert.py` file (3) replace this plan's `v111`/`v112` shell bodies (Convention
+Prerequisites, the smoke script); the rehearsal in Phase 6, recorded in the Phase-6 document (4);
+42 kind fixtures (5); the `h_mad_host.py` module (6, Implementation Strategy); the agy root by
+partitioning `check_siblings` (7; the Deliverables "name × state rule" is implemented that way,
+design §D6); AC-12.2 on both arms (8); an unknown `HMAD_HOST` value printed bare only when it
+fully matches `[A-Za-z0-9._-]+`, JSON-encoded otherwise (9, design OD-a, restated in spec v1.3
+FR-8); and the smoke record written at the spec path and archived by the docs-only step (10,
+OD-7).
+
+The seven items v1.2 owed the spec have landed: (2) and (7) in spec v1.2 (its Version History:
+the FR-10 hermeticity residual corrected, AC-12.2 restated); (1), (3), (4), (5) and (6) in spec
+v1.3 (spec v1.3 author report; AC-5.2's form-keyed table, FR-8/FR-9, AC-3.3/AC-4.2, "does not
+stand down", the sequencing bullet). Still open, and not this plan's: the design's §"Spec
+restatements" list (spec v1.4 in progress); the sibling `codex-tdd-gate-defects` spec and plan
+owe the restated V-1 dependency in all four sentences (Risks); and the probe sidecar's first
+three files (`calibrate.sh`, `seed.json`, `seed_coverage.py`) are still uncommitted
+(`ls docs/03-analysis/probes/multi-host-runtime` → "No such file or directory", run at
+`34c0e962`; design Implementation Order step 1, the orchestrator's). Next: operator review, then
+Phase 5.
 
 ## Version History
 - v1.0: Initial plan draft (2026-09-28) from spec v1.1 at ae7593a. Premises P1-P14 and the coupled-suite baseline (h-mad/tests handoff/tests handoff/scripts: 3893 collected; 1 env-dependent failure) executed at ae7593a; the spec's calibration and 22-entry seed reproduce there. Names the parity checker (h-mad/tests/host_parity.py) and test module (test_host_construct_parity.py), fixes the PARITY <KIND> file= id= [token=] message format, adds a per-alternative seed-coverage probe to the committed sidecar, a shared-file table and rebase-then-baseline order after grok-codex-fallback and codex-tdd-gate-defects, operator link creation before the smokes, a worktree-wrapper live smoke with explicit || exit 1 assertions, W1-W3 wiring, and a node-id suite floor. Raises three open items: AC-5.2(i) vs codex-tdd-gate-defects D4, the install sequencing cycle, and the spec's agent-substrate.md edit claim.
 - v1.1: Cycle-1 audit repairs (2026-09-28, 80870996: codex p1 5 must/3 should, teammate 4 must/11 should/4 nit), premises re-run at 4152e2be. Live smoke moved to Phase 7 between 7f local merge and 7e push (hosts load main via links; no pre-merge smoke tests this feature); asserts HEAD=unpushed merge, tip ancestry, per-host skill link -> main h-mad, --timeout 900; failure reverts the unpushed merge (never reset --hard) and halts. V-11.3 state check now reads orchestrator_state[F] of main's docs/.bkit-memory.json with test -f and non-empty guards (was vacuous: gitignored, absent in a worktree). Operator creates the four install links as a pre-step independent of any merge, breaking the cycle with codex-tdd-gate-defects V-1; merge order codex-tdd-gate-defects, grok-codex-fallback, this. FR-1 seed gate kept per entry as the spec states; per-branch coverage reported (P2b: 45 branches, 25 zero cells) and proven by per-branch literal samples. AC-5.2 not restated: per-branch framing over the sibling FR-0 outcome, spec revised from the measurement at base. FR-10 hermeticity: env-overridable defaults, None-default check() roots, conftest autouse override plus controls. One fixture per disjunct (36) with reason= field, suppression order, message rules per kind, W1/W2 ordering-mutant killing fixtures, decide() host check first, exact-match HMAD_HOST rule, AC-3.5 via stubbed PATH (docsections transitive subprocess), advisor-warn grok note (P15), AC ownership table over all 50 ACs, byte-identity as a sidecar probe, AC-12.1 not waived for the env-dependent failure, full harness halt set, shared-file table re-derived from the sibling plan.
 - v1.2: Corrective revision after the final plan audit round (2026-09-28, 2f262f8a: codex p1 v2 4 must/2 should; delta review v1.1 2 must/9 should/5 nit); not re-audited; premises re-run at 2f262f8a. V-11.3 now the spec's whole-file sha256 of docs/.bkit-memory.json plus git status; V-11.2 parses one pinned HMAD-STATUS line and compares both fields with the record, null included; V-11.1 pinned (adapter H1 before any h-mad script; grok init skills) with the prompt text pinned and the assertions rehearsed on fixtures before 7f. Smoke script split into preconditions (halt, no revert) and host run (recover): recover refuses on a tracked-dirty tree and saves the host diff, reverts each unpushed first-parent commit since PRE with rc checked, then asserts HEAD tree = PRE tree, clean tree, nothing public; MERGE resolved to a full sha; re-integration defined (revert the recovery reverts, fresh 7f for a fix, PRE kept). 7f invocation pinned (--repo-root primary, --branch, --base main; dirty_tree halts). Byte-identity probe arms: hermetic arm A byte-identical, real-default arm B a closed diff; AC-12.2 at real defaults owed to the spec. host_parity uses find_heading/fence_aware_end (titled_section asserts); absent adapter file = TABLE_MISSING no_heading, a control not a 37th fixture. 5c gates all four operator links. Phase-6 analysis and live-smoke record paths named (smoke record in the 7c archive dir). Sibling V-1 restatement widened to four sentences; grok-codex-fallback branch now in flight. AC-12.1 halt owner named (operator).
+- v1.3: Propagation revision after Phases 3 and 4 exited at their round caps (2026-09-28; not re-audited; no scope added), from design v1.2 (34c0e962) and spec v1.3 (dffd0814) author reports' owed-to-plan lists; premises touched re-run at 34c0e962. Live-smoke record written at docs/03-analysis/multi-host-runtime.live-smoke.md and archived by a docs-only step re-running 7c's mv (unique archive dir, no || true, two tests) and committed before 7e (OD-7, design Supersedes item 10). v111/v112 shell bodies replaced by the design's smoke_assert.py V-11.1/V-11.2 calls (Supersedes 1-3); UNVERIFIED reverts like FAIL (OD-b option 1 kept). Rehearsal in Phase 6 via smoke_assert.py rehearse, recorded in the Phase-6 document (item 4). 42 kind fixtures (36 disjunct + 6 splits). AC census 50 -> 51 (AC-8.5 added by spec v1.3), AC-8.5 owned by test_h_mad_host_declaration.py. Risks: reason (i) keyed on the refusal form at <base>; form (b) permissionDecision is grok's canonical decision field (10-hooks.md); sibling AC-6.6 does not keep exit 1. Advisor-warn stand-down answered: none. Install roots cite the invariant amended at 76e7af19. AC-12.2 claimed on both arms; Next Steps records the seven spec items as landed.

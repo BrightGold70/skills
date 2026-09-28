@@ -55,7 +55,7 @@ instead of line numbers.
 | F11 | `hmad-dispatch exec grok` (from `grok-codex-fallback`) runs grok with `--output-format streaming-json`. That format is a `type`-tagged event stream with **no** `system`/`init` line; the init line belongs to the other format, `streaming-messages-json`. `streaming-json` emits `available_commands` events whose `commands` field is a list of **plain strings**, and each tool call as a `tool_call` event (`toolName`, `rawInput`) followed by `tool_call_update` events carrying `status` (`completed` on success) and `rawOutput`. Measured in the committed log `docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.ndjson` (at `1ef1a782`): 0 `system` events; 9 `available_commands` events, each with 316 `commands` strings (316 distinct, identical across the 9), `h-mad` and `handoff` among them; a `read_file` call's path is in `rawInput.target_file`, while the chapter's example uses `rawInput.path`. | `14-headless-mode.md` §"streaming-json", §"streaming-messages-json"; `grok-codex-fallback` design §D3 (`gargs`); the committed log |
 | F12 | grok memory lives under `~/.grok/memory/` (`MEMORY.md` global/workspace) and not under `~/.claude/projects`. | `13-memory.md` §"Remember", §"Direct Editing" |
 | F13 | agy's docs dir has 0 lines matching `session_?id\|sessionId` (case-insensitive), so agy exposes no documented session-id variable. | `grep -rn -i -E 'session_?id\|sessionId' ~/.gemini/antigravity-cli/builtin/skills/agy-customizations/docs \| wc -l` → `0` |
-| F14 | This tree holds no codex host document. The codex 0.157.1 binary contains the strings `update_plan`, `request_user_input`, `spawn_agent` and `fork_turns`. Its only `.agents/skills` string occurs in an `external-agent-migration` module context. | `strings "$(readlink -f "$(which codex)")" \| grep -c …`; see Assumption A2 |
+| F14 | This tree holds no codex host document. The codex 0.157.1 binary contains the strings `update_plan`, `request_user_input`, `spawn_agent` and `fork_turns`. Its only `.agents/skills` string occurs in an `external-agent-migration` module context. This host's codex rollouts are observed traces an FR-2 `source` cell may cite: design DP16 reads them (operator-local, uncommitted, versions 0.116.0 to 0.144.1, none at 0.157.1), and the live smoke re-verifies any row resting on one. | `strings "$(readlink -f "$(which codex)")" \| grep -c …`; rollouts: design DP16; see Assumption A2 |
 
 ## Construct registry seed (measured)
 
@@ -177,11 +177,11 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
   | `STATUS_INVALID` | `status` is neither `mapped` nor `not-applicable` | fix the status |
   | `CELL_EMPTY` | a `mapping` or `source` cell is empty by AC-2.2 | fill it |
 
-  Each failure line also carries a `reason=` field naming **which disjunct** of its kind's
-  `meaning` fired (for example `REGISTRY_UNREADABLE reason=bad_id`,
-  `TABLE_MISSING reason=heading_twice`), so a failure is a `(kind, reason)` pair. The reason
-  values per kind are enumerated by the design (§D2) and are part of the contract the AC-3.3
-  fixtures pin.
+  A kind with more than one disjunct carries `reason=` on its failure line, naming **which
+  disjunct** of its kind's `meaning` fired (for example `REGISTRY_UNREADABLE reason=bad_id`,
+  `TABLE_MISSING reason=heading_twice`). A kind with one disjunct prints none, and its pair is
+  `(kind, None)`. A failure is therefore always a `(kind, reason)` pair. The reason values per
+  kind are enumerated by the design (§D2) and are part of the contract the AC-3.3 fixtures pin.
 
   "Hits" and "covered" mean regex match spans, as FR-4 defines them. The gate never invokes a host
   CLI.
@@ -346,7 +346,7 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       | refusal form at `<base>` | when (sibling FR-0 branch) | reason (i) as written | token the doc test pins |
       |---|---|---|---|
       | `exit 1` (today's form: 5 matching lines at `1ef1a782`) | the sibling has not merged, or `INCONCLUSIVE` (its AC-6.7 leaves the gate unchanged) | the gate refuses by `exit 1`, which grok treats as fail-open (F9) | `exit 1` |
-      | (a) rc 2, reason on stderr | `E1_BLOCKS` or `E1_DOES_NOT_BLOCK` with only form (a) proven | none: rc 2 is grok's documented `PreToolUse` deny (F9). The adapter says so, and the halt rests on (ii) and (iii) | `exit 2` |
+      | (a) rc 2 (`exit 2`), reason on stderr | `E1_BLOCKS` or `E1_DOES_NOT_BLOCK` with only form (a) proven | none: rc 2 (`exit 2`) is grok's documented `PreToolUse` deny (F9). The adapter says so, and the halt rests on (ii) and (iii) | `exit 2` |
       | (b) rc 0, stdout `hookSpecificOutput.permissionDecision == "deny"` | either blocking branch with form (b) proven | none: `hookSpecificOutput.permissionDecision` is grok's canonical decision field (F9, `10-hooks.md` §"Output (Blocking Hooks)"). The adapter says so, and the halt rests on (ii) and (iii) | `permissionDecision` |
 
       Any other reading at `<base>` (a mix of forms across refusal sites, or a form not in this
@@ -540,11 +540,17 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
   | codex, agy | a minted id |
 
   A minted id is one `python3 -c 'import uuid; print(uuid.uuid4())'` value, created once at
-  bootstrap and used for the whole session: as the **value** of `--claim` (`h_mad_state_write.py
+  bootstrap and written to one file, `"$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>"`
+  (per checkout and per feature, inside the git directory, so `git status --short` never lists
+  it). Every later call reads it from that file inline, so no call relies on a shell variable
+  surviving between two host tool calls (design OD-5). The mint runs under `set -C` and never
+  overwrites: an existing file prints `SID: NOT_MINTED`, a halt to the operator. The id is used
+  for the whole session: as the **value** of `--claim` (`h_mad_state_write.py
   --claim SESSION_ID` takes the id itself), as `--session-id` on every `--beat`, `--set` and
   `--release`, and as `--session-id` on every `h_mad_resume_decision.py` call. Its
-  failure mode is stated and conservative: a session that loses the id after a restart sees its
-  own claim as `owned_elsewhere` until the staleness window lapses. It never gets a false clear.
+  failure modes are stated and conservative: a session that loses its file sees its own claim as
+  `owned_elsewhere` until the staleness window lapses, and never gets a false clear; an
+  unreadable file reads as an empty id, which is no id, so the oracle answers `cannot_judge`.
 - **Acceptance Criteria**:
   - AC-9.1: With `HMAD_HOST=grok` and no `--session-id`, a state file holding a feature owned by a
     live foreign session yields `cannot_judge`. So does a state file with no owner. Each is a
@@ -576,6 +582,12 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
   - `~/.claude/skills`: Claude Code, and grok through `compat.claude.skills` (F4, F5).
   - `~/.gemini/config/skills`: agy. agy reads that root and a workspace `.agents/`, not
     `~/.agents` (its adapter).
+
+  Both new roots are documented host install locations under `.h-mad/invariants.md` §"Skill
+  self-containment" as amended at commit `76e7af19` (operator decision): its path exception names
+  `~/.claude/...` for Claude Code, `~/.agents/skills/...` for Codex and
+  `~/.gemini/config/skills/...` for agy, "each overridable by its documented environment
+  variable". `HMAD_AGENTS_SKILLS_DIR` and `HMAD_AGY_SKILLS_DIR` below are those variables.
 
   The install is a documented operator command in the codex, grok and agy adapters. No script
   links anything: `h_mad_install_check.py` "repairs nothing". `h_mad_install_check.py` gains two
@@ -707,19 +719,23 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
   - V-11.1: The host's log shows, from its **input events** (what the host asked a tool for,
     never the text a tool returned), both of these:
     - **Adapter read, on every host.** An observed **successful content read** of
-      `references/<host>-runtime.md` occurs before the first h-mad script run. A content read is
-      a tool call whose input names that file and whose completion is observed as successful and
-      returns the file's text: grok's `read_file` `tool_call` whose `rawInput` names the path,
-      followed by a `tool_call_update` with `status` `completed` (F11); on codex and agy, the
-      equivalent read or print-the-file command with its success observed in the log. A
-      **filename-only mention does not count**: an input that names the file without returning
-      its content (`test -f`, `ls`, `echo`, `grep -l`, a search whose result lists the path) is
-      not a read. A script run is an **execution** of an `h_mad_*.py` script or of
-      `hmad-dispatch` through the host's shell tool; a read, `sed` or `grep` whose input merely
-      mentions a script name is not a run. Residual: a partial read (for example the first lines
-      only) counts as a content read; the smoke proves the adapter was opened, not that every line
-      was read. A read through a glob such as `references/*.md` does not name the file and fails,
-      which is the conservative direction.
+      `references/<host>-runtime.md` occurs before the first h-mad script run. A read is an
+      observed, successful content read: the host's file-read tool, or `cat`, `head`, `tail`,
+      `nl` or a print-only `sed` with the file as an operand. Its event must show success, and
+      its returned text must contain the file's first `# ` heading line. On grok the read tool is
+      `read_file`, whose `tool_call` names the path in `rawInput` and whose success is a later
+      `tool_call_update` with `status` `completed` (F11); codex and agy show success in their own
+      log shapes (design §D10). A command that only names the file, such as `test -f`, `echo`,
+      `grep -l` or `ls`, is not a read, and neither is a search whose result lists the path. A
+      script run is an **execution** of an `h_mad_*.py` script or of `hmad-dispatch` through the
+      host's shell tool (an interpreter or direct invocation of the script, design §D10), never a
+      mention of its name; a read, `sed` or `grep` whose input merely mentions a script name is
+      not a run. At least one run of an `h_mad_*.py` script carries the inline declaration
+      `HMAD_HOST=<host>` (none → `FAIL`); an `export HMAD_HOST=…` statement does not count,
+      because every adapter asks for the inline form. Residual: a partial read
+      whose returned text holds the first `# ` heading line counts as a content read; the smoke
+      proves the adapter was opened, not that every line was read. A read through a glob such as
+      `references/*.md` does not name the file and fails, which is the conservative direction.
     - **Skill load.** For codex and agy: an observed successful content read of h-mad's
       `SKILL.md`, by the same predicate; none observed → `FAIL`. For grok: `h-mad` listed in some
       `available_commands` event's `commands` (a list of plain strings, F11) is a
@@ -728,10 +744,14 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       by the same predicate. If grok loads the skill in a way its log does not show as such a read,
       the grok arm is **`UNVERIFIED`**: it halts to the operator and never passes.
 
-    The verdict is exactly one of `PASS`, `FAIL` (with the failed clause) or `UNVERIFIED` (grok
-    skill load only); anything other than `PASS` halts the smoke for that host, and none of the
-    three is read from `$?`. Rehearsal (Phase 6) runs one committed hand-made log per clause and
-    direction, including a filename-only mention of the adapter before a script run (→ `FAIL`), a
+    The verdict is exactly one of `PASS`, `FAIL` (with the failed clause), `UNVERIFIED` or
+    `UNREADABLE`. `UNVERIFIED` is printed for grok's skill load (no observed `SKILL.md` read;
+    codex and agy get `FAIL` for the same miss) and for a log the classifier cannot read as keeping
+    or breaking the contract: an unparseable line or command, an unobserved input or output shape,
+    or an unclassified command that mentions a script before the adapter read. `UNREADABLE`
+    (exit 2) means that no verdict exists. Every token except `PASS` halts the smoke for that
+    host, and none of the four is read from `$?`. Rehearsal (Phase 6) runs one committed
+    hand-made log per clause and direction, including a filename-only mention of the adapter before a script run (→ `FAIL`), a
     `SKILL.md` read whose output mentions a script before the adapter read (→ `PASS`), and a grok
     log listing `h-mad` with no `SKILL.md` read (→ `UNVERIFIED`).
   - V-11.2: The status output names the feature and its `last_completed_phase` / `halt_reason`.
@@ -797,9 +817,12 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
   that a codex hook path under `~/.agents/skills` was consulted. A hook path is not a skill root.
   The codex live smoke (V-11.1) decides. If codex does not load h-mad from there, the smoke halts
   to the operator and this assumption is corrected in the spec.
-- A3: codex's rung-1 task tool is unknown. `update_plan` appears in the binary (F14) but has no
-  documentation here. It becomes the codex `task-tools` mapping only with a cited doc or an
-  observed trace.
+- A3: codex's rung-1 task tool is unknown at 0.157.1. `update_plan` appears in the binary (F14)
+  but has no documentation here, and `codex features list` at 0.157.1 has 0 lines matching
+  `todo`, `update_plan` or `task`. It is observed as a call in this host's codex rollouts, but
+  only in rollouts of 0.142.0 and older (design DP16: 9 files, 25 `function_call` occurrences),
+  so it stays a lead. It becomes the codex `task-tools` mapping only with a cited doc or an
+  observed trace at the version the adapter pins.
 - A4: The seed counts and the FR-4 reading are at `6494b3c`. They move with any edit to either
   `SKILL.md`, including `grok-codex-fallback`'s. They are re-derived at the implementation base
   (AC-4.6) and are never carried.
@@ -812,3 +835,4 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
 - v1.1: Operator decision on the v1.0 agy question (2026-09-28): FR-10 installs and checks the agy root ~/.gemini/config/skills/{h-mad,handoff} via --agy-skills-dir; a present-but-wrong h-mad/handoff there FAILs, any other colliding checkout name (measured: debugger) prints an AGY_SIBLING_COLLISION detail line and never FAILs (AC-10.5); ~/.claude/skills SIBLING_* semantics pinned unchanged (AC-10.6). agy smoke residual V-11.6 and the Owed decisions section removed. AC-5.2(i) and Out-of-Scope point Claude-side exit-1 blocking to codex-tdd-gate-defects D4 (76b2501).
 - v1.2: Wording owed by plan v1.2 (2026-09-28, e32ffe5c): AC-12.2 now states byte-identity with both new roots pointed at absent paths (HMAD_AGENTS_SKILLS_DIR, HMAD_AGY_SKILLS_DIR) and, at the real defaults with the four operator links present, identical exit codes and a closed stdout diff (new-root SIBLING_* lines, AGY_SIBLING_COLLISION: lines, the verdict line). FR-10 hermeticity residual corrected: the fixture repos ship h-mad and handoff, the names the operator links, so hermeticity is the env override set by a conftest autouse fixture, not the fixture name. Premises re-run against the tree; nothing else changed.
 - v1.3: Adopts design v1.0 and design-audit cycle 1 Axis C restatements plus plan v1.2 Next Steps items (2026-09-28, premises at 1ef1a782). F11 and V-11.1: grok evidence is exec grok streaming-json (no init line); available_commands lists h-mad as a precondition only, skill load proven by an observed SKILL.md read or the grok arm is UNVERIFIED; adapter read on every host is an observed successful content read before the first script run, filename-only mentions excluded. AC-3.3: one fixture per disjunct with (kind, reason) pairs, 42 at the design inventory (36 disjunct + 6 splits). AC-4.2: three A4 branch fixtures and three branch removals. AC-5.2: reason (i) from the refusal form measured at base (exit 1 / rc 2 / permissionDecision), doc test pins that row token; F9 adds grok hookSpecificOutput.permissionDecision. FR-8: exact value rule, unknown host bare when the whole value matches ^[A-Za-z0-9._-]+$ else JSON-encoded, host check before bad_window (AC-8.5), AC-8.3 full module twice, AC-8.4 grok has no model-accessible indicator. FR-9: unknown value and empty id give cannot_judge; --claim takes the id as its value. FR-10: env-override resolution rule. Advisor-warn hook does not stand down (Out-of-Scope, V-11.5 records CTXBUDGET lines). Sequencing: agent-substrate.md is read, not edited.
+- v1.4: Propagation of design v1.2 (2026-09-28, 34c0e962; no new audit, Phase 4 exited at its round cap). V-11.1: four verdict tokens PASS/FAIL/UNVERIFIED/UNREADABLE, UNVERIFIED for grok's missing SKILL.md read (codex/agy FAIL) and for logs the classifier cannot read, UNREADABLE exit 2 = no verdict; a read is an observed successful content read (file-read tool, cat/head/tail/nl or print-only sed) whose returned text holds the file's first # heading line; at least one h_mad_*.py run carries inline HMAD_HOST=<host>, export does not count. FR-3: reason= only on multi-disjunct kinds, single-disjunct pair is (kind, None). AC-5.2 form (a) reads rc 2 (exit 2). F14 may cite DP16 codex rollouts; A3: update_plan observed only in 0.142.0-and-older rollouts, still a lead. FR-10 cites the amended .h-mad/invariants.md Skill self-containment exception (76e7af19). FR-9: minted id persisted to the git-dir file h-mad-session-id.<feature> under set -C, read inline (OD-5).
