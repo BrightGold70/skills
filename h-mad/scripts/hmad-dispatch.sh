@@ -2052,6 +2052,30 @@ _GROK_JQ_DEFS='def _grok_over($d): if $d > $max then true
     else false end;
   def _grok_obj: (fromjson? // empty) | select(type == "object")
     | select(_grok_over(0) | not);'
+_GROK_RENDER_PROG='def _grok_flush: if .run == null then .
+    else .out += ["  · " + (if .run == "thought" then "thinking" else "reply text" end)
+                  + " (\(.k) events)"] | .run = null | .k = 0 end;
+  def _grok_emit($l): _grok_flush | .out += [$l];
+  [split("\n")[] | _grok_obj] as $evs
+  | ([$evs[] | select(.type == "tool_call" and (.toolCallId | type) == "string")
+      | {key: .toolCallId, value: (.toolName | tostring)}] | from_entries) as $names
+  | reduce $evs[] as $ev ({out: [], run: null, k: 0};
+      if ($ev.type | type) != "string" then .
+      elif $ev.type == "thought" or $ev.type == "text" then
+        (if .run == $ev.type then . else _grok_flush | .run = $ev.type end) | .k += 1
+      elif $ev.type == "available_commands" then .
+      elif $ev.type == "tool_call_update" and $ev.status == null then .
+      elif $ev.type == "tool_call" then
+        _grok_emit("  · tool \($ev.toolName) \($ev.status)"
+          + (if $ev.rawInput == null then "" else " " + ($ev.rawInput | tojson | .[0:70]) end))
+      elif $ev.type == "tool_call_update" then
+        _grok_emit("  · tool \(($ev.toolCallId | if type == "string" then $names[.] else null end) // "?") \($ev.status)")
+      elif $ev.type == "usage" then
+        _grok_emit("  · turn usage (\($ev.usage.output_tokens) out, \($ev.usage.reasoning_tokens) reasoning)")
+      elif $ev.type == "end" then
+        _grok_emit("  · END stopReason=\($ev.stopReason) turns=\($ev.num_turns)")
+      else _grok_emit("  · \($ev.type)") end)
+  | _grok_flush | .out[]'
 
 _grok_region() {  # <log> <pre_lines> -> the lines after pre_lines; the only place the offset is spelled
   local log="$1" pre="$2"
@@ -2118,7 +2142,27 @@ _grok_last_tool() {  # <log> <pre_lines> -> "N tool calls completed; last tool: 
 }
 
 # Classify a transcript so `progress` renders it with the right lens.
-_exec_log_format() {  # <logfile> -> agy-ndjson | codex-text | empty | missing
+_codex_banner_in_head() {  # <logfile> -> rc 0 iff a line in the first 4096 bytes starts with OpenAI Codex v
+  local h
+  h="$(head -c 4096 "$1" 2>/dev/null)" || h=""
+  case $'\n'"$h" in *$'\n''OpenAI Codex v'*) return 0 ;; esac
+  return 1
+}
+
+_grok_log_has_events() {  # <logfile> -> rc 0 iff a line is a Grok event within the depth limit
+  local log="$1" rc=0
+  if command -v jq >/dev/null 2>&1; then
+    jq -nR -e --argjson max "$_GROK_MAX_DEPTH" --arg re "$_GROK_TYPES_RE" \
+      "$_GROK_JQ_DEFS"' ($re | split("|")) as $t
+      | first(inputs | _grok_obj
+              | select((.type | type) == "string") | .type as $x
+              | select(any($t[]; . == $x))) | true' "$log" >/dev/null 2>&1 || rc=$?
+    case "$rc" in 0) return 0 ;; 4) return 1 ;; esac
+  fi
+  grep -aqE "^[[:space:]]*\{.*\"type\"[[:space:]]*:[[:space:]]*\"(${_GROK_TYPES_RE})\"" "$log" 2>/dev/null
+}
+
+_exec_log_format() {  # <logfile> -> agy-ndjson | codex-text | grok-ndjson | empty | missing
   local log="$1"
   [ -f "$log" ] || { printf 'missing'; return 0; }
   [ -s "$log" ] || { printf 'empty'; return 0; }
@@ -2129,6 +2173,10 @@ _exec_log_format() {  # <logfile> -> agy-ndjson | codex-text | empty | missing
   # exercising the codex branch in a test named for the agy one.
   if grep -aqE '^[[:space:]]*\{[[:space:]]*"event"[[:space:]]*:[[:space:]]*"(init|step_update|result)"' "$log" 2>/dev/null; then
     printf 'agy-ndjson'
+  elif _codex_banner_in_head "$log"; then
+    printf 'codex-text'
+  elif _grok_log_has_events "$log"; then
+    printf 'grok-ndjson'
   else
     printf 'codex-text'
   fi
@@ -2684,6 +2732,19 @@ _render_progress() {  # <logfile> [lines]
           + " turns=" + ((.result.num_turns // 0) | tostring)
           + " " + ((.result.duration_seconds // 0) | floor | tostring) + "s"
         else empty end' 2>/dev/null | tail -n "$n"
+  elif [ "$fmt" = grok-ndjson ]; then
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "  (grok stream — jq not on PATH, cannot render)"
+    else
+      local grender grc=0
+      grender="$(tail -n 400 "$log" 2>/dev/null \
+        | jq -Rs -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS$_GROK_RENDER_PROG")" || grc=$?
+      if [ "$grc" -ne 0 ]; then
+        echo "  (grok stream — jq failed, cannot render)"
+      elif [ -n "$grender" ]; then
+        printf '%s\n' "$grender" | tail -n "$n"
+      fi
+    fi
   else
     # codex text transcript, rendered ONLY past the echoed prompt.
     #
