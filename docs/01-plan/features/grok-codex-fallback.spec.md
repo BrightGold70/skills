@@ -117,31 +117,74 @@ exists to drift from the real one.
 
 ### FR-2: TDD gate — Claude never self-authors under `fallback_agent=grok`
 
-- **Description**: `h-mad/hooks/h-mad-tdd-gate.sh`, in its codex-authorship block (the block
-  headed `# --- Codex-authorship enforcement`), reads `fallback_agent` for the same `ACTIVE`
-  feature it reads `codex_status` for. The rest of the hook is unchanged: the state-file
-  resolution, the `step5` detection, the exemptions for tests, docs and config, and the test-first
-  gate below the block.
+- **Description**: The gate is the one merged by `codex-tdd-gate-defects`: the hook
+  `h-mad/hooks/h-mad-tdd-gate.sh` reads H-MAD state only through the `state` verb of the shared
+  judge `h-mad/scripts/h_mad_tdd_judge.py`, and measures test-first only through its `judge` verb.
+  This FR changes the two in one place each:
+  - the judge's `state` verb reports, beside what it reports today, which of the records it read
+    governs the fallback outcome (the rule is below);
+  - the hook, after its codex-authorship refusal (the `if` whose condition tests
+    `HMAD_CODEX_UNAVAILABLE`, the state line's codex-escape value and `command -v codex`) and
+    before it runs the `judge` verb, refuses on that report.
 
-  Define **codex_out** as true when any of these holds. This is exactly today's escape predicate:
+  The name, grammar and position of the line-level field that carries the report are the
+  design's (`docs/02-design/features/grok-codex-fallback.design.md`), not this spec's. Everything
+  else is unchanged: the chain of `docs/.bkit-memory.json` files the judge reads, the record
+  selection, the exemptions for tests, docs and config, the codex-authorship refusal, and the
+  `judge` verb's test-first measurement.
+
+  **The records.** The judge reads every `docs/.bkit-memory.json` from the target's directory up
+  to the project root, and takes every `orchestrator_state` entry whose `phase` is `step5`. These
+  are *the step5 records*. There is no single "active feature": the gate governs by every step5
+  record at once, and a record in any other phase is not read for either `codex_status` or
+  `fallback_agent`. With no step5 record the hook allows before the codex-authorship refusal, as
+  the base gate does, so neither field is read.
+
+  Define **codex_out** as true when any of these holds. This is exactly the merged gate's escape
+  predicate:
 
   - `HMAD_CODEX_UNAVAILABLE` is non-empty;
-  - `codex_status` is `unavailable` or `exhausted`;
+  - every step5 record's `codex_status` is `unavailable` or `exhausted` (one record holding any
+    other value, or none, keeps codex in);
   - `codex` is not on PATH.
 
-  The block's outcome is then a total function:
+  **The fallback rule** (order-independent, most restrictive first): if any step5 record's
+  `fallback_agent` is invalid (the last row below), the first such record in the judge's order
+  governs and the outcome is BLOCK-INVALID; otherwise, if any step5 record holds `"grok"`, the
+  first such record governs and the outcome is BLOCK-GROK; otherwise the outcome is FALL-THROUGH.
+  The governing record supplies the feature key and state file each refusal names. The block's
+  outcome is then a total function:
 
-  | codex_out | `fallback_agent` (for the ACTIVE feature) | outcome |
+  | codex_out | `fallback_agent` over the step5 records | outcome |
   |---|---|---|
-  | false | any value, or absent | **BLOCK-CODEX**: today's exit 1 and today's stderr, byte for byte |
-  | true | absent, `null`, or `"claude"` | **FALL-THROUGH** to the test-first gate, exactly as today |
-  | true | `"grok"` | **BLOCK-GROK**: exit 1 |
-  | true | any other JSON value (another string, a number, a boolean, an object or an array) | **BLOCK-INVALID**: exit 1, fail-closed |
+  | false | any value, or absent | **BLOCK-CODEX**: the base gate's `codex-authorship` refusal, its rc, stdout and stderr byte for byte |
+  | true | every record absent, `null`, or `"claude"` | **FALL-THROUGH** to the `judge` verb, exactly as the base gate |
+  | true | at least one `"grok"`, and no invalid value | **BLOCK-GROK**: deny, kind `fallback-grok` |
+  | true | at least one other JSON value (another string, a number, a boolean, an object or an array) | **BLOCK-INVALID**: deny, kind `fallback-invalid`, fail-closed |
+
+  **The decision protocol** (the merged gate's; unchanged here). The hook never exits 1. A caller
+  reads the decision from stdout and stderr, never from the exit code alone:
+  - **ALLOW**: rc 0 and empty stdout.
+  - **DENY**: rc 0, and stdout is one JSON object whose `hookSpecificOutput.permissionDecision` is
+    `"deny"`; stderr's first line, and the JSON's `permissionDecisionReason`, read
+    `[H-MAD-TDD-GATE] BLOCK kind=<kind>: <reason>`. The kind is the class.
+  - **rc 2 with a stderr refusal**: only when writing the JSON itself fails (the `_refuse`
+    fallback), so stdout is empty or partial. Claude Code also blocks on it. A test reads it as neither ALLOW nor a
+    well-formed DENY (`tdd_gate_support.decision` returns `invalid`).
+  - **Kinds.** This FR adds exactly two: `fallback-grok` and `fallback-invalid`. The kinds the
+    merged gate already emits are `codex-authorship`, `judge-error` (the gate's own fail-closed
+    refusal, including a state line it cannot parse) and the `judge` verb's ten DENY kinds
+    (`no-test-resolved`, `test-missing`, `venv-escapes-root`, `pytest-missing`, `pytest-error`,
+    `no-tests-ran`, `no-summary`, `test-passing`, `timeout`, `judge-error`). A state line whose
+    fallback report is missing, unrecognised or names a record position the line does not carry
+    is refused `judge-error`, fail-closed, like every other malformed state line.
+    **Residual:** the hook trusts the judge's choice of governing record; a report saying no
+    record governs while a record holds `"grok"` is a judge defect the hook cannot see.
 
   - **OQ1 (binding):** `HMAD_CODEX_UNAVAILABLE` means only "codex is out". It never lets Claude
     write under `fallback_agent=grok`. A one-off Claude escape needs `fallback_agent=claude`.
-  - A `codex_status` value outside its enum is read as `available`, which is today's behaviour
-    and is unchanged.
+  - A `codex_status` value outside its enum, or JSON `null`, is read as `available` (the judge's
+    `_active_records`), which is the merged gate's behaviour and is unchanged.
   - Grok writes through its own process, so its writes never reach this PreToolUse hook. The same
     is true of codex.
 - **Acceptance Criteria**:
@@ -153,11 +196,13 @@ exists to drift from the real one.
     - `HMAD_CODEX_UNAVAILABLE` ∈ {unset, `1`};
     - `codex` on PATH ∈ {yes, no}.
 
-    Each cell asserts two things:
-    - the exit code and outcome class the table above predicts;
-    - for FALL-THROUGH, that the hook exits 0 on a fixture where the test-first gate passes. That
-      fixture is a production `.py` target that does not exist yet, whose derived test file does
-      exist.
+    Each cell's fixture holds one step5 record carrying the cell's `codex_status` and
+    `fallback_agent`. Each cell asserts two things, read through the decision protocol above:
+    - the outcome class the table predicts, and for a deny its kind (`codex-authorship`,
+      `fallback-grok` or `fallback-invalid`);
+    - for FALL-THROUGH, ALLOW (rc 0, empty stdout) on a fixture where the `judge` verb allows. That
+      fixture is a production `.py` target that does not exist yet, for which the judge resolves a
+      test file that exists and holds one failing test, so the judge measures it red.
 
     The expected value is computed by a function in the test that transcribes the table. It is
     never computed by calling the hook.
@@ -176,34 +221,48 @@ exists to drift from the real one.
     sibling cannot cover a sick one. Each case runs under each of the three codex_out routes
     alone: `HMAD_CODEX_UNAVAILABLE=1` with `codex_status` absent and `codex` on PATH;
     `codex_status: "exhausted"` with the variable unset and `codex` on PATH; and `codex` off PATH
-    with the variable unset and `codex_status` absent. That is 24 cells, and each asserts exit 1,
-    the BLOCK-INVALID class, and AC-2.4's stderr. The same 8 values with codex_out false yield
+    with the variable unset and `codex_status` absent. That is 24 cells, and each asserts a DENY
+    of kind `fallback-invalid` (the BLOCK-INVALID class) and AC-2.4's stderr. The same 8 values with codex_out false yield
     BLOCK-CODEX, as the table's first row says.
 
     **Control:** a stored JSON `null` under the same three routes is FALL-THROUGH (3 cells), and so
     is an absent key. The string `"null"` and the JSON `null` must therefore produce different
     outcomes. **Residual:** other strings are covered by the table's rule and are exercised only
     by `"codex"` (AC-2.1) and the three strings above; numbers other than `0` are not exercised.
-  - AC-2.2 (**regression, absent field**): For `fallback_agent` absent, the hook's exit code and
-    stderr in each of the 16 cells equal those of the hook at the feature's base commit, byte for
-    byte. The 16 cells are 4 `codex_status` × 2 env × 2 PATH, and the base hook is read with
-    `git show <base>:h-mad/hooks/h-mad-tdd-gate.sh`. The same 16-cell comparison passes for
-    `fallback_agent: null` and for `"claude"`.
+  - AC-2.2 (**regression, absent field**): For `fallback_agent` absent, the hook's rc, stdout and
+    stderr in each of the 16 cells equal those of the base gate run the same way on the same
+    project, byte for byte. The 16 cells are 4 `codex_status` × 2 env × 2 PATH. The base is the
+    feature's fork point on `main`, the commit `h-mad/tests/grokfixtures.py`'s `BASE_SHA` names.
+    The base gate is run **from its own tree**: `h-mad/` at that commit is extracted with
+    `git archive <base> h-mad` into a scratch directory, and that copy's
+    `h-mad/hooks/h-mad-tdd-gate.sh` is run. A lone `git show <base>:<hook>` is not enough, because
+    the merged hook finds its judge beside its own realpath; a hook file copied alone finds no
+    judge and refuses `judge-error`. The same 16-cell comparison passes for `fallback_agent: null`
+    and for `"claude"`.
   - AC-2.3: BLOCK-GROK's stderr names all of the following:
     - the dispatch `hmad-dispatch exec grok`;
     - the assembler flag `--agent grok` (FR-8);
     - the escape `--set fallback_agent=claude`;
     - the fact that `HMAD_CODEX_UNAVAILABLE` does not override `fallback_agent=grok`.
   - AC-2.4: BLOCK-INVALID's stderr names the offending value and the valid set `grok|claude`.
-  - AC-2.5: `fallback_agent=grok` on a *different* feature in the same state file, one that is not
-    `ACTIVE`, does not change the ACTIVE feature's outcome.
+  - AC-2.5 (**which records are read**): the fallback rule reads every step5 record and no other
+    record. Three cases, each its own test, each with codex_out true and every record `exhausted`:
+    - a record whose `phase` is not `step5` (for example `step3`) holding `"grok"`, beside a step5
+      record with no `fallback_agent`, does not change the outcome: FALL-THROUGH;
+    - a second step5 record holding `"grok"`, beside a first step5 record with no
+      `fallback_agent`, blocks: BLOCK-GROK, whose stderr names the second record's feature key and
+      state file;
+    - a step5 record holding `"grok"` beside another holding an invalid value (`false`), in that
+      order: BLOCK-INVALID naming the invalid value and that record's feature key, because an
+      invalid value governs over `"grok"` whatever the order.
   - AC-2.6: The files the hook exempts today stay exempt under `fallback_agent=grok` with codex
     out: test files, `*/tests/*`, `*/fixtures/*`, docs, config, shell, and every non-`.py` target.
   - AC-2.7: A committed mutation spec under `h-mad/tests/mutation-specs/` has one row for each of
     three mutations, and each row is killed by an AC-2.1 cell:
     - dropping the BLOCK-GROK branch;
     - letting a non-empty `HMAD_CODEX_UNAVAILABLE` bypass BLOCK-GROK;
-    - reading `fallback_agent` from a feature other than `ACTIVE`.
+    - reading a record's `fallback_agent` from another record (for example, from the state file's
+      first record, whatever its phase).
 
 ### FR-3: `hmad-dispatch exec grok` transport
 
@@ -651,7 +710,27 @@ exists to drift from the real one.
   - the assembler without `--agent`;
   - `resolved-model codex|agy`.
 - **Acceptance Criteria**:
-  - AC-11.1: The full suite (`pytest h-mad/tests`) passes with every pre-existing test unmodified.
+  - AC-11.1: The full suite (`pytest h-mad/tests`) passes with every pre-existing test file
+    unmodified. *Pre-existing* means tracked at the base (AC-2.2's `BASE_SHA`) under the test
+    paths. The carve-out is exactly the files below, each limited to the change named; any other
+    line changed in any of them fails this AC:
+    - `h-mad/tests/test_h_mad_tdd_judge.py`: only the `ACTIVE_RE` pattern, which gains the
+      design's line-level fallback field after `records=` (FR-2);
+    - `h-mad/tests/test_h_mad_tdd_gate_judge.py`: only `_tree_b`'s default `state_line`, which
+      gains that field with its no-fallback value after `records=`;
+    - `h-mad/tests/mutation-specs/claude_gate_judge_wiring.json`: only the `replace` strings of
+      rows `W5BF`, `W5BF2` and `W5BF3`, which gain the same; their `find` strings and every other
+      row are unchanged;
+    - `h-mad/tests/stubs/codex` and `h-mad/tests/stubs/agy` (support executables, not tests): only
+      the added block, gated on `HMAD_STUB_CLAUDE_ENV_CAPTURE`, that writes the sorted names of the
+      `CLAUDE*` environment variables to that path.
+
+    `h-mad/tests/test_h_mad_assemble_tdd_agent.py` is not pre-existing (this feature created it),
+    so this AC does not cover it; its one change since creation is its own `BASE_SHA`, re-pinned
+    from `507214d` to the rebased fork point `8ef6009f` so the no-agent comparison (AC-8.1) runs
+    against the merged prompt. **Residual:** the plan's floor (Task 16) permits these files by
+    name and prints their diff; it does not by itself reject a larger diff, so the narrowness here
+    is checked by reading that diff.
   - AC-11.2: The existing exec tests pass unchanged. These are `test_hmad_dispatch_exec.py`,
     `test_hmad_dispatch_exec_completion.py`, `test_hmad_dispatch_exec_stamp.py` and
     `test_hmad_dispatch_progress.py`. It is the full-suite run that proves this, not a scoped one.
@@ -773,3 +852,4 @@ exists to drift from the real one.
 - v1.2: Plan audit round 2 owed items (2026-09-28): plan.audit.v2.p1 codex must 3 and plan.delta-review.v1.2 must 2 / should 2. New fixture F-NOTOOLTEXT (F0 minus every tool_call, tool_call_update and text event; end survives, 83 lines) and new AC-4.9 pinning the FR-4 omission clause (EMPTY path, no tool calls completed line), with AC-4.6 as its positive pair. FR-10 D4 statement reworded to a QUALITY claim so the plan v1.2 live exec grok plumbing smoke does not falsify it (orchestrator decision); the AC-10.1 needle unmeasured is unchanged.
 - v1.3: Design audit cycle 1 owed items, orchestrator-decided (2026-09-28). NFR: the FR-4 parsers are region-bounded like _agy_ndjson_response (pre_lines to EOF, no tail cap, residual O(region)); progress stays bounded like the agy lens. FR-5/FR-6/FR-7: the head-window codex banner takes precedence over grok detection in all three classifiers, with the prior-codex-then-grok --log residual (skipped, never falsely gated) and new AC-11.3. FR-5: grok detection is key-order independent and the shell and Python detectors agree (new AC-5.2b). FR-4: N is distinct toolCallIds with a completed update over the whole region, single-sourced with scan_grok ok (new AC-4.10 on F-NOTOOLS minus text). AC-5.2 exactness binds the listed classes; collapsed run lines may appear without delta text. F-DECOY pins the thought decoy inside the final text segment. AC census 55 to 58 distinct IDs.
 - v1.4: FR-5 agreement scoped to an input domain, orchestrator-decided (2026-09-28), answering design v1.2's owed spec-level residual. The jq route and scan_grok must agree on every LF-delimited line that is one RFC 8259 JSON text of depth at most 64 (design D3.5) with no leading BOM, no unpaired-surrogate escape and no CR byte; outside it neither detector crashes, a line beyond the bound is not a grok event on both, and the parser-grammar class (lowercase nan, BOM, lone surrogate, bare CR) is a stated residual in new Assumption A5. The grep fallback is named as outside the agreement requirement (design D4). AC-5.2b gains the design's existing depth-64/65 boundary case; AC IDs unchanged.
+- v1.5: Merged-gate delta (2026-09-29), answering impl-plan.delta-review.v1.4 should 5: the spec now states the gate merged by codex-tdd-gate-defects (main 8ef6009f). FR-2: the hook reads state only through h_mad_tdd_judge.py's state verb and never exits 1; the decision protocol (ALLOW rc 0 empty stdout, DENY rc 0 plus JSON deny with kind, rc 2 only when the JSON write fails) and the kind set are enumerated, with fallback-grok and fallback-invalid the two new kinds; ACTIVE is replaced by every step5 record in the state-file chain, codex_out's codex_status arm requires every step5 record out, and the fallback rule is invalid over grok over fall-through, first governing record named; the line-level field's name and grammar are the design's. AC-2.1 asserts class and kind, and FALL-THROUGH is a judge-measured red ALLOW, not a derived-test existence check. AC-2.1b asserts kind fallback-invalid, not exit 1. AC-2.2 compares rc, stdout and stderr against the base gate run from its own git archive tree, not git show. AC-2.5 covers a non-step5 grok record, a second step5 grok record, and invalid-over-grok. AC-2.7's third mutation reads another record. AC-11.1 carve-out names five files and the one change each may carry; test_h_mad_assemble_tdd_agent.py is feature-created and its BASE_SHA re-pin (f2ff9261) is stated. AC IDs unchanged.
