@@ -160,7 +160,9 @@ def test_unsearchable_directory_is_unreadable(tmp_path, case):
     locked = sub if case == "chmod-dir" else sub / "docs"
     locked.chmod(0)
     try:
-        chain = judge.read_chain(root, sub / "tools/x.py")
+        # Target directly under `sub`: the nearest-first walk (design D2) then probes
+        # sub/docs/.bkit-memory.json first, so the reported file is the state file itself.
+        chain = judge.read_chain(root, sub / "x.py")
         assert chain.value == "unreadable"
         assert chain.error_file == path
         assert chain.error == "PermissionError"
