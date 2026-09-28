@@ -22,9 +22,11 @@ as the spec recommends. The defects are live. At skills `2f262f8a`:
 P3 below reproduces each case with a control. This feature merges first of the three in-flight
 `h-mad/` features because it closes a live safety gap.
 
-This revision (v1.1) answers plan audit cycle 1 (`be1ac452`). Some answers need spec wording to
-move. Those are **not** adopted silently: each is marked "pending spec v1.1 S-n" where it is used,
-and is listed under "Owed by the spec".
+This revision (v1.2) answers plan audit cycle 2 (codex, 4 musts) and the v1.1 delta review (4
+musts, 7 shoulds), under orchestrator decisions D-A…D-D (operator-approved 2026-09-28). Spec v1.1
+(`96bf1cd1`) settled S-1…S-6. S-7, S-8, S-9, S-11 and S-12 are cited as "spec v1.2 (S-n)"; spec v1.2
+was being written in parallel with this revision, and the sentences this plan depends on are listed
+in the author report. S-10 is withdrawn (D-A): the wire registry keeps its own grammar.
 
 ## Scope
 
@@ -32,15 +34,15 @@ In scope, by file. Every path was verified present at `2f262f8a` with `ls`, exce
 
 | File | Change | Spec |
 |---|---|---|
-| `h-mad/scripts/<judge>.py` (new; the design names it) | shared judge: chain reader, resolver, interpreter selection, scorer; CLI with a `judge` verb and a `state` verb | FR-1–FR-5; the `state` verb is pending spec v1.1 S-8 |
+| `h-mad/scripts/<judge>.py` (new; the design names it) | shared judge: chain reader, resolver, interpreter selection, scorer; CLI with a `judge` verb and a `state` verb | FR-1–FR-5; the `state` verb is spec v1.2 (S-8) |
 | `h-mad/hooks/h-mad-codex-tdd-gate.py` | imports the judge; `_relative_target` gains the payload-`cwd` base; `_derived_test`, `_test_exit` and `_target_phase5_status` are removed; shell policy admits a contained `.venv` interpreter | FR-3, FR-5 |
 | `h-mad/hooks/h-mad-tdd-gate.sh` | payload read; governance and the Codex-authorship key from the judge's `state` verb; judge CLI call; one refusal function at every refusal site and on every implicit exit | FR-6 |
 | `h-mad/scripts/h_mad_wire_pin_gate.py` | `_parse_tasks` extended in place with `production` and `tests` | FR-2, OD-7 |
-| `h-mad/scripts/h_mad_wire_registry.py` | `_production_claims` rewritten to read `task["production"]` from `_parse_tasks`; its own label regex and task counter are deleted | FR-2 "do not add a second parser"; pending spec v1.1 S-10 |
+| `h-mad/scripts/h_mad_wire_registry.py` | **not edited** (D-A). `_production_claims` keeps its own grammar; see "Second Production grammar (residual)" | spec v1.2 FR-2 residual and AC-2.9 |
 | `h-mad/scripts/h_mad_audit_gate.py` | `_suite_summary` extended in place; `run_suite`'s one scoring change | FR-4, OD-7 |
 | `h-mad/references/codex-runtime.md` | §"Trust boundary" | FR-7 |
-| `h-mad/SKILL.md`, `h-mad/references/agy-runtime.md`, `h-mad/references/codex-implementer-prompt.md` | registry entry for the judge; the gate prose the change makes false (see "Stale-prose census") | invariant §"Skill manifest integrity"; **not named by the spec**, see OQ-2 / S-11 |
-| `h-mad/tests/` | new test modules; the named updates only | FR-8 and the ACs |
+| `h-mad/SKILL.md`, `h-mad/references/agy-runtime.md`, `h-mad/references/codex-implementer-prompt.md` | registry entry for the judge; the gate prose the change makes false (see "Stale-prose census") | invariant §"Skill manifest integrity"; spec v1.2 (S-11) |
+| `h-mad/tests/` | new test modules; the named updates only, including the module-level `HOOK` constant of the two Claude-gate modules (layer 6, "worktree artifacts reached through `$HOME/.claude`") | FR-8 and the ACs |
 | `h-mad/tests/mutation-specs/` | new specs for every FR-8 guard; the audit-gate spec re-anchored if `run_suite` moves | FR-8 |
 | `docs/03-analysis/probes/codex-tdd-gate-defects/` | four probes and their readings (step P0) | spec §"Measured premises", AC-0.1 |
 
@@ -52,7 +54,8 @@ In scope, by file. Every path was verified present at `2f262f8a` with `ls`, exce
 - G1: One judge decides for both gates. Neither gate keeps a state reader, resolver, interpreter
   or scorer of its own (FR-1).
 - G2: The impl-plan Task names the test, the name map is the fallback, and otherwise the write is
-  denied with both sources named (FR-2). One grammar reads `Production` values tree-wide.
+  denied with both sources named (FR-2). The judge reads `Production` values through
+  `_parse_tasks` only; the wire registry keeps its own grammar, a stated residual (D-A).
 - G3: pytest runs under the nearest contained `.venv`, never under a venv that escapes the root
   (FR-3). The shell-policy relaxation is proven exact by a differential corpus.
 - G4: The verdict comes from pytest's summary line, and rc selects nothing (FR-4).
@@ -65,15 +68,14 @@ In scope, by file. Every path was verified present at `2f262f8a` with `ls`, exce
 
 ## Requirements
 
-FR-0 through FR-8 of `docs/01-plan/features/codex-tdd-gate-defects.spec.md` v1.0 apply, with
-OD-1…OD-7 resolved as the spec recommends. Where this plan needs the spec to move, it cites pending
-spec v1.1 S-n.
+FR-0 through FR-8 of `docs/01-plan/features/codex-tdd-gate-defects.spec.md` v1.1 (`96bf1cd1`)
+apply, with OD-1…OD-7 resolved as the spec recommends. Where this plan relies on S-7, S-8, S-9,
+S-11 or S-12, it cites spec v1.2 (S-n).
 
 **Merge conditions:**
-- V-0 must read conclusively (not `INCONCLUSIVE`) with a chosen form. This is pending S-4, because
-  spec AC-6.7 lets AC-6.1–AC-6.4 ship without it.
-- V-1r (the offline Task 7 replay) must meet its post-merge criterion against the worktree's gate.
-  This is pending S-5.
+- V-0 must read conclusively (not `INCONCLUSIVE`) with a chosen form (spec v1.1 AC-6.7, S-4).
+- V-1r (the offline Task 7 replay) must meet its post-merge criterion against the worktree's gate
+  (spec v1.1 §"Live verification", S-5).
 
 The live V-1 stays blocked on `multi-host-runtime`, and it is not a merge condition. Evidence:
 `ls ~/.agents/skills/h-mad` → "No such file or directory", run at `2f262f8a`.
@@ -89,10 +91,10 @@ The live V-1 stays blocked on `multi-host-runtime`, and it is not a merge condit
 2. **Parsers, extended in place (OD-7).**
    - `_parse_tasks` gains `production` and `tests` list fields under the spec's label and value
      axes.
-   - `_production_claims` stops parsing, and reads `task["production"]` (see "One Production
-     grammar").
+   - `_production_claims` is not touched (D-A; see "Second Production grammar (residual)").
    - `_suite_summary` gains independent `failed`, `passed` and `errors` counts, and a
-     `no tests ran` reading.
+     `no tests ran` reading, and it scores only a whole pytest summary line (the "summary-line
+     rule" under "Regression census"), never a count phrase found elsewhere in the output.
    - Every existing caller keeps its current result, except the single `run_suite` change the spec
      names. The table under "Regression census" is the contract and is pinned cell by cell.
 3. **The judge.** A pure core takes (root, absolute target, ACTIVE features with their state
@@ -100,7 +102,7 @@ The live V-1 stays blocked on `multi-host-runtime`, and it is not a merge condit
    - `judge` prints exactly one `TDD-JUDGE:` line (FR-1).
    - `state` prints exactly one `TDD-STATE:` line, which is the chain reader's result for a target:
      no step5 record on the chain, the ACTIVE keys with each one's `codex_status`, or unreadable.
-     The design owns the format; S-8 names the verb to the spec.
+     The design owns the format; spec v1.2 (S-8) names the verb in FR-1.
 
    The Claude gate uses `state` for "is this governed?" and for the Codex-authorship key, so both
    gates reach one state reader for every state decision (OD-3).
@@ -115,12 +117,14 @@ The live V-1 stays blocked on `multi-host-runtime`, and it is not a merge condit
       file exists within the root on the target's chain") is correct for existence, and only for
       existence.
    3. The `state` verb decides governance. No step5 record → allow. Unreadable → refuse `judge-error`,
-      fail-closed like the Codex gate (pending S-8; today the Claude gate fails open here).
+      fail-closed like the Codex gate (spec v1.2 (S-8), AC-6.9; today the Claude gate fails open
+      here).
    4. Exemptions, then the Codex-authorship check over the `state` verb's ACTIVE records. The escape
       applies only when **every** ACTIVE record on the chain declares `unavailable`/`exhausted` or
-      `HMAD_CODEX_UNAVAILABLE` is set (pending S-8).
+      `HMAD_CODEX_UNAVAILABLE` is set (spec v1.2 (S-8), AC-6.10).
    5. The `judge` verb for every governed `.py` write, whether or not the target exists (OD-5). The
-      blocking form follows V-0's `CHOSEN=` reading (AC-6.5 / AC-6.6).
+      blocking form follows V-0's `CHOSEN=` reading (AC-6.5 / AC-6.6): (b) when `FORM_B=BLOCKS`,
+      otherwise (a) rc 2, on either conclusive branch. `exit 1` is never a chosen form.
 7. **Docs and mutation specs.** FR-7, the stale-prose census below, and the FR-8 specs.
 
 **The judge is found relative to the hook's own resolved path, never through `$HOME/.claude/skills`.**
@@ -138,9 +142,34 @@ The live V-1 stays blocked on `multi-host-runtime`, and it is not a merge condit
   hook already requires `python3`. The Codex gate already does the same
   (`Path(__file__).resolve().parents[1]` in `_derived_test`).
 - A test runs the worktree hook through a symlink placed outside the tree, and asserts that the
-  worktree judge ran.
+  worktree judge ran. The W6 test uses **two distinct trees** (see "Connection enforcement"), so a
+  judge path fixed to one checkout fails it.
 - **Residual:** a copied (not symlinked) hook finds no judge and denies `judge-error`. That is
   fail-closed, and the SKILL.md install line states it.
+
+**Worktree artifacts reached through `$HOME/.claude` are an axis; the tests are on it too.** The
+hook→judge edge above is one member. The test→hook edge is another: both existing Claude-gate test
+modules hard-wire `HOOK = Path.home() / ".claude" / "hooks" / "h-mad-tdd-gate.sh"`, which resolves
+to the **main** checkout's hook, so in the worktree every migrated assertion would run the unmodified
+gate. Census at `dfd5f02e` (`bash --noprofile --norc`, unit: matching lines):
+
+```bash
+grep -n 'Path.home() / ".claude"' h-mad/tests/*.py
+# reading at dfd5f02e: 6 matching lines in 4 files. Members of this feature's axis: the HOOK
+#   constant of test_h_mad_tdd_gate_codex.py and of test_h_mad_tdd_gate_state_resolution.py (2).
+#   Not members: test_h_mad_install_check.py (3 lines), which asserts the installed defaults on
+#   purpose, and test_h_mad_resume_decision.py (1 line), which reads handoff/, not this feature's files.
+```
+
+- **Rule:** every test that runs a file this feature edits resolves it from its own tree. Both
+  `HOOK` constants become `Path(__file__).resolve().parents[1] / "hooks" / "h-mad-tdd-gate.sh"`.
+- The change is module-level, outside any `def test_*`, so the impl-plan lists both constants under
+  §"Regression provenance", and the widened function-body diff (Success Criteria) sees them.
+- On main the value is unchanged in effect: `readlink ~/.claude/hooks/h-mad-tdd-gate.sh` →
+  `/Users/kimhawk/orca/skills/h-mad/hooks/h-mad-tdd-gate.sh`, the same file `parents[1]` reaches.
+- **Residual:** a test that reaches this feature's files through `$HOME/.claude` by a spelling other
+  than `Path.home() / ".claude"` (for example `os.path.expanduser`) is outside the grep. The 5g
+  diff review reads each new or changed test module's path constants by hand.
 
 **The judge's interpreter on the Claude side is the first `python3` on PATH**, the same one the
 hook already uses for the payload read.
@@ -186,9 +215,8 @@ judge that exits non-zero.
 - **Per-member fixtures** (each run alone), each expecting a refusal in the chosen form and never
   the member's own rc:
   - a judge stub that prints a traceback and exits 1;
-  - a judge stub that prints a valid ALLOW line and exits 1. It expects DENY `judge-error`, pending
-    S-9. Under spec v1.0's letter ("never `$?`"), it would expect ALLOW, but it must still not
-    exit 1.
+  - a judge stub that prints a valid ALLOW line and exits 1. It expects DENY `judge-error`
+    (spec v1.2 (S-9): rc never selects ALLOW; AC-1.3).
   - a `python3` stub that fails the `realpath` call;
   - an unset variable reached on the refusal path, injected by a mutation.
 - **Residual:** signals that kill `bash` itself, and a parse error before the trap is installed.
@@ -205,9 +233,10 @@ grep -c '\$(' h-mad/hooks/h-mad-tdd-gate.sh                 # 9 (command-substit
 These counts **move by construction**. After FR-6, four of today's five `exit 1` sites are
 replaced by the judge call: derivation script missing, cannot derive, no test file, test already
 passing. The Codex-authorship site remains. Re-measure at the 5g diff review. The pass condition
-is AC-6.5's (`grep -c '^\s*exit 1\s*$'` → 0) or AC-6.6's (every site asserted rc 1 and the
-prefix), never a carried count. The trap's per-member fixtures are the backstop for a refusal the
-greps cannot see, such as `… || exit 1` inside a compound line.
+is AC-6.5's `grep -c '^\s*exit 1\s*$'` → 0 on **either** conclusive branch (spec v1.1 AC-6.6 reuses
+AC-6.5's check; `exit 1` is not kept under `E1_BLOCKS`), never a carried count. The trap's
+per-member fixtures are the backstop for a refusal the greps cannot see, such as `… || exit 1`
+inside a compound line.
 
 **The run_suite change is stated as a table, not a sentence.** Today's behaviour is measured
 (P6). The after-column is the spec's one change plus what extending the parser necessarily moves.
@@ -250,8 +279,11 @@ between it and `01121ca7` either (v1.0). The premises were re-run anyway rather 
   - So a root state file with no step5 record hides a sub-project's step5 record. Reproduced as
     P3 `OD-3c`.
 - **P3: reproductions, each with a control.** Command:
-  `python3 docs/03-analysis/probes/codex-tdd-gate-defects/reproduce.py . /opt/homebrew/bin/python3 /opt/anaconda3/bin/python`.
-  The bytes of the P0 block below were run from scratch at `2f262f8a`: 24 `REPRO:` lines, rc 0.
+  `/opt/homebrew/bin/python3 docs/03-analysis/probes/codex-tdd-gate-defects/reproduce.py . /opt/homebrew/bin/python3 /opt/anaconda3/bin/python`.
+  The interpreter is pinned because the probe's `str | None` signatures need Python ≥ 3.10, and
+  `/usr/bin/python3` is 3.9.6 (P8). The bytes of the P0 block below were run from scratch at
+  `2f262f8a`, and again at `dfd5f02e` under that interpreter (3.14.7): 24 `REPRO:` lines, rc 0,
+  and the five fail-open lines P0 greps for all present.
   A Claude-gate reading is `(rc, stdout permissionDecision or '', first stderr line)`, so each
   blocking form reads differently from an allow. Unit: one `REPRO:` line per case. Timings and
   temp paths vary and are not part of the reading.
@@ -277,7 +309,9 @@ between it and `01121ca7` either (v1.0). The premises were re-run anyway rather 
   - `_production_claims` re-reads the plan with its **own** label regex, which accepts the singular
     `Production file` only. It takes the whole value as one key with only the outer backticks
     stripped. It uses its **own** task counter: `## Task ` or `#{2,3} [MT]\d+`, not `_TASK_RE`.
-  - The spec's AC-2.9 names only the wire-pin gate's and the assembler's tests (OQ-4 / S-10).
+  - This feature does not edit `_production_claims` (D-A). Spec v1.2 AC-2.9 names the registry's
+    tests beside the wire-pin gate's and the assembler's, and pins that `_production_claims` has
+    no diff against the base.
 - **P5: `_suite_summary` has one caller.**
   - `git grep -n "_suite_summary" -- h-mad handoff ':!h-mad/tests/fixtures'` → matches in
     `h-mad/scripts/h_mad_audit_gate.py` only: its definition and `run_suite`.
@@ -322,37 +356,42 @@ between it and `01121ca7` either (v1.0). The premises were re-run anyway rather 
     records both denials: the patch ("no derived test file exists") and
     `.venv/bin/python -m pytest` (shell policy).
 
-## One Production grammar (`_parse_tasks` → `_production_claims`)
+## Second Production grammar (residual, D-A)
 
-**Claim:** after FR-2, "which Task owns this production file" is read by exactly one grammar,
-`_parse_tasks`' `production` field. `_production_claims` keeps its signature and its result shape
-(`{path: task}`), but builds it from `task["production"]` for each task. Its label regex and its
-task counter are deleted. No third parser is written: the judge reads the same field.
+**Decision D-A (operator-approved 2026-09-28):** `h_mad_wire_registry._production_claims` is not
+edited. v1.1's rewrite over `_parse_tasks`, its three-population differential and wire W7 are
+withdrawn, and spec S-10 with them. The judge reads `Production` values only through
+`_parse_tasks`' new `production` field; no third parser is written.
 
-**Why the two grammars cannot both stay.** Probe `wire-registry-grammar.py` (step P0), run as
+**Residual, stated exactly.** After FR-2, "which Task owns this production file" is answered by two
+grammars: the judge's (`_parse_tasks`, spec FR-2's label and value axes) and the wire registry's
+(`_production_claims`: its own Task counter, `## Task ` or `#{2,3} [MT]\d+`; the singular
+`Production file` label only; the whole value as one key with the outer backticks stripped, of any
+extension). A plan line can be a production claim to one and not to the other, in both directions
+(spec v1.2 FR-2 "Residual: two `Production` parsers remain"). The registry's claims do not move,
+because its code does not move; spec v1.2 AC-2.9 pins `_production_claims` with no diff against
+the base, and pins that the extended `_parse_tasks` returns the same task ids in the same order as
+the base, because the registry pairs its own counter with that list by index.
+
+**Where the two disagree today, as a witness, not a complete census.** Probe
+`wire-registry-grammar.py` (step P0), run as
 `python3 …/wire-registry-grammar.py . /Users/kimhawk/orca/HemaSuite` at skills `2f262f8a` /
-HemaSuite `69ac6210`, over the corpus of 83 tracked, non-`archive/` `*.impl-plan.md` files.
-Reading:
+HemaSuite `69ac6210`, over the corpus of 83 tracked, non-`archive/` `*.impl-plan.md` files. It
+counts three divergence populations; it does not enumerate every divergence (the v1.1 delta review
+found further populations, such as singular-label values with no `.py` token). Reading:
 
 | Divergence today | Unit | Count |
 |---|---|---|
 | task counter differs from `_parse_tasks`: `desk-check-autofix` 11/12, `guideline-ingest-doc-id-uniqueness` 36/0, `presentation-voice-guidance` 8/0, `review-pipeline-correctness` 0/1 | files | 4 |
-| singular `Production file` value carrying ≥2 backticked `.py` tokens, read today as one malformed key | matching lines | 16 |
+| singular `Production file` value carrying ≥2 backticked `.py` tokens, read by the registry as one malformed key | matching lines | 16 |
 | `Production files` / `Production` label lines the registry does not read | matching lines | 64 |
 
 The 64 agree with the spec's label census (46 + 18). The corpus moves with every impl-plan
-commit, so this reading is re-derived at 5g, never carried.
+commit, so this reading is re-derived at 5g, never carried. No row is a pass condition: under D-A
+the pass condition is AC-2.9.
 
-**Guard-narrowing differential.** Moving the registry to the shared grammar changes its output on
-exactly these three populations. At 5g, run `_production_claims` from the worktree's base and from
-its head over the same 83-file corpus, and diff the `{normalised path: task id}` maps. Every
-changed entry must fall in one of the three populations above. Any other change is a defect. Its
-existing tests pass unmodified: `grep -c 'Production file' h-mad/tests/test_h_mad_wire_registry.py`
-→ 3 matching lines, each a singular, single-path value that both grammars read identically.
-
-The wire registry's mutation specs (`wire_registry_*.json`, 3 files) anchor no line inside
-`_production_claims`. Measured: 0 mutations per spec whose JSON names `Production file`,
-`_production_claims` or `task_index`.
+The registry's existing tests pass unmodified (R3), and its mutation specs
+(`wire_registry_*.json`, 3 files) are untouched by this feature.
 
 ## Guard narrowing: shell policy
 
@@ -369,7 +408,7 @@ today. Invariant §"Guard narrowing" requires the relaxation to be shown exact.
     - `./.venv/bin/python`;
     - `../hematology-paper-writer/.venv/bin/python` from a sibling `cwd`;
     - root-prefixed from the sub-project `cwd`, which resolves to a doubled path that does not
-      exist (see S-6);
+      exist (spec v1.1 AC-3.4, S-6);
     - `.venv/bin/python3.14`;
     - a `python-evil` file placed in the contained venv's `bin/`, which matches `python*`.
   - **Venv state:**
@@ -406,31 +445,64 @@ failures and no passes reading `UNREADABLE no_summary`? Every command below ran 
 
 **Behaviour today and after.** Today is the P6 reading. After is spec FR-4 plus what the parser
 extension necessarily moves. Each row becomes one parametrized test case in the audit-gate suite,
-with its own stub. The first column is the stub's summary line. The parser reads the last
-`_SUITE_RE` match anywhere in `stdout + stderr` (P5), not "the final line". The design states
-that scan rule for the extended parser, including a stray `N failed` printed to stderr after the
-summary.
+with its own stub. The first column is what the stub prints.
 
-| Summary line | `_suite_summary` today | `run_suite` today | `run_suite` after | Why |
+**Summary-line rule (FR-4 "pytest's summary line").** Today `_suite_summary` takes the last
+`_SUITE_RE` match found **anywhere** in `stdout + stderr` (P5). Once the parser reads `failed`
+alone, that rule would score a stray `1 failed` printed after a passing summary as a failure: a
+passing test would read `red-measured` and allow a production write. So the extended parser scores
+only a **summary line**:
+- a whole line, after stripping surrounding whitespace and pytest's `=` padding, that consists only
+  of comma-separated `<N> <word>` count phrases (or `no tests ran`), optionally followed by
+  ` in <duration>` and a parenthesised wall-clock;
+- a line that carries ` in <duration>` beats any line that does not, wherever each sits; among lines
+  of the same kind, the last wins;
+- a count phrase inside a longer line (a traceback, a `FAILED …` line, a diagnostic) is never read.
+
+The untimed fallback exists because an existing caller depends on it: of the stub lines that reach
+`run_suite`, one prints an untimed summary. Census at `dfd5f02e` (`bash --noprofile --norc`, unit:
+matching lines):
+
+```bash
+git grep -n -E '[0-9]+ (passed|failed|error|errors)( in|,|"|\\n)' -- h-mad/tests handoff ':!h-mad/tests/fixtures' | grep -v mutation-specs
+# reading at dfd5f02e: 13 matching lines. 8 reach run_suite (test_h_mad_audit_suite_gate.py 7,
+#   test_h_mad_audit_cycle.py 1), each echoing its summary as a whole line; 7 of the 8 are timed,
+#   and test_h_mad_audit_suite_gate.py's `echo "1 failed, 8 passed"; exit 1` is the untimed one
+#   (asserted FAIL). The other 5 are in modules that do not call _suite_summary (P5).
+```
+
+**Residual:** output with no timed summary line and a stray whole-line count (for example pytest
+killed before its summary, after a plugin printed `1 failed` on a line of its own) is scored on the
+stray line. The judge's timeout and `pytest-missing` branches run first (FR-4 classification).
+
+| Stub prints | `_suite_summary` today | `run_suite` today | `run_suite` after | Why |
 |---|---|---|---|---|
 | `3 failed in 0.10s` | `None` | UNREADABLE `no_summary` | **FAIL** | the spec's one change |
 | `3 failed, 1 skipped in 0.1s` | `None` | UNREADABLE `no_summary` | **FAIL** | same class: failures, no passes |
 | `1 failed, 1 error in 0.1s` | `None` | UNREADABLE `no_summary` | **FAIL** | same class; see OQ-3 |
-| `1 error in 0.06s` | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | not in the spec's change; kept by an explicit branch |
-| `no tests ran in 0.01s` | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` (spec v1.0), or `no_tests_ran` if spec v1.1 S-7 names it | kept by an explicit branch until the spec decides |
+| `1 error in 0.06s` | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | spec v1.2 (S-7) non-change; kept by an explicit branch |
+| `no tests ran in 0.01s` | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | spec v1.2 (S-7) non-change; kept by an explicit branch |
 | `2 passed, 1 error in 0.1s` | `(2, 0)` | **PASS** | PASS | kept by the spec's "existing callers keep their results"; see OQ-3 |
 | `1 failed, 11 passed in 0.2s` | `(11, 1)` | FAIL | FAIL | unchanged |
 | `collected 0 items` (no summary) | `None` | UNREADABLE `no_summary` | UNREADABLE `no_summary` | unchanged |
+| stdout `2 passed in 0.1s`, then stderr `1 failed` | `(2, 0)` | PASS | PASS | the summary-line rule; the discriminating case |
+
+The last row's "today" was measured at `dfd5f02e` by calling `_suite_summary('2 passed in 0.1s\n1 failed\n')`
+and `run_suite` on a stub printing that pair, under `/opt/homebrew/bin/python3`: `(2, 0)` and
+`PASS`. Today's parser gets it right only because `_SUITE_RE` requires `passed`; a parser extended
+to read `failed` alone without the summary-line rule scores it FAIL, and that is the mutation the
+row catches. The same pair fed to the judge (AC-4.4-style shim, rc 0) reads DENY `test-passing`,
+never ALLOW `red-measured`; the impl-plan pins it beside AC-4.4.
 
 **Two explicit branches.** Once the parser returns counts for `1 error` and for `no tests ran`,
 `run_suite`'s `passed == 0 and failed == 0` test would otherwise catch both and re-label them
 `no_tests_ran`.
 - For `1 error` that is false, because tests were collected and errored.
-- For `no tests ran` it changes the `SUITE:` reason that `main` and `h_mad_audit_cycle` print. That
-  is a second audit-gate change the spec does not name.
+- For `no tests ran` it changes the `SUITE:` reason that `main` and `h_mad_audit_cycle` print.
 
-v1.0 adopted the second change silently. v1.1 routes it to the spec as S-7 and builds spec v1.0's
-behaviour until S-7 is answered. The design names both branches and their mutations.
+Spec v1.2 (S-7) states both as non-changes: each keeps `UNREADABLE no_summary`, and `no_tests_ran`
+stays reserved for a parsed summary with 0 passed, 0 failed and 0 errors, such as `0 passed in …`.
+AC-4.7 pins both with exact-reason fixtures. The design names both branches and their mutations.
 
 **Tests that pin today's behaviour.**
 
@@ -454,7 +526,7 @@ Two tests sit next to the change and must pass **unmodified**:
 - `test_no_summary_is_UNREADABLE_not_PASS_and_not_FAIL`: its stub prints `collected 0 items`, and
   there is still no summary.
 - `test_a_run_that_says_only_no_tests_ran_is_also_refused`: it asserts only "not PASS", which is
-  still true under either S-7 outcome.
+  still true under spec v1.2 (S-7), which keeps `UNREADABLE no_summary` for it.
 
 The docstring of `test_an_empty_selection_is_not_a_pass` says a `no tests ran` stub "never reaches
 the verdict logic at all". After the change it does, so that sentence becomes false. It is prose
@@ -540,7 +612,8 @@ halves of a doc change").
 ## Architecture Considerations
 
 - **Single-source contract.** One chain reader, one resolver, one scorer, one `Production`
-  grammar, all called by both gates. The Codex gate imports the judge. The Claude gate runs its CLI
+  grammar for the judge, all called by both gates (the wire registry's own grammar is the stated
+  residual, D-A). The Codex gate imports the judge. The Claude gate runs its CLI
   and parses one line per verb. No gate keeps a private fallback: AC-1.1 requires
   `git grep -n "h_mad_derive_test_path.sh" -- h-mad/hooks` → no match. No gate keeps a private
   state reader either: after FR-6 the Claude gate contains no `jq` expression over
@@ -564,8 +637,8 @@ halves of a doc change").
 |---|---|---|
 | `reproduce.py`, `v0-blocking-contract.sh`, `v1-offline-replay.sh` and `wire-registry-grammar.py`, each with its reading; V-0's captured payload, replay rcs and `claude --version` | probe | AC-0.1, AC-0.2 |
 | Shared judge module and CLI (`judge` → `TDD-JUDGE:`, `state` → `TDD-STATE:`) | module / CLI | FR-1–FR-5 |
-| `_parse_tasks` `production` / `tests` fields; `_production_claims` on them | module | FR-2 |
-| `_suite_summary` counts including errors and `no tests ran`; the `run_suite` table above | module | FR-4 |
+| `_parse_tasks` `production` / `tests` fields (`_production_claims` untouched, D-A) | module | FR-2 |
+| `_suite_summary` counts including errors and `no tests ran`, under the summary-line rule; the `run_suite` table above | module | FR-4 |
 | Codex gate rewiring, `cwd` base, chain reader, venv shell policy with its differential | hook | FR-3, FR-5 |
 | Claude gate payload read, `state` and `judge` calls, refusal function with `EXIT` trap | hook | FR-6 |
 | §"Trust boundary" text; SKILL.md registry and gate bullets; agy-runtime.md sentence; codex-implementer-prompt.md bullets | docs | FR-7, OQ-2 |
@@ -584,23 +657,48 @@ Each is mutated in both directions (invariant §"Connection enforcement").
 | W4 judge → `_suite_summary` | AC-4.4 (rc-blindness) fails | AC-4.2 GREEN reads RED |
 | W5a Codex gate → chain reader | AC-5.2 allows again (the OD-3 fail-open) | the sibling-project case of `test_codex_hook_scopes_nested_state_to_the_target_project` denies |
 | W5b Claude gate → chain reader (`state` verb) | the `OD-3c` fixture (root step3, sub-project step5) allows again | a no-step5 chain is refused |
-| W6 Claude gate → hook-relative judge path | the symlinked-hook test runs no judge, or the main tree's | none: a path has no "force" direction (stated) |
-| W7 `_production_claims` → `_parse_tasks` `production` | a plural-label or multi-path Task claims nothing again | a singular single-path claim is lost |
+| W6 Claude gate → hook-relative judge path | the symlinked-hook test runs no judge, or the main tree's | the path is forced to tree A's `h-mad/scripts/` unconditionally: the test run through tree B's symlinked hook must fail, because tree B's judge marker is absent (fixture below) |
+
+**W6 fixture: two distinct hook/judge trees.** A single symlinked-hook fixture cannot tell a
+hook-relative judge path from one fixed to that same checkout, so the W6 test builds two:
+- tree A is the worktree's own `h-mad/`;
+- tree B is a scratch copy holding `hooks/h-mad-tdd-gate.sh` and a judge at the same relative
+  path, whose judge prints a valid verdict line and writes a tree-B marker file;
+- the test runs tree B's hook through a symlink placed outside both trees, and asserts that
+  tree B's marker was written and the verdict is tree B's judge's.
+
+The force mutation replaces the hook's resolved-path computation with tree A's absolute
+`h-mad/scripts/` path; the tree-B test must then fail. The remove mutation restores the
+`$HOME/.claude/skills` lookup; the tree-B test must fail too.
+
+Wire W7 (`_production_claims` → `_parse_tasks`) is withdrawn with the rewrite (D-A).
 
 ## Risks and Mitigation
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| R1: V-0 reads `INCONCLUSIVE`, or no form is proven (`CHOSEN=none`) | FR-6's refusal form cannot be chosen | **Halt to the operator. The feature does not merge.** The halt reason from the probe is fixed and V-0 is re-run. AC-6.1–AC-6.4 may be implemented in the worktree meanwhile, but nothing merges (pending S-4) |
-| R2: `grok-codex-fallback`'s impl-plan asserts the Claude gate's `exit 1` | After this merges with form (a) or (b), its BLOCK-GROK / BLOCK-INVALID tests and mutation anchors assert a form the gate no longer uses. Its worktree is already in Phase 5 (`git worktree list` → `~/orca/skills-grok-codex-fallback` on `feature/216-grok-codex-fallback`, at `2f262f8a`) | `grep -n 'exit 1' docs/01-plan/features/grok-codex-fallback.impl-plan.md \| grep -cE 'exit 1 ;;$\|BLOCK-\|test_gate_matrix'` → 7 gate-assertion lines at `2f262f8a` (file last changed `5a9cd8ed`): 3 `exit 1 ;;` case arms, 2 AC prose lines, 2 mutation rows. The broader v1.0 command matches 16 lines, 9 of them `exit 1` in its verification scripts. BSD `grep` without `-E` reads `$` before `\|` literally and prints 4. Owed to that impl-plan (report). Its new refusals must use this feature's refusal function |
-| R3: `_parse_tasks`' dict gains keys, and `_production_claims` changes grammar | A consumer that iterates or serialises the dict changes output, and the registry's claims change | P4's three consumers' suites run unmodified. The registry diff is accounted by population ("One Production grammar") |
+| R1: V-0 reads `INCONCLUSIVE`, or no form is proven (`CHOSEN=none`) | FR-6's refusal form cannot be chosen | **Halt to the operator. The feature does not merge.** The halt reason from the probe is fixed and V-0 is re-run. AC-6.1–AC-6.4 may be implemented in the worktree meanwhile, but nothing merges (spec v1.1 AC-6.7) |
+| R2: `grok-codex-fallback`'s impl-plan asserts the Claude gate's `exit 1` | After this merges with form (a) or (b), its BLOCK-GROK / BLOCK-INVALID tests and mutation anchors assert a form the gate no longer uses. Its worktree is already in Phase 5 (`git worktree list` → `~/orca/skills-grok-codex-fallback` on `feature/216-grok-codex-fallback`, at `2f262f8a`) | The R2 census below the table → 7 gate-assertion lines: 3 `exit 1 ;;` case arms, 2 AC prose lines, 2 mutation rows. Owed to that impl-plan (report). Its new refusals must use this feature's refusal function |
+| R3: `_parse_tasks`' dict gains keys | A consumer that iterates or serialises the dict changes output | P4's three consumers' suites run unmodified, and spec v1.2 AC-2.9's same-ids-same-order check over the corpus. The registry's own grammar is untouched (D-A) |
 | R4: no `.venv` in a governed project, and the hook's `python3` has no pytest | Every Claude-fallback write in this repository is DENY `pytest-missing` (P8): fail-closed but blocking | The deny reason names the remedy (create a contained `.venv`). OQ-1 goes to the operator. No knob (spec) |
-| R5: the worktree hook calls the main tree's scripts | Tests green for the wrong reason | Hook-relative judge path and the W6 test |
+| R5: the worktree hook calls the main tree's scripts, or a worktree test runs the main tree's hook | Tests green for the wrong reason | Hook-relative judge path and the two-tree W6 test; both test modules' `HOOK` resolved from `Path(__file__)` (layer 6) |
 | R6: a pre-existing test is deleted, or weakened under the same node id, while counts stay green | Compatibility NFR silently false | Node-id floor **and** the function-body diff (Success Criteria) |
 | R7: the `run_suite` edit drifts or duplicates `audit_suite_gate.json` anchors | A guard stops being mutation-tested | `--check-anchors` at 5g; the anchor-occurrence rule; re-anchor in the same commit |
-| R8: a V-0 session writes some other file, or invokes the hook for another path | A false reading | Per-arm nonce in the sentinel name. Only a Write of that exact sentinel logs `HIT <nonce>`. An arm with no such line halts `UNMEASURED` |
-| R9: V-0's isolation flags (`--setting-sources project --strict-mcp-config`) change session behaviour in a way not measured here | The sessions fail and every arm halts | A halt is `INCONCLUSIVE` → R1. The flags exist in `claude --help` (2.1.283), and their live effect is unverified |
-| R10: the HemaSuite objects `1fbf8022` / `31bfcfe4` become unreachable (branch rewritten, gc) | V-1r cannot run | The script halts `UNMEASURED` on `git archive`. Re-pin to the rewritten Task 7 commit and its parent, and say so |
+| R8: a V-0 session writes some other file, or invokes the hook for another path | A false reading | Per-arm nonce in the sentinel name. Only a Write whose path ends in that sentinel's basename logs `HIT <nonce> <path>`, and presence is scored at every logged path. An arm with no such line is `UNMEASURED`: a halt for E1, E2, E0 and the capture arm, `FORM_B=INCONCLUSIVE` for EJ |
+| R9: V-0's isolation flags (`--setting-sources project --strict-mcp-config`) change session behaviour in a way not measured here | The sessions fail and every arm halts | A halt is `INCONCLUSIVE` → R1. The flags exist in `claude --help` (2.1.283), and their live effect has not been observed |
+| R10: the objects HemaSuite `1fbf8022` / HemaSuite `31bfcfe4` become unreachable (branch rewritten, gc) | V-1r cannot run | The script halts `UNMEASURED` on `git archive`. Re-pin to the rewritten Task 7 commit and its parent, and say so |
+
+**R2 census** (in a fenced block, because a table cell must escape `|` as `\|`, and that escape
+copied raw into `grep -E` matches a literal `|`). Run in `bash --noprofile --norc`, unit: matching
+lines:
+
+```bash
+grep -n 'exit 1' docs/01-plan/features/grok-codex-fallback.impl-plan.md | grep -cE 'exit 1 ;;$|BLOCK-|test_gate_matrix'
+# reading at 2f262f8a, and again at dfd5f02e (file last changed 5a9cd8ed): 7
+```
+
+The broader v1.0 command (plan v1.0's R2 cell) matches 16 lines, 9 of them `exit 1` in that
+plan's verification scripts (v1.1 reading, reproduced by the v1.1 delta review, not re-run here). BSD `grep` without `-E` reads `$` before `\|` literally and prints 4.
 
 ## Convention Prerequisites
 
@@ -644,7 +742,7 @@ Each is mutated in both directions (invariant §"Connection enforcement").
   | `h-mad/references/codex-implementer-prompt.md` | edits two bullets | not named | not named |
   | `h-mad/scripts/h_mad_audit_gate.py` | edits | not a production file | not named |
   | `h-mad/scripts/h_mad_wire_pin_gate.py` | edits | not a production file | not named |
-  | `h-mad/scripts/h_mad_wire_registry.py` | edits (`_production_claims`) | not named | not named |
+  | `h-mad/scripts/h_mad_wire_registry.py` | not edited (D-A); its tests run unmodified | not named | not named |
   | `h-mad/scripts/h_mad_assemble_tdd.py` | reads (`_parse_tasks` consumer) | edits | not named |
   | `h-mad/scripts/h_mad_audit_cycle.py` | reads (`run_suite` consumer) | edits | not named |
 
@@ -804,19 +902,27 @@ PY
   shasum -a 256 "$D/reproduce.py" | grep -q '^45f763ee14162b4747fe1c3dee3afa1478f9cc86d2599717f3993bd34939d974 ' || exit 1
   cat > "$D/v0-blocking-contract.sh" <<'SH'
 #!/bin/bash
-# V-0 (spec FR-0; plan v1.1): which PreToolUse refusal forms does Claude Code honour for Write?
+# V-0 (spec v1.1 FR-0; plan v1.2): which PreToolUse refusal forms does Claude Code honour for Write?
 # Arms: E1 = exit 1, E2 = exit 2 (form a), EJ = rc 0 + JSON permissionDecision deny (form b),
 # E0 = exit 0 (negative control). Each arm has its own nonce, carried in its sentinel file name.
 # Proof that an arm's session reached the hook's refusal branch is a log line carrying THAT
 # arm's nonce, written only for tool_name=Write on that arm's sentinel. Any other invocation
-# logs nothing. Run from a cwd OUTSIDE every repository. Every halt is `exit 1` and means the
-# reading is INCONCLUSIVE, never a pass.
+# logs nothing. Presence is scored at every path the arm's session HIT lines logged, never at an
+# assumed path. Run from a cwd OUTSIDE every repository. Every halt is `exit 1` and means the
+# reading is INCONCLUSIVE, never a pass. Arm EJ alone may be UNMEASURED without a halt: it then
+# reads FORM_B=INCONCLUSIVE, and READING is still scored over E1/E2/E0 (spec v1.1 FR-0).
 S="$(mktemp -d "${TMPDIR:-/tmp}/hmad-v0.XXXXXX")" || exit 1
 git -C "$S" rev-parse --show-toplevel >/dev/null 2>&1 && { echo "V-0: HALT scratch is inside a git repo"; exit 1; }
 command -v jq >/dev/null || { echo "V-0: HALT no jq"; exit 1; }
 claude --version > "$S/claude.version" || { echo "V-0: HALT claude --version"; exit 1; }
 
 nonce() { od -An -N8 -tx1 /dev/urandom | tr -d ' \n'; }
+
+unmeasured() {  # $1 = arm, $2 = why. EJ is recorded and the run goes on; any other arm halts.
+  echo "V-0: $1 UNMEASURED $2"
+  [ "$1" = EJ ] || exit 1
+  EJ_UNMEASURED=1
+}
 
 mkhook() {  # $1 = arm, $2 = sentinel basename, $3 = refusal: 1 | 2 | json | 0 | cap
   {
@@ -847,7 +953,7 @@ attempt() {  # $1 = arm, $2 = sentinel basename; a real session is asked to Writ
       --tools Write --permission-mode acceptEdits \
       --no-session-persistence --output-format json > "$S/$1.out.json" 2> "$S/$1.err")
   grep -q "^HIT ${2#SENTINEL_} " "$S/$1.log" 2>/dev/null \
-    || { echo "V-0: $1 UNMEASURED no_hit_for_nonce ${2#SENTINEL_}"; exit 1; }
+    || unmeasured "$1" "no_hit_for_nonce ${2#SENTINEL_}"
 }
 
 N_cap="SENTINEL_cap$(nonce).py"
@@ -866,42 +972,58 @@ for arm in E1:1 E2:2 EJ:json E0:0; do
   dec=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)
   echo "V-0: replay $a rc=$rc decision=${dec:-none}" | tee -a "$S/replay.txt"
   case "$want" in
-    json) [ "$rc" = 0 ] && [ "$dec" = deny ] || { echo "V-0: $a UNMEASURED replay rc=$rc decision=${dec:-none}"; exit 1; } ;;
-    *)    [ "$rc" = "$want" ] && [ -z "$dec" ] || { echo "V-0: $a UNMEASURED replay rc=$rc want=$want"; exit 1; } ;;
+    json) ok=$([ "$rc" = 0 ] && [ "$dec" = deny ] && echo y) ;;
+    *)    ok=$([ "$rc" = "$want" ] && [ -z "$dec" ] && echo y) ;;
   esac
-  grep -q "^HIT ${n#SENTINEL_} " "$S/$a.log" || { echo "V-0: $a UNMEASURED replay_no_hit"; exit 1; }
+  [ "$ok" = y ] || { unmeasured "$a" "replay rc=$rc want=$want decision=${dec:-none}"; continue; }
+  grep -q "^HIT ${n#SENTINEL_} " "$S/$a.log" || { unmeasured "$a" replay_no_hit; continue; }
   mv "$S/$a.log" "$S/$a.replay.log" || exit 1   # the replay must not count as the session's hit
   attempt "$a" "$n"
 done
 
-p() { eval "n=\$N_$1"; [ -e "$S/$1/$n" ] && echo present || echo absent; }
-E1=$(p E1) E2=$(p E2) EJ=$(p EJ) E0=$(p E0)
+p() {  # present if ANY path this arm's session logged exists; a relative one is the session cwd's
+  local n f r=absent
+  eval "n=\$N_$1"
+  while read -r _ _ f; do
+    case "$f" in /*) ;; *) f="$S/$1/$f" ;; esac
+    [ -e "$f" ] && r=present
+  done < <(grep "^HIT ${n#SENTINEL_} " "$S/$1.log")
+  echo "$r"
+}
+E1=$(p E1) E2=$(p E2) E0=$(p E0)
+if [ -n "$EJ_UNMEASURED" ]; then EJ=UNMEASURED; else EJ=$(p EJ); fi
 case "$E1/$E2/$E0" in
   absent/absent/present)  R=E1_BLOCKS ;;
   present/absent/present) R=E1_DOES_NOT_BLOCK ;;
   *)                      R=INCONCLUSIVE ;;
 esac
-form() { [ "$E0" = present ] || { echo INCONCLUSIVE; return; }; [ "$1" = absent ] && echo BLOCKS || echo DOES_NOT_BLOCK; }
+form() {
+  [ "$E0" = present ] || { echo INCONCLUSIVE; return; }
+  case "$1" in absent) echo BLOCKS ;; present) echo DOES_NOT_BLOCK ;; *) echo INCONCLUSIVE ;; esac
+}
 FA=$(form "$E2") FB=$(form "$EJ")
+# Spec v1.1 AC-6.5 / AC-6.6: on either conclusive branch the form is (b) when FORM_B=BLOCKS, else (a)
+# when FORM_A=BLOCKS. `exit 1` is never a chosen form.
 case "$R/$FA/$FB" in
-  E1_DOES_NOT_BLOCK/*/BLOCKS)         C=b ;;
-  E1_DOES_NOT_BLOCK/BLOCKS/*)         C=a ;;
-  E1_BLOCKS/*)                        C=rc1 ;;
-  *)                                  C=none ;;
+  E1_DOES_NOT_BLOCK/*/BLOCKS|E1_BLOCKS/*/BLOCKS)   C=b ;;
+  E1_DOES_NOT_BLOCK/BLOCKS/*|E1_BLOCKS/BLOCKS/*)   C=a ;;
+  *)                                               C=none ;;
 esac
 echo "V-0: READING=$R FORM_A=$FA FORM_B=$FB CHOSEN=$C E1=$E1 E2=$E2 EJ=$EJ E0=$E0 claude=$(head -1 "$S/claude.version") scratch=$S"
 SH
-  shasum -a 256 "$D/v0-blocking-contract.sh" | grep -q '^b8a3400dca8a37b8e84d97615ec9788b21171150f5941dbf8f52ee7c1c820cef ' || exit 1
+  shasum -a 256 "$D/v0-blocking-contract.sh" | grep -q '^04700d9ffc254a603387f4baf1a62a1b115956fd410d88c3484db3fc50ddaff4 ' || exit 1
   cat > "$D/v1-offline-replay.sh" <<'V1R'
 #!/bin/bash
-# V-1 offline (plan v1.1): replay the HemaSuite #28 Task 7 incident against a skills tree's Codex
+# V-1 offline (plan v1.2): replay the HemaSuite #28 Task 7 incident against a skills tree's Codex
 # gate, read-only on HemaSuite. Usage: v1-offline-replay.sh <skills-tree> <hemasuite-checkout>
 # HemaSuite is only READ: `git archive` / `git show` of two pinned commits, and an APFS clone
 # (`cp -c`) of its hematology-paper-writer/.venv. Every pytest run happens in the scratch copies.
 # RED  = the tree before Task 7's commit plus that commit's test file (the incident's state:
 #        the RED test existed, the production change did not).
 # GREEN = Task 7's commit (the same test now passes): the denying control.
-# Every halt is `exit 1` and means the reading is UNMEASURED, never a pass.
+# Every halt is `exit 1` and means the reading is UNMEASURED, never a pass. A completed run scores
+# each of the six gate lines against its post-merge pass condition (one `V-1r: CHECK` line each)
+# and exits 0 only on `VERDICT=PASS`; any failed check gives `VERDICT=FAIL` and exit 2.
 SK=$(cd "$1" && pwd -P) || exit 1
 H=$(cd "$2" && pwd -P) || exit 1
 GREEN_SHA=31bfcfe4 SUB=hematology-paper-writer  # `shared/` rides along: the sub-project conftest puts the git root on sys.path
@@ -935,6 +1057,23 @@ gate() {  # $1 = snapshot, $2 = label, $3 = payload json (cwd is the sub-project
   local R="$S/$1" out rc
   out=$(cd "$R/$SUB" && env -u CODEX_PROJECT_DIR python3 "$SK/h-mad/hooks/h-mad-codex-tdd-gate.py" <<<"$3"); rc=$?
   echo "V-1r: gate $1 $2 rc=$rc out=${out:-<empty>}" | tee -a "$S/reading.txt"
+  k="$1_$(printf '%s' "$2" | tr - _)"
+  eval "RC_$k=\$rc"; eval "OUT_$k=\$out"
+}
+is_allow() {  # $1 = key: rc 0 and an empty or `{}` stdout
+  eval "rc=\$RC_$1"; eval "out=\$OUT_$1"
+  [ "$rc" = 0 ] && { [ -z "$out" ] || [ "$out" = "{}" ]; }
+}
+is_deny() {  # $1 = key, $2 = a word the deny must also carry (optional)
+  eval "out=\$OUT_$1"
+  case "$out" in *'"deny"'*) ;; *) return 1 ;; esac
+  [ -z "$2" ] || case "$out" in *"$2"*) ;; *) return 1 ;; esac
+}
+FAILS=0
+check() {  # $1 = check name, rest = the predicate
+  local name=$1 v=PASS; shift
+  "$@" || { v=FAIL; FAILS=$((FAILS + 1)); }
+  echo "V-1r: CHECK $name $v" | tee -a "$S/reading.txt"
 }
 
 snapshot red "$RED_SHA" "$GREEN_SHA"
@@ -951,9 +1090,17 @@ for snap in red green; do
   gate "$snap" shell-pytest "$(jq -cn --arg c "$cwd" --arg x ".venv/bin/python -m pytest $TEST" '{tool_name:"shell_command",cwd:$c,tool_input:{command:$x}}')"
   gate "$snap" shell-write "$(jq -cn --arg c "$cwd" --arg x ".venv/bin/python -c \"open('x','w')\"" '{tool_name:"shell_command",cwd:$c,tool_input:{command:$x}}')"
 done
-echo "V-1r: DONE skills=$(git -C "$SK" rev-parse --short HEAD) hemasuite_red=$RED_SHA hemasuite_green=$GREEN_SHA scratch=$S"
+check red-patch-allows is_allow red_patch
+check green-patch-denies-test-passing is_deny green_patch test-passing
+check red-shell-pytest-allows is_allow red_shell_pytest
+check green-shell-pytest-allows is_allow green_shell_pytest
+check red-shell-write-denies is_deny red_shell_write
+check green-shell-write-denies is_deny green_shell_write
+V=PASS; [ "$FAILS" = 0 ] || V=FAIL
+echo "V-1r: DONE VERDICT=$V fails=$FAILS/6 skills=$(git -C "$SK" rev-parse --short HEAD) hemasuite_red=$RED_SHA hemasuite_green=$GREEN_SHA scratch=$S"
+[ "$V" = PASS ] || exit 2
 V1R
-  shasum -a 256 "$D/v1-offline-replay.sh" | grep -q '^e9901faaa4abbb417281813b545eb8ab4c2bce5e60b78d9133f3152a041e5919 ' || exit 1
+  shasum -a 256 "$D/v1-offline-replay.sh" | grep -q '^8dd639240265d338ee24aa6a52e80929302c52c14ee8c41b8bb9360cd2e4ee10 ' || exit 1
   cat > "$D/wire-registry-grammar.py" <<'WRG'
 #!/usr/bin/env python3
 """Where h_mad_wire_registry._production_claims and _parse_tasks disagree today.
@@ -999,7 +1146,7 @@ print(f"WRGRAMMAR: files={len(files)} task_counter_divergent_files={len(div)} "
 WRG
   shasum -a 256 "$D/wire-registry-grammar.py" | grep -q '^9d20448039ca662b646981fbb57ddc1879fa852faaaa4dbef2b0654150b82650 ' || exit 1
   SHA=$(git rev-parse --short HEAD) || exit 1
-  python3 "$D/reproduce.py" . /opt/homebrew/bin/python3 /opt/anaconda3/bin/python > "$D/reproduce.reading.$SHA.txt" || exit 1
+  /opt/homebrew/bin/python3 "$D/reproduce.py" . /opt/homebrew/bin/python3 /opt/anaconda3/bin/python > "$D/reproduce.reading.$SHA.txt" || exit 1
   test "$(grep -c '^REPRO:' "$D/reproduce.reading.$SHA.txt")" = 24 || exit 1
   grep -q "^REPRO: D3 nopytest (0, 'allow'" "$D/reproduce.reading.$SHA.txt" || exit 1
   grep -q "^REPRO: OD-3 nearest-state (0, 'allow'" "$D/reproduce.reading.$SHA.txt" || exit 1
@@ -1008,8 +1155,12 @@ WRG
   grep -q "^REPRO: OD-5 nopytest (0, '', '')" "$D/reproduce.reading.$SHA.txt" || exit 1
   python3 "$D/wire-registry-grammar.py" . /Users/kimhawk/orca/HemaSuite > "$D/wire-registry-grammar.reading.$SHA.txt" || exit 1
   grep -q '^WRGRAMMAR: files=' "$D/wire-registry-grammar.reading.$SHA.txt" || exit 1
-  bash "$D/v1-offline-replay.sh" . /Users/kimhawk/orca/HemaSuite > "$D/v1-offline-replay.reading.$SHA.txt" || exit 1
-  grep -q '^V-1r: DONE ' "$D/v1-offline-replay.reading.$SHA.txt" || exit 1
+  bash "$D/v1-offline-replay.sh" . /Users/kimhawk/orca/HemaSuite > "$D/v1-offline-replay.reading.$SHA.txt"; V1RC=$?
+  # Pre-merge the gate is unfixed: the replay must complete and FAIL its post-merge checks (exit 2),
+  # never halt (exit 1) and never pass (exit 0).
+  test "$V1RC" = 2 || exit 1
+  grep -q '^V-1r: DONE VERDICT=FAIL fails=4/6 ' "$D/v1-offline-replay.reading.$SHA.txt" || exit 1
+  grep -q '^V-1r: CHECK red-patch-allows FAIL$' "$D/v1-offline-replay.reading.$SHA.txt" || exit 1
   ```
 
   - **The 24** is the probe's own line count: 17 gate and summary lines plus 7 `run_suite` lines. It
@@ -1019,21 +1170,35 @@ WRG
     `OD-4 tool_input`, `OD-3c claude-root-first`, `OD-5 nopytest`) are **expected to become
     refusals**. The probe is then the regression witness, and its post-merge reading is committed
     beside the first.
-  - **The wire-registry reading** is published in "One Production grammar". It moves with every
-    impl-plan commit, in either repository.
-  - **The pre-merge V-1r reading** at skills `2f262f8a`, HemaSuite red `1fbf8022` / green
-    `31bfcfe4`:
+  - **The wire-registry reading** is published in "Second Production grammar (residual)". It
+    moves with every impl-plan commit, in either repository.
+  - **This P0 block was executed as written** in this revision, with `D` pointed at a scratch
+    directory, from the repository root at skills `b327e8bf` (it differs from `dfd5f02e` only in
+    `docs/02-design/`), HemaSuite `3f0c9f3a`: rc 0. Every sha256 pin matched; `reproduce.py` printed
+    24 `REPRO:` lines; `wire-registry-grammar.py` printed `files=83 task_counter_divergent_files=4
+    singular_label_multi_path_lines=16 axis_label_lines_unread_by_registry=64`; the V-1r replay
+    exited 2 with the reading below.
+  - **The pre-merge V-1r reading** at skills `dfd5f02e`, HemaSuite red `1fbf8022` / green
+    `31bfcfe4` (the same six gate lines at `b327e8bf` in the P0 run above):
     - Direct control, RED snapshot: `tests/test_certificate_lock_removed.py` → `7 failed, 2 passed`.
     - Direct control, GREEN snapshot: all four candidates pass (`9 passed`, `10 passed`,
       `30 passed`, `17 passed`).
-    - Today's gate denies all six payloads (unit: `V-1r: gate` lines). Both `patch` lines deny
-      "requires a failing test before tools/review_round/guideline_excerpts.py; no derived test
-      file exists". All four `shell-*` lines deny "permits only explicit test, read-only, and H-MAD
-      control commands". That is the incident, reproduced from its own artifacts.
+    - Today's gate denies all six payloads (unit: `V-1r: gate` lines carrying `"deny"`: 6). Both
+      `patch` lines deny "requires a failing test before tools/review_round/guideline_excerpts.py;
+      no derived test file exists". All four `shell-*` lines deny "permits only explicit test,
+      read-only, and H-MAD control commands". That is the incident, reproduced from its own
+      artifacts.
+    - The checks read `red-patch-allows FAIL`, `green-patch-denies-test-passing FAIL`,
+      `red-shell-pytest-allows FAIL`, `green-shell-pytest-allows FAIL`, and both
+      `*-shell-write-denies PASS`: `VERDICT=FAIL fails=4/6`, exit 2. So the post-merge check has
+      been observed failing against the unfixed gate.
+    - **Positive and single-branch controls**, run against a stub gate in a scratch skills tree
+      (then deleted): a stub that allows the RED patch, denies the GREEN patch with `test-passing`,
+      admits both `shell-pytest` payloads and denies both `shell-write` payloads reads
+      `VERDICT=PASS fails=0/6`, exit 0; the same stub allowing the GREEN patch reads
+      `green-patch-denies-test-passing FAIL`, `VERDICT=FAIL fails=1/6`, exit 2.
     - HemaSuite was not written: `git -C <HemaSuite> --no-optional-locks status --porcelain`
-      hashed the same before and after. A concurrent `pytest` process with cwd in HemaSuite wrote
-      `__pycache__` files there during the run. It is identified by `lsof -d cwd`, and it is not
-      the probe.
+      hashed the same before and after the `dfd5f02e` run.
 - **V-0: the blocking-contract probe** (verification, not pytest). It needs real Claude Code
   sessions, and it is run by the operator or the orchestrator from a cwd outside every repository,
   after P0 and before the FR-6 blocking-form task:
@@ -1041,62 +1206,87 @@ WRG
   ```bash
   cd "${TMPDIR:-/tmp}" || exit 1
   bash /Users/kimhawk/orca/skills/docs/03-analysis/probes/codex-tdd-gate-defects/v0-blocking-contract.sh | tee v0.out || exit 1
-  grep -q '^V-0: READING=\(E1_BLOCKS\|E1_DOES_NOT_BLOCK\) FORM_A=[A-Z_]* FORM_B=[A-Z_]* CHOSEN=\(a\|b\|rc1\) ' v0.out || exit 1
+  grep -q '^V-0: READING=\(E1_BLOCKS\|E1_DOES_NOT_BLOCK\) FORM_A=[A-Z_]* FORM_B=[A-Z_]* CHOSEN=\(a\|b\) ' v0.out || exit 1
   ```
 
   - **Arms and proof.**
     - There are five sessions: a capture arm, then E1 (`exit 1`), E2 (`exit 2`, form (a)), EJ
       (rc 0 plus JSON `permissionDecision: deny`, form (b)) and E0 (`exit 0`).
-    - Each arm's sentinel file name carries a fresh nonce. The arm's hook writes `HIT <nonce>` only
-      when `tool_name` is `Write` and `file_path` is that exact sentinel, and only on its refusal
-      (or, for E0, match) branch.
-    - An arm whose session leaves no `HIT` line with its own nonce halts `UNMEASURED`. Any nonempty
-      log does not count.
+    - Each arm's sentinel file name carries a fresh nonce. The arm's hook writes `HIT <nonce> <path>`
+      only when `tool_name` is `Write` and `file_path` ends in that sentinel's basename, and only on
+      its refusal (or, for E0, match) branch.
+    - An arm whose session leaves no `HIT` line with its own nonce is `UNMEASURED`. For E1, E2 and
+      E0 (and the capture arm) that halts the run; for EJ it is recorded and the run goes on, and
+      EJ reads `UNMEASURED`, so `FORM_B=INCONCLUSIVE` (spec v1.1 FR-0: the three-valued reading
+      depends on E1, E2 and E0 only). The same holds for a failed hand replay.
+    - **Presence is scored at the path the session actually wrote**, not at an assumed one: `p()`
+      reads every `HIT` line of the arm's session log and reports `present` when any logged path
+      exists (a relative path is taken against the arm's session directory). A session that Writes
+      the sentinel's basename into another directory is therefore scored there.
     - Each arm's hand replay of the captured payload, re-pointed at the arm's sentinel with `jq`,
       must return its rc: 1, 2, 0 with `decision=deny`, or 0. It must log its own `HIT`, which is
       then moved aside so that it cannot stand in for the session's.
-  - **Readings.**
+  - **Readings** (spec v1.1 FR-0, AC-0.2).
     - `READING` is the spec's three-valued reading over E1/E2/E0.
     - `FORM_A` and `FORM_B` are per-form: `BLOCKS` when that arm's sentinel is absent while E0's is
-      present. They are `INCONCLUSIVE` when E0's sentinel is absent.
-    - The per-form readings are pending S-1, since spec FR-0 has no EJ arm.
-  - **Choice** (orchestrator decision; pending S-2 / S-3):
-    - Under `E1_DOES_NOT_BLOCK`, the form is whichever V-0 **proves** blocks. When both do, it is
-      (b), which is the form the Codex gate already uses.
-    - Under `E1_BLOCKS`, AC-6.6 applies as spec v1.0 says (`CHOSEN=rc1`).
-    - `CHOSEN=none` or `READING=INCONCLUSIVE` fails the last `grep`, halts to the operator, and
-      blocks the merge (R1).
+      present, `DOES_NOT_BLOCK` when both are present, and `INCONCLUSIVE` when E0's sentinel is
+      absent or the arm is `UNMEASURED`.
+  - **Choice** (spec v1.1 AC-6.5 / AC-6.6, orchestrator decision D-C). On either conclusive reading
+    the form is (b) when `FORM_B=BLOCKS`, otherwise (a) rc 2 (`FORM_A=BLOCKS` holds on both
+    conclusive readings, because both require E2 absent and E0 present). `exit 1` is never chosen,
+    so `rc1` is not a value of `CHOSEN=`. `CHOSEN=none` or `READING=INCONCLUSIVE` fails the last
+    `grep`, halts to the operator, and blocks the merge (R1).
   - **Isolation.** `--setting-sources project --strict-mcp-config` keeps the user's own
     PreToolUse hooks, including the installed gate, and MCP servers out of the sessions. The
     arm's hook arrives through `--settings`, which still applies. The effect of these flags on a
     live session is unverified (R9).
-  - **Exercised offline, not live.** At `2f262f8a` the script ran against a fake `claude` on PATH
-    that invokes the settings hook with a Claude-Code-shaped payload. Mode → reading:
+  - **Exercised offline, not live.** In this revision the embedded script (the bytes pinned above)
+    ran against a throwaway fake `claude` on PATH that invokes the settings hook with a
+    Claude-Code-shaped payload, from a scratch `TMPDIR`, under `bash` 5 and again under
+    `/bin/bash` 3.2.57 for four modes. Mode → reading, each run alone:
     - honours rc 2 and JSON deny → `E1_DOES_NOT_BLOCK FORM_A=BLOCKS FORM_B=BLOCKS CHOSEN=b`;
-    - honours any rc≠0 and JSON deny → `E1_BLOCKS … CHOSEN=rc1`;
+    - honours any rc≠0 and JSON deny → `E1_BLOCKS FORM_A=BLOCKS FORM_B=BLOCKS CHOSEN=b`;
+    - honours any rc≠0 only → `E1_BLOCKS FORM_A=BLOCKS FORM_B=DOES_NOT_BLOCK CHOSEN=a`;
     - honours rc 2 only → `E1_DOES_NOT_BLOCK FORM_A=BLOCKS FORM_B=DOES_NOT_BLOCK CHOSEN=a`;
-    - never writes → `INCONCLUSIVE … CHOSEN=none`;
+    - never writes → `INCONCLUSIVE FORM_A=INCONCLUSIVE FORM_B=INCONCLUSIVE CHOSEN=none`;
     - never invokes the hook → halt `cap UNMEASURED no_hit_for_nonce`;
     - writes a different file in every arm → halt at `cap`;
-    - writes a different file in E1 and E2 only (the audit's false-`E1_BLOCKS` scenario) → halt
-      `E1 UNMEASURED no_hit_for_nonce`.
+    - writes a different file in E1 and E2 only → halt `E1 UNMEASURED no_hit_for_nonce`;
+    - honours rc 2 and JSON deny, but E1's session writes the same basename into another directory
+      → `E1_DOES_NOT_BLOCK … CHOSEN=b` (the v1.1 script read this as a false `E1_BLOCKS`,
+      measured on the v1.1 bytes in the same run);
+    - honours rc 2 only, and EJ's session never invokes the hook → `EJ UNMEASURED`, then
+      `E1_DOES_NOT_BLOCK FORM_A=BLOCKS FORM_B=INCONCLUSIVE CHOSEN=a` (the v1.1 script halted);
+    - a bare-basename `file_path` in the payload → halt `captured payload file_path is not the cap
+      sentinel` (the capture check requires a `/` before the basename; a halt, never a reading).
 
-    The fake and its scratch directories were deleted after the run. The real sessions were
-    **not** run.
+    The two `E1_BLOCKS` modes read `CHOSEN=rc1` on the v1.1 bytes. The last `grep` above was run
+    over five sample reading lines: it accepts `CHOSEN=a` and `CHOSEN=b` on either conclusive
+    reading, and rejects `CHOSEN=rc1` and `READING=INCONCLUSIVE … CHOSEN=none`. The fake and its
+    scratch directories were deleted after the run. The real sessions were **not** run.
   - **Commit** into the probe directory, stamped with the skills sha: `v0.out`, and the scratch's
     `payload.json`, `replay.txt`, `claude.version` and per-arm `*.replay.log` / `*.log`.
-- **V-1r: the offline incident replay** (verification, not pytest; pending S-5). Run
-  `bash docs/03-analysis/probes/codex-tdd-gate-defects/v1-offline-replay.sh <worktree> /Users/kimhawk/orca/HemaSuite`
-  at 5g, against the worktree's gate. It needs no `~/.agents` install, and it writes nothing to
-  HemaSuite. **Pass condition, all required:**
-  - both direct controls as in the pre-merge reading;
-  - `gate red patch rc=0 out=<empty>` (or `out={}`): ALLOW for the incident's own payload;
-  - `gate green patch` carries `"deny"` and `test-passing`: the denying control;
-  - `gate red shell-pytest` and `gate green shell-pytest` read `rc=0 out=<empty>`: the incident's
-    `.venv/bin/python -m pytest` from the sub-project `cwd`, now admitted;
-  - both `shell-write` lines carry `"deny"`.
+- **V-1r: the offline incident replay** (verification, not pytest; spec v1.1 §"Live
+  verification", S-5). Run at 5g, against the worktree's gate:
 
-  An allow with no denying control is not a pass (spec §"Live verification").
+  ```bash
+  bash docs/03-analysis/probes/codex-tdd-gate-defects/v1-offline-replay.sh <worktree> /Users/kimhawk/orca/HemaSuite > v1r.out; test $? = 0 || exit 1
+  grep -q '^V-1r: DONE VERDICT=PASS fails=0/6 ' v1r.out || exit 1
+  ```
+
+  It needs no `~/.agents` install, and it writes nothing to HemaSuite. The script itself scores
+  every gate line; exit 0 and `VERDICT=PASS` require all of:
+  - both direct controls as in the pre-merge reading (otherwise the script halts, exit 1);
+  - `CHECK red-patch-allows`: rc 0 and an empty or `{}` stdout, an ALLOW for the incident's own
+    payload;
+  - `CHECK green-patch-denies-test-passing`: stdout carries `"deny"` and `test-passing`, the
+    denying control;
+  - `CHECK red-shell-pytest-allows` and `CHECK green-shell-pytest-allows`: the incident's
+    `.venv/bin/python -m pytest` from the sub-project `cwd`, now admitted;
+  - `CHECK red-shell-write-denies` and `CHECK green-shell-write-denies`: stdout carries `"deny"`.
+
+  Any failed check gives `VERDICT=FAIL` and exit 2. An allow with no denying control is not a pass
+  (spec §"Live verification").
 - **5c state.** The feature record carries the base sha, the V-0 reading with its `CHOSEN=`, and
   its sha.
 
@@ -1106,53 +1296,69 @@ WRG
   Claude gate also the positional argument. The AC-6.5 / AC-6.6 branch and the form are chosen by
   V-0's `CHOSEN=`.
 - **V-0 is conclusive** and **V-1r meets its pass condition**. Both are merge conditions (R1;
-  pending S-4 / S-5).
-- The `run_suite` table above passes cell by cell, with one stub per row.
+  spec v1.1 AC-6.7 and §"Live verification").
+- The `run_suite` table above passes cell by cell, with one stub per row, including the
+  summary-line row.
 - The tests of `h_mad_wire_pin_gate`, `h_mad_assemble_tdd` **and `h_mad_wire_registry`** pass
-  unmodified (P4). The `_production_claims` base-versus-head diff is fully accounted
-  ("One Production grammar").
+  unmodified (P4), and `h_mad_wire_registry.py` has no diff against the base (spec v1.2 AC-2.9;
+  D-A).
 - The shell-policy differential is published and fully accounted ("Guard narrowing: shell
   policy").
-- **Existing Claude-gate assertions read the decision, not a channel.** Under form (b) a refusal
-  exits 0 with its reason on stdout. So every existing assertion that reads one channel alone
-  either stops discriminating or fails. The impl-plan lists each one under §"Regression
-  provenance", with what it asserted before and what it reads after. Every assertion reads
-  through one helper that returns (allow|deny, reason) from rc, stdout JSON and stderr together;
-  the helper is a single definition shared by both modules. Located by function name
+- **Existing Claude-gate assertions migrate by form, exactly as spec v1.2 AC-6.2's list says**
+  (D-B; spec v1.1 AC-6.6 names the same list). Located by function name
   (`bash --noprofile --norc`, `grep '^\s*assert' <module> | grep -c 'stderr\|stdout\|returncode'`
   → 8 of 8 assert lines in `test_h_mad_tdd_gate_codex.py`, and 8 of 9 in
-  `test_h_mad_tdd_gate_state_resolution.py`, at `2f262f8a`):
-  - `test_h_mad_tdd_gate_codex.py`:
-    - `test_blocks_claude_prod_write_when_codex_available` asserts rc 1 plus `codex` and
-      `dispatch` in stderr. After: deny, with both words in the reason.
-    - `test_state_codex_status_exhausted_allows_fallback`, `test_env_override_allows_fallback` and
-      `test_codex_absent_does_not_trigger_codex_gate` each assert only that "must be authored by
-      codex" is absent **from stderr**. That is vacuous under (b), where the BLOCK moves to stdout.
-      After: absent from the helper's reason.
-    - `test_test_file_allowed_even_with_codex_available` and `test_non_step5_ignores_codex_gate`
-      assert rc 0. That is non-discriminating under (b). After: allow.
-  - `test_h_mad_tdd_gate_state_resolution.py`:
-    - `test_gate_finds_state_one_directory_down`, `test_repo_root_layout_still_works` and
-      `test_a_production_file_under_a_test_named_directory_is_still_gated` assert rc 1, and the
-      first also asserts `H-MAD-TDD-GATE` in stderr. Each feeds an **absolute** target under
-      `codex_status=exhausted`, so today each is satisfied by the D1 "cannot derive test path"
-      branch (P3 `D1`), not by the behaviour it names. After: deny through the judge, with the
-      `kind` named in the test.
-    - `test_no_state_anywhere_still_allows`, `test_state_outside_the_project_is_not_adopted`,
-      `test_real_test_files_are_still_exempt` and `test_test_directories_are_still_exempt` assert
-      rc 0. After: allow.
-
-  This replaces v1.0's "today: one" and AC-6.2's "rc assertions change only" (S-12).
-- **Node-id floor, and a function-body diff.**
+  `test_h_mad_tdd_gate_state_resolution.py`, at `2f262f8a` and again at `dfd5f02e`;
+  `grep -n 'returncode == 1'` over the two modules → 4 matching lines at `dfd5f02e`). The impl-plan
+  lists each changed assertion under §"Regression provenance", with what it asserted before and
+  what it reads after, for the form V-0 chose:
+  - **Under (a)** (rc 2 on stderr): only the four `returncode == 1` assertions change, to rc 2 —
+    in `test_blocks_claude_prod_write_when_codex_available`,
+    `test_gate_finds_state_one_directory_down`, `test_repo_root_layout_still_works` and
+    `test_a_production_file_under_a_test_named_directory_is_still_gated`. The stderr assertions
+    and the `returncode == 0` assertions stand unchanged. No shared helper is added.
+  - **Under (b)** (rc 0 with a stdout JSON deny): a refusal exits 0 with its reason on stdout, so
+    every assertion that reads one channel alone stops discriminating or fails. The assertions
+    move to one helper that returns (allow|deny, reason) from rc, stdout JSON and stderr together;
+    the helper is a single definition shared by both modules.
+    - `test_h_mad_tdd_gate_codex.py`: `test_blocks_claude_prod_write_when_codex_available` (rc 1
+      plus `codex` and `dispatch` in stderr → deny, both words in the reason);
+      `test_state_codex_status_exhausted_allows_fallback`, `test_env_override_allows_fallback` and
+      `test_codex_absent_does_not_trigger_codex_gate` ("must be authored by codex" absent from
+      stderr, vacuous under (b) → absent from the helper's reason);
+      `test_test_file_allowed_even_with_codex_available` and `test_non_step5_ignores_codex_gate`
+      (rc 0 → allow).
+    - `test_h_mad_tdd_gate_state_resolution.py`: `test_gate_finds_state_one_directory_down`,
+      `test_repo_root_layout_still_works` and
+      `test_a_production_file_under_a_test_named_directory_is_still_gated` (rc 1, and the first
+      also `H-MAD-TDD-GATE` in stderr → deny, with the prefix in the reason);
+      `test_no_state_anywhere_still_allows`, `test_state_outside_the_project_is_not_adopted`,
+      `test_real_test_files_are_still_exempt` and `test_test_directories_are_still_exempt`
+      (rc 0 → allow).
+  - **On either form**, both modules' `HOOK` constant moves to
+    `Path(__file__).resolve().parents[1] / "hooks" / "h-mad-tdd-gate.sh"` (layer 6) and is listed
+    under §"Regression provenance".
+  - Fact recorded, not a change: the three `test_h_mad_tdd_gate_state_resolution.py` rc-1 tests
+    feed an **absolute** target under `codex_status=exhausted`, so today each is satisfied by the
+    D1 "cannot derive test path" branch (P3 `D1`); after FR-6 each reaches the judge.
+- **Node-id floor, and a module-level diff.**
   - At the worktree's base,
     `…/python -m pytest --collect-only -q -p no:cacheprovider h-mad/tests handoff/tests handoff/scripts | grep '::' | sort > base.ids`.
     At 5g, the same into `head.ids`. `comm -23 base.ids head.ids` must be empty. The expected
     removed set is empty: every changed test above keeps its node id.
-  - A node id cannot see an assertion weakened in place. So at 5g every **pre-existing** test
-    function whose source differs between base and head is listed. Compare `ast.get_source_segment`
-    per `def test_*` over the test files that `git diff --diff-filter=M --name-only <base> HEAD --
-    h-mad/tests handoff/tests handoff/scripts` names. That set must equal the impl-plan's
-    §"Regression provenance" list exactly. The impl-plan ships the checker as a probe.
+  - A node id cannot see an assertion weakened in place, and a `def test_*`-only diff cannot see
+    one weakened through a helper, a fixture or a module constant. So at 5g the checker compares,
+    by `ast.get_source_segment`, **every top-level statement** — each `def`, `class` and assignment,
+    keyed by its name — of each pre-existing file among: the test files that
+    `git diff --diff-filter=M --name-only <base> HEAD -- h-mad/tests handoff/tests handoff/scripts`
+    names; every `conftest.py` on the path of a changed test file; and every module under those
+    trees that a changed test file imports. A statement whose source differs, or that was
+    removed, is listed. That set must equal the impl-plan's §"Regression provenance" list exactly
+    (the `HOOK` constants included). The impl-plan ships the checker as a probe.
+  - Measured at `dfd5f02e`: the two Claude-gate modules import only the standard library and
+    `pathlib` (`grep -n '^from\|^import'` over both, then excluding `json`, `shutil`, `stat`,
+    `subprocess`, `pathlib` and `__future__` → 0 matching lines), so for them the set is the two
+    modules plus `h-mad/tests/conftest.py`. Re-derived at 5g, because a new import moves it.
 - `ANCHORS_OK` with `drifted=0` over every committed mutation spec. Every FR-8 guard and every wire
   above is CAUGHT, scored on the pytest summary, with each alternation branch mutated alone. The
   `EXIT`-trap members are each mutated alone.
@@ -1160,8 +1366,7 @@ WRG
 - **`reproduce.py`'s post-merge reading shows each of the five fail-open cases refused, in a form
   that differs from today's reading:**
   - Codex gate cases read `(0, 'deny', …)`.
-  - Claude gate cases read `(0, 'deny', '')` under (b), `(2, '', …)` under (a), or
-    `(1, '', '[H-MAD-TDD-GATE] BLOCK: …')` under `rc1`.
+  - Claude gate cases read `(0, 'deny', '')` under (b), or `(2, '', …)` under (a).
   - Today's `(0, '', '')` matches none of these.
 
 ## Out-of-Scope (confirmed from spec)
@@ -1172,27 +1377,18 @@ WRG
 - The Claude gate's no-state, no-`jq` and file-type-exemption fail-opens.
 - Venvs not named `.venv`, and `.venv/bin/pytest` as a shell entry point.
 
-## Owed by the spec (pending spec v1.1)
+## Spec items (S-1…S-12)
 
-The plan uses each of these where marked. None is adopted as settled until the spec says so, and
-the exact wording owed is in the author report.
+The plan cites each where it is used. None is adopted beyond what the named spec revision says.
 
-- **S-1:** FR-0 gains arm EJ (JSON deny) and the per-arm nonce proof; AC-0.2 records the per-form
-  readings.
-- **S-2:** AC-6.5: the form is the one V-0 proves; (b) when both are proven.
-- **S-3:** AC-6.6: under `E1_BLOCKS`, keep rc 1 (v1.0), or move to the proven JSON form for one
-  form across gates.
-- **S-4:** AC-6.7: an `INCONCLUSIVE` reading halts to the operator, and nothing merges.
-- **S-5:** §"Live verification": add V-1r as a merge condition.
-- **S-6:** AC-3.4's root-prefixed token from the sub-project `cwd` resolves to a doubled path.
-- **S-7:** FR-4's second audit-gate change (`no tests ran` → `no_tests_ran`).
-- **S-8:** FR-1's `state` verb; FR-6's "Unchanged: not step5"; an unreadable chain on the Claude
-  side; the multi-ACTIVE Codex-authorship rule.
-- **S-9:** FR-1: a non-zero judge rc is `judge-error`; AC-1.3 adds two rc-1 stubs.
-- **S-10:** FR-2 / AC-2.9 name `_production_claims` and `h_mad_wire_registry` (extends OQ-4).
-- **S-11:** FR-7 names the SKILL.md, agy-runtime.md and codex-implementer-prompt.md edits
-  (extends OQ-2).
-- **S-12:** AC-6.2: stderr assertions move channel too, not only rc.
+- **Settled in spec v1.1 (`96bf1cd1`):** S-1 (FR-0 arm EJ, nonce proof, per-form readings), S-2
+  (AC-6.5 form), S-3 (AC-6.6: the single-form rule, no `exit 1`), S-4 (AC-6.7), S-5 (V-1r in
+  §"Live verification"), S-6 (AC-3.4 doubled path).
+- **Applied in spec v1.2:** S-7 (FR-4 audit-gate non-change), S-8 (the `state` verb, OD-8/OD-9,
+  AC-6.8–AC-6.10), S-9 (rc never selects ALLOW; AC-1.3 stubs), S-11 (FR-7 names the three docs;
+  AC-7.2), S-12 (AC-6.2 carries the form-conditional list).
+- **Withdrawn:** S-10, by orchestrator decision D-A. Spec v1.2 states the two-parser residual in
+  FR-2 and pins the registry in AC-2.9.
 
 ## Open Questions
 
@@ -1202,23 +1398,24 @@ the exact wording owed is in the author report.
   Accept this (fail-closed, with the remedy in the deny reason), or amend the spec?
 - **OQ-2 (spec).** The spec names no `SKILL.md`, `agy-runtime.md` or `codex-implementer-prompt.md`
   change. The invariant §"Skill manifest integrity" requires the gate's documented contract to
-  follow its behaviour, and the stale-prose census finds sentences that go false. This plan
-  includes them (S-11).
+  follow its behaviour, and the stale-prose census finds sentences that go false. Answered by
+  spec v1.2 (S-11).
 - **OQ-3 (operator).** `run_suite` scores `2 passed, 1 error` as PASS today (P6): a collection
   error hidden by a green count. The spec keeps existing results, so this plan keeps it. Under the
   new rule `1 failed, 1 error` scores FAIL. Is the PASS row a defect to file separately?
-- **OQ-4 (spec).** AC-2.9 omits `h_mad_wire_registry`, a third `_parse_tasks` consumer and the
-  holder of a second `Production` grammar (P4; S-10).
+- **OQ-4 (spec).** Closed by D-A: the registry is not edited, and spec v1.2 AC-2.9 names its
+  tests.
 
 ## Next Steps
 
-1. The orchestrator routes S-1…S-12 to the spec author. The operator answers OQ-1 and OQ-3.
+1. The operator answers OQ-1 and OQ-3.
 2. The orchestrator runs step P0 and commits the probes and their readings. V-0 is run before the
    FR-6 form task, and an inconclusive V-0 halts to the operator.
-3. Plan audit cycle 2 (SKILL.md §"Audit prompt assembly").
+3. Plan v1.2 is the final corrective revision after audit cycle 2 (the document-audit round cap).
 4. The Phase 4 design names the judge file, the `state` verb's line format, the timeout value, the
    `EXIT`-trap shape and the blocking form.
 
 ## Version History
 - v1.0: Initial plan draft (2026-09-28) from spec v1.0 at cf7e194f with OD-1..OD-7 accepted as recommended. Premises, the reproductions with controls, the OD-7 run_suite regression census, the stale-prose census and the coupled-suite baseline measured at 01121ca7. Step P0 embeds reproduce.py and v0-blocking-contract.sh with their sha256; OQ-1..OQ-4 raised.
 - v1.1: Plan audit cycle 1 answered (2026-09-28; reports at be1ac452, codex p1 6 musts + 1 should, teammate 6 musts + 6 shoulds + 2 nits); premises re-run at 2f262f8a in bash --noprofile --norc. V-0 rewritten: arm EJ tests the JSON-deny form beside exit 2, per-arm nonce HIT lines replace the any-nonempty-log proof, CHOSEN= reading; exercised offline against a fake claude in 7 modes. INCONCLUSIVE V-0 now halts to the operator and blocks merge (R1). New V-1r probe replays the HemaSuite Task 7 incident offline from git objects 1fbf8022/31bfcfe4 (pre-merge: 6/6 gate lines deny, controls RED/GREEN) and is a merge condition. Claude gate governance and Codex-authorship key move to the judge's chain reader (state verb; OD-3c reproduced). EXIT-trap rule closes the set -euo pipefail implicit-exit class. _production_claims rewritten over _parse_tasks (wire-registry-grammar probe: 4 files, 16 lines, 64 lines). reproduce.py reports stdout permissionDecision (24 lines). Shell-policy guard-narrowing differential, Claude-gate assertion census by function name, function-body diff beside the node-id floor, anchor-occurrence rule, ANCHORS and R2 commands fixed. Spec-owed items S-1..S-12 cited as pending spec v1.1, not adopted.
+- v1.2: Final corrective revision after plan audit cycle 2 (2026-09-28; codex p1 4 musts, v1.1 delta review 4 musts + 7 shoulds + 2 nits, both at dfd5f02e) under orchestrator decisions D-A..D-D. D-C: V-0 never chooses exit 1; CHOSEN is b when FORM_B=BLOCKS else a on either conclusive reading; rc1 removed from the script, run-gate grep, Choice, offline modes, reproduce post-merge row and census pass condition. V-0 also scores presence at the session's logged HIT paths and records EJ UNMEASURED as FORM_B=INCONCLUSIVE; exercised offline against a fake claude in 11 modes (v1.1 bytes read a false E1_BLOCKS in the other-directory mode). V-1r now scores all six gate lines (CHECK lines, VERDICT, exit 0/2/1); pre-merge reading VERDICT=FAIL fails=4/6 exit 2 at dfd5f02e, positive control PASS 0/6 and single-branch control FAIL 1/6 against a stub gate. v0 and v1r sha256 re-pinned; the P0 block executed as written into a scratch dir (rc 0). FR-4 summary-line rule with the stdout-2-passed/stderr-1-failed row. W6 uses two distinct hook/judge trees. Test HOOK constants resolve from Path(__file__) (worktree-via-HOME axis census, 6 lines / 4 files). D-A: _production_claims not edited, two-parser residual stated, W7 and S-10 withdrawn. D-B: existing assertions migrate form-conditionally. Function-body diff widened to every top-level statement plus conftest and imported helpers. S-1..S-6 cited as spec v1.1, S-7/8/9/11/12 as spec v1.2. R2 command moved to a fenced block; reproduce.py interpreter pinned.

@@ -32,7 +32,9 @@ before the plan is audited. None of them weakens D1–D4.
 | OD-4 | The Claude gate reads a top-level `file_path` from stdin. Claude Code sends `tool_input.file_path`. Measured: a Claude-Code-shaped payload yields rc=0 with no stderr on a step5 fixture where Codex is available. The installed hook (`$HOME/.claude/hooks/h-mad-tdd-gate.sh`, a symlink to the tracked file, registered with no positional argument) therefore stands down on every Claude write. This is the measured reason the orchestrator's 2026-09-28 D4 probe "exited 0 before reaching any BLOCK branch". | The Claude gate reads `tool_input.file_path`, falling back to the top-level `file_path` and then to the positional argument (FR-6). The D4 probe is re-specified so that it does not depend on this fix (FR-0). |
 | OD-5 | The same fail-open defect class exists on the Claude side and is not named by D3. The Claude gate runs bare `pytest` scored on rc, and only when the target already exists. Measured: with a **passing** test and no `pytest` on PATH, it exits 0. | The Claude gate uses the shared judge (FR-1…FR-4), so D3 scoring applies to both gates (FR-6). |
 | OD-6 | D3 denies on a collection error. A RED test that imports a not-yet-written module at top level produces `1 error`, not `N failed`. The GREEN write that creates that module would then be denied. HemaSuite's #28 plan already writes some RED tests to import "inside its body", which avoids this. | D3 is kept as written: a collection error is DENY `pytest-error`. The deny reason tells the author to move the import into the test body (FR-4, AC-4.6). |
-| OD-7 | The brainstorm says reuse `h_mad_wire_pin_gate._parse_tasks` and `h_mad_audit_gate._suite_summary`, and that the change touches only "the hook, its tests, and the `codex-runtime.md` trust section". Neither function can be reused unchanged. `_parse_tasks` captures only `Task shape`/`WIRE`/`WIRE-PIN`, because its `_FIELD_RE` has no Production/Test label. `_suite_summary("1 failed in 0.03s")` returns `None`, because `_SUITE_RE` requires `passed`, and it drops `error` counts. | Extend both functions in place, so there is still exactly one parser each. Their existing callers keep their current results, except for the one change to the audit gate named in FR-4. The file scope grows to include `h-mad/scripts/h_mad_wire_pin_gate.py` and `h-mad/scripts/h_mad_audit_gate.py` (FR-2, FR-4). |
+| OD-7 | The brainstorm says reuse `h_mad_wire_pin_gate._parse_tasks` and `h_mad_audit_gate._suite_summary`, and that the change touches only "the hook, its tests, and the `codex-runtime.md` trust section". Neither function can be reused unchanged. `_parse_tasks` captures only `Task shape`/`WIRE`/`WIRE-PIN`, because its `_FIELD_RE` has no Production/Test label. `_suite_summary("1 failed in 0.03s")` returns `None`, because `_SUITE_RE` requires `passed`, and it drops `error` counts. | Extend both functions in place, so that no new task parser and no new summary parser is added. Their existing callers keep their current results, except for the one change to the audit gate named in FR-4. The file scope grows to include `h-mad/scripts/h_mad_wire_pin_gate.py` and `h-mad/scripts/h_mad_audit_gate.py` (FR-2, FR-4). This does **not** make the `Production` grammar single-source: `h_mad_wire_registry._production_claims` keeps its own, and two `Production` parsers remain (FR-2, residual). |
+| OD-8 | The Claude gate reads governance from the **root** state file first and takes only the first ACTIVE key (`head -1`). Measured (§"Measured premises", Claude-gate state): a root file holding only a non-step5 record hides a sub-project step5 record (rc 0), and an unreadable root file exits rc 5 with empty stderr — neither a named refusal nor an allow. The brainstorm does not decide what the Claude gate does with an unreadable chain. | Governance on the Claude side comes from the judge's `state` verb over FR-5's chain reader (FR-1, FR-6). An unreadable chain is refused `judge-error` in the chosen blocking form, fail-closed like the Codex gate (AC-6.9). |
+| OD-9 | With several ACTIVE step5 records, the Claude gate reads `codex_status` from the first key only. Measured: when that first record declares `exhausted`, the Codex-authorship escape is taken for every write, whatever the other records declare. | The Codex-authorship escape applies only when `HMAD_CODEX_UNAVAILABLE` is set or **every** ACTIVE record on the target's chain declares `codex_status` `unavailable` or `exhausted` (AC-6.10). |
 
 ## Measured premises
 
@@ -88,6 +90,30 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
 
   Among the `Production file`/`Test file` lines, 0 carry an unbackticked `.py` path and 1 is a
   `none (…)` value that still carries a backticked `.py`.
+- **Wire-registry grammar (tree, skills `dfd5f02e`).** `h_mad_wire_registry._production_claims`
+  does not use `_parse_tasks`'s fields. It counts Tasks itself (a line starting `## Task `, or a
+  `##`/`###` heading followed by `M<n>`/`T<n>`), matches the case-insensitive label
+  `Production file` (singular only, so `Production files` and bare `Production` are not read; bold
+  optional), and keys the whole rest of the line, whitespace- and backtick-stripped, of any
+  extension. A value naming several paths is one key. With the colon inside the bold the label
+  still matches, and the key keeps the closing `**` (`` **Production file:** `a.py` `` keys
+  `` ** `a.py ``). Commands:
+  `grep -n -A12 'def _production_claims' h-mad/scripts/h_mad_wire_registry.py`, and the regex
+  replayed in `python3` over four label forms (bold with the colon outside, bold with it inside,
+  unbolded with a multi-path non-`.py` value, and `Production files`), not committed.
+- **Claude-gate state reading (probe, skills `dfd5f02e`).** Fixture: `CLAUDE_PROJECT_DIR=<root>`, a
+  `codex` stub on PATH, target `<root>/sub/tools/x.py` passed positionally, run under
+  `bash h-mad/hooks/h-mad-tdd-gate.sh` (which sets `set -euo pipefail`). Readings, one run each:
+
+  | Root `docs/.bkit-memory.json` | `sub/docs/.bkit-memory.json` | rc | stderr |
+  |---|---|---|---|
+  | one non-step5 record | step5, `codex_status` `exhausted` | 0 | empty |
+  | `{not json` | same | 5 | empty |
+  | step5 `a` (`exhausted`), then step5 `b` (no status) | same | 1 | "cannot derive test path" |
+  | step5 `b` (no status), then step5 `a` (`exhausted`) | same | 1 | "must be authored by Codex" |
+
+  The scratch probe was deleted after running; its committed re-run is owed under
+  `docs/03-analysis/probes/codex-tdd-gate-defects/` with the others.
 
 ## Functional Requirements
 
@@ -165,12 +191,23 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   | `timeout` | DENY | The pytest run exceeded its bound. | Same. |
   | `judge-error` | DENY | The judge itself raised, or its CLI output was not exactly one well-formed verdict line. | Same, fail-closed. |
 
-- **CLI contract**: the CLI prints exactly one line to stdout:
-  - `TDD-JUDGE: ALLOW kind=red-measured source=<impl-plan|name-map> test=<repo-relative path>`, or
-  - `TDD-JUDGE: DENY kind=<kind> reason=<text>`.
+- **CLI contract**: the CLI has two verbs, and each prints exactly one line to stdout.
+  - Verb `judge` prints one of:
+    - `TDD-JUDGE: ALLOW kind=red-measured source=<impl-plan|name-map> test=<repo-relative path>`, or
+    - `TDD-JUDGE: DENY kind=<kind> reason=<text>`.
+  - Verb `state` prints exactly one `TDD-STATE:` line, the chain reader's (FR-5) result for the
+    target. It carries exactly one of three values; the design owns the line's exact format.
 
-  The caller reads the token, never `$?`. Zero lines, more than one line, an unknown verb or an
-  unknown `kind` all mean DENY `judge-error`.
+    | Value | Meaning | Claude gate's action (FR-6) |
+    |---|---|---|
+    | none | No state file on the target's chain holds a step5 record. | Allow: not governed. |
+    | active | One or more ACTIVE step5 records; the line names each record's key and its `codex_status` (absent reads as `available`). | Governed: apply the Codex-authorship check (OD-9), then the `judge` verb. |
+    | unreadable | Some state file on the chain cannot be read or decoded. | Refuse `judge-error` (OD-8). |
+
+  - **Failure modes, both verbs.** rc never selects ALLOW: a non-zero rc from the judge is DENY
+    `judge-error` even when a well-formed line was printed. Zero lines, more than one line, an
+    unknown verb, an unknown `kind` or an unknown `state` value all mean DENY `judge-error`. A
+    `state` failure is never read as none.
 - **Acceptance Criteria**:
   - AC-1.1: `git grep -n "h_mad_derive_test_path.sh"` over `h-mad/hooks/` returns no match.
     Both hooks reach the name map only through the shared judge.
@@ -180,7 +217,11 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     the Codex import raises, and the Claude CLI's output is malformed.
   - AC-1.3: A stubbed judge CLI prints each of these, and each one yields a Claude-gate DENY with
     `kind=judge-error`: an empty line, two verdict lines, `TDD-JUDGE: MAYBE`, and a DENY whose
-    `kind` is outside the set.
+    `kind` is outside the set. It also prints a traceback with rc 1, and a valid ALLOW line with
+    rc 1, each of which yields DENY `judge-error` in the chosen form, never the stub's rc. A
+    stubbed `state` verb that prints zero lines, two lines, a value outside the three, or a valid
+    none line with rc 1 likewise yields a refusal with `kind=judge-error`, never an allow. Each
+    stub is its own fixture, run alone.
 
 ### FR-2: Test resolution — impl-plan Task first, then the name map, then deny (D1)
 
@@ -199,6 +240,14 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
        corpus uses it for prose counts such as "**Tests** (5 functions, …)". A path continued on the
        next line is not read. An unbackticked path is not read, and the measured corpus has 0 of
        them.
+     - **Residual: two `Production` parsers remain.** "Do not add a second parser" binds the
+       judge's resolution and the extended `_parse_tasks`; it does not reach
+       `h_mad_wire_registry._production_claims`, which this feature does not change. That function
+       keeps its own Task counter and its own grammar: it keys any singular `Production file`
+       value of any extension (§"Measured premises", wire-registry grammar), and it does not read
+       the `production` list this rule adds. A plan line can therefore be a production claim to one
+       parser and not to the other, in both directions: a non-`.py` or unbackticked value is keyed
+       by the registry only, and a `Production files`/`Production` label is read by the judge only.
   3. **Matching.** An entry `P` matches the target `T` when some directory `B` exists such that
      `B` is `T`'s parent or an ancestor of it, `B` is the project root or lies below it, and
      `(B / P).resolve() == T`. That Task's test entries then resolve against the same `B`. `B` is
@@ -241,8 +290,12 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   - AC-2.8: The impl-plan file holds invalid UTF-8, so the name map is used. Its failing test
     allows the write. When no name-map test exists either, the DENY reason contains
     `impl-plan unreadable`.
-  - AC-2.9: `h-mad/tests` tests for `h_mad_wire_pin_gate` and `h_mad_assemble_tdd`, which imports
-    `_parse_tasks`, pass unmodified.
+  - AC-2.9: `h-mad/tests` tests for `h_mad_wire_pin_gate`, `h_mad_assemble_tdd` and
+    `h_mad_wire_registry` (the latter two import `_parse_tasks`) pass unmodified, and
+    `h_mad_wire_registry._production_claims` has no diff against the base. Over the impl-plan
+    corpus of §"Measured premises" (field labels), the extended `_parse_tasks` returns the same
+    task ids in the same order as the base, because the registry pairs its own Task counter with
+    that list by index.
 
 ### FR-3: Project interpreter — trusted only when its venv stays inside the root (D2; OD-1)
 
@@ -309,6 +362,12 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   - **Audit-gate change.** The one change to the audit gate: `run_suite` now scores a summary with
     failures but no passes, such as `3 failed in …`, as `FAIL`. Today it scores it
     `UNREADABLE no_summary`.
+  - **Audit-gate non-change.** Once `_suite_summary` reports `no tests ran` and `error` counts,
+    `run_suite` keeps scoring a `no tests ran in …` summary, and an errors-only summary such as
+    `1 error in 0.06s`, `UNREADABLE no_summary`, as today (measured at skills `dfd5f02e`:
+    `_suite_summary` returns `None` for both). Neither `SUITE:` reason becomes `no_tests_ran`; that
+    reason stays reserved for a parsed summary with 0 passed, 0 failed and 0 errors, such as
+    `0 passed in …`.
 - **Acceptance Criteria**:
   - AC-4.1 (fail-open regression, the brief's reproduction): the fixture's resolved test file
     **passes**, and pytest runs under an interpreter with no pytest, built as a
@@ -326,7 +385,11 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   - AC-4.6 [OD-6]: The `pytest-error` reason contains the words "import" and "inside the test body".
   - AC-4.7: `_suite_summary` returns parsed counts for each final line in §Measured premises. The
     audit gate's existing tests pass, apart from any test that pinned the `3 failed` →
-    `UNREADABLE` behaviour. That test is updated, and the update is named in the impl-plan.
+    `UNREADABLE` behaviour. That test is updated, and the update is named in the impl-plan. A
+    `run_suite` fixture whose command prints only `no tests ran in 0.01s`, and one that prints only
+    `1 error in 0.06s`, each assert `SUITE: UNREADABLE reason=no_summary` exactly; the existing
+    `test_a_run_that_says_only_no_tests_ran_is_also_refused` asserts only "not PASS" and does not
+    pin the reason.
 
 ### FR-5: Codex gate — target base and governing state (OD-2, OD-3)
 
@@ -362,23 +425,60 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
 - **Description**:
   - **Payload.** The gate reads `tool_input.file_path`, then the top-level `file_path`, then the
     positional argument [OD-4].
-  - **Judge.** After its existing exemptions and the Codex-authorship check, the gate calls the
-    judge's CLI for every governed production `.py` write, whether or not the target exists yet
-    [OD-5]. It reads the `TDD-JUDGE:` token. The gate passes the judge its project root
-    (`CLAUDE_PROJECT_DIR`, as today) and the absolute target. The judge derives the ACTIVE features
-    itself, with FR-5's chain reader. `_resolve_state_file` keeps only its role of taking the fast
-    no-op path when no state file exists.
+  - **Governance** [OD-8]. The gate decides whether the write is governed, and reads the
+    Codex-authorship key, from the judge's `state` verb (FR-1), passing its project root
+    (`CLAUDE_PROJECT_DIR`, as today) and the absolute target. It no longer reads step5 records
+    with its own `jq` query. `_resolve_state_file` keeps only its role of taking the fast no-op
+    path when no state file exists. By `state` value: none → allow; active → governed;
+    unreadable, or any `state` failure mode in FR-1 → refuse `judge-error`.
+  - **Codex authorship** [OD-9]. On a governed write, after the exemptions, the Codex-authorship
+    BLOCK applies unless `HMAD_CODEX_UNAVAILABLE` is set or every ACTIVE record in the `state`
+    line declares `codex_status` `unavailable` or `exhausted`. The `codex`-on-PATH condition is
+    unchanged.
+  - **Judge.** After the exemptions and the Codex-authorship check, the gate calls the judge's
+    `judge` verb for every governed production `.py` write, whether or not the target exists yet
+    [OD-5]. It reads the `TDD-JUDGE:` token under FR-1's failure modes. The judge derives the
+    ACTIVE features itself, with FR-5's chain reader.
   - **Blocking form.** Every refusal site uses one form. The Codex-authorship BLOCK, every judge
-    DENY and `judge-error` are all refusal sites. The form is chosen by FR-0's reading.
-  - **Unchanged.** The non-blocking paths are unchanged: no state, no `jq`, not step5, and the
-    exemptions.
+    DENY, an unreadable `state` and every `judge-error` are all refusal sites. The form is chosen
+    by FR-0's reading.
+  - **Unchanged.** These non-blocking paths are unchanged: no state file (the
+    `_resolve_state_file` fast path), no `jq` (for as long as the gate still requires `jq`; if
+    the design removes that dependency, this path goes with it), and the exemptions. "Not step5"
+    is no longer a separate path: it is the `state` verb's none value, decided over the target's
+    whole chain rather than the root file first.
 - **Acceptance Criteria**:
   - AC-6.1 [OD-4]: A Claude-Code-shaped stdin payload
     `{"tool_name":"Write","tool_input":{"file_path":"<abs>"}, …}` on a step5 fixture with `codex`
     on PATH and `codex_status` available reaches the Codex-authorship refusal. Today it exits 0
     silently.
   - AC-6.2: The existing positional-argument tests in `test_h_mad_tdd_gate_state_resolution.py` and
-    `test_h_mad_tdd_gate_codex.py` pass. Their rc assertions change only as AC-6.5 or AC-6.6 requires.
+    `test_h_mad_tdd_gate_codex.py` pass. Their assertions change exactly as the list below says for
+    the form FR-0 chose, and no other assertion changes. This list is the single statement of the
+    migration; AC-6.5 and AC-6.6 cite it, and it applies whichever branch chose the form.
+    - **Existing assertions that change** (the plan's census, re-read by test function over
+      `h-mad/tests/test_h_mad_tdd_gate_codex.py` and
+      `h-mad/tests/test_h_mad_tdd_gate_state_resolution.py`; 4 `returncode == 1` matching lines
+      at skills `dfd5f02e` by `grep -n 'returncode == 1'` over those two files):
+      - `returncode == 1` in `test_blocks_claude_prod_write_when_codex_available`,
+        `test_gate_finds_state_one_directory_down`, `test_repo_root_layout_still_works` and
+        `test_a_production_file_under_a_test_named_directory_is_still_gated`: under (a) they
+        become rc 2; under (b) they become a deny decision read from stdout JSON.
+      - Under (b) only, the rc and stderr assertions move to the decision the form emits, with rc,
+        stdout JSON and stderr read together, and a negative assertion reads the reason across both
+        streams. The stderr assertions so moved: `codex` and `dispatch` in
+        `test_blocks_claude_prod_write_when_codex_available`, `H-MAD-TDD-GATE` in
+        `test_gate_finds_state_one_directory_down`, and "must be authored by codex" absent in
+        `test_state_codex_status_exhausted_allows_fallback`, `test_env_override_allows_fallback`
+        and `test_codex_absent_does_not_trigger_codex_gate`, which are vacuous on stderr alone
+        under (b).
+      - Under (b) only, the `returncode == 0` assertions stop discriminating allow from deny and
+        must read the decision: `test_test_file_allowed_even_with_codex_available`,
+        `test_non_step5_ignores_codex_gate`, `test_no_state_anywhere_still_allows`,
+        `test_state_outside_the_project_is_not_adopted`, `test_real_test_files_are_still_exempt`
+        and `test_test_directories_are_still_exempt`.
+      - Under (a), only the four `returncode == 1` assertions change; the stderr and
+        `returncode == 0` assertions stand unchanged.
   - AC-6.3 [OD-5]: No `pytest` on PATH, and the resolved test passes. The result is a refusal with
     `kind=pytest-missing` or `test-passing`, never an allow.
   - AC-6.4: A **new** production file, whose target does not exist yet, with a passing resolved
@@ -394,56 +494,69 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
 
     For each refusal site, a test asserts that exact form, and asserts that rc is not 1. A test
     that asserts only "non-zero" does not satisfy this AC. `grep -c '^\s*exit 1\s*$'` on the hook
-    returns 0.
+    returns 0. Existing assertions migrate as AC-6.2's list says for the chosen form.
   - AC-6.6 (branch `E1_BLOCKS`): `exit 1` is **not** kept. Every refusal site uses one form, so
     that one form serves both gates where FR-0 allows it: if FR-0 proves (b) (`FORM_B=BLOCKS`),
     every site uses (b), the form of the Codex gate's `_deny`; if FR-0 proves only (a), every site
     uses (a), rc = 2. `E1_BLOCKS` requires E2 absent, so (a) is always proven on this branch and
     one of the two always applies. The per-site tests and the `grep -c '^\s*exit 1\s*$'` → 0
-    check are AC-6.5's, and the FR-0 reading is cited in the test module's docstring.
-    - **Existing assertions that change** (the plan's census, re-read in this revision by test
-      function over `h-mad/tests/test_h_mad_tdd_gate_codex.py` and
-      `h-mad/tests/test_h_mad_tdd_gate_state_resolution.py`):
-      - `returncode == 1` in `test_blocks_claude_prod_write_when_codex_available`,
-        `test_gate_finds_state_one_directory_down`, `test_repo_root_layout_still_works` and
-        `test_a_production_file_under_a_test_named_directory_is_still_gated`: under (a) they
-        become rc 2; under (b) they become a deny decision read from stdout JSON.
-      - Under (b) only, the stderr assertions move to the decision's reason: `codex` and
-        `dispatch` in `test_blocks_claude_prod_write_when_codex_available`, `H-MAD-TDD-GATE` in
-        `test_gate_finds_state_one_directory_down`, and "must be authored by codex" absent in
-        `test_state_codex_status_exhausted_allows_fallback`, `test_env_override_allows_fallback`
-        and `test_codex_absent_does_not_trigger_codex_gate`, which are vacuous on stderr alone
-        under (b).
-      - Under (b) only, the `returncode == 0` assertions stop discriminating allow from deny and
-        must read the decision: `test_test_file_allowed_even_with_codex_available`,
-        `test_non_step5_ignores_codex_gate`, `test_no_state_anywhere_still_allows`,
-        `test_state_outside_the_project_is_not_adopted`, `test_real_test_files_are_still_exempt`
-        and `test_test_directories_are_still_exempt`.
-      - Under (a), the stderr and `returncode == 0` assertions stand unchanged.
+    check are AC-6.5's, and the FR-0 reading is cited in the test module's docstring. Existing
+    assertions migrate as AC-6.2's list says for the chosen form.
   - AC-6.7 (branch `INCONCLUSIVE`): neither AC-6.5 nor AC-6.6 is implemented, and Phase 4 does not
-    start for this FR. AC-6.1 through AC-6.4 may be implemented, but the feature does not merge;
-    the reading halts to the operator until a re-run is conclusive.
+    start for this FR. AC-6.1 through AC-6.4 and AC-6.8 through AC-6.10 may be implemented, but
+    the feature does not merge; the reading halts to the operator until a re-run is conclusive.
+  - AC-6.8 [OD-8]: The root state holds only a non-step5 record, and the sub-project state holds a
+    step5 record with `codex_status` `exhausted`. For an absolute target under the sub-project, the
+    write is governed: the `judge` verb runs, and its verdict decides. Today the gate exits rc 0
+    (§"Measured premises", Claude-gate state).
+  - AC-6.9 [OD-8]: A state file on the target's chain holds `{not json`. The write is refused with
+    `kind=judge-error` in the chosen form. Today the gate exits rc 5 with empty stderr.
+  - AC-6.10 [OD-9]: Two ACTIVE step5 records on the chain, with `codex` on PATH and
+    `HMAD_CODEX_UNAVAILABLE` unset. If one declares `exhausted` and the other declares nothing,
+    the Codex-authorship refusal is emitted, in either record order. If both declare `unavailable`
+    or `exhausted`, the gate proceeds to the `judge` verb. Today, with the `exhausted` record
+    first, the escape is taken.
 
-### FR-7: Document the trust boundary (D2)
+### FR-7: Document the trust boundary and the shipped gate (D2)
 
-- **Description**: `h-mad/references/codex-runtime.md` §"Trust boundary" states the venv rule from
-  FR-3: which venv is chosen, the containment test, the residuals, and the `venv-escapes-root`
-  denial. It also states that the gate scores pytest's summary line, never rc.
+- **Description**:
+  - `h-mad/references/codex-runtime.md` §"Trust boundary" states the venv rule from FR-3: which
+    venv is chosen, the containment test, the residuals, and the `venv-escapes-root` denial. It
+    also states that the gate scores pytest's summary line, never rc.
+  - The skill's other gate prose states the shipped gate (invariant §"Skill manifest integrity" in
+    `.h-mad/invariants.md`). Three files, each located structurally:
+    - `h-mad/SKILL.md`: the registry entry under §"Helper scripts (all in
+      `~/.claude/skills/h-mad/scripts/`)" registers the judge beside `h_mad_derive_test_path.sh`,
+      and every bullet that names `hooks/h-mad-tdd-gate.sh` states the shipped gate.
+    - `h-mad/references/agy-runtime.md` §"The TDD gate": states the blocking form FR-0 chose.
+      Under form (b) it no longer says the gate "is written to Claude Code's exit-code protocol".
+    - `h-mad/references/codex-implementer-prompt.md`: the hook-rule bullets under the line that
+      begins `Hook: PreToolUse hook at`. The production-code bullet names the impl-plan Task as the
+      first test source (FR-2), and "failing" as the summary showing `N failed` (FR-4).
+  - **Residual, stated.** Prose that describes the gate without naming a hook file, or that sits
+    outside these three files and `codex-runtime.md`, is not covered. If a heading or the `Hook:`
+    line named here is renamed, the doc test fails rather than passing vacuously.
 - **Acceptance Criteria**:
   - AC-7.1: The section contains `.venv`, `realpath`, `venv-escapes-root` and "summary line". The
     existing test `test_codex_adapter_states_pytest_trust_boundary` passes.
+  - AC-7.2: A doc test, locating each span by the heading or line named above, asserts: the
+    §"Helper scripts" span names the judge's file; the §"The TDD gate" span names the chosen form
+    (rc 2 for (a), `permissionDecision` for (b)); the `Hook:` bullets contain `impl-plan` and
+    `failed`. The test fails when a locator matches nothing.
 
 ### FR-8: Every guard bites
 
-- **Description**: Each guard added by FR-2…FR-6 is mutation-tested, and each mutation is scored on
+- **Description**: Each guard added by FR-1…FR-6 is mutation-tested, and each mutation is scored on
   the pytest summary.
 - **Acceptance Criteria**:
   - AC-8.1: For each of the following guards, deleting or negating it turns at least one named AC
     test red: the Task-match authority (AC-2.5), the `none` value rule (AC-2.3), venv containment
     (AC-3.2), the `pytest-missing` branch (AC-4.1), the `errors ≥ 1` branch (AC-4.3), rc-blindness
     (AC-4.4), the payload `cwd` base (AC-5.1), the chain reader (AC-5.2), the `tool_input` read
-    (AC-6.1) and the blocking form (AC-6.5 or AC-6.6). A branch of an alternation is mutated on
-    its own, never together with its siblings.
+    (AC-6.1), the blocking form (AC-6.5 or AC-6.6), the Claude gate's non-zero-judge-rc refusal
+    (AC-1.3, the valid-ALLOW-with-rc-1 stub), the `state`-verb governance read (AC-6.8), the
+    unreadable-chain refusal (AC-6.9) and the every-ACTIVE-record escape rule (AC-6.10). A branch
+    of an alternation is mutated on its own, never together with its siblings.
 
 ## Live verification (not pytest ACs)
 
@@ -476,7 +589,9 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
 - **Security**: this is a workflow guard, not a sandbox (`codex-runtime.md` §"Trust boundary"). No
   new interpreter becomes trusted outside the containment rule, and no knob or environment variable
   is added (D2, D3). The existing declared `codex_status` and `HMAD_CODEX_UNAVAILABLE` escapes on
-  the Claude side are unchanged.
+  the Claude side keep their meaning for a single ACTIVE record. With several ACTIVE records, the
+  `codex_status` escape now requires every record to declare it (OD-9, AC-6.10); today the first
+  record alone decides.
 - **Compatibility**: every write the gates allow today on a non-Phase-5 target is still allowed.
   Every existing test in `h-mad/tests` passes, apart from the updates FR-4, FR-5 and FR-6 name
   explicitly. The Codex gate's `--self-check` still prints `CODEX-TDD-GATE: PASS`.
@@ -505,3 +620,4 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
 ## Version History
 - v1.0: Initial specification draft from brainstorm v1.1 (76b2501); D1–D4 bind; OD-1..OD-7 raised from tree measurements at ae7593a1 / HemaSuite ffa87323, each owed operator confirmation (2026-09-28).
 - v1.1: Applies plan v1.1 (85d61ba8) owed items S-1..S-6: FR-0 adds arm EJ, a nonce HIT invocation precondition and per-form FORM_A/FORM_B readings (AC-0.1, AC-0.2); AC-6.5 form = the one FR-0 proves, (b) when both; AC-6.6 amended by orchestrator decision to the single-form rule (no exit 1 under E1_BLOCKS) with the changed existing assertions named; AC-6.7 no merge while INCONCLUSIVE; V-1r offline replay added as a merge condition; AC-3.4 payloads corrected for cwd. Swept: AC-6.2 cites AC-6.6, Assumptions cites EJ. S-7..S-12 not applied (2026-09-28).
+- v1.2: Applies plan-owed S-7, S-8, S-9, S-11, S-12 and two delta-review items (2026-09-28). S-7: FR-4 states the audit-gate non-change (a parsed `no tests ran`, and an errors-only summary, keep UNREADABLE no_summary), AC-4.7 pins it. S-8: FR-1 adds the `state` verb (none/active/unreadable); FR-6 reads governance and the Codex-authorship key from it and drops "not step5" from Unchanged; new OD-8 (unreadable chain refused judge-error) and OD-9 (escape needs every ACTIVE record), AC-6.8..AC-6.10, from a probe at dfd5f02e. S-9: FR-1 rc never selects ALLOW; AC-1.3 adds rc-1 stubs and state-verb stubs. S-11: FR-7 names SKILL.md, agy-runtime.md, codex-implementer-prompt.md; AC-7.2. S-12 applied form-conditionally by operator decision: the changed-assertion list moves to AC-6.2, cited by AC-6.5 and AC-6.6. S-10 withdrawn by operator decision: FR-2 and OD-7 state the residual that two Production parsers remain; AC-2.9 adds the registry tests. FR-8 and NFR Security swept.
