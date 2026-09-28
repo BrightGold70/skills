@@ -16,8 +16,11 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
+from functools import cache
+from importlib import import_module
 from typing import Any
 
 
@@ -109,10 +112,24 @@ def _project_root(payload: dict[str, Any]) -> Path:
     return Path.cwd().resolve()
 
 
+def _read_regular_text(path: Path) -> str:
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):  # M:G4
+            raise OSError("not a regular file")
+        chunks = []
+        while chunk := os.read(descriptor, 65536):
+            chunks.append(chunk)
+        return b"".join(chunks).decode("utf-8")
+    finally:
+        os.close(descriptor)
+
+
 def _state_status(state_file: Path) -> str:
     try:
-        state = json.loads(state_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        text = _read_regular_text(state_file)
+        state = json.loads(text)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return "unknown"
     records = state.get("orchestrator_state", {})
     if not isinstance(records, dict):
@@ -122,21 +139,6 @@ def _state_status(state_file: Path) -> str:
         for value in records.values()
     )
     return "active" if active else "inactive"
-
-
-def _target_phase5_status(root: Path, target: Path) -> str:
-    current = target.parent
-    while True:
-        try:
-            current.relative_to(root)
-        except ValueError:
-            return "unknown"
-        state_file = current / "docs" / ".bkit-memory.json"
-        if state_file.is_file():
-            return _state_status(state_file)
-        if current == root:
-            return "inactive"
-        current = current.parent
 
 
 def _any_phase5_status(root: Path) -> str:
@@ -164,11 +166,19 @@ def _targets(payload: dict[str, Any]) -> tuple[str, list[str], str]:
     return tool, [], ""
 
 
-def _relative_target(root: Path, raw: str) -> tuple[Path, str] | None:
+def _payload_cwd_base(root: Path, cwd: Any) -> Path:
+    if isinstance(cwd, str) and cwd:  # M:G1
+        candidate = Path(cwd).expanduser().resolve()
+        if candidate.is_dir() and (candidate == root or root in candidate.parents):  # M:G7
+            return candidate
+    return root
+
+
+def _relative_target(root: Path, raw: str, cwd: Any = None) -> tuple[Path, str] | None:
     if not raw:
         return None
     candidate = Path(raw).expanduser()
-    absolute = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+    absolute = candidate.resolve() if candidate.is_absolute() else (_payload_cwd_base(root, cwd) / candidate).resolve()
     try:
         relative = absolute.relative_to(root).as_posix()
     except ValueError:
@@ -289,31 +299,12 @@ def _safe_shell_command(command: str, root: Path | None = None) -> bool:
     return False
 
 
-def _derived_test(root: Path, relative: str) -> Path | None:
-    skill_root = Path(__file__).resolve().parents[1]
-    derive = skill_root / "scripts" / "h_mad_derive_test_path.sh"
-    if not derive.is_file():
-        return None
-    result = subprocess.run(
-        ["bash", str(derive), relative],
-        cwd=root,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    value = result.stdout.strip()
-    return (root / value).resolve() if result.returncode == 0 and value else None
-
-
-def _test_exit(root: Path, test: Path) -> int:
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", str(test), "-x", "-q", "--no-header"],
-        cwd=root,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    return result.returncode
+@cache
+def _load_judge() -> Any:
+    scripts = str(Path(__file__).resolve().parents[1] / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    return import_module("h_mad_tdd_judge")
 
 
 def main() -> int:
@@ -333,6 +324,14 @@ def main() -> int:
         print("CODEX-TDD-GATE: PASS")
         return 0
 
+    try:
+        return _main_guarded()
+    except Exception as exc:  # M:G2
+        return _deny(f"H-MAD Phase 5 gate raised {type(exc).__name__}: {exc}; refusing fail-closed. kind=judge-error")
+
+
+def _main_guarded() -> int:
+
     payload = _payload()
     root = _project_root(payload)
     tool, targets, command = _targets(payload)
@@ -350,32 +349,22 @@ def main() -> int:
     if tool in {"Write", "Edit", "apply_patch"} and not targets and phase5_status in {"active", "unknown"}:
         return _deny("H-MAD Phase 5 could not identify this write target; refusing fail-closed.")
 
-    for raw in targets:
-        resolved = _relative_target(root, raw)
+    for raw in targets:  # M:G5
+        resolved = _relative_target(root, raw, payload.get("cwd"))
         if resolved is None:
             if phase5_status in {"active", "unknown"}:
                 return _deny("H-MAD Phase 5 write target is outside or unreadable; refusing fail-closed.")
             continue
         absolute, relative = resolved
-        target_status = _target_phase5_status(root, absolute)
-        if target_status == "unknown":
-            return _deny("H-MAD state governing this write is unreadable; refusing fail-closed.")
-        if target_status != "active":
+        judge = _load_judge()
+        chain = judge.read_chain(root, absolute)  # M:W5A
+        if chain.value == "unreadable":
+            return _deny(f"H-MAD state governing this write is unreadable ({chain.error_file}: {chain.error}); refusing fail-closed. kind=judge-error")
+        if chain.value != "active" or not _is_production_python(relative):
             continue
-        if not _is_production_python(relative):
-            continue
-        test = _derived_test(root, relative)
-        if test is None or not test.is_file():
-            return _deny(
-                f"H-MAD Phase 5 requires a failing test before {relative}; "
-                "no derived test file exists."
-            )
-        test_exit = _test_exit(root, test)
-        if test_exit != 1:
-            return _deny(
-                f"H-MAD Phase 5 requires a failing test before {relative}; "
-                f"{test.relative_to(root)} returned pytest exit {test_exit}, not test-failure exit 1."
-            )
+        verdict = judge.judge(root, absolute, chain.records)  # M:W1
+        if verdict.decision != "ALLOW":
+            return _deny(f"H-MAD Phase 5 requires a failing test before {relative}: kind={verdict.kind}; {verdict.reason}")
     return 0
 
 
