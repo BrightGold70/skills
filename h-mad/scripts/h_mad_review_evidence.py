@@ -243,7 +243,7 @@ def scan(log_text: str) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("log", help="the dispatch's --log transcript (agy NDJSON)")
+    ap.add_argument("log", help="the dispatch's --log transcript (agy NDJSON or grok streaming-json)")
     args = ap.parse_args(argv)
 
     path = Path(args.log)
@@ -278,6 +278,20 @@ def main(argv: list[str] | None = None) -> int:
         # anyway -- its own output saying `The requested view_file tool is
         # unavailable in this session, so I could not inspect the worktree`. A
         # verdict over a tree the leg never read, and nothing could see it.
+        grok = None if codex_banner_in_head(text) else scan_grok(text)
+        if grok is not None:
+            if not grok["complete"]:
+                print(f"ERROR: {path} is a grok stream with no `end` event (killed, still "
+                      "running, or copied mid-write) — no counts published", file=sys.stderr)
+                print("EVIDENCE: UNREADABLE reason=truncated_no_end")
+                return 2
+            verdict = "PASS" if grok["ok"] >= 1 else "NONE"
+            line = (f"EVIDENCE: {verdict} tools={grok['tools']} ok={grok['ok']} "
+                    f"unresolved={grok['unresolved']} thinking={grok['thinking']} format=grok")
+            if grok["stop_reason"]:
+                line += f" stop_reason={grok['stop_reason']}"
+            print(line)
+            return 0
         codex = scan_codex_text(text)
         if codex is not None:
             if codex["complete"]:
