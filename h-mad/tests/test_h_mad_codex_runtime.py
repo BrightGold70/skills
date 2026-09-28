@@ -313,7 +313,7 @@ def test_codex_hook_rejects_pytest_no_tests_collected_as_red(tmp_path):
     })
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "exit 1" in output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "no-tests-ran" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_codex_hook_self_check_reports_machine_readable_pass():
