@@ -11,7 +11,10 @@
 ## Skill self-containment
 - A skill MUST remain runnable from a bare clone: no import of another skill's
   internals, no hardcoded path outside the skill's own directory (except documented
-  `~/.claude/...` install locations). Cross-skill coupling is a violation.
+  host install locations: `~/.claude/...` for Claude Code, `~/.agents/skills/...` for
+  Codex, `~/.gemini/config/skills/...` for the Antigravity CLI (agy), each overridable
+  by its documented environment variable). Cross-skill coupling is a violation.
+  (Operator decision 2026-09-28, multi-host-runtime.)
 
 ## Skill manifest integrity
 - Every skill's `SKILL.md` MUST carry valid frontmatter with `name` and `description`.
