@@ -174,8 +174,15 @@ At worktree `HEAD` `ab83ae92`, `BASE_SHA=d68635159ad5ec64b03d2852dc25536c4e3ea65
     gave 14 mismatching files. PASS.
 11. **`judge_latency.py`.** `LATENCY: runs=3 worst_s=17.51 budget_s=40.0` (17.51, 11.07, 10.73;
     each `DENY kind=test-passing`, i.e. all four candidates ran). PASS.
-12. **OQ-D1 host-deadline probe.** NOT RUN — needs a live Claude Code session write; operator
-    merge condition, open.
+12. **OQ-D1 host-deadline probe.** First pass at `ab83ae92` recorded NOT RUN. Then run by the
+    orchestrator with V-0's mechanism (`probes/…/oqd1-host-deadline.sh`: a headless `claude -p`
+    session asked to Write a governed file, the tree's gate registered through `--settings`
+    behind a wrapper that logs `DONE` only after the gate returns). At `0d9dca24`, claude 2.1.284:
+    arm SLOW (test sleeps 35 s, then fails) `gate=DONE rc=0 s=36 out=` and `file=present`; control
+    arm PASSING `DONE rc=0 … "permissionDecision":"deny" … kind=test-passing` and `file=absent`.
+    `OQ-D1: DONE VERDICT=PASS`. The host waited for the gate's own ALLOW; no explicit `timeout` is
+    needed on the registration. PASS. (The Codex half stays open: the Codex gate is not
+    registered on this machine.)
 13. **Wire-pin gate.** `WIREPIN: PASS tasks=12 wiring=4 unpinned=0 mislabeled=0`. PASS.
 
-Twelve of thirteen items pass; item 12 is open and blocks the merge.
+All thirteen items pass.
