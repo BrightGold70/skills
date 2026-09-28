@@ -885,7 +885,7 @@ _cmd_verify() {
   return 1
 }
 
-_cmd_resolved_model() {  # <codex|agy> [--log <f>] — what model actually ran
+_cmd_resolved_model() {  # <codex|agy|grok> [--log <f>] — what model actually ran
   # With nothing pinned, `exec` inherits each agent's own configuration, so the
   # resolved model is the only evidence of what a 5d/5e dispatch ran — and a model
   # that cannot execute a tool still returns a well-formed STATUS: BLOCKED. The
@@ -3450,8 +3450,8 @@ _cmd_audit_cycle() {
       return 2; }
     local _s
     for _s in "${_surf[@]}"; do
-      case "$_s" in agy|codex) ;;
-        *) echo "hmad-dispatch: audit-cycle: --surfaces: unknown agent '$_s' (agy|codex)" >&2
+      case "$_s" in agy|codex|grok) ;;
+        *) echo "hmad-dispatch: audit-cycle: --surfaces: unknown agent '$_s' (agy|codex|grok)" >&2
            return 2 ;;
       esac
     done
