@@ -18,6 +18,7 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 from h_mad_audit_gate import _SGR_RE, _SUMMARY_LINE_RE, _suite_summary  # noqa: E402
+from h_mad_wire_pin_gate import _parse_tasks  # noqa: E402
 
 KINDS = frozenset({"red-measured", "no-test-resolved", "test-missing",
                    "venv-escapes-root", "pytest-missing", "pytest-error",
@@ -212,16 +213,16 @@ def resolve(root: Path, target: Path, records: Sequence[Record], *, deadline: fl
         except (OSError, UnicodeDecodeError) as exc:
             notes.append(f"{plan}: impl-plan unreadable: {type(exc).__name__}")
             continue
-        tasks = []  # M:W3
+        tasks = _parse_tasks(text)  # M:W3
         plan_matched = False
         for task in tasks:
             if not _inside(str(real_target), str(real_root)):
                 continue
             base = real_target.parent
             while _inside(str(base), str(real_root)):
-                if any(os.path.realpath(base / entry) == str(real_target) for entry in task.production):
+                if any(os.path.realpath(base / entry) == str(real_target) for entry in task["production"]):
                     matched = plan_matched = True
-                    for entry in task.tests:
+                    for entry in task["tests"]:
                         candidate = Path(os.path.realpath(base / entry))
                         if not _inside(str(candidate), str(real_root)):
                             notes.append(f"candidate outside root dropped: {entry}")
