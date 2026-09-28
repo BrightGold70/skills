@@ -71,8 +71,22 @@ In scope, by file. Every path was verified present at `2f262f8a` with `ls`, exce
 - G3: pytest runs under the nearest contained `.venv`, never under a venv that escapes the root
   (FR-3). The shell-policy relaxation is proven exact by a differential corpus.
 - G4: The verdict comes from pytest's summary line, and rc selects nothing (FR-4).
-- G5: Both gates resolve a relative target against the payload `cwd`. Both read state along the
-  whole chain, for "is this governed?" as well as "which test?" (FR-5, FR-6).
+- G5: Each gate resolves a relative target against its own base, and the two bases differ.
+  - **Codex gate** (FR-5, design D8). `_relative_target(root, raw, cwd)` resolves a relative `raw`
+    against `_payload_cwd_base(root, cwd)`. That base is the payload `cwd`, `.resolve()`d, when it
+    is a directory equal to or under the root; otherwise it is the root. An absolute `raw`
+    resolves as today. Either way, today's `.resolve()` in `_relative_target` folds `..` before
+    `_is_production_python` tests the root-relative parts.
+  - **Claude gate** (FR-6 "Relative target", design DD-7 and D9 step 3). A relative target is made
+    absolute against the project root, never against the payload `cwd`. This happens before any
+    check, the exemptions included.
+  - **Canonicalization is owed by design v1.2 and is not in the tree.** The target is to be
+    canonicalized (`..` resolved) before any exemption pattern matches, so `tests/../x.py` is
+    production (design audit cycle 2). Design v1.1 at `b20ef027` does not do this. Its D9 step 3
+    is "string work only", so `$ROOT_ABS/tests/../x.py` still matches `*/tests/*`. Layer 6 follows
+    design v1.2's rule once it is committed.
+  - Both gates read state along the whole chain, for "is this governed?" as well as "which test?"
+    (FR-5, FR-6).
 - G6: The Claude gate reads Claude Code's real payload and is judged by the same unit. It refuses
   in a form V-0 proved Claude Code honours, on every refusal site and on every implicit exit
   (FR-6).
@@ -135,8 +149,10 @@ The live V-1 stays blocked on `multi-host-runtime`, and it is not a merge condit
       `tool_input.file_path`, the top-level `file_path` and the top-level `path`. `$1` is consulted
       only when stdin yields no target. A stdin target that holds a control character, or a stdin
       read that fails, is no target, and `$1` is not consulted in its place: the empty-target rule
-      decides (design D9 step 2). A relative target is made absolute against the project root
-      before any check (DD-7, spec v1.3 AC-6.15).
+      decides (design D9 step 2). A relative target is made absolute against the project root,
+      never against the payload `cwd`, before any check (DD-7, spec v1.3 AC-6.15). It is then
+      canonicalized, with `..` resolved, before the exemptions match. That rule is owed by design
+      v1.2 (G5).
    1. **Fast path.** No state file name on the target's chain → allow. It replaces
       `_resolve_state_file` (design D9 step 4, `_chain_may_hold_state`) and may allow only a write
       the `state` verb would read as none: a non-regular or dangling-symlink state path, and a
@@ -1413,6 +1429,12 @@ WRG
 - Every AC of spec FR-1…FR-8 passes through each hook's real entry point: stdin JSON, and for the
   Claude gate also the positional argument. The AC-6.5 / AC-6.6 branch and the form are chosen by
   V-0's `CHOSEN=`.
+  - Every test that runs the Claude gate, new or migrated, passes stdin explicitly. A payload test
+    uses `input=<payload>`. A positional-argument test uses `stdin=subprocess.DEVNULL`.
+  - Why: the gate now reads its target from stdin first and consults `$1` only when stdin yields
+    no target (design D9). An inherited stdin makes the verdict depend on the runner's fd 0. A pipe
+    held open with no data costs D9's 2.0 s bound. A payload on it would be decided instead of
+    `$1`.
 - **V-0 is conclusive** and **V-1r meets its pass condition**. Both are merge conditions (R1;
   spec v1.1 AC-6.7 and §"Live verification").
 - The `run_suite` table above passes cell by cell, with one stub per row, including the
@@ -1456,6 +1478,30 @@ WRG
   - **On either form**, both modules' `HOOK` constant moves to
     `Path(__file__).resolve().parents[1] / "hooks" / "h-mad-tdd-gate.sh"` (layer 6) and is listed
     under §"Regression provenance".
+  - **On either form**, every existing call site that runs the Claude gate gains
+    `stdin=subprocess.DEVNULL` (design D9; rule under the first bullet above). This is a
+    non-assertion change: the argv, env and every assertion stand as they are. It is listed
+    under §"Regression provenance" as a non-assertion change.
+    - Census, at `b8662267`, of 3 call sites (unit: matching lines): the `_run` helper of
+      `test_h_mad_tdd_gate_codex.py`, `test_non_step5_ignores_codex_gate` in the same module, and
+      the `_run` helper of `test_h_mad_tdd_gate_state_resolution.py`. None passes `stdin=` or
+      `input=` today. Command, in `bash --noprofile --norc`:
+
+      ```bash
+      grep -n 'subprocess.run(\[str(HOOK)' h-mad/tests/test_h_mad_tdd_gate_codex.py h-mad/tests/test_h_mad_tdd_gate_state_resolution.py
+      # reading at b8662267: 3 matching lines in 2 files (2 in the codex module, 1 in state_resolution)
+      grep -n 'stdin=\|input=' h-mad/tests/test_h_mad_tdd_gate_codex.py h-mad/tests/test_h_mad_tdd_gate_state_resolution.py
+      # reading at b8662267: 0 matching lines
+      ```
+
+    - The two `_run` helpers are top-level statements, so the 5g top-level-statement diff lists
+      them. The `test_*` function is listed too.
+    - Residual: a call spelled other than `subprocess.run([str(HOOK)` is outside the grep. The
+      other modules that name `h-mad-tdd-gate.sh` do not run the real gate. They are
+      `test_h_mad_hook_wiring.py`, `test_h_mad_install_check.py` and
+      `test_h_mad_install_check_docs.py`. The first names the gate only in settings fixtures for
+      `h_mad_hook_wiring.py`. The second runs a `#!/bin/bash\nexit 0` stand-in. The third reads
+      docs. The census re-runs at 5g, because a new test adds call sites.
   - Fact recorded, not a change: the three `test_h_mad_tdd_gate_state_resolution.py` rc-1 tests
     feed an **absolute** target under `codex_status=exhausted`, so today each is satisfied by the
     D1 "cannot derive test path" branch (P3 `D1`); after FR-6 each reaches the judge.
@@ -1546,3 +1592,4 @@ The plan cites each where it is used. None is adopted beyond what the named spec
 - v1.1: Plan audit cycle 1 answered (2026-09-28; reports at be1ac452, codex p1 6 musts + 1 should, teammate 6 musts + 6 shoulds + 2 nits); premises re-run at 2f262f8a in bash --noprofile --norc. V-0 rewritten: arm EJ tests the JSON-deny form beside exit 2, per-arm nonce HIT lines replace the any-nonempty-log proof, CHOSEN= reading; exercised offline against a fake claude in 7 modes. INCONCLUSIVE V-0 now halts to the operator and blocks merge (R1). New V-1r probe replays the HemaSuite Task 7 incident offline from git objects 1fbf8022/31bfcfe4 (pre-merge: 6/6 gate lines deny, controls RED/GREEN) and is a merge condition. Claude gate governance and Codex-authorship key move to the judge's chain reader (state verb; OD-3c reproduced). EXIT-trap rule closes the set -euo pipefail implicit-exit class. _production_claims rewritten over _parse_tasks (wire-registry-grammar probe: 4 files, 16 lines, 64 lines). reproduce.py reports stdout permissionDecision (24 lines). Shell-policy guard-narrowing differential, Claude-gate assertion census by function name, function-body diff beside the node-id floor, anchor-occurrence rule, ANCHORS and R2 commands fixed. Spec-owed items S-1..S-12 cited as pending spec v1.1, not adopted.
 - v1.2: Final corrective revision after plan audit cycle 2 (2026-09-28; codex p1 4 musts, v1.1 delta review 4 musts + 7 shoulds + 2 nits, both at dfd5f02e) under orchestrator decisions D-A..D-D. D-C: V-0 never chooses exit 1; CHOSEN is b when FORM_B=BLOCKS else a on either conclusive reading; rc1 removed from the script, run-gate grep, Choice, offline modes, reproduce post-merge row and census pass condition. V-0 also scores presence at the session's logged HIT paths and records EJ UNMEASURED as FORM_B=INCONCLUSIVE; exercised offline against a fake claude in 11 modes (v1.1 bytes read a false E1_BLOCKS in the other-directory mode). V-1r now scores all six gate lines (CHECK lines, VERDICT, exit 0/2/1); pre-merge reading VERDICT=FAIL fails=4/6 exit 2 at dfd5f02e, positive control PASS 0/6 and single-branch control FAIL 1/6 against a stub gate. v0 and v1r sha256 re-pinned; the P0 block executed as written into a scratch dir (rc 0). FR-4 summary-line rule with the stdout-2-passed/stderr-1-failed row. W6 uses two distinct hook/judge trees. Test HOOK constants resolve from Path(__file__) (worktree-via-HOME axis census, 6 lines / 4 files). D-A: _production_claims not edited, two-parser residual stated, W7 and S-10 withdrawn. D-B: existing assertions migrate form-conditionally. Function-body diff widened to every top-level statement plus conftest and imported helpers. S-1..S-6 cited as spec v1.1, S-7/8/9/11/12 as spec v1.2. R2 command moved to a fenced block; reproduce.py interpreter pinned.
 - v1.3: Propagation revision (2026-09-28), not an audit round: carries what spec v1.3 and design v1.1 (both at b20ef027) say the plan owes. Layer 6 reordered to spec v1.3 FR-6 Order (fast path, empty target, exemptions, governance, Codex authorship, judge; DD-1/OD-A), with stdin-first target read and DD-7/DD-8/DD-9. No-jq allow removed from "What we deliberately do not touch" and Out-of-Scope (DD-2, AC-6.12). "Two explicit branches" replaced by the one run_suite predicate (DD-3); summary-line rule gains the SGR strip and open category axis (DD-4, OD-D); run_suite table gains four rows, today cells re-read at 34c0e962. Time bound is Popen+killpg (DD-10). Shell-policy differential gains the h_mad_state_write.py row and control, builder-derived python<X.Y>, widened softened set (OD-C/AC-3.6). R2 cites design D13; R2 census re-run at 34c0e962 -> 7. New section "Spec v1.3 ACs: where each is tested" (AC-3.6, AC-4.2, AC-4.7, AC-6.1, AC-6.9, AC-6.11..AC-6.15).
+- v1.4: Propagation revision (2026-09-28), not an audit round, from design audit cycle 2's plan-G5 must (codex p1 at b8662267). G5 no longer sends both gates to the payload cwd. The Codex gate resolves against _payload_cwd_base (design D8), and the Claude gate against the project root (DD-7). Canonicalizing ('..' resolved before the exemptions) is stated as owed by design v1.2: design v1.1's D9 step 3 is string work only. Layer 6 step 0 swept. Success Criteria: every test that runs the Claude gate passes stdin explicitly (design D9's stdin-first read). The 3 existing call sites (census at b8662267) gain stdin=subprocess.DEVNULL and are listed under Regression provenance as a non-assertion change.

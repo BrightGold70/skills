@@ -10,10 +10,9 @@ chose, and an `EXIT` trap routes every exit that nothing decided into that funct
 
 ## Overview
 
-The design implements spec v1.3 FR-0…FR-8 and plan v1.2. OD-1…OD-9 and the orchestrator's
-OD-A…OD-D are resolved as spec v1.3 records them. Spec v1.3 was read in the working tree, where the
-spec author was revising it in parallel with this revision; its Version History line `v1.3` is the
-text this design answers. Operator decisions: OD-8 refuses an unreadable chain `judge-error` in the chosen form.
+The design implements spec v1.4 FR-0…FR-8 and plan v1.3, both as committed at skills `037c9f6b`.
+OD-1…OD-9 and the orchestrator's OD-A…OD-D are resolved as the spec records them; v1.2 of this
+design also applies the orchestrator's OD-G…OD-L (DD-7, D2, D3, D8, D9, D10, D12, D13). Operator decisions: OD-8 refuses an unreadable chain `judge-error` in the chosen form.
 OD-9 lets the Codex-authorship escape apply only when every ACTIVE record declares Codex unavailable.
 The registry keeps its own `Production` grammar (D-A). Existing Claude-gate assertions migrate
 according to the chosen form (D-B). V-0 never chooses `exit 1`: the form is (b) when
@@ -36,23 +35,25 @@ Some decisions here go beyond the spec's or the plan's wording. Each is marked *
 ## Supersedes the plan or the spec on
 
 Each item names the sentence it departs from, the reason, and the revert. The last column says
-where the item stands now: which spec v1.3 text adopted it, and which plan v1.2 sentences still
-state the old rule. The report routes each open item to its owner. IDs are stable: a withdrawn row
-keeps its number.
+where the item stands now: which spec or plan text adopted it (spec v1.4 and plan v1.3, as
+committed at skills `037c9f6b`), and what is still owed. The report routes each owed item to its
+owner. IDs are stable: a withdrawn row keeps its number.
 
 | DD | Departs from | Design | Why | Revert | Now |
 |---|---|---|---|---|---|
-| DD-1 | Plan §"Implementation Strategy", layer 6 (**Claude gate.**), step 3, which begins "The `state` verb decides governance" and precedes step 4's exemptions; spec v1.2 FR-6 | The Claude gate runs the exemptions and the `.py` filter **before** the `state` verb | Under the plan's order, an unreadable state file refuses every write, including an exempt `.json` write that would repair it. That is a deadlock nobody asked for. For every readable state the verdicts are identical under either order | Swap the two blocks | Adopted by spec v1.3 (OD-A; FR-6 "Order"; AC-6.9). Owed: the plan's layer-6 step order |
-| DD-2 | Plan §"What we deliberately do not touch" and plan §"Out-of-Scope (confirmed from spec)", each listing the no-`jq` fail-open as kept; spec v1.2 §Out-of-Scope | The gate no longer reads state with `jq`, so the `jq` dependency and its "no `jq` → allow" path are removed | Spec v1.2 FR-6 "Unchanged" already said "if the design removes that dependency, this path goes with it". Keeping a `command -v jq` allow with nothing left that uses `jq` would be a silent stand-down with no reason behind it | Restore the `command -v jq` check before the `state` call | Adopted by spec v1.3 (FR-6; AC-6.12; §Out-of-Scope). Owed: both plan sections |
-| DD-3 | Plan §"Two explicit branches" in `run_suite` | One predicate: a parsed summary that carries neither a `passed` nor a `failed` phrase stays `UNREADABLE no_summary` | The two-branch form moves `3 skipped in …`, `5 deselected in …` and `1 xfailed in …` from `no_summary` to `no_tests_ran` (measured in D7). The one predicate closes that axis | Two branches, and accept the three reason changes | Adopted by spec v1.3 (FR-4 "Audit-gate non-change"). Owed: the plan section |
-| DD-4 | Plan summary-line rule | SGR colour sequences are stripped before a line is matched | Measured: today `_suite_summary` reads a coloured `1 failed, 1 passed` as `(1, 0)`, which `run_suite` scores PASS. The plan's whole-line rule turns that into `UNREADABLE`. Stripping turns it into the correct `FAIL` | Drop the strip; coloured runs then read `no_summary` | Adopted by spec v1.3 (OD-D; FR-4 "Colour", audit-gate change 2). Owed: the plan's rule |
+| DD-1 | Plan §"Implementation Strategy", layer 6 (**Claude gate.**), step 3, which begins "The `state` verb decides governance" and precedes step 4's exemptions; spec v1.2 FR-6 | The Claude gate runs the exemptions and the `.py` filter **before** the `state` verb | Under the plan's order, an unreadable state file refuses every write, including an exempt `.json` write that would repair it. That is a deadlock nobody asked for. For every readable state the verdicts are identical under either order | Swap the two blocks | Adopted by spec v1.3 (OD-A; FR-6 "Order"; AC-6.9) and by plan v1.3's layer-6 step order |
+| DD-2 | Plan §"What we deliberately do not touch" and plan §"Out-of-Scope (confirmed from spec)", each listing the no-`jq` fail-open as kept; spec v1.2 §Out-of-Scope | The gate no longer reads state with `jq`, so the `jq` dependency and its "no `jq` → allow" path are removed | Spec v1.2 FR-6 "Unchanged" already said "if the design removes that dependency, this path goes with it". Keeping a `command -v jq` allow with nothing left that uses `jq` would be a silent stand-down with no reason behind it | Restore the `command -v jq` check before the `state` call | Adopted by spec v1.3 (FR-6; AC-6.12; §Out-of-Scope) and by both plan v1.3 sections |
+| DD-3 | Plan §"Two explicit branches" in `run_suite` | One predicate: a parsed summary that carries neither a `passed` nor a `failed` phrase stays `UNREADABLE no_summary` | The two-branch form moves `3 skipped in …`, `5 deselected in …` and `1 xfailed in …` from `no_summary` to `no_tests_ran` (measured in D7). The one predicate closes that axis | Two branches, and accept the three reason changes | Adopted by spec v1.3 (FR-4 "Audit-gate non-change") and by plan v1.3 ("One predicate") |
+| DD-4 | Plan summary-line rule | SGR colour sequences are stripped before a line is matched | Measured: today `_suite_summary` reads a coloured `1 failed, 1 passed` as `(1, 0)`, which `run_suite` scores PASS. The plan's whole-line rule turns that into `UNREADABLE`. Stripping turns it into the correct `FAIL` | Drop the strip; coloured runs then read `no_summary` | Adopted by spec v1.3 (OD-D; FR-4 "Colour", audit-gate change 2) and by plan v1.3's SGR bullet |
 | DD-5 | Spec v1.2 FR-4 classification (7 rules, no final else) | Rule 8: any other parsed summary (0 failed, 0 passed, 0 errors, not `no tests ran`) → `no-tests-ran` | The v1.2 list is not total. Without rule 8 a skipped-only run has no kind | Rule 8 → `no-summary` instead. That keeps FR-1's kind table meaning "`no tests ran`" alone for `no-tests-ran`, and stretches `no-summary` instead. Both kinds DENY | Adopted by spec v1.3 (FR-4 rule 8; FR-1 kind table) |
-| DD-6 | — | **Withdrawn in v1.1** (orchestrator OD-C). The shell policy implements spec FR-3 as written: a contained venv interpreter passes the existing argv rules, H-MAD control allowlist included (D8) | v1.0 narrowed FR-3 to `-m pytest …` without the spec's agreement | — | Spec v1.3 AC-3.6. Owed: the plan's expected softened set gains the control-allowlist rows (D8 "Differential") |
-| DD-7 | (not stated in spec v1.2 or plan v1.2) | The Claude gate makes a relative target absolute against the project root before any check | Without this, the fast path resolves a relative target against the process cwd while the judge resolves it against the root, and the two disagree. The softening it causes is published by the D9 differential: exactly two rows | Leave targets raw; the fast path then defers every relative target to the `state` verb | Kept (orchestrator OD-E, author's call). Spec v1.3 FR-6 and AC-6.15 bind it |
+| DD-6 | — | **Withdrawn in v1.1** (orchestrator OD-C). The shell policy implements spec FR-3 as written: a contained venv interpreter passes the existing argv rules, H-MAD control allowlist included (D8) | v1.0 narrowed FR-3 to `-m pytest …` without the spec's agreement | — | Spec v1.3 AC-3.6. Adopted by plan v1.3's accounting sentence (control-allowlist row, D8 "Differential") |
+| DD-7 | (not stated in spec v1.2 or plan v1.2) | The Claude gate makes a relative target absolute against the project root, and lexically normalizes it (`..` and `.` folded, `os.path.normpath`), before any check, the exemptions included (D9 step 3; orchestrator OD-G) | Without this, the fast path resolves a relative target against the process cwd while the judge resolves it against the root, and the two disagree. Without the normalization, the root prefix turns `tests/../x.py`, a production file, into an exempt `<root>/tests/../x.py`. The D9 differential publishes the result: two softened cells and two tightened cells | Leave targets raw; the fast path then defers every relative target to the `state` verb | Kept (orchestrator OD-E, OD-G). Spec v1.4 FR-6 and AC-6.15 still read "conditional on design v1.1 keeping DD-7"; owed: the spec resolves the condition and states the normalization |
 | DD-8 | (not stated; today an empty target with an ACTIVE record is allowed) | An empty target on a governed root is refused `judge-error` | OD-4's root cause is payload-shape drift. A payload the gate cannot read yields an empty target, which today is a silent allow. The Codex gate already refuses "could not identify this write target" | Allow on an empty target, as today | Adopted by spec v1.3 (FR-6; AC-6.13) |
 | DD-9 | (not stated) | A Claude-gate target outside the project root has the root alone as its chain | A chain from outside the root is empty, so the target would read `none` and be allowed. Today the root-first reader governs it. This keeps today's refusal | Read `none` for an outside target | Adopted by spec v1.3 (FR-6; AC-6.14) |
-| DD-10 | Plan §"Architecture Considerations", the "Time bound" bullet: "The judge bounds pytest with `subprocess.run(timeout=…)`" | `Popen(start_new_session=True)` with `communicate(timeout=…)`, and `os.killpg` on timeout (D6) | Measured in D6: `subprocess.run(timeout=1)` returned and left the shim's `sleep` alive; the process-group kill left none. A surviving pytest child can write into the tree after the gate decided | `subprocess.run(timeout=…)`, accepting survivors | Owed: the plan bullet |
-| DD-11 | Spec FR-4 classification rule 2: "`No module named pytest` in the output" | Rule 2 matches only a whole line, after stripping, that ends with `: No module named pytest` (D7) | A RED test whose assertion message quotes the phrase would otherwise read `pytest-missing`. The narrowing is fail-closed: a real missing-pytest output the rule misses has no summary line and still reads DENY `no-summary` | Substring match anywhere in the output | Owed: spec FR-4 rule 2 wording |
+| DD-10 | Plan §"Architecture Considerations", the "Time bound" bullet: "The judge bounds pytest with `subprocess.run(timeout=…)`" | `Popen(start_new_session=True)` with `communicate(timeout=…)`, and `os.killpg` on timeout (D6) | Measured in D6: `subprocess.run(timeout=1)` returned and left the shim's `sleep` alive; the process-group kill left none. A surviving pytest child can write into the tree after the gate decided | `subprocess.run(timeout=…)`, accepting survivors | Adopted by plan v1.3's "Time bound" bullet. v1.2 extends the same bounded run to the name map (D3 step 6, OD-K) |
+| DD-11 | Spec FR-4 classification rule 2: "`No module named pytest` in the output" | Rule 2 matches only a whole line, after SGR and whitespace stripping, that ends with `: No module named pytest` (D7) | A RED test whose assertion message quotes the phrase would otherwise read `pytest-missing`. The narrowing is fail-closed: a real missing-pytest output the rule misses has no summary line and still reads DENY `no-summary` | Substring match anywhere in the output | Adopted by spec v1.4 FR-4 rule 2 |
+| DD-12 | Spec v1.4 FR-5 "Unchanged": `_any_phase5_status` for the shell policy is unchanged | The Codex gate's state reads open only regular files and never block: `_state_status` reads through a non-blocking regular-file open, and the per-target chain read runs for every write target whatever `_any_phase5_status` returns (D8; orchestrator OD-H, OD-I) | A FIFO under the root blocked `_any_phase5_status`'s `read_text` before the chain reader ran, and a state file behind an unsearchable directory is invisible to `rglob`, so an `inactive` scan skipped a present state file | Restore `read_text` and the `inactive` skip | Owed: spec FR-5 "Unchanged" bullet |
+| DD-13 | Spec v1.4 FR-6 "Payload": "a stdin read that fails, is no target" (the failure is not defined) | The read fails when at least one byte was read and no target came out; 0 bytes read (EOF, tty, or the 2.0 s bound with nothing read) is the only case that consults `$1` (D9 step 2) | v1.1 let a non-JSON or truncated payload fall back to `$1`, which its own error table forbade | v1.1's rule: exit 0 on any payload with no usable field | Owed: spec FR-6 "Payload", one defining clause |
 
 ## Architecture Overview
 
@@ -63,7 +64,8 @@ Codex host ──stdin JSON──▶ h-mad-codex-tdd-gate.py ──import──�
 
 Claude host ─stdin JSON──▶ h-mad-tdd-gate.sh
                               ├ EXIT trap installed first (undecided exit → refusal)
-                              ├ payload → target (stdin tool_input.file_path | file_path | path; else $1)
+                              ├ payload → target (stdin tool_input.file_path | file_path | path; $1 only on 0 stdin bytes)
+                              ├ canonical target: normpath(join(root, target))  [DD-7]
                               ├ _chain_may_hold_state fast path (proved no state name on the chain → allow)
                               ├ empty target → root governance                  [DD-8]
                               ├ exemptions, .py filter                          [DD-1]
@@ -120,9 +122,19 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
   realpath of the target's parent directory (`os.path.realpath` accepts a path that does not exist
   yet). If `d == root`, or `root` is an ancestor of `d`, the chain is `d, d.parent, …, root`.
   Otherwise the chain is `[root]` (DD-9).
-- Each chain directory is read at `D/docs/.bkit-memory.json`. A path for which `os.path.lexists`
-  is false is skipped. Every other path is a state file, whatever its type (spec v1.3 FR-5: a
-  name present on the chain that is not a regular file is unreadable, never absent).
+- Each chain directory is read at `D/docs/.bkit-memory.json`. **Absence is proven only by
+  `os.lstat(path)` raising `FileNotFoundError` (`ENOENT`) or `NotADirectoryError` (`ENOTDIR`, a
+  non-directory `docs`, under which no name can exist).** Such a path is skipped. Any other
+  `OSError` from `lstat` (`PermissionError`/`EACCES` from a directory the process cannot search,
+  `ELOOP`, `ENAMETOOLONG`, `EIO`) ends the walk as `unreadable`, with the exception class name
+  as the error (orchestrator OD-I). `os.path.lexists` is not used here, because it returns `False`
+  for `EACCES` as well as for `ENOENT`. A path whose `lstat` succeeds is a state file, whatever
+  its type (spec FR-5: a name present on the chain that is not a regular file is unreadable,
+  never absent).
+  - Executed under `/usr/bin/python3` 3.9.6 in a scratch tree (deleted), at skills `b8662267`: a
+    state file under a `chmod 000` directory → `os.path.lexists` `False`, `os.lstat`
+    `PermissionError` errno 13; no `docs` → `FileNotFoundError` errno 2; `docs` a regular file →
+    `NotADirectoryError` errno 20.
   - The read is `fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)`, then `os.fstat(fd)`. If the
     mode is not `S_ISREG`, the error is `not-a-regular-file`. Otherwise the bytes are read from
     that same `fd`, decoded as UTF-8, and passed to `json.loads`. Opening with `O_NONBLOCK` and
@@ -130,7 +142,8 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
     file swapped between a `stat` and an `open` cannot be read unchecked.
   - Executed under `/usr/bin/python3` 3.9.6 in a scratch tree (deleted): a FIFO →
     `not-a-regular-file` in 0.0 s; a directory → `not-a-regular-file`; a dangling symlink →
-    `FileNotFoundError`; a regular file → read. `os.path.lexists` was true for all four.
+    `FileNotFoundError`; a regular file → read. `os.path.lexists` was true for all four, so
+    `os.lstat` succeeded for all four (`lexists` is `lstat` with every `OSError` read as `False`).
   - `OSError`, `UnicodeDecodeError`, `ValueError`, `not-a-regular-file`, a top level that is not
     an object, or an `orchestrator_state` that is present and not an object each end the walk:
     `Chain("unreadable", (), <file>, <exception class name, "not-a-regular-file" or "not-an-object">)`.
@@ -146,15 +159,19 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
   `unreadable`), and a new file under a directory that does not exist yet with the state one level
   up (`cd` fails, reader `active`). The class is "any input on which the fast path says no state
   and this reader does not say `none`". D9 step 4 replaces the function with one that tests the
-  same names this reader tests (`lexists`), over the same directories, and defers to the `state`
-  verb on every input where it cannot prove the two agree.
-- **Residuals.**
-  - A state file inside a directory the process cannot search reads as absent to both
-    `os.path.lexists` and the fast path's `[ -e ] || [ -L ]`. Both gates agree, and both allow.
-    This is today's behaviour.
-  - The Codex gate's `_any_phase5_status` (spec FR-5: unchanged) still calls `read_text` on every
-    `docs/.bkit-memory.json` under the root, and `main` calls it for every payload. A FIFO there
-    blocks the Codex gate before this reader runs, and the host's hook timeout then decides.
+  same names this reader tests, over the same directories, and defers to the `state` verb on
+  every input where it cannot prove absence the way this reader proves it (D9 step 4's
+  searchability rule).
+- **No blocking read on any state path** (orchestrator OD-H). The three places that touch a state
+  path are this reader, the Codex gate's `_state_status` (D8) and the Claude fast path (D9 step 4).
+  The first two open only through `O_NONBLOCK` plus an `fstat` `S_ISREG` test and treat anything
+  else as unreadable; the fast path opens nothing. No state read runs before this reader that
+  could block.
+- **Residual.** The Codex gate's `_any_phase5_status` walks with `Path.rglob`, which skips a
+  directory it cannot list or search without raising: executed in the scratch tree above, `rglob`
+  returned no path for the state file under the `chmod 000` directory. So its shell-policy reading
+  can be `inactive` while a step5 record sits behind such a directory. Writes are not affected,
+  because the per-target read no longer depends on that scan (D8, DD-12).
 
 ### D3 — Resolution `resolve(root, target, records)` (FR-2)
 
@@ -186,8 +203,16 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
      `test-passing` in D7's precedence.
    - The candidate run's cwd is that candidate's `B` (FR-4).
 6. **Name map.** If no task matched, the judge calls the name map on the target's root-relative
-   POSIX path:
-   `subprocess.run(["bash", <scripts>/h_mad_derive_test_path.sh, rel], cwd=root, capture_output=True, text=True, timeout=<remaining budget>)`.
+   POSIX path through D6's one bounded runner (orchestrator OD-K):
+   `_run_bounded(["bash", <scripts>/h_mad_derive_test_path.sh, rel], cwd=root, deadline)`, which
+   is `Popen(start_new_session=True)`, `communicate(timeout=<remaining budget>)`, and
+   `os.killpg(proc.pid, SIGKILL)` on `TimeoutExpired`. The judge contains no
+   `subprocess.run(…, timeout=…)` call (5g: `grep -c 'subprocess.run' h-mad/scripts/h_mad_tdd_judge.py`
+   → 0 matching lines). A name map that times out, or that finds the budget already spent, is
+   the verdict `timeout`.
+   - `subprocess.run(timeout=…)` is excluded because its post-timeout cleanup waits on children
+     that still hold the captured pipes. The codex design audit cycle 2 measured it: a script
+     running `sleep 2 & wait` under a 0.2 s timeout returned after 2.01 s.
    - A non-empty stdout resolves against `root`. The candidate is that file, and its cwd is `root`.
    - If that candidate is missing (rule of step 5), the verdict is `test-missing`.
 7. **Deny.** If neither source yields a path, the verdict is `no-test-resolved`.
@@ -283,10 +308,11 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
 - **One budget per judge call.** `JUDGE_BUDGET_S = 40.0` covers every subprocess one `judge()` call
   starts: the name map and every candidate run. Each run's timeout is the remaining budget. When
   the remaining budget is ≤ 0 before a run, the verdict is `timeout` without starting it.
-- **Process-group kill** (DD-10). Each run is started with
-  `subprocess.Popen(..., start_new_session=True)` and read with `communicate(timeout=remaining)`. On
-  `TimeoutExpired` the judge calls `os.killpg(proc.pid, SIGKILL)` and then `communicate()`, and the
-  verdict is `timeout`.
+- **Process-group kill** (DD-10). Every subprocess the judge starts, the name map (D3 step 6)
+  and each candidate run, goes through one helper, `_run_bounded(argv, cwd, deadline)`. It starts
+  the process with `subprocess.Popen(..., start_new_session=True)` and reads it with
+  `communicate(timeout=remaining)`. On `TimeoutExpired` it calls `os.killpg(proc.pid, SIGKILL)` and
+  then `communicate()`, and the verdict is `timeout`.
   - Executed at skills `1ef1a782` under `/usr/bin/python3` 3.9.6, with a `/bin/sh` shim running
     `sleep 7.3x; echo done`:
     - `subprocess.run(timeout=1)` returned after 1.0 s and left the `sleep` alive (`pgrep -f` → 1
@@ -397,7 +423,17 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
     today `None`;
   - `3 apples in 0.1s` → (0,0,0,F), with `phrases` = {`apples`}; today `None`. It is a summary
     line now, by the open axis; it still scores `no_summary` in `run_suite` and `no-tests-ran` in
-    the judge, and both deny;
+    the judge, and both deny. **Residual of the open axis, stated** (the same class as
+    `3 apples`): any line of `stdout + stderr` shaped `N lowercase words`, with no pytest origin,
+    is a summary line. Executed with the grammar above under `/usr/bin/python3` 3.9.6 at skills
+    `b8662267`: `2 rows inserted` and `5 files would be left unchanged` match untimed, and
+    `3 records written in 0.2s` matches timed. Because a timed line beats an untimed one and the
+    last line wins, such a timed line printed after pytest's summary (on stderr, or late on
+    stdout) replaces it. When the stray line's categories are all non-counting words, that fails
+    closed (judge rule 8 `no-tests-ran`, `run_suite` `no_summary`), but a RED run can then be
+    denied for a reason unrelated to its tests. A stray line whose category is exactly `passed`,
+    `failed`, `error` or `errors` is read as pytest's own; that member is not introduced by the
+    open axis, since v1.0's closed word set accepted it too;
   - `collected 0 items`, `E   assert '1 failed' in x`, `FAILED t.py::a - 1 failed` and
     `3 Apples in 0.1s` → None; today `None`.
 - **The coloured line** (DD-4) is pytest 9.1.1's `--color=yes` summary for one failing and one
@@ -434,7 +470,8 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
   blocks where today allows. No row moves toward PASS, so no stamp flips toward PASS.
 - **Judge classifier** `score(proc_output, timed_out)`, first match wins:
   1. `timed_out` → `timeout`.
-  2. Some whole line, after stripping, ends with `: No module named pytest` (DD-11). That is the
+  2. Some whole line, after SGR and whitespace stripping (no `=` stripping; spec v1.4 FR-4 rule 2's
+     wording), ends with `: No module named pytest` (DD-11). That is the
      unquoted `-m` form, measured as
      `/Applications/Xcode.app/Contents/Developer/usr/bin/python3: No module named pytest`, rc 1,
      and again in this revision as `<scratch venv>/bin/python: No module named pytest` from a
@@ -461,12 +498,29 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
 
 ### D8 — Codex gate changes (`h-mad/hooks/h-mad-codex-tdd-gate.py`; FR-3, FR-5)
 
-- **Removed:** `_target_phase5_status`, `_derived_test` and `_test_exit`. `_state_status` and
-  `_any_phase5_status` are unchanged (spec FR-5).
+- **Removed:** `_target_phase5_status`, `_derived_test` and `_test_exit`. `_any_phase5_status`
+  keeps its `rglob` walk and its three values, and still drives only the shell policy and the
+  no-target deny (spec FR-5). Its reads change (DD-12, orchestrator OD-H):
+  - `_state_status(state_file)` no longer calls `read_text`. It calls a new local helper,
+    `_read_regular_text(path)`: `os.open(path, os.O_RDONLY | os.O_NONBLOCK)`, `os.fstat` on that
+    descriptor, and a mode that is not `S_ISREG` raises `OSError`; otherwise the bytes are read
+    from the same descriptor and decoded as UTF-8. `_state_status` already maps `OSError` to
+    `unknown`, and a `UnicodeDecodeError` is added to that except clause. So a FIFO, a directory
+    or a dangling symlink found by `rglob` reads `unknown`, and nothing blocks.
+  - The helper is local, not the judge's, because `_any_phase5_status` must keep working when the
+    judge cannot be imported (the shell policy then still denies on `unknown`). It is the same
+    rule as D2's read, implemented twice, and each copy is pinned by its own FIFO fixture through
+    its own entry point (§"Test Plan").
 - **Loading the judge.** `_load_judge()` inserts `Path(__file__).resolve().parents[1] / "scripts"`
-  at `sys.path[0]`, then `import h_mad_tdd_judge`. It is called lazily, the first time the main path
-  needs the judge, and never when `_any_phase5_status(root) == "inactive"`. So a broken judge
-  cannot affect a project with no step5 record, which matches the Claude fast path.
+  at `sys.path[0]`, then `import h_mad_tdd_judge`. It is called the first time the main path needs
+  the judge: for the first write target, and for a shell command when `_any_phase5_status` is
+  `active`. It is no longer skipped when `_any_phase5_status(root) == "inactive"` (DD-12,
+  orchestrator OD-I): `rglob` does not see a state file behind a directory it cannot search (D2
+  "Residual"), so an `inactive` scan is not a proof that the target's chain holds no state. The
+  per-target chain read (below) is that proof, and it runs for every write target. The cost,
+  stated: a judge that cannot be imported now refuses every Codex write target `judge-error`
+  (AC-5.4's crash guard), in a project with no step5 record too. The Claude side keeps its
+  name-absence fast path (D9 step 4); the Codex side has none.
 - **`_payload_cwd_base(root, cwd) -> Path`** (OD-2), the one statement of the payload-`cwd` rule.
   It returns `c = Path(cwd).expanduser().resolve()` when `cwd` is a non-empty string, `c` is a
   directory, and `c == root` or `root in c.parents`. Otherwise it returns `root`. `root` is
@@ -481,7 +535,7 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
     never the process cwd, so
     `test_codex_hook_resolves_git_root_from_nested_cwd` (no payload `cwd`, process cwd nested)
     still resolves against the root.
-- **Per target.**
+- **Per target** (every write target, whatever `_any_phase5_status` returned; DD-12).
   1. `chain = judge.read_chain(root, absolute)`.
   2. `unreadable` → `_deny("H-MAD state governing this write is unreadable (<file>: <error>); refusing fail-closed. kind=judge-error")`.
   3. `none` → continue.
@@ -491,8 +545,8 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
   the Codex side an exempt write on an unreadable chain is still refused, while the Claude side
   allows it (DD-1, OD-A). The asymmetry is kept on purpose. The Codex gate is the implementer's
   gate, and repairing orchestrator state is the orchestrator's job, done through Claude's
-  `Write` or `h_mad_state_write.py`. Spec v1.3 does not state the asymmetry; a sentence in FR-5 is
-  owed.
+  `Write` or `h_mad_state_write.py`. Spec v1.4 FR-5 states the asymmetry ("Unreadable before the
+  filter").
   5. `DENY` → `_deny(f"H-MAD Phase 5 requires a failing test before {relative}: kind={kind}; {reason}")`.
      `relative` is root-relative, so AC-5.1's deny names `hematology-paper-writer/tools/review_round/guideline_excerpts.py`.
 - **Crash guard** (AC-5.4). The whole body of `main` after `--self-check` sits inside
@@ -533,9 +587,8 @@ through `python3 os.path.realpath`. Neither hook uses `$HOME/.claude/skills` (pl
   - **Expected softened set:** {contained venv} × {spellings that resolve into it, `python-evil`
     included} × {`-m pytest tests/test_x.py`, the `h_mad_state_write.py` row}. Every other
     softened row is a defect; every tightened row is justified by name.
-  - This is wider than plan v1.2's expected set, which stops at `-m pytest …`. The plan's
-    §"Guard narrowing: shell policy" accounting sentence is owed that change; FR-3 has always
-    permitted it.
+  - This is wider than plan v1.2's expected set, which stopped at `-m pytest …`. Plan v1.3's
+    §"Guard narrowing: shell policy" accounting sentence carries it; FR-3 has always permitted it.
 
 ### D9 — Claude gate (`h-mad/hooks/h-mad-tdd-gate.sh`; FR-6, OD-4, OD-5, OD-8, OD-9)
 
@@ -571,16 +624,34 @@ governance, Codex authorship, judge):
        `tool_input.file_path`, the top-level `file_path` and the top-level `path`;
      - it exits 3, printing nothing, when that string holds a control character (`ord < 32` or
        127);
-     - it prints nothing and exits 0 when stdin is empty, is not a JSON object, or has no such
-       field.
+     - it prints nothing and exits 0 **only when it read 0 bytes**: a tty, an EOF with no data,
+       or the 2.0 s bound reached with nothing read;
+     - it prints nothing and exits 4 when it read at least one byte and no target came out: the
+       bytes are not UTF-8 JSON (a truncated payload, cut by the 2.0 s bound, included), the JSON
+       is not an object, or no field above holds a non-empty string (DD-13).
    - Then:
      - `TRC == 0` and `TP` non-empty → `TARGET_PATH=$TP`, even when `$1` is also given;
-     - `TRC == 0` and `TP` empty → `TARGET_PATH=${1:-}`;
-     - any other `TRC` → `TARGET_PATH=""`. A payload was present but unusable, or the reader
-       failed, so `$1` is not trusted in its place. The empty-target rule (step 5) decides.
+     - `TRC == 0` and `TP` empty → `TARGET_PATH=${1:-}`. This is the 0-byte case only;
+     - any other `TRC` (3, 4, or a reader that crashed) → `TARGET_PATH=""`. A payload was present
+       but yielded no target, so `$1` is not trusted in its place. The empty-target rule (step 5)
+       decides.
+   - The rule over the set of stdin outcomes {empty, tty, not UTF-8 JSON, truncated, not an
+     object, no field, control character, timeout with 0 bytes, timeout with some bytes, reader
+     exception}: `$1` is consulted exactly when 0 bytes were read. Every other member either
+     yields a stdin target or leaves the target empty.
    - **Why this never hangs.** Claude Code's registration passes no argument and writes the
-     payload on stdin. A hand invocation from a terminal has a tty on fd 0, which is not read. A
-     pipe held open with no data costs the 2.0 s bound and then falls back to `$1`.
+     payload on stdin. A hand invocation from a terminal has a tty on fd 0, which is not read.
+     **Residual:** a writer that holds the pipe open and sends 0 bytes costs the 2.0 s bound and
+     then falls back to `$1`.
+   - **Tests pass stdin explicitly** (orchestrator OD-L). A test that invokes this gate without
+     `stdin=` inherits the runner's fd 0: a pipe held open costs 2.0 s per call, and bytes on it
+     are consumed as a payload. Every test that invokes the Claude gate passes
+     `stdin=subprocess.DEVNULL` or `input=<payload>`. This applies to the existing helpers in
+     `test_h_mad_tdd_gate_state_resolution.py` and `test_h_mad_tdd_gate_codex.py`, whose
+     `subprocess.run` calls pass no `stdin=` today (`grep -n 'subprocess.run\|stdin\|input='`
+     over the two files at skills `b8662267` → 3 matching lines, all `subprocess.run`, none with
+     `stdin=` or `input=`), and it is part of the AC-6.2 migration
+     (§"Test Plan"). It changes no assertion.
    - **Executed** under `/bin/bash` 3.2.57 with this reader, in a scratch script (deleted):
      - stdin `{"tool_input":{"file_path":"/stdin/win.py"}}` plus `$1=/positional/lose.py` →
        `/stdin/win.py`;
@@ -592,29 +663,63 @@ governance, Codex authorship, judge):
      - stdin held open by a `sleep 6` writer, plus `$1` → the `$1` path after 2.06 s;
      - no stdin redirection, run from a Python `subprocess.run` inside the Bash tool → the `$1`
        path after 0.06 s.
-3. **Absolute target** (DD-7). `ROOT_ABS=$(cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null && pwd -P) || ROOT_ABS=""`.
-   A non-empty relative `TARGET_PATH` becomes `$ROOT_ABS/$TARGET_PATH` when `ROOT_ABS` is
-   non-empty. This is string work only.
+     - These readings are of the v1.1 reader. v1.2's exit-4 branch (DD-13) was not executed; the
+       non-JSON-stdin-plus-`$1` fixture in §"Test Plan" pins it.
+3. **Canonical target** (DD-7, orchestrator OD-G). `ROOT_ABS=$(cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null && pwd -P) || ROOT_ABS=""`.
+   A non-empty `TARGET_PATH` is then replaced by
+   `python3 -c 'import os,sys;print(os.path.normpath(os.path.join(sys.argv[1],sys.argv[2])))' "$ROOT_ABS" "$TARGET_PATH"`:
+   a relative target is joined to `ROOT_ABS` (an absolute one ignores it, as `os.path.join`
+   does), and `.` and `..` segments are folded lexically. With `ROOT_ABS` empty the join leaves a
+   relative target relative, and it is still normalized. A failure of this call is an errexit,
+   which the trap refuses `judge-error`.
+   - This runs **before** the fast path and before every exemption pattern, so no pattern ever
+     sees a `..` segment in an absolute target: `tests/../x.py`, `./tests/../x.py` and
+     `<root>/tests/../x.py` all become `<root>/x.py`, a production file.
+   - It is lexical, never `realpath`: no symlink is resolved.
+   - **Residual, stated exactly.** The exemption patterns key on the lexically normalized path,
+     not on the file the host opens. They differ in exactly two cases, and both involve a
+     symlinked directory component of the target: (a) a symlink whose own name is `tests` or
+     `fixtures`, or which sits under such a directory, pointing at production code: the write is
+     exempt; (b) a `..` that follows a symlinked component, which the kernel applies after
+     following the link and `normpath` applies before, so the normalized path names a different
+     file. (a) holds today for absolute targets, since the old gate resolved no symlink either.
+     (b) can exempt only a target whose raw spelling already carries a `tests` or `fixtures`
+     segment, because normalization removes segments and never adds one.
 4. **Fast path** (spec v1.3 AC-6.11). `_chain_may_hold_state "$ROOT_ABS" "$TARGET_PATH" || _allow`.
    The function returns 1 only when it has *proved* that no `docs/.bkit-memory.json` name exists on
    the chain D2's reader walks. On every input where it cannot prove that, it returns 0, and the
    `state` verb decides. It replaces `_resolve_state_file`, whose `-f` test and `cd` into the
    target's parent let two governed writes through (D2).
-   - `_lexists p` is `[ -e "$p" ] || [ -L "$p" ]`, the shell twin of `os.path.lexists`. A
-     dangling symlink, a directory and a FIFO at the state path all count as present.
-   - With `ROOT_ABS` non-empty, a present `$ROOT_ABS/docs/.bkit-memory.json` → 0.
+   - `_lexists p` is `[ -e "$p" ] || [ -L "$p" ]`. A dangling symlink, a directory and a FIFO at
+     the state path all count as present.
+   - **How absence is proven** (orchestrator OD-I). `_lexists` alone is not a proof, because
+     `[ -e ]` and `[ -L ]` are both false when a directory on the way cannot be searched. For a
+     chain directory `D`, `_absent_at D` returns 0 (proven absent) only when
+     `! _lexists "$D/docs/.bkit-memory.json"` **and** `[ -x "$D" ]` **and** one of:
+     `! _lexists "$D/docs"`; `[ -x "$D/docs" ]`; or `[ -e "$D/docs" ] && [ ! -d "$D/docs" ]`
+     (a non-directory `docs`, D2's `ENOTDIR`). Every other case returns 1, and the function
+     defers. `[ -x "$D" ]` succeeds only when the whole path to `D` resolves and `D` is
+     searchable, so a failed `-e`/`-L` below it is a real absence.
+     - Executed under `/bin/bash` 3.2.57 in a scratch tree (deleted), at skills `b8662267`, beside
+       D2's `lstat` reading of the same paths: a `chmod 000` `D` → defer (reader `unreadable`
+       `PermissionError`); a `chmod 000` `D/docs` → defer (reader `unreadable`); no `docs` →
+       proven absent (reader absent); `docs` a regular file → proven absent (reader absent);
+       `docs` a dangling symlink → defer (reader absent). The last is a deferral the reader did
+       not need, which costs one `state` call and changes no verdict.
+   - With `ROOT_ABS` non-empty, `_absent_at "$ROOT_ABS"` failing → 0.
    - An empty target → 1. Its chain is the root alone, already tested.
    - A target that is not absolute (only possible when `ROOT_ABS` is empty), or that holds a `.`
-     or `..` segment → 0. `realpath` folds `..` after a missing directory lexically, and the shell
-     walk would not.
+     or `..` segment → 0. After step 3 an absolute target holds neither, so the segment clause
+     is a guard for step 3's own failure modes; `realpath` folds `..` after a missing directory
+     lexically, and the shell walk would not.
    - Otherwise `d` starts at `dirname(target)` and climbs while `d` is not present. A directory
      that does not exist yet holds no state file, so skipping it loses nothing. Then
      `d=$(cd "$d" && pwd -P)`, and a failed `cd` → 0. This is `realpath` of the target's parent,
      computed on its existing prefix.
    - With `ROOT_ABS` non-empty and `d` outside it → 1. D2 then reads the root alone (DD-9), and
      the root's state was absent.
-   - Walk `d` upward, testing `_lexists "$d/docs/.bkit-memory.json"` at each step, and stop after
-     `ROOT_ABS` (or after `/` when `ROOT_ABS` is empty). A present name → 0. Otherwise → 1.
+   - Walk `d` upward, testing `_absent_at "$d"` at each step, and stop after `ROOT_ABS` (or after
+     `/` when `ROOT_ABS` is empty). Any directory where absence is not proven → 0. Otherwise → 1.
    - **Executed** under `/bin/bash` 3.2.57 in a scratch tree (deleted):
      - a dangling-symlink root state → defer;
      - no root state, `sub/docs/.bkit-memory.json` present, and a target under
@@ -625,15 +730,22 @@ governance, Codex authorship, judge):
      - an empty target, no root state → allow;
      - an empty `ROOT_ABS` with a state on the target's ancestors → defer, and without one → allow;
      - a relative target → defer.
-   - **Residual.** A state file in a directory the process cannot search is absent to both this
-     function and D2's reader, so both allow. That is today's behaviour.
+     These readings are of v1.1's `_lexists` walk and were not re-run under `_absent_at`. Each
+     case above has only searchable directories, where `_absent_at` reduces to
+     `! _lexists "$D/docs/.bkit-memory.json"`; AC-6.11's fixtures re-read them.
+   - A state file in a directory the process cannot search is no longer absent to either gate:
+     this function defers, and D2's reader returns `unreadable`, which step 8 refuses
+     `judge-error` for a production `.py` write (v1.1 allowed it); an exempt write is still
+     allowed at step 6.
 5. **Empty target** (DD-8). If `TARGET_PATH` is empty, the gate runs `_find_judge` (step 7) and
    `_read_state` with no `--target`: `active` or `unreadable` → `_refuse judge-error "could not identify the write target"`,
    and `none` → `_allow`.
 6. **Exemptions and the `.py` filter** (DD-1, OD-A). Both `case` blocks keep their exact patterns,
-   then `[[ "$TARGET_PATH" != *.py ]] && _allow`. No `python3` process is started for an exempt
-   write, and no state is read, so an exempt write on an unreadable chain is allowed and the
-   broken state file can be repaired.
+   then `[[ "$TARGET_PATH" != *.py ]] && _allow`. The patterns see step 3's canonical target.
+   Neither the `state` verb nor the `judge` verb is run for an exempt write (step 2's reader and
+   step 3's normalization are the only `python3` processes before this step), and no state is
+   read, so an exempt write on an unreadable chain is allowed and the broken state file can be
+   repaired.
 7. **Judge path.** `_find_judge` sets
    `JUDGE=$(python3 -c 'import os,sys;print(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),"scripts","h_mad_tdd_judge.py"))' "${BASH_SOURCE[0]}")`,
    unless step 5 already set it. A failure here is an errexit, and the trap turns it into
@@ -657,8 +769,11 @@ governance, Codex authorship, judge):
      its state file in the `h_mad_state_write.py … "<file>"` remedy.
    - Both values are percent-decoded by `_pct_decode` before printing, so the hint prints the
      absolute path as today (D10 makes the field absolute). `_pct_decode` is
-     `printf '%b' "${1//%/\\x}"`. Executed under `/bin/bash` 3.2.57 on the `quote(…, safe="/._-")`
-     encoding of `/a b/"q"\x/%z,é`, it returned that string byte for byte.
+     `[ "$1" = % ] && return 0; printf '%b' "${1//%/\\x}"`: the lone `%` is D10's empty-value
+     token and decodes to nothing. Executed under `/bin/bash` 3.2.57 on the `quote(…, safe="/._-")`
+     encoding of `/a b/"q"\x/%z,é`, the `printf` form returned that string byte for byte; at skills
+     `b8662267` the two-statement form returned the empty string for `%` and `"null"` for
+     `%22null%22`.
 10. **Judge.** `JOUT=$(python3 "$JUDGE" judge --root "$ROOT_ABS" --target "$TARGET_PATH" 2>/dev/null) || JRC=$?`.
     - `JRC == 0` and `JOUT` a well-formed ALLOW line → `_allow`.
     - A well-formed DENY line → `_refuse <kind> <reason>`.
@@ -679,7 +794,8 @@ governance, Codex authorship, judge):
     to stdout as `printf … || exit 2`, then sets `DECIDED=refused` and exits 0. So
     `DECIDED=refused` is recorded only after the JSON was written;
   - under `a` it sets `DECIDED=refused` and exits 2.
-- `_chain_may_hold_state`, `_read_state` and `_pct_decode` are specified in steps 4, 8 and 9.
+- `_chain_may_hold_state` and `_absent_at`, `_read_state`, and `_pct_decode` are specified in
+  steps 4, 8 and 9.
 - `_json_str` escapes `\`, then `"`, then maps `[[:cntrl:]]` to a space. Newlines in the
   Codex-authorship message become spaces inside the JSON, and stderr keeps them.
 - `_on_exit` is the trap:
@@ -711,8 +827,9 @@ governance, Codex authorship, judge):
 **DD-7 guard-narrowing differential** (orchestrator OD-E; spec v1.3 AC-6.15; invariant §"Guard
 narrowing").
 - **Corpus.** {relative, `./`-relative, absolute} × {`tests/x.py`, `fixtures/x.py`,
-  `sub/tests/x.py`, `test_x.py`, `x.md`, `x.py`} × {no state, root state with one ACTIVE step5
-  record}. Each cell runs through the positional entry point with stdin `/dev/null`, process cwd
+  `sub/tests/x.py`, `test_x.py`, `x.md`, `x.py`, `tests/../x.py`} × {no state, root state with one
+  ACTIVE step5 record}: 3 × 7 × 2 = 42 cells. The fixture root's own path must hold no `tests` or
+  `fixtures` segment. Each cell runs through the positional entry point with stdin `/dev/null`, process cwd
   and `CLAUDE_PROJECT_DIR` both at the fixture root, and `PATH` = a bin dir holding a `codex`
   stub, `jq` and `python3`, then `/usr/bin:/bin`. So every gated production cell stops at the
   Codex-authorship refusal under both gates, and the comparison never depends on a test run.
@@ -720,13 +837,21 @@ narrowing").
   the worktree's. A cell's class is *allow* or *refuse*, read in the chosen form (rc 2, or the
   stdout JSON deny); the old gate's `exit 1` is *refuse*.
 - **Old verdicts, executed** at eec0c7a6's gate (identical to 1ef1a782's) under `/bin/bash`
-  3.2.57 in a scratch tree (deleted). All 18 no-state cells allow. In the 18 active cells, the old
-  gate refuses exactly these 5: relative `tests/x.py`, relative `fixtures/x.py`, and `x.py` in all
+  3.2.57 in a scratch tree (deleted), over v1.1's six path rows: all 18 no-state cells allow. In
+  those rows' 18 active cells, the old gate refuses exactly these 5: relative `tests/x.py`, relative `fixtures/x.py`, and `x.py` in all
   three forms.
+- **The traversal row** (orchestrator OD-G), old verdicts executed at skills `b8662267`'s gate
+  (last changed at `dde1c7ad`, so the same gate) the same way, in a scratch tree (deleted): the 3
+  no-state cells allow (rc 0); of the 3 active cells, relative `tests/../x.py` is refused (rc 1),
+  and `./tests/../x.py` and `<root>/tests/../x.py` are allowed (rc 0), because both match
+  `*/tests/*` before any `..` is folded. So the old gate refuses 6 of the 21 active cells.
 - **Expected softened set:** exactly the two active cells relative `tests/x.py` and relative
   `fixtures/x.py`. `./tests/x.py` is not softened, because `./tests/x.py` already matches
   `*/tests/*` today (the old gate allowed it, as it did `./fixtures/x.py`). The three `x.py` cells
-  stay refused. Any other softened cell is a defect, and any tightened cell is named.
+  and relative `tests/../x.py` stay refused. Any other softened cell is a defect.
+- **Expected tightened set:** exactly the two active cells `./tests/../x.py` and absolute
+  `<root>/tests/../x.py`. Step 3 normalizes both to `<root>/x.py`, a production file, which the
+  old gate exempted. Any other tightened cell is a defect.
 - **Residual, stated.** The Claude gate's `*/tests/*` and `*/fixtures/*` match the whole absolute
   path, root prefix included, while the Codex gate's `_is_production_python` tests only
   root-relative parts. A project whose root lies under a `tests/` or `fixtures/` directory is
@@ -735,9 +860,31 @@ narrowing").
 
 ### D10 — Line formats (FR-1; the `TDD-STATE:` format the spec owes)
 
-- **Field encoding.** Every variable field value is `urllib.parse.quote(value, safe="/._-")`, so a
-  value holds no space, comma, `=` or glob character. `~` stays unquoted, because it is always safe
-  in `quote`, and a word produced by an expansion is never tilde-expanded.
+- **Field encoding.** One encoder, `_enc(s) = urllib.parse.quote(s, safe="/._-") or "%"`, and
+  every variable byte on either line passes through it exactly once. So a value holds no space,
+  comma, `=` or glob character. `~` stays unquoted, because it is always safe in `quote`, and a
+  word produced by an expansion is never tilde-expanded.
+  - **Which fields.** `_enc` is applied to the whole value of: the `record=` key, `codex_status`
+    and state-file subfields, `unreadable file=`, the ALLOW `test=`, and the payload of the
+    fallback subfield (next bullet). It is not applied to a closed token (`none`, `yes`/`no`, a
+    count, a `kind`, an `error=` class name) or to `reason=`, which is free text to the end of the
+    line.
+  - **The fallback subfield** (orchestrator OD-J; the one statement of its encoding, D13 cites
+    it). It is one of the literal tags `absent`, `null`, `grok`, `claude`, or the literal prefix
+    `invalid:` followed by `_enc(json.dumps(value, separators=(",", ":")))`. The tag and the
+    `invalid:` prefix are never passed through `_enc`; the JSON text is passed through it once,
+    whole. Decoding strips `invalid:` and applies `_pct_decode` once. Worked bytes, executed under
+    `/usr/bin/python3` 3.9.6 at skills `b8662267`: the string value `"null"` → `json.dumps` →
+    the 6 bytes `"null"` → `_enc` → `%22null%22` → the subfield `invalid:%22null%22`;
+    `{"a":[1,2]}` → `invalid:%7B%22a%22%3A%5B1%2C2%5D%7D`; `false` → `invalid:false`; `""` →
+    `invalid:%22%22`. Quoting the whole tag a second time would give `invalid%3A%2522null%2522`,
+    which the active-line ERE below rejects (executed).
+  - **Empty values.** `quote("")` is `''` (executed), which would leave an empty comma field and
+    fail the ERE's `[^ ,]+`. `_enc` writes the empty string as a lone `%`. `quote` never emits a
+    lone `%` (it writes `%` as `%25`), so the token is unambiguous, and `_pct_decode` maps it back
+    to the empty string (D9 step 9). The class is every `_enc` field whose value can be empty;
+    its members are the record key and `codex_status` (a state-file path, a `test=` path and a
+    JSON text are never empty).
   - A **state-file** path (`record=` third field, `unreadable file=`) is the file's absolute
     path, as D2 read it. It is absolute so that the Codex-authorship hint, which prints it as the
     `h_mad_state_write.py` argument, works from any cwd, as today's `$STATE_FILE` does.
@@ -759,7 +906,8 @@ narrowing").
     Codex-authorship hint and applies no status test of its own. So every rule over record
     statuses has one implementation, in the judge; v1.0's gate re-implemented the escape set to
     find the blocker.
-  - `<fallback>` is the record's `fallback_agent` tag (D13).
+  - `<fallback>` is the record's `fallback_agent` tag (D13), encoded by the fallback-subfield
+    rule above.
   - An exception in the verb prints nothing to stdout, prints a message to stderr, and exits 2.
   - An empty `--root`, or one that is not a directory, is a usage error: rc 2, nothing on stdout.
     It never falls back to the process cwd.
@@ -786,7 +934,9 @@ narrowing").
     this encoding. It matched two records with an `invalid:` tag for `false`, a `grok` tag, an
     `invalid:` tag for `""`, and an `invalid:` tag for `{"a":[1,2]}` (encoded
     `invalid:%7B%22a%22%3A%5B1%2C2%5D%7D`). It rejected a record with three fields, and a
-    fourth field of `bogus`.
+    fourth field of `bogus`. Re-executed at skills `b8662267`: it matched a record
+    `%,%,<file>,absent` (empty key and status) and one ending `invalid:%22null%22`, and rejected
+    `,,<file>,absent` and a subfield `invalid%3A%2522null%2522`.
 - **Extension rule.** The line is a closed grammar, not a key bag. v1.1 appends the fourth
   `record=` field now (D13). Any later field is appended the same way, and the gate's ERE changes
   in the same commit.
@@ -827,8 +977,7 @@ Each span is located by heading or by line prefix, never by line number:
   - The production bullet reads: the test named by the impl-plan Task, else the name map, and
     "failing" means pytest's summary shows `N failed`.
   - The test bullet names the basename rule (`test_*.py`, `*_test.py`, `conftest*.py`).
-  - Spec FR-7 names this file's bullets, not its `Hook:` line; the line is added here, and the
-    report routes that to the spec.
+  - Spec v1.4 FR-7 names the `Hook: ` line with its bullets, as this section does.
 - **`h-mad/scripts/h_mad_derive_test_path.sh`'s header comment.** It says it is "Used by
   ~/.claude/hooks/h-mad-tdd-gate.sh", which goes false. It becomes "Used by h_mad_tdd_judge.py".
   This site is in the plan's stale-prose census (2 matching lines in that file) and is not in the
@@ -838,12 +987,23 @@ Each span is located by heading or by line prefix, never by line number:
 ### D12 — Fixture tree for the shell-policy differential and the venv ACs
 
 - `tmp/root` is `git init`'d. `root/docs/.bkit-memory.json` holds one step5 record.
-- **The builder interpreter** is the test run's own `sys.executable`. pytest is importable in it
-  by construction, because it is running the test.
+- **The builder interpreter** is the test run's own `sys.executable`. pytest is importable in it,
+  because it is running the test, but that is not enough for the venv built from it:
+  `--system-site-packages` reaches the builder's **base** interpreter's site-packages, not a venv
+  the runner itself lives in. The advisory delta review of v1.1 measured it: a venv built from a
+  `--without-pip` venv's `bin/python` with `--system-site-packages` read
+  `home = /opt/anaconda3/bin` in its `pyvenv.cfg` and could not import a module placed in the
+  first venv's site-packages.
+  - **Precondition, asserted.** After building, the fixture runs `<venv>/bin/python -c 'import pytest'`
+    and **fails** (never skips) with the named reason "builder's base interpreter has no pytest;
+    run the suite under a base interpreter (`sys.prefix == sys.base_prefix`)" when it exits
+    non-zero. It holds on this machine: `/opt/anaconda3/bin/python -c 'import sys;print(sys.prefix==sys.base_prefix)'`
+    printed `True` at skills `b8662267`.
 - `root/hematology-paper-writer/.venv/` is made by
   `[sys.executable, "-m", "venv", "--without-pip", "--system-site-packages", <dir>]`. Its
   `bin/python` is then a real symlink to the builder, which leaves the root (the AC-3.3 shape),
-  and `pyvenv.cfg` is real. `--system-site-packages` is what lets that venv import pytest.
+  and `pyvenv.cfg` is real. `--system-site-packages` is what lets that venv import pytest, under
+  the precondition above.
   - Executed with `/opt/anaconda3/bin/python` (3.11.8) as builder, in a scratch dir (deleted):
     `bin/python -> /opt/anaconda3/bin/python`, `bin/python3 -> python`,
     `bin/python3.11 -> python`, `pyvenv.cfg` holding `include-system-site-packages = true`.
@@ -893,8 +1053,7 @@ re-planned onto.
 - **Why now.** Plan §"Convention Prerequisites" merges this feature first, and plan R2 says grok's
   "new refusals must use this feature's refusal function". Read-only readings in grok's worktree
   `/Users/kimhawk/orca/skills-grok-codex-fallback`:
-  - its HEAD moved during this revision, from `29e055fa` (Task 9 RED) to `199eaf89` (Task 9
-    GREEN); both readings are below Task 12;
+  - one reading, taken for v1.2: its HEAD is `0cdbf8e0` (Task 11 GREEN), below Task 12;
   - `grep -c fallback_agent h-mad/hooks/h-mad-tdd-gate.sh` there → 0 matching lines, so Task 12
     is not implemented;
   - its gate file's last commit is `dde1c7ad`, the same pre-feature gate this feature rewrites.
@@ -914,10 +1073,12 @@ re-planned onto.
   - the record has no `fallback_agent` key → `absent`;
   - the value is JSON `null` → `null`;
   - the value is a `str` equal to `"grok"` → `grok`, and to `"claude"` → `claude`;
-  - any other value → `invalid:` followed by the D10 encoding of
-    `json.dumps(value, separators=(",", ":"))`. So `false`, `true`, `0`, `""`, `"Grok"`, `"null"`,
-    `"codex"`, `{}` and `[]` all reach `invalid:`, and JSON `null` and the string `"null"` stay
-    distinct (`null` versus `invalid:%22null%22`), as grok D2 requires.
+  - any other value → `invalid:` followed by `json.dumps(value, separators=(",", ":"))`, held
+    unencoded in `Record.fallback`. `format_state_line` encodes it by D10's fallback-subfield rule,
+    the single statement of that encoding: the prefix stays literal and the JSON text passes
+    through `_enc` once. So `false`, `true`, `0`, `""`, `"Grok"`, `"null"`, `"codex"`, `{}` and
+    `[]` all reach `invalid:`, and JSON `null` and the string `"null"` stay distinct (`null` versus
+    `invalid:%22null%22` on the wire), as grok D2 requires.
   - The `isinstance(value, str)` test comes first, so `True == 1`-style Python equalities cannot
     reach `grok` or `claude`.
   - `json.dumps` escapes non-ASCII (`ensure_ascii=True`), where `jq`'s `tojson` does not. grok's
@@ -926,10 +1087,12 @@ re-planned onto.
   - The tag is data, and this feature makes no decision on it: no verdict here reads it.
 - **Contract for grok's re-planned Task 12.** Each item is a constraint on grok's design, not
   work done here.
-  1. **Where the rule lives.** The fold over records is added to the judge, as a line-level field
-     on the `state` line (for example `fallback-block=none|grok:<B>|invalid:<B>`, with `B` the
-     1-based record position). The gate reads that field and applies no rule of its own. This is
-     the single-source rule that moved `blocker=` into the judge (D10).
+  1. **Where the rule lives.** The fold over records is added to the judge, as one line-level
+     field on the `state` line that names the fold's outcome and, when it blocks, the 1-based
+     position `B` of the governing record. The gate reads that field and applies no rule of its
+     own. This is the single-source rule that moved `blocker=` into the judge (D10). **The field's
+     name, its value grammar and its position in the line are grok's design's to fix**, not this
+     document's; item 5 states what that spelling must satisfy.
   2. **Which record governs.** grok D2 reads only `$ACTIVE`. With several ACTIVE records (OD-9),
      the fold is over all of them and does not depend on their order. Any `invalid:` record →
      BLOCK-INVALID, naming the first such record. Otherwise any `grok` record → BLOCK-GROK, naming
@@ -942,10 +1105,25 @@ re-planned onto.
      is `_refuse fallback-invalid "<grok's text>"`. The first stderr line therefore begins
      `[H-MAD-TDD-GATE] BLOCK kind=fallback-grok: ` rather than `[H-MAD-TDD-GATE] BLOCK: `. The
      feature key and the state file in the remedy come from the governing record, percent-decoded
-     by `_pct_decode`.
-  5. **The gate ERE.** If the fold field is added, the active-line ERE in D10 gains it in the same
-     commit, with a cross-check that its `B` is ≤ `records`.
-- **What grok's Task 12 must re-plan** (read from its impl-plan's Task 12, read-only):
+     by `_pct_decode`. For BLOCK-INVALID, the value named in stderr is the governing record's
+     fallback subfield with `invalid:` stripped and then `_pct_decode`d once (D10), which yields
+     `json.dumps(value, separators=(",", ":"))` byte for byte.
+  5. **The gate ERE.** The fold field is a closed token in D10's sense: the active-line ERE in D10
+     gains it, whole-line, in the same commit that adds it, with a cross-check that its `B` is
+     ≥ 1 and ≤ `records`, and the D10 round-trip test gains one row per fold outcome.
+- **What grok must re-plan** (orchestrator OD-L). The class is every grok artifact anchored on
+  pre-feature Claude-gate text: its code, its tests, its harness, its fixtures, its mutation rows
+  and their counts. The list below was read from its impl-plan's Task 12 and Task 14, read-only,
+  at grok `0cdbf8e0`. It is complete for those two Tasks; for the rest of the impl-plan, the
+  enumerating command is
+  `grep -n 'h-mad-tdd-gate\|tdd_gate_fallback\|test_h_mad_tdd_gate' docs/01-plan/features/grok-codex-fallback.impl-plan.md`
+  in grok's worktree, which read 21 matching lines at `0cdbf8e0`: 8 inside Task 12, 11 inside
+  Task 14 (the latter include `grok_wire_reverts.json`'s multi-file `target_command` and row
+  WR12), and 2 elsewhere, both lines of one note that `~/.claude/hooks/h-mad-tdd-gate.sh`
+  resolves to the main checkout. That note is re-read at re-plan.
+  - Task 12's header: **Production file** gains `h-mad/scripts/h_mad_tdd_judge.py` (the fold,
+    item 1), and the **WIRE** line, which names the gate's "Codex-authorship enforcement block",
+    gains the judge-side wire from `state` to the fold field;
   - its code-structure block (the `jq` filter and the `case` with `exit 1` arms) → a `case` over
     the judge's fold field, with `_refuse` arms;
   - `test_gate_matrix`, `test_absent_null_claude_match_the_base_hook` and every outcome-class
@@ -956,21 +1134,40 @@ re-planned onto.
     read error is now the `state` verb's `unreadable` or failure, refused `judge-error` at D9
     step 8, before the fallback block runs. The `*)` arm's role, an unforeseen tag, is taken by
     the ERE: an unknown fourth field fails the line, and the gate refuses `judge-error`;
-  - its wire-scoped revert WR12, which edits `(.orchestrator_state[$k] // {}) as $r`. That text no
-    longer exists. The equivalent revert forces `Record.fallback` to `absent` in the judge;
-  - its test harness's `cwd=project` with a relative target (`shared/widget.py`). DD-7 makes that
-    target absolute against `CLAUDE_PROJECT_DIR`, which the harness sets to the same directory,
-    so the cells keep their meaning.
+  - test 2, `test_invalid_class_blocks_each_value_alone`, which asserts stderr names
+    `fallback_agent=<json.dumps(value, separators=(",", ":"))>`: that text now comes from the
+    decoded fallback subfield (item 4), and its `exit 1` assertion follows the chosen form;
+  - test 9, `test_other_feature_grok_does_not_change_active_outcome`, and grok spec AC-2.5 ("a
+    different feature … that is not `ACTIVE`"). grok's ACTIVE is `head -1`; under item 2 every
+    step5 record on the chain is ACTIVE, so a second step5 record holding `grok` blocks. Test 9's
+    `other` is at `step3`, so its expected outcome holds; AC-2.5's wording is owed to grok's spec;
+  - the **Expected RED split** (55 failing, 122 passing, of 177 items) and every per-test
+    count, re-derived after the re-plan, never carried;
+  - its wire-scoped revert WR12 (Task 14, `grok_wire_reverts.json`), which edits
+    `(.orchestrator_state[$k] // {}) as $r`. That text no longer exists. The equivalent revert
+    forces `Record.fallback` to `absent` in the judge;
+  - Task 14's `tdd_gate_fallback_agent.json`, every row of which anchors on text this feature
+    deletes: G1 and G2 find `exit 1 ;;⏎  "invalid "*)`; G3, G4 and G5 find `jq` filter text; G6
+    finds the `*)` arm, whose role the ERE takes. Its `file` field (`hooks/h-mad-tdd-gate.sh`)
+    gains the judge for the fold's rows. G3 is also W9's force-fire. AC-2.7 ("carries G1–G3")
+    and Task 14's per-task row counts (Task 12: 7 rows; the sum of 58) move with them;
+  - its test harness: `subprocess.run(["bash", HOOK, "shared/widget.py"], cwd=project, env=cell_env)`
+    passes no `stdin=`, and every call must pass `stdin=subprocess.DEVNULL` or `input=<payload>`
+    (D9 step 2, "Tests pass stdin explicitly"); at 177 items, an inherited held-open pipe would cost
+    about 2.0 s each. Its `cwd=project` with a relative target (`shared/widget.py`) keeps its
+    meaning: DD-7 makes that target absolute against `CLAUDE_PROJECT_DIR`, which the harness sets
+    to the same directory.
 - **Residual.** This contract transports the value and fixes where the rule over it lives. It
-  does not decide grok's FR-2 table, its stderr wording, or its mutation rows.
+  does not decide grok's FR-2 table, its stderr wording, the fold field's spelling, or its
+  mutation rows.
 
 ## Components Changed / Added
 
 | Component | File path | Change type | Purpose |
 |---|---|---|---|
 | Judge | `h-mad/scripts/h_mad_tdd_judge.py` | new | chain reader, resolver, interpreter selection, scorer, `state`/`judge` CLI, `blocker=` and the `fallback` record field (D1–D7, D10, D13) |
-| Codex gate | `h-mad/hooks/h-mad-codex-tdd-gate.py` | modify | lazy judge import, crash guard, `_payload_cwd_base`, chain reader, venv executable lookup (D8) |
-| Claude gate | `h-mad/hooks/h-mad-tdd-gate.sh` | modify (rewrite) | stdin-first payload, `_chain_may_hold_state` fast path, `state`/`judge` calls, refusal function, `EXIT` trap (D9) |
+| Codex gate | `h-mad/hooks/h-mad-codex-tdd-gate.py` | modify | lazy judge import, crash guard, `_payload_cwd_base`, chain reader for every write target, non-blocking `_state_status` read, venv executable lookup (D8) |
+| Claude gate | `h-mad/hooks/h-mad-tdd-gate.sh` | modify (rewrite) | stdin-first payload, canonical target, `_chain_may_hold_state` fast path, `state`/`judge` calls, refusal function, `EXIT` trap (D9) |
 | Task parser | `h-mad/scripts/h_mad_wire_pin_gate.py` | modify | `_parse_tasks` gains `production`/`tests` (D5) |
 | Summary scorer | `h-mad/scripts/h_mad_audit_gate.py` | modify | `_suite_summary` → `SuiteSummary`; `run_suite` predicate (D7) |
 | Name map | `h-mad/scripts/h_mad_derive_test_path.sh` | modify (comment only) | header names its new caller (D11) |
@@ -1047,8 +1244,8 @@ re-planned onto.
 - **Codex gate:** `_relative_target(root, raw, cwd=None)`,
   `_safe_shell_command(command, root=None, cwd=None)`, new `_payload_cwd_base`, new
   `_contained_venv_executable`, new `_load_judge`. The removals are listed in D8.
-- **Claude gate:** the stdin payload's target is read first, and `$1` only when stdin yields none
-  (D9 step 2). Refusal is by `REFUSAL_FORM`: (a)
+- **Claude gate:** the stdin payload's target is read first, and `$1` only when stdin supplied 0
+  bytes (D9 step 2, DD-13). Refusal is by `REFUSAL_FORM`: (a)
   rc 2 with the reason on stderr, or (b) rc 0 with one stdout JSON deny. Exit 1 is never used.
 - **`h_mad_audit_gate._suite_summary(text) -> Optional[SuiteSummary]`.**
 - **`h_mad_wire_pin_gate._parse_tasks(text) -> list[dict]`:** the same list, with two keys added
@@ -1060,7 +1257,8 @@ re-planned onto.
 |---|---|---|
 | Judge core | unreadable state file | `Chain("unreadable", …)`, never an exception |
 | Judge core | impl-plan unreadable | recorded, name map used, carried into every DENY reason of that call, `test-missing` included (D3 step 8, AC-2.8) |
-| Judge core | a state path that is a FIFO, a directory or a dangling symlink | `Chain("unreadable", …)` with `not-a-regular-file` or the `OSError` class; never a blocking read (D2) |
+| Judge core | a state path that is a FIFO, a directory or a dangling symlink, or whose `lstat` fails other than `ENOENT`/`ENOTDIR` (an unsearchable directory) | `Chain("unreadable", …)` with `not-a-regular-file` or the `OSError` class; never a blocking read (D2) |
+| Codex gate | a non-regular file at a state path `rglob` finds | `_state_status` → `unknown` without blocking (DD-12); the shell policy denies, and each write target is decided by its own chain read |
 | Judge CLI | empty or non-directory `--root` | usage error, rc 2, nothing on stdout → the Claude gate refuses `judge-error` |
 | Judge core | interpreter cannot start (`OSError` from `Popen`) | DENY `no-summary`, the reason naming the error |
 | Judge core | budget exhausted | DENY `timeout`, the process group killed |
@@ -1069,7 +1267,7 @@ re-planned onto.
 | Codex gate | import failure, or any exception after `--self-check` | `_deny(… kind=judge-error)`, rc 0, parseable JSON (AC-5.4) |
 | Codex gate | chain unreadable | `_deny("H-MAD state governing this write is unreadable …")` |
 | Claude gate | judge/state rc ≠ 0, zero or two lines, grammar miss | `_refuse judge-error` |
-| Claude gate | stdin payload present but unusable (a control character in the target, or the reader failed) | target left empty, `$1` not consulted → the empty-target rule (DD-8) |
+| Claude gate | stdin read at least one byte and yielded no target (non-JSON, truncated, not an object, no field, a control character, or the reader failed) | target left empty, `$1` not consulted → the empty-target rule (DD-8, DD-13) |
 | Claude gate | `CLAUDE_PROJECT_DIR` cannot be entered, and the fast path defers | `_refuse judge-error` naming the root (D9 step 8); exempt writes are still allowed |
 | Claude gate | errexit, `pipefail` or `nounset` anywhere | `EXIT` trap → `_refuse judge-error` in the chosen form |
 
@@ -1108,10 +1306,10 @@ gate writes the reason to stderr under both forms.
   | `tdd_judge_resolution.json` | Task-match authority (AC-2.5); the `none` rule (AC-2.3); plan notes on every DENY (AC-2.8); the present/missing candidate split (D3 step 5) | skip the authority `if`; `_NONE_VALUE_RE` → never match; drop the notes from the `test-missing` return; run missing candidates |
   | `tdd_judge_venv.json` | containment (AC-3.2): each of the three conjuncts alone | each conjunct → `True` |
   | `tdd_judge_scoring.json` | `pytest-missing` (AC-4.1); `errors ≥ 1` (AC-4.3); rc-blindness (AC-4.4); rule 8 (AC-4.2, the skipped-only fixture) | delete each branch alone; score on `returncode` |
-  | `tdd_judge_chain.json` | chain reader (AC-5.2); unreadable decides (AC-6.9); the OD-9 all-records rule (AC-6.10); the non-regular-file rule (spec v1.3 FR-5); `blocker=` (D10) | nearest file only; skip unreadable; `all` → `any`; drop the `S_ISREG` test; `blocker` → 1 |
+  | `tdd_judge_chain.json` | chain reader (AC-5.2); unreadable decides (AC-6.9); the OD-9 all-records rule (AC-6.10); the non-regular-file rule (spec v1.3 FR-5); `blocker=` (D10); absence proven only by `ENOENT`/`ENOTDIR` (D2, OD-I) | nearest file only; skip unreadable; `all` → `any`; drop the `S_ISREG` test; `blocker` → 1; `PermissionError` read as absent |
   | `tdd_judge_wiring.json` | W3 and W4, each in both directions, plus one callee-side mutant each (table below) | per row, alone |
-  | `codex_gate_judge_wiring.json` | payload `cwd` base (AC-5.1); W1; W5a; crash guard (AC-5.4); the venv executable lookup (AC-3.4, AC-3.6) | ignore `cwd`; bypass the judge (remove / force ALLOW); nearest-only status; drop the `try`; return the realpath instead of the lexical path |
-  | `claude_gate_judge_wiring.json` | `tool_input` read (AC-6.1); stdin-before-`$1` (AC-6.1, the conflicting-input fixture); `state` governance (AC-6.8); non-zero-rc refusal (AC-1.3); the blocking form (AC-6.5/6.6); exemptions-before-governance (AC-6.9, the exempt-write fixtures); the fast path's `-L` half of `_lexists` (AC-6.11a) and its missing-parent handling (AC-6.11b), one mutant per fixture. The AC-6.11b mutant restores v1.0's shape in one edit: no climb, and a failed `cd` returns 1. Each half alone survives, because the climb and the failed-`cd` deferral back each other up; that redundancy is deliberate and stated here. Executed on D9 step 4's scratch function under `/bin/bash` 3.2.57: either half alone → defer on the AC-6.11b fixture, both together → allow; dropping `-L` → the AC-6.11a fixture allows; the empty-target refusal (AC-6.13); the outside-root chain (AC-6.14); W2; W5b; W6 two-tree; each trap member | per row, alone |
+  | `codex_gate_judge_wiring.json` | payload `cwd` base (AC-5.1); W1; W5a; crash guard (AC-5.4); the venv executable lookup (AC-3.4, AC-3.6); the non-blocking `_state_status` read and the per-target read on an `inactive` scan (DD-12) | ignore `cwd`; bypass the judge (remove / force ALLOW); nearest-only status; drop the `try`; return the realpath instead of the lexical path; `_read_regular_text` → `read_text`; skip the per-target read when `_any_phase5_status` is `inactive` |
+  | `claude_gate_judge_wiring.json` | `tool_input` read (AC-6.1); stdin-before-`$1` (AC-6.1, the conflicting-input fixture); `state` governance (AC-6.8); non-zero-rc refusal (AC-1.3); the blocking form (AC-6.5/6.6); exemptions-before-governance (AC-6.9, the exempt-write fixtures); the fast path's `-L` half of `_lexists` (AC-6.11a) and its missing-parent handling (AC-6.11b), one mutant per fixture. The AC-6.11b mutant restores v1.0's shape in one edit: no climb, and a failed `cd` returns 1. The failed-`cd` deferral is the safety guard; the climb is a precision step with no guard of its own to mutate: removing the climb alone preserves every verdict, and only defers a missing-parent write that the `state` verb then reads as it would have. Executed on D9 step 4's scratch function under `/bin/bash` 3.2.57: either half alone → defer on the AC-6.11b fixture, both together → allow; dropping `-L` → the AC-6.11a fixture allows; the fast path's searchability rule (`_absent_at`, OD-I): `[ -x "$D" ]` → true and `[ -x "$D/docs" ]` → true, each alone, each on a `chmod 000` fixture; the canonical target (DD-7, OD-G): drop the `normpath`, scored on the traversal cells; the 0-bytes-only `$1` fallback (DD-13): exit 4 → exit 0, scored on the non-JSON-stdin fixture; the empty-target refusal (AC-6.13); the outside-root chain (AC-6.14); W2; W5b; W6 two-tree; each trap member | per row, alone |
   | `audit_suite_summary_line.json` | DD-3 predicate, each word of `{"passed","failed"}` alone; the timed-beats-untimed rule; the SGR strip; the exact-category count rule (AC-4.7, the `2 failed, 1 subtests passed` fixture) | per row, alone |
 
   The guards named by spec v1.3 AC-8.1 each appear in one row above. The outside-root chain
@@ -1152,8 +1350,17 @@ gate writes the reason to stderr under both forms.
     `bin/python` symlink;
   - the non-regular state paths (spec v1.3 FR-5): a FIFO, a directory and a dangling symlink, each
     → `unreadable`, and the FIFO case returning within 1.0 s;
+  - a state file under a `chmod 000` directory, and one under a `chmod 000` `docs`, each →
+    `unreadable` with error `PermissionError` (D2, OD-I); a `docs` that is a regular file →
+    `none`;
+  - the name map's bound (D3 step 6, OD-K): the module's name-map script path pointed at a real
+    executable scratch script running `sleep 30 & wait`, under `judge(..., budget_s=1.0)` →
+    `timeout` within 1.0 s + a 5.0 s margin, and no surviving `sleep`;
   - the `fallback` tag table of D13, one row per value, round-tripped through `format_state_line`
-    and the D10 ERE;
+    and the D10 ERE, with the worked bytes of D10 asserted literally;
+  - the empty-value token (D10): a record whose key is `""`, and one whose `codex_status` is `""`,
+    each alone → a line the D10 ERE matches, whose field reads `%` and decodes to the empty
+    string;
   - AC-4.1–4.6, with AC-4.5 run through `judge(..., budget_s=1.0)` against a 30 s sleeper shim,
     asserting `timeout` within 1.0 s + a 5.0 s margin and no surviving shim process;
   - the D7 grammar rows, including the coloured, the `2 passed`/stray-`1 failed`, the two
@@ -1168,7 +1375,13 @@ gate writes the reason to stderr under both forms.
   - AC-5.1, AC-5.2, AC-5.4, with a `TMPDIR`-based payload `cwd` (unresolved `/var/…` against a
     resolved root) for `_payload_cwd_base`;
   - W1 and W5a;
-  - the shell-policy differential with its published accounting.
+  - the shell-policy differential with its published accounting;
+  - FIFO fixtures through the real entry point (DD-12, OD-H), each returning within 1.0 s: a FIFO
+    at the target chain's state path with a Write payload → the unreadable deny; a FIFO at a state
+    path off the target's chain with a shell-command payload → the shell policy's unreadable
+    deny;
+  - a step5 state file under a `chmod 000` `docs` on the target's chain, with a Write payload →
+    the unreadable deny, although `_any_phase5_status` reads `inactive` there (DD-12, OD-I).
 - **`h-mad/tests/test_h_mad_tdd_gate_judge.py`**, the Claude gate:
   - AC-1.2, with the Claude-Code-shaped payload and 11 kinds;
   - AC-1.3, one stub per fixture;
@@ -1179,6 +1392,11 @@ gate writes the reason to stderr under both forms.
   - AC-6.11 (a) and (b), each alone; AC-6.12 (no `jq` on PATH); AC-6.13; AC-6.14;
   - AC-6.15 and the DD-7 differential (D9), publishing its softened rows;
   - a control-character stdin target with `$1` also given → the empty-target rule, never `$1`;
+  - non-JSON stdin (`not json`) with `$1` also given, on a root holding a step5 record →
+    `judge-error` by the empty-target rule, never `$1` (DD-13);
+  - a step5 state file under a `chmod 000` `docs` on the target's chain → `judge-error`, the
+    fast path deferring (D9 step 4, OD-I);
+  - every Claude-gate call in this module passes `stdin=subprocess.DEVNULL` or `input=<payload>`;
   - an unenterable `CLAUDE_PROJECT_DIR` with a state on the target's chain → `judge-error`;
   - the Codex-authorship hint names the blocker record's key and its absolute state file, for a
     state path containing a space;
@@ -1196,6 +1414,9 @@ gate writes the reason to stderr under both forms.
   - The `HOOK` constant changes under either form.
   - The assertion migration follows spec AC-6.2's list for the chosen form: the 4 `returncode == 1`
     matching lines, by `grep -n 'returncode == 1'` over the two files at `1ef1a782`.
+  - The migration also adds `stdin=subprocess.DEVNULL` to each of the 3 `subprocess.run` calls in
+    the two files (orchestrator OD-L; D9 step 2). It is not an assertion change, so AC-6.2's "no
+    other assertion changes" holds; spec AC-6.2's list is owed the line.
 - **`test_h_mad_audit_suite_gate.py::test_an_empty_selection_is_not_a_pass`.** A docstring
   correction only (plan §"Regression census").
 - **`test_h_mad_audit_suite_gate.py`:** new cases for the run_suite table rows and AC-4.7. The
@@ -1251,7 +1472,10 @@ stamps read the same h-mad tree:
   - The Claude gate's rc 2 under form (a) is a host protocol that the host consumes. It is not an
     h-mad gate verdict read by the orchestrator.
 - **Single-source contract.**
-  - There is one chain reader, one resolver, one containment rule and one scorer.
+  - There is one chain reader, one resolver, one containment rule and one scorer. The one stated
+    exception is the non-blocking regular-file read, which the Codex gate's `_read_regular_text`
+    repeats so that its shell-policy scan works without the judge (D8, DD-12); each copy has its
+    own FIFO fixture.
   - Every rule over ACTIVE records lives only in the judge: the OD-9 escape (`codex-escape=`),
     the blocker (`blocker=`), and, under D13's contract, grok's fallback fold. The gate applies
     none of them.
@@ -1281,8 +1505,9 @@ stamps read the same h-mad tree:
   expected softened set:
   - the shell-policy relaxation (D8 "Differential", D12), whose expected set now includes the
     H-MAD control-allowlist row (OD-C);
-  - DD-7's relative exemption (D9 "DD-7 guard-narrowing differential"), whose expected set is
-    exactly two cells, measured against the old gate.
+  - DD-7's relative exemption (D9 "DD-7 guard-narrowing differential"), whose expected softened
+    set is exactly two cells and whose expected tightened set is exactly two cells (the
+    traversal row, OD-G), measured against the old gate.
   - The stdin-first target read (OD-B) is not a softening: when both sources name a target, the
     gate decides the one the host actually writes.
 - **Connection enforcement.** W1–W6 are mutated in both directions (plan table); W3 and W4 carry
@@ -1321,3 +1546,4 @@ stamps read the same h-mad tree:
 ## Version History
 - v1.0: Initial design (2026-09-28) from spec v1.2 and plan v1.2 at skills 1ef1a782: judge h-mad/scripts/h_mad_tdd_judge.py with state/judge verbs; TDD-STATE and TDD-JUDGE line formats (D10); 40 s whole-judge budget with process-group kill (D6); summary-line grammar with SGR strip and closed word set (D7); Claude gate refusal function, REFUSAL_FORM literal and EXIT trap (D9); venv shell branch for -m pytest only (D8). DD-1..DD-9 depart from plan or spec wording, each with its revert. OQ-D1 (host hook timeouts), OQ-D2 raised.
 - v1.1: Answers design audit cycle 1 (codex p1: 9 must, 1 should; teammate: 3 must, 12 should) against spec v1.3 in the working tree, applying orchestrator OD-A..OD-F (2026-09-28). OD-A: DD-1 kept (exemptions before governance), exempt-write fixtures, Codex-side asymmetry stated. OD-B: stdin target first, $1 fallback only, bounded tty-safe reader, control-character targets unidentifiable. OD-C: DD-6 withdrawn; contained venv executable returned lexically and run through the existing argv rules, control-allowlist row added to the expected softened set. OD-D: open lowercase category grammar with exact-category counts; measured pytest 9.1.1 subtests lines and table rows. OD-E: DD-7 kept with a measured old-versus-new differential (two softened cells). OD-F: D13 rebase contract for grok-codex-fallback D2 and the fourth record field. Also: _chain_may_hold_state fast path replaces _resolve_state_file; non-regular state paths unreadable via O_NONBLOCK open plus fstat; plan notes on every DENY (AC-2.8); present/missing candidate split; blocker= and absolute state-file fields; empty --root a usage error; _payload_cwd_base; W3/W4 remove, force and callee-side mutants; D12 fixture rebuilt (system-site-packages venv, marker shim, per-row oracle, derived versioned spelling); OQ-D1 Claude half made a 5g merge condition; DD-10 and DD-11 added; false reason-pin absence corrected.
+- v1.2: Final corrective revision (2026-09-28): answers codex design audit cycle 2 (6 must, 1 should) and the advisory delta review of v1.1 (12 should, 6 nit), applying orchestrator OD-G..OD-L; not re-audited. OD-G: DD-7 target lexically normalized against the root before the fast path and every exemption; differential gains the tests/../x.py row (42 cells; two softened, two tightened) and a stated symlink residual. OD-H: no blocking state read; Codex _state_status reads through a non-blocking regular-file open (DD-12). OD-I: absence proven only by lstat ENOENT/ENOTDIR in D2 and by the _absent_at searchability rule in the fast path; the Codex per-target chain read runs whatever _any_phase5_status returns (DD-12). OD-J: one _enc encoder; the fallback subfield is a literal tag or invalid: plus one quote pass over the JSON, worked bytes given; empty values encode as a lone %. OD-K: the name map runs through D6's _run_bounded. OD-L: tests pass stdin explicitly (AC-6.2 migration); D13's re-plan list covers Task 12 and Task 14 with an enumerating grep, fold-field spelling left to grok's design. Also: stdin exit-4 rule (DD-13), D12 pytest precondition asserted, D7 open-axis noise residual, DD table Now column and Overview swept to spec v1.4 / plan v1.3, rule-2 wording aligned, AC-6.11b climb described as a precision step.
