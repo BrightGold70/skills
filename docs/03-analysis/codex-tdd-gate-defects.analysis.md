@@ -1,5 +1,18 @@
 # codex-tdd-gate-defects analysis
 
+## DD-7 differential
+
+The probe at `docs/03-analysis/probes/codex-tdd-gate-defects/dd7_differential.py`
+compared the pre-feature hook from `git show main:h-mad/hooks/h-mad-tdd-gate.sh`
+(`main` at `aa5c43c747af21790e7463a6ca472595088c8e95`) with the worktree hook.
+It ran all 126 positional-input cells with a resolved temporary root, a Codex stub,
+and an active or step3-only state. The command exited 0 with
+`DD7: DONE cells=126 softened=6 tightened=8`. The six softened cells were the
+active relative `tests/x.py` and `fixtures/x.py` cells for each of the three
+root shapes. The eight tightened cells were active dot-prefixed and absolute
+`tests/../x.py` for each shape, plus active absolute `x.py` for roots under
+`tests/repo` and `fixtures/repo`. There were no other changed cells.
+
 ## Baseline at BASE_SHA
 
 Task 0 was run in `/Users/kimhawk/orca/skills-codex-tdd-gate-defects` on branch
