@@ -1,0 +1,5 @@
+{"phase": "plan", "cycle": 1, "leg": "codex", "item": "live exec grok round trip missing (wrapper-runtime invariant)", "origin": "instrument", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "codex", "item": "W1/W3/W8/W11 force-fire column empty", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "codex", "item": "W6 force-fire not discriminating; needs mixed agy+F0 log", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "agy", "item": "AC-2.1b BLOCK-CODEX cells called plan addition; spec asserts them", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "agy", "item": "P8/P10/P13 lack commands; P11 rc2 claim no proxy", "origin": "instrument", "by_cycle": null, "verified_by_execution": false}
