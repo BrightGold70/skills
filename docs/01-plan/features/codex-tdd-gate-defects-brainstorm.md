@@ -36,6 +36,13 @@ Operator decisions from 2026-09-28 are marked **[D1]**–**[D3]**.
    Every guard is mutation-tested.
 5. **Live verification** comes before HemaSuite re-arms the gate: one real codex GREEN write through the fixed gate. The install of `~/.agents/skills/h-mad` is **out of scope here** and is owned by `multi-host-runtime`, which absorbed todo #5. The live check needs that install, which sets the order.
 
+6. **[D4] The Claude-side gate may never block. Measure first, then fix.** Added 2026-09-28 by operator decision.
+   - `h-mad/hooks/h-mad-tdd-gate.sh` blocks only through `exit 1`, at 5 sites, and never emits a JSON `permissionDecision: deny`. The codex gate does emit one.
+   - Claude Code's PreToolUse contract treats exit 2 (or a JSON deny) as blocking. Any other non-zero exit is a non-blocking error. So the Claude-side Phase-5 authorship gate may never have refused a write.
+   - The multi-host-runtime spec-author flagged this. It is **unverified**: my live probe on 2026-09-28 was inconclusive, because the hook exited 0 before reaching any BLOCK branch, so the write landing measured nothing.
+   - Step 1: a live probe that provably reaches a BLOCK branch. Replay the payload by hand first and require hook rc=1, then attempt the real tool write.
+   - If that probe confirms the defect, switch every BLOCK to exit 2 or a JSON deny, with a test that asserts the blocking form rather than just "non-zero".
+
 ## Alternatives Considered
 
 - **Impl-plan only.** Rejected [D1]: it breaks legitimate ad-hoc fixes during step5.
@@ -62,7 +69,8 @@ Operator decisions from 2026-09-28 are marked **[D1]**–**[D3]**.
 
 1. Should ACTIVE feature resolution reuse the existing hook's state read? It must: one reader.
 2. What if the Task's `**Test file**:` does not exist yet (a RED in progress)? Probably deny with "author the test first", which is what TDD wants.
-3. Does the Claude-side TDD gate (`h-mad-tdd-gate.sh`) share D1? It uses the same derive script, so the same defect likely applies, and scope should decide whether to fix both.
+3. ~~Does the Claude-side TDD gate share D1?~~ **Yes**, verified: `h-mad-tdd-gate.sh` sets `DERIVE_SCRIPT=…/h_mad_derive_test_path.sh`. D1's fix applies to both gates, through one shared resolver.
 
 ## Version History
 - v1.0: Initial brainstorm draft (operator decisions D1–D3, 2026-09-28).
+- v1.1: D4 added (the Claude gate's exit-1 blocking is unverified; measure first); OQ3 answered (D1 applies to both gates).
