@@ -1,0 +1,24 @@
+REPRO: D3 nopytest (0, 'allow', '')
+REPRO: D3 control-withpytest (0, 'deny', 'H-MAD Phase 5 requires a failing test before hematology-paper-writer/tools/w.py; hematology-paper-writer/tests/test_w.py returned pytest exit 0, not test-failure exit 1.')
+REPRO: OD-2 cwd-relative (0, 'deny', 'H-MAD Phase 5 requires a failing test before tools/w.py; no derived test file exists.')
+REPRO: OD-3 nearest-state (0, 'allow', '')
+REPRO: OD-3 control-nosubstate (0, 'deny', 'H-MAD Phase 5 requires a failing test before hematology-paper-writer/tools/w.py; hematology-paper-writer/tests/test_w.py returned pytest exit 0, not test-failure exit 1.')
+REPRO: OD-4 tool_input (0, '', '')
+REPRO: OD-4 control-toplevel (1, '', '[H-MAD-TDD-GATE] BLOCK: Phase 5 implementation must be authored by Codex, not Claude.')
+REPRO: OD-3c claude-root-first (0, '', '')
+REPRO: OD-3c control-noroot (1, '', '[H-MAD-TDD-GATE] BLOCK: cannot derive test path for /private/var/folders/7s/9n332lmj54511r')
+REPRO: D1 claude-absolute (1, '', '[H-MAD-TDD-GATE] BLOCK: cannot derive test path for /private/var/folders/7s/9n332lmj54511r')
+REPRO: OD-5 nopytest (0, '', '')
+REPRO: OD-5 control-withpytest (1, '', '[H-MAD-TDD-GATE] BLOCK: hematology-paper-writer/tests/test_w.py already passing; no new co')
+REPRO: summary red rc=1 last='1 failed in 0.02s'
+REPRO: summary green rc=0 last='1 passed in 0.00s'
+REPRO: summary importerr rc=2 last='1 error in 0.05s'
+REPRO: summary empty rc=5 last='no tests ran in 0.00s'
+REPRO: summary nopytest rc=1 last='/opt/homebrew/opt/python@3.14/bin/python3.14: No module named pytest'
+REPRO: run_suite '3 failed in 0.10s' summary=None verdict=UNREADABLE reason=no_summary
+REPRO: run_suite '1 error in 0.06s' summary=None verdict=UNREADABLE reason=no_summary
+REPRO: run_suite '2 passed, 1 error in 0.1s' summary=(2, 0) verdict=PASS reason=-
+REPRO: run_suite '1 failed, 1 error in 0.1s' summary=None verdict=UNREADABLE reason=no_summary
+REPRO: run_suite '3 failed, 1 skipped in 0.1s' summary=None verdict=UNREADABLE reason=no_summary
+REPRO: run_suite 'no tests ran in 0.01s' summary=None verdict=UNREADABLE reason=no_summary
+REPRO: run_suite '1 failed, 11 passed in 0.2s' summary=(11, 1) verdict=FAIL reason=-

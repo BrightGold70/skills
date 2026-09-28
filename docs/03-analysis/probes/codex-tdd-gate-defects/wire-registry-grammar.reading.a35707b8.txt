@@ -1,0 +1,1 @@
+WRGRAMMAR: files=84 task_counter_divergent_files=4 singular_label_multi_path_lines=14 axis_label_lines_unread_by_registry=64 divergent=[desk-check-autofix.impl-plan.md:11/12 guideline-ingest-doc-id-uniqueness.impl-plan.md:36/0 presentation-voice-guidance.impl-plan.md:8/0 review-pipeline-correctness.impl-plan.md:0/1]
