@@ -6,7 +6,7 @@
 > docs/01-plan/features/multi-host-runtime.plan.md (v1.3: §"Connection enforcement" W1–W3, the
 > 5c "Rebase, then baseline" step and the Phase-7 smoke stay binding)
 > Branch target: `feature/multi-host-runtime` (a git worktree; plan §"Convention Prerequisites")
-> 5c baseline: branch `feature/217-multi-host-runtime`, worktree `/Users/kimhawk/orca/skills-multi-host-runtime`, forked from main `3b5c4388` (impl-plan v1.2 + delta review v1.2)
+> 5c baseline: branch `feature/multi-host-runtime`, worktree `/Users/kimhawk/orca/skills-multi-host-runtime`, forked from main `3b5c4388` (impl-plan v1.2 + delta review v1.2)
 
 ## Executive Summary
 
