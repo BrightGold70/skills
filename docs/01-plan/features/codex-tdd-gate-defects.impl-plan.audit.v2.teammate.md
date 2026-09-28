@@ -1,0 +1,45 @@
+AUDIT-codex-tdd-gate-defects-impl-plan-v2-BEGIN
+## Summary
+This is the gating teammate pass over impl-plan v1.1. The document at HEAD 8322fa04 is byte-identical to the inlined target and was last changed at 89a67198. `git diff --name-only a1478ad3 8322fa04 -- h-mad handoff pytest.ini docs/03-analysis/probes` lists 0 files. Every v1.1 Version-History disposition is present in the document, and every one I re-derived holds:
+Task 1 splits 23 failing / 15 passing of 38. The 87 rows break down 14/8/3/6/6/6/13/31 per spec and 14/3/12/8/6/9/4/30/1 per task. The new-item total is 296. Convention 8's JSON walk gives SKILL.md 53 rows in 14 specs, audit_gate 44 in 5, wire_pin_gate 11 in 3, and 0 for every other edited file. `--check-anchors` reads `specs=99 mutations=907 ok=907 drifted=0`. `WIREPIN: PASS tasks=12 wiring=4`. Task 6 item 8's traceback reproduces (rc 1, empty stdout, `PermissionError`). The Deviation 11 `rc=` capture reproduces case by case under /bin/bash 3.2.57.
+
+I executed the Task 1 literals, today's parser and all thirteen S-mutants (S1–S12) against the 15 + 22 rows. Every scored test is killed, and the RED pass/fail sets match the plan exactly. I also checked every other new row (E1, P1, P1B, P2, K3B, K5, G6B, G7, G8, H15, W5BF2, W5BF3, D1, H16, H17, R5, C2G, C3G) against its tagged subject and the path its test takes. One fix-introduced defect blocks: P1B's killing test reads a cwd-relative `git ls-files`, and the harness runs it from `h-mad/`, where that command lists 0 files.
+Evidence: 27 files opened, 38 greps run (plus 11 executed probes: the Task-1 parser/mutant matrix, the bash 3.2 capture/trap/`"$@"` checks, the V1 containment simulation, the Task 6 item 8 replay, the wire-pin gate, the anchor sweep, two collect-only runs, and the `git ls-files` cwd control).
+
+## Must-fix
+- Row P1B cannot be killed as specified: `test_corpus_old_fields_unperturbed` (Task 2 item 8) runs `git ls-files '*.impl-plan.md'` with no stated cwd. The mutation harness runs every spec's `command` with `cwd=root` (`h_mad_mutation_harness.py:380`, `subprocess.run(command, cwd=str(root), …)`), and every Task 10 spec has root `"../.."`, which is the `h-mad/` directory. A git pathspec is cwd-relative. From `h-mad/`, `git ls-files '*.impl-plan.md' | wc -l` → 0 files. From the repository root it gives 11 non-archive files. So under the harness the corpus is empty and the P1 mutant (`current["pins"].extend(…)`) changes nothing it compares. The test passes vacuously, P1B reads SURVIVED, and Task 10 halts. The item also states no floor ("the count is re-read, never frozen"), so an empty corpus is a silent pass even outside the harness. This is a v1.1 row added under "Initially-green guards", so the fix introduced the defect.
+  class: build
+  quote: docs/01-plan/features/codex-tdd-gate-defects.impl-plan.md › `the count is re-read, never frozen`
+  quote: docs/01-plan/features/codex-tdd-gate-defects.impl-plan.md › `tests/test_h_mad_parse_tasks_paths.py::test_corpus_old_fields_unperturbed`
+  fix (any of these works; each checked from `h-mad/`): run git at the repository top with `cwd=Path(__file__).resolve().parents[2]` (precedent: `REPO_ROOT = Path(__file__).resolve().parents[2]` at `h-mad/tests/conftest.py:24`); or use `git -C "$(git rev-parse --show-toplevel)" ls-files '*.impl-plan.md'` (→ 11); or use the pathspec `':(top)*.impl-plan.md'` (→ 11, printed as `../docs/…`, so read files relative to the cwd). In every case, add a non-vacuity assertion (at least one file, and at least one path-label line with a `.py` token removed) so that an empty corpus fails. P1 (in-memory) is unaffected.
+  instance of: new tests whose verdict depends on the process cwd, scored under a harness that fixes `cwd=h-mad/`. I swept the new tests that start a subprocess or read the tree: Task 1 `_run_hermetic` (absolute SCRIPT), Task 3 CLI (`--root`), Task 6 and Task 8 gate runs (`cwd=<root>` explicit), Task 7 corpus, and Task 9 (document paths). This is the only member. Rule: any test that reads repository state names its directory explicitly.
+
+## Should-fix
+- Propagate design v1.3 (85b81698; spec and plan at 8322fa04). Task 8 precondition 2 and OQ-I3 still halt on a delta the design has now answered, as the dispatch notes. The same stale v1.2 content also appears in:
+  - the Source header ("design v1.2") and the heading "Deviations from design v1.2";
+  - the Executive Summary ("Task 8 waits on two preconditions");
+  - step 7's "both `case` blocks keep their pattern bytes" with no `RAW_TARGET`/`DIR_SUBJECT` (design §D9 step 3: `DIR_SUBJECT="/${TARGET_PATH#"$R"/}"` inside the root; both spellings must match outside it);
+  - item 23's 42 cells, "6 cells refuse … 36 allow", and "The fixture root's own path holds no `tests` or `fixtures` segment (asserted)" (v1.3: 126 cells over the root shapes repo, `<tmp>/tests/repo` and `<tmp>/fixtures/repo`);
+  - `dd7_cells` and `DD7: DONE cells=42`, and the probe's expected sets of 2 softened and 2 tightened (v1.3: 6 softened, 8 tightened);
+  - items 21–22 and row H15, which v1.1 itself says must be re-derived under option (i).
+  class: build
+  quote: docs/01-plan/features/codex-tdd-gate-defects.impl-plan.md › `Task 8 does not start until the`
+  quote: docs/01-plan/features/codex-tdd-gate-defects.impl-plan.md › `the 42 cells of`
+  quote: docs/01-plan/features/codex-tdd-gate-defects.impl-plan.md › `DD7: DONE cells=42 softened=N tightened=N`
+- Row V1 survives unless the `venv-out-bin-back-in` fixture's outside directory also holds a regular `pyvenv.cfg`, and Deviation 6 does not say so. Under the V1 mutant (`if False:`), conjunct 2 passes because `bin` points back inside. The row then returns `S_ISREG(os.lstat(<root>/…/.venv/pyvenv.cfg))`, which follows the `.venv` symlink into the outside directory. I simulated the plan's three-conjunct literal in a scratch tree:
+  - outside directory holding only `bin -> <root>/inbin`: unmutated False, V1-mutant False (survives);
+  - the same directory plus a regular `pyvenv.cfg`: unmutated False, V1-mutant True (killed).
+  This dates from v1.0, but it is on a row the plan relies on for AC-8.1 containment.
+  class: build
+  quote: docs/01-plan/features/codex-tdd-gate-defects.impl-plan.md › `denies and a V1 mutant survives every D12 row. The new fixture points`
+  fix (any of these works): state that the outside target is a copy of D12's `outside-venv` (which carries a real `pyvenv.cfg`) with its `bin` replaced by a symlink into the root; or state explicitly that a regular `pyvenv.cfg` is written there. Either way, have the row's oracle also assert `S_ISREG(os.lstat(<venv>/pyvenv.cfg).st_mode)`, so that V3 cannot be what denies.
+- The published `_SUITE_RE` census does not reproduce as written. The document gives `git grep -n _SUITE_RE` → "2 matching lines, both in that file". At `f6b258f0`, that exact command gives 11 matching lines. Scoped to `-- h-mad handoff` it gives 4 lines, two of which are `<INLINE_SUITE_REFERENCE>` substrings in `h-mad/references/codex-verifier-prompt.md` (lines 31 and 77). The 2-line figure holds only with `-w` (`git grep -nw _SUITE_RE f6b258f0 -- h-mad handoff` → 2). The conclusion (one definition, one use, both in `h_mad_audit_gate.py`) stands, so only the published figure is wrong.
+  class: measurement
+  quote: docs/01-plan/features/codex-tdd-gate-defects.impl-plan.md › `2 matching lines, both in that file`
+
+## Nit
+- Task 3's `test-missing` helper is called as `_test_missing(missing, notes, root)`, but the tagged R3 line builds `_listing(candidates, root)` and is called "the one `test-missing` constructor". The implementer has to infer that the helper's parameter is named `candidates` (or rename one side), and that the name-map branch wraps the same helper in a `Resolution` rather than returning `_deny(…)` from `resolve` (typed `-> Resolution`). This dates from v1.0.
+- In the executed bash 3.2.57 trap check (a scratch copy of step 2's `_refuse`/`_on_exit` with the `: "$HMAD_UNSET_PROBE_VAR"` line inserted), `local rc=$?` inside the EXIT trap read 0 after a `set -u` abort. So item 28 `[unset-variable]` refuses with "gate exited rc=0 before deciding", and under T2's mutant the gate exits 0 with empty stdout, which is an allow and not `invalid`. T2 is still killed on the deny assertion. The rc in that reason is just misleading.
+- Deviation 14 argues that "an `h-mad/tests` module that reads a path outside `h-mad/` breaks … Skill self-containment". Task 2 item 8 reads the repository's `docs/**/*.impl-plan.md`, and at least ten existing modules set `REPO_ROOT = Path(__file__).resolve().parents[2]`. The rationale is overstated. The docstring-quote design it motivates is still fine.
+- Task 3 builds the `timeout` venvs as "`fake_venv` whose `bin/python` is `sleeper(…)`", but `fake_venv(dir, sh_body)` takes a script body and `sleeper(path, pidfile, seconds)` writes a file. How the two compose (for example, `sleeper` written over the `bin/python` that `fake_venv` made) is left to the implementer.
+AUDIT-codex-tdd-gate-defects-impl-plan-v2-END
