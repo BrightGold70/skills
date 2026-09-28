@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills
 **Handover-From:** HemaSuite · feature/28-review-manifest-guideline-evidence · session 23401af7-3efe-4845-8f67-98e9efda02af
+**Taken-Over-By:** skills · main · session 8a0b0625-ef06-41aa-9d4f-04fe14f2a32f · 2026-09-28
 **Supersedes:** none — first on this branch
 
 ## Session Summary
