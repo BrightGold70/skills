@@ -149,6 +149,10 @@
         "exhausted",
         null
       ]
+    },
+    "fallback_agent": {
+      "description": "Who covers Phase-5 authoring when Codex is out. The field is read only when codex is out: HMAD_CODEX_UNAVAILABLE non-empty, codex_status unavailable|exhausted, or codex not on PATH. Absent, null and 'claude' are equivalent: Claude covers, test-first, as before. HMAD_CODEX_UNAVAILABLE does not override 'grok'; a one-off Claude escape needs --set fallback_agent=claude. Audit-leg routing to grok (audit-cycle --surfaces agy,grok) is prose-enforced by SKILL.md, and no script reads this field for it.",
+      "enum": ["grok", "claude", null]
     }
   },
   "additionalProperties": false
