@@ -154,10 +154,19 @@ for v in '{}' '{"f":null}' '{"f":false}' '{"f":"grok"}' '{"f":0}'; do
 table demands BLOCK-INVALID; and `jq -r` prints the JSON string `"null"` and JSON `null`
 identically, so a string `"null"` would read as absent. The read must distinguish absent, JSON
 `null`, the two valid strings, and everything else, and must fail **closed** (BLOCK-INVALID) when
-the value cannot be read at all. AC-2.1's matrix exercises only `"codex"` from the invalid class,
-so the plan adds a supplementary parametrized test: under `codex_out`, each of `false`, `true`,
-`0`, `"null"`, `""`, `{}`, `[]` is its own case and each yields BLOCK-INVALID — every member of
-the class alone, so a healthy sibling cannot cover a sick one.
+the value cannot be read at all. The class test is now the spec's own **AC-2.1b** (spec v1.1),
+which supersedes v1.0's plan-level supplement: each of the 8 values `false`, `true`, `0`,
+`"null"`, `""`, `"Grok"`, `{}`, `[]` is its own parametrized case, run under each of the three
+codex_out routes alone (`HMAD_CODEX_UNAVAILABLE=1`; `codex_status: "exhausted"`; `codex` off
+PATH) — 24 BLOCK-INVALID cells, each asserting exit 1 and AC-2.4's stderr — with a control in
+which a stored JSON `null` under the same three routes is FALL-THROUGH (3 cells), as is an absent
+key. The control is what separates the string `"null"` from JSON `null`, so it is the cell that
+kills a reintroduced `-r` collapse; the `false` cells kill a reintroduced `//`. The plan keeps
+one addition beyond the spec's assertions: the spec states that the same 8 values with codex_out
+false yield BLOCK-CODEX (the table's first row) but does not require a test of it, and a read
+that returned BLOCK-INVALID regardless of `codex_out` would pass all 24 cells. So the same test
+file carries those 8 BLOCK-CODEX cells (codex on PATH, variable unset, `codex_status` absent),
+one value per case.
 
 **Regression is proven against the base, not asserted.** AC-2.2 compares against
 `git show <base>:h-mad/hooks/h-mad-tdd-gate.sh`; AC-8.1 against the base commit's assembler
@@ -171,7 +180,11 @@ grok size bound.
 ## Verified premises (commands run at `1680271`)
 
 Each premise below was executed against the tree, not reasoned about. A reading is one reading at
-one sha; the command is what a later reader re-runs.
+one sha; the command is what a later reader re-runs. The commits since (`805e4f3`, `7d2f780`,
+`42511c3`) touch only this feature's documents and probe sidecar:
+`git diff --stat 1680271 42511c3 -- h-mad handoff` prints nothing (run at `42511c3`), so the tree
+premises P2–P13 and the suite baseline were not re-run for v1.1 and stand at `1680271`. P1 and
+the AC census were re-run at `42511c3`.
 
 - **P1 — F0 matches the spec's figures.** Run:
 
@@ -180,7 +193,7 @@ one sha; the command is what a later reader re-runs.
   wc -l < "$F"; wc -c < "$F"; shasum -a 256 "$F"
   jq -r .type "$F" | sort | uniq -c
   jq -r 'select(.type=="tool_call_update" and .status=="completed")|.toolCallId' "$F" | sort -u | wc -l
-  jq -r 'select(.type=="tool_call_update" and .status==null)|.toolCallId' "$F" | wc -l
+  jq -c 'select(.type=="tool_call_update" and .status==null)' "$F" | wc -l
   jq -s '[.[]|select(.type=="usage")|.usage.reasoning_tokens]|add' "$F"
   jq -c 'select(.type=="end")|[.stopReason,(.modelUsage|keys),.num_turns]' "$F"
   grep -c '^{"type":"' "$F"
@@ -193,10 +206,15 @@ one sha; the command is what a later reader re-runs.
   `tool_call` 2, `end` 1; 2 distinct completed `toolCallId`s; 2 null-status updates; reasoning
   sum 121; `end` = `end_turn`, one model key `grok-4.7-build`, 3 turns; 110 matching lines;
   last `text` at event index 106, last `usage` at 108 (spec A1 confirmed). F0 ends with a
-  newline. F0 was committed at `d2fbb96` and is unchanged since (`git log --format=%h -1 -- "$F"`).
-  **The probe sidecar does not carry these commands** (`grep -n 'sha256\|shasum'
-  docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.md` → zero matching lines),
-  although the spec says it does; see Risks and the owed list.
+  newline. F0 was committed at `d2fbb96` and is unchanged since (`git log --format=%h -1 -- "$F"`
+  → `d2fbb96`, re-run at `42511c3`, where the size, sha256, null-status and line-prefix figures
+  above re-read identically). **Where the commands live:** since `7d2f780` the probe sidecar
+  (`docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.md`, section
+  "Re-derivation commands") carries all of them except two — the null-status count and the
+  `grep -c '^{"type":"'` line-prefix count — and spec v1.1's F0 bullet writes those two inline.
+  The plan's v1.0 statement that the sidecar carried none of them is retired. Check:
+  `grep -c 'status==null\|\^{"type"' docs/03-analysis/probes/grok-codex-fallback/stream-json.2026-09-28.md`
+  → 0 matching lines at `42511c3` (unit: lines), confirming exactly those two are absent there.
 - **P2 — tool-call join for AC-4.6 and AC-5.2.** `jq -r 'select(.type=="tool_call" or
   .type=="tool_call_update")|[.type,.toolCallId,(.toolName//"-"),(.status//"null")]|@tsv' "$F"`
   shows `read_file` then `search_replace`, each `pending` → `null` → `completed`, with
@@ -248,6 +266,9 @@ one sha; the command is what a later reader re-runs.
   `--effort` default to `None` (`grep -n 'add_argument("--timeout"\|^DEFAULT_MODEL\|^DEFAULT_EFFORT'
   h-mad/scripts/h_mad_assemble_tdd.py`). FR-8's "1500 when `--timeout` is not given" therefore
   needs a not-given sentinel; an argparse default of 900 cannot tell `--timeout 900` from absence.
+  Spec v1.1 makes this explicit: "not given" is judged on presence in argv, never on value, and
+  AC-8.2 pins `--agent grok --timeout 900` → `--timeout 900`, never `--timeout 1500` — the one
+  case a value-based sentinel (`if timeout == 900`) gets wrong.
   The block's dispatch line is built in one f-string beginning `hmad-dispatch exec codex`.
 - **P10 — `resolved-model` pass-through.** `_cmd_resolved_model` forwards `"$@"` to
   `h_mad_resolved_model.py`, whose agent is `choices=("codex", "agy")`. FR-9's wrapper side is a
@@ -256,8 +277,11 @@ one sha; the command is what a later reader re-runs.
   `grok 1.0.41`. `--reasoning-effort` lists `[aliases: --effort]`; `--output-format` lists
   `streaming-json` ("NDJSON: one ACP session update per line"); `-p, --single` and
   `--prompt-file` both exist; `--sandbox <PROFILE>` lists no values and reads **`[env:
-  GROK_SANDBOX=]`**. The last is new to this plan: an operator's exported `GROK_SANDBOX` reaches
-  the grok child and applies a sandbox although FR-3 supplies no default (Risks). The claim that
+  GROK_SANDBOX=]`**. An operator's exported `GROK_SANDBOX` therefore reaches the grok child and
+  applies a sandbox although FR-3 supplies no default (Risks). Plan v1.0 raised this; spec v1.1
+  now mandates it — FR-3 states the variable is inherited, neither scrubbed nor set, FR-10
+  requires `agent-substrate.md` to disclose it, and AC-10.2 pins the needle `GROK_SANDBOX` there;
+  scrubbing or defaulting it is spec Out-of-Scope. The claim that
   `-p` with `--prompt-file` exits rc 2 is carried from the brainstorm and was **not** re-run here
   (running it risks a live model call, which D4 forbids).
 - **P12 — the evidence verdict extractor.** `h_mad_extract_verdict.py <file> --key STATUS` on a
@@ -268,9 +292,12 @@ one sha; the command is what a later reader re-runs.
   a Codex PreToolUse adapter wired through Codex's own `hooks.json`
   (`h-mad/references/codex-runtime.md`). No grok-side adapter exists in this skill, and whether
   grok offers a hook surface at all was not probed, so a grok Phase-5 dispatch writes
-  production code with **no write-time test-first gate** — the RED/GREEN verdicts and the
-  orchestrator's pytest re-run are the only enforcement. The spec does not state this (Risks,
-  owed list).
+  production code with **no write-time test-first gate**. What remains is the RED/GREEN
+  verdicts, the orchestrator's independent pytest re-run, and the 5e revert test that
+  establishes GREEN (`h-mad/SKILL.md`, "GREEN is established by the revert test"). The operator
+  has made the gap out of scope: spec v1.1 carries it as an Out-of-Scope entry, FR-10 requires
+  the Phase-5 section to disclose it, and AC-10.1 pins the needle `no write-time test-first gate`
+  in that section. Plan v1.0's "the spec does not state this" is closed.
 
 **Suite baseline.** Commands, at `1680271`:
 
@@ -349,14 +376,14 @@ AC-2.7's spec is the gate's first.
 | `scan_grok()` and the CLI's grok branch | `h-mad/scripts/h_mad_review_evidence.py` | FR-6 |
 | `--surfaces` accepts `grok` | `h-mad/scripts/hmad-dispatch.sh` (`_cmd_audit_cycle`) | FR-7 |
 | `grok` / `grok-truncated` effort shapes, closed-world `combine()` routing, `_effort_items()` rendering | `h-mad/scripts/h_mad_audit_cycle.py` (`measure_effort`, `combine`, `_effort_items`) | FR-7 |
-| `--agent {codex,grok}`, not-given `--timeout` sentinel, 1500 s grok default | `h-mad/scripts/h_mad_assemble_tdd.py` | FR-8 |
+| `--agent {codex,grok}`, not-given `--timeout` sentinel (judged on presence in argv, never on value, so an explicit `--timeout 900` under grok stays 900), 1500 s grok default | `h-mad/scripts/h_mad_assemble_tdd.py` | FR-8 |
 | `grok` agent: last-`end` `modelUsage` reader and its refusals | `h-mad/scripts/h_mad_resolved_model.py`; usage comment of `_cmd_resolved_model` | FR-9 |
-| Phase-5, exec, teammate-leg and never-gate-on-one-pass sections; D4 statement in two places | `h-mad/SKILL.md` | FR-10 |
+| Phase-5 (incl. the `no write-time test-first gate` disclosure), exec, teammate-leg and never-gate-on-one-pass sections; D4 statement in two places | `h-mad/SKILL.md` | FR-10 |
 | `fallback_agent` (and `codex_status`, P6) field semantics | `h-mad/references/state-schema.md` | FR-10 |
-| `exec grok` verb, argv, env handling, `GROK_SANDBOX` residual | `h-mad/references/agent-substrate.md` §"Verbs" | FR-10 |
+| `exec grok` verb, argv, env handling, inherited `GROK_SANDBOX` (FR-3; AC-10.2 needle) | `h-mad/references/agent-substrate.md` §"Verbs" | FR-10 |
 | `grok` stub | `h-mad/tests/stubs/grok` | FR-3–FR-5, FR-7 |
 | F0-derived fixture builder (one helper) and F0 sha256 check | `h-mad/tests/` (new helper module) | FR-4–FR-7, FR-9 |
-| New test files for FR-1–FR-10, including the 80-cell gate matrix, the 16-cell × 3 base comparison, the invalid-class supplement, and the two-instrument agreement test | `h-mad/tests/` (new files) | FR-1–FR-11 |
+| New test files for FR-1–FR-10, including the 80-cell gate matrix, the 16-cell × 3 base comparison, AC-2.1b's 24 BLOCK-INVALID cells with its 3-cell JSON-`null` control plus the plan's 8 BLOCK-CODEX cells, and the two-instrument agreement test | `h-mad/tests/` (new files) | FR-1–FR-11 |
 | Heading-located doc test (fails, never skips, on a missing heading) | `h-mad/tests/` (new file) | FR-10 |
 | Gate mutation spec, three rows (AC-2.7) | `h-mad/tests/mutation-specs/` (new JSON) | FR-2 |
 | Mutation specs for the parser, evidence and shape guards (see Success Criteria) | `h-mad/tests/mutation-specs/` (new JSON) | FR-4, FR-6, FR-7 |
@@ -380,7 +407,7 @@ symbol is a wrong-reason RED and halts.
 | W7 | `measure_effort` → `scan_grok`; `combine` → `grok-truncated` routing | AC-7.2/7.3 fail; AC-7.4 fails | `grok-truncated` scored as a count → AC-7.4 fails |
 | W8 | `_cmd_audit_cycle --surfaces` → `_cmd_exec grok` | AC-7.1 fails | — |
 | W9 | hook → `fallback_agent` of `ACTIVE` | AC-2.1 BLOCK-GROK cells fail | read from another feature → AC-2.5 fails |
-| W10 | assembler `--agent` → dispatch line and timeout default | AC-8.2 fails | state read → AC-8.5 fails |
+| W10 | assembler `--agent` → dispatch line and timeout default | AC-8.2 fails (incl. its explicit `--timeout 900` case) | state read → AC-8.5 fails |
 | W11 | `h_mad_resolved_model` `choices` → grok reader | AC-9.1 fails (argparse refuses `grok`) | — |
 
 ## Risks and Mitigation
@@ -388,12 +415,12 @@ symbol is a wrong-reason RED and halts.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | A binary `codex`/else test in `_cmd_exec` routes grok into the agy arm | grok receives agy's argv, and the OVERSIZE refusal fires on a file-delivered prompt | Every `$agent`-branching line in `_cmd_exec` gets a grok arm or a named test (census above); AC-3.1 and AC-3.5 are the behavioural backstop |
-| The gate reads `fallback_agent` with `//` or `-r` | `false` and the string `"null"` fall through and let Claude write | Type-preserving read; invalid-class supplement with each value alone; fail-closed on read failure |
+| The gate reads `fallback_agent` with `//` or `-r` | `false` and the string `"null"` fall through and let Claude write | Type-preserving read; AC-2.1b (8 values × 3 codex_out routes, each alone, with the JSON-`null` control) plus the plan's 8 BLOCK-CODEX cells; fail-closed on read failure |
 | `combine()` scores an unrouted `grok-truncated` as a count | A cannot-measure leg reads as hollow, or as delivered | Closed-world shape routing plus a shape-enumeration test; W7 force-fire |
 | Two instruments classify a grok log differently | `progress` shows one lens while the gate routes another | Shared seven-type criterion and one agreement test over both |
 | A2: grok's stream schema changes | Parsers misread; a false zero or a false verdict | `None` / `UNREADABLE` / `grok-truncated` paths keep it a cannot-judge; FR-5's residual documented; the F0 sha check makes a fixture edit visible |
-| Grok writes with no write-time test-first gate (P13) | A grok GREEN can land untested production code; nothing blocks it at write time | RED/GREEN verdicts plus the orchestrator's pytest re-run remain mandatory; the plan documents the gap in the Phase-5 section; spec owes an Out-of-Scope entry |
-| `GROK_SANDBOX` in the operator's environment silently sandboxes the child (P11) | A dispatch fails or behaves differently with no flag in argv | Documented as a residual in `agent-substrate.md`; not scrubbed, because the spec leaves sandbox choice to the operator |
+| Grok writes with no write-time test-first gate (P13) | A grok GREEN can land untested production code; nothing blocks it at write time | Accepted, operator-decided: spec Out-of-Scope. RED/GREEN verdicts, the orchestrator's pytest re-run and the 5e revert test that establishes GREEN remain mandatory; the Phase-5 section discloses the gap (FR-10, AC-10.1 needle `no write-time test-first gate`) |
+| `GROK_SANDBOX` in the operator's environment silently sandboxes the child (P11) | A dispatch fails or behaves differently with no flag in argv | Spec-mandated disclosure: FR-3 states the inheritance, FR-10 requires it in `agent-substrate.md`, AC-10.2 pins the needle `GROK_SANDBOX`; not scrubbed or defaulted (spec Out-of-Scope) |
 | `--always-approve` grants unrestricted tool execution in `<cd_dir>` | Wider than codex's `workspace-write` default | Stated in FR-10 docs; accepted by the operator's choice of `fallback_agent=grok` |
 | Stray `graft/` directory seen in the probe (finding 6) | Tree-delta output after a grok run over-counts | Tree delta reported, not trusted, for grok until a clean re-probe (spec Out-of-Scope) |
 | Switching the audit legs from `doc-auditor` to `grok` mid-document | `h_mad_audit_gate.py` emits a `legs_changed:` reason when two cycles' leg sets differ (`grep -n legs_changed h-mad/scripts/h_mad_audit_gate.py`); its effect on a doc switching to `grok` was read, not executed | Phase 4 executes the case and the teammate-leg section documents the observed outcome |
@@ -420,9 +447,13 @@ symbol is a wrong-reason RED and halts.
 
 ## Success Criteria
 
-- All 53 spec ACs across FR-1–FR-11 pass automated tests. (Count: `grep -oE '^  - AC-[0-9]+\.[0-9]+'
-  docs/01-plan/features/grok-codex-fallback.spec.md | sort -u | wc -l` → 53 distinct AC ids at
-  `1680271`; it moves only if the spec is revised.)
+- All 54 spec ACs across FR-1–FR-11 pass automated tests. (Count: `grep -oE '^  - AC-[0-9]+\.[0-9]+[a-z]?'
+  docs/01-plan/features/grok-codex-fallback.spec.md | sort -u | wc -l` → 54 distinct AC ids at
+  `42511c3`; unit: distinct ids. It moves only if the spec is revised. v1.0's grammar
+  `AC-[0-9]+\.[0-9]+` still reads 53 at `42511c3` because it truncates `AC-2.1b` to `AC-2.1` and
+  deduplicates it away — the new id is invisible to it, so the grammar gained the letter suffix.
+  Cross-check: `grep -oE 'AC-[0-9]+\.[0-9]+[a-z]?'` over the whole spec, any indentation, also
+  reads 54, and the two id sets are equal under `comm -3`.)
 - **Node-id floor.** Every test node id collected from `h-mad/tests` and `handoff/tests` at the
   base is collected at HEAD and passes, except the one environment-dependent failure named in
   the baseline if it still fails for the same reason. Command: `pytest --collect-only -q
@@ -431,14 +462,16 @@ symbol is a wrong-reason RED and halts.
   cancel in a count.
 - Pre-existing test files are append-only: `git diff --numstat <base> -- <each pre-existing test
   file touched>` shows `0` in the deleted column.
-- The invalid-class supplement: each of `false`, `true`, `0`, `"null"`, `""`, `{}`, `[]` yields
-  BLOCK-INVALID alone under `codex_out`.
+- AC-2.1b (counted in the 54 above) and, beyond it, the plan's 8 BLOCK-CODEX cells: each of the
+  8 AC-2.1b values alone with codex_out false yields BLOCK-CODEX.
 - The two-instrument agreement test passes on F0, F-SPACED, F-TRUNC, an agy log and a codex
   banner log.
 - The shape-enumeration test asserts an explicit `combine()` route for every shape
   `measure_effort()` returns.
 - Mutation verification `ALL_CAUGHT` for: the three AC-2.7 gate rows; and, as further rows, the
-  invalid-class read (`//` reintroduced), segment closers (drop `usage` from the closer set),
+  invalid-class read (`//` reintroduced, killed by AC-2.1b's `false` cells; `-r` string/`null`
+  collapse reintroduced, killed by AC-2.1b's `"null"` cells against its JSON-`null` control),
+  segment closers (drop `usage` from the closer set),
   decoy exclusion (`thought` data appended), `pre_lines` scoping dropped, `ok` counted by
   substring, the truncated evidence branch publishing counts, and `grok-truncated` removed from
   its `combine()` route.
@@ -455,7 +488,8 @@ symbol is a wrong-reason RED and halts.
 - The grok pane path: `send`, `ask`, `launch`, `exec-pane`, `pin`, `verify`, `resolve` (AC-3.7).
 - A grok 6a-prime reviewer; `h_mad_archreview_cycle.py` stays agy-only.
 - A failed-tool-status branch; `unresolved` stands in until a failure spelling is captured.
-- Choosing a grok `--sandbox` profile.
+- Choosing a grok `--sandbox` profile, and scrubbing or defaulting `GROK_SANDBOX` (FR-3).
+- A write-time test-first gate for grok (P13); the Phase-5 section discloses it (FR-10).
 - A grok input-size ceiling or refusal detector.
 - Completion-event reaping (`--complete-log`) for grok.
 - The stray `graft/` directory seen in the probe; grok tree-delta is reported, not trusted.
@@ -464,11 +498,13 @@ symbol is a wrong-reason RED and halts.
 
 ## Next Steps
 
-Operator reviews and approves v1.0 → Phase 3 audit cycle on the live skill's surfaces (grok is
+Operator reviews and approves v1.1 → Phase 3 audit cycle on the live skill's surfaces (grok is
 not a surface until this feature merges; if codex is out, the teammate leg per `h-mad/SKILL.md`
-§"Teammate audit leg — when codex is unavailable" applies) → gate until must-fix = 0 → Phase 4 design,
-which carries the owed items in the author report (the sidecar's missing census commands, the
-P13 write-gate disclosure, the `state-schema.md` sibling-field note).
+§"Teammate audit leg — when codex is unavailable" applies) → gate until must-fix = 0 → Phase 4 design.
+Of v1.0's owed items, the sidecar commands and the P13 write-gate disclosure are closed by spec
+v1.1 and `7d2f780`; the `state-schema.md` sibling-field note (P6) stays, as an
+orchestrator-approved superset of FR-10.
 
 ## Version History
 - v1.0: Initial plan draft (2026-09-28), from spec v1.0 at 1680271. Premises P1-P13 and the suite baseline executed at 1680271; adds the closed-world combine() routing rule, the type-preserving fallback_agent read with an invalid-class supplement, the _cmd_exec agent-arm census, the node-id suite floor, and the W1-W11 wiring table.
+- v1.1: Revised to spec v1.1 at 42511c3 (2026-09-28). The invalid-class supplement folds into the spec AC-2.1b (8 values x 3 codex_out routes = 24 BLOCK-INVALID cells, JSON-null FALL-THROUGH control); the plan keeps 8 BLOCK-CODEX cells beyond it. P1 records that the sidecar carries the re-derivation commands since 7d2f780, except the null-status and line-prefix counts the spec writes inline. P11 and P13 cite the now spec-mandated GROK_SANDBOX disclosure and write-gate Out-of-Scope entry, the latter mitigated also by the 5e revert test. FR-8 sentinel is presence-judged (AC-8.2 explicit 900). AC census re-derived with a suffix-aware grammar: 54 distinct ids (the v1.0 grammar hid AC-2.1b).
