@@ -32,6 +32,8 @@ In scope — the systems spec v1.1 FR-1 to FR-12 touch:
   extended with a `## Construct mapping` table (FR-2, FR-5, FR-6), plus FR-8 / FR-9 / FR-10 text;
 - the `## Host runtime` section of `h-mad/SKILL.md` and `handoff/SKILL.md`, and the `cannot_judge`
   row of h-mad's decision-routing table (FR-7, AC-9.4);
+- the install-check contract text in `h-mad/SKILL.md` (bootstrap sentence, `SIBLING_NOT_SYMLINK`
+  remedy, `AGY_SIBLING_COLLISION` row, helper-registry lines; FR-10 — design v1.3 §D11 erratum);
 - `h-mad/scripts/h_mad_context_budget.py` (FR-8), `h-mad/scripts/h_mad_resume_decision.py`
   (FR-9), `h-mad/scripts/h_mad_install_check.py` (FR-10);
 - tests and mutation specs under `h-mad/tests/`, and one autouse fixture appended to the existing

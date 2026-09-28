@@ -1189,8 +1189,34 @@ discrimination"):
     the error → as R11 (codex and agy `FAIL`, grok `UNVERIFIED`).
   - R14, tokenizer and exec-form cases (OD-3 and the delta review), each alone, placed before the
     adapter read and followed by it and a run:
-    (a) `echo x # c`, a newline, then a script run → `FAIL … a script ran before the adapter was
-    read`;
+    (a) `echo x # c`, a separator, then a script run → `FAIL … a script ran before the adapter
+    was read`. **What (a) exists to test:** that a `#` never removes from the tokenizer's view the
+    separator after it, or the simple command after that separator, so a script run placed after
+    a `#`-bearing command is still classified as an execution. That is the `commenters = ""`
+    setting of "Classifying a command". With shlex's default commenter `#`, the comment consumes
+    the rest of its line including the newline, so the newline form yields the single simple
+    command `echo x python3 h-mad/scripts/h_mad_state_write.py` (the run becomes an `echo`
+    operand), and the `; ` form below yields `echo x` alone (the run is gone). With
+    `commenters = ""` both forms yield `echo x # c`, then the run. The separator
+    differs by host, because only the NDJSON hosts can carry a newline inside one command:
+    - **grok and agy:** a newline. The command text is a JSON string, so `\n` in the fixture
+      decodes to a real newline.
+    - **codex (erratum v1.3):** `; `, so the command line after `exec` is
+      `/bin/zsh -lc "echo x # c; python3 h-mad/scripts/h_mad_state_write.py" in <cwd>`, on one
+      line. The v1.2 form wrote the newline literally, which splits the command over two log
+      lines. The reader takes only the first non-beat line after `exec` and requires the shape
+      `^\S+ -lc .* in \S+$`; the first line `/bin/zsh -lc "echo x # c` fails it, so the case
+      printed `UNVERIFIED V-11.1 codex input shape unobserved` every time and could never reach
+      its `FAIL` (impl-plan audit cycle 2, both lanes). Writing the newline as a two-character
+      `\n` escape is not used either: the tokenizer reads it as an escaped `n`, so there is no
+      separator and the run becomes part of the token `cnpython3`. The reader is unchanged.
+    - **What the codex form gives up, stated exactly:** a real shell treats a `#` at the start of
+      a word as a comment to the end of the line, so it would not run the script after `# c; `.
+      The classifier treats every `#` as ordinary, so it reports the run: an over-report, in the
+      direction "Classifying a command" chooses. The codex case therefore tests the tokenizer
+      setting, not shell fidelity. Shell fidelity on the newline form is tested by the grok and
+      agy cases only. A real codex log with a multi-line command still halts on the input shape,
+      which the reader intends.
     (b) `echo ${#x}; <run>` → the same `FAIL`;
     (c) `cat y >> <adapter>; <run>` → the same `FAIL`, since a `>>` target is not a read;
     (d) `python3 2>err h-mad/scripts/h_mad_state_write.py` → the same `FAIL`;
@@ -1290,6 +1316,74 @@ second cell, before the closing ` |`:
   `the-token-leaves-the-decision-table` anchor.
 - The appended sentence has no catch-all hit.
 
+**The install-check contract (erratum v1.3; `h-mad/SKILL.md` only).** The bootstrap step of
+``## First-run auto-bootstrap`` runs `python3 ~/.claude/skills/h-mad/scripts/h_mad_install_check.py`
+with no options. After W3 (D6), that option-less call also reads `~/.agents/skills` and
+`~/.gemini/config/skills` through `default_host_roots()`, and can print lines the section does
+not name. `.h-mad/invariants.md` §"Skill manifest integrity" makes a changed entry behaviour
+without an updated `SKILL.md` contract a violation, so the edits below are part of D11. Items 1–6
+are the edits impl-plan v1.1 Deviation 8 and Task 14 already assume, in the same order. Item 7 is
+new in this erratum (see its reason). Each edit adds text and keeps every existing token.
+1. **Bootstrap step.** In ``## First-run auto-bootstrap``, the numbered step that runs
+   `h_mad_install_check.py` gains one sentence at its end: "The check also reads
+   `~/.agents/skills` and `~/.gemini/config/skills` (override with `HMAD_AGENTS_SKILLS_DIR` and
+   `HMAD_AGY_SKILLS_DIR`, or with `--agents-skills-dir` and `--agy-skills-dir`); a root that does
+   not exist adds no line." (D6 "Byte-identity with the new roots absent".)
+2. **`SIBLING_NOT_SYMLINK` remedy.** In the same section's remedy table, the row whose first cell
+   is `` `SIBLING_NOT_SYMLINK` `` gets a new remedy cell: remove the copy and link the checkout's
+   skill in its place, in the skills directory the line names, which is one of
+   `~/.claude/skills`, `~/.agents/skills` or `~/.gemini/config/skills` (for example
+   `rm -rf ~/.agents/skills/handoff` then `ln -s <checkout>/handoff ~/.agents/skills/handoff`).
+   Today's cell hard-codes `rm -rf ~/.claude/skills/<name>`, which deletes the wrong entry when
+   the line names another root.
+3. **`AGY_SIBLING_COLLISION` row.** The same table gains one row directly after the
+   `` `SIBLING_WRONG_CHECKOUT` `` row. First cell `` `AGY_SIBLING_COLLISION` ``. Second cell: "a
+   skill from this checkout that agy does not install (anything but `h-mad` and `handoff`) sits
+   in `~/.gemini/config/skills` as a copy, a dangling link or another checkout's link; printed
+   after the verdict and never changes it". Third cell: "none required: the operator decides
+   whether that directory is theirs". (D6 `split_agy_root` and `main()`.)
+4. **Helper registry, install check.** In ``## Helper scripts (all in
+   `~/.claude/skills/h-mad/scripts/`)``, the line starting `` - `h_mad_install_check.py` — ``
+   gains, at its end: "Also reads `~/.agents/skills` and `~/.gemini/config/skills`
+   (`--agents-skills-dir` / `--agy-skills-dir`, env `HMAD_AGENTS_SKILLS_DIR` /
+   `HMAD_AGY_SKILLS_DIR`); an empty value for either prints `INSTALL: UNREADABLE`, exit 2; in the
+   agy root, a skill agy does not install prints an `AGY_SIBLING_COLLISION:` line after the
+   verdict and never changes it."
+5. **Helper registry, context budget (W1).** The line starting
+   `` - `h_mad_context_budget.py` — `` gains, at its end: "Under a declared non-Claude host it
+   refuses before any transcript read: `HMAD_HOST` set to `codex`, `agy` or `grok` prints
+   `CTXBUDGET: UNKNOWN reason=host_unsupported`, and any other value except empty or `claude`
+   prints `reason=unknown_host` (see `h_mad_host.py`)." Its committed anchor
+   (`context_budget_docs.json`, `drop-helper-from-list`) is the line's unchanged prefix.
+6. **Helper registry, classifier.** A new line directly after the context-budget line:
+   "- `h_mad_host.py` — host classifier: `classify_host()` reads `HMAD_HOST` and returns
+   `claude` (unset, empty or `claude`), `declared` (`codex`, `agy` or `grok`) or `unknown` (any
+   other value; no strip, no case fold). No CLI. Read by `h_mad_context_budget.py` and
+   `h_mad_resume_decision.py`. Stdlib-only." (D3.)
+7. **The remedy table's count sentence.** The sentence before the table ends "The detail lines
+   each name one remedy, and all ten have one:". Item 3 makes the table eleven rows, and the new
+   row's remedy is "none required", so this erratum's own edit moves that count. The words "(the
+   eleventh row, `AGY_SIBLING_COLLISION`, is a detail that needs none)" are inserted after "all
+   ten have one", before the colon. No test reads that sentence: `grep -rn 'all ten have one'
+   h-mad/ handoff/` → 1 matching line, in `h-mad/SKILL.md` itself (run at `a1478ad3`; `docs/`
+   is excluded because this document quotes the phrase).
+
+- **Pinned by** impl-plan Task 14's 13 install-check and helper-registry nodes (4 + 2 + 1 + 3 +
+  2 + 1). Item 7 has no node there yet; the impl-plan owes one.
+- **Guards.** The new text adds no catch-all hit: no PascalCase call, no backticked compound
+  PascalCase, no `CLAUDE` token, and its only Claude home path is the existing
+  `~/.claude/skills` form. The FR-4 re-run (AC-7.2) is the check. `--check-anchors` over both
+  spec directories must still print `ANCHORS_OK` with `drifted=0`.
+  `h-mad/tests/test_h_mad_install_check_docs.py` passes unchanged: its token tuples name the ten
+  issue lines, and items 1–7 remove none of them.
+- **Residual, stated exactly.** The class covered is the `SKILL.md` surfaces that describe the
+  scripts W1 and W3 change, plus W2's `cannot_judge` row above. Two W2 surfaces are left unedited
+  by this erratum: `h-mad/SKILL.md`'s "Pass `--session-id` so the collision check runs; omitting
+  it opts out" (in ``## Decision routing (for `/h-mad "<feature>"`)``), and `handoff/SKILL.md`'s
+  bullet starting "**`cannot_judge`** → the state file exists and could not be READ". Both still
+  name only the old cause (impl-plan audit cycle 2, teammate). Extending D11 to them is open for
+  the orchestrator.
+
 ### D12 — Doc tests `h-mad/tests/test_host_runtime_docs.py`
 
 - **Locating.** Every test locates its section with `h_mad_doc_block_exec.find_heading(text,
@@ -1345,7 +1439,7 @@ The pinned tokens, by AC:
 | Mutation specs | `h-mad/tests/mutation-specs/host_parity.json`, `host_declaration.json`, `install_check_roots.json` | new | Success Criteria |
 | grok adapters | `h-mad/references/grok-runtime.md`, `handoff/references/grok-runtime.md` | new | FR-2, FR-5, FR-8–FR-10 (D9) |
 | codex/agy adapters | `{h-mad,handoff}/references/{codex,agy}-runtime.md` | modify | FR-2, FR-6, FR-8–FR-10 (D9) |
-| Routing | `h-mad/SKILL.md`, `handoff/SKILL.md` | modify | FR-7, AC-9.4 (D11) |
+| Routing | `h-mad/SKILL.md`, `handoff/SKILL.md` | modify | FR-7, AC-9.4, FR-10 install-check contract (D11) |
 | Probe sidecar | `docs/03-analysis/probes/multi-host-runtime/{calibrate.sh,seed.json,seed_coverage.py,byte_identity.py,smoke_assert.py,rehearsal/}` | new | FR-1, FR-4, FR-11, FR-12 (D8, D10) |
 | Phase-6 document | `docs/03-analysis/multi-host-runtime.analysis.md` | new | AC-4.5, AC-4.6, AC-6.1, rehearsal, byte-identity |
 | Live-smoke record | written at `docs/03-analysis/multi-host-runtime.live-smoke.md` (the spec's path); committed at `docs/archive/<YYYY-MM>/multi-host-runtime/multi-host-runtime.live-smoke.md` (the plan's) | new | FR-11 |
@@ -1377,16 +1471,25 @@ mutation specs, and `check_siblings`' body.
 
 ## Implementation Order
 
-1. **Before the design gate clears** (plan Next Steps): commit `calibrate.sh`, `seed.json` and
-   `seed_coverage.py` (per-entry mode). They need no feature code. This step is the
-   orchestrator's, because this document's author writes only the design. It had not happened
-   when design audit cycle 1 ran, so that cycle checked DP1 and DP2 against scratch readings.
-   It had still not happened at `76e7af19`: `ls docs/03-analysis/probes/multi-host-runtime` →
-   "No such file or directory". The design gate cannot clear under this order until it does.
+1. **At 5c, before any production task** (orchestrator decision, design v1.3): impl-plan Task 0
+   commits `calibrate.sh`, `seed.json` and `seed_coverage.py` (per-entry mode) and runs them.
+   They need no feature code. Task 0's commit is the first commit after the 5c impl-plan commit,
+   which must stay the branch's first commit because `h_mad_baseline_sha.py` verifies that. No
+   production task starts until Task 0's calibration reading is committed.
+   - **Erratum (v1.3).** Up to v1.2 this step read "Before the design gate clears" and said the
+     gate could not clear until the three files were committed. They were never built: the
+     design gate exited at its round cap at `34c0e962` (design v1.2), and the directory is still
+     absent (`ls docs/03-analysis/probes/multi-host-runtime` → "No such file or directory", run
+     at `a1478ad3`). Moving the step to 5c is the orchestrator's decision, recorded here and not
+     re-argued; it does not reopen the design gate. Consequence, unchanged by the move: design
+     audit cycle 1 checked DP1 and DP2 against scratch readings, and the sidecar was still
+     absent at `76e7af19`, where v1.2's premises were re-run. The first committed reading is
+     Task 0's at `BASE_SHA`.
 2. **5c** (plan "Rebase, then baseline"):
    - rebase;
    - record `<base>`;
-   - run `calibrate.sh <base>` and `seed_coverage.py --sha <base> --registry seed.json`;
+   - run `calibrate.sh <base>` and `seed_coverage.py --sha <base> --registry seed.json` (step 1,
+     impl-plan Task 0);
    - re-run P4, P5, P6, P9 and P15, and the suite baseline;
    - from P5, record the gate's refusal form at `<base>` as `REFUSAL_FORM_AT_BASE` (D9.2), or halt
      on a reading outside its three rows;
@@ -1412,8 +1515,9 @@ mutation specs, and `check_siblings`' body.
 5. **Strand 3.** One adapter at a time, in the order h-mad codex, h-mad agy, h-mad grok, handoff
    codex, handoff agy, handoff grok. Each adapter's live node and its D12 doc tests go from RED to
    GREEN.
-6. **Strand 4.** The two D11 edits to the `SKILL.md` files, then the FR-4 re-run (AC-7.2) and
-   `--check-anchors`.
+6. **Strand 4.** The D11 edits to the `SKILL.md` files (the two `## Host runtime` sections, the
+   `cannot_judge` row, and the install-check contract's seven items), then the FR-4 re-run
+   (AC-7.2) and `--check-anchors`.
 7. **Mutation specs.** The three new specs, run to `ALL_CAUGHT`, with the W1–W3 wire-scoped
    reverts and force-fires.
 8. **Sidecar.** `byte_identity.py` and `smoke_assert.py` plus `rehearsal/`.
@@ -1688,8 +1792,10 @@ per token wherever a row lists several.
   rule's condition. The grok adapter's `~/.grok/...` paths are prose that names grok's own store
   and home; no script or test reads them.
 - **Skill manifest integrity.** Complies. Both `SKILL.md` contracts are updated where behaviour
-  changes: routing names grok, and the `cannot_judge` row names its second cause. Frontmatter is
-  untouched.
+  changes: routing names grok, the `cannot_judge` row names its second cause, and the
+  install-check contract names the two new roots, their overrides and `AGY_SIBLING_COLLISION`,
+  with the W1 and classifier registry lines (D11, erratum v1.3). Frontmatter is untouched. The
+  two W2 surfaces D11's residual names are the exception, open for the orchestrator.
 
 ## Verified premises (design-level)
 
@@ -1915,3 +2021,4 @@ wc -l` → 0 files.
 - v1.0: Initial design draft (2026-09-28) from spec v1.2 (b51c5b2a) and plan v1.2 (e32ffe5c); premises executed at 6478b8b5 (tree unchanged at dfd5f02e). Registry, host_parity checker (find_heading/fence_aware_end/_fence_events table parse, closed branch-expansion grammar reproducing P2b), shared h_mad_host classifier, W1-W3 host/root checks keeping all 17 existing mutation anchors unique, agy root by partitioning check_siblings, 22x3 construct matrix, D12 doc-test token table, probe sidecar. Supersedes the plan on nine items: grok V-11.1 reads available_commands (exec grok emits streaming-json, no init line); v111 orders input events not log text (logs carry tool output); smoke_assert.py single file; rehearsal in Phase 6; 42 kind fixtures (6 splits); h_mad_host module; agy partition; AC-12.2 on both arms; unknown host JSON-encoded.
 - v1.1: Design audit cycle 1 repairs (2026-09-28; codex p1 9 must, teammate 8 must/19 should; premises re-run at 1ef1a782). V-11.1: grok commands is a list of plain strings (listing = precondition only); every host needs an observed successful content read of the adapter before the first execution and of SKILL.md, else FAIL/UNVERIFIED; simple commands classified by argv (execution/content read/non-executing/unclassified), beat lines skipped, unparseable lines halt; UNVERIFIED/UNREADABLE tokens; rehearsal R6-R11, every grok case carrying a verbatim probe-log available_commands line; real-log replay verdicts predicted. BAD_PATTERN reads only elements whose field checks ran; backtick strip before the cell_count id. adapter_table public and shared with doc tests. split_agy_root takes names (checkout_skill_names + agreement test). FR-8 unknown host bare on fullmatch [A-Za-z0-9._-]+ else JSON. AC-8.3 full module run unset and claude; AC-8.4 substitute: none, grok /context a manual action not a gate; AC-9.3 per-argument fenced lines pinned; FR-8 runnable HMAD_HOST=<h> line executed by the doc test; AC-5.2 reason (i) keyed on the refusal form at base (permissionDecision documented by 10-hooks.md, contradicting plan Risks). Anchors checked over both spec directories. Spec restatements listed in the design. DP2 population stated (61 branching / 72 all). Live-smoke record path aligned to spec (docs/03-analysis/multi-host-runtime.live-smoke.md; archiving after 7c left to the orchestrator).
 - v1.2: Final corrective revision after design audit round 2 (2026-09-28; codex p1 v2 12 must/1 should, delta review v1.1 3 must/10 should; not re-audited; premises re-run at 76e7af19). V-11.1: skill-load miss is FAIL for codex/agy, UNVERIFIED for grok only (OD-1); a read counts only with a success signal AND returned text holding the file's first heading (needle from --root), so cat A || true and empty tool reads are not reads (OD-2); tokenizer commenters="", redirect operators incl. >> and fd digits, process substitution, python -m, print-only sed screen and rg --pre/-z screen, residuals stated exactly (OD-3); step 4 requires an execution carrying inline HMAD_HOST=<H> (OD-4); codex command-line shape check; rehearsal R11 split, R12-R15 added. Session id minted once under set -C into the git dir file h-mad-session-id.<feature> and read inline on every call, oracle line first, --create --claim for start_fresh, executable cross-invocation doc test (OD-5). Codex matrix cells re-sourced to codex --help / features list at 0.157.1 and observed 0.144.1 rollouts (DP16); session-reset-command codex now N (OD-6). Live-smoke record written at the spec path, archived by re-running 7c's mv and committed before 7e (OD-7, Supersedes item 10). Invariant compliance cites the amended path exception (OD-8). Every N cell states its reason, AC-2.2 reason doc test (OD-9). AC-9.1 zzz and empty-id pairs, AC-10.3 empty-env and option-over-env fixtures (OD-10). OD-a/OD-b defined; spec restatements for the V-11.1 verdict set, FR-3 reason field and AC-5.2 rc 2 (exit 2); fence indent rule; NDJSON log assumption; overview on spec v1.3.
+- v1.3: Narrow corrective erratum after the impl-plan audit cap (2026-09-28; not re-audited; premises at a1478ad3; scope exactly three items routed from impl-plan v1.1, nothing else changed). (1) Probe sidecar ordering, impl-plan Deviation 7 / codex c1 M1, c2 M1: Implementation Order step 1 moved from 'before the design gate clears' to 5c by ORCHESTRATOR DECISION: impl-plan Task 0 commits and runs calibrate.sh, seed.json and seed_coverage.py as the first commit after the 5c impl-plan commit, and no production task starts until its calibration reading is committed; erratum note records that the gate exited at cap at 34c0e962 without the files (ls docs/03-analysis/probes/multi-host-runtime -> No such file or directory at a1478ad3); step 2's calibrate/seed_coverage bullet cross-references it. (2) Codex R14(a), impl-plan S7 / codex c2 M2 / teammate c2 M1: D10 now states what R14(a) tests (a # never hides the separator after it or the command after that, i.e. commenters=''); grok and agy keep a newline separator (JSON string), codex uses '; ' on one line; the over-report the codex form accepts is stated. Regex check, python re.match(r'^\S+ -lc .* in \S+$', first non-beat line after exec): v1.2 form '/bin/zsh -lc "echo x # c' -> False; v1.3 form '/bin/zsh -lc "echo x # c; python3 h-mad/scripts/h_mad_state_write.py" in /Users/kimhawk/orca/skills' -> True. Tokenizer control (D10 shlex config): commenters='' -> [echo x # c] [python3 h-mad/scripts/h_mad_state_write.py] on both forms; commenters='#' -> [echo x] on the codex form and [echo x python3 ...] on the newline form, so the case still kills the commenter mutant. Reader unchanged, case count unchanged. (3) Install-check contract, impl-plan Deviation 8 / teammate c1 M3: D11 gains the h-mad/SKILL.md install-check edits items 1-6 exactly as impl-plan Task 14 assumes (bootstrap sentence, SIBLING_NOT_SYMLINK remedy over three roots, AGY_SIBLING_COLLISION row, helper-registry lines for h_mad_install_check.py, h_mad_context_budget.py and new h_mad_host.py), plus item 7 (the table's 'all ten have one' count, moved by item 3's eleventh row) which the impl-plan does not yet pin; W2 residual (h-mad 'omitting it opts out', handoff cannot_judge bullet) stated exactly and left open. Swept: Implementation Order strand 4, Components row, Invariant Compliance 'Skill manifest integrity'.
