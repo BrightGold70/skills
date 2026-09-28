@@ -1,5 +1,20 @@
 # codex-tdd-gate-defects analysis
 
+## Phase 6 verdict
+
+Match Rate: 98% (46 of 47 ACs; 45 implemented, 2 partial: AC-0.1 V-0 scratch artifacts not
+committed, AC-2.8 invalid-UTF-8 plan has only its deny half pinned). Source:
+`codex-tdd-gate-defects.gap.v1.md` (fresh-context verifier). 6a-prime: `READY_TO_MERGE` (agy,
+tools=35; `codex-tdd-gate-defects.archreview.v1.md`). Suite at `a6477488`'s tree: 1 failed (the
+baseline node) / 4196 passed. Iterate cycles: 0.
+
+The verifier also reproduced five gate fail-opens (D1 `.PY` case-variant suffix on APFS, both
+gates; D2 Codex patch header with trailing space or CRLF; D3 symlinked root spelling under
+`tests/`; D4 a `tests/` symlink to a production directory; D5 `_run_bounded`'s second
+`communicate()` has no timeout). D1, D2, D4 and D5 are inherited from the base gates; D3 is a gap
+in the §D9 root-ancestry fix. None is a regression. Operator decision 2026-09-29: merge, and
+carry D1–D5 to a follow-up feature (D1/D2 first).
+
 ## DD-7 differential
 
 The probe at `docs/03-analysis/probes/codex-tdd-gate-defects/dd7_differential.py`
