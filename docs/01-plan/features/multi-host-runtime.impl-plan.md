@@ -1138,7 +1138,7 @@ No test splits a table line itself.
 (`TABLE_MISSING reason=no_heading`). **After GREEN**: the 29 new items and that node pass, and the
 ledger drops to 5. **Regression guards**: `h-mad/tests/test_h_mad_codex_runtime.py` (AC-6.6,
 unchanged), the `test_h_mad_portable_timeout.py` scans over `references/*.md`, and the
-`<INLINE_*>` scan in `test_h_mad_skill_reviewer_prompt.py`.
+unfilled-inline-slot scan (the `INLINE_` placeholder check) in `test_h_mad_skill_reviewer_prompt.py`.
 
 **Acceptance Criteria**:
 - [ ] AC-2.1 and AC-6.2 (codex h-mad): `test_live_adapter_is_clean[h-mad-codex]` passes.
