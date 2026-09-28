@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+printf 'grok %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
+
+if [ -n "${HMAD_STUB_ENV_CAPTURE:-}" ]; then
+  printf 'HPW_AGENT_BACKEND=%s\n' "${HPW_AGENT_BACKEND-<unset>}" > "$HMAD_STUB_ENV_CAPTURE"
+fi
+
+if [ -n "${HMAD_STUB_CLAUDE_ENV_CAPTURE:-}" ]; then
+  for _n in $(compgen -e); do case "$_n" in CLAUDE*) printf '%s\n' "$_n" ;; esac; done \
+    | LC_ALL=C sort > "$HMAD_STUB_CLAUDE_ENV_CAPTURE"
+fi
+
+if [ -n "${HMAD_STUB_GROK_PROMPT_CAPTURE:-}" ]; then
+  _prev=""
+  for _arg in "$@"; do
+    if [ "$_prev" = "--prompt-file" ]; then
+      cp -- "$_arg" "$HMAD_STUB_GROK_PROMPT_CAPTURE"
+      break
+    fi
+    _prev="$_arg"
+  done
+fi
+
+if [ -n "${HMAD_STUB_GROK_STREAM:-}" ]; then
+  while IFS= read -r _line || [ -n "$_line" ]; do
+    printf '%s\n' "$_line"
+  done < "$HMAD_STUB_GROK_STREAM"
+fi
+
+[ -n "${HMAD_STUB_GROK_SLEEP:-}" ] && sleep "$HMAD_STUB_GROK_SLEEP"
+exit "${HMAD_STUB_GROK_RC:-0}"

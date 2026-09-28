@@ -11,6 +11,11 @@ if [ -n "${HMAD_STUB_ENV_CAPTURE:-}" ]; then
   printf 'HPW_AGENT_BACKEND=%s\n' "${HPW_AGENT_BACKEND-<unset>}" > "$HMAD_STUB_ENV_CAPTURE"
 fi
 
+if [ -n "${HMAD_STUB_CLAUDE_ENV_CAPTURE:-}" ]; then
+  for _n in $(compgen -e); do case "$_n" in CLAUDE*) printf '%s\n' "$_n" ;; esac; done \
+    | LC_ALL=C sort > "$HMAD_STUB_CLAUDE_ENV_CAPTURE"
+fi
+
 # Consume stdin (the piped prompt); capture it if asked.
 # HMAD_STUB_CODEX_ECHO_STDIN models the REAL codex behaviour that produced the
 # verdict-laundering defect: `codex exec ... -` echoes the piped prompt into its
