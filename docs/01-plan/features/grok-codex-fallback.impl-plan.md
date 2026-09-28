@@ -10,17 +10,20 @@
 
 Seventeen tasks, each counted once: two leaf tasks with no dependency (Task 1 builds the in-skill
 F0 copy, the fixture builder and the stubs; Task 2 adds the schema property); two `new-behaviour`
-leaves (Task 5, `scan_grok` plus the `scan()` RecursionError catch; Task 8, the shell stream
+leaves (Task 5, `scan_grok` plus the `scan()` RecursionError catch and `agy_events` type guard; Task 8, the shell stream
 readers); eight `wiring` tasks that connect each surface to its new callee (Tasks 3, 4, 6, 7, 9, 10,
 11, 12, carrying W1–W11 of plan v1.3); one cross-surface agreement task (13); one task that authors
-and runs the 57 mutation rows in seven specs (14); the documentation (15); the full coupled-suite
+and runs the 58 mutation rows in seven specs (14); the documentation (15); the full coupled-suite
 gate (16); and last the live `exec grok` smoke through the worktree's own wrapper (17).
 2 + 2 + 8 + 1 + 1 + 1 + 1 + 1 = 17.
 
 ## Deviations from design v1.2
 
 The design is binding except where the orchestrator ruled otherwise on an audit finding. Each
-deviation below is recorded with its evidence, so the design can be amended to match.
+deviation below is recorded with its evidence. **For 5d and 5e this section overrides design v1.2
+wherever the two disagree** (design line 877 "`scan()` is untouched", its mutation total 43 and its
+six specs): an implementer or auditor reading both follows this section. Amending the design to match
+is not a precondition of 5d; it is an open item for the orchestrator, named in this revision's report.
 
 1. **`scan()` is no longer untouched** (design line 877 "`scan()` is untouched"; impl-plan audit
    cycle 1, teammate must-fix; orchestrator decision 1, repair (a)). `scan()`'s
@@ -28,19 +31,26 @@ deviation below is recorded with its evidence, so the design can be amended to m
    `except (ValueError, TypeError):` (`h-mad/scripts/h_mad_review_evidence.py:131`), so a 200,000-deep line raises `RecursionError`. The
    teammate executed this on Python 3.14.7, 3.11.8 and `/opt/anaconda3/bin/python`: the CLI exits 1
    with frames `:251 → main :201 → scan :130`, and `measure_effort()` raises the same error. So
-   design Test Plan row "the CLI prints F0's EVIDENCE line on the malformed fixture" (line 1731)
-   could not go GREEN with `scan()` untouched. Re-executed for this revision at `76b2501` (`h-mad/`
+   the design's Test Plan row at line 1731, whose last clause reads "and the CLI prints F0's
+   `EVIDENCE:` line (row E4)" on the malformed fixture, could not go GREEN with `scan()` untouched. Re-executed for this revision at `76b2501` (`h-mad/`
    byte-identical to `507214d`) with `/opt/anaconda3/bin/python`, no file written:
    `h_mad_review_evidence.scan(depth_line(200_000))` → `RecursionError`, and
    `h_mad_archreview_cycle._evidence_counts(...)` on the same line → `RecursionError`; the tuple
    `(ValueError, TypeError, RecursionError)` catches it. **Repair:** Task 5 changes `h_mad_review_evidence.py:131` to
    `        except (ValueError, TypeError, RecursionError):`. **Class rule:** every Python JSON
-   parse reachable from a `--log` catches `RecursionError`. Members, from
-   `grep -n 'json.loads' h-mad/scripts/*.py` (28 matching lines in 17 files, read at `76b2501`)
-   crossed with `grep -ln -- '--log' h-mad/scripts/*.py` (5 files: `h_mad_archreview_cycle.py`,
-   `h_mad_assemble_tdd.py`, `h_mad_audit_cycle.py`, `h_mad_resolved_model.py`,
-   `h_mad_review_evidence.py`); 2 files are in both (`h_mad_archreview_cycle.py`,
-   `h_mad_review_evidence.py`), and `h_mad_audit_cycle.py` parses its log only through `scan()`:
+   parse that reads a dispatch transcript, under any argument name (`--log`, the evidence CLI's
+   positional `log`, or a path handed in by a caller), catches `RecursionError`. The census is the
+   importer grep, not an argument-name grep: `grep -rn 'import.*h_mad_review_evidence\|from
+   h_mad_review_evidence' h-mad/scripts h-mad/hooks h-mad/bin` → 2 matching lines,
+   `h-mad/scripts/h_mad_audit_cycle.py:17` and `h-mad/scripts/h_mad_archreview_cycle.py:117` (read
+   at `01121ca7`, `h-mad/` byte-identical to `507214d`), so `scan()`'s transcript readers are the CLI
+   itself and those two modules. A `--log` text grep is only a cross-check: `grep -n 'json.loads'
+   h-mad/scripts/*.py` (28 matching lines in 17 files, read at `76b2501`) crossed with `grep -ln --
+   '--log' h-mad/scripts/*.py` (5 files: `h_mad_archreview_cycle.py`, `h_mad_assemble_tdd.py`,
+   `h_mad_audit_cycle.py`, `h_mad_resolved_model.py`, `h_mad_review_evidence.py`; in
+   `h_mad_audit_cycle.py` and `h_mad_review_evidence.py` the match is in comments and help text
+   only) leaves 2 files in both (`h_mad_archreview_cycle.py`, `h_mad_review_evidence.py`), and
+   `h_mad_audit_cycle.py` parses its log only through `scan()`. The members:
    - `h_mad_review_evidence.py:130` `scan()` — the one parse. Its three `--log` callers are
      `h_mad_review_evidence.py:201` (`main`), `h_mad_audit_cycle.py:530` (`measure_effort`) and
      `h_mad_archreview_cycle.py:117-119` (`_evidence_counts`, which `score --log` reaches). All three
@@ -51,9 +61,13 @@ deviation below is recorded with its evidence, so the design can be amended to m
    - `h_mad_resolved_model.py`'s codex and agy paths parse no JSON (regex over the header; the module
      does not import `json` at `507214d`). `h_mad_assemble_tdd.py` only prints `--log` into a command
      block and parses no log. `h_mad_archreview_cycle.py:430` parses the state file, not a `--log`.
-   - The other 26 `json.loads` lines are in the 15 files that take no `--log` argument, so no
-     `--log` reaches them; that zero follows from the argument surface, which is load-bearing: a
-     new `--log` consumer joins the class and needs the catch.
+   - The other 26 `json.loads` lines are in 15 files that read no dispatch transcript: none of them
+     imports `h_mad_review_evidence` (the importer census above), and the v1.1 delta review
+     (`grok-codex-fallback.impl-plan.delta-review.v1.1.md`) read the argument surfaces of the
+     line-parsing ones (`audit_origins`, `context_budget`, `response_probe`, `telemetry`,
+     `wire_registry`) and found none that takes a transcript. That
+     zero is load-bearing: a new transcript consumer, whatever it names its path argument, joins the
+     class and needs the catch.
    **Anchors:** line 131 is in no committed anchor. The committed `h_mad_review_evidence.py` finds
    (audit_effort, codex_transcript_evidence and review_evidence_format specs) contain no `except`, and
    the new line does not contain E7's find `except (ValueError, RecursionError):` as a substring, so
@@ -62,8 +76,43 @@ deviation below is recorded with its evidence, so the design can be amended to m
    The design states each wire's removal direction in prose only. This plan scores all 13 of them
    (one per WIRE across the eight wiring tasks) as rows of a seventh spec,
    `grok_wire_reverts.json`, each with the callee intact and the task's WIRE-PIN as its `test` key.
-3. **Mutation total 57, not the design's 43.** 43 design rows + E9 (deviation 1) + 13 wire-revert
-   rows (deviation 2) = 57, in seven specs, not six. Committed spec count after Task 14: 106.
+3. **Mutation total 58, not the design's 43.** 43 design rows + E9 (deviation 1) + E10
+   (deviation 4) + 13 wire-revert rows (deviation 2) = 58, in seven specs, not six. Committed spec
+   count after Task 14: 106.
+4. **`scan()`'s `agy_events` membership test is type-guarded** (a second change to `scan()`; impl-plan
+   audit cycle 2, codex must-fix 2; orchestrator decision 3). `h-mad/scripts/h_mad_review_evidence.py:141`
+   reads `        if event.get("event") in _AGY_EVENTS:`, and `_AGY_EVENTS` is a `frozenset`
+   (`h-mad/scripts/h_mad_review_evidence.py:42`), so valid JSON whose `event` value is unhashable
+   raises `TypeError` there, outside the `try` that guards `json.loads`. Executed for this revision
+   at `01121ca7` with `/opt/anaconda3/bin/python`, on F0 with `{"event":[]}` prepended, no file kept
+   in the tree: the CLI ends `TypeError: unhashable type: 'list'`, and `measure_effort()` raises
+   `TypeError unhashable type: 'list'`. The design row quoted in deviation 1 therefore also fails on a
+   log that carries such a line. **Repair:** Task 5 replaces line 141 with the two lines
+   `        event_name = event.get("event")` /
+   `        if isinstance(event_name, str) and event_name in _AGY_EVENTS:`; the next line,
+   `            agy_events += 1` (the committed anchor of `review_evidence_format.json`), stays
+   byte-identical. Executed on a scratch copy of the module (deleted): the guarded `scan()` on the
+   mixed log equals `scan()` on F0, `{"event":"init"}` still counts 1 and `{"event":{}}` counts 0.
+   **Class rule:** every `x in <frozenset|set|dict>` whose `x` is a JSON-derived value reachable from
+   a dispatch transcript is type-guarded before the membership test. Members, from a sweep of every
+   ` in ` expression in the two files (read at `01121ca7`):
+   - `h-mad/scripts/h_mad_review_evidence.py:141` (`scan()`, `event.get("event") in _AGY_EVENTS`) —
+     the one unguarded member; repaired above, new test Task 5 test 13, new row E10.
+   - `scan_grok` (Task 5, new): `isinstance(t, str) and t in _GROK_TYPES` — guarded (row E4).
+     `t in ("tool_call", "tool_call_update")` and `type(value) in (int, float)` test a tuple, which
+     compares by `==` and never hashes, so they are outside the class.
+   - `scan_codex_text()` (`h_mad_review_evidence.py:86-87`, `kind in outcomes`) iterates regex
+     matches, not JSON; `main()` makes no membership test on a parsed value.
+   - `h-mad/scripts/h_mad_audit_cycle.py`: no member. It parses its log only through `scan()` (no
+     `json.loads` in the file). Its ` in ` expressions on values are `_payload(line) not in
+     acknowledged` (lines 680 and 691; report text, not JSON), `result.returncode not in (0, 2)`
+     (741), `shape in ("missing", "unparseable")` (878) and `len(parts) not in (4, 5)` (1004); the last
+     three test tuples. Task 7's new `shape not in ("parsed", "grok")` is a tuple too.
+   - Outside the two swept files, for completeness: `grok_from_log` (Task 4) makes no membership test
+     on a parsed value (`event.get("type") == "end"`, `sorted(usage)`).
+   **Anchors:** the two new lines contain none of the 926 committed finds (907 in
+   `h-mad/tests/mutation-specs/`, 19 in `h-mad/tests/specs/`) as a substring (executed: 0 hits), and
+   none of this plan's `review_evidence_grok.json` finds.
 
 ## Preamble — where and how this plan runs
 
@@ -88,7 +137,9 @@ deviation below is recorded with its evidence, so the design can be amended to m
   in full, never the scoped file alone. The three paths are named explicitly: they are the root
   `pytest.ini`'s `testpaths`, whose comment records that the two-path form silently dropped the
   tests in `handoff/scripts/` (5 `test_*.py` files there at `76b2501`, two of which reference
-  `hmad-dispatch`), and Task 16's base collect runs from a `git archive` that has no `pytest.ini`. The one environment-dependent failure recorded in the plan baseline,
+  `hmad-dispatch`), and naming them keeps every run independent of `testpaths`, including Task 16's
+  base collect (which runs on the whole tree at `BASE_SHA`, `pytest.ini` included). The one
+  environment-dependent failure recorded in the plan baseline,
   `h-mad/tests/test_h_mad_check_plugin_hooks.py::TestAgainstTheLiveBinary::test_top_level_key_set_still_matches`,
   is the only failure a task may leave, and only for its recorded reason.
 - **Codex authors 5d/5e.** If codex is out during this feature's own Phase 5, the fallback is
@@ -108,10 +159,17 @@ deviation below is recorded with its evidence, so the design can be amended to m
    181, `_bindir` 193), in the same `from test_hmad_dispatch import …` form that
    `test_hmad_dispatch_exec.py` uses for its own four names (`SKILL_MD_TEXT, _bindir, _git_repo,
    run`). `_bindir(tmp_path, names)` symlinks `stubs/<name>` for each name and the real `jq` as
-   `bin/jq`, and `run()` puts the bindir first on PATH, then `/usr/bin:/bin`. A test that needs a
-   `jq` shim "in the test's bindir" (Task 8 test 7, Task 9 test 22, Task 10 test 9) first unlinks
-   `bin/jq` (present whenever `shutil.which("jq")` finds one) and writes the shim at that same path: `/usr/bin/jq` exists on this host, so a shim placed
-   anywhere else on PATH is either shadowed by the real `jq` link or shadows the wrong entry.
+   `bin/jq`, and `run()` puts the bindir first on PATH, then `/usr/bin:/bin`. **Rule for every `jq`
+   shim placed in a bindir that already links the real `jq`:** the test first reads the link's
+   absolute target (`real_jq = os.path.realpath(bindir / "jq")`, taken before anything is
+   unlinked), then unlinks `bin/jq` (present whenever `shutil.which("jq")` finds one) and writes the
+   shim at that same path. A shim that delegates to the real `jq` execs `real_jq` by its absolute
+   path, never a bare `jq`, which would now resolve to the shim itself. `/usr/bin/jq` exists on this
+   host, so a shim placed anywhere else on PATH is either shadowed by the real `jq` link or shadows
+   the wrong entry. The members today are four: Task 8 test 7, Task 9 test 22 and Task 10 test 9
+   (non-delegating shims in `_bindir`'s bindir), and Task 12 test 11 (a delegating shim in the cell
+   bindir, which also links the real `jq`, with `cell_env["PATH"]` = `f"{bindir}:/usr/bin:/bin"`); a
+   new shim follows the rule whether or not it is listed.
 2. **Tool-absent cells run on a farm, never through `run()`.** `grokfixtures.usr_bin_farm(tmp_path,
    absent, stubs)` links the named stubs first, then every `/usr/bin` entry whose name is neither in
    `absent` nor already linked. `grokfixtures.farm_env(farm, **extra)` returns an env whose `PATH` is
@@ -501,10 +559,16 @@ landed lines `    if a.agent == "grok":` / `        grok_from_log(a.log)` / `   
 **Task shape**: `new-behaviour`
 
 **Description**: FR-6 reader / design D6: `_GROK_TYPES`, `GROK_MAX_DEPTH`, the iterative
-`_json_deeper_than`, `scan_grok`, `CODEX_BANNER_HEAD` and `codex_banner_in_head`. One line of
-`scan()` changes (§"Deviations from design v1.2", item 1): `h-mad/scripts/h_mad_review_evidence.py:131`
-`        except (ValueError, TypeError):` becomes
-`        except (ValueError, TypeError, RecursionError):`, and nothing else in `scan()` moves.
+`_json_deeper_than`, `scan_grok`, `CODEX_BANNER_HEAD` and `codex_banner_in_head`. Two places in
+`scan()` change, and nothing else in `scan()` moves:
+- §"Deviations from design v1.2", item 1: `h-mad/scripts/h_mad_review_evidence.py:131`
+  `        except (ValueError, TypeError):` becomes
+  `        except (ValueError, TypeError, RecursionError):`.
+- §"Deviations from design v1.2", item 4: `h-mad/scripts/h_mad_review_evidence.py:141`
+  `        if event.get("event") in _AGY_EVENTS:` becomes the two lines
+  `        event_name = event.get("event")` /
+  `        if isinstance(event_name, str) and event_name in _AGY_EVENTS:`, and the following
+  `            agy_events += 1` stays byte-identical.
 `scan_codex_text()` is untouched. `main()` is Task 6.
 
 **Code structure**:
@@ -575,14 +639,16 @@ def scan_grok(log_text: str) -> dict | None:
 - The thinking test is spelled `type(value) in (int, float)`, never `scan()`'s anchored
   `isinstance(value, (int, float)) and not isinstance(value, bool)` (anchor rule 2,
   `audit_effort.json`).
-- Landed literals (Task 14 rows E1, E4–E9), each exactly once in the file:
+- Landed literals (Task 14 rows E1, E4–E10), each exactly once in the file:
   `        if t == "tool_call_update" and event.get("status") == "completed" and isinstance(call_id, str):`,
   `isinstance(t, str) and t in _GROK_TYPES`, `CODEX_BANNER_HEAD = 4096`, `GROK_MAX_DEPTH = 64`,
   `except (ValueError, RecursionError):`, `if _json_deeper_than(event, GROK_MAX_DEPTH):`, and
   `        except (ValueError, TypeError, RecursionError):` (E9; it does not contain E7's `find` as a
-  substring, so E7 still matches once).
+  substring, so E7 still matches once), and
+  `        if isinstance(event_name, str) and event_name in _AGY_EVENTS:` (E10; it does not contain
+  E4's `find` as a substring, so E4 still matches once).
 
-**Tests** (16 collected items; `import h_mad_review_evidence as ev`, symbols read inside tests):
+**Tests** (17 collected items; `import h_mad_review_evidence as ev`, symbols read inside tests):
 1. `test_scan_grok_counts_f0` — tools 2, ok 2, unresolved 0, thinking 121, complete True,
    stop_reason `end_turn`.
 2. `test_scan_grok_counts_f_notools` — tools 2, ok 0, unresolved 2, complete True.
@@ -608,9 +674,16 @@ def scan_grok(log_text: str) -> dict | None:
 12. `test_archreview_evidence_counts_survive_a_200k_deep_line` — `import h_mad_archreview_cycle as
     ar`; `ar._evidence_counts(deep_line_200k() + f0_text())` equals `ev.scan(f0_text())`, with the
     same `pytest.fail` wrapper (the `score --log` member of the class).
+13. `test_scan_survives_an_unhashable_event_value` — `ev.scan('{"event":[]}\n' + f0_text())` equals
+    `ev.scan(f0_text())`. The call sits in a `try` block whose `except TypeError` branch calls
+    `pytest.fail("scan() raised TypeError on an unhashable event value")`, so the RED and the E10
+    kill are an assertion in the test file, never an uncaught traceback ending in the mutated file
+    (§"Deviations from design v1.2", item 4; the CLI and `measure_effort()` reach this line only
+    through `scan()`).
 
-**Expected RED split**: 15 failing, 1 passing. Tests 11 and 12 fail at RED on the `pytest.fail`
-(today's `scan()` raises `RecursionError`). **Regression guards**: `test_scan_unchanged_on_f0`.
+**Expected RED split**: 16 failing, 1 passing. Tests 11 and 12 fail at RED on the `pytest.fail`
+(today's `scan()` raises `RecursionError`); test 13 fails at RED on its `pytest.fail` (today's
+`scan()` raises `TypeError: unhashable type: 'list'`). **Regression guards**: `test_scan_unchanged_on_f0`.
 
 **Acceptance Criteria**:
 - [ ] AC-6.4: `ok` comes from parsed events, never from a substring.
@@ -621,8 +694,10 @@ def scan_grok(log_text: str) -> dict | None:
 - [ ] Deviation 1 (class rule): `scan()` and `_evidence_counts` survive a 200,000-deep line
       (`test_scan_survives_a_200k_deep_line`,
       `test_archreview_evidence_counts_survive_a_200k_deep_line`).
+- [ ] Deviation 4 (class rule): `scan()` survives an unhashable `event` value
+      (`test_scan_survives_an_unhashable_event_value`).
 
-**Mutation rows** (Task 14, `review_evidence_grok.json`): E1, E4, E5, E6, E7, E8, E9 — 7 rows.
+**Mutation rows** (Task 14, `review_evidence_grok.json`): E1, E4, E5, E6, E7, E8, E9, E10 — 8 rows.
 
 **Dependencies on other tasks**: Task 1
 
@@ -797,8 +872,11 @@ report is `pass_result(index=1, effort=...)` with its defaults `verdict="PASS"`,
    shape `parsed` (plan W7a).
 10. `test_measure_effort_banner_then_f0_is_codex_text` (AC-11.3, `measure_effort` arm).
 11. `test_codex_banner_pattern_is_single_sourced` — `ac._CODEX_BANNER is ev._CODEX_HEADER_RE`.
-12. `test_measure_effort_survives_a_200k_deep_line` — `measure_effort` on a file holding
-    `deep_line_200k() + f0_text()` equals `measure_effort` on F0 (shape `grok`), with the call wrapped
+12. `test_measure_effort_survives_a_200k_deep_line` — two assertions, both required:
+    `r_deep == r_f0` and `r_deep["shape"] == "grok"`, where `r_deep` is `measure_effort` on a file
+    holding `deep_line_200k() + f0_text()` and `r_f0` is `measure_effort` on F0. The second assertion
+    is what fails at RED (both calls return shape `unparseable` there, so the first alone would
+    pass). The `measure_effort` call on the deep file is wrapped
     in the same `try` / `except RecursionError` / `pytest.fail` form as Task 5 test 11, with the
     message `"measure_effort() raised RecursionError on a 200,000-deep line"` (the `measure_effort`
     member of the §"Deviations from design v1.2" class; `scan()` already catches from Task 5).
@@ -807,7 +885,8 @@ report is `pass_result(index=1, effort=...)` with its defaults `verdict="PASS"`,
 and `unknown` items of test 7, test 8, test 11, test 12 (at RED the deep line no longer raises,
 because Task 5 landed, and the result is shape `unparseable`, not `grok`). **Regression guards** (9): test 5 (today F-TRUNC is
 `unparseable`, which routes to the same reason), the `missing`, `empty`, `parsed`, `grok`,
-`codex-text` and `unparseable` items of test 7, tests 9 and 10.
+`codex-text` and `unparseable` items of test 7, tests 9 and 10. Test 12's `RecursionError` arm cannot
+be RED at Task 7 (Task 5 already closed it); that property's kill is E9, through Task 5 test 11.
 **WIRE-PIN RED reasons**: pin 1 — `measure_effort(F0)` returns shape `unparseable`, an assertion on
 the caller's return value; `scan_grok` exists from Task 5. Pin 2 — `combine()` sends the
 hand-built `grok-truncated` dict to the floor and returns `low_evidence:p1`.
@@ -1234,7 +1313,7 @@ _GROK_RENDER_PROG='def _grok_flush: if .run == null then .
         | jq -Rs -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS$_GROK_RENDER_PROG")" || grc=$?
       if [ "$grc" -ne 0 ]; then
         echo "  (grok stream — jq failed, cannot render)"
-      else
+      elif [ -n "$grender" ]; then
         printf '%s\n' "$grender" | tail -n "$n"
       fi
     fi
@@ -1262,6 +1341,8 @@ _GROK_RENDER_PROG='def _grok_flush: if .run == null then .
 
   The pipeline's rc is captured under the wrapper's `set -euo pipefail`, so a failing `jq` (the
   shim of test 9) prints only `  (grok stream — jq failed, cannot render)`, never a partial render.
+  The `[ -n "$grender" ]` guard makes an empty render (a window whose events all render nothing,
+  e.g. only `available_commands`) print nothing, where `printf '%s\n' ""` would print one blank line.
   **Executed for this revision** (jq 1.8.2, `$_GROK_JQ_DEFS` from design D3.5, no file kept): on F0
   the program prints 13 lines, among them `  · tool read_file pending …`, `  · tool read_file
   completed`, `  · tool search_replace pending …`, `  · tool search_replace completed`, three
@@ -1459,8 +1540,9 @@ begins `[H-MAD-TDD-GATE] BLOCK: fallback_agent=grok — `; BLOCK-INVALID contain
 10. `test_exempt_files_stay_exempt_under_grok` (7) — targets `shared/test_widget.py`,
     `shared/tests/helpers.py`, `shared/fixtures/data.py`, `docs/notes.md`, `shared/config.toml`,
     `shared/run.sh`, `shared/widget.js`, with `feat` at `"grok"` and codex_out true: exit 0 (AC-2.6).
-11. `test_fallback_read_error_fails_closed` — a `jq` shim in the cell's bindir that execs the real `jq`
-    unless an argument contains `fallback_agent`, where it exits 5: BLOCK-INVALID from the `*)` arm, whose first line names the unreadable-value
+11. `test_fallback_read_error_fails_closed` — a `jq` shim in the cell's bindir (Convention 1's shim
+    rule: it replaces the `bin/jq` link and execs the absolute `real_jq` read before the unlink) that
+    execs the real `jq` unless an argument contains `fallback_agent`, where it exits 5: BLOCK-INVALID from the `*)` arm, whose first line names the unreadable-value
     marker (design "read error fails closed").
 
 **Expected RED split**: 55 failing, 122 passing. Failing: the 28 matrix cells with codex_out true and
@@ -1543,7 +1625,7 @@ landed in Tasks 5–10).
 **Test file**: none (the killing tests belong to Tasks 3–12)
 **Task shape**: `operational`
 
-**Description**: Author the seven spec files with exactly the 57 rows below, then for each spec run
+**Description**: Author the seven spec files with exactly the 58 rows below, then for each spec run
 `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors <spec>` (read `ANCHORS:`) and
 `python3 h-mad/scripts/h_mad_mutation_harness.py <spec>` (read `MUTATION:`). The pass condition is
 `ANCHORS_OK` and `MUTATION: ALL_CAUGHT` for all seven; `SURVIVED` or `REFUSED` halts and is reported
@@ -1551,7 +1633,11 @@ against the owning task. Also run the design's W1 residual precondition
 `PATH=/usr/bin:/bin command -v grok` (must fail, rc 1) before scoring row W1.
 
 In the tables, `⏎` inside a `find`/`replace` stands for a newline and `\|` for a literal `|`; each cell is the raw source text,
-and JSON escaping (`\"`, `\\`, `\n`) is applied when it is written into the spec.
+and JSON escaping (`\"`, `\\`, `\n`) is applied when it is written into the spec. **Every row carries
+its own `file` key**, because the harness requires `file` on every row
+(`h-mad/scripts/h_mad_mutation_harness.py:290`) and all 907 committed rows carry one. A spec header
+below naming one file gives that file to every row of its table; only `grok_wire_reverts.json`'s table
+has a `file` column, because its rows name five different files.
 
 **`tdd_gate_fallback_agent.json`** — file `hooks/h-mad-tdd-gate.sh`; `command`
 `["python3.11","-m","pytest","tests/test_h_mad_tdd_gate_fallback_agent.py","-q"]`; `target_command`
@@ -1615,6 +1701,7 @@ P5 and W4 is row P7. W1's informational second node is
 | E7 | `e7-recursion-error-uncaught` | `except (ValueError, RecursionError):` | `except ValueError:` | `tests/test_h_mad_review_evidence_scan_grok.py::test_scan_grok_survives_malformed_type_lines` |
 | E8 | `e8-depth-skip-dropped` | `if _json_deeper_than(event, GROK_MAX_DEPTH):` | `if False:` | `tests/test_h_mad_review_evidence_scan_grok.py::test_scan_grok_depth_boundary` |
 | E9 | `e9-scan-recursion-error-uncaught` | `        except (ValueError, TypeError, RecursionError):` | `        except (ValueError, TypeError):` | `tests/test_h_mad_review_evidence_scan_grok.py::test_scan_survives_a_200k_deep_line` |
+| E10 | `e10-scan-event-membership-unguarded` | `        if isinstance(event_name, str) and event_name in _AGY_EVENTS:` | `        if event_name in _AGY_EVENTS:` | `tests/test_h_mad_review_evidence_scan_grok.py::test_scan_survives_an_unhashable_event_value` |
 | W6 | `w6-grok-before-agy-in-cli` | `if counts["agy_events"] == 0:` | `if counts["agy_events"] == 0 or scan_grok(text) is not None:` | `tests/test_h_mad_review_evidence_grok.py::test_cli_mixed_agy_f0_equals_agy_alone` |
 
 **`audit_cycle_grok.json`** — file `scripts/h_mad_audit_cycle.py`; `command`
@@ -1658,7 +1745,7 @@ W11's informational second node is
 **`grok_wire_reverts.json`** — the wire-scoped removal direction of every WIRE (§"Deviations from
 design v1.2", item 2): each row removes the caller's connection only, with the callee intact, and
 its `test` key is that WIRE's WIRE-PIN, so the harness scores the pin itself failing. The rows span
-five files, so `file` is per row (as `review_evidence_format.json` already does); `command`
+five files, so its table names each row's `file` in a column; `command`
 `["python3.11","-m","pytest","tests/test_h_mad_assemble_tdd_agent.py","tests/test_h_mad_resolved_model_grok.py","tests/test_h_mad_review_evidence_grok.py","tests/test_h_mad_audit_cycle_grok.py","tests/test_hmad_dispatch_exec_grok.py","tests/test_hmad_dispatch_progress_grok.py","tests/test_hmad_dispatch_audit_cycle_grok.py","tests/test_h_mad_tdd_gate_fallback_agent.py","-q"]`;
 `target_command` `["python3.11","-m","pytest","-q"]`.
 
@@ -1683,12 +1770,12 @@ force-fires it). WR7-2 removes what A2 disables, but is scored on WIRE-PIN 2 rat
 test. No row's `replace` contains its own `find`. Every row names exactly one WIRE-PIN: 13 rows for
 the 13 WIRE entries of Tasks 3 (1), 4 (1), 6 (1), 7 (2), 9 (4), 10 (2), 11 (1) and 12 (1).
 
-**Row count**: 6 + 19 + 10 + 4 + 2 + 3 + 13 = 57 (unit: mutation rows; the seven tables above,
-in order). By owning task: Task 12 7, Task 8 11, Task 9 7, Task 10 6, Task 11 2, Task 5 7, Task 6 4,
-Task 7 6, Task 3 3, Task 4 4 — sum 57. The design's rows are 34 named rows (G1–G6, P1–P9, L1–L5,
+**Row count**: 6 + 19 + 11 + 4 + 2 + 3 + 13 = 58 (unit: mutation rows; the seven tables above,
+in order). By owning task: Task 12 7, Task 8 11, Task 9 7, Task 10 6, Task 11 2, Task 5 8, Task 6 4,
+Task 7 6, Task 3 3, Task 4 4 — sum 58. The design's rows are 34 named rows (G1–G6, P1–P9, L1–L5,
 E1–E8, A1–A3, T1, R1–R2) plus 9 force-fires that are not aliases of a named row (W1, W2, W3a, W5,
 W6, W7a, W8, W10a, W11) = 43; W3b = P5, W4 = P7, W7b = A2, W9 = G3, and W10b has no row. This plan
-adds E9 and WR3–WR12 (13 rows): 43 + 1 + 13 = 57 (§"Deviations from design v1.2", item 3).
+adds E9, E10 and WR3–WR12 (13 rows): 43 + 2 + 13 = 58 (§"Deviations from design v1.2", item 3).
 
 **Expected RED split**: not applicable — no test is authored. The verdict is seven `ANCHORS: ANCHORS_OK` and
 seven `MUTATION: ALL_CAUGHT` tokens, plus the committed sweep test green in the full suite with 106
@@ -1774,48 +1861,142 @@ Phase-5 section cannot pass test 1 alone.
 root:
 
 ```bash
-BASE_SHA="$(python3 -c 'import sys; sys.path.insert(0, "h-mad/tests"); import grokfixtures; print(grokfixtures.BASE_SHA)')"
+set -o pipefail
+BASE_SHA="$(python3 -c 'import sys; sys.path.insert(0, "h-mad/tests"); import grokfixtures; print(grokfixtures.BASE_SHA)')" \
+  || { echo "FAIL: cannot read grokfixtures.BASE_SHA"; exit 1; }
 printf '%s' "$BASE_SHA" | grep -qE '^[0-9a-f]{40}$' || { echo "FAIL: BASE_SHA is not 40-hex: $BASE_SHA"; exit 1; }
-/opt/anaconda3/bin/python -m pytest -q -p no:cacheprovider h-mad/tests handoff/tests handoff/scripts
+PERMITTED='h-mad/tests/test_h_mad_check_plugin_hooks.py::TestAgainstTheLiveBinary::test_top_level_key_set_still_matches'
+R="$(mktemp -d)" || { echo "FAIL: mktemp"; exit 1; }
 T="$(mktemp -d)" || { echo "FAIL: mktemp"; exit 1; }
-git archive "$BASE_SHA" h-mad handoff | tar -x -C "$T" || { echo "FAIL: git archive $BASE_SHA"; exit 1; }
-(cd "$T" && /opt/anaconda3/bin/python -m pytest --collect-only -q -p no:cacheprovider h-mad/tests handoff/tests handoff/scripts 2>&1 | grep '::' | sort) > "$T/base.txt"
-/opt/anaconda3/bin/python -m pytest --collect-only -q -p no:cacheprovider h-mad/tests handoff/tests handoff/scripts 2>&1 | grep '::' | sort > "$T/head.txt"
-[ -s "$T/base.txt" ] || { echo "FAIL: the base collect listed no node ids"; exit 1; }
-[ -z "$(comm -23 "$T/base.txt" "$T/head.txt")" ] \
-  || { echo "FAIL: node ids collected at BASE_SHA are gone"; comm -23 "$T/base.txt" "$T/head.txt"; exit 1; }
-git ls-tree -r --name-only "$BASE_SHA" -- h-mad/tests handoff/tests handoff/scripts \
-  | grep -E '(^|/)(test_[^/]*\.py|conftest\.py)$' > "$T/pre.txt"
-[ -s "$T/pre.txt" ] || { echo "FAIL: no pre-existing test file listed at BASE_SHA"; exit 1; }
+echo "records: $R"
+# 1. the full coupled suite, judged on pytest's rc AND its FAILED/ERROR lines
+/opt/anaconda3/bin/python -m pytest -q -rfE -p no:cacheprovider h-mad/tests handoff/tests handoff/scripts > "$R/suite.txt" 2>&1
+suite_rc=$?
+tail -n 1 "$R/suite.txt"
+[ "$suite_rc" -eq 0 ] || [ "$suite_rc" -eq 1 ] \
+  || { echo "FAIL: the suite exited $suite_rc (collection error, interrupt, internal or usage error)"; exit 1; }
+if grep -q '^ERROR ' "$R/suite.txt"; then echo "FAIL: the suite reported errors"; grep '^ERROR ' "$R/suite.txt"; exit 1; fi
+sed -n 's/^FAILED \([^ ]*\).*/\1/p' "$R/suite.txt" > "$R/failed.txt" || { echo "FAIL: cannot read the FAILED lines"; exit 1; }
+if [ "$suite_rc" -eq 0 ]; then
+  [ ! -s "$R/failed.txt" ] || { echo "FAIL: the suite exited 0 with FAILED lines"; exit 1; }
+else
+  [ "$(cat "$R/failed.txt")" = "$PERMITTED" ] \
+    || { echo "FAIL: the suite failed beyond the one permitted node:"; cat "$R/failed.txt"; exit 1; }
+fi
+suite_last="$(tail -n 1 "$R/suite.txt")" || { echo "FAIL: cannot read the suite summary"; exit 1; }
+case "$suite_last" in *" passed"*) ;; *) echo "FAIL: the suite summary has no passed count: $suite_last"; exit 1 ;; esac
+# 2. the base collect runs on the WHOLE tree at BASE_SHA (a collection may read docs/)
+git archive "$BASE_SHA" | tar -x -C "$T" || { echo "FAIL: git archive $BASE_SHA | tar"; exit 1; }
+(cd "$T" && /opt/anaconda3/bin/python -m pytest --collect-only -q -p no:cacheprovider h-mad/tests handoff/tests handoff/scripts) > "$R/base.raw" 2>&1 \
+  || { echo "FAIL: the base collect exited non-zero"; tail -n 5 "$R/base.raw"; exit 1; }
+/opt/anaconda3/bin/python -m pytest --collect-only -q -p no:cacheprovider h-mad/tests handoff/tests handoff/scripts > "$R/head.raw" 2>&1 \
+  || { echo "FAIL: the head collect exited non-zero"; tail -n 5 "$R/head.raw"; exit 1; }
+for s in base head; do
+  last="$(tail -n 1 "$R/$s.raw")" || { echo "FAIL: cannot read the $s collect summary"; exit 1; }
+  case "$last" in *[Ee]rror*) echo "FAIL: the $s collect summary names an error: $last"; exit 1 ;; esac
+  case "$last" in *" collected"*) ;; *) echo "FAIL: the $s collect summary is not 'N tests collected': $last"; exit 1 ;; esac
+  grep '::' "$R/$s.raw" | LC_ALL=C sort > "$R/$s.txt" || { echo "FAIL: the $s collect listed no node ids"; exit 1; }
+done
+LC_ALL=C comm -23 "$R/base.txt" "$R/head.txt" > "$R/gone.txt" || { echo "FAIL: comm"; exit 1; }
+[ ! -s "$R/gone.txt" ] || { echo "FAIL: node ids collected at BASE_SHA are gone"; cat "$R/gone.txt"; exit 1; }
+# 3. every file tracked at BASE_SHA under the three test paths, plus pytest.ini, is unmodified
+git ls-tree -r --name-only "$BASE_SHA" -- h-mad/tests handoff/tests handoff/scripts pytest.ini > "$R/pre.txt" \
+  || { echo "FAIL: git ls-tree $BASE_SHA"; exit 1; }
+grep -qxF pytest.ini "$R/pre.txt" || { echo "FAIL: pytest.ini is not tracked at BASE_SHA"; exit 1; }
 while IFS= read -r f; do
-  git diff --exit-code "$BASE_SHA" -- "$f" || { echo "FAIL: pre-existing test file differs from BASE_SHA: $f"; exit 1; }
-done < "$T/pre.txt"
+  case "$f" in
+    h-mad/tests/stubs/codex|h-mad/tests/stubs/agy)
+      echo "--- permitted edit (Task 1): $f"
+      git --no-pager diff "$BASE_SHA" -- "$f" || { echo "FAIL: git diff $f"; exit 1; } ;;
+    *)
+      git diff --quiet --exit-code "$BASE_SHA" -- "$f" \
+        || { echo "FAIL: a file tracked at BASE_SHA under the test paths differs: $f"; exit 1; } ;;
+  esac
+done < "$R/pre.txt"
+# 4. the D8 census
 [ "$(grep -c 'codex|agy|grok\|agy|codex|grok' h-mad/scripts/hmad-dispatch.sh)" -eq 6 ] \
   || { echo "FAIL: the agy|codex|grok census is not 6 matching lines (design D8)"; exit 1; }
+# 5. the content-classifier sweep, compared with its expected population
 grep -rln 'from h_mad_review_evidence import\|agy_events\|_exec_log_format\|OpenAI Codex' \
-  h-mad/scripts h-mad/hooks h-mad/bin | grep -v __pycache__                 # the design's class sweep, recorded
-echo "FLOOR: PASS files=$(wc -l < "$T/pre.txt" | tr -d ' ')"
-rm -rf "$T"
+  h-mad/scripts h-mad/hooks h-mad/bin > "$R/sweep.raw" || { echo "FAIL: the class sweep matched nothing"; exit 1; }
+grep -v __pycache__ "$R/sweep.raw" | LC_ALL=C sort > "$R/sweep.txt" || { echo "FAIL: the class sweep is empty"; exit 1; }
+printf '%s\n' h-mad/scripts/h_mad_archreview_cycle.py h-mad/scripts/h_mad_audit_cycle.py \
+  h-mad/scripts/h_mad_review_evidence.py h-mad/scripts/hmad-dispatch.sh > "$R/sweep.expected"
+diff "$R/sweep.expected" "$R/sweep.txt" \
+  || { echo "FAIL: the class sweep is not its 4 expected files; a new file is a new content classifier whose FR-5 precedence must be decided and recorded before this gate re-runs"; exit 1; }
+echo "FLOOR: PASS files=$(wc -l < "$R/pre.txt" | tr -d ' ') suite_rc=$suite_rc"
+rm -rf "$T" "$R"
 ```
 
-`BASE_SHA` is the constant in `h-mad/tests/grokfixtures.py`. The script runs as one `bash` script
-(or one Bash-tool call); `set -e` is not relied on, because it is inert in the Bash tool's top-level
-shell, so every check carries its own `|| { echo "FAIL: …"; exit 1; }`, and the verdict is the last
-line `FLOOR: PASS files=N`, never `$?`. The suite's own verdict is read from pytest's summary line
-(`N passed`, with the Preamble's one environment-dependent failure the only permitted `failed`).
+`BASE_SHA` is the constant in `h-mad/tests/grokfixtures.py`. The script runs as one script, under
+`bash` or as one Bash-tool call (zsh here). `set -e` is not relied on, because it is inert in the Bash
+tool's top-level shell: every command whose failure matters carries its own
+`|| { echo "FAIL: …"; exit 1; }` or `if …; then …; exit 1; fi`, and `set -o pipefail` makes each
+guarded pipeline (`git archive | tar`, `grep '::' | sort`, `grep -v | sort`) fail when any stage
+fails, not only its last. A pytest run is never piped: each writes to a file under `$R` and its rc is
+read directly. The verdict is the last line `FLOOR: PASS files=N suite_rc=R`, read as a token, never
+`$?`, and it **certifies the suite**: it is reached only when the suite exited 0, or exited 1 with the
+Preamble's one environment-dependent node as its only `FAILED` line and no `ERROR` line; any other rc
+(2 for a collection error or interrupt, 3, 4, 5) halts first. A failed step leaves `$R` behind (its
+path is printed first, on the line that begins `records:`) for the record; the pass path removes `$T` and `$R`.
 
-**The unmodified gate** (codex cycle-1 must-fix 3, orchestrator decision 4). Every pre-existing test
-file, meaning every `test_*.py` and `conftest.py` tracked at `BASE_SHA` under the three test paths
-(124 files at `507214d`: `git ls-tree -r --name-only 507214d -- h-mad/tests handoff/tests
-handoff/scripts | grep -E '(^|/)(test_[^/]*\.py|conftest\.py)$' | wc -l`, unit: files), is diffed
-against `BASE_SHA` directly with `git diff --exit-code "$BASE_SHA" -- <file>`, which must print
-nothing and exit 0 for each file, so an added skip decorator, an added line, or a deleted file all
-fail it. The v1.0 `--numstat` check only caught deleted lines. The node-id floor (`comm -23` empty)
-stays as a second, independent check. Task 1's edits to `h-mad/tests/stubs/codex` and
-`h-mad/tests/stubs/agy` are test support, not test files, and are outside this list by its filter. The class sweep's reading at `0b3f969`
-was 4 files; a new file in its output is a new content classifier that needs the FR-5 precedence.
+**The base tree** (delta review of v1.1, must-fix; orchestrator decision 1, repair (a)). The base
+collect runs on the whole tree at `BASE_SHA` (`git archive "$BASE_SHA" | tar -x -C "$T"`), because a
+collection may read outside `h-mad/` and `handoff/`:
+`h-mad/tests/test_h_mad_audit_cycle.py::test_premise_items_match_gate_count_real_artifacts` is
+parametrized over `REAL_AUDIT_REPORTS`, globbed from `docs/`, and on the v1.1 archive (`h-mad handoff`
+only) it collected as `[NOTSET]`, so v1.1's floor failed on every run. The delta reviewer executed
+repair (a) at `HEAD`: `comm -23` and `comm -13` both empty. The base and head collect summaries are
+each asserted to read `N tests collected` with no `error`, so a base import failure cannot quietly
+shrink the floor. Read at `01121ca7` in the main checkout: the head collect exits 0 with
+`3893 tests collected in 3.50s`.
+
+**The unmodified gate** (codex cycle-1 must-fix 3, orchestrator decision 4; widened by the v1.1
+delta review, should-fix 1). Every file tracked at `BASE_SHA` under the three test paths, plus the
+root `pytest.ini`, is diffed against `BASE_SHA` with `git diff --quiet --exit-code "$BASE_SHA" --
+<file>`, so an added skip decorator, an edited fixture, stub, helper module (`claudebinary.py:74`
+calls `pytest.skip`), mutation spec or `pytest.ini`, and a deleted file all fail it. At `507214d`
+that is 255 files (`git ls-tree -r --name-only 507214d -- h-mad/tests handoff/tests handoff/scripts
+pytest.ini | wc -l`; unit: files): 124 `test_*.py` / `conftest.py`, 130 other tracked files under
+the three paths, and `pytest.ini`. Two are a named allowlist, `h-mad/tests/stubs/codex` and
+`h-mad/tests/stubs/agy`, which Task 1 edits: their diff is printed into the record instead of
+failing. No other task edits a file tracked at `BASE_SHA` under the three paths (every other task's
+production and test files are new or live outside them). The node-id floor (`comm -23` empty) stays
+as a second, independent check. **Residual:** a skip decided by the environment inside an unchanged
+file (for example `claudebinary.py`'s probe of the Claude binary) changes no byte and no node id, so
+neither check sees it; the suite's summary line is printed for the record.
+
+**The class sweep** (codex cycle-2 should-fix). The content-classifier sweep is compared with its
+expected population, the 4 files it reads at `01121ca7` (`h_mad_archreview_cycle.py`,
+`h_mad_audit_cycle.py`, `h_mad_review_evidence.py`, `hmad-dispatch.sh`, all under `h-mad/scripts/`;
+the same 4 as the design's reading at `0b3f969`). No task adds a sweep string to a new file under
+`h-mad/scripts`, `h-mad/hooks` or `h-mad/bin`, so the expected set after Tasks 1–15 is the same 4. An
+added file is a new content classifier: the gate halts until its FR-5 precedence is decided and
+recorded and the expected list is extended in this plan. A removed file halts too.
 The `_cmd_exec` agent-conditional census is re-measured with the design's D3 `awk` command, because
 S4 and S8 moved it by construction; its reading is recorded, not compared.
+
+**Guards proven by forced failure** (codex cycle-2 must-fix 1, orchestrator decision 2). Executed for
+this revision, no file kept: the script above, byte-identical, ran in a scratch git repository that
+mirrors the paths it names (a `pytest.ini`, a test under each of the three paths, a `docs/`-globbing
+parametrized test, the `PERMITTED` node as an environment-switched failure, `stubs/codex` and
+`stubs/agy`, a fixture, a 6-line census file and the 4 sweep files), once per scenario, under `bash`
+and again under `zsh`, with the same result each time. Clean → `FLOOR: PASS files=9 suite_rc=0`;
+permitted node failing alone → `FLOOR: PASS files=9 suite_rc=1`; `stubs/codex` edited →
+`FLOOR: PASS` with its diff printed. Each forced failure stopped on its own first line: an extra
+failing test, alone or beside the permitted one → `FAIL: the suite failed beyond the one permitted
+node:`; a head collection error → `FAIL: the suite exited 2 (collection error, interrupt, internal or
+usage error)`; a base collection error →
+`FAIL: the base collect exited non-zero`; a `docs/` file removed → `FAIL: node ids collected at
+BASE_SHA are gone`; a fixture edited, `pytest.ini` edited, a skip decorator added → `FAIL: a file
+tracked at BASE_SHA under the test paths differs: <file>`; a new file carrying `agy_events` under
+`h-mad/hooks` → the class-sweep line `FAIL: the class sweep is not its 4 expected files`, with its
+FR-5 instruction; a census line deleted →
+`FAIL: the agy|codex|grok census is not 6 matching lines (design D8)`; `BASE_SHA = "deadbeef"` →
+`FAIL: BASE_SHA is not 40-hex: deadbeef`. Control, same repository: v1.1's script printed `FAIL: node
+ids collected at BASE_SHA are gone` on the clean scenario (its `h-mad handoff` archive has no `docs/`),
+and v1.1's script with only its archive widened printed `FLOOR: PASS` on the extra-failing-test
+scenario and on the head-collection-error scenario, which is codex's finding reproduced.
 
 **Expected RED split**: not applicable — no test is authored.
 
@@ -1825,10 +2006,13 @@ S4 and S8 moved it by construction; its reading is recorded, not compared.
 - [ ] AC-11.2: `test_hmad_dispatch_exec.py`, `test_hmad_dispatch_exec_completion.py`,
       `test_hmad_dispatch_exec_stamp.py`, `test_hmad_dispatch_progress.py` pass in that full run.
 - [ ] AC-5.3, AC-6.5, AC-7.5, AC-9.4: the named pre-existing files pass unchanged in that run.
-- [ ] Every pre-existing test file (`test_*.py` / `conftest.py` tracked at `BASE_SHA` under
-      `h-mad/tests`, `handoff/tests`, `handoff/scripts`) is byte-identical to `BASE_SHA`
-      (`git diff --exit-code` per file); the node-id floor (`comm -23` empty) holds as a second
-      check; the census reads 6 matching lines; the script's last line is `FLOOR: PASS files=N`.
+- [ ] Every file tracked at `BASE_SHA` under `h-mad/tests`, `handoff/tests`, `handoff/scripts`, and
+      `pytest.ini`, is byte-identical to `BASE_SHA` (`git diff --quiet --exit-code` per file), except
+      the two allowlisted stubs, whose diff is in the record; the node-id floor (`comm -23` empty,
+      whole-tree base collect, both collect summaries free of `error`) holds as a second check; the
+      census reads 6 matching lines; the class sweep equals its 4 expected files.
+- [ ] The script's last line is `FLOOR: PASS files=N suite_rc=R`, which certifies the suite verdict
+      above (rc 0, or rc 1 with the permitted node as the only `FAILED` line).
 
 **Mutation rows**: none.
 
@@ -1850,7 +2034,7 @@ merge. About $0.04 at F0's measured `total_cost_usd=0.0393`.
 
 ```bash
 W="$(git -C /Users/kimhawk/orca/skills worktree list --porcelain \
-  | awk '/^worktree /{p=$2} /^branch refs\/heads\/feature\/216-grok-codex-fallback$/{print p}')"
+  | awk '/^worktree /{p=substr($0, 10)} /^branch refs\/heads\/feature\/216-grok-codex-fallback$/{print p}')"
 [ -n "$W" ] || { echo "FAIL: feature worktree not found"; exit 1; }
 WR="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$W")" || { echo "FAIL: realpath of $W"; exit 1; }
 D="$W/h-mad/bin/hmad-dispatch"
@@ -1889,10 +2073,29 @@ echo "SMOKE: PASS"
   `FAIL:` line is the result, and the steps after it do not run.
 - **Record:** the wrapper realpath, the command, rc, the `--out` content, the `b.txt` content, and
   the four readers' outputs go into the Phase-5 report and
-  `docs/03-analysis/probes/grok-codex-fallback/exec-grok-smoke.md`. `$S` is removed after the record
-  is written.
+  `docs/03-analysis/probes/grok-codex-fallback/exec-grok-smoke.md`. On `SMOKE: PASS`, `$S` is removed
+  after the record is written. On any `FAIL:` line `$S` is kept (its `smoke.out`, `smoke.log` and
+  `b.txt` are the evidence) and its path goes into the record.
+- The worktree lookup takes the whole remainder of the porcelain `worktree ` line
+  (`substr($0, 10)`), so a worktree path containing a space is not truncated (executed on a
+  hand-built porcelain sample whose path is `/a b/c`: printed `/a b/c`).
 - **Any other result halts.** A live envelope that disagrees with F0 fixes the parsers against the
-  observed envelope and the smoke re-runs. **If the smoke cannot run** (no key, no quota, no `grok` on
+  observed envelope, and the repair is not complete until all of the following hold, in order, each
+  read on its own token (codex cycle-2 must-fix 3, orchestrator decision 4):
+  1. The repair lands through the owning task's TDD cycle: a failing test built from the observed
+     envelope first, then the parser change.
+  2. Task 16's script re-runs in full, unchanged, from the worktree root (the whole coupled suite
+     `h-mad/tests handoff/tests handoff/scripts`, the node-id floor, the unmodified gate, the census
+     and the class sweep) and its last line is `FLOOR: PASS`.
+  3. Every Task 14 spec whose rows name a repaired file re-runs, together with
+     `grok_wire_reverts.json` whenever a repaired file carries one of its rows:
+     `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors <spec>` reads `ANCHORS_OK` and
+     `python3 h-mad/scripts/h_mad_mutation_harness.py <spec>` reads `MUTATION: ALL_CAUGHT`. The map
+     from file to spec: `scripts/hmad-dispatch.sh` → `grok_exec.json` and `grok_wire_reverts.json`;
+     `scripts/h_mad_review_evidence.py` → `review_evidence_grok.json` and `grok_wire_reverts.json`;
+     `scripts/h_mad_audit_cycle.py` → `audit_cycle_grok.json` and `grok_wire_reverts.json`;
+     `scripts/h_mad_resolved_model.py` → `resolved_model_grok.json` and `grok_wire_reverts.json`.
+  4. Only then does the smoke re-run, from the top, to `SMOKE: PASS`. **If the smoke cannot run** (no key, no quota, no `grok` on
   PATH, a refusal of `--effort low`), Phase 5 halts and asks the operator; a skipped smoke never
   passes, and merge does not proceed on "not run".
 - **Residual (plan):** `--model` and `--sandbox` meet only the stub and `grok --help`, never the live
@@ -1903,6 +2106,8 @@ echo "SMOKE: PASS"
 
 **Acceptance Criteria**:
 - [ ] Every pass condition above holds, with the record complete.
+- [ ] After any live-envelope repair: Task 16's `FLOOR: PASS` and each affected spec's `ANCHORS_OK` and
+      `MUTATION: ALL_CAUGHT` are re-read on the repaired tree before the smoke's `SMOKE: PASS` is.
 
 **Mutation rows**: none.
 
@@ -1934,9 +2139,9 @@ ids). The implementation gate counts against these 58, never against plan v1.3's
 Sum: 4 + 8 + 7 + 10 + 4 + 6 + 5 + 5 + 4 + 2 + 3 = 58.
 
 **Test census** (unit: collected test items introduced by this plan): Task 1 12, Task 2 8, Task 3 11,
-Task 4 9, Task 5 16, Task 6 7, Task 7 19, Task 8 21, Task 9 30, Task 10 15, Task 11 2, Task 12 177,
-Task 13 23, Task 15 7 — total 357, of which 178 fail at RED and 179 are regression guards or
-first-run passes (the per-task splits sum to these: failing 10+4+9+9+15+4+10+21+23+10+2+55+0+6,
+Task 4 9, Task 5 17, Task 6 7, Task 7 19, Task 8 21, Task 9 30, Task 10 15, Task 11 2, Task 12 177,
+Task 13 23, Task 15 7 — total 358, of which 179 fail at RED and 179 are regression guards or
+first-run passes (the per-task splits sum to these: failing 10+4+9+9+16+4+10+21+23+10+2+55+0+6,
 passing 2+4+2+0+1+3+9+0+7+5+0+122+23+1).
 
 **Task graph**: Tasks 1 and 2 are independent (`Dependencies on other tasks: None`). After Task 1,
@@ -1951,3 +2156,4 @@ Task 12, W10 Task 3, W11 Task 4).
 ## Version History
 - v1.0: Initial implementation plan draft (2026-09-28), authored at 507214d from spec v1.4, design v1.2 and plan v1.3 (no audit cycle yet). 17 tasks, 8 wiring (W1-W11), 43 mutation rows in six specs, 354 new test items, live exec grok smoke last.
 - v1.1: Impl-plan audit cycle 1 answered (2026-09-28; codex p1 4 musts + 1 should, doc-auditor teammate 1 must + 2 shoulds + nits, audit commit 5b294a8), re-verified at 76b2501 (h-mad unchanged since 507214d). scan() catches RecursionError (Deviations section: class rule over every --log JSON parse, members scan/CLI/measure_effort/archreview _evidence_counts, new tests Task 5 11-12 and Task 7 12, row E9); Task 16 depends on Task 13; all 13 wire-scoped removals executed and scored as grok_wire_reverts.json rows WR3-WR12 keyed on their WIRE-PINs; Task 16 diffs each of the 124 pre-existing test files against BASE_SHA with git diff --exit-code plus the node-id floor; Task 17 smoke and Task 16 floor are guarded scripts ending in SMOKE: PASS / FLOOR: PASS; Task 10 renderer landed as _GROK_RENDER_PROG with its algorithm, executed on F0; suite paths include handoff/scripts; Task 2 pre-creates the state file and pops the key; Tasks 10 and 11 sequential. 17 tasks, 8 wiring, 57 mutation rows in seven specs, 357 new test items.
+- v1.2: Impl-plan audit cycle 2 answered (2026-09-28; codex p2 3 musts + 1 should, v1.1 delta review 1 must + 5 shoulds + 6 nits), corrective and not re-audited, verified at 01121ca7 (h-mad unchanged since 507214d). Task 16 floor: base collect on the whole tree at BASE_SHA, every step guarded (pipefail, suite rc plus FAILED/ERROR lines, collect summaries free of error), unmodified gate widened to all 255 tracked files under the test paths plus pytest.ini with the two Task 1 stubs allowlisted, class sweep compared with its 4 expected files, every guard proven by forced failure under bash and zsh; scan() agy_events membership type-guarded (Deviation 4, Task 5 test 13, row E10); Task 17 re-runs Task 16 and the affected specs after any live-envelope repair; Task 7 test 12 states both assertions; Convention 1 jq-shim rule names four members; Deviations override the design for 5d/5e; nits applied. 17 tasks, 8 wiring, 58 mutation rows in seven specs, 358 new test items.
