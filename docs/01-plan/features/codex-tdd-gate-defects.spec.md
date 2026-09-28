@@ -29,12 +29,28 @@ before the plan is audited. None of them weakens D1–D4.
 | OD-1 | D2 says a venv interpreter is trusted only if "its realpath stays inside the git root". A standard venv's `bin/python` is a symlink to the base interpreter. For HemaSuite, `realpath(hematology-paper-writer/.venv/bin/python)` resolves into `/opt/homebrew/Cellar/python@3.14/…`, outside the root. Read literally, D2 rejects the one interpreter it exists to admit. | Containment is checked on the **venv directory**, not on the interpreter's last symlink hop (FR-3). |
 | OD-2 | The brief says `_project_root` makes the `hematology-paper-writer/` prefix present, and calls Codex's cwd diagnosis wrong. Measured: the gate resolves a relative patch target against the git root, not against the payload `cwd`. A cwd-relative `tools/x.py`, sent from a sub-project cwd, reproduces the blocked report's exact denial: "requires a failing test before tools/x.py; no derived test file exists". | A relative target resolves against the payload `cwd` when that is a directory inside the project root. Otherwise it resolves against the root, as today (FR-5). |
 | OD-3 | The two gates read state differently. `_target_phase5_status` (Codex gate) takes the **nearest** `docs/.bkit-memory.json` above the target. `_resolve_state_file` (Claude gate) takes the **root** file first. In HemaSuite the step5 record lives in the root `docs/.bkit-memory.json`, while `hematology-paper-writer/docs/.bkit-memory.json` holds no step5 record. Measured: with the target correctly placed in the sub-project, the Codex gate **allows the write with no test run**. Fixing OD-2 alone therefore opens a silent fail-open. | One chain reader: a target is governed if any state file on the chain from the target's directory up to the project root holds a step5 record. Any unreadable file on the chain means `unknown` (FR-5). |
-| OD-4 | The Claude gate reads a top-level `file_path` from stdin. Claude Code sends `tool_input.file_path`. Measured: a Claude-Code-shaped payload yields rc=0 with no stderr on a step5 fixture where Codex is available. The installed hook (`$HOME/.claude/hooks/h-mad-tdd-gate.sh`, a symlink to the tracked file, registered with no positional argument) therefore stands down on every Claude write. This is the measured reason the orchestrator's 2026-09-28 D4 probe "exited 0 before reaching any BLOCK branch". | The Claude gate reads `tool_input.file_path`, falling back to the top-level `file_path` and then to the positional argument (FR-6). The D4 probe is re-specified so that it does not depend on this fix (FR-0). |
+| OD-4 | The Claude gate reads a top-level `file_path` from stdin. Claude Code sends `tool_input.file_path`. Measured: a Claude-Code-shaped payload yields rc=0 with no stderr on a step5 fixture where Codex is available. The installed hook (`$HOME/.claude/hooks/h-mad-tdd-gate.sh`, a symlink to the tracked file, registered with no positional argument) therefore stands down on every Claude write. This is the measured reason the orchestrator's 2026-09-28 D4 probe "exited 0 before reaching any BLOCK branch". | The Claude gate reads the stdin payload first (`tool_input.file_path`, then the top-level `file_path`, then the top-level `path`), and the positional argument only when stdin yields no target (FR-6, decision OD-B). The D4 probe is re-specified so that it does not depend on this fix (FR-0). |
 | OD-5 | The same fail-open defect class exists on the Claude side and is not named by D3. The Claude gate runs bare `pytest` scored on rc, and only when the target already exists. Measured: with a **passing** test and no `pytest` on PATH, it exits 0. | The Claude gate uses the shared judge (FR-1…FR-4), so D3 scoring applies to both gates (FR-6). |
 | OD-6 | D3 denies on a collection error. A RED test that imports a not-yet-written module at top level produces `1 error`, not `N failed`. The GREEN write that creates that module would then be denied. HemaSuite's #28 plan already writes some RED tests to import "inside its body", which avoids this. | D3 is kept as written: a collection error is DENY `pytest-error`. The deny reason tells the author to move the import into the test body (FR-4, AC-4.6). |
-| OD-7 | The brainstorm says reuse `h_mad_wire_pin_gate._parse_tasks` and `h_mad_audit_gate._suite_summary`, and that the change touches only "the hook, its tests, and the `codex-runtime.md` trust section". Neither function can be reused unchanged. `_parse_tasks` captures only `Task shape`/`WIRE`/`WIRE-PIN`, because its `_FIELD_RE` has no Production/Test label. `_suite_summary("1 failed in 0.03s")` returns `None`, because `_SUITE_RE` requires `passed`, and it drops `error` counts. | Extend both functions in place, so that no new task parser and no new summary parser is added. Their existing callers keep their current results, except for the one change to the audit gate named in FR-4. The file scope grows to include `h-mad/scripts/h_mad_wire_pin_gate.py` and `h-mad/scripts/h_mad_audit_gate.py` (FR-2, FR-4). This does **not** make the `Production` grammar single-source: `h_mad_wire_registry._production_claims` keeps its own, and two `Production` parsers remain (FR-2, residual). |
-| OD-8 | The Claude gate reads governance from the **root** state file first and takes only the first ACTIVE key (`head -1`). Measured (§"Measured premises", Claude-gate state): a root file holding only a non-step5 record hides a sub-project step5 record (rc 0), and an unreadable root file exits rc 5 with empty stderr — neither a named refusal nor an allow. The brainstorm does not decide what the Claude gate does with an unreadable chain. | Governance on the Claude side comes from the judge's `state` verb over FR-5's chain reader (FR-1, FR-6). An unreadable chain is refused `judge-error` in the chosen blocking form, fail-closed like the Codex gate (AC-6.9). |
+| OD-7 | The brainstorm says reuse `h_mad_wire_pin_gate._parse_tasks` and `h_mad_audit_gate._suite_summary`, and that the change touches only "the hook, its tests, and the `codex-runtime.md` trust section". Neither function can be reused unchanged. `_parse_tasks` captures only `Task shape`/`WIRE`/`WIRE-PIN`, because its `_FIELD_RE` has no Production/Test label. `_suite_summary("1 failed in 0.03s")` returns `None`, because `_SUITE_RE` requires `passed`, and it drops `error` counts. | Extend both functions in place, so that no new task parser and no new summary parser is added. Their existing callers keep their current results, except for the audit-gate verdict changes FR-4 lists under "Audit-gate changes". The file scope grows to include `h-mad/scripts/h_mad_wire_pin_gate.py` and `h-mad/scripts/h_mad_audit_gate.py` (FR-2, FR-4). This does **not** make the `Production` grammar single-source: `h_mad_wire_registry._production_claims` keeps its own, and two `Production` parsers remain (FR-2, residual). |
+| OD-8 | The Claude gate reads governance from the **root** state file first and takes only the first ACTIVE key (`head -1`). Measured (§"Measured premises", Claude-gate state): a root file holding only a non-step5 record hides a sub-project step5 record (rc 0), and an unreadable root file exits rc 5 with empty stderr — neither a named refusal nor an allow. The brainstorm does not decide what the Claude gate does with an unreadable chain. | Governance on the Claude side comes from the judge's `state` verb over FR-5's chain reader (FR-1, FR-6). On an unreadable chain a production `.py` write is refused `judge-error` in the chosen blocking form, fail-closed like the Codex gate; an exempt write is decided before the state is read and is allowed, so the broken file can be repaired (decision OD-A, AC-6.9). |
 | OD-9 | With several ACTIVE step5 records, the Claude gate reads `codex_status` from the first key only. Measured: when that first record declares `exhausted`, the Codex-authorship escape is taken for every write, whatever the other records declare. | The Codex-authorship escape applies only when `HMAD_CODEX_UNAVAILABLE` is set or **every** ACTIVE record on the target's chain declares `codex_status` `unavailable` or `exhausted` (AC-6.10). |
+
+**Decisions taken at design audit cycle 1 (orchestrator, 2026-09-28).** These settle departures
+the design v1.0 (`eec0c7a6`) raised in its §"Supersedes the plan or the spec on" table, whose rows
+are `DD-1`…`DD-9`. The spec now states each one; the design is audited against this text.
+
+| Decision | Design row | What the spec now requires |
+|---|---|---|
+| OD-A | DD-1 | The Claude gate decides the exemptions and the `.py` filter **before** it reads governance. On an unreadable chain an exempt write is allowed, so the state file can be repaired; a production `.py` write is refused `judge-error` (FR-6, AC-6.9). |
+| OD-B | — (design D9 read `$1` first) | The Claude gate reads the stdin payload's target first; the positional argument is a fallback used only when stdin yields no target (FR-6, AC-6.1). |
+| OD-C | DD-6 (not adopted) | FR-3's shell policy is **not** narrowed: a contained venv interpreter passes the existing argv rules, including the H-MAD control allowlist (FR-3, AC-3.6). |
+| OD-D | DD-3, DD-4, DD-5 | FR-4 states the coloured-summary verdict change (DD-4), the one-predicate audit-gate non-change (DD-3), the judge's skipped-only rule (DD-5), and a summary grammar that reads pytest 9.1.1's `subtests` categories (FR-4, AC-4.2, AC-4.7). |
+
+The design's DD-2 (the no-`jq` allow goes), DD-8 (an empty target on a governed root is refused)
+and DD-9 (a target outside the root is governed by the root's state) are stated in FR-6. DD-7 (a
+relative Claude-gate target is made absolute against the root) is stated in FR-6 **conditionally**:
+it binds only if design v1.1 keeps DD-7.
 
 ## Measured premises
 
@@ -114,6 +130,30 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
 
   The scratch probe was deleted after running; its committed re-run is owed under
   `docs/03-analysis/probes/codex-tdd-gate-defects/` with the others.
+- **Summary readings today (tree, skills `a83ed085`; `h-mad/` and `handoff/` are unchanged since
+  `533126d6`).** `h_mad_audit_gate._suite_summary` called under `/usr/bin/python3` in
+  `h-mad/scripts` by an inline heredoc (nothing written), and what `run_suite` scores from it:
+
+  | Input line | `_suite_summary` today | `run_suite` today |
+  |---|---|---|
+  | coloured `1 failed, 1 passed in 0.04s` (the pytest 9.1.1 `--color=yes` bytes quoted in design D7) | `(1, 0)` | PASS |
+  | `2 passed, 2 subtests passed in 0.00s` | `(2, 0)` | PASS |
+  | `2 failed, 1 subtests passed in 0.02s` | `None` | UNREADABLE `no_summary` |
+  | `3 failed in 0.1s` | `None` | UNREADABLE `no_summary` |
+  | `3 skipped in 0.1s`, `5 deselected in 0.1s`, `1 xfailed in 0.1s`, `1 error in 0.06s`, `no tests ran in 0.00s` | `None` each | UNREADABLE `no_summary` each |
+
+  The coloured row is a fail-open today: `_SUITE_RE` finds `1 passed` but not the `1 failed` that
+  an SGR sequence separates from its comma.
+- **pytest 9.1.1 summary categories (tree, `/opt/anaconda3/bin/python`).**
+  `_pytest.terminal.KNOWN_TYPES` holds 11 entries, counted from its printed tuple: `failed`,
+  `passed`, `skipped`, `deselected`, `xfailed`, `xpassed`, `warnings`, `error`,
+  `subtests passed`, `subtests failed`, `subtests skipped`. A scratch file with one failing and one
+  passing test, each opening one passing subtest, ended `1 failed, 1 passed, 2 subtests passed in
+  0.02s` under `-q --no-header` (probe deleted). The design audit's lines `2 passed, 2 subtests
+  passed in 0.00s` and `2 failed, 1 subtests passed in 0.02s` come from the same pytest. Neither
+  repository uses subtests today: `git grep -l -w subtests -- h-mad handoff` at skills `a83ed085`
+  and `git grep -l -w subtests -- '*.py'` at HemaSuite `f25a8566` each list 0 files. That zero rests on nobody having written one, not on any
+  constraint, so it is not load-bearing and FR-4 does not rely on it.
 
 ## Functional Requirements
 
@@ -185,7 +225,7 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   | `venv-escapes-root` | DENY | The nearest `.venv` fails containment (FR-3). | Same. |
   | `pytest-missing` | DENY | The run printed `No module named pytest`. | Same. |
   | `pytest-error` | DENY | The summary shows ≥1 `error`. | Same. |
-  | `no-tests-ran` | DENY | The summary is `no tests ran`. | Same. |
+  | `no-tests-ran` | DENY | The summary is `no tests ran`, or it is some other parsed summary with 0 failed, 0 passed and 0 errors, such as `3 skipped in …` or `1 xfailed in …` (FR-4 rule 8). | Same. |
   | `no-summary` | DENY | No summary line was parsed. | Same. |
   | `test-passing` | DENY | The summary shows 0 failed and ≥1 passed: nothing is RED. | Same. |
   | `timeout` | DENY | The pytest run exceeded its bound. | Same. |
@@ -313,7 +353,11 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   - **Shell policy.** The Codex gate's shell policy (`_trusted_executable` / `_safe_shell_command`)
     also accepts a token naming `<D>/.venv/bin/python*` under the same containment rule. Relative
     tokens resolve against the payload `cwd` (OD-2). The existing argv rules still apply, so only
-    `python -m pytest …` and the H-MAD control allowlist pass.
+    `python -m pytest …` and the H-MAD control allowlist pass. The allowlist is the existing
+    `python <script>` branch of `_safe_shell_command`: the script must resolve under the hook's
+    own `h-mad/scripts/` and pass `_safe_hmad_script`. A contained venv token gets exactly the
+    verdict a `python*` token in `TRUSTED_BIN_DIRS` gets for the same argv; it is **not** narrowed
+    to `-m pytest` (decision OD-C; design DD-6 is not adopted).
   - **Residuals, stated.** `.venv/bin/pytest` is still refused. Venvs not named `.venv`, such as
     `venv/` or `env/`, are not discovered. A `.venv/bin/python` inside a contained venv that
     symlinks to an arbitrary binary outside the root is accepted. That is the same trust already
@@ -339,6 +383,11 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     denied, whether the venv is contained or escapes.
   - AC-3.5: The existing test `test_codex_hook_rejects_untrusted_executable_paths` passes
     unmodified.
+  - AC-3.6 [OD-C]: During step5, a contained-venv token running an H-MAD control script, with an
+    argv the allowlist accepts under `/usr/bin/python3`, is allowed; the same argv under
+    `/usr/bin/python3` is allowed too (the control); and the same argv with the venv escaping the
+    root is denied. A script path outside the hook's `h-mad/scripts/` is denied under the
+    contained venv token.
 
 ### FR-4: Score on pytest's summary line, never on rc (D3)
 
@@ -350,6 +399,20 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     extended in place [OD-7]. It must read `failed`, `passed` and `error`/`errors` counts
     independently, so that `1 failed in 0.01s` and `1 error in 0.06s` both parse. It must also
     report `no tests ran`.
+  - **Colour** [OD-D, design DD-4]. SGR colour sequences (`ESC [ … m`) are removed from each line
+    before it is matched, so a `--color=yes` summary reads the same as a plain one.
+  - **Category axis** [OD-D]. A summary phrase is a count followed by a category. Every category
+    in pytest 9.1.1's `_pytest.terminal.KNOWN_TYPES` (11 entries, §"Measured premises"), in the
+    singular or plural pytest prints, is accepted in a summary line. Only a phrase whose category
+    is exactly `passed`, `failed`, or `error`/`errors` adds to a count: `2 subtests passed` adds
+    nothing to `passed`, and `1 subtests failed` adds nothing to `failed`. So
+    `2 passed, 2 subtests passed in 0.00s` reads 2 passed, and
+    `2 failed, 1 subtests passed in 0.02s` reads 2 failed and 0 passed.
+  - **Residual, stated.** A category a plugin reports, which pytest appends to the summary
+    beyond `KNOWN_TYPES`, is outside this axis. The design states whether such a line is still a
+    summary line and the verdict that follows for both the judge and `run_suite`; if it is not,
+    the judge denies `no-summary` and `run_suite` reads `UNREADABLE no_summary`, which fails
+    closed.
   - **Classification**, first match wins:
     1. Timeout → `timeout`.
     2. `No module named pytest` in the output → `pytest-missing`.
@@ -358,16 +421,31 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     5. errors ≥ 1 → `pytest-error`.
     6. failed ≥ 1 → `red-measured`.
     7. passed ≥ 1 → `test-passing`.
+    8. Otherwise → `no-tests-ran` [OD-D, design DD-5]. This is a parsed summary with 0 failed,
+       0 passed and 0 errors that is not `no tests ran`, such as `3 skipped in …`,
+       `5 deselected in …` or `1 xfailed in …`. Rule 8 makes the list total: every run gets
+       exactly one kind.
   - **The rc** appears in DENY reasons for diagnosis only, and never selects a branch.
-  - **Audit-gate change.** The one change to the audit gate: `run_suite` now scores a summary with
-    failures but no passes, such as `3 failed in …`, as `FAIL`. Today it scores it
-    `UNREADABLE no_summary`.
-  - **Audit-gate non-change.** Once `_suite_summary` reports `no tests ran` and `error` counts,
-    `run_suite` keeps scoring a `no tests ran in …` summary, and an errors-only summary such as
-    `1 error in 0.06s`, `UNREADABLE no_summary`, as today (measured at skills `dfd5f02e`:
-    `_suite_summary` returns `None` for both). Neither `SUITE:` reason becomes `no_tests_ran`; that
-    reason stays reserved for a parsed summary with 0 passed, 0 failed and 0 errors, such as
-    `0 passed in …`.
+  - **Audit-gate changes.** These are the only `run_suite` verdict changes (measured today in
+    §"Measured premises", summary readings):
+    1. A summary with failures but no passes, such as `3 failed in …`, scores `FAIL`. Today it
+       scores `UNREADABLE no_summary`.
+    2. [OD-D, design DD-4] A coloured failing summary, such as the `--color=yes` bytes of
+       `1 failed, 1 passed in 0.04s`, scores `FAIL`. Today it scores **`PASS`**, a fail-open. This
+       change blocks where today allows; no verdict moves toward `PASS`.
+    3. A failing summary that carries a `subtests` phrase, such as
+       `2 failed, 1 subtests passed in 0.02s`, scores `FAIL`. Today it scores
+       `UNREADABLE no_summary`.
+
+    `2 passed, 2 subtests passed in 0.00s` keeps `PASS` with 2 passed.
+  - **Audit-gate non-change** [OD-D, design DD-3]. One predicate decides: a parsed summary with no
+    `passed` phrase and no `failed` phrase scores `UNREADABLE no_summary`, as today. That covers
+    `no tests ran in …`, an errors-only summary such as `1 error in 0.06s`, and `3 skipped in …`,
+    `5 deselected in …` and `1 xfailed in …`; `_suite_summary` returns `None` for each today, so
+    each scores `no_summary` today and after. No such summary's `SUITE:` reason becomes
+    `no_tests_ran`; that reason stays reserved for a parsed summary with a `passed` or `failed`
+    phrase and 0 passed, 0 failed, such as `0 passed in …`. The judge's rule 8 does not reach
+    `run_suite`: `no-tests-ran` is a judge kind, `no_tests_ran` a `SUITE:` reason.
 - **Acceptance Criteria**:
   - AC-4.1 (fail-open regression, the brief's reproduction): the fixture's resolved test file
     **passes**, and pytest runs under an interpreter with no pytest, built as a
@@ -375,7 +453,9 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     twice: once as the project `.venv`, and once with no project venv and the gate itself run by
     that interpreter. Both runs deny.
   - AC-4.2: RED gives ALLOW `red-measured`. GREEN gives DENY `test-passing`. An empty test file
-    gives DENY `no-tests-ran`.
+    gives DENY `no-tests-ran`. A test file whose only test is skipped gives DENY `no-tests-ran`
+    (rule 8). A RED test that also runs a passing subtest gives ALLOW `red-measured`, and a GREEN
+    test with a passing subtest gives DENY `test-passing`.
   - AC-4.3: A test file whose import fails gives DENY `pytest-error`, even though it exits
     non-zero.
   - AC-4.4: An interpreter shim that prints `1 failed in 0.01s` and exits 0 gives ALLOW. A shim that
@@ -383,13 +463,19 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   - AC-4.5: A shim that sleeps past the bound gives DENY `timeout` within the bound plus a stated
     margin.
   - AC-4.6 [OD-6]: The `pytest-error` reason contains the words "import" and "inside the test body".
-  - AC-4.7: `_suite_summary` returns parsed counts for each final line in §Measured premises. The
-    audit gate's existing tests pass, apart from any test that pinned the `3 failed` →
-    `UNREADABLE` behaviour. That test is updated, and the update is named in the impl-plan. A
-    `run_suite` fixture whose command prints only `no tests ran in 0.01s`, and one that prints only
-    `1 error in 0.06s`, each assert `SUITE: UNREADABLE reason=no_summary` exactly; the existing
-    `test_a_run_that_says_only_no_tests_ran_is_also_refused` asserts only "not PASS" and does not
-    pin the reason.
+  - AC-4.7: `_suite_summary` returns parsed counts for each pytest final line in §"Measured
+    premises" (the four-row pytest table and the summary-readings table). The audit gate's
+    existing tests pass, apart from any test that pinned one of the three "Audit-gate changes"
+    rows at its old verdict. Such a test is updated, and the update is named in the impl-plan.
+    `run_suite` fixtures, one per command output, each run alone:
+    - prints only `no tests ran in 0.01s`, only `1 error in 0.06s`, only `3 skipped in 0.1s`,
+      only `5 deselected in 0.1s`, only `1 xfailed in 0.1s`: each asserts
+      `SUITE: UNREADABLE reason=no_summary` exactly. The existing
+      `test_a_run_that_says_only_no_tests_ran_is_also_refused` asserts only "not PASS" and does not
+      pin the reason.
+    - prints the coloured `1 failed, 1 passed in 0.04s` bytes: asserts `FAIL` (today `PASS`).
+    - prints `2 failed, 1 subtests passed in 0.02s`: asserts `FAIL` with 0 passed.
+    - prints `2 passed, 2 subtests passed in 0.00s`: asserts `PASS` with 2 passed.
 
 ### FR-5: Codex gate — target base and governing state (OD-2, OD-3)
 
@@ -400,7 +486,10 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   - **Chain reader.** `_target_phase5_status` is replaced by one chain reader, shared with the
     Claude gate through the judge unit. The ACTIVE features are every step5 record in every state
     file from the target's directory up to the root, inclusive. Any unreadable file on the chain
-    means `unknown`, which denies fail-closed, as today.
+    means `unknown`, which denies fail-closed, as today. A directory on the chain that does not
+    exist yet (the parent of a new file) simply holds no state file; its existing ancestors are
+    still read. A `docs/.bkit-memory.json` name present on the chain that is not a regular file —
+    a dangling symlink, a directory or a FIFO — is unreadable, never absent.
   - **Unchanged.** `_any_phase5_status` for the shell policy is unchanged.
   - **Crashes.** An exception anywhere in the gate's main path yields `_deny(...)` with
     `judge-error`, never an uncaught traceback.
@@ -423,13 +512,42 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
 ### FR-6: Claude gate — payload, shared judge, blocking form (OD-4, OD-5, D4)
 
 - **Description**:
-  - **Payload.** The gate reads `tool_input.file_path`, then the top-level `file_path`, then the
-    positional argument [OD-4].
+  - **Payload** [OD-4, OD-B]. The gate reads its target from the stdin payload first:
+    `tool_input.file_path`, then the top-level `file_path`, then the top-level `path` (read
+    today). The positional argument is a fallback, used only when stdin yields no target. When
+    both yield a target, the stdin target is the one decided. The gate must not hang on a
+    terminal stdin when invoked by hand; how it avoids that is the design's.
+  - **Relative target** [conditional on design v1.1 keeping DD-7]. A relative target is made
+    absolute against the project root before any check, including the exemptions. Consequence,
+    stated: a relative `tests/x.py` or `fixtures/x.py` becomes exempt where today it is gated,
+    because today's `*/tests/*` and `*/fixtures/*` patterns need a leading segment. If design
+    v1.1 drops DD-7, relative targets are left as given, and this bullet and AC-6.15 do not
+    apply.
+  - **Empty target** [design DD-8]. When neither stdin nor the positional argument yields a
+    target, the gate reads the root's governance: `active` or `unreadable`, or any `state` failure
+    mode, → refuse `judge-error`; `none` → allow. Today an empty target with an ACTIVE record is
+    allowed.
+  - **Target outside the root** [design DD-9]. A target outside the project root has the root
+    alone as its chain, so the root's state governs it, as today's root-first reader does. It is
+    never read as `none` merely because its own chain is empty.
+  - **Order** [OD-A, design DD-1]. The gate decides in this order, and the first step that
+    decides ends the run:
+    1. the fast path: no state file anywhere on the target's chain → allow;
+    2. the empty-target rule above;
+    3. the exemptions (the basename and directory `case` patterns, and the non-code extensions)
+       and the `.py` filter → allow. No state is read for an exempt write, so an exempt write is
+       allowed even when the chain is unreadable, and the broken state file can be repaired;
+    4. governance, from the `state` verb;
+    5. the Codex-authorship check;
+    6. the `judge` verb.
   - **Governance** [OD-8]. The gate decides whether the write is governed, and reads the
     Codex-authorship key, from the judge's `state` verb (FR-1), passing its project root
     (`CLAUDE_PROJECT_DIR`, as today) and the absolute target. It no longer reads step5 records
-    with its own `jq` query. `_resolve_state_file` keeps only its role of taking the fast no-op
-    path when no state file exists. By `state` value: none → allow; active → governed;
+    with its own `jq` query, and it no longer requires `jq` [design DD-2]. `_resolve_state_file`
+    keeps only its role of taking the fast no-op path. That path may allow only a write the
+    `state` verb would read as none: a non-regular `docs/.bkit-memory.json` on the chain (FR-5),
+    and a target whose parent directory does not exist yet but whose existing ancestors hold a
+    state file, are not "no state file". By `state` value: none → allow; active → governed;
     unreadable, or any `state` failure mode in FR-1 → refuse `judge-error`.
   - **Codex authorship** [OD-9]. On a governed write, after the exemptions, the Codex-authorship
     BLOCK applies unless `HMAD_CODEX_UNAVAILABLE` is set or every ACTIVE record in the `state`
@@ -443,15 +561,19 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     DENY, an unreadable `state` and every `judge-error` are all refusal sites. The form is chosen
     by FR-0's reading.
   - **Unchanged.** These non-blocking paths are unchanged: no state file (the
-    `_resolve_state_file` fast path), no `jq` (for as long as the gate still requires `jq`; if
-    the design removes that dependency, this path goes with it), and the exemptions. "Not step5"
-    is no longer a separate path: it is the `state` verb's none value, decided over the target's
-    whole chain rather than the root file first.
+    `_resolve_state_file` fast path, under the constraint in "Governance") and the exemptions
+    (their patterns keep their bytes; only their place in the order moves, and under DD-7 the
+    string they match). "Not step5" is no longer a separate path: it is the `state` verb's none
+    value, decided over the target's whole chain rather than the root file first.
+  - **Removed** [design DD-2]. The no-`jq` allow goes: nothing in the gate reads `jq` any more,
+    so a missing `jq` no longer stands the gate down.
 - **Acceptance Criteria**:
   - AC-6.1 [OD-4]: A Claude-Code-shaped stdin payload
     `{"tool_name":"Write","tool_input":{"file_path":"<abs>"}, …}` on a step5 fixture with `codex`
     on PATH and `codex_status` available reaches the Codex-authorship refusal. Today it exits 0
-    silently.
+    silently. [OD-B] The same stdin payload with an exempt `<root>/tests/x.py` passed as the
+    positional argument is still refused: the stdin target is decided, not `$1`. The positional
+    argument alone, with empty stdin, reaches the same refusal.
   - AC-6.2: The existing positional-argument tests in `test_h_mad_tdd_gate_state_resolution.py` and
     `test_h_mad_tdd_gate_codex.py` pass. Their assertions change exactly as the list below says for
     the form FR-0 chose, and no other assertion changes. This list is the single statement of the
@@ -503,19 +625,40 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     check are AC-6.5's, and the FR-0 reading is cited in the test module's docstring. Existing
     assertions migrate as AC-6.2's list says for the chosen form.
   - AC-6.7 (branch `INCONCLUSIVE`): neither AC-6.5 nor AC-6.6 is implemented, and Phase 4 does not
-    start for this FR. AC-6.1 through AC-6.4 and AC-6.8 through AC-6.10 may be implemented, but
+    start for this FR. AC-6.1 through AC-6.4 and AC-6.8 through AC-6.15 may be implemented, but
     the feature does not merge; the reading halts to the operator until a re-run is conclusive.
   - AC-6.8 [OD-8]: The root state holds only a non-step5 record, and the sub-project state holds a
     step5 record with `codex_status` `exhausted`. For an absolute target under the sub-project, the
     write is governed: the `judge` verb runs, and its verdict decides. Today the gate exits rc 0
     (§"Measured premises", Claude-gate state).
-  - AC-6.9 [OD-8]: A state file on the target's chain holds `{not json`. The write is refused with
-    `kind=judge-error` in the chosen form. Today the gate exits rc 5 with empty stderr.
+  - AC-6.9 [OD-8, OD-A]: A state file on the target's chain holds `{not json`. A production `.py`
+    write is refused with `kind=judge-error` in the chosen form. On the same chain, three exempt
+    writes are each allowed, one fixture each, run alone: the state file itself
+    (`docs/.bkit-memory.json`), a test file `tests/test_x.py`, and a doc `notes.md`. Today every
+    one of these writes, production or exempt, exits rc 5 with empty stderr, because the gate
+    parses the state with `jq` before it reaches the exemptions.
   - AC-6.10 [OD-9]: Two ACTIVE step5 records on the chain, with `codex` on PATH and
     `HMAD_CODEX_UNAVAILABLE` unset. If one declares `exhausted` and the other declares nothing,
     the Codex-authorship refusal is emitted, in either record order. If both declare `unavailable`
     or `exhausted`, the gate proceeds to the `judge` verb. Today, with the `exhausted` record
     first, the escape is taken.
+  - AC-6.11 [OD-8]: The fast path does not allow a governed write. Two fixtures, each run alone:
+    (a) the only `docs/.bkit-memory.json` on the chain is a dangling symlink → refused
+    `judge-error`; (b) the root holds no state file, `sub/docs/.bkit-memory.json` holds a step5
+    record, and the target is `<root>/sub/newdir/x.py` with `newdir` not yet created, with a
+    passing resolved test → refused, never allowed.
+  - AC-6.12 [design DD-2]: With no `jq` reachable on PATH, a governed production `.py` write whose
+    resolved test passes is refused `test-passing`. Today it is allowed.
+  - AC-6.13 [design DD-8]: An empty target (stdin payload with no target field, no positional
+    argument) is refused `judge-error` when the root holds an ACTIVE step5 record, and when the
+    root's state is unreadable; it is allowed when the root holds no step5 record.
+  - AC-6.14 [design DD-9]: A target outside the project root, with the root holding an ACTIVE step5
+    record and `codex` on PATH, reaches the Codex-authorship refusal; with the root holding no
+    step5 record, it is allowed.
+  - AC-6.15 [conditional on design v1.1 keeping DD-7]: The relative targets `tests/x.py` and
+    `./tests/x.py` are allowed as exempt; the relative `sub/x.py` is judged as
+    `<root>/sub/x.py`, the same verdict the absolute form gets. The design publishes the
+    old-versus-new differential of the softened rows.
 
 ### FR-7: Document the trust boundary and the shipped gate (D2)
 
@@ -555,8 +698,14 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
     (AC-4.4), the payload `cwd` base (AC-5.1), the chain reader (AC-5.2), the `tool_input` read
     (AC-6.1), the blocking form (AC-6.5 or AC-6.6), the Claude gate's non-zero-judge-rc refusal
     (AC-1.3, the valid-ALLOW-with-rc-1 stub), the `state`-verb governance read (AC-6.8), the
-    unreadable-chain refusal (AC-6.9) and the every-ACTIVE-record escape rule (AC-6.10). A branch
-    of an alternation is mutated on its own, never together with its siblings.
+    unreadable-chain refusal (AC-6.9), the every-ACTIVE-record escape rule (AC-6.10), the
+    exemptions-before-governance order (AC-6.9, the exempt-write fixtures), the stdin-before-`$1`
+    precedence (AC-6.1, the conflicting-input fixture), the fast path's non-regular-state and
+    missing-parent handling (AC-6.11, each fixture its own mutation), the empty-target refusal
+    (AC-6.13), the outside-root chain (AC-6.14), the SGR strip (AC-4.7, the coloured fixture), the
+    `subtests` category rule (AC-4.7, the `2 failed, 1 subtests passed` fixture) and rule 8
+    (AC-4.2, the skipped-only fixture). A branch of an alternation is mutated on its own, never
+    together with its siblings.
 
 ## Live verification (not pytest ACs)
 
@@ -602,8 +751,8 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
   by `multi-host-runtime`, and V-1 depends on it.
 - Changing the name map itself (`h_mad_derive_test_path.sh`'s three prefixes).
 - How the grok host treats `exit 1`. That is owned by `multi-host-runtime`.
-- The Claude gate's other fail-open paths, which stay as documented: no state, no `jq`, and the
-  file-type exemptions.
+- The Claude gate's other fail-open paths, which stay as documented: no state and the file-type
+  exemptions. The no-`jq` allow is not among them: it is removed (FR-6, design DD-2).
 - Venvs not named `.venv`, and `.venv/bin/pytest` as a shell entry point (FR-3 residuals).
 
 ## Assumptions
@@ -617,7 +766,19 @@ already sits the blocked Codex report, `hemasuite-t7_green.blocked1.report.md`.
 - The impl-plan for an ACTIVE feature sits at `<state dir>/docs/01-plan/features/<feature>.impl-plan.md`.
   This holds for HemaSuite #28.
 
+## Open Questions
+
+- **OQ-D1 (operator).** The Claude Code and Codex host hook timeouts are not measured. If a host
+  kills the hook before the judge's time budget ends, the host's own semantics decide the write,
+  and that may be an allow. Open; the design's budget stands until it is measured.
+- **OQ-D2.** Whether a backticked node id such as `` `tests/test_x.py::test_a` `` is an FR-2 entry.
+  Under FR-2's value axis as written it is not, because the token does not end in `.py`. Two
+  readings are defensible (take the file part as the entry, or run the node id itself), and each
+  moves the verdict differently, so the spec does not choose. The design measured 2 such label
+  lines in the 83-file corpus; the committed probe owes that reading.
+
 ## Version History
 - v1.0: Initial specification draft from brainstorm v1.1 (76b2501); D1–D4 bind; OD-1..OD-7 raised from tree measurements at ae7593a1 / HemaSuite ffa87323, each owed operator confirmation (2026-09-28).
 - v1.1: Applies plan v1.1 (85d61ba8) owed items S-1..S-6: FR-0 adds arm EJ, a nonce HIT invocation precondition and per-form FORM_A/FORM_B readings (AC-0.1, AC-0.2); AC-6.5 form = the one FR-0 proves, (b) when both; AC-6.6 amended by orchestrator decision to the single-form rule (no exit 1 under E1_BLOCKS) with the changed existing assertions named; AC-6.7 no merge while INCONCLUSIVE; V-1r offline replay added as a merge condition; AC-3.4 payloads corrected for cwd. Swept: AC-6.2 cites AC-6.6, Assumptions cites EJ. S-7..S-12 not applied (2026-09-28).
 - v1.2: Applies plan-owed S-7, S-8, S-9, S-11, S-12 and two delta-review items (2026-09-28). S-7: FR-4 states the audit-gate non-change (a parsed `no tests ran`, and an errors-only summary, keep UNREADABLE no_summary), AC-4.7 pins it. S-8: FR-1 adds the `state` verb (none/active/unreadable); FR-6 reads governance and the Codex-authorship key from it and drops "not step5" from Unchanged; new OD-8 (unreadable chain refused judge-error) and OD-9 (escape needs every ACTIVE record), AC-6.8..AC-6.10, from a probe at dfd5f02e. S-9: FR-1 rc never selects ALLOW; AC-1.3 adds rc-1 stubs and state-verb stubs. S-11: FR-7 names SKILL.md, agy-runtime.md, codex-implementer-prompt.md; AC-7.2. S-12 applied form-conditionally by operator decision: the changed-assertion list moves to AC-6.2, cited by AC-6.5 and AC-6.6. S-10 withdrawn by operator decision: FR-2 and OD-7 state the residual that two Production parsers remain; AC-2.9 adds the registry tests. FR-8 and NFR Security swept.
+- v1.3: Answers design audit cycle 1 (codex p1, teammate) and the design v1.0 author report (eec0c7a6), applying orchestrator decisions OD-A..OD-D (2026-09-28). OD-A: FR-6 order puts the exemptions and the .py filter before governance; AC-6.9 narrowed to production .py writes and given three exempt-write fixtures (state .json, tests, .md), today all rc 5 (probed). OD-B: FR-6 and OD-4 read the stdin target (tool_input.file_path, file_path, path) first and $1 as fallback only; AC-6.1 adds the conflicting-input fixture. OD-C: FR-3 not narrowed, DD-6 not adopted; AC-3.6 added. OD-D: FR-4 names the SGR strip (coloured failing summary PASS to FAIL, measured), the one-predicate audit-gate non-change (skipped/deselected/xfailed keep no_summary), classifier rule 8 (skipped-only to no-tests-ran; FR-1 kind table amended), and the pytest 9.1.1 category axis incl. subtests with its plugin residual; FR-4 Audit-gate changes list three rows; AC-4.2 and AC-4.7 extended; new measured premises at a83ed085. FR-6 states DD-2 (no-jq allow removed, AC-6.12), DD-8 (AC-6.13), DD-9 (AC-6.14), DD-7 conditionally on design v1.1 (AC-6.15), and the fast-path constraint (AC-6.11); FR-5 reads a non-regular state path as unreadable. Decisions table added; Open Questions OQ-D1 (operator) and OQ-D2 (left open). OD-7 row, AC-6.7 range, FR-8, Out-of-Scope swept (2026-09-28).
