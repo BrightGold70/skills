@@ -182,3 +182,75 @@ SEEDCOV-BRANCHES: entries=22 branches=54 cells=72 zero=25 dead=14
 ```
 
 These 25 `ZERO` cells are the Phase-6 branch-classification inputs.
+
+### Task 16 byte-identity probe readings
+
+The orchestrator ran the first three arms at `BASE_SHA=3b5c4388b4f11b7011eacf7aae6f95a6445f433f` before this probe correction:
+
+```text
+BYTE-IDENTITY: PASS arm=budget cases=14
+BYTE-IDENTITY: PASS arm=decision cases=18
+BYTE-IDENTITY: PASS arm=install-a cases=9
+```
+
+Arm `install-b`: **to be re-run by the orchestrator after the `closed_diff()` fix**. This worker's sandbox cannot run the probe's `git worktree add`, so this document does not claim an arm-B pass. The plan's old-base budget negative control also needs an orchestrator run for the same reason.
+
+The `closed_diff()` unit check used the diagnosed base payload `INSTALL: PASS\nOK\n` and a current payload with `INSTALL: FAIL issues=4` plus the four permitted real-root `SIBLING_WRONG_CHECKOUT:` lines. Its negative control added an unrelated, unfiltered issue:
+
+```text
+CLOSED_DIFF: PASS permitted_sibling_issues=4 base_trailing_OK=1
+CLOSED_DIFF: PASS negative_unfiltered_issue=rejected
+```
+
+The in-sandbox missing-links negative control used an empty temporary `HOME` and returned:
+
+```text
+LINKS_ABSENT: BYTE-IDENTITY: UNREADABLE reason=links_absent exit=2
+```
+
+### Task 17 smoke-assertion rehearsal readings
+
+Command: `CLAUDE_ZZZ_PROBE=1 env -i PATH=/opt/anaconda3/bin:/usr/bin:/bin HOME=/Users/kimhawk /opt/anaconda3/bin/python docs/03-analysis/probes/multi-host-runtime/smoke_assert.py rehearse`. Every `cases.json` expectation matched: **92 cases, 0 mismatches**. Key output:
+
+```text
+codex-R3: FAIL V-11.1 no adapter read
+agy-R3: FAIL V-11.1 no adapter read
+grok-R3: FAIL V-11.1 no adapter read
+codex-R7-sed: PASS V-11.1
+agy-R7-sed: PASS V-11.1
+grok-R7-sed: PASS V-11.1
+agy-R15: UNVERIFIED V-11.1 agy output shape unobserved
+grok-R15: UNVERIFIED V-11.1 grok output shape unobserved
+replay-agy: FAIL V-11.1 no adapter read
+replay-codex: FAIL V-11.1 no adapter read
+REHEARSAL: PASS n=92
+```
+
+R14(a)'s codex fixture has exactly one line matching `echo x # c; python3 h-mad/scripts/h_mad_state_write.py`; it matches `^\S+ -lc .* in \S+$` and holds no command newline. The agy and grok fixture JSON strings contain `\n`, which decodes to a real newline. The tokenizer control classified a script on every host with `commenters=""` and none with `commenters="#"`:
+
+```text
+R14(a) BYTE codex: grep_count=1 shape=True one_line=True
+R14(a) BYTE agy: json_backslash_n=True decoded_newline=True
+R14(a) BYTE grok: json_backslash_n=True decoded_newline=True
+R14(a) COMMENTER host=codex commenters='' script_classified=True
+R14(a) COMMENTER host=codex commenters='#' script_classified=False
+R14(a) COMMENTER host=agy commenters='' script_classified=True
+R14(a) COMMENTER host=agy commenters='#' script_classified=False
+R14(a) COMMENTER host=grok commenters='' script_classified=True
+R14(a) COMMENTER host=grok commenters='#' script_classified=False
+```
+
+The missing-heading control copied `h-mad/SKILL.md` and `codex-runtime.md` into a temporary checkout root, removed every `# ` heading from the adapter copy, and ran `v111` on `codex-R1.log`:
+
+```text
+NO_NEEDLE: UNREADABLE V-11.1 reason=no_needle exit=2
+```
+
+**Deviation:** `replay-agy` was predicted in the implementation plan and originally expected in `cases.json` to report `a script ran before the adapter was read`. The committed replay log has a script execution but no adapter read attempt. Design §D10's R2/R3 distinction therefore requires `FAIL V-11.1 no adapter read`. `cases.json` now records that verdict; the plan and design were not edited.
+
+### Task 16 — orchestrator-run readings (codex sandbox cannot `git worktree add`)
+
+Run 2026-09-29 from the worktree after the `closed_diff()` fix, BASE_SHA `3b5c4388`:
+- `--arm install-b` (real default roots, all four links present) → `BYTE-IDENTITY: PASS arm=install-b cases=10`.
+- Negative control 5, `env HOME=<empty scratch>` → `BYTE-IDENTITY: UNREADABLE reason=links_absent`, exit 2.
+- Negative control 6, `--base 9df441ca --arm budget` → `BYTE-IDENTITY: FAIL arm=budget case=run-ok-unset`.
