@@ -14,7 +14,7 @@ three probe-sidecar files (design Implementation Order step 1, placed here by or
 decision), and Task 1 takes the remaining 5c readings. Strand 1 is the parity checker (Task 2)
 and the registry (Task 3). Strand 2 is the host classifier (Task 4) and the three `wiring` tasks
 W1–W3 (Tasks 5, 6, 7). Strand 3 is the six adapters, one per task (Tasks 8–13). Strand 4 is the
-two `SKILL.md` edits (Task 14). Task 15 authors and scores the 94 mutation rows in three specs.
+two `SKILL.md` edits (Task 14). Task 15 authors and scores the 97 mutation rows in three specs.
 Tasks 16 and 17 author the rest of the probe sidecar (`byte_identity.py`, then `smoke_assert.py`
 with `rehearsal/`). Task 18 is the full coupled-suite gate.
 2 + 2 + 1 + 3 + 6 + 1 + 1 + 2 + 1 = 19.
@@ -52,16 +52,21 @@ section where they differ.
      `test_branch_expander_refuses_unsupported_shapes[group-plus|atom-brace|unbalanced]`,
      `test_host_cli_stub_control_fires[codex|agy|grok]` and
      `test_env_override_is_read[agents|agy]`.
-3. **Mutation rows: 94, from the design's 88 members plus 6 wire rows.** The design's table heading
-   reads "each one mutant per member". Its members are: `host_parity.json` 65 (42 + 5 + 4 + 3 + 6
-   + 1 + 1 + 1 + 1 + 1, Task 15), `host_declaration.json` 13, and `install_check_roots.json` 10.
-   The install table's 7 classes expand to 10 members because three classes name one member per
-   root: "the env override read dropped", "an empty override read as unset" and "the override
-   preferred over an explicit option", each for `agents` and `agy`. The 6 wire rows are the plan's
-   wire-scoped reverts and force-fires scored through the harness (W1 revert, W1 force-fire, W2
-   revert, W2 force-fire, W3 revert of each of its two wires). W3's two force-fires are already
-   design members ("the agy name split inverted" and "the split applied to the Claude root").
-   88 + 6 = 94.
+3. **Mutation rows: 97, from the design's 88 members, plus 1 per-branch split row, plus 8 wire
+   rows.** The design's table heading reads "each one mutant per member". Its members are:
+   `host_parity.json` 65 (42 + 5 + 4 + 3 + 6 + 1 + 1 + 1 + 1 + 1, Task 15),
+   `host_declaration.json` 13, and `install_check_roots.json` 10. The install table's 7 classes
+   expand to 10 members because three classes name one member per root: "the env override read
+   dropped", "an empty override read as unset" and "the override preferred over an explicit
+   option", each for `agents` and `agy`. The 1 split row: plan v1.3's suppression rule (d) has two
+   trigger branches (`TABLE_MISSING`, and `TABLE_MALFORMED reason=header`), so it lands as two
+   tagged statements with one row each (Sd-missing, Sd-header) instead of the design's one "rule
+   (d) removed" member (`invariants.base.md` §"Test discrimination": each branch its own fixture).
+   The 8 wire rows are the plan's wire-scoped reverts and force-fires scored through the harness:
+   W1 revert, W1 force-fire, W2 revert, W2 force-fire, and for each of W3's two wires a revert and
+   a force-fire (FF3a, FF3b; audit cycle 1). The design members I1 ("the agy name split inverted")
+   and I2 ("the split applied to the Claude root") are behaviour mutants of the split, not
+   force-fires of a `main` → `check` connection. 88 + 1 + 8 = 97.
 4. **The AC-9.3 executable doc test seeds `docs/.bkit-memory.json` with `{}`** before it runs the
    `--create --claim` line. Measured at `7e155451` in a `tempfile.TemporaryDirectory` git
    repository, which was removed on exit:
@@ -82,6 +87,27 @@ section where they differ.
    the trailing-space mutant survive the `h-mad`/`h-mad-x` fixture. `PosixPath` sorting puts
    `h-mad` before `h-mad-x`, measured with `sorted([Path('r/h-mad-x/SKILL.md'),
    Path('r/h-mad/SKILL.md')])` at `7e155451`.
+7. **Task 0 runs at 5c, not before the design gate.** Design Implementation Order step 1 reads
+   "**Before the design gate clears** … The design gate cannot clear under this order until it
+   does." (design lines 1380–1385). The design gate closed at design v1.2 (`34c0e962`, "final
+   corrective revision after round 2") without that step, and the probe directory is still absent
+   at `a85abf7f` (`ls docs/03-analysis/probes/multi-host-runtime` → "No such file or directory").
+   Placing the three files at 5c is the orchestrator's decision, and this plan cannot move work
+   in front of a gate that has already closed. This is a real conflict with the design text, not a
+   precision: it is stated here so review sees it, and it stays open for the orchestrator, who can
+   either confirm the 5c placement or revise the design (audit cycle 1, codex must 1).
+8. **`h-mad/SKILL.md` surfaces that describe the scripts W1 and W3 change are updated in Task
+   14.** This is an addition to design §D11, which edits only `## Host runtime` and the
+   `cannot_judge` row. The Axis-B invariant (`.h-mad/invariants.md` §"Skill manifest integrity":
+   "A skill whose entry behavior is changed without updating its `SKILL.md` contract is a
+   violation") requires it. After Task 7, the bootstrap's option-less
+   `h_mad_install_check.py` call also reads `~/.agents/skills` and `~/.gemini/config/skills`.
+   At `a85abf7f`, `h-mad/SKILL.md` names none of `~/.agents/skills`, `~/.gemini/config/skills`,
+   `HMAD_AGENTS_SKILLS_DIR`, `HMAD_AGY_SKILLS_DIR`, `AGY_SIBLING_COLLISION`, `host_unsupported`,
+   `unknown_host` or `h_mad_host.py` (`grep -cF` → 0 lines for each). Its
+   `SIBLING_NOT_SYMLINK` remedy is `rm -rf ~/.claude/skills/` plus the skill name (line 84), which
+   deletes the wrong entry for a line naming another root. The design's §D11 has the same gap, so
+   this deviation is also owed to the design (audit cycle 1, teammate must 3).
 
 ## Preamble — where and how this plan runs
 
@@ -100,17 +126,37 @@ section where they differ.
   merged: `git branch -a` lists `feature/216-grok-codex-fallback` only, checked out in
   `~/orca/skills-grok-codex-fallback`.
 - **`BASE_SHA`.** It is the commit the branch forks from, which is the parent of the 5c commit.
-  It is derived once, in Task 1, as the parent of the sha that
-  `python3 h-mad/scripts/h_mad_baseline_sha.py --branch feature/multi-host-runtime` prints. Read
-  the `BASELINE:` token first; only `OK` carries `sha=`, and any other token halts Task 1 with
-  `HALT: BASELINE not OK`. Every "at `BASE_SHA`" in this plan means that commit. The 5c commit
-  (the impl-plan and its audits) must be the branch's first commit, which is what
+  It is first derived in Task 0, as that task's first step and before any probe runs, as the
+  parent of the sha that `h_mad_baseline_sha.py` prints. Shell variables do not survive between
+  commands, so every task that uses `$BASE_SHA` runs this block first, in the same shell as the
+  commands that use it:
+  ```bash
+  BL=$(/opt/anaconda3/bin/python h-mad/scripts/h_mad_baseline_sha.py --branch feature/multi-host-runtime | grep -m1 '^BASELINE:')
+  case "$BL" in
+    "BASELINE: OK sha="*) BASE_SHA=$(git rev-parse "$(printf '%s\n' "$BL" | sed -E 's/^BASELINE: OK sha=([0-9a-f]{40}).*/\1/')^") ;;
+    *) BASE_SHA=""; echo "HALT: BASELINE not OK: $BL" ;;
+  esac
+  ```
+  Read the `BASELINE:` token; only `OK` carries `sha=`. An empty `BASE_SHA` or a printed
+  `HALT: BASELINE not OK` stops the task. Task 0 writes the value into the Phase-6 document's
+  §"Baseline at BASE_SHA"; every later derivation must equal that recorded value, or the task
+  halts to the operator. Every "at `BASE_SHA`" in this plan means that commit. The 5c commit (the
+  impl-plan and its audits) must be the branch's first commit, which is what
   `h_mad_baseline_sha.py` verifies. Task 0's probe commit therefore follows it.
-- **Codex authors 5d/5e.** `h-mad/hooks/h-mad-tdd-gate.sh` blocks a Claude write to any
-  non-test `.py`. For every `h-mad/scripts/*.py` path, `h_mad_derive_test_path.sh` derives no
-  test path (it prints nothing for each of the four scripts this plan edits and for the probe
-  paths, read at `7e155451`), so the gate's fallback branch would block a Claude-authored write
-  with "cannot derive test path". If codex is out, halt to the operator; never bypass the gate.
+- **Codex authors every non-test `.py`, including the probes.** `h-mad/hooks/h-mad-tdd-gate.sh`
+  blocks a Claude write to any non-test `.py` while any feature's phase is `step5`, and 5a sets
+  `phase = "step5"` (`h-mad/SKILL.md` §5a). For every `h-mad/scripts/*.py` path,
+  `h_mad_derive_test_path.sh` derives no test path (it prints nothing for each of the four
+  scripts this plan edits and for the probe paths, read at `7e155451`), so the gate's fallback
+  branch would block a Claude-authored write with "cannot derive test path". Codex therefore
+  authors 5d/5e, and also the three probe tasks that write a `.py`: Task 0 (`seed_coverage.py`),
+  Task 16 (`byte_identity.py`) and Task 17 (`smoke_assert.py`). If codex is out, halt to the
+  operator; never bypass the gate.
+- **Interpreter.** Every command this plan tells an implementer to run uses
+  `/opt/anaconda3/bin/python` (or `python3.11`, which resolves to it). On this host bare `python3`
+  is `/opt/homebrew/bin/python3` and has no pytest. The only `python3` spellings left are text
+  written into adapters and `SKILL.md` (design §D9 and §D12 pin them) and the argv inside
+  rehearsal fixtures.
 - **No test in this plan runs `codex`, `agy` or `grok`.** The live smoke is Phase 7 (plan), after
   7f and before 7e. It is described under §"After Phase 5" and is not a task.
 - **The operator's four install links** (`~/.agents/skills/{h-mad,handoff}`,
@@ -136,7 +182,7 @@ section where they differ.
 
    | After task | Carried-RED nodes (all in `P`) | Count |
    |---|---|---|
-   | 2 | `test_live_registry_and_skill_files_are_clean`; `test_live_adapter_is_clean` × 6; `test_registry_holds_every_seed_id`; `test_registry_branch_samples` × 22 | 30 |
+   | 2 | `test_live_registry_and_skill_files_are_clean`; `test_live_adapter_is_clean` × 6; `test_registry_holds_every_seed_id`; `test_registry_branch_samples` × 22 (one per `BRANCH_SAMPLES` key; 22 at the seed) | 30 |
    | 3, 4, 5, 6, 7 | `test_live_adapter_is_clean[h-mad-codex|h-mad-agy|h-mad-grok|handoff-codex|handoff-agy|handoff-grok]` | 6 |
    | 8 | the five ids except `h-mad-codex` | 5 |
    | 9 | `h-mad-grok`, `handoff-codex`, `handoff-agy`, `handoff-grok` | 4 |
@@ -159,11 +205,13 @@ section where they differ.
    node ids (`tests/test_x.py::test_y[id]` in specs, relative to `h-mad/`).
 6. **Committed anchors.** After every task that edits a file some committed mutation spec
    anchors, both of
-   `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/*.json`
-   and `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors handoff/tests/mutation-specs/*.json`
+   `env -u HMAD_HOST /opt/anaconda3/bin/python h-mad/scripts/h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/*.json`
+   and `env -u HMAD_HOST /opt/anaconda3/bin/python h-mad/scripts/h_mad_mutation_harness.py --check-anchors handoff/tests/mutation-specs/*.json`
    must print `ANCHORS_OK` with `drifted=0`. Read the `ANCHORS:` token, never `$?`. The anchored
-   files this plan edits are the three scripts, `h-mad/tests/conftest.py` and both `SKILL.md`
-   files.
+   files this plan edits are the three scripts and both `SKILL.md` files. `h-mad/tests/conftest.py`
+   is not anchored by any committed spec (the `"file"` values of both spec directories name no
+   conftest: 0 matching lines at `a85abf7f`); it is swept anyway because the sweep is
+   directory-wide.
 7. **Mutation spec form.** `root` is `"../.."` (the `h-mad/` directory); `file` is
    `scripts/…` or `tests/…`; `test` is `tests/<file>.py::<name>[<id>]`; `command` and
    `target_command` start with `python3.11` (`which python3.11` → `/opt/anaconda3/bin/python3.11`,
@@ -211,11 +259,14 @@ such file or directory").
 - **`seed_coverage.py --sha SHA --registry PATH [--branches]`**:
   - Per-entry mode reads both `SKILL.md` files through `git show` at the given sha and counts
     occurrences with `re.finditer`. It prints one line per entry, in the form
-    `ENTRY id=claude-md h-mad=2 handoff=1 declared=h-mad,handoff verdict=ok`. The verdict is `ok`,
-    `stale:` plus the skill name (0 hits in a declared skill), or `undeclared:` plus the skill
-    name (≥ 1 hit in an undeclared skill). It ends with
-    `SEEDCOV: PASS entries=N stale=0 undeclared=0` or
-    `SEEDCOV: FAIL entries=N stale=N undeclared=N`, exit 0.
+    `ENTRY id=claude-md h-mad=2 handoff=1 declared=h-mad,handoff verdict=ok`. A **finding** is
+    `stale:` plus a skill name (0 hits in a declared skill) or `undeclared:` plus a skill name
+    (≥ 1 hit in an undeclared skill). One entry can carry a finding per skill, so the verdict is
+    `ok` when the entry has none, and otherwise every finding of the entry, comma-joined, in skill
+    order `h-mad` then `handoff` (for example `verdict=undeclared:h-mad,stale:handoff`). It ends
+    with `SEEDCOV: PASS entries=N stale=0 undeclared=0` or
+    `SEEDCOV: FAIL entries=N stale=N undeclared=N`, exit 0. `entries` counts entries; `stale` and
+    `undeclared` count findings, not entries.
   - `--branches` imports `expand_branches` from `h-mad/tests/host_parity.py`, reached by putting
     the repository's `h-mad/tests` directory on `sys.path`. It prints one line per branch ×
     declared skill, in the form
@@ -228,11 +279,15 @@ such file or directory").
     unresolvable sha prints `SEEDCOV: UNREADABLE reason=bad_sha`; both exit 2.
   - It is stdlib only.
 
+**Author**: codex (§Preamble), because `seed_coverage.py` is a non-test `.py`.
+
 **Probe-run step** (the reading is written to `docs/03-analysis/multi-host-runtime.analysis.md`,
-§"Baseline at BASE_SHA", which this task creates):
+§"Baseline at BASE_SHA", which this task creates). All three items run in one shell:
+0. **Derive `BASE_SHA`** with the §Preamble block. A `HALT: BASELINE not OK` line or an empty
+   `BASE_SHA` stops the task before item 1. Record the value first in §"Baseline at BASE_SHA".
 1. `bash docs/03-analysis/probes/multi-host-runtime/calibrate.sh "$BASE_SHA"` → record every
    line. This is AC-4.5's reading.
-2. `python3 docs/03-analysis/probes/multi-host-runtime/seed_coverage.py --sha "$BASE_SHA" --registry docs/03-analysis/probes/multi-host-runtime/seed.json`
+2. `/opt/anaconda3/bin/python docs/03-analysis/probes/multi-host-runtime/seed_coverage.py --sha "$BASE_SHA" --registry docs/03-analysis/probes/multi-host-runtime/seed.json`
    → record every line.
 
 **Controls, each executed in this task** (expected values were read at `7e155451`, where
@@ -248,8 +303,12 @@ such file or directory").
   `SEEDCOV: UNREADABLE reason=no_expander`, because `host_parity.py` does not exist yet. This
   control shows that branch mode refuses rather than guessing.
 - C0.4 (negative): a scratch copy of `seed.json` with `advisor`'s `skills` set to `["handoff"]`,
-  written in the session scratchpad and deleted after the run →
-  `SEEDCOV: FAIL entries=22 stale=1 undeclared=1`.
+  written in the session scratchpad and deleted after the run → the line
+  `ENTRY id=advisor h-mad=18 handoff=0 declared=handoff verdict=undeclared:h-mad,stale:handoff`
+  and `SEEDCOV: FAIL entries=22 stale=1 undeclared=1`. The two hit counts were read at
+  `7e155451` with `re.findall(r'\badvisor\(\)', …)` over `git show 7e155451:<skill>/SKILL.md`:
+  18 occurrences in `h-mad`, 0 in `handoff`. One entry carries both findings, which is the case
+  the per-entry verdict list exists for.
 - C0.5: `calibrate.sh deadbeef` → `CALIBRATE: UNREADABLE reason=bad_sha`, exit 2.
 
 The `BASE_SHA` readings move with either `SKILL.md`, because both siblings edit `h-mad/SKILL.md`.
@@ -259,6 +318,8 @@ They are recorded, never compared with the `7e155451` controls.
 - [ ] AC-4.5 (reading half): the calibration command and its reading at `BASE_SHA` are in the
   Phase-6 document's §"Baseline at BASE_SHA".
 - [ ] C0.1–C0.5 print exactly the tokens above.
+
+- [ ] `BASE_SHA` was derived by item 0 before item 1 ran, and its value is recorded.
 
 **Mutation rows**: none. **Dependencies on other tasks**: None. It runs right after the 5c
 impl-plan commit.
@@ -272,8 +333,10 @@ impl-plan commit.
 **Task shape**: `gate`
 
 **Description**: The rest of design Implementation Order step 2 and plan §"Rebase, then
-baseline". Each item records its command and reading, stamped with `BASE_SHA`:
-1. **Derive `BASE_SHA`** (§Preamble).
+baseline". Each item records its command and reading, stamped with `BASE_SHA`; every item that
+uses `$BASE_SHA` runs in the same shell as item 1's derivation, or repeats it:
+1. **Re-derive `BASE_SHA`** with the §Preamble block and compare it with the value Task 0
+   recorded. A difference halts to the operator.
 2. **Four-link gate.** Run the plan's loop verbatim. Its first `HALT` line stops 5c and goes to
    the operator. The loop is `for p in ~/.agents/skills ~/.gemini/config/skills; do for k in h-mad
    handoff; do test -L …; test "$(readlink -f …)" = "/Users/kimhawk/orca/skills/$k"; done; done`.
@@ -307,16 +370,26 @@ baseline". Each item records its command and reading, stamped with `BASE_SHA`:
    tokens (13 in `h-mad/SKILL.md`, 12 in `handoff/SKILL.md`). Record:
    - every new distinct token, classified as a Claude construct or a false hit;
    - every entry whose per-entry verdict is not `ok`;
-   - the resulting registry changes: a new entry, a retirement with its reason, or an axis or
-     exclusion narrowed with a new control. A false hit is never registered.
+   - the resulting registry changes: a new entry, or a retirement with its reason. A false hit is
+     never registered.
 
-   Task 3 builds the registry from `seed.json` plus exactly this record.
+   Task 3 builds the registry from `seed.json` plus exactly this record. **A false hit halts.**
+   Spec AC-4.6 fixes a false hit by "narrowing an axis or its exclusion, which is recorded with a
+   new control". Design §D2 gives no narrowing mechanism: `CATCH_ALL_AXES`, `A4_BRANCHES` and
+   `EXCLUSION_SUFFIXES` are fixed constants, each entry is a Task 15 mutation row (S5), and a new
+   suffix or a narrowed axis changes the design's member count and needs its own killing
+   fixture. So when this record classifies any token as a false hit, Task 1 ends with
+   `HALT: AC-4.6 false hit — design delta owed`, naming the token, and Task 3 does not start. The
+   orchestrator routes the narrowing to a design revision, which names the changed constant, its
+   discriminating control and its mutation row. This plan does not invent that mechanism.
 
 **Acceptance Criteria**:
 - [ ] AC-4.6: the record (item 9) is in the Phase-6 document before Task 3 starts.
 - [ ] AC-6.1: the gap table (item 8) with its sha is in the Phase-6 document.
 - [ ] `REFUSAL_FORM_AT_BASE` is recorded as one of `exit1`, `a` or `b`, or the task halted.
 - [ ] The four-link gate printed no `HALT`, or the task halted to the operator.
+- [ ] The AC-4.6 record classifies no token as a false hit, or the task halted with the design
+  delta owed.
 
 **Mutation rows**: none. **Dependencies on other tasks**: Task 0
 
@@ -331,7 +404,7 @@ only `testpaths = h-mad/tests handoff/tests handoff/scripts`, read at `7e155451`
 
 **Description**: Design §D2 in full: the registry, `SKILL.md` and adapter stages, catch-all,
 suppression rules (a)–(e), the adapter-table reader and the branch expander. The module imports
-`json`, `re`, `dataclasses`, `pathlib`, `typing` and `h_mad_doc_block_exec`, the last through
+`json`, `re`, `sys`, `dataclasses`, `pathlib`, `typing` and `h_mad_doc_block_exec`, the last through
 `sys.path.insert(0, <h-mad>/scripts)` as `h-mad/tests/docsections.py` does. It imports no
 `subprocess` and calls no `os.system` or `os.popen`. The fence helpers were verified at
 `7e155451`:
@@ -339,7 +412,11 @@ suppression rules (a)–(e), the adapter-table reader and the branch expander. T
   `AmbiguousHeading`;
 - `fence_aware_end(text: str, start: int, level: int) -> int`;
 - `_fence_events(text: str) -> Iterator[_FenceEvent]`, where `_FenceEvent` carries `lineno`,
-  `kind`, `start`, `end`, `level` and `text`.
+  `kind`, `start`, `end`, `level` and `text`. `text` is filled only for `heading` events, where it
+  holds the title; every `body` and `prose` event keeps the default `text=""`
+  (`h-mad/scripts/h_mad_doc_block_exec.py`, `_fence_events`, read at `a85abf7f`). A line's text is
+  therefore always `text[event.start:event.end].rstrip("\r\n")`, never `event.text`, both in
+  `adapter_table`'s "begins with `|`" test and in Task 8's `_fenced_lines`.
 
 **Code structure** (design §D2.1, verbatim contracts):
 ```python
@@ -386,9 +463,11 @@ def check(paths: ParityPaths, *, axes: Mapping[str, str] = CATCH_ALL_AXES,
 
 **Landed structure** (Task 15's rows anchor on it; each rule is checkable with `grep -c` on the
 landed file):
-- **S1.** Every emission of a `(kind, reason)` pair is one statement on its own line,
-  `failures.append(...)`, and the control-flow statement after it (`return`, `continue` or a skip
-  flag) is on a separate line. Each emission line ends with a tag comment naming the design
+- **S1.** Every emission of a `(kind, reason)` pair is one statement on its own line:
+  `failures.append(...)`, or, inside `adapter_table` (which returns `Table.problems` for `check()`
+  to convert), `problems.append(...)`. The table-kind emissions D21–D25 and D42 are the
+  `problems.append(...)` ones. The control-flow statement after an emission (`return`, `continue`
+  or a skip flag) is on a separate line. Each emission line ends with a tag comment naming the design
   disjunct it emits: `# M:D01` … `# M:D42` in the order of the fixture table below. Two families
   share one line: `# M:D07-D10` (the `missing_key` emission inside `for key in REQUIRED_KEYS:`,
   whose reason is `f"missing_key:{key}"`) and `# M:D31-D36` (the `CELL_EMPTY` emission, whose
@@ -399,9 +478,19 @@ landed file):
 - **S3.** The ids of `BAD_PATTERN` entries go into a set by a statement separate from the emission.
   Later stages skip entries through that set, so disabling an emission never lets
   `re.compile` see a non-`str` pattern.
-- **S4.** Each suppression rule (a)–(e) is one statement tagged `# M:Sa` … `# M:Se`. The statement
-  is either an `if` whose condition switches the rule on, or a single side-effect statement (for
-  (e), recording the cell-count row's id as present).
+- **S4.** Suppression rules (a), (b), (c) and (e) are each one statement, tagged `# M:Sa`,
+  `# M:Sb`, `# M:Sc` and `# M:Se`. Rule (d) has two trigger branches in plan v1.3 ("An adapter
+  with `TABLE_MISSING`, or with `TABLE_MALFORMED reason=header`, yields no `ROW_*`,
+  `STATUS_INVALID` or `CELL_EMPTY` line"; design §D2.4 names only the header branch), so it is two
+  statements, `# M:Sd-missing` (the adapter has a `TABLE_MISSING` problem) and `# M:Sd-header`
+  (it has `TABLE_MALFORMED reason=header`). A `TABLE_MISSING` adapter has no rows, so what
+  Sd-missing suppresses is one `ROW_MISSING` per registry id declared for the adapter's skill.
+  Each tagged statement is either an `if` whose condition switches the rule on, or a single
+  side-effect statement (for (e), recording the cell-count row's id as present). Rule (b) has two
+  halves: Sb is the `UNREGISTERED` skip; the `STALE_ENTRY`/`UNDECLARED_SKILL` skip is S3's
+  set-skip, which is not tagged. Residual, stated rather than rowed: disabling that set-skip makes
+  `re.compile` see `"("` in fixture (b), which is a crash kill and never an assertion kill, so it
+  gets no row (Task 15's pass condition requires `crash_kills=0`).
 - **S5.** `CATCH_ALL_AXES` and `A4_BRANCHES` are dict literals with one entry per line, tagged
   `# M:A1` … `# M:A4` and `# M:B1` (`tilde`), `# M:B2` (`home`), `# M:B3` (`home_braced`).
   `CATCH_ALL_AXES["A4"]` is `a4_pattern(A4_BRANCHES.values())`. `EXCLUSION_SUFFIXES` is a
@@ -411,7 +500,8 @@ landed file):
   The `tbd`/`todo` test is one line tagged `# M:C1` holding `.lower()`. The `BAD_PATTERN` step
   iterates only elements whose field checks ran, on one line tagged `# M:P1`. The cell-count
   branch reads its id through `_cell_id(cells[0])` on one line tagged `# M:K1`.
-- **S7.** Each tag occurs exactly once in the file, except that `# M:X` is on the one tuple line.
+- **S7.** Each tag occurs exactly once in the file. (`# M:X` is simply the tag of the one tuple
+  line; it is not an exception.)
 
 **Clean baseline** (one builder, `_baseline(tmp_path) -> ParityPaths`, shared by every fixture):
 - registry: `advisor` (pattern `\badvisor\(\)`, skills `["h-mad"]`) and `claude-md` (pattern
@@ -487,7 +577,10 @@ disjunct fixtures. The splits are D37–D42 = 6. 36 + 6 = 42.
 - (b): D17's edit plus D20's edit → `{(BAD_PATTERN, None)}`;
 - (c): D16's edit, plus the `claude-md` row deleted from handoff codex →
   `{(DUPLICATE_ID, None)}`;
-- (d): D24's edit, plus h-mad codex `advisor` status `maybe` → `{(TABLE_MALFORMED, header)}`;
+- (d): D24's edit, plus h-mad codex `advisor` status `maybe` → `{(TABLE_MALFORMED, header)}`.
+  This is the header branch (Sd-header). The `TABLE_MISSING` branch (Sd-missing) has its own
+  fixture, D21 (`tm-no-heading`): without the rule it yields `TABLE_MISSING` plus a
+  `ROW_MISSING` for each of `advisor` and `claude-md`, so its exactly-one-pair assertion fails;
 - (e): h-mad codex `advisor` row with five cells → `{(TABLE_MALFORMED, cell_count)}`.
 
 **Catch-all fixtures** (spec AC-4.2 and AC-4.3). The fixture tokens are A1 `Foobar(`, A2
@@ -509,8 +602,13 @@ per-entry branch counts below were measured at `7e155451` by an in-memory expans
 - 1 each for the other 9 entries.
 
 That is 45 + 9 = 54 branches. `SEED_IDS` lists the 22 spec-seed ids, and `RETIRED_IDS` is `{}`.
+`BRANCH_SAMPLES` is keyed by construct id (22 keys at the seed), and the sample test is
+parametrized over its keys, so a retired id (removed from `BRANCH_SAMPLES`) has no sample node
+and an added id (a new key) has one. `test_registry_holds_every_seed_id` and item 20 share one
+module helper, `_missing_seed_ids(registry_ids, seed_ids, retired) -> list[str]`: the seed ids
+that are neither in `registry_ids` nor a `retired` key with a non-empty reason.
 
-**Tests** (120 collected items):
+**Tests** (124 collected items):
 1. `test_live_registry_and_skill_files_are_clean` (1). It asserts
    `"registry" in result.stages`, no failure line naming the registry or either `SKILL.md`, and no
    failure line whose `file=` names none of the nine files.
@@ -538,9 +636,10 @@ That is 45 + 9 = 54 branches. `SEED_IDS` lists the 22 spec-seed ids, and `RETIRE
     `## Construct mapping` and before the real table, a fenced block holding a pipe table with a
     `zeta-thing` row. It yields `[]`.
 14. `test_registry_holds_every_seed_id` (1). It first asserts that the live registry file exists,
-    then AC-1.2.
-15. `test_registry_branch_samples[…]` (22): one id per `SEED_IDS` entry, spelled as the construct
-    id (for example `claude-settings`).
+    then AC-1.2: `_missing_seed_ids(<live registry ids>, SEED_IDS, RETIRED_IDS) == []`.
+15. `test_registry_branch_samples[…]` (22 at the seed): one id per `BRANCH_SAMPLES` key, spelled
+    as the construct id (for example `claude-settings`). Each case reads that id's pattern from
+    the live registry.
 16. `test_branch_expander_refuses_unsupported_shapes[group-plus|atom-brace|unbalanced]` (3), over
     `(?:a|b)+`, `a{2}` and `(a` respectively.
 17. `test_gate_runs_no_host_cli` (1). Stubs named `codex`, `agy` and `grok` are written to
@@ -553,16 +652,28 @@ That is 45 + 9 = 54 branches. `SEED_IDS` lists the 22 spec-seed ids, and `RETIRE
 19. `test_host_parity_has_no_direct_launcher_import` (1). This is a source scan: no
     `import subprocess`, `os.system` or `os.popen` in `host_parity.py` (direct-only, plan AC-3.5
     note).
+20. `test_seed_check_honours_retirement[retired-with-reason|retired-empty-reason|absent-not-retired]`
+    (3), the positive control for the retirement reason. It calls `_missing_seed_ids` in memory,
+    with `seed_ids=["advisor", "claude-md"]` and `registry_ids=["claude-md"]`, and
+    `retired` set to `{"advisor": "fixture reason"}`, `{"advisor": ""}` and `{}` respectively. The
+    expected results are `[]`, `["advisor"]` and `["advisor"]`. It reads no registry file.
+21. `test_host_parity_has_no_fence_scanner` (1). It imports the module-level
+    `recognition_sites` from `test_h_mad_doc_block_exec` (defined at line 327 of
+    `h-mad/tests/test_h_mad_doc_block_exec.py`, read at `a85abf7f`). It first asserts the positive
+    control `recognition_sites("def f(t):\n    return t.startswith('#')\n") == {"f"}`, then
+    `recognition_sites(<host_parity.py source>) == set()`. This is the guard that host_parity
+    adds no fence scanner: the existing `test_extract_has_no_fence_state_of_its_own` parses only
+    `h_mad_doc_block_exec.py`, so it cannot fail on anything in `host_parity.py`.
 
-1+6+1+42+5+1+6+7+6+6+6+1+1+1+22+3+1+3+1 = 120.
+1+6+1+42+5+1+6+7+6+6+6+1+1+1+22+3+1+3+1+3+1 = 124.
 
 **Expected RED split**: the test module imports `host_parity` at module level (design
 Implementation Order step 3), so RED is one collection error,
-`ModuleNotFoundError: No module named 'host_parity'`, with 0 items. **After GREEN**: 90 passed and
+`ModuleNotFoundError: No module named 'host_parity'`, with 0 items. **After GREEN**: 94 passed and
 30 failed. The 30 are exactly the carried-RED set for Task 2: the registry node fails on
 `REGISTRY_UNREADABLE reason=missing_file`, each adapter node fails on its stage guard, and the 23
-registry-file tests fail on "registry file absent". **Regression guards**: the full suite, including
-`test_h_mad_doc_block_exec.py`'s single-recognition-site test (host_parity reuses
+registry-file tests fail on "registry file absent". Items 20 and 21 read no registry file and
+pass. **Regression guards**: the full suite, including item 21 (host_parity reuses
 `_fence_events`; it adds no fence scanner).
 
 **Acceptance Criteria**:
@@ -572,10 +683,12 @@ registry-file tests fail on "registry file absent". **Regression guards**: the f
   nodes.
 - [ ] AC-3.4: `[stale-entry]` and `[undeclared-skill]`.
 - [ ] AC-3.5: `test_gate_runs_no_host_cli` with `test_host_cli_stub_control_fires[codex|agy|grok]`
-  as its positive control.
+  as its positive control. Each stub is a `#!/bin/sh` script that writes its marker with a shell
+  redirection (`: > marker`), a builtin, because the control's child `PATH` holds only the stub
+  directory and `touch` is not on it.
 - [ ] AC-4.2: items 7, 8 and 9. AC-4.3: items 10 and 11. AC-4.4: item 12.
 
-**Mutation rows** (authored and run in Task 15): 65 rows of `host_parity.json`.
+**Mutation rows** (authored and run in Task 15): 66 rows of `host_parity.json`.
 
 **Dependencies on other tasks**: Task 1
 
@@ -590,21 +703,29 @@ tests only if Item 9 of Task 1 adds an entry, as described below)
 
 **Description**: Design §D1. The registry is `seed.json`'s `constructs` array with exactly the
 Task 1 AC-4.6 record applied, and an optional `$comment` naming that record. If the record adds an
-entry, this task adds its samples to `BRANCH_SAMPLES` and its id to the sample test's params. If
-it retires one, it adds a `RETIRED_IDS` key with the reason, and the Phase-6 record names the same
-key. `SEED_IDS` stays the 22 spec ids. Then take the per-branch reading:
-`python3 docs/03-analysis/probes/multi-host-runtime/seed_coverage.py --sha "$BASE_SHA" --registry h-mad/references/host-constructs.json --branches`.
+entry, this task adds a `BRANCH_SAMPLES` key for it holding one sample per branch, which adds its
+sample node. If it retires one, it removes that id's `BRANCH_SAMPLES` key (so the retired id has
+no sample node) and adds a `RETIRED_IDS` key with the reason, and the Phase-6 record names the
+same key. `SEED_IDS` stays the 22 spec ids. A false hit never reaches this task: Task 1 halted on
+it (§Task 1 item 9). Then, in one shell with the §Preamble `BASE_SHA` block, take the per-branch
+reading:
+`/opt/anaconda3/bin/python docs/03-analysis/probes/multi-host-runtime/seed_coverage.py --sha "$BASE_SHA" --registry h-mad/references/host-constructs.json --branches`.
 Record it in the Phase-6 document, with every `ZERO` cell listed for the Phase-6 classification.
 At `7e155451`, an in-memory run of the same computation over the seed read
 `branches=54 cells=72 zero=25 dead=14`, which is DP2's figure. The figure moves with either
 `SKILL.md`.
 
-**Expected RED split**: the 30 carried nodes fail at the start of the task (registry absent). After
-GREEN, 24 pass: `test_live_registry_and_skill_files_are_clean`,
-`test_registry_holds_every_seed_id` and the 22 samples. The 6 adapter nodes stay RED, and their
-failure changes from the stage guard to `TABLE_MISSING reason=no_heading`. Check that change in
-the output: it is the executed evidence that the vacuity guard and the adapter stage both work.
-**Regression guards**: the 90 Task-2 nodes that already passed.
+**Expected RED split**, stated as formulas over `S = len(BRANCH_SAMPLES)` after this task's
+edits (S = 22 when the AC-4.6 record changes nothing; S = 22 + added − retired otherwise). At the
+start of the task the 30 carried nodes fail (registry absent). After GREEN, 2 + S pass:
+`test_live_registry_and_skill_files_are_clean`, `test_registry_holds_every_seed_id` and the S
+samples (24 when S = 22). The 6 adapter nodes stay RED, and their failure changes from the stage
+guard to `TABLE_MISSING reason=no_heading`. Check that change in the output: it is the executed
+evidence that the vacuity guard and the adapter stage both work. The carried-RED ledger's Task-3
+row (6) is unchanged by S. Whenever S ≠ 22, the Phase-6 document records the re-derived counts.
+If the retired id is `claude-settings`, Task 15's E1 row names the sample node of another
+retained entry with an optional group instead, and the Phase-6 record says so.
+**Regression guards**: the 94 Task-2 nodes that already passed.
 
 **Acceptance Criteria**:
 - [ ] AC-1.1 (live half): the committed registry passes the registry stage (item 1 node).
@@ -746,10 +867,13 @@ and item 6 `bad_window`. **WIRE-PIN RED reason**: the pin's stdout is a Claude r
 `CTXBUDGET: OK` line carrying `used=`), so the equality assertion on the caller's output fails. The test drives the CLI in a
 subprocess, and `h_mad_host` already exists (Task 4), so no import error is involved.
 **Regression guards**: the whole existing `h-mad/tests/test_h_mad_context_budget.py` module, run
-twice by AC-8.3 at GREEN: `env -u HMAD_HOST python3 -m pytest -q h-mad/tests/test_h_mad_context_budget.py`
-and `HMAD_HOST=claude python3 -m pytest -q h-mad/tests/test_h_mad_context_budget.py`. Each summary
-must show no `failed` and no `error`, and both must show the same `passed` count. The reading at
-`1ef1a782` (DP13) was 31 and 31.
+twice by AC-8.3 at GREEN:
+`env -u HMAD_HOST /opt/anaconda3/bin/python -m pytest -q -p no:cacheprovider h-mad/tests/test_h_mad_context_budget.py`
+and
+`env HMAD_HOST=claude /opt/anaconda3/bin/python -m pytest -q -p no:cacheprovider h-mad/tests/test_h_mad_context_budget.py`.
+Each summary must show no `failed` and no `error`, and both must show the same `passed` count. The
+reading at `1ef1a782` (DP13) was 31 and 31. (Bare `python3` has no pytest on this host: the v1.0
+spelling printed `No module named pytest`, audit cycle 1.)
 **Wire-scoped revert**: `    host_class, host_value = classify_host()` →
 `    host_class, host_value = "claude", None`. The pin fails, because stdout is a Claude reading.
 Scored as row WR1 (Task 15).
@@ -831,8 +955,8 @@ calls.
 5. `test_decide_empty_session_id_is_no_id[grok-live-foreign-owner|grok-no-owner]` (2), with
    `session_id=""` → `cannot_judge`.
 6. `test_resume_decision_cli_under_grok` (1): the CLI with
-   `env=hermetic_env(HMAD_HOST="grok")`, `--state`, `--feature fx`, no `--session-id`, and
-   `timeout=60.0` → stdout `cannot_judge`.
+   `env=hermetic_env(HMAD_HOST="grok")`, `--state` naming the `no-owner` state fixture's file,
+   `--feature fx`, no `--session-id`, and `timeout=60.0` → stdout `cannot_judge`.
 
 9+15+3+2+2+1 = 32.
 
@@ -1032,9 +1156,22 @@ fails. It is a CLI subprocess, and no import of a missing symbol is involved.
 autouse override (AC-10.2, first clause), and item 11.
 **Wire-scoped reverts**: remove `        agents_skills_dir=agents_dir,` from `main()`'s call, and pin 1
 fails (row WR3a). Remove `        agy_skills_dir=agy_dir,`, and pin 2 fails (row WR3b).
-**Force-fires**: I1 (the name split inverted, killed by
-`test_agy_root_cell[debugger-copy]`) and I2 (the split applied to the Claude root, killed by
-`test_claude_root_debugger_copy_still_fails`). Both are design members.
+**Force-fires**, one per root wire, each making `check()` read its root even when the caller
+passed no root keyword. FF3a inserts, directly before `        if agents_skills_dir is not None:`,
+the line
+`        agents_skills_dir = agents_skills_dir if agents_skills_dir is not None else os.environ.get(AGENTS_SKILLS_ENV)`;
+FF3b inserts, directly before `        if agy_skills_dir is not None:`, the line
+`        agy_skills_dir = agy_skills_dir if agy_skills_dir is not None else os.environ.get(AGY_SKILLS_ENV)`.
+The fallback is inside the body on purpose: a mutated signature default would be evaluated once,
+at import, before the test's `monkeypatch.setenv`, and would survive. Each is killed by assertion by
+`test_check_without_root_keywords_reads_no_new_root`: both variables name roots holding an
+`h-mad` copy, so under FF3a the agents root yields `SIBLING_NOT_SYMLINK`, and under FF3b the agy
+root yields it too (`h-mad` is an installed agy name, so `split_agy_root` keeps it as an issue).
+Either way `check()` no longer returns `[]`. `os` is imported by this task, so neither mutant is
+an import crash. I1 (the name split inverted, killed by `test_agy_root_cell[debugger-copy]`) and
+I2 (the split applied to the Claude root, killed by `test_claude_root_debugger_copy_still_fails`)
+are design members that mutate the split's behaviour. They are not force-fires of a `main` →
+`check` connection.
 
 **Acceptance Criteria**:
 - [ ] AC-10.1: item 1. AC-10.3: items 2, 3 and 4. AC-10.5: item 5. AC-10.6: item 6 and the existing
@@ -1042,8 +1179,8 @@ fails (row WR3a). Remove `        agy_skills_dir=agy_dir,`, and pin 2 fails (row
 - [ ] AC-10.2: the existing module unchanged, plus item 7 as its permanent pin. The byte-identity
   half is Task 16 and Phase 6.
 
-**Mutation rows** (Task 15): I1, I2, I3a, I3b, I4a, I4b, I5a, I5b, I6, I7, WR3a and WR3b in
-`install_check_roots.json` — 12 rows.
+**Mutation rows** (Task 15): I1, I2, I3a, I3b, I4a, I4b, I5a, I5b, I6, I7, WR3a, WR3b, FF3a and
+FF3b in `install_check_roots.json` — 14 rows.
 
 **Dependencies on other tasks**: Task 4 (the `hermetic_env` fixture)
 
@@ -1094,7 +1231,9 @@ this order, `## Install`, `## Context budget and claims` and `## Construct mappi
   `handoff-grok` to its path, for example `REPO_ROOT / "h-mad/references/codex-runtime.md"`;
 - `_section(text, heading) -> str` uses `find_heading` and `fence_aware_end`, and raises
   `LookupError` naming the heading on `None` or `AmbiguousHeading`;
-- `_fenced_lines(section) -> list[str]` returns the `body` events of `_fence_events`;
+- `_fenced_lines(section) -> list[str]` returns, for each `body` event `e` of
+  `_fence_events(section)`, the line `section[e.start:e.end].rstrip("\r\n")`. It never reads
+  `e.text`, which is `""` for every `body` event (Task 2 description);
 - `_row(adapter_id, construct_id) -> Row` calls `host_parity.adapter_table`, asserts
   `problems == []` and exactly one row with that id, and returns it.
 
@@ -1279,9 +1418,11 @@ file, and the Tasks 8–9 nodes.
 headings are `## Resolve the skill package`, `## Codex tool mapping`, `## Mode routing` and
 `## Safety invariants`. Add one row per registry entry declaring `handoff` (12 at the seed), from
 the codex column of design §D9.3. The `task-tools` row is `not-applicable` and names
-`.omc/notepad.md` and `update_plan` (as a lead). No `Skill(skill:`, `Agent(subagent_type:`,
-`AskUserQuestion` or `TodoWrite` appears anywhere in the file
-(`handoff/tests/test_handoff_codex_runtime.py`, AC-6.6). No text points into an `h-mad` file.
+`.omc/notepad.md` and `update_plan` (as a lead). No `Skill(skill:`, `AskUserQuestion` or
+`TodoWrite` appears anywhere in the file (`handoff/tests/test_handoff_codex_runtime.py` forbids
+exactly those three, line 37, AC-6.6). `Agent(subagent_type:` is kept out too, as a stricter
+self-imposed rule borrowed from `h-mad/tests/test_h_mad_codex_runtime.py`. No text points into an
+`h-mad` file.
 
 **Tests** (4 new collected items):
 - `test_task_tools_row[handoff-codex-status|handoff-codex-notepad|handoff-codex-update-plan]` (3);
@@ -1368,25 +1509,89 @@ live nodes all pass from here on.
 **Description**: Design §D11. In each file, the section located by
 `find_heading(text, "## Host runtime")` has its first two sentences replaced by design §D11's
 text. h-mad ends the grok clause "before bootstrap"; handoff says "before acting". Everything else
-in both sections stays byte-identical. In `h-mad/SKILL.md`'s `## Decision routing` section, the
-one row whose first cell is `` `cannot_judge` `` (`grep -c '^| `cannot_judge`'` → 1 at
-`7e155451`) gains design §D11's "**Second cause:**" sentence at the end of its second cell, before
-the closing ` |`. The row's opening text, `` | `cannot_judge` | The state file EXISTS and could not be read ``,
-stays byte-identical: it is `resume_decision_cannot_judge.json`'s anchor.
+in both sections stays byte-identical. In `h-mad/SKILL.md`'s decision-routing section, located by
+its full heading ``## Decision routing (for `/h-mad "<feature>"`)`` (the short form
+`## Decision routing` makes `find_heading` return `None`; the full form returns `(14377, 2)`,
+both executed at `a85abf7f`), the one row whose first cell is `` `cannot_judge` ``
+(`grep -c '^| `cannot_judge`'` → 1 at `7e155451`) gains design §D11's "**Second cause:**"
+sentence at the end of its second cell, before the closing ` |`. The row's opening text,
+`` | `cannot_judge` | The state file EXISTS and could not be read ``, stays byte-identical: it is
+`resume_decision_cannot_judge.json`'s anchor.
 
-**Tests** (10 new collected items):
+**Install-check and helper-registry edits** (Deviation 8; `h-mad/SKILL.md` only). Each edit adds
+text and keeps every existing token; no edited line is a committed mutation anchor except the
+context-budget registry line, whose anchor `` - `h_mad_context_budget.py` — orchestrator context
+budget `` (`context_budget_docs.json`, `drop-helper-from-list`) is its unchanged prefix. The new
+text must add no catch-all hit: it has no PascalCase call, no backticked compound PascalCase, no
+`CLAUDE` token, and its only Claude home path is the existing `~/.claude/skills` form, which
+`claude-skills-dir` covers. The live registry node is the check.
+1. In ``## First-run auto-bootstrap``, the bootstrap step that runs `h_mad_install_check.py` gains
+   one sentence at its end: "The check also reads `~/.agents/skills` and
+   `~/.gemini/config/skills` (override with `HMAD_AGENTS_SKILLS_DIR` and `HMAD_AGY_SKILLS_DIR`,
+   or with `--agents-skills-dir` and `--agy-skills-dir`); a root that does not exist adds no
+   line."
+2. In the same section's remedy table, the `` `SIBLING_NOT_SYMLINK` `` row's remedy cell becomes:
+   remove the copy and link the checkout's skill in its place, in the skills directory the line
+   names, which is one of `~/.claude/skills`, `~/.agents/skills` or `~/.gemini/config/skills`
+   (for example `rm -rf ~/.agents/skills/handoff` then
+   `ln -s <checkout>/handoff ~/.agents/skills/handoff`).
+3. The same table gains one row after `` `SIBLING_WRONG_CHECKOUT` ``: first cell
+   `` `AGY_SIBLING_COLLISION` ``; second cell "a skill from this checkout that agy does not
+   install (anything but `h-mad` and `handoff`) sits in `~/.gemini/config/skills` as a copy, a
+   dangling link or another checkout's link; printed after the verdict and never changes it";
+   third cell "none required: the operator decides whether that directory is theirs".
+4. In ``## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)``, the
+   `` - `h_mad_install_check.py` — `` line gains, at its end: "Also reads `~/.agents/skills` and
+   `~/.gemini/config/skills` (`--agents-skills-dir` / `--agy-skills-dir`, env
+   `HMAD_AGENTS_SKILLS_DIR` / `HMAD_AGY_SKILLS_DIR`); an empty value for either prints
+   `INSTALL: UNREADABLE`, exit 2; in the agy root, a skill agy does not install prints an
+   `AGY_SIBLING_COLLISION:` line after the verdict and never changes it."
+5. The `` - `h_mad_context_budget.py` — `` line gains, at its end: "Under a declared non-Claude
+   host it refuses before any transcript read: `HMAD_HOST` set to `codex`, `agy` or `grok` prints
+   `CTXBUDGET: UNKNOWN reason=host_unsupported`, and any other value except empty or `claude`
+   prints `reason=unknown_host` (see `h_mad_host.py`)."
+6. A new line directly after the context-budget line: "- `h_mad_host.py` — host classifier:
+   `classify_host()` reads `HMAD_HOST` and returns `claude` (unset, empty or `claude`), `declared`
+   (`codex`, `agy` or `grok`) or `unknown` (any other value; no strip, no case fold). No CLI. Read
+   by `h_mad_context_budget.py` and `h_mad_resume_decision.py`. Stdlib-only."
+
+**Tests** (23 new collected items):
 - `test_host_runtime_names_every_adapter[h-mad-codex|h-mad-agy|h-mad-grok|handoff-codex|handoff-agy|handoff-grok]`
   (6). Each id is the skill, a hyphen, then the host, and each asserts that `references/<host>-runtime.md` is in the
   located section.
 - `test_host_runtime_locator_fails_loudly[renamed|doubled]` (2). On in-memory copies of
   `h-mad/SKILL.md` with the heading renamed or doubled, `_section` raises `LookupError`.
-- `test_cannot_judge_row_names_host_cause[hmad-host|session-id]` (2). Exactly one line of the
-  located section starts with ``| `cannot_judge` |``, and it holds `HMAD_HOST` or `--session-id`
-  respectively.
+- `test_cannot_judge_row_names_host_cause[hmad-host|session-id]` (2). The section is located with
+  ``_section(text, '## Decision routing (for `/h-mad "<feature>"`)')``, the full heading. Exactly
+  one line of it starts with ``| `cannot_judge` |``, and that line holds `HMAD_HOST` or
+  `--session-id` respectively.
+- `test_bootstrap_install_check_names_host_roots[agents-root|agy-root|agents-env|agy-env]` (4).
+  In the section located by `## First-run auto-bootstrap`, the tokens `~/.agents/skills`,
+  `~/.gemini/config/skills`, `HMAD_AGENTS_SKILLS_DIR` and `HMAD_AGY_SKILLS_DIR` respectively.
+- `test_sibling_remedy_names_every_root[agents|agy]` (2). In the same section, exactly one line
+  starts with ``| `SIBLING_NOT_SYMLINK` |``, and it holds `~/.agents/skills` or
+  `~/.gemini/config/skills` respectively.
+- `test_agy_collision_row_present` (1). In the same section, exactly one line starts with
+  ``| `AGY_SIBLING_COLLISION` |``.
+- `test_helper_registry_install_check_line[agents-option|agy-option|agy-collision]` (3). In the
+  section located by ``## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)``, exactly one
+  line starts with ``- `h_mad_install_check.py` —``, and it holds `--agents-skills-dir`,
+  `--agy-skills-dir` or `AGY_SIBLING_COLLISION:` respectively.
+- `test_helper_registry_budget_line[host-unsupported|unknown-host]` (2). In the same section,
+  exactly one line starts with ``- `h_mad_context_budget.py` —``, and it holds
+  `host_unsupported` or `unknown_host` respectively.
+- `test_helper_registry_lists_h_mad_host` (1). In the same section, exactly one line starts with
+  ``- `h_mad_host.py` —``, and it holds `HMAD_HOST`.
 
-**Expected RED split**: 4 failing and 6 passing.
-- The failures are the two `-grok` ids and both `test_cannot_judge_row_names_host_cause` ids. At
-  `7e155451` the h-mad row holds neither `HMAD_HOST` nor `session-id`.
+6+2+2+4+2+1+3+2+1 = 23.
+
+**Expected RED split**: 17 failing and 6 passing.
+- The failures are the two `-grok` ids, both `test_cannot_judge_row_names_host_cause` ids, and
+  the 13 Deviation-8 items (4+2+1+3+2+1). At `7e155451` the h-mad row holds neither `HMAD_HOST`
+  nor `session-id`, and at `a85abf7f` `h-mad/SKILL.md` holds none of the Deviation-8 tokens
+  (`grep -cF` → 0 lines each), so every one of the 13 fails on its assertion. Both headings
+  resolve at `a85abf7f` (`find_heading` → `(2052, 2)` and `(255565, 2)`, executed), so none fails
+  on its locator.
 - Passing now, and kept as guards: the four codex/agy ids, because both sections already name
   `references/codex-runtime.md` and `references/agy-runtime.md` at `7e155451`, and the two locator
   ids.
@@ -1401,6 +1606,9 @@ each entrypoint.
 **Acceptance Criteria**:
 - [ ] AC-7.1: the six host-runtime ids. AC-7.2: the live registry node stays GREEN. AC-7.3: the
   locator ids. AC-9.4: the two cannot-judge ids.
+- [ ] Axis-B "Skill manifest integrity" (Deviation 8): the 13 install-check and helper-registry
+  nodes pass, and `h-mad/tests/test_h_mad_install_check_docs.py` passes unchanged (its fixed
+  token tuples are not extended; that would edit an existing test).
 
 **Mutation rows**: none. **Dependencies on other tasks**: Task 13
 
@@ -1414,9 +1622,17 @@ and `h-mad/tests/mutation-specs/install_check_roots.json` (none exists at `7e155
 **Test file**: none. The killing tests belong to Tasks 2–7.
 **Task shape**: `operational`
 
-**Description**: Author the three specs with exactly the 94 rows below. For each spec, run
-`python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors <spec>` and read `ANCHORS:`,
-then `python3 h-mad/scripts/h_mad_mutation_harness.py <spec>` and read `MUTATION:`.
+**Description**: Author the three specs with exactly the 97 rows below. For each spec, read
+`ANCHORS:` and then `MUTATION:` from:
+```bash
+for s in h-mad/tests/mutation-specs/host_parity.json h-mad/tests/mutation-specs/host_declaration.json h-mad/tests/mutation-specs/install_check_roots.json; do
+  env -u HMAD_HOST /opt/anaconda3/bin/python h-mad/scripts/h_mad_mutation_harness.py --check-anchors "$s"
+  env -u HMAD_HOST /opt/anaconda3/bin/python h-mad/scripts/h_mad_mutation_harness.py "$s"
+done
+```
+`env -u HMAD_HOST` keeps
+an ambient host value out of the harness's pytest children: under a non-Claude `HMAD_HOST`,
+FF2's killing test calls `decide()` in process and is red before any mutation.
 - **Pass condition, per spec**: `ANCHORS_OK`, and `MUTATION: ALL_CAUGHT` with `crash_kills=0`.
   A crash kill does not count: that row is re-authored so its killing test fails on its assertion.
 - `SURVIVED`, `REFUSED` or any other token halts, and is reported against the owning task.
@@ -1433,9 +1649,10 @@ the `# M:D31-D36` line: those rows share a find, and the harness applies one row
 | Rows | replace | test |
 |---|---|---|
 | D01–D06, D11–D30, D37–D42 (32 rows) | the same indentation, then `pass` | `tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[<the row's fixture id>]` |
-| D07, D08, D09, D10 (4) | the same line prefixed `if key != "id": `, `"pattern"`, `"skills"` or `"description"` respectively | the matching `[ru-missing-key-…]` id |
-| D31–D36 (6) | the same line prefixed `if (cell_name, kind) != ("mapping", "no_alnum"): `, with the pair set per row to the row's `(cell, reason)` | the matching `[ce-…]` id |
-| Sa–Se (5) | an `if` rule: its condition → `False`; a side-effect rule: `pass` | `tests/test_host_construct_parity.py::test_suppression_rule_leaves_one_pair[a]` … `[e]` |
+| D07, D08, D09, D10 (4) | the line's own leading indentation, then `if key != "id": `, then the line with its leading indentation stripped; `"id"` is `"pattern"`, `"skills"` or `"description"` for D08, D09 and D10 respectively | the matching `[ru-missing-key-…]` id |
+| D31–D36 (6) | the line's own leading indentation, then `if (cell_name, kind) != ("mapping", "no_alnum"): `, then the line with its leading indentation stripped; the pair is set per row to the row's `(cell, reason)` | the matching `[ce-…]` id |
+| Sa, Sb, Sc, Sd-header, Se (5) | an `if` rule: its condition → `False`; a side-effect rule: `pass` | `tests/test_host_construct_parity.py::test_suppression_rule_leaves_one_pair[a]`, `[b]`, `[c]`, `[d]`, `[e]` respectively |
+| Sd-missing (1) | its condition → `False` | `tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[tm-no-heading]` |
 | A1–A4 (4) | the empty string (the dict entry is dropped) | `tests/test_host_construct_parity.py::test_default_axes_report_each_fixture[A1]`, `[A2]`, `[A3]`, `[A4-tilde]` |
 | B1–B3 (3) | the empty string | `…::test_default_axes_report_each_fixture[A4-tilde]`, `[A4-home]`, `[A4-home-braced]` |
 | X-Error, X-Exception, X-Warning, X-Expired, X-Exit, X-Interrupt (6) | the tuple line with that suffix's string replaced by `".*"` | `tests/test_host_construct_parity.py::test_removed_exclusion_suffix_reports_its_fixture[<suffix>]` |
@@ -1445,7 +1662,8 @@ the `# M:D31-D36` line: those rows share a find, and the harness applies one row
 | P1 (1) | the iteration over the checked elements → over every element | `tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[ru-missing-key-pattern]` |
 | K1 (1) | `_cell_id(cells[0])` → `cells[0].strip()` | `tests/test_host_construct_parity.py::test_kind_fixture_reports_exactly_its_pair[tmal-cell-count]` |
 
-Rows: 32 + 4 + 6 + 5 + 4 + 3 + 6 + 1 + 1 + 1 + 1 + 1 = 65. The D rows are 32 + 4 + 6 = 42.
+Rows: 32 + 4 + 6 + 5 + 1 + 4 + 3 + 6 + 1 + 1 + 1 + 1 + 1 = 66. The D rows are 32 + 4 + 6 = 42;
+the suppression rows are 5 + 1 = 6 (Deviation 3).
 
 **`host_declaration.json`**: the row's `file` is given per row; `command`
 `["python3.11","-m","pytest","tests/test_h_mad_host_declaration.py","tests/test_h_mad_context_budget.py","tests/test_h_mad_resume_decision.py","tests/test_h_mad_feature_lock.py","-q"]`;
@@ -1507,17 +1725,22 @@ W1a–W1c, W2a–W2b, V1, V2, E1–E3) and 4 wire rows (WR1, FF1, WR2, FF2).
 | I7 | `    if issues:⏎        print(f"INSTALL: FAIL issues={len(issues)}")` | `    for line in details:⏎        print(line)⏎    if issues:⏎        print(f"INSTALL: FAIL issues={len(issues)}")` | `tests/test_h_mad_install_check_roots.py::test_detail_lines_sorted_and_after_verdict` |
 | WR3a | `        agents_skills_dir=agents_dir,⏎` | the empty string | `tests/test_h_mad_install_check_roots.py::test_agents_root[copy]` |
 | WR3b | `        agy_skills_dir=agy_dir,⏎` | the empty string | `tests/test_h_mad_install_check_roots.py::test_agy_root_cell[h-mad-copy]` |
+| FF3a | `        if agents_skills_dir is not None:` | `        agents_skills_dir = agents_skills_dir if agents_skills_dir is not None else os.environ.get(AGENTS_SKILLS_ENV)⏎        if agents_skills_dir is not None:` | `tests/test_h_mad_install_check_roots.py::test_check_without_root_keywords_reads_no_new_root` |
+| FF3b | `        if agy_skills_dir is not None:` | `        agy_skills_dir = agy_skills_dir if agy_skills_dir is not None else os.environ.get(AGY_SKILLS_ENV)⏎        if agy_skills_dir is not None:` | `tests/test_h_mad_install_check_roots.py::test_check_without_root_keywords_reads_no_new_root` |
 
-Rows: 10 design members (I1, I2, I3a, I3b, I4a, I4b, I5a, I5b, I6, I7) and 2 wire rows = 12.
+Rows: 10 design members (I1, I2, I3a, I3b, I4a, I4b, I5a, I5b, I6, I7) and 4 wire rows (WR3a,
+WR3b, FF3a, FF3b) = 14. FF3a and FF3b re-contain their `find`, which the harness reports as a
+self-matching advisory, never a refusal (`h_mad_mutation_harness.py`, `SELF_MATCHING_NOTE`); the
+killing test asserts a return value, not text containment, so the advisory does not apply.
 
-**Total**: 65 + 17 + 12 = 94, matching the per-task attributions: Task 2 65, Task 4 3, Task 5 8,
-Task 6 6, Task 7 12.
+**Total**: 66 + 17 + 14 = 97, matching the per-task attributions: Task 2 66, Task 4 3, Task 5 8,
+Task 6 6, Task 7 14.
 
 **Acceptance Criteria**:
 - [ ] Every guard is mutation-verified (plan Success Criteria): all three specs print
   `ALL_CAUGHT` with `crash_kills=0`.
 - [ ] W1–W3 each fail their WIRE-PIN under the wire-scoped revert (WR1, WR2, WR3a, WR3b), and each
-  force-fire fails its named test (FF1, FF2, I1, I2).
+  force-fire fails its named test by assertion (FF1, FF2, FF3a, FF3b).
 
 **Dependencies on other tasks**: Task 14 (every killing test file must be GREEN for the harness's
 baseline)
@@ -1546,36 +1769,55 @@ still listed, it prints `BYTE-IDENTITY: UNREADABLE reason=worktree_left`.
 - **Case names**:
   - budget: `ok-advisor`, `deny-advisor`, `run-ok`, `run-halt`, `window-zero`,
     `missing-transcript` (`HOME` an empty temp dir) and `no-usage`, each run as `-unset` then
-    `-claude`: 7 × 2 = 14 cases;
+    `-claude`: 7 × 2 = 14 cases. The two advisor cases pass **no** `--mode` (advisor is the
+    default at both trees); the two run cases pass `--mode run`. Cases run in exactly the listed
+    order, and `FAIL` names the **first** failing case in that order;
   - decision: `absent-file`, `unreadable-file`, `absent-feature`, `foreign-owner-with-id`,
     `foreign-owner-without-id`, `halted`, `complete`, `lcp-4` and `lcp-1`, each `-unset` then
     `-claude`: 9 × 2 = 18;
   - install-a: `healthy`, `stale-copy`, `missing-hook`, `split`, `dangling`, `absent-link`,
     `sibling-copy`, `sibling-other-checkout` and `empty-path`, with both root variables at absent
     paths: 9;
-  - install-b: the precondition `test -L` on the four links, else
+  - install-b: the precondition `test -L` on the four links, resolved under `Path.home()` (so
+    under the `HOME` the probe runs with), else
     `BYTE-IDENTITY: UNREADABLE reason=links_absent`. Then B1 (the 9 install-a argvs at the real
     defaults) and B2 (`--skills-link ~/.claude/skills/h-mad --repo /Users/kimhawk/orca/skills`),
     compared by the plan's closed-diff rule, with the `AGY_SIBLING_COLLISION:` names taken from
     the plan P8 `comm -12` reading run inside the probe: 10 cases.
 
+**Author**: codex (§Preamble), because `byte_identity.py` is a non-test `.py`.
+
 **Runs in this task**, which are this probe's verification. Phase 6 re-runs them for its record.
+Each is `/opt/anaconda3/bin/python docs/03-analysis/probes/multi-host-runtime/byte_identity.py`
+with the arguments shown, run in one shell after the §Preamble `BASE_SHA` block.
 1. `--base "$BASE_SHA" --arm budget` → `BYTE-IDENTITY: PASS arm=budget cases=14`.
-2. `--arm decision` → `PASS arm=decision cases=18`.
-3. `--arm install-a` → `PASS arm=install-a cases=9`.
-4. `--arm install-b` → `BYTE-IDENTITY: UNREADABLE reason=links_absent` while the four links are
-   absent (the orchestrator rule). It never prints `PASS` without them, and Phase 6 halts to the
-   operator on this token.
-5. **Negative control**: `--base 9df441ca --arm budget` → `BYTE-IDENTITY: FAIL arm=budget case=run-ok-unset`.
-   `9df441ca` is `a467ee57^`, the commit before `h_mad_context_budget.py` gained `--mode`
-   (`git show 9df441ca:h-mad/scripts/h_mad_context_budget.py | grep -c -- '--mode'` → 0 matching
-   lines at `7e155451`), so its `run-ok` case exits 2 with a usage error.
-6. After each run, `git worktree list --porcelain` names no temp path.
+2. `--base "$BASE_SHA" --arm decision` → `PASS arm=decision cases=18`.
+3. `--base "$BASE_SHA" --arm install-a` → `PASS arm=install-a cases=9`.
+4. `--base "$BASE_SHA" --arm install-b` → `BYTE-IDENTITY: PASS arm=install-b cases=10`. The four
+   links exist by now: Task 1's four-link gate halts 5c until the operator creates them, so no
+   run reaches this task without them. If this run prints
+   `BYTE-IDENTITY: UNREADABLE reason=links_absent`, the links were removed after Task 1, and the
+   task halts to the operator; it never prints `PASS` without them.
+5. **Negative control, links**: `env HOME=<an empty scratch directory>` in front of run 4's
+   command → `BYTE-IDENTITY: UNREADABLE reason=links_absent`, exit 2. The scratch directory is
+   made in the session scratchpad and deleted after the run.
+6. **Negative control, budget**: `--base 9df441ca --arm budget` →
+   `BYTE-IDENTITY: FAIL arm=budget case=run-ok-unset`. `9df441ca` is `a467ee57^`, the commit
+   before `h_mad_context_budget.py` gained `--mode` (`git show 9df441ca:h-mad/scripts/h_mad_context_budget.py | grep -c -- '--mode'`
+   → 0 matching lines at `7e155451`), so its `run-ok` case exits 2 with a usage error. The two
+   advisor cases before it pass, because they pass no `--mode`: a probe at `a85abf7f` ran the
+   `9df441ca` script and the current one with `--transcript` only, on a one-turn transcript of
+   1,010 and of 150,010 tokens, and both printed the same line
+   (`CTXBUDGET: OK used=1010 window=1000000 pct=0.1 projected=2020 ceiling=45`, and the
+   `used=150010` line), rc 0; `--mode run` at `9df441ca` printed
+   `error: unrecognized arguments: --mode run`. The probe was deleted.
+7. After each run, `git worktree list --porcelain` names no temp path.
 
 **Acceptance Criteria**:
 - [ ] AC-8.3 (probe half), AC-10.2 (second clause) and AC-12.2 (arm A): runs 1–3 print `PASS`.
-  AC-12.2 arm B is Phase 6's, and it needs the links.
-- [ ] The negative control prints `FAIL` at the named case.
+  AC-12.2 arm B: run 4 prints `PASS`; Phase 6 re-runs it for its record.
+- [ ] Negative control 5 prints `UNREADABLE reason=links_absent`, and negative control 6 prints
+  `FAIL` at the named case.
 
 **Mutation rows**: none. **Dependencies on other tasks**: Task 15
 
@@ -1588,6 +1830,7 @@ still listed, it prints `BYTE-IDENTITY: UNREADABLE reason=worktree_left`.
 case)
 **Test file**: none (verified by `smoke_assert.py rehearse`)
 **Task shape**: `gate` (authors a committed measurement probe and its rehearsal fixtures; writes no h-mad file)
+**Author**: codex (§Preamble), because `smoke_assert.py` is a non-test `.py`.
 
 **Description**: Design §D10, which is binding in full: verdict tokens, the per-host log table,
 the tokenizer (`shlex.shlex(text, posix=True, punctuation_chars=";&|<>()\n")`, whitespace
@@ -1615,9 +1858,21 @@ moved into Python. `rehearse` reads `rehearsal/cases.json`: each case names its 
 84 + 1 + 4 + 3 = 92.
 
 **Verification in this task**:
-- `python3 docs/03-analysis/probes/multi-host-runtime/smoke_assert.py rehearse` →
+- `/opt/anaconda3/bin/python docs/03-analysis/probes/multi-host-runtime/smoke_assert.py rehearse` →
   `REHEARSAL: PASS n=92`. A replay that prints anything but its prediction is investigated
   (design §D10): the finding says whether the classifier or the prediction is wrong.
+- **Open design question, codex R14(a).** Design §D10 expects codex R14(a) (`echo x # c`, a
+  newline, then a script run, as one command) to print `FAIL … a script ran before the adapter
+  was read`. The design's codex reader takes the command as the single next non-beat line after
+  `exec` and requires the shape `^\S+ -lc .* in \S+$`. If codex writes that command's newline
+  literally, the first line fails the shape and the case prints
+  `UNVERIFIED V-11.1 codex input shape unobserved` instead. No committed codex log shows a
+  multi-line command either way (the 8 command lines of
+  `h-mad/tests/fixtures/codex-text-8-exec.log` are single-line; audit cycle 1, teammate). The
+  expectation is the design's, so this plan does not change it: build the fixture as the design
+  states, and if the case prints the `UNVERIFIED` line, halt to the orchestrator with
+  `HALT: codex R14(a) — design delta owed` rather than editing the expected line or the case
+  count.
 - **Control**: `v111 --host codex --log <R1 log> --root <scratch copy of the checkout whose h-mad/references/codex-runtime.md has no line starting "# ">`
   → `UNREADABLE V-11.1 reason=no_needle`, exit 2. The scratch copy is made in the session
   scratchpad and deleted.
@@ -1644,15 +1899,17 @@ adapters' and `SKILL.md`'s first headings from `--root`)
    still fails, AC-12.1 is not met, 7f does not run, and the orchestrator halts to the operator
    naming that node (plan: not waived).
 2. The same command with `CLAUDE_ZZZ_PROBE=1` exported → the same summary.
-3. **AC-8.3**: the two module runs of Task 5, which must show equal `passed` counts.
+3. **AC-8.3**: the two module runs of Task 5, spelled exactly as there (`/opt/anaconda3/bin/python`,
+   never bare `python3`), which must show equal `passed` counts.
 4. **Node-id floor**: collect at HEAD with Task 1's command into a temp file, then
    `comm -23 "$(git rev-parse --absolute-git-dir)/hmad-mhr-base-nodeids.txt" <head file>` must
    print nothing.
-5. **Append-only**: `git diff --numstat "$BASE_SHA" -- h-mad/tests/conftest.py` shows `0` deleted.
+5. **Append-only** (in one shell after the §Preamble `BASE_SHA` block):
+   `git diff --numstat "$BASE_SHA" -- h-mad/tests/conftest.py` shows `0` deleted.
    No other pre-existing test file is touched: `git diff --name-only "$BASE_SHA" -- h-mad/tests handoff/tests handoff/scripts`
    lists only this plan's new files and `conftest.py`.
 6. **Anchors**: both `--check-anchors` commands → `ANCHORS_OK drifted=0`.
-7. **Wire-pin gate**: `python3 h-mad/scripts/h_mad_wire_pin_gate.py docs/01-plan/features/multi-host-runtime.impl-plan.md`
+7. **Wire-pin gate**: `/opt/anaconda3/bin/python h-mad/scripts/h_mad_wire_pin_gate.py docs/01-plan/features/multi-host-runtime.impl-plan.md`
    → `WIREPIN: PASS`.
 
 **Acceptance Criteria**:
@@ -1726,10 +1983,11 @@ adapters' and `SKILL.md`'s first headings from `--root`)
 | AC-10.5 | Task 7, `test_agy_root_cell` |
 | AC-10.6 | Task 7, `test_claude_root_debugger_copy_still_fails`, and the existing `TestSiblingSkills` |
 | AC-12.1 | Task 18 |
-| AC-12.2 | Task 16 (arm A); Phase 6 (arm B) |
+| AC-12.2 | Task 16 (arm A, runs 1–3; arm B, run 4); Phase 6 re-runs both |
 
 51 rows, one per spec AC id (`grep -oE '^ *- AC-[0-9]+\.[0-9]+'` over the spec, then `sort -u` →
 51 distinct ids at `7e155451`). V-11.1 to V-11.5 are owned by the Phase-7 live-smoke record.
 
 ## Version History
+- v1.1 (2026-09-28): answers impl-plan audit cycle 1 (codex `audit.v1.p1`: 7 must, 1 should; teammate `audit.v1.teammate`: 3 must, 10 should, 7 nit), premises re-read at `a85abf7f`. codex M1 (probe sidecar after the design gate) — premise HOLDS (design lines 1380–1385 say "Before the design gate clears"; `ls docs/03-analysis/probes/multi-host-runtime` → absent), not refuted; the gate already closed at `34c0e962`, so the plan cannot reorder it: recorded as Deviation 7, open for the orchestrator. codex M2 + teammate M1 (`BASE_SHA` used before derived) — fixed: derivation block in §Preamble, Task 0 item 0, Task 1 re-derives and compares. codex M3 (single verdict vs C0.4) — fixed: verdict is the entry's comma-joined finding list, counts are findings; C0.4 now pins `verdict=undeclared:h-mad,stale:handoff` (advisor() 18/0 at `7e155451`). codex M4 (AC-4.6 false hit has no owner) — fixed as a halt: design §D2 has no narrowing mechanism, so Task 1 halts `design delta owed`; design change reported, not invented. codex M5 (retired id still parametrized) — fixed: sample test keyed on `BRANCH_SAMPLES`, plus `test_seed_check_honours_retirement[…]` (3) as the retirement-reason control. codex M6 (W3 force-fires are not force-fires) — fixed: FF3a/FF3b added (body-level env fallback, killed by `test_check_without_root_keywords_reads_no_new_root`); I1/I2 relabelled as design members. codex M7 (arm B `links_absent` unreachable) — fixed: run 4 expects `PASS cases=10`; `links_absent` is negative control 5 under an empty `HOME`. codex S1 (fixed Task 3 counts) — fixed: formulas over `len(BRANCH_SAMPLES)`. teammate M2 (bare `python3` has no pytest) — fixed: every run command uses `/opt/anaconda3/bin/python`; AC-8.3 commands executed → 31 passed / 31 passed. teammate M3 (SKILL.md install-check contract) — fixed as Deviation 8 plus 13 Task 14 nodes; also owed to design §D11. teammate S1 (`if` prefix before indentation) — fixed. S2 (`_FenceEvent.text` empty for body) — fixed (read at `a85abf7f`). S3 (`## Decision routing` locator returns None) — fixed with the full heading (executed: None vs `(14377, 2)`). S4 (suppression (d) two branches) — fixed: Sd-missing/Sd-header rows, (b) STALE/UNDECLARED half stated as a crash-kill residual. S5 (recognition-site guard cannot see host_parity) — fixed: `test_host_parity_has_no_fence_scanner` with a positive control (executed: `{'f'}`). S6 (byte-identity argv/first-failure) — fixed: advisor cases pass no `--mode`, first failure in listed order; parity probed at `a85abf7f` and deleted. S7 (codex R14(a) unbuildable) — deferred to design: premise holds, all three repairs change design §D10; Task 17 halts on it. S8 (Task 0 has no author) — fixed: codex authors Tasks 0, 16, 17. S9 (`problems.append`) — fixed. S10 (harness without `env -u HMAD_HOST`) — fixed. Nits: conftest not anchored (fixed); handoff forbidden tokens (fixed); `sys` import (fixed); CLI `--state` fixture (fixed); stub builtins (fixed); S7 wording (fixed); design Test Strategy vs Test Plan on resume-decision CLI tests — no change, a design-internal mismatch this plan follows the Test Plan on. Counts: 19 tasks, 3 wiring, 97 mutation rows (66 + 17 + 14).
 - v1.0: Initial implementation plan (2026-09-28), first 5a draft; answers no audit cycle. From design v1.2, spec v1.4 and plan v1.3; premises read at 7e155451 (h-mad, handoff, probes and pytest.ini unchanged at b8662267). 19 tasks: Task 0 probe sidecar part 1 and Task 1 baseline at 5c, strands 1-4, 3 wiring tasks (W1-W3, W3 with two wires), mutation specs (94 rows = 88 design members + 6 wire rows), byte-identity and smoke-assertion probes, suite gate. Six deviations recorded (hermetic_env fixture, added killing tests, row census, state-file seed, D12 tokens in matrix rows, fixture shapes).
