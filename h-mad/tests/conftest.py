@@ -115,3 +115,9 @@ def hermetic_env():
         env.update(extra)
         return env
     return make
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_host_skill_roots(monkeypatch, tmp_path):
+    monkeypatch.setenv("HMAD_AGENTS_SKILLS_DIR", str(tmp_path / "absent-agents-skills"))
+    monkeypatch.setenv("HMAD_AGY_SKILLS_DIR", str(tmp_path / "absent-agy-skills"))
