@@ -7,9 +7,10 @@ description: "Use this skill in five modes. WRITE creates a durable session clos
 
 ## Host runtime
 
-This package supports Claude Code, OpenAI Codex, and the Antigravity CLI (`agy`). In Codex, read
-[references/codex-runtime.md](references/codex-runtime.md) before acting; in agy, read
-[references/agy-runtime.md](references/agy-runtime.md). Apply that adapter's tool, path,
+This package supports Claude Code, OpenAI Codex, the Antigravity CLI (`agy`) and the grok CLI
+(`grok`). In Codex, read [references/codex-runtime.md](references/codex-runtime.md) before
+acting; in agy, read [references/agy-runtime.md](references/agy-runtime.md); in grok, read
+[references/grok-runtime.md](references/grok-runtime.md) before acting. Apply that adapter's tool, path,
 task-persistence, and delegation mappings as overrides to host-specific instructions below.
 The five modes and their safety invariants remain unchanged.
 
