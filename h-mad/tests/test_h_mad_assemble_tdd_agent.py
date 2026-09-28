@@ -17,7 +17,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 from h_mad_assemble_tdd import command_block  # noqa: E402
 
-BASE_SHA = "507214d"
+BASE_SHA = "8ef6009f"
 PLAN = """# Feature implementation plan
 
 ## Task 1: hostile-agent-input
