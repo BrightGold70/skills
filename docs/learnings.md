@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-30 · pattern · [0.5] · `h-mad,tdd,guards,handoff:2026-09-30-phase5-tasks-0-4` — A later task in one feature can legitimately reverse a guard an earlier task pinned (FR-4 trim vs Task-2 fold guard): re-scope the guard to its real unit-level intent, never weaken the new behaviour.
+- 2026-09-30 · gotcha · [0.7] · `h-mad,bash32,hooks,handoff:2026-09-30-phase5-tasks-0-4` — Claude h-mad hook runs under its #!/bin/bash shebang = macOS bash 3.2.57: namerefs, mapfile, assoc arrays, ${v,,} are fatal. Pin with a /bin/bash-run test.
+- 2026-09-30 · gotcha · [0.5] · `h-mad,tdd,red-count,handoff:2026-09-30-phase5-tasks-0-4` — Score an H-MAD RED per test FUNCTION, not per pytest case: parametrised cases and fixture ImportErrors show as ERRORs, and codex BLOCKs on raw counts that are correct per function.
 - 2026-09-29 · gotcha · [0.7] · `h-mad,mutation-harness,handoff:2026-09-29-three-features-merged` — mutation harness runs pytest with cwd h-mad/: a test shelling out 'git archive <sha> h-mad' reads BASELINE_NOT_GREEN there; pin cwd to the repo root
 - 2026-09-29 · gotcha · [0.7] · `h-mad,worktree,merge,handoff:2026-09-29-three-features-merged` — Tests that pin 'this checkout's path' pass in the worktree and fail on merged main; docs must carry <HMAD_SKILL_ROOT>, and the merged-tree suite must run before push even at identity=y
 - 2026-09-29 · pattern · [0.7] · `h-mad,phase6,review,handoff:2026-09-29-three-features-merged` — A fresh-context adversarial 6a verifier found reproducible gate/scan defects in 3 of 3 features after suite, mutation harness and agy READY_TO_MERGE all passed; run it before merge, not after
