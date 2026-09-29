@@ -10,7 +10,7 @@ from pathlib import Path
 TESTS = Path(__file__).resolve().parent
 F0_COPY = TESTS / "fixtures" / "grok-stream-json.2026-09-28.ndjson"
 F0_SHA256 = "72f6258734f184ae999f84273b5abe3711202a1a8f43f392143173c8364fe569"
-BASE_SHA = "5a9cd8ed693202e0291a9c6d5a3a63207b1f1b14"
+BASE_SHA = "8ef6009f9491796d5d16b96a54e3b3185a8a6f19"
 STUBS = TESTS / "stubs"
 
 
