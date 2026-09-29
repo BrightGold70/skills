@@ -1,0 +1,160 @@
+REPRO: family=primitive cell=case value='/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpt9u0q9o_/Case/sub'
+REPRO: family=primitive cell=unicode value='/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpt9u0q9o_/é'
+REPRO: family=primitive cell=file-case value='/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpt9u0q9o_/Case/sub/Prod.py'
+REPRO: family=primitive cell=unreadable value='error=13'
+REPRO: family=primitive cell=child-of-0311 value='/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmpt9u0q9o_/Tests/prod.py'
+REPRO: family=primitive cell=O_RDONLY-0311 value=errno=13
+REPRO: family=primitive cell=O_EVTONLY-0311 value=errno=13
+REPRO: family=primitive cell=O_SEARCH-0311 value=absent
+REPRO: family=primitive cell=listdir-0311 value=errno=13
+REPRO: family=primitive cell=capabilities F_GETPATH=True ALLOW_MISSING=False O_SEARCH=False
+REPRO: agent-cli-reachable=no
+REPRO: cell=M-1 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-1 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-2 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-2 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-3 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-3 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-4 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-4 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-5 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-5 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-6 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-6 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-7 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-7 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-8 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-8 gate=codex state=step5 decision=deny kind=outside
+REPRO: cell=M-9 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-9 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-10 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-10 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-11 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-11 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-12 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-12 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-13 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-13 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-13 intermediate gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-13 intermediate gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-14 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-14 gate=codex state=step5 decision=deny kind=judge-error
+REPRO: cell=M-18 gate=claude state=step3 decision=allow kind=-
+REPRO: cell=M-18 gate=codex state=step3 decision=allow kind=-
+REPRO: cell=M-18 M-13 intermediate gate=claude state=step3 decision=allow kind=-
+REPRO: cell=M-18 M-13 intermediate gate=codex state=step3 decision=allow kind=-
+REPRO: cell=M-18 M-14 gate=claude state=step3 decision=allow kind=-
+REPRO: cell=M-18 M-14 gate=codex state=step3 decision=deny kind=judge-error
+REPRO: cell=leaf-symlink gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=leaf-symlink gate=codex state=step5 decision=allow kind=-
+REPRO: cell=leaf-symlink gate=claude state=step3 decision=allow kind=-
+REPRO: cell=leaf-symlink gate=codex state=step3 decision=allow kind=-
+REPRO: cell=M-15 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-15 nbsp gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-15 crlf gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-16 gate=codex state=step5 decision=deny kind=outside
+REPRO: cell=M-21 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-22 gate=codex state=step5 decision=deny kind=outside
+REPRO: cell=M-17 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-19 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-20 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-23 gate=codex state=step5 decision=allow kind=-
+REPRO: family=oq-p1 cell=AC-3.6(a) state=step5 listdir=errno=13
+REPRO: cell=OQ-P1 a gate=claude state=step5 decision=allow kind=-
+REPRO: cell=OQ-P1 a gate=codex state=step5 decision=allow kind=-
+REPRO: family=oq-p1 cell=AC-3.6(b) state=step5 listdir=errno=13
+REPRO: cell=OQ-P1 b gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=OQ-P1 b gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: family=oq-p1 cell=AC-3.6(a) state=step3 listdir=errno=13
+REPRO: cell=OQ-P1 a gate=claude state=step3 decision=allow kind=-
+REPRO: cell=OQ-P1 a gate=codex state=step3 decision=allow kind=-
+REPRO: family=oq-p1 cell=AC-3.6(b) state=step3 listdir=errno=13
+REPRO: cell=OQ-P1 b gate=claude state=step3 decision=allow kind=-
+REPRO: cell=OQ-P1 b gate=codex state=step3 decision=allow kind=-
+REPRO: cell=R-3 symlink-tests gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=R-3 tests gate=claude state=step5 decision=allow kind=-
+REPRO: cell=R-3 src gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=FR-8 cat-subst gate=codex state=step5 decision=deny kind=outside
+REPRO: cell=FR-8 literal-uuid gate=codex state=step5 decision=deny kind=outside
+REPRO: cell=FR-8 flag gate=codex state=step5 decision=deny kind=outside
+REPRO: family=d5 elapsed=12.0 timed_out=True rc=-9
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-15 control' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-15 CRLF patch' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\r\n*** Update File: src/prod.py\r\n@@\r\n-X = 1\r\n+X = 2\r\n*** End Patch\r\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+0009' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\t\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+0009' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\t*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+000B' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\x0b\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+000B' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\x0b*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+000C' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\x0c\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+000C' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\x0c*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+000D' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\r\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+000D' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\r*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+001C' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\x1c\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+001C' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\x1c*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+001D' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\x1d\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+001D' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\x1d*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+001E' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\x1e\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+001E' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\x1e*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+001F' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\x1f\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+001F' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\x1f*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+0020' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py \n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+0020' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n *** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+0085' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\x85\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+0085' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\x85*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+00A0' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\xa0\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+00A0' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\xa0*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+1680' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u1680\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+1680' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u1680*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2000' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2000\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2000' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2000*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2001' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2001\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2001' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2001*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2002' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2002\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2002' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2002*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2003' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2003\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2003' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2003*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2004' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2004\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2004' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2004*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2005' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2005\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2005' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2005*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2006' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2006\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2006' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2006*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2007' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2007\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2007' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2007*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2008' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2008\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2008' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2008*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2009' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2009\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2009' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2009*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+200A' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u200a\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+200A' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u200a*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+200B' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u200b\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+200B' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u200b*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2028' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2028\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2028' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2028*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+2029' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u2029\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+2029' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u2029*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+202F' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u202f\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+202F' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u202f*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+205F' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u205f\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+205F' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u205f*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+3000' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\u3000\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+3000' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\u3000*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='trail U+FEFF' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File: src/prod.py\ufeff\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='lead U+FEFF' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n\ufeff*** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-16 lead space' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n *** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-17 Add+indented Update' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Add File: docs/x.md\n+x\n  *** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 docs/x.md=x; src/prod.py=X = 2'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-19 Move trailing space' invocation=argv0:apply_patch fixture='base; docs/a.md=a' patch='*** Begin Patch\n*** Update File: docs/a.md\n*** Move to: src/prod2.py \n@@\n-a\n+b\n*** End Patch\n' observed='rc=0 docs/a.md removed; src/prod2.py=b'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-23 lead space Move' invocation=argv0:apply_patch fixture='base; docs/a.md=a' patch='*** Begin Patch\n*** Update File: docs/a.md\n *** Move to: src/new.py\n@@\n-a\n+b\n*** End Patch\n' observed='rc=1 docs/a.md=a; no move'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-20 Add + U+001F' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Add File: src/n.py\x1f\n+x\n*** End Patch\n' observed='rc=0 src/n.py\\x1f=x'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='AC-4.4 Add interior U+0001' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Add File: src/pr\x01od.py\n+x\n*** End Patch\n' observed='rc=0 src/pr\\x01od.py=x'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-22 *** update file: src/prod.py' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** update file: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 invalid patch hunk; src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-22 ***  Update File: src/prod.py' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n***  Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 invalid patch hunk; src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-22 *** Update File:src/prod.py' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File:src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 invalid patch hunk; src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-22 **** Update File: src/prod.py' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n**** Update File: src/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 invalid patch hunk; src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='M-22 *** Update File:\tsrc/prod.py' invocation=argv0:apply_patch fixture='src/prod.py=X = 1; docs/ and tests/ empty' patch='*** Begin Patch\n*** Update File:\tsrc/prod.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=1 invalid patch hunk; src/prod.py=X = 1'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z version=codex-cli-0.158.0 source=plan-R-4@644f8bf6 label='leaf symlink' invocation=argv0:apply_patch fixture='base; tests/t.py=X = 1; src/link.py -> ../tests/t.py' patch='*** Begin Patch\n*** Update File: src/link.py\n@@\n-X = 1\n+X = 2\n*** End Patch\n' observed='rc=0 src/link.py remains -> ../tests/t.py; tests/t.py=X = 2'
+MANUAL: family=R-5 date=2026-09-29 version=Claude-Code-2.1.284 source=plan-R-5 tool=Write file_path=<scratchpad>/pd5/src/link.py fixture='src/link.py -> ../tests/t.py; tests/t.py=X = 1' observed='refused symbolic link; target unchanged'
+MANUAL: family=R-5 date=2026-09-29 version=Claude-Code-2.1.284 source=plan-R-5 tool=Edit file_path=<scratchpad>/pd5/src/link.py old_string='X = 1' new_string='X = 2' observed='Refusing to write …/pd5/src/link.py: it is a symbolic link. Write to the link's target path instead: …/pd5/tests/t.py.; link and target unchanged'
+MANUAL: family=R-5 date=2026-09-29 version=Claude-Code-2.1.284 source=plan-R-5 tool=MultiEdit observed='absent from tool set; unmeasurable'
+MANUAL: family=R-5 date=2026-09-29 version=Claude-Code-2.1.284 source=plan-R-5 tool=NotebookEdit observed='absent from tool set; unmeasurable'
+MANUAL: family=R-4 date=2026-09-29T07:58:57Z source=plan-R-4@644f8bf6 command='codex --version' observed='codex-cli 0.158.0' provenance='historical manual reading; command not run by this probe'
+MANUAL: family=R-5 date=2026-09-29 version=Claude-Code-2.1.284 source=plan-R-5 setup="mkdir -p pd5/src pd5/tests; printf 'X = 1\n' > pd5/tests/t.py; ln -sf ../tests/t.py pd5/src/link.py" provenance='historical tool reading'
