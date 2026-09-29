@@ -331,6 +331,14 @@
       "find": "  _chain_may_hold_state \"$ROOT_ABS\" \"$CANON_PREFIX\" || _allow",
       "replace": "  _refuse judge-error \"unresolvable arm=$CANON_ARM component=$CANON_COMPONENT\"",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_unresolvable_step3_allows"
+    },
+    {
+      "name": "CG-JT",
+      "_mechanism": "Remove judge-timeout from the Claude gate DENY alternatives; the stubbed judge verdict must be blocked with its kind.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-timeout|judge-error) reason=(.+)$'",
+      "replace": "JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-error) reason=(.+)$'",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_gate_judge_timeout_stub"
     }
   ]
 }
