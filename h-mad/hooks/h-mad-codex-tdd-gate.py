@@ -21,16 +21,12 @@ import subprocess
 import sys
 from functools import cache
 from importlib import import_module
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from h_mad_target_identity import Identity
 
 
-PATCH_TARGET = re.compile(
-    r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$",
-    re.MULTILINE,
-)
 SIMPLE_SHELL_COMMAND = re.compile(r"[A-Za-z0-9_./:@%+=,'\" \t-]+")
 READ_ONLY_COMMANDS = {"cat", "grep", "head", "jq", "ls", "pwd", "shasum", "tail", "wc"}
 SAFE_DISPATCH_VERBS = {
@@ -161,20 +157,58 @@ def _any_phase5_status(root: Path) -> str:
     return "inactive"
 
 
-def _targets(payload: dict[str, Any]) -> tuple[str, list[str], str]:
+class TargetParse(NamedTuple):
+    tool: str
+    paths: list[str]
+    command: str
+    bad_header: str
+
+
+def _patch_header_paths(patch: str) -> tuple[list[str], str]:
+    markers = (
+        "*** Add File: ", "*** Update File: ",
+        "*** Delete File: ", "*** Move to: ",
+    )
+    paths: list[str] = []
+    bad_header = ""
+    for line in patch.split("\n"):
+        start, end = 0, len(line)
+        while start < end and line[start].isspace() and not "\x1c" <= line[start] <= "\x1f":
+            start += 1
+        while end > start and line[end - 1].isspace() and not "\x1c" <= line[end - 1] <= "\x1f":
+            end -= 1
+        header = line[start:end]
+        for marker in markers:
+            if header == marker[:-1]:
+                if not bad_header:
+                    bad_header = header
+                break
+            if header.startswith(marker):
+                path = header[len(marker):]
+                if not path or any(ord(char) < 0x20 or ord(char) == 0x7f for char in path):
+                    if not bad_header:
+                        bad_header = header
+                else:
+                    paths.append(path)
+                break
+    return paths, bad_header
+
+
+def _targets(payload: dict[str, Any]) -> TargetParse:
     tool = str(payload.get("tool_name") or "")
     raw = payload.get("tool_input")
     args = raw if isinstance(raw, dict) else {}
     if tool in {"Write", "Edit"}:
         path = str(args.get("file_path") or args.get("path") or "")
-        return tool, [path] if path else [], ""
+        return TargetParse(tool, [path] if path else [], "", "")
     if tool == "apply_patch":
         patch = str(args.get("patch") or args.get("command") or "")
-        return tool, PATCH_TARGET.findall(patch), ""
+        paths, bad_header = _patch_header_paths(patch)
+        return TargetParse(tool, paths, "", bad_header)
     if tool in {"exec_command", "shell_command", "shell", "Bash", "Shell"}:
         command = str(args.get("cmd") or args.get("command") or "")
-        return tool, [], command
-    return tool, [], ""
+        return TargetParse(tool, [], command, "")
+    return TargetParse(tool, [], "", "")
 
 
 def _payload_cwd_base(root: Path, cwd: Any) -> Path:
@@ -353,7 +387,11 @@ def _load_identity() -> Any:
 
 def main() -> int:
     if sys.argv[1:] == ["--self-check"]:
-        if PATCH_TARGET.findall("*** Update File: pkg/module.py\n") != ["pkg/module.py"]:
+        if any(_patch_header_paths(patch) != (["src/prod.py"], "") for patch in (
+            "*** Update File: src/prod.py\n",
+            "*** Update File: src/prod.py \n",
+            "  *** Update File: src/prod.py\n",
+        )):
             print("CODEX-TDD-GATE: FAIL parser", file=sys.stderr)
             return 2
         unsafe = (
@@ -386,8 +424,11 @@ def _main_guarded() -> int:
         if phase5_status in {"active", "unknown"}:
             return _deny(f"H-MAD Phase 5 root is unreadable ({root.component}); refusing fail-closed. kind=judge-error")
         return 0
-    tool, targets, command = _targets(payload)
+    tool, targets, command, bad_header = _targets(payload)
     phase5_status = _any_phase5_status(root)
+
+    if bad_header and phase5_status in {"active", "unknown"}:
+        return _deny(f"H-MAD Phase 5 patch has a bad header {bad_header!r}; refusing fail-closed. kind=judge-error")
 
     if command and phase5_status == "unknown":
         return _deny("H-MAD state is unreadable; refusing shell execution fail-closed.")

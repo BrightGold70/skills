@@ -312,10 +312,16 @@ def test_codex_test_shaped_names_stay_exempt(tmp_path, relative, expected):
     _expect_gate(root, relative, expected, "no-test-resolved" if expected == "deny" else "")
 
 
-def test_codex_trailing_space_is_not_folded(tmp_path):
+def test_codex_trailing_space_is_not_folded(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+    from h_mad_target_identity import fold_py_suffix
+
+    assert fold_py_suffix("src/prod.py ") == "src/prod.py "
+    assert fold_py_suffix("src/prod.PY ") == "src/prod.PY "
     root = _root(tmp_path)
     (root / "src").mkdir()
-    _expect_gate(root, "src/prod.py ", "allow")
+    # FR-4 trims patch header whitespace, so this target is now governed.
+    _expect_gate(root, "src/prod.py ", "deny", "no-test-resolved")
 
 
 def test_codex_d1_repro_patch_denies(tmp_path):

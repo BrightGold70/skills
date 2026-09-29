@@ -150,6 +150,38 @@
       "find": "        chain = judge.read_chain(root, absolute)  # M:W5A",
       "replace": "        chain = judge.Chain(\"active\", (judge.Record(\"forced\", \"available\", root / \"docs\" / \".bkit-memory.json\", \"absent\"),), None, \"\")  # M:W5A",
       "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_scopes_nested_state_to_the_target_project"
+    },
+    {
+      "name": "CX-LTRIM",
+      "_mechanism": "Task 4 AC-4.2: removing leading header trim must expose the indented production target.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        while start < end and line[start].isspace() and not \"\\x1c\" <= line[start] <= \"\\x1f\":",
+      "replace": "        while False and start < end and line[start].isspace() and not \"\\x1c\" <= line[start] <= \"\\x1f\":",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_indented_header_denies"
+    },
+    {
+      "name": "CX-TTRIM",
+      "_mechanism": "Task 4 AC-4.1 and AC-4.7: removing trailing header trim must lose the production target and fail self-check.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        while end > start and line[end - 1].isspace() and not \"\\x1c\" <= line[end - 1] <= \"\\x1f\":",
+      "replace": "        while False and end > start and line[end - 1].isspace() and not \"\\x1c\" <= line[end - 1] <= \"\\x1f\":",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_trailing_header_whitespace_denies"
+    },
+    {
+      "name": "CX-CTRL",
+      "_mechanism": "Task 4 AC-4.4: removing control-byte validation must accept an invalid header path.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "                if not path or any(ord(char) < 0x20 or ord(char) == 0x7f for char in path):",
+      "replace": "                if not path:",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_control_byte_header_is_judge_error"
+    },
+    {
+      "name": "CX-SPLIT",
+      "_mechanism": "Task 4 AC-4.6: splitlines must truncate a control-bearing header instead of retaining the whole line.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    for line in patch.split(\"\\n\"):",
+      "replace": "    for line in patch.splitlines():",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_patch_header_paths_split_on_newline_only"
     }
   ]
 }
