@@ -296,6 +296,9 @@ class TestCli:
     def test_ready_prints_token_and_exits_0(self, tmp_path):
         a = tmp_path / "demo.analysis.md"
         a.write_text(ANALYSIS)
+        versioned = tmp_path / "docs" / "03-analysis" / "demo.analysis.v1.md"
+        versioned.parent.mkdir(parents=True)
+        versioned.write_text(ANALYSIS)
         p = self.store(tmp_path, READY)
         r = self.run(p, "--feature", "demo", "--analysis", a)
         assert r.returncode == 0
@@ -339,6 +342,7 @@ class TestParkedMutationSpecs:
             (specs / f"{name}.json").write_text("{}", encoding="utf-8")
         a = docs / "03-analysis" / f"{feature}.analysis.md"
         a.write_text(ANALYSIS, encoding="utf-8")
+        (docs / "03-analysis" / f"{feature}.analysis.v1.md").write_text(ANALYSIS, encoding="utf-8")
         return a, specs, docs
 
     def test_a_parked_spec_with_a_live_twin_is_provenance_not_a_blocker(self, tmp_path):
@@ -376,7 +380,8 @@ class TestParkedMutationSpecs:
         a, _, _ = self._tree(tmp_path, parked=["x"], live=[])
         result = p7.check(READY, a)
         assert "pending_mutation_spec_not_restored" not in codes(result)
-        assert {w["code"] for w in result["warnings"]} == {"pending_specs_unverified"}
+        assert {w["code"] for w in result["warnings"]} == {"pending_specs_unverified",
+                                                          "analysis_versions_unverified"}
 
     def test_an_explicit_analysis_elsewhere_does_not_move_the_root(self, tmp_path):
         """`--analysis /tmp/x.analysis.md` used to derive the repo root as `/`."""
@@ -445,3 +450,78 @@ class TestParkedMutationSpecs:
         for d in dirs:
             restored, unrestored = p7.split_parked(d, specs)
             assert len(restored) == 2 and unrestored == [], (d, unrestored)
+
+
+class TestVersionedAnalysis:
+    """Telemetry derives `iterate_cycles` as `max(N) - 1` over
+    `<feature>.analysis.v<N>.md` and reads no counter. inline-protocols.md has said
+    since 2026-07-23 that 6a writes v1 and each 6b cycle writes the next v<N>, and
+    nothing checked it. grok-codex-fallback (1 iterate cycle) and multi-host-runtime
+    (2) closed with only the unversioned `analysis.md` -- the verifier's report was
+    saved as `gap.v1.md`, a name no counter reads, and each 6b cycle was narrated
+    inside the one unversioned file -- so telemetry recorded `iterate_cycles=0` for
+    both. The gate now refuses to close on an unversioned-only analysis.
+    """
+
+    def _tree(self, tmp_path, versions=(1,)):
+        docs = tmp_path / "docs"
+        (docs / "03-analysis").mkdir(parents=True)
+        a = docs / "03-analysis" / "demo.analysis.md"
+        a.write_text(ANALYSIS, encoding="utf-8")
+        for n in versions:
+            (docs / "03-analysis" / f"demo.analysis.v{n}.md").write_text(ANALYSIS, encoding="utf-8")
+        return a, docs
+
+    def test_an_unversioned_only_analysis_blocks(self, tmp_path):
+        """The grok / multi-host-runtime shape: a passing rate, a `gap.v1.md`, no v<N>."""
+        a, docs = self._tree(tmp_path, versions=())
+        (docs / "03-analysis" / "demo.gap.v1.md").write_text(ANALYSIS, encoding="utf-8")
+        result = p7.check(READY, a, docs_root=docs, feature="demo")
+        assert "analysis_unversioned" in codes(result)
+        detail = next(b["detail"] for b in result["blockers"] if b["code"] == "analysis_unversioned")
+        assert "demo.analysis.v<N>.md" in detail
+        assert "iterate_cycles" in detail
+
+    def test_a_versioned_analysis_is_ready(self, tmp_path):
+        """Positive control: the fixture can produce READY at all."""
+        a, docs = self._tree(tmp_path, versions=(1,))
+        result = p7.check(READY, a, docs_root=docs, feature="demo")
+        assert result["ready"], result
+        assert not result["warnings"]
+
+    def test_an_archived_versioned_analysis_counts(self, tmp_path):
+        """Searched where telemetry searches: live 03-analysis AND archive/*/<feature>/."""
+        a, docs = self._tree(tmp_path, versions=())
+        arch = docs / "archive" / "2026-09" / "demo"
+        arch.mkdir(parents=True)
+        (arch / "demo.analysis.v1.md").write_text(ANALYSIS, encoding="utf-8")
+        assert "analysis_unversioned" not in codes(p7.check(READY, a, docs_root=docs, feature="demo"))
+
+    def test_state_claiming_more_iterate_cycles_than_the_files_show_blocks(self, tmp_path):
+        """v1 written, then 6b overwrote in place: existence passes, the count is lost.
+        multi-host-runtime's state said iterate_cycles=2; two cycles need a v3."""
+        a, docs = self._tree(tmp_path, versions=(1,))
+        result = p7.check(dict(READY, iterate_cycles=2), a, docs_root=docs, feature="demo")
+        assert "iterate_cycles_unrecorded" in codes(result)
+        detail = next(b["detail"] for b in result["blockers"]
+                      if b["code"] == "iterate_cycles_unrecorded")
+        assert "iterate_cycles=2" in detail and "derive 0" in detail
+
+    def test_matching_state_and_files_are_ready(self, tmp_path):
+        a, docs = self._tree(tmp_path, versions=(1, 2, 3))
+        assert p7.check(dict(READY, iterate_cycles=2), a, docs_root=docs, feature="demo")["ready"]
+
+    def test_no_docs_root_is_a_warning_not_a_pass_or_a_verdict(self, tmp_path):
+        a, _ = self._tree(tmp_path, versions=())
+        result = p7.check(READY, a)
+        assert "analysis_unversioned" not in codes(result)
+        assert "analysis_versions_unverified" in {w["code"] for w in result["warnings"]}
+
+    def test_cli_blocks_an_unversioned_only_analysis(self, tmp_path):
+        a, docs = self._tree(tmp_path, versions=())
+        state = docs / ".bkit-memory.json"
+        state.write_text(json.dumps({"orchestrator_state": {"demo": READY}}), encoding="utf-8")
+        r = subprocess.run([sys.executable, str(SCRIPT), str(state), "--feature", "demo"],
+                           capture_output=True, text=True, cwd=str(tmp_path))
+        assert "PHASE7: BLOCKED" in r.stdout, r.stdout
+        assert "analysis_unversioned" in r.stdout
