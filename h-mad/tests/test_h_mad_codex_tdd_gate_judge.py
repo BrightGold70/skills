@@ -246,6 +246,18 @@ def _shell_verdict(root: Path, cwd: Path, command: str) -> tuple[str, str]:
     return verdict, reason
 
 
+def test_codex_gate_allows_documented_budget_command_in_step5(tmp_path):
+    adapter = CODEX_GATE.parent.parent / "references" / "codex-runtime.md"
+    script = CODEX_GATE.parent.parent / "scripts" / "h_mad_context_budget.py"
+    command = f'python3 "{script}" --host codex'
+    assert command in adapter.read_text(encoding="utf-8")
+    root = _root(tmp_path)
+    verdict, reason, _ = _run(
+        root, {"tool_name": "exec_command", "tool_input": {"cmd": command}, "cwd": str(root)},
+    )
+    assert verdict == "allow", reason
+
+
 @pytest.mark.parametrize("name,expected", [
     ("contained/sub-cwd/pytest", "allow"),
     ("contained/root-prefix/pytest", "allow"),

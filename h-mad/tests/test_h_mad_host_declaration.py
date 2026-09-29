@@ -48,6 +48,16 @@ def test_classify_host(host, declaration, expected):
     )
 
 
+def test_explicit_host_precedes_environment(host):
+    assert host.classify_host({}, explicit_host="codex") == ("declared", "codex")
+    assert host.classify_host({"HMAD_HOST": "grok"}, explicit_host="codex") == ("declared", "codex")
+
+
+def test_unknown_explicit_host_is_refused(host):
+    assert host.classify_host({"HMAD_HOST": "claude"}, explicit_host="zzz") == ("unknown", "zzz")
+    assert host.classify_host({"HMAD_HOST": "claude"}, explicit_host="") == ("unknown", "")
+
+
 def test_hermetic_env_drops_claude_names_and_backend(monkeypatch, hermetic_env):
     ambient = {
         "CLAUDE_ZZZ_PROBE": "1",
@@ -112,6 +122,48 @@ def _run_budget(tmp_path, hermetic_env, value, *args):
         text=True,
         timeout=60.0,
     )
+
+
+@pytest.mark.parametrize("declaration", [None, "grok"])
+def test_budget_host_flag_wins(tmp_path, hermetic_env, declaration):
+    env = hermetic_env(HOME=str(tmp_path / "home"))
+    if declaration is not None:
+        env["HMAD_HOST"] = declaration
+    result = subprocess.run(
+        [sys.executable, str(BUDGET), "--host", "codex"],
+        cwd=tmp_path, env=env, input="", capture_output=True, text=True, timeout=60.0,
+    )
+    assert result.returncode == 2
+    assert result.stdout == "CTXBUDGET: UNKNOWN reason=host_unsupported host=codex\n"
+
+
+def test_budget_unknown_host_flag_is_refused(tmp_path, hermetic_env):
+    result = subprocess.run(
+        [sys.executable, str(BUDGET), "--host", "zzz"],
+        cwd=tmp_path, env=hermetic_env(HMAD_HOST="claude"), input="",
+        capture_output=True, text=True, timeout=60.0,
+    )
+    assert result.returncode == 2
+    assert result.stdout == "CTXBUDGET: UNKNOWN reason=unknown_host host=zzz\n"
+
+
+def test_resume_host_flag_wins_and_unknown_refuses(tmp_path, hermetic_env):
+    state = _resume_state(tmp_path, "no-owner")
+    for declaration, flag, expected in (
+        (None, "codex", "cannot_judge"),
+        ("grok", "claude", "enter_autonomous"),
+        ("claude", "zzz", "cannot_judge"),
+    ):
+        env = hermetic_env()
+        if declaration is not None:
+            env["HMAD_HOST"] = declaration
+        result = subprocess.run(
+            [sys.executable, str(RESUME_DECISION), "--state", str(state),
+             "--feature", "fx", "--host", flag],
+            cwd=tmp_path, env=env, input="", capture_output=True, text=True, timeout=60.0,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == expected
 
 
 @pytest.mark.parametrize("value", ["codex", "agy", "grok"])

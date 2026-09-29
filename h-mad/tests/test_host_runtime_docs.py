@@ -285,7 +285,7 @@ def test_context_budget_section(adapter_id: str, token: str) -> None:
 def test_budget_line_runs_and_reports_host(adapter_id: str, tmp_path: Path, hermetic_env) -> None:
     section = _claims(adapter_id, "budget line runs and reports host")
     host = adapter_id.removeprefix("h-mad-")
-    pattern = re.compile(rf'^HMAD_HOST={host} python3 "\$HMAD_SKILL_ROOT/scripts/h_mad_context_budget\.py"$')
+    pattern = re.compile(rf'^python3 "{re.escape(str(REPO_ROOT / "h-mad" / "scripts" / "h_mad_context_budget.py"))}" --host {host}$')
     lines = [line for line in _fenced_lines(section) if pattern.fullmatch(line)]
     assert len(lines) == 1, f"Context budget and claims needs exactly one fenced {host} budget command"
     empty_home = tmp_path / "home"
@@ -298,6 +298,12 @@ def test_budget_line_runs_and_reports_host(adapter_id: str, tmp_path: Path, herm
     # host_unsupported is a cannot-judge: h_mad_context_budget.py exits 2 for it (design, impl-plan Task 5).
     assert result.returncode == 2, f"{host} budget command must report host_unsupported with rc 2: {result.stderr}"
     assert result.stdout.strip() == f"CTXBUDGET: UNKNOWN reason=host_unsupported host={host}", f"{host} budget must report unsupported host"
+
+
+@pytest.mark.parametrize("adapter_id", HOST_ADAPTERS, ids=HOST_ADAPTERS)
+def test_adapter_has_no_inline_host_assignment(adapter_id: str) -> None:
+    text = ADAPTERS[adapter_id].read_text(encoding="utf-8")
+    assert not re.search(r"(?m)^HMAD_HOST=\S+\s+python3\b", text)
 
 
 @pytest.mark.parametrize(

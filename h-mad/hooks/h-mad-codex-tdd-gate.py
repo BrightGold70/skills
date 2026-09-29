@@ -43,7 +43,7 @@ SAFE_HMAD_SCRIPT_OPTIONS = {
         "--report-file", "--sandbox", "--task", "--template", "--test-path", "--timeout",
     },
     "h_mad_baseline_sha.py": {"--branch", "--repo", "--trunk"},
-    "h_mad_context_budget.py": {"--ceiling", "--cwd", "--mode", "--transcript", "--window"},
+    "h_mad_context_budget.py": {"--ceiling", "--cwd", "--host", "--mode", "--transcript", "--window"},
     "h_mad_do_preconditions.py": {"--feature", "--repo-root"},
     "h_mad_extract_verdict.py": {"--after-marker", "--allowed", "--feature", "--key", "--phase"},
     "h_mad_identifier_sweep.py": {"--allow", "--include-history", "--root"},

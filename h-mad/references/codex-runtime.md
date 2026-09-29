@@ -112,10 +112,10 @@ python3 "$HMAD_SKILL_ROOT/scripts/h_mad_install_check.py" --agents-skills-dir ~/
 
 ## Context budget and claims
 
-Declare the host inline on every script call. The budget check is:
+Use the explicit host flag for the budget and resume oracle. These commands show this checkout's absolute script path; update it for another installation. The budget check is:
 
 ```bash
-HMAD_HOST=codex python3 "$HMAD_SKILL_ROOT/scripts/h_mad_context_budget.py"
+python3 "/Users/kimhawk/orca/skills-multi-host-runtime/h-mad/scripts/h_mad_context_budget.py" --host codex
 ```
 
 `CTXBUDGET: UNKNOWN reason=host_unsupported` is expected, not an `OK` verdict. The
@@ -132,12 +132,12 @@ before any state write; use `--create --claim` only for its `start_fresh` verdic
 
 ```bash
 ( set -C; python3 -c 'import uuid; print(uuid.uuid4())' > "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>" ) && echo "SID: MINTED" || echo "SID: NOT_MINTED"
-HMAD_HOST=codex python3 "$HMAD_SKILL_ROOT/scripts/h_mad_resume_decision.py" --state docs/.bkit-memory.json --feature "<feature>" --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
-HMAD_HOST=codex python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --create --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
-HMAD_HOST=codex python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
-HMAD_HOST=codex python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --beat --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
-HMAD_HOST=codex python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --set current_phase=5 --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
-HMAD_HOST=codex python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --release --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "/Users/kimhawk/orca/skills-multi-host-runtime/h-mad/scripts/h_mad_resume_decision.py" --host codex --state docs/.bkit-memory.json --feature "<feature>" --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --create --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --beat --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --set current_phase=5 --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --release --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
 ```
 
 If the id file becomes unreadable, the oracle receives an empty id and returns

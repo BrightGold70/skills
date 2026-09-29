@@ -746,5 +746,14 @@
     "log": "../../../../../h-mad/tests/fixtures/codex-text-8-exec.log",
     "root": ".",
     "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "codex-output-injection",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-output-injection.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "note": "Design residual: codex output that reproduces a whole event is read as an event."
   }
 ]
