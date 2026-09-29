@@ -11,8 +11,8 @@ a committed probe re-derives each premise this plan depends on.
 
 ## Overview
 
-The spec (`docs/01-plan/features/tdd-gate-fail-opens.spec.md` v1.0, operator-approved with
-OD-1…OD-5 at commit `662b1ce1`) fixes WHAT the gates must decide. This plan fixes the order of
+The spec (`docs/01-plan/features/tdd-gate-fail-opens.spec.md` v1.2 at commit `e26466a8`; v1.0
+and OD-1…OD-5 operator-approved at commit `662b1ce1`) fixes WHAT the gates must decide. This plan fixes the order of
 work, the five decisions the spec left to the plan, the surfaces each change reaches, and the
 measurements that must be re-taken as work proceeds. D1, D3 and D4 are one class: the gate decides
 on the target's **spelling** rather than its **identity**. The plan therefore does not patch the
@@ -50,8 +50,10 @@ process cannot be reaped returns within `JUDGE_BUDGET_S + REAP_GRACE_S` and repo
   suffix test on the canonical root and target produced by one shared function.
 - G-2 (FR-2): the `.py` suffix is ASCII-folded before production classification and before all
   three basename exemptions, in both gates.
-- G-3 (FR-3): an unresolvable target (a dangling symlink, a loop, or a failed resolution at any
-  prefix) is refused `judge-error` when governed, and allowed as today when not governed.
+- G-3 (FR-3): an unresolvable target is refused `judge-error` when governed, and allowed as today
+  when not governed. Unresolvable has two arms: a dangling symlink, a loop, or a failed resolution
+  at any prefix (arm 1); an existing root or target component the on-disk-spelling primitive cannot
+  open or list (arm 2), which never falls back to its spelling.
 - G-4 (FR-4): the Codex gate recognises `apply_patch` headers with Codex's own grammar: `\n` split,
   both-end `White_Space` trim, exact marker. It refuses a header path that still holds a control
   byte.
@@ -68,7 +70,7 @@ process cannot be reaped returns within `JUDGE_BUDGET_S + REAP_GRACE_S` and repo
 
 - FR-1: one target-normalisation rule in both gates (D3, D4; B2, OD-1). ACs 1.1–1.10.
 - FR-2: `.py` suffix case-folded before every name test (D1; B3, OD-3). ACs 2.1–2.5.
-- FR-3: unresolvable target refused `judge-error` when governed (B4, OD-4). ACs 3.1–3.5.
+- FR-3: unresolvable target refused `judge-error` when governed (B4, OD-4). ACs 3.1–3.6.
 - FR-4: Codex gate reads patch headers as Codex does (D2; B6, OD-2). ACs 4.1–4.7.
 - FR-5: judge bounds its post-kill reap and reports `judge-timeout` (D5; B5). ACs 5.1–5.5.
 - FR-6: pinned repros and a cross-gate differential (B7, OD-5). ACs 6.1–6.3.
@@ -129,15 +131,27 @@ committed probe re-derives every row.
   `os.path.ALLOW_MISSING`. It implements the spec's component walk with `os.lstat`, `os.stat`,
   `os.path.lexists` and `os.path.exists`, all present on 3.9.6. `O_SEARCH` is not available as a
   fallback on 3.11.8.
-- **Open (OQ-P1, routed to the spec owner):** spec FR-3's predicate (`lexists` and not `exists`)
-  does not cover an **existing, resolvable directory that cannot be opened or listed**. Examples:
-  a mode-`0311` parent, which a writer can still create files in, or a leaf's parent without read
-  permission, which FR-1 step 4 must list. A spelling-preserving fallback there reopens M-9's class
-  for that directory. On-disk `Tests/` at mode `0311`, spelled `tests/prod.py`, would be exempted
-  by the spelled `tests`. The spec's residual "Permission-denied ancestors" covers only a component
-  the gate cannot `lstat`. This plan proposes treating an existing component that the primitive
-  cannot open or list as **unresolvable** (FR-3: `judge-error` when governed). That refuses more,
-  and it is a spec change, so the plan does not adopt it on its own authority.
+- **Closed (OQ-P1, operator decision 2026-09-29: refuse; spec v1.1 FR-3 arm 2, AC-3.6).** An
+  existing, resolvable root or target component on which the primitive's open (FR-1 step 3) or the
+  listing of the leaf's canonical parent (FR-1 step 4) raises `OSError` is **unresolvable**: refused
+  `judge-error` when governed, allowed when not. The canonicaliser never falls back to the spelling
+  for that component, because the fallback would exempt on-disk `Tests/` at mode `0311` spelled
+  `tests/…` (M-9's class). The canonicaliser's unresolvable result therefore has two causes: arm 1
+  (does not resolve) and arm 2 (cannot be read in its on-disk spelling). Which operations the
+  canonicaliser performs, and so which components arm 2 can fire on, and how the Claude gate
+  receives the arm-2 condition, are the design's (§"Next Steps"). The spec's
+  permission residual is now split three ways (cannot `lstat`: inert; can `lstat` but cannot open
+  or list: FR-3 arm 2; a writer under another uid or with privileges the gate lacks: residual).
+  Scratch reading of AC-3.6's **unfixed** observables, taken at `e26466a8` (the gate and judge
+  files are unchanged since `5e3a8238`: `git diff --stat 5e3a8238 e26466a8 -- h-mad/hooks
+  h-mad/scripts h-mad/tests/mutation-specs` prints nothing), under `/opt/anaconda3/bin/python`
+  3.11.8 and `/opt/homebrew/bin/python3` 3.14.7 with identical results, spec fixture (`src/prod.py`,
+  `codex_status: exhausted`), Claude `Write` payload and Codex `apply_patch` payload, script deleted
+  after running: (a) on-disk `Tests/` at `0311`, `tests/newmod.py` — `step5`: both gates allow;
+  (b) `src/` at `0311`, `src/prod.py` — `step5`: both deny `no-test-resolved`; (c) both cells under
+  `step3`: both gates allow. `os.listdir` raised `PermissionError` in every cell (the precondition
+  held). These equal the spec's expected unfixed column; T0's committed probe re-derives them and
+  its reading supersedes this one.
 
 ### PD-2 — `REAP_GRACE_S` and `_run_bounded`'s return arity (spec owed item 3)
 
@@ -148,10 +162,11 @@ committed probe re-derives every row.
 **Why 1.0.** The spec's cap is ≤ 2.0 s. After `os.killpg(…, SIGKILL)`, every member of the child's
 process group loses its pipe ends at once, so the grace only has to cover kernel teardown. The only
 writer the grace cannot outwait is a process outside the group, and that is D5 itself. With 1.0 s,
-AC-5.1's bound is `2.0 + 1.0 + 1.0 = 4.0 s`, under the spec's 5.0 s, and a governed write's worst
+AC-5.1's bound is `2.0 + 1.0 + 1.0 = 4.0 s` (the value spec v1.1 adopted into AC-5.1, with
+`reap_failed=True` asserted), and a governed write's worst
 case is `JUDGE_BUDGET_S` (40.0, read from the module: `python3 -c 'import sys;
 sys.path.insert(0,"h-mad/scripts"); import h_mad_tdd_judge as j; print(j.JUDGE_BUDGET_S)'` →
-`40.0`) + 1.0 s. The repository already has one bounded drain after `killpg`, in
+`40.0`) + 1.0 s = 41.0 s + process start-up (spec FR-5 "Worst case"). The repository already has one bounded drain after `killpg`, in
 `h-mad/scripts/h_mad_doc_block_exec.py` (the `proc.communicate(timeout=DRAIN_SECONDS)` block, which
 closes `proc.stdout`/`proc.stderr` on `TimeoutExpired`). The design follows that shape. Its
 `DRAIN_SECONDS = 5.0` exceeds the spec cap, so it is not reused.
@@ -166,10 +181,12 @@ existing `timeout` reasoning is unchanged. `reap_failed` is the new discriminato
 unpackings (the name-map run in `resolve` and the pytest run in `judge`). Two are in
 `h-mad/tests/test_h_mad_tdd_judge.py`: the `def` line of `test_run_bounded_kills_the_process_group`,
 whose name contains the substring, and that test's **one** unpacking. So there are three unpacking
-sites in all, one of them in a test. The spec's
-AC-5.2 names a second test, `test_name_map_runs_under_the_budget`, as a tuple-unpacking site. It
-calls `judge.judge` and does not unpack, so its assertions (`timeout`, `< 6.0 s`) stay as they are.
-The spec wording is owed a correction (see the report). No mutation spec anchors on a
+sites in all, one of them in a test. Re-run at `e26466a8`: the same 5 matching lines in 2 files.
+Spec v1.1's AC-5.2 now says the same: only `test_run_bounded_kills_the_process_group` unpacks
+(five names today; its move to the six-field result is the named, reviewed delta), and
+`test_name_map_runs_under_the_budget` calls `judge.judge`, does not unpack, and keeps its
+assertions (`timeout`, `< 6.0 s`) unchanged. A plain timeout with no detached descendant reports
+`timed_out=True`, `reap_failed=False` (AC-5.2). No mutation spec anchors on a
 `_run_bounded` line. The only judge anchor on an affected line is `# M:K3`
 (`tdd_judge_scoring.json`, 2 mutations), whose `find` text contains `timed_out`. See the anchor
 rule in §"Implementation Strategy".
@@ -204,16 +221,17 @@ cites no M-cell value of its own beyond the spot-check under §"Verified premise
 
 ### PD-5 — Claude Code Edit / MultiEdit / NotebookEdit on a leaf symlink (spec owed item 5)
 
-**Decision: unmeasured, and cannot be measured by a script.** These are Claude Code harness tools
-and cannot be driven from `reproduce.py`. The measurement is a **live** action in a Claude Code
-session. Put a leaf symlink `src/link.py -> ../tests/t.py` in a scratch fixture, apply each tool to
-`src/link.py`, and record whether `tests/t.py` changed (link followed) or `src/link.py` became a
-regular file (link replaced). The result, with the Claude Code build, goes into T0's reading as
-manual rows, and it must exist **before the design freezes FR-1's leaf rule**. If any tool
-replaces the link, FR-1's "decide a leaf symlink by its referent" is a fail-open for a production
-link into `tests/`. The spec would then need an amendment, for example to govern a leaf symlink
-when **either** its link location or its referent is governed. This plan does not choose that
-amendment.
+**Decision: closed as measured; FR-1's leaf rule stands.** The orchestrator measured it live on
+Claude Code 2.1.284 (2026-09-29), with a leaf symlink `src/link.py -> ../tests/t.py` in a scratch
+fixture: **Edit** on `src/link.py` is refused by the tool itself ("Refusing to write …: it is a
+symbolic link. Write to the link's target path instead"), and the link and `tests/t.py` are
+unchanged. Write was already measured refusing (spec §"Measured premises"). **MultiEdit** and
+**NotebookEdit** are absent from that build's tool set, so they are **unmeasurable** there, not
+measured. No observed tool replaces the link, so spec v1.1 leaves FR-1's "decide a leaf symlink by
+its referent" unamended. These are harness-tool actions: `reproduce.py` cannot re-derive them, so
+they enter T0's reading **only as manual rows** carrying the build (2.1.284) and the date. The
+residual is the spec's: a later build's MultiEdit or NotebookEdit, or any writer that replaces a
+leaf symlink, is measured before it is trusted.
 
 ## Verified premises (commands run at `5e3a8238`)
 
@@ -244,15 +262,15 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
 
 | Task | Content | ACs | Depends on |
 |---|---|---|---|
-| T0 | Probe `reproduce.py` + unfixed reading (PD-4); PD-5 manual rows | — (measurement) | — |
-| T1 | Shared canonicaliser: component walk, F_GETPATH on existing directories, leaf inode match with the all-entries rule for hard links in one directory, remainder append + lexical collapse, unresolvable predicate. Unit tests drive it directly. | 1.7, 1.8 (unit half), 1.9 (unit half), 1.10, 3.4 | T0 |
-| T2 | Codex gate: root, payload `cwd` (before `_payload_cwd_base` tests containment) and every target through T1; fold in `_is_production_python`; FR-3 refusal gated on `_any_phase5_status` ∈ {`active`, `unknown`} | 1.1–1.6, 1.8, 1.9, 2.1–2.4, 3.1–3.5 (Codex halves) | T1 |
-| T3 | Claude gate: one Python call returns canonical root, canonical target and the unresolvable flag, replacing `ROOT_ABS`'s `pwd -P` and the `# M:H11` call; every exemption, `IN_ROOT` and the suffix test read the canonical values; fold in the basename `case` and the `*.py` test; FR-3 refusal after `_read_state` reports `active`/`unreadable`, with `_chain_may_hold_state` and `TDD-STATE: none` unchanged | 1.1–1.9, 2.1–2.4, 3.1–3.5 (Claude halves) | T1 |
+| T0 | Probe `reproduce.py` + unfixed reading (PD-4). Includes the OQ-P1 cells, each under the `step5` and the `step3`-only state: a mode-`0311` directory spelled in another case with an absent leaf (on-disk `Tests/`, `tests/newmod.py`), and an existing leaf whose parent lacks `r` (`src/` at `0311`, `src/prod.py`); each cell prints its `os.listdir` precondition. These cells are the measurement of AC-3.6's unfixed observables (a), (b) and (c). Plus the PD-5 manual rows (Write and Edit refused on Claude Code 2.1.284; MultiEdit and NotebookEdit absent from that build), entered by hand, not printed by the script | — (measurement) | — |
+| T1 | Shared canonicaliser: component walk, F_GETPATH on existing directories, leaf inode match with the all-entries rule for hard links in one directory, remainder append + lexical collapse, unresolvable predicate over both FR-3 arms. **Arm-2 guard:** an `OSError` from the primitive's open of an existing component (FR-1 step 3) or from the listing of the leaf's canonical parent (FR-1 step 4) makes the result unresolvable, with no fallback to the spelling. Unit tests drive it directly, including the arm-2 guard on the `0311` fixture. | 1.7, 1.8 (unit half), 1.9 (unit half), 1.10, 3.4 | T0 |
+| T2 | Codex gate: root, payload `cwd` (before `_payload_cwd_base` tests containment) and every target through T1; fold in `_is_production_python`; FR-3 refusal (both arms) gated on `_any_phase5_status` ∈ {`active`, `unknown`} | 1.1–1.6, 1.8, 1.9, 2.1–2.4, 3.1–3.6 (Codex halves) | T1 |
+| T3 | Claude gate: one Python call returns canonical root, canonical target and the unresolvable condition (both FR-3 arms; the call contract is the design's), replacing `ROOT_ABS`'s `pwd -P` and the `# M:H11` call; every exemption, `IN_ROOT` and the suffix test read the canonical values; fold in the basename `case` and the `*.py` test; FR-3 refusal after `_read_state` reports `active`/`unreadable`, with `_chain_may_hold_state` and `TDD-STATE: none` unchanged | 1.1–1.9, 2.1–2.4, 3.1–3.6 (Claude halves) | T1 |
 | T4 | Codex header grammar: `\n` split, both-end trim with `str.isspace()` minus U+001C–U+001F, exact markers, control-byte and empty-path refusal when governed; `--self-check` gains the trailing-space and indented cases | 2.5, 4.1–4.7 | T2 |
-| T5 | Judge: `REAP_GRACE_S`, six-field return, reap failure → `judge-timeout` on the name-map path and the pytest path, `judge-timeout` first in the priority tuple and stopping further runs, `KINDS` + `JUDGE_DENY_RE`, new rows in `test_claude_gate_kind` and `test_codex_gate_kind` | 5.1–5.5 | — (independent of T1–T4) |
+| T5 | Judge: `REAP_GRACE_S = 1.0`, six-field `NamedTuple` return adding `reap_failed: bool` (AC-5.1 bound 4.0 s; AC-5.2's only unpacking delta is `test_run_bounded_kills_the_process_group`), reap failure → `judge-timeout` on the name-map path and the pytest path, `judge-timeout` first in the priority tuple and stopping further runs, `KINDS` + `JUDGE_DENY_RE`, new rows in `test_claude_gate_kind` and `test_codex_gate_kind` | 5.1–5.5 | — (independent of T1–T4) |
 | T6 | Cross-gate differential over the OD-5 domain, reusing `tdd_gate_support.decision` and `hermetic_env`, with an expectation table whose deny count the test derives; re-run `dd7_differential.py` (AC-6.3) | 6.1–6.3 | T2, T3 |
 | T7 | Documentation surfaces (D-8) | — (doc-derived tests stay green) | T2–T5 |
-| T8 | Mutation specs for every guard AC-7.1 names, one mutation per alternation branch, each alone | 7.1 | T1–T6 |
+| T8 | Mutation specs for every guard AC-7.1 names, one mutation per alternation branch, each alone. Spec v1.2's AC-7.1 names **19 guard rows** (18 at spec v1.0; the added row is FR-3's cannot-be-read arm, AC-3.6, whose mutation lives on T1's arm-2 guard). Counted as the AC-7.1 paragraph's `(AC-` parentheticals plus its `separate mutations` phrases: `git show e26466a8:docs/01-plan/features/tdd-gate-fail-opens.spec.md \| awk '/AC-7\.1:/{f=1} f&&/^$/{exit} f' \| tr '\n' ' ' \| tr -s ' '`, then `grep -o '(AC-' \| wc -l` → 16 and `grep -o 'separate mutations' \| wc -l` → 3; the same at `662b1ce1` → 15 and 3. 19 is a **floor** on mutations, not their count: a row naming a guard in each gate ("the fold in each gate") needs one mutation per gate, and the committed specs are the census | 7.1 | T1–T6 |
 | T9 | Re-run `reproduce.py` on the fixed tree; commit the reading | — (measurement) | T1–T8 |
 
 **Rules over the whole feature** (each closes a class, not an instance):
@@ -324,8 +342,8 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| An existing directory the primitive cannot open or list (OQ-P1) falls back to its spelling | A fail-open of M-9's class under a mode-`0311` directory | OQ-P1 routed to the spec owner with a fail-closed proposal; T0's probe adds that cell so the decision rests on a reading |
-| A Claude Code tool replaces a leaf symlink (PD-5) | FR-1's referent rule allows a production write through a link into `tests/` | PD-5 live measurement before the design freezes the leaf rule; spec amendment if any tool replaces |
+| An existing directory the primitive cannot open or list (OQ-P1) falls back to its spelling | A fail-open of M-9's class under a mode-`0311` directory | Closed by the operator (refuse): spec FR-3 arm 2 and AC-3.6; T1's arm-2 guard has no spelling fallback and its own AC-7.1 mutation; T0's probe carries the OQ-P1 cells |
+| A Claude Code tool replaces a leaf symlink (PD-5) | FR-1's referent rule allows a production write through a link into `tests/` | Measured on 2.1.284: Write and Edit refuse, MultiEdit and NotebookEdit absent; a tool in a later build is measured before it is trusted (spec residual) |
 | The canonicaliser uses an API absent on the suite's 3.11.8 (`ALLOW_MISSING`, `O_SEARCH`) | Green under PATH `python3` 3.14.7, red or wrong under the suite | PD-1 names the constraint; T1's unit tests run under the suite interpreter |
 | Rewriting marked lines drifts mutation anchors silently | A guard's mutation no longer applies, or relocates and reports SURVIVED | `--check-anchors` `ANCHORS_OK drifted=0` after every task; re-derive at the same guard |
 | Canonicalisation flips an existing pinned verdict beyond the spec's three | Silent softening of a pinned cell | Stop-and-report rule; T6 re-runs `dd7_differential.py` and `test_dd7_differential_matches_the_published_cells` stays at 126/18 |
@@ -335,9 +353,9 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
 
 ## Convention Prerequisites
 
-- Phase 3 audit exit and Phase 4 design approval per `h-mad/SKILL.md`. OQ-P1 and PD-5 must be
-  settled (spec amendment or explicit operator acknowledgement) before the design freezes FR-1 and
-  FR-3.
+- Phase 3 audit exit and Phase 4 design approval per `h-mad/SKILL.md`. OQ-P1 and PD-5 are
+  settled (operator 2026-09-29; folded into spec v1.1 and v1.2, committed together at `e26466a8`), so
+  the design may freeze FR-1 and FR-3.
 - Feature branch cut from `main` after this plan's approval. The suite floor and anchor baseline
   (§"Verified premises") are re-measured at that branch base with the same commands.
 - Phase 5 authorship by Codex (the gate under repair is the gate that governs its own Phase 5).
@@ -376,12 +394,20 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
 
 ## Next Steps
 
-1. Operator review of v1.0, and a decision on OQ-P1 and PD-5's measurement (both route to the spec
-   owner if they change FR-1 or FR-3).
+1. Operator review of v1.1 (OQ-P1 decided refuse, PD-5 measured, OD-1…OD-5 approved).
 2. Phase 3 audit cycle on two surfaces per `h-mad/SKILL.md`.
 3. Phase 4 design: canonicaliser placement (PD-1), the exact lines each task rewrites (which fixes
    the anchor set), and the Claude gate's call contract for the canonical root, target and
-   unresolvable flag.
+   unresolvable flag. Owed to the design by spec v1.1's FR-3 arm 2:
+   - **Which operations the canonicaliser performs**, named exactly. Arm 2 fires only on an
+     operation the canonicaliser actually performs, so a component the design's primitive never
+     opens is never tested (for example, F_GETPATH on the deepest existing directory covers its
+     ancestors without opening them). The design states, per component kind (root, intermediate
+     directory, leaf's parent, leaf), whether it is opened, listed, or neither.
+   - **How the Claude gate receives the arm-2 condition**, alongside the existing unresolvable
+     flag from the same single Python call: one flag carrying both arms or a separate arm-2 value,
+     and the reason text naming the component either way (AC-3.6 requires the reason to name it).
 
 ## Version History
 - v1.0: Initial plan draft (2026-09-29) from spec v1.0 (662b1ce1). PD-1 F_GETPATH primitive in one shared canonicaliser, bash side does no canonicalisation; PD-2 REAP_GRACE_S=1.0 and a six-field runner result; PD-3 no case-sensitive runner exists, AC-1.10 fails never skips; PD-4 committed probe T0/T9; PD-5 leaf-symlink tools need a live measurement. Opens OQ-P1 (an existing directory the primitive cannot open). Readings at 5e3a8238.
+- v1.1: Revision (2026-09-29) against spec v1.2 (e26466a8). OQ-P1 closed (operator: refuse; spec FR-3 arm 2, AC-3.6): G-3 and FR-3 carry both arms, T1 gains the arm-2 guard with no spelling fallback, AC-3.6 owned by T2/T3 (gate halves), scratch reading of AC-3.6's unfixed observables at e26466a8 equals the spec's expected column. PD-5 closed as measured (Edit refused on Claude Code 2.1.284; MultiEdit/NotebookEdit absent, unmeasurable); T0 enters it as manual rows only. T0 gains the OQ-P1 cells under both states. T8 states AC-7.1's 19 guard rows (18 at spec v1.0) with the counting command, as a floor on mutations. FR-5 aligned to spec: REAP_GRACE_S = 1.0, six-field NamedTuple with reap_failed, AC-5.1 < 4.0 s, AC-5.2 unpacking only in test_run_bounded_kills_the_process_group. Next Steps owe the design the canonicaliser's operations and the Claude gate's arm-2 transport.
