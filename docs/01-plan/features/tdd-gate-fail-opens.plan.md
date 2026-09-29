@@ -12,10 +12,16 @@ are behaviour of an agent's own tools (Codex's `apply_patch` grammar, Claude Cod
 leaf symlink) are manual, dated readings with their exact command (§"Reproduction commands"),
 because no committed script may invoke an agent CLI (PD-4).
 
+The feature also carries the operator's fold of OD-6 (spec FR-8): the Codex gate admits the
+documented resume oracle, `h_mad_resume_decision.py` reads the minted session id itself behind a new
+`--session-id-from-git-dir` flag, and the three host adapters' oracle line drops its `$(…)`
+(tasks T10–T12).
+
 ## Overview
 
-The spec (`docs/01-plan/features/tdd-gate-fail-opens.spec.md` v1.3 at commit `766860ba`; v1.2 at `e26466a8`; v1.0
-and OD-1…OD-5 operator-approved at commit `662b1ce1`) fixes WHAT the gates must decide. This plan fixes the order of
+The spec (`docs/01-plan/features/tdd-gate-fail-opens.spec.md` v1.4 at commit `644f8bf6`; v1.3 at
+`766860ba`; v1.2 at `e26466a8`; v1.0 and OD-1…OD-5 operator-approved at commit `662b1ce1`; OD-6
+folded by the operator 2026-09-29, spec v1.4) fixes WHAT the gates must decide. This plan fixes the order of
 work, the five decisions the spec left to the plan, the surfaces each change reaches, and the
 measurements that must be re-taken as work proceeds. D1, D3 and D4 are one class: the gate decides
 on the target's **spelling** rather than its **identity**. The plan therefore does not patch the
@@ -37,7 +43,12 @@ In scope, and the only files this feature's code changes may touch:
   canonicaliser (PD-1).
 - One new stdlib-only module under `h-mad/scripts/` if the design places the canonicaliser outside
   the judge (PD-1 leaves the placement to the design).
-- Tests under `h-mad/tests/`, mutation specs under `h-mad/tests/mutation-specs/`.
+- `h-mad/scripts/h_mad_resume_decision.py` (FR-8 change 2): the `--session-id-from-git-dir` flag,
+  and a module-level `build_parser()` that `main()` calls (T10).
+- `h-mad/references/codex-runtime.md`, `grok-runtime.md` and `agy-runtime.md`: the fenced
+  resume-oracle line and its "empty id" prose (FR-8 change 3, T12).
+- Tests under `h-mad/tests/` (including the two named deltas in `test_host_runtime_docs.py`,
+  AC-8.6), mutation specs under `h-mad/tests/mutation-specs/`.
 - Documentation surfaces that state the gate's rules (Deliverable D-8).
 - The committed probe directory `docs/03-analysis/probes/tdd-gate-fail-opens/`.
 
@@ -74,7 +85,11 @@ process cannot be reaped returns within `JUDGE_BUDGET_S + REAP_GRACE_S` and repo
   probe. T0's **unfixed** reading, one stamped reading of that probe, replaces the table, as the
   spec's own text requires. T9's **fixed** reading is a separate artifact, cited on its own and
   never substituted for T0's (PD-4). The columns the probe cannot derive (Codex's writes, Codex's
-  trim set, Claude Code's tools) are manual rows in T0's reading.
+  trim set, Claude Code's tools) are manual rows in T0's reading. A committed comparison of the two
+  readings fails on any softened verdict the spec does not name (PD-4, "Old-versus-new verdict
+  comparison").
+- G-9 (FR-8): under `step5` the Codex gate admits the resume oracle in its documented form, and
+  that form carries no command substitution.
 
 ## Requirements
 
@@ -85,9 +100,11 @@ process cannot be reaped returns within `JUDGE_BUDGET_S + REAP_GRACE_S` and repo
 - FR-5: judge bounds its post-kill reap and reports `judge-timeout` (D5; B5). ACs 5.1–5.5.
 - FR-6: pinned repros and a cross-gate differential (B7, OD-5). ACs 6.1–6.3.
 - FR-7: every guard bites. AC-7.1.
+- FR-8: the Codex gate admits the documented resume oracle (OD-6). ACs 8.1–8.6.
 - The spec's NFRs: at most one added Python process in the Claude gate (FR-1 replaces the
-  existing `# M:H11` call rather than adding one); no new knob or environment variable; every
-  existing test green except the named deltas.
+  existing `# M:H11` call rather than adding one); no new environment variable (FR-8 adds one CLI
+  flag, `--session-id-from-git-dir`); every existing test green except the named deltas (spec
+  NFR Compatibility, which names AC-8.6's two).
 
 ## Plan decisions (the five items the spec owed to the plan)
 
@@ -240,7 +257,44 @@ forbids. The Linux `F_GETPATH` fallback (spec residual) has no test here for the
 the skills root as its argument and building every fixture in a `TemporaryDirectory`. It prints one
 `REPRO:` line per gate cell of spec §"Measured premises" (M-1…M-23: each cell's **gate** columns),
 per PD-1 primitive row, per OQ-P1 cell, and for the D5 reading. It exercises only the two gates and
-the judge.
+the judge. The gate corpus also carries two cell families the M-table does not number, each
+printed per gate and per state mode (`step5`, `step3`-only):
+
+- **`leaf-symlink`**, the third approved relaxation (spec FR-1 "Verdict changes toward ALLOW": a
+  leaf symlink into `tests/`, Claude gate): `src/link.py -> ../tests/t.py` with `tests/t.py`
+  present, a `Write` of `src/link.py`. Unfixed reading by R-6 at `644f8bf6`: `step5` Claude deny
+  `no-test-resolved`, Codex allow; `step3` both allow. Fixed: both allow under both states.
+- **`FR-8`** (spec owed item (d)): the Codex gate on a `step5` shell payload of the shape
+  `test_codex_hook_allows_exact_safe_hmad_control_script` uses, one cell per command form: the
+  documented `--session-id "$(cat …)"` line, the literal `--session-id <uuid>` form, and the
+  `--session-id-from-git-dir` form. Unfixed: deny for all three (spec §"Measured premises",
+  OD-6 reading at `78e35abf`). Fixed: deny, allow, allow.
+
+**Old-versus-new verdict comparison (the class: every softened verdict is named).**
+`h-mad/invariants.base.md` requires running a corpus through the old and new logic, diffing the
+verdicts, and accounting for **every** input whose verdict softened. T0 commits
+`docs/03-analysis/probes/tdd-gate-fail-opens/compare_readings.py`, which takes two readings and
+keys each `REPRO:` gate line by (cell, gate, state mode). It exits non-zero, printing each
+offending key, when:
+
+1. a key is present in one reading and absent from the other (a dropped cell would hide a
+   softening);
+2. a key's verdict moved from deny to allow and the key is not in its **approved set**, a literal
+   table in the script: (`M-10`, Claude, `step5`), (`M-10`, Codex, `step5`), (`M-11`, Claude,
+   `step5`), (`leaf-symlink`, Claude, `step5`) — spec FR-1's three relaxations — and (`FR-8
+   literal-uuid`, Codex, `step5`), (`FR-8 flag`, Codex, `step5`) — spec FR-8, operator-approved
+   OD-6.
+
+It prints `COMPARE: PASS softened=N approved=N` or `COMPARE: FAIL …`, and a deny that changes kind
+is reported but is not a softening. T0 runs its two controls and commits their output beside the
+unfixed reading: the unfixed reading against itself gives `PASS softened=0`, and against a copy
+with one extra deny-to-allow key outside the approved set gives `FAIL`. T9 runs it on T0's reading
+against T9's reading and commits the output; the feature is not done unless that output is
+`PASS`, with `softened` equal to `approved` equal to 6. The approved set has six keys, not three,
+because spec FR-8 (v1.4) adds two approved ALLOWs that sit in the same readings: a table of three
+would make T9's comparison fail on the operator's own OD-6 decision. The residual: the comparison covers only the corpus the probe prints; a softened
+verdict on a spelling outside that corpus is caught only by the per-task stop-and-report rule
+(§"Implementation Strategy").
 
 **No agent CLI, in any committed artifact of this feature (the class, not the instance).**
 `h-mad/invariants.base.md` §"Dispatched agent CLIs are not script dependencies" forbids a script
@@ -288,12 +342,10 @@ value of its own beyond the spot-check under §"Verified premises".
 ### PD-5 — Claude Code Edit / MultiEdit / NotebookEdit on a leaf symlink (spec owed item 5)
 
 **Decision: closed as measured; FR-1's leaf rule stands.** The orchestrator measured it live on
-Claude Code 2.1.284 (2026-09-29) by command R-5 (§"Reproduction commands"), with the fixture
-`mkdir -p pd5/src pd5/tests; printf 'X = 1\n' > pd5/tests/t.py; ln -sf ../tests/t.py
-pd5/src/link.py`, then the Claude Code Edit tool on `pd5/src/link.py` replacing `X = 1` with
-`X = 2`: it is refused with "Refusing to write …: it is a symbolic link. Write to the link's
-target path instead"; afterwards `ls -l pd5/src/link.py` still shows the link and `cat
-pd5/tests/t.py` still reads `X = 1`. Write was already measured refusing (spec §"Measured premises"). **MultiEdit** and
+Claude Code 2.1.284 (2026-09-29) by the tool call R-5 (§"Reproduction commands": tool `Edit`,
+`file_path` `<scratchpad>/pd5/src/link.py`, `old_string` `X = 1`, `new_string` `X = 2`), which the
+tool refused; the link and `pd5/tests/t.py` were unchanged afterwards. R-5 carries the exact
+input, response and follow-up commands. Write was already measured refusing (spec §"Measured premises"). **MultiEdit** and
 **NotebookEdit** are absent from that build's tool set, so they are **unmeasurable** there, not
 measured. No observed tool replaces the link, so spec v1.1 leaves FR-1's "decide a leaf symlink by
 its referent" unamended. These are harness-tool actions: `reproduce.py` cannot re-derive them, so
@@ -318,6 +370,10 @@ Premises the spec measured and this plan did not re-run are T0's to re-derive.
 | `test_dd7_differential_matches_the_published_cells` asserts 126 cells and 18 denies | `grep -n -F 'assert len(observed) == 126 and observed.count("deny") == 18' h-mad/tests/test_h_mad_tdd_gate_judge.py` | 1 matching line |
 | Suite collection floor | `/opt/anaconda3/bin/python -m pytest --collect-only -q -p no:cacheprovider h-mad/tests \| tail -1` on a clean tree | `4618 tests collected` |
 | Mutation anchors baseline | `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/*.json` | `ANCHORS: ANCHORS_OK specs=118 mutations=1195 ok=1195 drifted=0 unreadable=0 skipped=0 unclassifiable=0` |
+| FR-8: the safe list has no oracle entry today (spec OD-6 reading at `78e35abf`, re-run for v1.4) | `/opt/anaconda3/bin/python -c 'import importlib.util as u;s=u.spec_from_file_location("g","h-mad/hooks/h-mad-codex-tdd-gate.py");m=u.module_from_spec(s);s.loader.exec_module(m);d=m.SAFE_HMAD_SCRIPT_OPTIONS;print(len(d),"h_mad_resume_decision.py" in d)'` | `10 False`, at `644f8bf6` |
+| FR-8: `git` is refused by the gate's shell policy (why the flag, not a path) | the same import, then `print(m._safe_shell_command("git rev-parse --absolute-git-dir", ".", "."))` | `False`, at `644f8bf6` |
+| FR-8: the script builds its parser inside `main()`, with no `build_parser()` for AC-8.2 to reach (why T10 adds one) | `grep -n -E 'def build_parser\|ArgumentParser' h-mad/scripts/h_mad_resume_decision.py`; `grep -c 'parser.add_argument(' h-mad/scripts/h_mad_resume_decision.py` | 1 matching line, the `ArgumentParser(` inside `main()`, and no `def build_parser`; 5 matching lines, one per option (`--state`, `--feature`, `--host`, `--session-id`, `--now`), at `644f8bf6` |
+| FR-8: each adapter carries one `$(cat …)` oracle line | `for f in codex grok agy; do printf '%s ' $f; grep -c 'h_mad_resume_decision.py.*session-id "\$(cat' h-mad/references/$f-runtime.md; done` | `codex 1`, `grok 1`, `agy 1` (matching lines), at `644f8bf6` |
 
 **The suite floor drifts by construction.** It moved from 4611 (a `git archive 662b1ce1 h-mad`
 export) to 4618 at `5e3a8238`, one commit later, through an unrelated documentation test, and
@@ -334,16 +390,40 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
 
 | Task | Content | ACs | Depends on |
 |---|---|---|---|
-| T0 | Probe `reproduce.py` + unfixed reading (PD-4). Includes the OQ-P1 cells, each under the `step5` and the `step3`-only state: a mode-`0311` directory spelled in another case with an absent leaf (on-disk `Tests/`, `tests/newmod.py`), and an existing leaf whose parent lacks `r` (`src/` at `0311`, `src/prod.py`); each cell prints its `os.listdir` precondition. These cells are the measurement of AC-3.6's unfixed observables (a), (b) and (c). Plus the outside-root `# M:H20` cells of R-3 (spec AC-1.11). The probe invokes no agent CLI and prints `REPRO: agent-cli-reachable=no` (PD-4). Manual rows, entered by hand with their command, never printed by the script: the Codex-writes column of M-15…M-23, the Codex trim set and Codex following a leaf symlink (R-4, with `codex --version`), and PD-5 (R-5: Write and Edit refused on Claude Code 2.1.284; MultiEdit and NotebookEdit absent from that build) | — (measurement) | — |
-| T1 | Shared canonicaliser: component walk, F_GETPATH on existing directories, leaf inode match with the all-entries rule for hard links in one directory, remainder append + lexical collapse, unresolvable predicate over both FR-3 arms. **Arm-2 guard:** an `OSError` from the primitive's open of an existing component (FR-1 step 3) or from the listing of the leaf's canonical parent (FR-1 step 4) makes the result unresolvable, with no fallback to the spelling. Unit tests drive it directly, including the arm-2 guard on the `0311` fixture. | 1.7, 1.8 (unit half), 1.9 (unit half), 1.10, 3.4 | T0 |
-| T2 | Codex gate: root, payload `cwd` (before `_payload_cwd_base` tests containment) and every target through T1; fold in `_is_production_python`; FR-3 refusal (both arms) gated on `_any_phase5_status` ∈ {`active`, `unknown`} | 1.1–1.6, 1.8, 1.9, 2.1–2.4, 3.1–3.6 (Codex halves) | T1 |
-| T3 | Claude gate: one Python call returns canonical root, canonical target and the unresolvable condition (both FR-3 arms; the call contract is the design's), replacing `ROOT_ABS`'s `pwd -P` and the `# M:H11` call; `IN_ROOT`, the in-root directory exemption (`# M:H19`), the basename exemptions and the suffix test read the canonical values; the outside-root directory exemption (`# M:H20`) keeps its dual check per spec FR-1 step 7 — `_dir_match` of the canonical target **and** `_dir_match` of the raw spelling `RAW_TARGET` — so the canonical value replaces only its first conjunct. **Pinned outside-root symlink control** (R-3's first cell): a target outside the root, `out/lnk/x.py` with `out/lnk -> tests`, whose canonical form enters `tests/` but whose raw spelling does not, stays deny `no-test-resolved` on the fixed gate; with its positive control `out/tests/x.py` (allow) and negative control `out/src/x.py` (deny). This pin is spec AC-1.11. Its discriminating observable is the mutant, not the unfixed tree: the existing mutation `H20B` (keeps only the `$TARGET_PATH` conjunct) kills only on the **fixed** tree, where `TARGET_PATH` is canonical. On the unfixed tree `TARGET_PATH` is only `normpath`'d, so `H20B` does not move the cell, and a mutation run before T3 lands reports `H20B` SURVIVED legitimately (spec AC-1.11, measured at `4192ad8c`). Score `H20B` only after T3, once T3 has re-derived it at the same guard; fold in the basename `case` and the `*.py` test; FR-3 refusal after `_read_state` reports `active`/`unreadable`, with `_chain_may_hold_state` and `TDD-STATE: none` unchanged | 1.1–1.9, 1.11, 2.1–2.4, 3.1–3.6 (Claude halves) | T1 |
+| T0 | Probe `reproduce.py` + unfixed reading (PD-4). Includes the OQ-P1 cells, each under the `step5` and the `step3`-only state: a mode-`0311` directory spelled in another case with an absent leaf (on-disk `Tests/`, `tests/newmod.py`), and an existing leaf whose parent lacks `r` (`src/` at `0311`, `src/prod.py`); each cell prints its `os.listdir` precondition. These cells are the measurement of AC-3.6's unfixed observables (a), (b) and (c). Plus the outside-root `# M:H20` cells of R-3 (spec AC-1.11), the `leaf-symlink` cells (R-6) and the three `FR-8` gate cells (spec owed item (d)), each described in PD-4. The probe invokes no agent CLI and prints `REPRO: agent-cli-reachable=no` (PD-4). Also commits `compare_readings.py` (PD-4, "Old-versus-new verdict comparison") with the output of its two controls (self-comparison `PASS softened=0`; an injected unapproved deny-to-allow key `FAIL`). Manual rows, entered by hand with their command, never printed by the script: one row per R-4 case (the Codex-writes column of M-15…M-23, each trim code point, Codex following a leaf symlink), with `codex --version`, and PD-5 (R-5's exact tool input and response: Write and Edit refused on Claude Code 2.1.284; MultiEdit and NotebookEdit absent from that build) | — (measurement) | — |
+| T1 | Shared canonicaliser: component walk, F_GETPATH on existing directories, leaf inode match returning **every** entry of the canonical parent that shares the leaf's `(st_dev, st_ino)` (the hard-link contract, below the table: the canonicaliser returns all names and never evaluates an exemption), remainder append + lexical collapse, unresolvable predicate over both FR-3 arms. **Arm-2 guard:** an `OSError` from the primitive's open of an existing component (FR-1 step 3) or from the listing of the leaf's canonical parent (FR-1 step 4) makes the result unresolvable, with no fallback to the spelling. Unit tests drive it directly, including the arm-2 guard on the `0311` fixture. | 1.7, 1.8 (unit half), 1.9 (unit half), 1.10, 3.4 | T0 |
+| T2 | Codex gate: root, payload `cwd` (before `_payload_cwd_base` tests containment) and every target through T1; fold in `_is_production_python`, which runs on every leaf name T1 returns (the target is production unless every name is exempt, the hard-link contract below the table); FR-3 refusal (both arms) gated on `_any_phase5_status` ∈ {`active`, `unknown`} | 1.1–1.6, 1.8, 1.9, 2.1–2.4, 3.1–3.6 (Codex halves) | T1 |
+| T3 | Claude gate: one Python call returns canonical root, canonical target, **every leaf name sharing the leaf's inode in its canonical parent**, and the unresolvable condition (both FR-3 arms; the encoding is the design's, the content is the hard-link contract below the table), replacing `ROOT_ABS`'s `pwd -P` and the `# M:H11` call; `IN_ROOT`, the in-root directory exemption (`# M:H19`), the basename exemptions and the suffix test read the canonical values; the outside-root directory exemption (`# M:H20`) keeps its dual check per spec FR-1 step 7 — `_dir_match` of the canonical target **and** `_dir_match` of the raw spelling `RAW_TARGET` — so the canonical value replaces only its first conjunct. **Pinned outside-root symlink control** (R-3's first cell): a target outside the root, `out/lnk/x.py` with `out/lnk -> tests`, whose canonical form enters `tests/` but whose raw spelling does not, stays deny `no-test-resolved` on the fixed gate; with its positive control `out/tests/x.py` (allow) and negative control `out/src/x.py` (deny). This pin is spec AC-1.11. Its discriminating observable is the mutant, not the unfixed tree: the existing mutation `H20B` (keeps only the `$TARGET_PATH` conjunct) kills only on the **fixed** tree, where `TARGET_PATH` is canonical. On the unfixed tree `TARGET_PATH` is only `normpath`'d, so `H20B` does not move the cell, and a mutation run before T3 lands reports `H20B` SURVIVED legitimately (spec AC-1.11, measured at `4192ad8c`). Score `H20B` only after T3, once T3 has re-derived it at the same guard; the basename `case` (`# M:H6`) and the `*.py` test run over every returned name, allowing only when every name allows; fold in the basename `case` and the `*.py` test; FR-3 refusal after `_read_state` reports `active`/`unreadable`, with `_chain_may_hold_state` and `TDD-STATE: none` unchanged | 1.1–1.9, 1.11, 2.1–2.4, 3.1–3.6 (Claude halves) | T1 |
 | T4 | Codex header grammar: `\n` split, both-end trim with `str.isspace()` minus U+001C–U+001F, exact markers, control-byte and empty-path refusal when governed; `--self-check` gains the trailing-space and indented cases. AC-4.6's code points are the ones the manual R-4 reading measured on codex-cli 0.158.0; the tests drive only the gate, never `codex` (PD-4) | 2.5, 4.1–4.7 | T2 |
 | T5 | Judge: `REAP_GRACE_S = 1.0`, six-field `NamedTuple` return adding `reap_failed: bool` (AC-5.1 bound 4.0 s; AC-5.2's only unpacking delta is `test_run_bounded_kills_the_process_group`), reap failure → `judge-timeout` on the name-map path and the pytest path, `judge-timeout` first in the priority tuple and stopping further runs, `KINDS` + `JUDGE_DENY_RE`, new rows in `test_claude_gate_kind` and `test_codex_gate_kind` | 5.1–5.5 | — (independent of T1–T4) |
-| T6 | Cross-gate differential over the OD-5 domain, reusing `tdd_gate_support.decision` and `tdd_gate_support.hermetic_env`. It asserts, per spec FR-6: (1) the two gates' decisions are equal on every cell; (2) on every cell where both deny, their **kinds** are equal (Codex kind parsed with `kind=([a-z-]+)` from the reason); (3) each cell's decision, and its kind when it denies, equals that cell's row in a **published expectation table** in the test, one row per cell and state mode carrying the expected decision and the expected kind; (4) the table's deny count is derived by the test from the table, never typed. Each assertion is its own failure message, so a cross-gate kind disagreement fails on its own and is not masked by an equal decision. Re-run `dd7_differential.py` (AC-6.3) | 6.1–6.3 | T2, T3 |
-| T7 | Documentation surfaces (D-8) | — (doc-derived tests stay green) | T2–T5 |
-| T8 | Mutation specs for every guard AC-7.1 names, one mutation per alternation branch, each alone. The mutation **floor is 20** at spec v1.2 (19 at spec v1.0): the AC-7.1 paragraph's `(AC-` parentheticals, plus one for each `separate mutations` pair, plus one for each guard named `in each gate` (one mutation per gate, AC-2.2). Command: `P=$(git show e26466a8:docs/01-plan/features/tdd-gate-fail-opens.spec.md \| awk '/AC-7\.1:/{f=1} f&&/^$/{exit} f' \| tr '\n' ' ' \| tr -s ' ')`, then `echo "$P" \| grep -o '(AC-' \| wc -l` → 16 occurrences, `echo "$P" \| grep -o 'separate mutations' \| wc -l` → 3, `echo "$P" \| grep -o 'in each gate' \| wc -l` → 1; 16 + 3 + 1 = 20. The same at `662b1ce1` → 15, 3 and 1 = 19; the added row is FR-3's cannot-be-read arm, AC-3.6, whose mutation lives on T1's arm-2 guard. Re-run at `983c2f85` (spec unchanged since `e26466a8`): 16, 3, 1; and at spec v1.3 `766860ba` (AC-1.11 added, no AC-7.1 row for `H20`): 16, 3, 1, so the floor stays 20. 20 is a **floor**, not the count: the acceptance check is the per-guard census over the committed specs — every guard AC-7.1 names, and every gate a guard is named in, has at least one mutation reported caught | 7.1 | T1–T6 |
-| T9 | Re-run `reproduce.py` on the fixed tree; commit the reading | — (measurement) | T1–T8 |
+| T6 | Cross-gate differential over the OD-5 domain as spec v1.4 FR-6 defines it, reusing `tdd_gate_support.decision` and `tdd_gate_support.hermetic_env`. **Domain rule, two clauses:** a resolvable spelling is in-root when its canonical target (FR-1) is inside the canonical root; an unresolvable spelling (FR-3, either arm) is in-root when its **resolved prefix** is inside the canonical root, the resolved prefix being the longest prefix of the spelled components, after FR-1 step 1, that FR-1 step 2 walks before FR-3's predicate holds ("inside" includes equal). **Cells:** M-1…M-14 and M-18, plus the controls `notes.md`, `tests/test_x.py` and `sub/test_x.PY`, each asserted as its own row. The required unresolvable cells stay in, with their resolved prefixes: M-12 `R/docs`, M-13 leaf case `R/src`, M-13 intermediate case (`lnk -> nowhere`) `R`, M-14 `R/src`, and each of them again under M-18; their expected rows are deny `judge-error` in **both** gates (equal kinds) under the governing state and allow under the `step3`-only state (FR-3 fires at step 2, before step 6's inside-root test). The test asserts each resolved prefix is inside the canonical root, so a cell cannot leave the domain silently. It asserts, per spec FR-6: (1) the two gates' decisions are equal on every cell; (2) on every cell where both deny, their **kinds** are equal (Codex kind parsed with `kind=([a-z-]+)` from the reason); (3) each cell's decision, and its kind when it denies, equals that cell's row in a **published expectation table** in the test, one row per cell and state mode carrying the expected decision and the expected kind; (4) the table's deny count is derived by the test from the table, never typed. Each assertion is its own failure message, so a cross-gate kind disagreement fails on its own and is not masked by an equal decision. Re-run `dd7_differential.py` (AC-6.3) | 6.1–6.3 | T2, T3 |
+| T7 | Documentation surfaces (D-8), including the three adapters `codex-runtime.md`, `grok-runtime.md` and `agy-runtime.md` (spec owed item (e)); their oracle line and "empty id" prose are T12's edit, and T7 re-checks each adapter's other gate statements against the fixed gates | — (doc-derived tests stay green) | T2–T5, T12 |
+| T8 | Mutation specs for every guard AC-7.1 names, one mutation per alternation branch, each alone. The mutation **floor is 25** at spec v1.4 (20 at spec v1.2 and v1.3, 19 at spec v1.0): the AC-7.1 paragraph's `(AC-` parentheticals, plus one for each `separate mutations` pair, plus one for each guard named `in each gate` (one mutation per gate, AC-2.2). Command: `P=$(git show 644f8bf6:docs/01-plan/features/tdd-gate-fail-opens.spec.md \| awk '/AC-7\.1:/{f=1} f&&/^$/{exit} f' \| tr '\n' ' ' \| tr -s ' ')`, then `echo "$P" \| grep -o '(AC-' \| wc -l` → 21 occurrences, `echo "$P" \| grep -o 'separate mutations' \| wc -l` → 3, `echo "$P" \| grep -o 'in each gate' \| wc -l` → 1; 21 + 3 + 1 = 25 (run 2026-09-29 for plan v1.4). The five rows spec v1.4 added are FR-8's: the safe-list entry (AC-8.1), its equality with the parser (AC-8.2), the id-file read (AC-8.3), the `cannot_judge` answer (AC-8.4) and the mutual exclusion (AC-8.5), whose mutations live in T11 and T10. Earlier readings of the same command: `e26466a8` and `983c2f85` → 16, 3, 1 = 20; `766860ba` (AC-1.11 added, no AC-7.1 row for `H20`) → 16, 3, 1 = 20; `662b1ce1` → 15, 3, 1 = 19. The floor moves with every spec revision that edits AC-7.1 and is re-measured with the same command, at the spec's sha, whenever the spec changes. 25 is a **floor**, not the count: the acceptance check is the per-guard census over the committed specs — every guard AC-7.1 names, and every gate a guard is named in, has at least one mutation reported caught | 7.1 | T1–T6, T10, T11 |
+| T9 | Re-run `reproduce.py` on the fixed tree; commit the reading; run `compare_readings.py` on T0's reading against it and commit the output, which must be `COMPARE: PASS softened=6 approved=6` (PD-4) | — (measurement) | T1–T8, T10–T12 |
+| T10 | Script (spec FR-8 change 2, owed item (b)): `h_mad_resume_decision.py` gains a module-level `build_parser()` that `main()` calls, and `--session-id-from-git-dir` in one argparse mutually exclusive group with `--session-id`; with the flag it runs `git rev-parse --absolute-git-dir` under a 10 s bound, reads `<git dir>/h-mad-session-id.<feature>`, strips it, and decides as `--session-id <id>` would; each of the six failure modes prints `cannot_judge` on every host. Tests use a git repository and a linked worktree (AC-8.3) and a hermetic `PATH` without `git` (AC-8.4) | 8.3, 8.4, 8.5 | — (independent of T1–T9) |
+| T11 | Codex gate (spec FR-8 change 1, owed item (a)): `SAFE_HMAD_SCRIPT_OPTIONS` gains the `h_mad_resume_decision.py` key with exactly the parser's long options minus `--help` (six after T10), no per-script value check. AC-8.2's test derives the set from `build_parser()` (T10), reading each action's `option_strings`, and never types it | 8.1, 8.2 | T10 |
+| T12 | Adapters (spec FR-8 change 3, owed item (c)): the fenced oracle line in `codex-runtime.md`, `grok-runtime.md` and `agy-runtime.md` becomes the `--session-id-from-git-dir` form, and each adapter's "empty id" prose becomes "the oracle cannot read the id and returns `cannot_judge`"; the two named deltas in `test_host_runtime_docs.py` (`test_claims_section_fenced_lines`'s `oracle` condition, `test_claims_lines_execute_across_invocations`'s oracle selection) | 8.6 | T10, T11 |
+
+**The hard-link contract (spec FR-1 step 4, AC-1.9; agy must #1 of audit cycle 2).** Chosen:
+**the canonicaliser returns all names; it never evaluates an exemption.** For an existing leaf it
+returns the tuple of every entry of the leaf's canonical parent whose `(st_dev, st_ino)` equals the
+leaf's, sorted, at least one name. For an absent leaf it returns the one spelled leaf name (FR-1
+step 5). Each gate then applies its own basename exemptions and its `.py` suffix test (after the
+FR-2 fold) to **every** name: the write is exempt by name only if every name is exempt, and it is
+non-`.py` only if every name is non-`.py`. The directory exemptions need no loop, because every
+name shares the one canonical parent. The Codex gate receives the tuple in-process (T2). The Claude
+gate receives it from the single Python call (T3), which also returns the canonical root, the
+canonical target and the unresolvable condition. Why not the alternative (the call evaluates the
+exemptions): it would move the Claude gate's basename `case` (`# M:H6`) and `*.py` test into Python,
+putting the exemption list in a third place beside the Codex gate's `_is_production_python` and
+relocating the `# M:H6` anchor; returning names keeps each gate's exemption code where it is. Owed
+by the design: the encoding of the name list on the Claude gate's call output. It must carry any
+byte a directory entry can hold except NUL (a newline, a space), and a list the gate cannot parse
+is `judge-error`, never a fallback to the spelled leaf (the fail-closed rule below). AC-1.9's
+fixture (`src/prod.py` and `src/test_prod.py` on one inode, spelled `src/test_prod.py`) is the pin
+in both gates; its AC-7.1 mutation makes T1 return only the spelled name, which turns AC-1.9 red
+in both gates at once. Each gate's per-name loop is a separate site the design names; whether it
+gets its own mutation beyond the floor is the per-guard census's call (T8).
 
 **Rules over the whole feature** (each closes a class, not an instance):
 
@@ -368,12 +448,15 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
   `replace`; lines are not mutations.) The candidate set is a forecast, not a census: the design
   names the exact lines, and `--check-anchors` after each task is the census.
 - **Verdict changes are named, never discovered.** The only verdict changes toward ALLOW are the
-  spec's three: M-10 (both gates), M-11 (Claude gate), and a leaf symlink into `tests/` (Claude
-  gate). Any other existing test that changes verdict is a stop-and-report, not a test edit. The
+  spec's three from FR-1: M-10 (both gates), M-11 (Claude gate), and a leaf symlink into `tests/`
+  (Claude gate); plus FR-8's two admitted oracle forms (the literal-uuid and the
+  `--session-id-from-git-dir` forms, Codex gate). Any other existing test that changes verdict is a
+  stop-and-report, not a test edit. Over the probe's corpus this is mechanical:
+  `compare_readings.py` (PD-4) fails on any softened key outside the approved set of six. The
   axis along which a fourth ALLOW could slip in unnamed is an exemption whose input changes from
   the spelling to the canonical value; the only such exemption outside the root is `# M:H20`, and
   it keeps its raw-spelling conjunct (T3), pinned by R-3's outside-root symlink control (spec AC-1.11). Inside
-  the root, a verdict change beyond the three is the stop-and-report above; the spec, not this
+  the root, a verdict change beyond the named ones is the stop-and-report above; the spec, not this
   plan, decides that the in-root exemptions read only canonical values (FR-1 step 6).
 - **Every refusal the feature adds is fail-closed on exception.** The Codex gate's
   `except Exception` (`# M:G2`) already maps a raise to `kind=judge-error`. On the Claude side the
@@ -418,8 +501,9 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
 | D-5 | Judge: `REAP_GRACE_S`, six-field runner result, `judge-timeout` kind and priority | module | FR-5 |
 | D-6 | Pinned repro tests + cross-gate differential test module | tests | FR-6, all ACs |
 | D-7 | Mutation specs for AC-7.1's guard list, plus re-derived anchors for touched markers | mutation specs | FR-7 |
-| D-8 | Documentation: `h-mad/references/codex-implementer-prompt.md` "Hook:" bullets (resolved identity, any-case `.py`), `h-mad/SKILL.md` helper-scripts bullet for `h_mad_tdd_judge.py` (`judge-timeout`), `h-mad/references/codex-runtime.md` §"Trust boundary" (`judge-timeout`, unresolvable refusal). The design confirms whether `h-mad/references/agy-runtime.md` §"The TDD gate" needs a change: it names no judge kind (`grep -c -E "$(python3 -c 'import sys;sys.path.insert(0,"h-mad/scripts");import h_mad_tdd_judge as j;print("\|".join(sorted(j.KINDS)))')" h-mad/references/agy-runtime.md` → 0 matching lines over the whole file, at `983c2f85`). | docs | FR-2, FR-3, FR-5 |
-| D-9 | `docs/03-analysis/probes/tdd-gate-fail-opens/reproduce.py` (gates and judge only, no agent CLI) + unfixed reading with the manual R-4 and R-5 rows (T0) + fixed reading (T9), two separate files | probe | G-8, PD-4, PD-5 |
+| D-8 | Documentation: `h-mad/references/codex-implementer-prompt.md` "Hook:" bullets (resolved identity, any-case `.py`), `h-mad/SKILL.md` helper-scripts bullet for `h_mad_tdd_judge.py` (`judge-timeout`), `h-mad/references/codex-runtime.md` §"Trust boundary" (`judge-timeout`, unresolvable refusal). The design confirms whether `h-mad/references/agy-runtime.md` §"The TDD gate" needs a change: it names no judge kind (`grep -c -E "$(python3 -c 'import sys;sys.path.insert(0,"h-mad/scripts");import h_mad_tdd_judge as j;print("\|".join(sorted(j.KINDS)))')" h-mad/references/agy-runtime.md` → 0 matching lines over the whole file, at `983c2f85`). The three adapters `codex-runtime.md`, `grok-runtime.md` and `agy-runtime.md` §"Context budget and claims": the resume-oracle line and its "empty id" prose (FR-8 change 3; edited in T12, listed here per spec owed item (e)). | docs | FR-2, FR-3, FR-5, FR-8 |
+| D-10 | FR-8: `h_mad_resume_decision.py` `build_parser()` and `--session-id-from-git-dir` (T10); the `SAFE_HMAD_SCRIPT_OPTIONS` entry (T11); the adapters' oracle line and the two `test_host_runtime_docs.py` deltas (T12) | script, hook, docs, tests | FR-8 |
+| D-9 | `docs/03-analysis/probes/tdd-gate-fail-opens/reproduce.py` (gates and judge only, no agent CLI) + `compare_readings.py` and its two controls' output (T0) + unfixed reading with the manual R-4 and R-5 rows (T0) + fixed reading and its comparison output (T9), each a separate file | probe | G-8, PD-4, PD-5 |
 
 ## Risks and Mitigation
 
@@ -429,11 +513,14 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
 | A Claude Code tool replaces a leaf symlink (PD-5) | FR-1's referent rule allows a production write through a link into `tests/` | Measured on 2.1.284: Write and Edit refuse, MultiEdit and NotebookEdit absent; a tool in a later build is measured before it is trusted (spec residual) |
 | The canonicaliser uses an API absent on the suite's 3.11.8 (`ALLOW_MISSING`, `O_SEARCH`) | Green under PATH `python3` 3.14.7, red or wrong under the suite | PD-1 names the constraint; T1's unit tests run under the suite interpreter |
 | Rewriting marked lines drifts mutation anchors silently | A guard's mutation no longer applies, or relocates and reports SURVIVED | `--check-anchors` `ANCHORS_OK drifted=0` after every task; re-derive at the same guard |
-| Canonicalisation flips an existing pinned verdict beyond the spec's three | Silent softening of a pinned cell | Stop-and-report rule; T6 re-runs `dd7_differential.py` and `test_dd7_differential_matches_the_published_cells` stays at 126/18 |
+| Canonicalisation flips an existing pinned verdict beyond the spec's named relaxations (FR-1's three, FR-8's two) | Silent softening of a pinned cell | `compare_readings.py` fails on any softened key of the probe's corpus outside the approved set of six (PD-4; T0 runs its controls, T9 commits `PASS softened=6 approved=6`); stop-and-report rule for anything outside the corpus; T6 re-runs `dd7_differential.py` and `test_dd7_differential_matches_the_published_cells` stays at 126/18 |
 | The Codex trim set is re-measured against a later codex-cli | AC-4.6's code-point cases pin a stale grammar | T0's manual R-4 rows record `codex --version` beside each row; a version change is caught only when R-4 is re-taken by hand on the new binary, because no committed artifact may invoke `codex` (PD-4 residual; spec Assumptions owes the matching wording) |
 | Canonicalising the Claude gate's outside-root exemption drops its raw-spelling conjunct (`# M:H20`) | An outside-root target whose canonical form enters `tests/` becomes a fourth, unnamed ALLOW | T3 keeps the dual check (spec FR-1 step 7); R-3's outside-root symlink control is a pinned test (spec AC-1.11), and the re-derived `H20B` mutation must turn it red on the fixed tree (on the unfixed tree `H20B` SURVIVES legitimately, so it is scored only after T3) |
 | The committed probe or a new test reaches an agent CLI | Breaks `invariants.base.md` §"Dispatched agent CLIs are not script dependencies"; a probe reading then depends on an installed agent | Constructed `PATH` for every spawned process; `REPRO: agent-cli-reachable=no` gates the reading's validity (PD-4) |
 | The reap grace is too short on a loaded machine | A plain timeout is misreported as `judge-timeout` | Both kinds DENY, so the write is refused either way; AC-5.2's no-descendant case pins `timeout` |
+| The hard-link rule is lost at the gate boundary (agy must #1 of audit cycle 2) | A name sharing the leaf's inode is exempt while its sibling is production (AC-1.9's class) | T1 returns every same-inode name and each gate tests every name (the hard-link contract, §"Implementation Strategy"); an unparseable name list is `judge-error`; AC-1.9 pinned in both gates with its AC-7.1 mutation |
+| FR-8 closes only the oracle line (spec Residuals, "FR-8 closes the oracle line only") | Each adapter's `h_mad_state_write.py` lines (`--create --claim`, `--claim`, `--beat`, `--set`, `--release`) still use `$HMAD_SKILL_ROOT` and `$(cat …)`, so the Codex gate still refuses them under `step5`, including `--beat` and `--release` during Phase 5 | Not fixed here: the operator's fold names only the oracle. Stated as the spec's residual; an operator decision to fold them is a spec change first |
+| `--session-id-from-git-dir` hides a read failure as "no id" | On the Claude host a missing id reaches `decide` as `None` and prints `enter_autonomous` | Every failure mode prints `cannot_judge` on every host (T10); AC-8.4's `--host claude` cases discriminate, and the fail-closed branch has its own AC-7.1 mutation |
 | AC-5.1 and AC-5.3 leave a detached `sleep` running | Leaked processes across the suite | Teardown kills the sleeper via its pidfile (spec AC-5.1), with the pattern `_pid_gone` already used in `test_h_mad_tdd_judge.py` |
 
 ## Convention Prerequisites
@@ -449,13 +536,13 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
   `CODEX-TDD-GATE: PASS` at every commit.
 - The suite interpreter is `/opt/anaconda3/bin/python` (pytest 9.1.1). The full `h-mad/tests`
   suite runs per task, not only the scoped modules.
-- Every reading this plan cites carries its command inline or as R-1…R-5 in §"Reproduction
+- Every reading this plan cites carries its command inline or as R-1…R-6 in §"Reproduction
   commands", runnable from the skills root. T0's probe is the committed instrument that
   supersedes them for every gate and judge row; R-4 and R-5 stay manual by construction (PD-4).
 
 ## Success Criteria
 
-- Every AC in spec FR-1…FR-7 passes as an automated test on the fixed tree. The "unfixed" halves
+- Every AC in spec FR-1…FR-8 passes as an automated test on the fixed tree. The "unfixed" halves
   (AC-1.7's `realpath` substitution, AC-3.4, AC-4.7, AC-5.4, AC-6.1, AC-6.2) are **run** on the
   unfixed code or with the named substitution, not asserted.
 - Full suite: collected ≥ the floor re-measured at the branch base + the tests this feature adds,
@@ -471,6 +558,9 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
   observable for every M-cell and is cited on its own; it does not replace the table.
 - The pinned outside-root symlink control (R-3's first cell, spec AC-1.11) stays deny
   `no-test-resolved` on the fixed Claude gate, and `H20B` turns it red on the fixed tree.
+- T9's committed `compare_readings.py` output is `COMPARE: PASS softened=6 approved=6`: every
+  softened verdict in the corpus is one the spec names, and every named one happened.
+- The mutation census covers every guard AC-7.1 names at spec v1.4, a floor of 25 mutations (T8).
 
 ## Out-of-Scope (confirmed from spec)
 
@@ -484,9 +574,10 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
 
 ## Next Steps
 
-1. Operator review of v1.2 (plan audit cycle 1 answered; OQ-P1 decided refuse, PD-5 measured,
-   OD-1…OD-5 approved).
-2. Phase 3 audit cycle on two surfaces per `h-mad/SKILL.md`.
+1. Operator review of v1.4, the corrective revision after plan audit cycle 2 (the second and last
+   gating round; v1.4 is not re-audited). OQ-P1 decided refuse, PD-5 measured, OD-1…OD-5 approved,
+   OD-6 folded as FR-8.
+2. Phase 4 design.
 3. Phase 4 design: canonicaliser placement (PD-1), the exact lines each task rewrites (which fixes
    the anchor set), and the Claude gate's call contract for the canonical root, target and
    unresolvable flag. Owed to the design by spec v1.1's FR-3 arm 2:
@@ -498,6 +589,17 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
    - **How the Claude gate receives the arm-2 condition**, alongside the existing unresolvable
      flag from the same single Python call: one flag carrying both arms or a separate arm-2 value,
      and the reason text naming the component either way (AC-3.6 requires the reason to name it).
+
+   Owed to the design by this revision:
+   - **The hard-link name list's encoding** on the Claude gate's call output (§"Implementation
+     Strategy", the hard-link contract): it carries any byte but NUL, and an unparseable list is
+     `judge-error`. The contract itself (all names returned, each gate tests every name) is fixed
+     here; the design names each gate's per-name loop site.
+   - **FR-8's git-dir read** (spec v1.4 owed item): where in `h_mad_resume_decision.py` the
+     `git rev-parse --absolute-git-dir` call and the id-file read sit relative to `decide`, and the
+     name of the 10 s bound's module constant.
+   - **`compare_readings.py`'s key format**: the `REPRO:` line grammar T0 prints, from which the
+     (cell, gate, state mode) key is parsed.
 4. Owed by the spec author (this plan does not edit the spec): (a) spec §"Assumptions" says a
    later Codex "is caught by AC-4.6 only if the owed probe re-runs against the new binary", and
    spec §"Measured premises" says the committed probe's reading replaces the whole table; under
@@ -511,8 +613,10 @@ task list is the impl-plan's to refine; the order and the dependencies are this 
 Each command runs from the skills root. R-1…R-3 were run for v1.2 at `983c2f85` on 2026-09-29,
 macOS 27.0 APFS, and their outputs are the readings cited above; they build every fixture in a
 `TemporaryDirectory`, drive only the two gates (through the existing `tdd_gate_support` helpers),
-and give every spawned gate a constructed `PATH` with no agent CLI. R-4 and R-5 are **manual**:
-they exercise an agent's own tool, so no committed artifact runs them (PD-4).
+and give every spawned gate a constructed `PATH` with no agent CLI. R-6 has the same properties and
+was run at `644f8bf6` for v1.4. R-4 and R-5 are **manual**: they exercise an agent's own tool, so
+no committed artifact runs them (PD-4); R-4 was re-taken case by case for v1.4, R-5 is the
+orchestrator's tool call.
 
 **R-1 — the on-disk-spelling primitive (PD-1 table).** Run once per interpreter:
 `/opt/anaconda3/bin/python`, `/opt/homebrew/bin/python3`, `/usr/bin/python3`.
@@ -627,29 +731,144 @@ no-test-resolved`. On the fixed gate the first line must be unchanged; dropping 
 (`H20B`) turns it into `allow` there. On this unfixed gate `H20B` leaves all three lines unchanged
 (spec AC-1.11), so `H20B` SURVIVED before T3 is expected, not a defect.
 
-**R-4 — Codex's own `apply_patch` (manual; never in a script or test).** In a scratch copy of the
-fixture, never in the repository, record the binary's version, then run `apply_patch` as Codex
-dispatches it (`argv[0]=apply_patch`), substituting the header line under test:
+**R-4 — Codex's own `apply_patch` (manual; never in a script or test).** Run by hand, from a
+scratch directory outside the repository, never committed, and deleted after the run; each case
+builds its own fixture in a `TemporaryDirectory` (removed on exit). Every case is invoked as
+Codex dispatches the tool, `argv[0]=apply_patch` on the `codex` binary (the same as
+`exec -a apply_patch codex "$P"`). Each case's fixture is `src/prod.py` = `X = 1`, empty `docs/` and
+`tests/`, plus the case's own `setup`; each case's patch is the literal string in its `run` call.
+The output line per case is: label, `rc`, the first 90 characters of stdout+stderr with newlines
+shown as ` / `, and every file (`repr(name)=repr(content)`) or symlink (`repr(name)->repr(target)`)
+in the fixture afterwards. Invocation: `/opt/homebrew/bin/python3 r4.py`, with `r4.py`:
 
-```bash
-F=$(mktemp -d) && mkdir -p "$F/src" && printf 'X = 1\n' > "$F/src/prod.py" && cd "$F" && codex --version && P=$'*** Begin Patch\n*** Update File: src/prod.py \n@@\n-X = 1\n+X = 2\n*** End Patch\n' && (exec -a apply_patch "$(command -v codex)" "$P"); echo "rc=$?"; cat src/prod.py
+```python
+import os, shutil, subprocess, sys, tempfile
+CODEX = shutil.which("codex")
+B, E = "*** Begin Patch\n", "*** End Patch\n"
+UPD = "@@\n-X = 1\n+X = 2\n"
+def run(label, patch, setup=()):
+    with tempfile.TemporaryDirectory() as t:
+        os.makedirs(t + "/src"); os.makedirs(t + "/docs"); os.makedirs(t + "/tests")
+        open(t + "/src/prod.py", "w").write("X = 1\n")
+        for kind, a, b in setup:
+            if kind == "file": open(t + "/" + a, "w").write(b)
+            if kind == "link": os.symlink(b, t + "/" + a)
+        p = subprocess.run(["apply_patch", patch], executable=CODEX, cwd=t, capture_output=True, text=True)
+        msg = (p.stdout + p.stderr).strip().replace("\n", " / ")[:90]
+        state = []
+        for d, ds, fs in os.walk(t):
+            for n in sorted(fs + [x for x in ds if os.path.islink(os.path.join(d, x))]):
+                q = os.path.join(d, n); rel = os.path.relpath(q, t)
+                if os.path.islink(q): state.append(f"{rel!r}->{os.readlink(q)!r}")
+                else: state.append(f"{rel!r}={open(q, errors='replace').read()!r}")
+        print(f"{label} | rc={p.returncode} | {msg} | {' '.join(sorted(state))}")
+print("codex:", subprocess.run([CODEX, "--version"], capture_output=True, text=True).stdout.strip())
+run("M-15 control", B + "*** Update File: src/prod.py\n" + UPD + E)
+run("M-15 CRLF patch", (B + "*** Update File: src/prod.py\n" + UPD + E).replace("\n", "\r\n"))
+CPS = [0x09, 0x0B, 0x0C, 0x0D, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x85, 0xA0, 0x1680] + list(range(0x2000, 0x200C)) + [0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF]
+for c in CPS:
+    ch = chr(c)
+    run(f"trail U+{c:04X}", B + "*** Update File: src/prod.py" + ch + "\n" + UPD + E)
+    run(f"lead  U+{c:04X}", B + ch + "*** Update File: src/prod.py\n" + UPD + E)
+run("M-16 lead space", B + " *** Update File: src/prod.py\n" + UPD + E)
+run("M-17 Add+indented Update", B + "*** Add File: docs/x.md\n+x\n  *** Update File: src/prod.py\n" + UPD + E)
+run("M-19 Move trailing space", B + "*** Update File: docs/a.md\n*** Move to: src/prod2.py \n@@\n-a\n+b\n" + E, [("file", "docs/a.md", "a\n")])
+run("M-23 lead space Move", B + "*** Update File: docs/a.md\n *** Move to: src/new.py\n@@\n-a\n+b\n" + E, [("file", "docs/a.md", "a\n")])
+run("M-20 Add + U+001F", B + "*** Add File: src/n.py\x1f\n+x\n" + E)
+run("AC-4.4 Add interior U+0001", B + "*** Add File: src/pr\x01od.py\n+x\n" + E)
+for h in ["*** update file: src/prod.py", "***  Update File: src/prod.py", "*** Update File:src/prod.py", "**** Update File: src/prod.py", "*** Update File:\tsrc/prod.py"]:
+    run(f"M-22 {h!r}", B + h + "\n" + UPD + E)
+run("leaf symlink", B + "*** Update File: src/link.py\n" + UPD + E, [("file", "tests/t.py", "X = 1\n"), ("link", "src/link.py", "../tests/t.py")])
 ```
 
-Reading 2026-09-29 (this author, by hand), trailing-space header (M-15's space variant):
-`codex-cli 0.158.0`, `Success. Updated the following files:` / `M src/prod.py`, `rc=0`, `X = 2`,
-and `ls src` shows only `prod.py`. The other M-15…M-23 cells and the trim-set code points are the
-same command with the header line substituted; T0 enters each as a manual row with its version
-and date.
+The code-point list is every code point for which Python `str.isspace()` is true except U+000A,
+the line separator itself (the list was checked against
+`python3 -c 'print([hex(c) for c in range(0x110000) if chr(c).isspace()])'`, 29 code points, at
+this reading), plus U+200B and U+FEFF. So T4's rule, `str.isspace()` minus U+001C–U+001F, is
+measured at **every** code point it admits and every one it removes; no trim code point T4 relies
+on is inferred. What stays inferred is only the claim for code points outside this list (spec
+§"Measured premises": "The code points not run are inferred from the property, not measured").
 
-**R-5 — Claude Code Edit on a leaf symlink (PD-5; manual, harness tool).** The orchestrator's
-procedure, verbatim: fixture `mkdir -p pd5/src pd5/tests; printf 'X = 1\n' > pd5/tests/t.py; ln
--sf ../tests/t.py pd5/src/link.py`, then the Claude Code Edit tool on `pd5/src/link.py` replacing
-`X = 1` with `X = 2`, which is refused with "Refusing to write …: it is a symbolic link. Write to
-the link's target path instead"; afterwards `ls -l pd5/src/link.py` still shows the link and `cat
-pd5/tests/t.py` still reads `X = 1`. Claude Code 2.1.284, 2026-09-29.
+Reading: codex-cli 0.158.0, 2026-09-29T07:58:57Z, this plan's author, run at skills `644f8bf6`,
+`/opt/homebrew/bin/python3` 3.14.7; the script and every fixture were deleted after the run. The
+output, 75 lines, is below. Rows that group code points stand for lines that are byte-identical
+except for their label; `<tmp>` stands for the `TemporaryDirectory` path, cut at 90 characters.
+
+| Case (labels) | Observed output after the label |
+|---|---|
+| `codex:` | `codex-cli 0.158.0` |
+| `M-15 control`, `M-15 CRLF patch` | `rc=0 \| Success. Updated the following files: / M src/prod.py \| 'src/prod.py'='X = 2\n'` |
+| `trail` and `lead` for U+0009, U+000B, U+000C, U+000D, U+0020, U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F, U+3000 (48 lines) | `rc=0 \| Success. Updated the following files: / M src/prod.py \| 'src/prod.py'='X = 2\n'` |
+| `trail` for U+001C, U+001D, U+001E, U+001F, U+200B, U+FEFF (6 lines) | `rc=1 \| Failed to read file to update <tmp>… \| 'src/prod.py'='X = 1\n'` |
+| `lead` for U+001C, U+001D, U+001E, U+001F, U+200B, U+FEFF (6 lines) | `rc=1 \| Invalid patch hunk on line 2: '<code point>*** Update File: src/prod.py' is not a valid hunk header. … \| 'src/prod.py'='X = 1\n'` |
+| `M-16 lead space` | `rc=0 \| Success. Updated the following files: / M src/prod.py \| 'src/prod.py'='X = 2\n'` |
+| `M-17 Add+indented Update` | `rc=0 \| Success. Updated the following files: / A docs/x.md / M src/prod.py \| 'docs/x.md'='x\n' 'src/prod.py'='X = 2\n'` |
+| `M-19 Move trailing space` | `rc=0 \| Success. Updated the following files: / M src/prod2.py \| 'src/prod.py'='X = 1\n' 'src/prod2.py'='b\n'` (`docs/a.md` is gone) |
+| `M-23 lead space Move` | `rc=1 \| Failed to find expected lines in <tmp>… \| 'docs/a.md'='a\n' 'src/prod.py'='X = 1\n'` |
+| `M-20 Add + U+001F` | `rc=0 \| Success. Updated the following files: / A src/n.py \| 'src/n.py\x1f'='x\n' 'src/prod.py'='X = 1\n'` |
+| `AC-4.4 Add interior U+0001` | `rc=0 \| Success. Updated the following files: / A src/prod.py \| 'src/pr\x01od.py'='x\n' 'src/prod.py'='X = 1\n'` |
+| `M-22` × 5 (each header in the list) | `rc=1 \| Invalid patch hunk on line 2: '<the header>' is not a valid hunk header. … \| 'src/prod.py'='X = 1\n'` |
+| `leaf symlink` | `rc=0 \| Success. Updated the following files: / M src/link.py \| 'src/link.py'->'../tests/t.py' 'src/prod.py'='X = 1\n' 'tests/t.py'='X = 2\n'` |
+
+Each result equals the spec's "Codex writes" column for M-15…M-23 and its trim-set paragraph.
+Two readings go beyond the spec's table and change nothing in it: U+001D (not in the spec's list)
+is not trimmed, as `str.isspace()` minus U+001C–U+001F predicts; and the interior-U+0001 Add
+writes `src/pr\x01od.py`, which is why AC-4.4 refuses it. T0 enters each case as a manual row
+with this version and date.
+
+**R-5 — Claude Code Edit on a leaf symlink (PD-5; manual, harness tool).** Taken by the
+orchestrator on Claude Code 2.1.284, 2026-09-29, in the session scratchpad (written `<scratchpad>`
+below). This is a **Claude Code tool call, not a shell command**: no script can replay it, and
+nothing committed re-runs it (PD-4). It is re-taken by hand, in a Claude Code session, on any
+build that is to be trusted.
+
+1. Fixture, shell, run in `<scratchpad>`:
+   `mkdir -p pd5/src pd5/tests; printf 'X = 1\n' > pd5/tests/t.py; ln -sf ../tests/t.py pd5/src/link.py`
+2. Tool call, the exact input:
+
+   | Field | Value |
+   |---|---|
+   | tool | `Edit` |
+   | `file_path` | `<scratchpad>/pd5/src/link.py` |
+   | `old_string` | `X = 1` |
+   | `new_string` | `X = 2` |
+
+3. Exact response: "Refusing to write …/pd5/src/link.py: it is a symbolic link. Write to the link's
+   target path instead: …/pd5/tests/t.py." (the orchestrator elided the scratchpad prefix as `…`).
+4. Afterwards, shell: `ls -l pd5/src/link.py` showed the link to `../tests/t.py`, and
+   `cat pd5/tests/t.py` showed `X = 1`.
+
+MultiEdit and NotebookEdit are absent from that build's tool set, so no call could be made.
+
+**R-6 — the `leaf-symlink` corpus cell on the unfixed gates (PD-4, codex must #1 of audit
+cycle 2).** It reuses R-2's definitions verbatim: the command below extracts R-2's heredoc body up to
+its first `with tempfile.TemporaryDirectory() as t:` line, appends the cell, runs it, and deletes
+the scratch file.
+
+```bash
+S=<scratchpad>/leafprobe.py; awk '/^\*\*R-2 /{f=1} f&&/^```bash$/{g=1;next} g&&/^EOF$/{exit} g' docs/01-plan/features/tdd-gate-fail-opens.plan.md | sed '1d' | awk '/^with tempfile.TemporaryDirectory\(\) as t:$/{exit} {print}' > $S; cat >> $S <<'EOF'
+for phase in ("step5", "step3"):
+    with tempfile.TemporaryDirectory() as t:
+        r, b = fixture(t, phase); os.makedirs(r + "/tests"); open(r + "/tests/t.py", "w").write("X = 1\n"); os.symlink("../tests/t.py", r + "/src/link.py")
+        print("leaf-symlink", phase, "claude:", claude(r, b, f"{r}/src/link.py"), "| codex:", codex(r, W(f"{r}/src/link.py")))
+EOF
+/opt/anaconda3/bin/python $S . ; rm -f $S
+```
+
+Output at `644f8bf6` (2026-09-29, `/opt/anaconda3/bin/python` 3.11.8): `leaf-symlink step5 claude:
+deny no-test-resolved | codex: allow`; `leaf-symlink step3 claude: allow | codex: allow`. So the
+relaxation is the Claude gate's alone under `step5`, as spec FR-1 says ("Codex already follows
+it"), and the approved-set key is (`leaf-symlink`, Claude, `step5`) only. The files R-2 and R-6
+exercise are unchanged since `983c2f85`: `git diff --stat 983c2f85 644f8bf6 --
+h-mad/hooks/h-mad-tdd-gate.sh h-mad/hooks/h-mad-codex-tdd-gate.py h-mad/scripts/h_mad_tdd_judge.py
+h-mad/tests/tdd_gate_support.py` prints nothing. (The wider `h-mad/hooks h-mad/scripts
+h-mad/tests` pathspec does move over that range, 11 files from unrelated features, so the
+§"Verified premises" suite floor and anchor baseline stamped at `983c2f85` are stale by
+construction and are re-measured at the branch base, as that section already requires.)
 
 ## Version History
 - v1.0: Initial plan draft (2026-09-29) from spec v1.0 (662b1ce1). PD-1 F_GETPATH primitive in one shared canonicaliser, bash side does no canonicalisation; PD-2 REAP_GRACE_S=1.0 and a six-field runner result; PD-3 no case-sensitive runner exists, AC-1.10 fails never skips; PD-4 committed probe T0/T9; PD-5 leaf-symlink tools need a live measurement. Opens OQ-P1 (an existing directory the primitive cannot open). Readings at 5e3a8238.
 - v1.1: Revision (2026-09-29) against spec v1.2 (e26466a8). OQ-P1 closed (operator: refuse; spec FR-3 arm 2, AC-3.6): G-3 and FR-3 carry both arms, T1 gains the arm-2 guard with no spelling fallback, AC-3.6 owned by T2/T3 (gate halves), scratch reading of AC-3.6's unfixed observables at e26466a8 equals the spec's expected column. PD-5 closed as measured (Edit refused on Claude Code 2.1.284; MultiEdit/NotebookEdit absent, unmeasurable); T0 enters it as manual rows only. T0 gains the OQ-P1 cells under both states. T8 states AC-7.1's 19 guard rows (18 at spec v1.0) with the counting command, as a floor on mutations. FR-5 aligned to spec: REAP_GRACE_S = 1.0, six-field NamedTuple with reap_failed, AC-5.1 < 4.0 s, AC-5.2 unpacking only in test_run_bounded_kills_the_process_group. Next Steps owe the design the canonicaliser's operations and the Claude gate's arm-2 transport.
 - v1.2: Revision (2026-09-29) answering plan audit cycle 1 (docs/01-plan/features/tdd-gate-fail-opens.plan.audit.v1.p1.md, codex: 5 must, 1 should; tdd-gate-fail-opens.plan.audit.v1.agy.md, agy: 1 must, a duplicate of codex must 4; both at 983c2f85) against spec v1.2 (e26466a8). M1: G-1 and T3 keep the Claude gate's outside-root M:H20 dual check (canonical target AND raw spelling, spec FR-1 step 7); new pinned outside-root symlink control (R-3), which the re-derived H20B mutation must turn red. M2: T6 asserts equal kinds wherever both gates deny and a published expectation table carrying each cell's decision and kind. M3: no committed artifact invokes an agent CLI (constructed PATH, REPRO agent-cli-reachable=no); the Codex-writes column and trim set become the manual dated reading R-4; residual stated; spec Assumptions wording owed by the spec. M4: every behavioural premise carries its runnable command; new section Reproduction commands with R-1 (F_GETPATH, now also measured on 3.9.6), R-2 (gate cells and AC-3.6), R-3 (M:H20 cells), R-4 (manual apply_patch), R-5 (PD-5 procedure verbatim); premises re-run at 983c2f85; def hermetic_env is defined in two files, not one. M5: the spec table's pointer names T0's unfixed reading; T9's fixed reading is cited separately. S1: mutation floor 20 (16 parentheticals + 3 separate-mutation pairs + 1 in-each-gate), per-guard census remains the acceptance check.
 - v1.3: Propagation (2026-09-29) of spec v1.3 (766860ba), which added AC-1.11 (the outside-root M:H20 symlink control, plan R-3). FR-1 cites ACs 1.1-1.11; T3's AC column adds 1.11; every R-3 and H20B citation names AC-1.11 (T0, T3, the verdict-change rule, the Verified-premises R-3 row, the Risks row, Success Criteria, R-3 itself). H20B kills only on the fixed tree: on the unfixed tree TARGET_PATH is only normpath'd, so a mutation run before T3 reports H20B SURVIVED legitimately (spec AC-1.11, measured at 4192ad8c); it is scored after T3. AC-7.1 has no H20 row and none is added; the T8 floor stays 20. Next Steps item 4 records that spec v1.3 answered both owed items.
+- v1.4: Corrective revision, not re-audited (2026-09-29), after plan audit cycle 2, the second and final gating round: docs/01-plan/features/tdd-gate-fail-opens.plan.audit.v2.p1.md (codex: 4 must) and docs/03-analysis/tdd-gate-fail-opens.plan-audit-c2-agy-unscored.md (agy: 2 must), against spec v1.4 (644f8bf6). codex #1: PD-4 adds the leaf-symlink ALLOW cell (R-6 reading at 644f8bf6: step5 Claude deny no-test-resolved, Codex allow) and the FR-8 gate cells to the corpus, and a committed compare_readings.py (T0 with two run controls, T9 must print COMPARE: PASS softened=6 approved=6) that fails on any softened key outside an approved set of six: FR-1's three plus FR-8's two (announced override of the brief's three). codex #2: T6 adopts spec v1.4's two-clause domain rule and resolved-prefix definition; M-12, M-13 (both cases), M-14 and M-18 stay, judge-error in both gates under step5. codex #3: R-4 publishes the driver script, every case's patch, and its observed output on codex-cli 0.158.0 (2026-09-29T07:58:57Z): every str.isspace code point but U+000A plus U+200B and U+FEFF, leading and trailing; M-15 CRLF, M-16, M-17, M-19, M-20, M-22, M-23, interior U+0001, leaf symlink. codex #4: R-5 records the exact Edit tool input and response and says it is a tool call, not replayable. agy #1: hard-link contract, the canonicaliser returns every same-inode name and each gate tests every name; the encoding is owed by the design. agy #2: T6 asserts notes.md, tests/test_x.py, sub/test_x.PY. Spec v1.4 owed items: T10 (script flag and build_parser), T11 (safe-list entry), T12 (adapters), T0 FR-8 cells, T7 lists the adapters; T8 floor 20 -> 25 (21 + 3 + 1 at 644f8bf6); FR-8 verified premises at 644f8bf6; Risks carry the h_mad_state_write residual.
