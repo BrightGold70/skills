@@ -26,8 +26,28 @@ from h_mad_doc_block_exec import AmbiguousHeading, _fence_events, fence_aware_en
 SID_READ = '"$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"'
 ADAPTER_ID = "h-mad-codex"
 HOST_ADAPTERS = (ADAPTER_ID, "h-mad-agy", "h-mad-grok")
-REFUSAL_FORM_AT_BASE = "exit1"
+BASE_SHA = "52a78ca8"
+REFUSAL_FORM_AT_BASE = "b"
+
+
+def _refusal_form_at_base() -> str:
+    shown = subprocess.run(
+        ["git", "show", f"{BASE_SHA}:h-mad/hooks/h-mad-tdd-gate.sh"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=True, timeout=60.0,
+    ).stdout
+    assert 'readonly REFUSAL_FORM=b' in shown
+    assert '"permissionDecision":"deny"' in shown
+    assert 'exit 2  # M:H5A' in shown
+    assert 'tool_input.get(\'file_path\')' in shown
+    assert 'toolInput' not in shown
+    return "b"
+
+
 REFUSAL_TOKEN = {"exit1": "exit 1", "a": "exit 2", "b": "permissionDecision"}[REFUSAL_FORM_AT_BASE]
+
+
+def test_refusal_form_pin_matches_rebased_base() -> None:
+    assert _refusal_form_at_base() == REFUSAL_FORM_AT_BASE
 
 
 def _section(text: str, heading: str) -> str:
@@ -391,6 +411,8 @@ def test_version_and_compatibility(adapter_id: str, case: str, token: str) -> No
 def test_tdd_gate_section(case: str, token: str) -> None:
     section = _required_section("h-mad-grok", "## The TDD gate", f"TDD gate {case}")
     assert token in section, f"grok TDD gate {case} must state {token}"
+    if case == "reason-i":
+        assert "exit 1" not in section, "grok gate reason must not describe the pre-rebase refusal"
 
 
 @pytest.mark.parametrize(

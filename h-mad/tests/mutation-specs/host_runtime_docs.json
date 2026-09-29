@@ -61,6 +61,14 @@
       "find": "        raise LookupError(f\"heading doubled: {heading}\")  # M:L2",
       "replace": "        return \"\"",
       "test": "tests/test_host_runtime_docs.py::test_host_runtime_locator_fails_loudly[doubled]"
+    },
+    {
+      "name": "D1",
+      "_mechanism": "Remove the measured JSON deny form from Grok reason (i).",
+      "file": "references/grok-runtime.md",
+      "find": "`permissionDecision: \"deny\"`",
+      "replace": "`exit 1`",
+      "test": "tests/test_host_runtime_docs.py::test_tdd_gate_section[reason-i]"
     }
   ]
 }

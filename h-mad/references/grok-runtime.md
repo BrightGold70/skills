@@ -69,9 +69,10 @@ ignore that text for grok's context budget decision.
 ## The TDD gate
 
 Phase 5 halts with `step5:grok_tdd_hook_unverified` until a real grok refusal of
-a production write has been observed. The current gate refuses by `exit 1`, which
-grok treats as fail-open. Its input parser does not read grok's `toolInput` payload.
-A handler reaching the 5 s limit also fails open. Running `pytest` in RED and GREEN
+a production write has been observed. At rebased base `52a78ca8`, the gate refuses
+with `permissionDecision: "deny"` and exit 0, falling back to `exit 2`; grok honors
+both refusal forms. The gate still reads `tool_input.file_path`, not grok's
+`toolInput` payload. A handler reaching the 5 s limit also fails open. Running `pytest` in RED and GREEN
 does not prove that the host hook blocked a production write. Verify the refusal
 through the live smoke before claiming mechanical enforcement.
 

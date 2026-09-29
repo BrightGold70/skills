@@ -200,9 +200,9 @@ def check(
     if sibling_repo is not None:
         issues += check_siblings(sibling_repo, skills_link.parent)
         if agents_skills_dir is not None:
-            issues += check_siblings(sibling_repo, Path(agents_skills_dir))
+            issues += check_siblings(sibling_repo, Path(agents_skills_dir).expanduser())
         if agy_skills_dir is not None:
-            agy_root = Path(agy_skills_dir)
+            agy_root = Path(agy_skills_dir).expanduser()
             agy_issues, agy_details = split_agy_root(
                 check_siblings(sibling_repo, agy_root), agy_root,
                 checkout_skill_names(sibling_repo), AGY_INSTALLED_NAMES)

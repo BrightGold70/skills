@@ -126,6 +126,22 @@
       "find": "        if agy_skills_dir is not None:",
       "replace": "        agy_skills_dir = agy_skills_dir if agy_skills_dir is not None else os.environ.get(AGY_SKILLS_ENV)\n        if agy_skills_dir is not None:",
       "test": "tests/test_h_mad_install_check_roots.py::test_check_without_root_keywords_reads_no_new_root"
+    },
+    {
+      "name": "D4a",
+      "_mechanism": "Skip tilde expansion of the agents skills root.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "Path(agents_skills_dir).expanduser()",
+      "replace": "Path(agents_skills_dir)",
+      "test": "tests/test_h_mad_install_check_roots.py::test_tilde_root_checks_home_directory[option-agents]"
+    },
+    {
+      "name": "D4b",
+      "_mechanism": "Skip tilde expansion of the agy skills root.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "Path(agy_skills_dir).expanduser()",
+      "replace": "Path(agy_skills_dir)",
+      "test": "tests/test_h_mad_install_check_roots.py::test_tilde_root_checks_home_directory[option-agy]"
     }
   ]
 }

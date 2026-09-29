@@ -206,6 +206,25 @@ def test_env_override_is_read(tmp_path, hermetic_env, root):
     assert _lines(proc)[:1] == ["INSTALL: FAIL issues=1"]
 
 
+@pytest.mark.parametrize("root", ["agents", "agy"])
+@pytest.mark.parametrize("source", ["option", "env"])
+def test_tilde_root_checks_home_directory(tmp_path, hermetic_env, root, source):
+    repo, claude, hook = _install(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    actual_root = home / "skills"
+    _state(actual_root, repo, "h-mad", "copy")
+    option = {root: "~/skills"} if source == "option" else {}
+    key = "HMAD_AGENTS_SKILLS_DIR" if root == "agents" else "HMAD_AGY_SKILLS_DIR"
+    env = {"HOME": str(home)}
+    if source == "env":
+        env[key] = "~/skills"
+    proc = _run(repo, claude, hook, hermetic_env, extra_env=env, **option)
+    assert proc.returncode == 0, proc.stderr
+    assert _lines(proc)[:1] == ["INSTALL: FAIL issues=1"]
+    assert f"SIBLING_NOT_SYMLINK:{actual_root / 'h-mad'} " in proc.stdout
+
+
 def test_default_roots_resolve_to_documented_paths():
     assert ic.default_host_roots({}) == (
         str(Path.home() / ".agents" / "skills"),
