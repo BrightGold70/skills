@@ -14,6 +14,16 @@ from pathlib import Path
 from typing import Optional
 
 
+def assert_case_insensitive(directory: Path) -> None:
+    """Assert the volume resolves a name spelled with the opposite ASCII case."""
+    probe = directory / "a"
+    probe.touch()
+    try:
+        assert os.path.exists(directory / "A"), "case-insensitive filesystem precondition failed"
+    finally:
+        probe.unlink()
+
+
 @dataclass(frozen=True)
 class Outcome:
     decision: str
