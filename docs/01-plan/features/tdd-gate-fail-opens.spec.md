@@ -36,10 +36,10 @@ is operator-approved. The orchestrator relayed seven binding decisions (operator
 | B7 | Every gap-report repro becomes a pinned test on the relevant gate(s), plus a shared cross-gate differential (same spellings, same decision). | FR-6 |
 
 Measuring the tree for this spec found members of the same classes that B2 and B6, **read
-literally**, do not close. Each is written below as an open decision (OD) with the resolution this
+literally**, do not close. Each is written below as an operator decision (OD) with the resolution this
 spec uses so its ACs are testable. None weakens B1–B7; each one refuses more or decides by identity
-where the binding text decides by spelling. The operator must confirm or overturn each OD before
-the plan is audited.
+where the binding text decides by spelling. The operator approved all five ODs, each with the
+resolution below, on 2026-09-29 (commit `662b1ce1`).
 
 | OD | Gap in the literal decision (measured, §"Measured premises") | Resolution this spec uses |
 |---|---|---|
@@ -57,7 +57,8 @@ empty), macOS 27.0, APFS (case-insensitive, the default), Python 3.14.7, codex-c
 report measured codex 0.157.1; every D2 cell it reported reproduced unchanged on 0.158.0. The
 scratch probes were deleted after running; the committed re-run is **owed** at
 `docs/03-analysis/probes/tdd-gate-fail-opens/reproduce.py` (orchestrator), and its reading replaces
-this table.
+this table. That reading does not exist yet (plan PD-4, task T0), so this table stays until T0
+commits its unfixed reading, and is then replaced by a pointer to that one reading.
 
 Fixture for M-1…M-14 and M-18: a git root with `src/prod.py`, and `docs/.bkit-memory.json` =
 `{"orchestrator_state":{"feat":{"phase":"step5","codex_status":"exhausted"}}}` (so the Claude
@@ -112,10 +113,25 @@ and NFD). `os.path.realpath` (non-strict) on a symlink loop **returns the lexica
 error**; `os.path.realpath(p, strict=os.path.ALLOW_MISSING)` raises `OSError` errno 62 (ELOOP) on the
 loop and follows a dangling link to its (absent) referent.
 
+An existing directory the primitive cannot open (OQ-P1; measured 2026-09-29 at skills `f5e44a50`,
+Python 3.14.7, in a `TemporaryDirectory`, scratch probe deleted after running): on-disk `Tests/` at
+mode 0311, spelled `tests/`. `os.path.exists` and `os.path.lexists` are both true; `os.open(…,
+O_RDONLY)` on the directory and `os.listdir` both fail with errno 13 (EACCES); creating
+`tests/new.py` in it **succeeds**; an existing `tests/prod.py` inside it still opens, and `F_GETPATH`
+on that file returns the on-disk `…/Tests/prod.py`. So the writer can create in a directory whose
+on-disk spelling the primitive cannot read from the directory itself, and a spelling fallback there
+would exempt it (M-9's class). T0's probe owes this cell.
+
 Writers and a leaf symlink `src/link.py -> ../tests/t.py`: Codex `apply_patch` "Update File:
 src/link.py" **follows** the link (the link survives, `tests/t.py` is modified). The Claude Code
 Write tool of the build that authored this spec refused the write ("it is a symbolic link. Write
-to the link's target path instead"). Edit, MultiEdit and NotebookEdit were not probed.
+to the link's target path instead"). **Edit** (PD-5, measured live by the orchestrator on Claude Code
+2.1.284, 2026-09-29) is refused by the tool itself ("Refusing to write …: it is a symbolic link.
+Write to the link's target path instead: …"); the link and `tests/t.py` are unchanged. MultiEdit and
+NotebookEdit are not in that build's tool set, so they are **unmeasurable** there, not measured. No
+tool observed replaces the link, so FR-1's leaf rule stands unamended. These rows are harness-tool
+actions: T0's `reproduce.py` cannot re-derive them, and they enter T0's reading only as manual rows
+carrying the build and date above.
 
 D5: `h_mad_tdd_judge._run_bounded([python, "-c", "Popen(['sleep','12'], start_new_session=True);
 sleep(30)"], ., now+2.0)` → `elapsed=12.0 timed_out=True rc=-9` (the gap report's reading,
@@ -150,7 +166,9 @@ reproduced).
      its **on-disk spelling** (case and Unicode normalisation as stored). The root is canonicalised
      by the **same primitive**, and so is the Codex payload `cwd` before `_payload_cwd_base` tests
      containment. A spelling-preserving primitive (`os.path.realpath`, `Path.resolve`, bash builtin
-     `pwd -P`) does **not** satisfy this step: M-8 and M-9 fail with it.
+     `pwd -P`) does **not** satisfy this step: M-8 and M-9 fail with it. If the primitive cannot
+     open or list an existing component this step or step 4 needs, FR-3's second arm applies; the
+     gate never falls back to the spelling for that component.
   4. **Existing leaf.** If the leaf exists, its on-disk name is the entry of its canonical parent
      directory that has the leaf's `(st_dev, st_ino)`. If several entries in that directory share
      it (hard links in one directory), an exemption holds only if it holds for **every** such
@@ -224,11 +242,19 @@ reproduced).
 
 ### FR-3: An unresolvable target is refused `judge-error` when governed (B4, OD-4)
 
-- **Description**: A target is **unresolvable** when, at some prefix during FR-1 step 2, the prefix
-  exists as a directory entry (`os.path.lexists`) but does not resolve (`os.path.exists` is false):
-  a dangling symlink, a symlink loop (ELOOP), or a symlink whose resolution fails for another
-  reason. It applies to a leaf and to an intermediate component alike. When the target is
-  unresolvable:
+- **Description**: A target is **unresolvable** when either arm holds:
+  1. **Does not resolve.** At some prefix during FR-1 step 2, the prefix exists as a directory entry
+     (`os.path.lexists`) but does not resolve (`os.path.exists` is false): a dangling symlink, a
+     symlink loop (ELOOP), or a symlink whose resolution fails for another reason. It applies to a
+     leaf and to an intermediate component alike.
+  2. **Cannot be read in its on-disk spelling** (OQ-P1, operator decision 2026-09-29: refuse). An
+     existing component of the root or of the target on which the on-disk-spelling primitive's
+     operation raises `OSError` — opening it to read its on-disk path (FR-1 step 3), or listing the
+     leaf's canonical parent (FR-1 step 4). Examples: a directory at mode 0311 (writable and
+     traversable, not readable; measured in §"Measured premises"), and the parent of an existing
+     leaf without `r`. The gate never falls back to the spelled case for such a component: that
+     fallback would exempt on-disk `Tests/` spelled `tests/` (M-9's class).
+  When the target is unresolvable:
   - with **governing** state (Claude: the judge's `state` verb over the target's chain reports
     `active` or `unreadable`; Codex: `_any_phase5_status` is `active` or `unknown`), the gate
     refuses with kind `judge-error` and a reason naming the unresolvable prefix;
@@ -248,6 +274,19 @@ reproduced).
     with a negative control that `os.path.realpath` of the same path returns without error.
   - AC-3.5: the Codex deny reason carries the token `kind=judge-error`; the Claude deny carries
     `BLOCK kind=judge-error`.
+  - AC-3.6 (second arm, OQ-P1), under the governing `step5` state, each its own case, the fixture
+    restoring the mode in teardown:
+    (a) on-disk `Tests/` at mode 0311, spelled `tests/newmod.py` (absent) — fixed: both gates deny
+    `judge-error`, the reason naming the component; unfixed: both allow (expected by M-9's
+    mechanism, the spelled `tests` component being exempt; not yet measured, T0 measures this
+    cell).
+    (b) `src/` at mode 0311 holding an existing `src/prod.py`, spelled `src/prod.py` — fixed: both
+    gates deny `judge-error` (step 4 cannot list the parent); unfixed: both deny with M-1's kind
+    `no-test-resolved` (expected, not yet measured; T0 measures this cell). The kind is the
+    discriminating observable.
+    (c) control: (a) and (b) under the `step3`-only state — both gates allow, fixed and unfixed.
+    Each case asserts its precondition (`os.listdir` of the directory raises `PermissionError`)
+    and fails, never skips, when it does not hold (a root uid would not raise).
 
 ### FR-4: The Codex gate reads patch headers as Codex does (D2; B6, OD-2)
 
@@ -292,12 +331,15 @@ reproduced).
 ### FR-5: The judge bounds its post-kill reap and reports `judge-timeout` (D5; B5)
 
 - **Description**: In `h_mad_tdd_judge._run_bounded`, after `TimeoutExpired` and `os.killpg(…,
-  SIGKILL)`, the second wait is bounded by one named constant `REAP_GRACE_S`, 0 < `REAP_GRACE_S` ≤
-  2.0 s. If the pipes close within the grace, the outcome is today's timeout (kind `timeout`). If
-  they do not — a descendant that left pytest's process group still holds stdout or stderr — the
-  runner closes its pipe ends, reaps the killed child, and reports a **reap failure**, distinct from
-  a plain timeout. The judge maps a reap failure to DENY kind `judge-timeout` on both paths that use
-  the runner (the name map in `resolve`, and pytest in `judge`); `judge-timeout` stops further test
+  SIGKILL)`, the second wait is bounded by one named module constant `REAP_GRACE_S = 1.0` (seconds;
+  plan PD-2, inside this spec's cap 0 < `REAP_GRACE_S` ≤ 2.0 s). If the pipes close within the grace,
+  the outcome is today's timeout (kind `timeout`). If they do not — a descendant that left pytest's
+  process group still holds stdout or stderr — the runner closes its pipe ends, reaps the killed
+  child, and reports a **reap failure**, distinct from a plain timeout. `_run_bounded` returns a
+  six-field `NamedTuple`: today's five fields in today's order (`returncode`, `out`, `err`,
+  `timed_out`, `error`) plus `reap_failed: bool`; `timed_out` is also true on a reap failure, and
+  `error` keeps its one meaning ("Popen raised"). The judge maps a reap failure to DENY kind
+  `judge-timeout` on both paths that use the runner (the name map in `resolve`, and pytest in `judge`); `judge-timeout` stops further test
   runs and outranks every other kind in the aggregation (the kind-priority tuple in `judge`).
   `judge-timeout` joins `KINDS`, and the Claude gate's `JUDGE_DENY_RE` alternation, so the Claude
   gate refuses with `BLOCK kind=judge-timeout`; without that edit the same judge line is refused
@@ -305,17 +347,21 @@ reproduced).
   discriminates. The Codex gate passes the kind through its existing `kind={verdict.kind}` reason.
   The detached descendant is not killed (the judge does not know its pid); after the pipes close its
   next write gets EPIPE/SIGPIPE.
-- **Worst case**: a governed write returns within `JUDGE_BUDGET_S` (40.0 s) + `REAP_GRACE_S` + process
-  start-up, instead of waiting for the descendant.
+- **Worst case**: a governed write returns within `JUDGE_BUDGET_S` (40.0 s) + `REAP_GRACE_S` (1.0 s)
+  = 41.0 s + process start-up, instead of waiting for the descendant.
 - **Acceptance Criteria**:
   - AC-5.1 (D5): the gap repro — `_run_bounded` with deadline `start + 2.0` on a child that detaches
-    `sleep 12` and sleeps 30 — fixed: returns in under `2.0 + REAP_GRACE_S + 1.0` s (≤ 5.0 s) and
-    reports a reap failure; unfixed: returns at ≈ 12 s. The test kills the detached sleeper through
-    its pidfile in teardown.
-  - AC-5.2: a child that times out with no detached descendant still reports a plain timeout;
-    `test_run_bounded_kills_the_process_group`, `test_name_map_runs_under_the_budget` and the other
-    existing `timeout` assertions in `h-mad/tests/test_h_mad_tdd_judge.py` stay green. If the
-    runner's return arity changes, the tuple unpacking in those tests is a named, reviewed delta.
+    `sleep 12` and sleeps 30 — fixed: returns in under `2.0 + REAP_GRACE_S + 1.0` s = 4.0 s and
+    reports `reap_failed=True`; unfixed: returns at ≈ 12 s. The test kills the detached sleeper
+    through its pidfile in teardown.
+  - AC-5.2: a child that times out with no detached descendant still reports a plain timeout
+    (`timed_out=True`, `reap_failed=False`); `test_run_bounded_kills_the_process_group`,
+    `test_name_map_runs_under_the_budget` and the other existing `timeout` assertions in
+    `h-mad/tests/test_h_mad_tdd_judge.py` stay green. Of those tests only
+    `test_run_bounded_kills_the_process_group` unpacks `_run_bounded`'s result (five names today);
+    its move to the six-field result is a named, reviewed delta. `test_name_map_runs_under_the_budget`
+    calls `judge.judge` and does not unpack, so its assertions (kind `timeout`, `< 6.0 s`) are
+    unchanged.
   - AC-5.3: `judge()` with the name map replaced by a detaching script, and separately with a fake
     venv interpreter that detaches — each returns DENY `judge-timeout` within `budget_s +
     REAP_GRACE_S + 1.0` s; unfixed: `timeout` after the descendant exits.
@@ -363,7 +409,8 @@ reproduced).
     canonicaliser (AC-1.1), the Codex-gate canonicaliser (AC-1.4), the on-disk-spelling step (AC-1.5),
     the hard-link rule (AC-1.9), the root canonicalisation (AC-1.3), the fold in each gate (AC-2.2),
     the dangling branch and the loop branch of FR-3's predicate (AC-3.1, AC-3.2; separate
-    mutations), the governing-state condition of FR-3 (AC-3.3), the leading trim and the trailing
+    mutations), FR-3's cannot-be-read arm (AC-3.6), the governing-state condition of FR-3
+    (AC-3.3), the leading trim and the trailing
     trim (AC-4.2, AC-4.1; separate mutations), the control-byte refusal (AC-4.4), the `\n`-only split
     (AC-4.6), the bounded reap (AC-5.1), the reap-failure → `judge-timeout` mapping on the name-map
     path and on the pytest path (AC-5.3; separate mutations), the priority of `judge-timeout`
@@ -404,8 +451,12 @@ reproduced).
   hard-linked into `tests/` is exempt when written through the `tests/` name. FR-1 step 4 covers
   links inside one directory only.
 - **Writers that replace a leaf symlink instead of following it.** FR-1 decides a leaf symlink by
-  its referent, which is what Codex `apply_patch` does (measured). Claude Code's Write refused a
-  leaf symlink in the measured build; Edit, MultiEdit and NotebookEdit were not probed.
+  its referent, which is what Codex `apply_patch` does (measured). Claude Code's Write and Edit
+  refused a leaf symlink (Edit measured on 2.1.284, 2026-09-29). Residual: MultiEdit and
+  NotebookEdit are absent from that build and unmeasured; any Claude Code build, or any other
+  writer, that **replaces** a leaf symlink with a regular file writes at the link location while
+  FR-1 decides by the referent, and a production link into `tests/` would then be a fail-open. A
+  tool that appears in a later build is measured before it is trusted here.
 - **A legitimate `*.PY` (any case) data file** outside the exempt directories is refused while
   governed (B3).
 - **Case-variant exempt spellings are governed**: `FIXTURES/…` with on-disk `fixtures/` becomes
@@ -414,8 +465,16 @@ reproduced).
 - **Filesystems without an on-disk-spelling primitive** (Linux `casefold` ext4, where `F_GETPATH` is
   absent): FR-1 step 3 falls back to a spelling-preserving resolution, and M-8/M-9-class spellings
   remain open there. The measured platform is macOS APFS only.
-- **Permission-denied ancestors**: a component the gate cannot `lstat` is treated as absent. The
-  gate runs as the writer's uid, so the writer cannot traverse it either.
+- **Permission-denied components**, split by what the gate can do to the component:
+  - a component the gate cannot `lstat` (its parent lacks `x`) is treated as absent. The gate runs
+    as the writer's uid, so the writer cannot traverse it either and the write fails; the verdict is
+    inert.
+  - a component the gate can `lstat` but the on-disk-spelling primitive cannot open or list (e.g.
+    mode 0311, or a leaf parent without `r`) is **not** a residual: it is FR-3's second arm
+    (refused `judge-error` when governed, allowed otherwise).
+  - what remains open: a writer running under a different uid from the gate, or with privileges
+    the gate lacks, can reach a component the gate cannot; the gate reads only its own
+    permissions.
 - **Divergences excluded from the differential (OD-5)**: an exempt write on an unreadable chain
   (Claude allows, Codex refuses — predecessor OD-A); an outside-root target (Codex refuses every
   file type when governed, Claude governs only `.py`); relative targets (Claude joins the root,
@@ -440,7 +499,13 @@ reproduced).
 
 ## Open Questions
 
-- OD-1…OD-5 await operator confirmation (see the table above).
+- None open on OD-1…OD-5: all five were operator-approved on 2026-09-29 (commit `662b1ce1`; see the
+  table above).
+- Plan v1.0's OQ-P1 is decided (operator, 2026-09-29: refuse) and folded into FR-3's second arm
+  and AC-3.6. Plan PD-5's measurement is taken (Edit refused on Claude Code 2.1.284); FR-1's leaf
+  rule is unamended.
 
 ## Version History
 - v1.0: Initial specification draft (2026-09-29) from brainstorm v1.1 (c83c62fe) and operator decisions B1-B7. FR-1 one target-normalisation rule (D3, D4), FR-2 .py fold (D1), FR-3 unresolvable target refused judge-error when governed (OQ1), FR-4 Codex header grammar (D2), FR-5 bounded reap + judge-timeout (D5, OQ2), FR-6 pinned repros + cross-gate differential, FR-7 mutation. OD-1..OD-5 raised from measurements at 1a77e1c4 / codex-cli 0.158.0 (on-disk spelling, leading-whitespace headers, fold before name tests, governed-only refusal, differential domain); each owes operator confirmation.
+- v1.1: Revision (2026-09-29) answering plan v1.0 (f5e44a50) owed items and operator decisions. OQ-P1 decided refuse: FR-3 gains a second arm (an existing root/target component the on-disk-spelling primitive cannot open or list is unresolvable; judge-error when governed, allow otherwise; never fall back to the spelling), FR-1 step 3 cross-reference, AC-3.6 (a/b/c), AC-7.1 mutation row, permission residual split; 0311 reading measured at f5e44a50. PD-5 recorded as a measured premise: Edit on a leaf symlink refused on Claude Code 2.1.284, MultiEdit/NotebookEdit absent from that build (unmeasurable), FR-1 leaf rule unamended; not re-derivable by T0's probe. PD-2 applied to FR-5: REAP_GRACE_S = 1.0 s, six-field NamedTuple adding reap_failed, AC-5.1 bound 4.0 s, worst case 41.0 s. AC-5.2 corrected: only test_run_bounded_kills_the_process_group unpacks _run_bounded. PD-4: table stays until T0's committed reading replaces it.
+- v1.2: OD status (2026-09-29): OD-1..OD-5 recorded as operator-approved 2026-09-29 (662b1ce1) in the Binding-decisions preamble and Open Questions; 'open decision' renamed 'operator decision'. No requirement changed.
