@@ -21,7 +21,10 @@ import subprocess
 import sys
 from functools import cache
 from importlib import import_module
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from h_mad_target_identity import Identity
 
 
 PATCH_TARGET = re.compile(
@@ -87,17 +90,25 @@ def _payload() -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _project_root(payload: dict[str, Any]) -> Path:
+def _canonical_root(path: Path) -> Path | Identity:
+    identity = _load_identity()
+    try:
+        return Path(identity.canonical_directory(str(path)))
+    except OSError:
+        return identity.Identity(str(path), "", str(path), (), True, 2, str(path))
+
+
+def _project_root(payload: dict[str, Any]) -> Path | Identity:
     explicit = os.environ.get("CODEX_PROJECT_DIR")
     if explicit:
-        path = Path(explicit).expanduser().resolve()
+        path = Path(explicit).expanduser()
         if path.is_dir():
-            return path
+            return _canonical_root(path)
 
     for candidate in (payload.get("project_dir"), payload.get("cwd"), os.getcwd()):
         if not candidate:
             continue
-        path = Path(str(candidate)).expanduser().resolve()
+        path = Path(str(candidate)).expanduser()
         if not path.is_dir():
             continue
         result = subprocess.run(
@@ -107,9 +118,9 @@ def _project_root(payload: dict[str, Any]) -> Path:
             check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip()).resolve()
-        return path
-    return Path.cwd().resolve()
+            return _canonical_root(Path(result.stdout.strip()).expanduser())
+        return _canonical_root(path)
+    return _canonical_root(Path.cwd())
 
 
 def _read_regular_text(path: Path) -> str:
@@ -174,20 +185,32 @@ def _payload_cwd_base(root: Path, cwd: Any) -> Path:
     return root
 
 
-def _relative_target(root: Path, raw: str, cwd: Any = None) -> tuple[Path, str] | None:
-    if not raw:
-        return None
-    candidate = Path(raw).expanduser()
-    absolute = candidate.resolve() if candidate.is_absolute() else (_payload_cwd_base(root, cwd) / candidate).resolve()
+def _relative_target(root: Path, raw: str, cwd: Any = None) -> Identity | None:
+    identity = _load_identity()
     try:
-        relative = absolute.relative_to(root).as_posix()
+        base = _payload_cwd_base(root, cwd)
+    except RuntimeError:
+        base = root
+    if isinstance(cwd, str) and cwd and base != root:
+        try:
+            base = Path(identity.canonical_directory(str(Path(cwd).expanduser())))
+        except OSError:
+            try:
+                base = _payload_cwd_base(root, cwd)
+            except RuntimeError:
+                base = root
+    resolved = identity.canonicalise(str(root), str(Path(raw).expanduser()), str(base))
+    if resolved.unresolvable:
+        return resolved
+    try:
+        Path(resolved.target).relative_to(root)
     except ValueError:
         return None
-    return absolute, relative
+    return resolved
 
 
 def _is_production_python(relative: str) -> bool:
-    path = Path(relative)
+    path = Path(_load_identity().fold_py_suffix(relative))
     name = path.name
     if path.suffix != ".py":
         return False
@@ -320,6 +343,14 @@ def _load_judge() -> Any:
     return import_module("h_mad_tdd_judge")
 
 
+@cache
+def _load_identity() -> Any:
+    scripts = str(Path(__file__).resolve().parents[1] / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    return import_module("h_mad_target_identity")
+
+
 def main() -> int:
     if sys.argv[1:] == ["--self-check"]:
         if PATCH_TARGET.findall("*** Update File: pkg/module.py\n") != ["pkg/module.py"]:
@@ -347,6 +378,14 @@ def _main_guarded() -> int:
 
     payload = _payload()
     root = _project_root(payload)
+    if not isinstance(root, Path):
+        try:
+            phase5_status = _any_phase5_status(Path(root.component))
+        except OSError:
+            phase5_status = "unknown"
+        if phase5_status in {"active", "unknown"}:
+            return _deny(f"H-MAD Phase 5 root is unreadable ({root.component}); refusing fail-closed. kind=judge-error")
+        return 0
     tool, targets, command = _targets(payload)
     phase5_status = _any_phase5_status(root)
 
@@ -368,12 +407,39 @@ def _main_guarded() -> int:
             if phase5_status in {"active", "unknown"}:
                 return _deny("H-MAD Phase 5 write target is outside or unreadable; refusing fail-closed.")
             continue
-        absolute, relative = resolved
+        if resolved.unresolvable:
+            if phase5_status in {"active", "unknown"}:
+                component = resolved.component
+                try:
+                    info = os.stat(component)
+                    parent = os.path.dirname(component)
+                    with os.scandir(parent) as entries:
+                        names = sorted(
+                            entry.name for entry in entries
+                            if not entry.is_symlink()
+                            and (entry_info := entry.stat(follow_symlinks=False)).st_dev == info.st_dev
+                            and entry_info.st_ino == info.st_ino
+                        )
+                    if names:
+                        component = os.path.join(parent, names[0])
+                except OSError:
+                    pass
+                return _deny(f"H-MAD Phase 5 target is unresolvable ({component}); refusing fail-closed. kind=judge-error")
+            continue
+        production = []
+        for name in resolved.names:
+            absolute = Path(resolved.target).parent / name
+            relative = absolute.relative_to(root).as_posix()
+            if _is_production_python(relative):
+                production.append((name, absolute, relative))
+        if not production:
+            continue
+        _, absolute, relative = min(production)
         judge = _load_judge()
         chain = judge.read_chain(root, absolute)  # M:W5A
         if chain.value == "unreadable":
             return _deny(f"H-MAD state governing this write is unreadable ({chain.error_file}: {chain.error}); refusing fail-closed. kind=judge-error")
-        if chain.value != "active" or not _is_production_python(relative):
+        if chain.value != "active":
             continue
         verdict = judge.judge(root, absolute, chain.records)  # M:W1
         if verdict.decision != "ALLOW":
