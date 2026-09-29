@@ -1,0 +1,96 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_review_evidence_scan_grok.py",
+    "tests/test_h_mad_review_evidence_grok.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "e1-ok-by-substring",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        if t == \"tool_call_update\" and event.get(\"status\") == \"completed\" and isinstance(call_id, str):",
+      "replace": "        if \"completed\" in line:",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_scan_grok_ok_ignores_a_completed_substring_in_text"
+    },
+    {
+      "name": "e2-truncated-publishes-counts",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "                print(\"EVIDENCE: UNREADABLE reason=truncated_no_end\")\n                return 2",
+      "replace": "                print(f\"EVIDENCE: NONE tools={grok['tools']} ok={grok['ok']} format=grok\")\n                return 2",
+      "test": "tests/test_h_mad_review_evidence_grok.py::test_cli_f_trunc_is_unreadable_without_counts"
+    },
+    {
+      "name": "e3-banner-not-consulted",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "grok = None if codex_banner_in_head(text) else scan_grok(text)",
+      "replace": "grok = scan_grok(text)",
+      "test": "tests/test_h_mad_review_evidence_grok.py::test_cli_banner_then_f0_keeps_codex_output"
+    },
+    {
+      "name": "e4-membership-before-type-check",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "isinstance(t, str) and t in _GROK_TYPES",
+      "replace": "t in _GROK_TYPES",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_scan_grok_survives_malformed_type_lines"
+    },
+    {
+      "name": "e5-banner-window-8192",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "CODEX_BANNER_HEAD = 4096",
+      "replace": "CODEX_BANNER_HEAD = 8192",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_codex_banner_in_head_window_edge"
+    },
+    {
+      "name": "e6-depth-bound-65",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "GROK_MAX_DEPTH = 64",
+      "replace": "GROK_MAX_DEPTH = 65",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_scan_grok_depth_boundary"
+    },
+    {
+      "name": "e7-recursion-error-uncaught",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "except (ValueError, RecursionError):",
+      "replace": "except ValueError:",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_scan_grok_survives_malformed_type_lines"
+    },
+    {
+      "name": "e8-depth-skip-dropped",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "if _json_deeper_than(event, GROK_MAX_DEPTH):",
+      "replace": "if False:",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_scan_grok_depth_boundary"
+    },
+    {
+      "name": "e9-scan-recursion-error-uncaught",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        except (ValueError, TypeError, RecursionError):",
+      "replace": "        except (ValueError, TypeError):",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_scan_survives_a_200k_deep_line"
+    },
+    {
+      "name": "e10-scan-event-membership-unguarded",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        if isinstance(event_name, str) and event_name in _AGY_EVENTS:",
+      "replace": "        if event_name in _AGY_EVENTS:",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_scan_survives_an_unhashable_event_value"
+    },
+    {
+      "name": "w6-grok-before-agy-in-cli",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "if counts[\"agy_events\"] == 0:",
+      "replace": "if counts[\"agy_events\"] == 0 or scan_grok(text) is not None:",
+      "test": "tests/test_h_mad_review_evidence_grok.py::test_cli_mixed_agy_f0_equals_agy_alone"
+    }
+  ]
+}

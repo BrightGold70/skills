@@ -75,7 +75,10 @@ def test_no_agent_output_is_byte_identical_to_base(
     checkout.mkdir()
     archive = subprocess.run(
         ["git", "archive", BASE_SHA, "h-mad"],
-        check=True, capture_output=True,
+        # From the repository root: pytest may run from h-mad/ (the mutation
+        # harness does), where the pathspec `h-mad` matches nothing.
+        cwd=Path(__file__).resolve().parents[2],
+        check=True, capture_output=True, stdin=subprocess.DEVNULL, timeout=60.0,
     ).stdout
     subprocess.run(
         ["tar", "-x", "-C", str(checkout)],

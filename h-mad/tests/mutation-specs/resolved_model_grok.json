@@ -1,0 +1,40 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_resolved_model_grok.py",
+    "tests/test_h_mad_resolved_model.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "r1-first-of-several-models",
+      "file": "scripts/h_mad_resolved_model.py",
+      "find": "    if len(keys) != 1:",
+      "replace": "    if not keys:",
+      "test": "tests/test_h_mad_resolved_model_grok.py::test_grok_refusals_exit_2_unknown"
+    },
+    {
+      "name": "r2-first-end-not-last",
+      "file": "scripts/h_mad_resolved_model.py",
+      "find": "            last_end = event",
+      "replace": "            last_end = last_end or event",
+      "test": "tests/test_h_mad_resolved_model_grok.py::test_grok_second_dispatch_model_wins"
+    },
+    {
+      "name": "w11-grok-reader-for-every-agent",
+      "file": "scripts/h_mad_resolved_model.py",
+      "find": "    if a.agent == \"grok\":",
+      "replace": "    if True:",
+      "test": "tests/test_h_mad_resolved_model.py::test_codex_reads_the_resolved_model_out_of_its_session_header"
+    }
+  ]
+}
