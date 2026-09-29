@@ -223,13 +223,22 @@ def test_wire_registry_guard_fires_on_a_deliberate_live_file_leak(
 
 
 def test_wire_registry_guard_mutation_is_caught_by_harness(tmp_path: Path) -> None:
-    # The explicit root keeps the real conftest mutation target and pytest cwd
+    # The explicit root keeps the conftest mutation target and pytest cwd
     # unambiguous. The baseline command runs only this passing guard test, not
     # the intentionally RED registry tests.
     from h_mad_mutation_harness import run_spec
     import json
 
-    root = Path(__file__).resolve().parents[2]
+    # A scratch copy, never the live tree: the harness rewrites conftest on disk
+    # for the length of each inner run, and a concurrent pytest in the live tree
+    # would import the mutant. The copy is outside any repo, so the tree lock
+    # falls back to <root>/.h-mad and the HEAD check reads None (never "moved").
+    import shutil
+    live = Path(__file__).resolve().parents[1]
+    root = tmp_path / "tree"
+    for part in ("tests", "scripts"):
+        shutil.copytree(live / part, root / "h-mad" / part,
+                        ignore=shutil.ignore_patterns("__pycache__"))
     spec = tmp_path / "mutations.json"
     spec.write_text(json.dumps({
         "root": str(root),
