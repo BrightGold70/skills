@@ -1,0 +1,17 @@
+old_sha=aa5c43c747af21790e7463a6ca472595088c8e95
+exit=0
+DD7: softened repo/relative/tests/x.py/active
+DD7: softened repo/relative/fixtures/x.py/active
+DD7: tightened repo/dot/tests/../x.py/active
+DD7: tightened repo/absolute/tests/../x.py/active
+DD7: softened tests/repo/relative/tests/x.py/active
+DD7: softened tests/repo/relative/fixtures/x.py/active
+DD7: tightened tests/repo/dot/tests/../x.py/active
+DD7: tightened tests/repo/absolute/x.py/active
+DD7: tightened tests/repo/absolute/tests/../x.py/active
+DD7: softened fixtures/repo/relative/tests/x.py/active
+DD7: softened fixtures/repo/relative/fixtures/x.py/active
+DD7: tightened fixtures/repo/dot/tests/../x.py/active
+DD7: tightened fixtures/repo/absolute/x.py/active
+DD7: tightened fixtures/repo/absolute/tests/../x.py/active
+DD7: DONE cells=126 softened=6 tightened=8

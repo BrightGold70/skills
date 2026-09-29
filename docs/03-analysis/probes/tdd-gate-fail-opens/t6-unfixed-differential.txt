@@ -1,0 +1,155 @@
+base=48d639f75753e2005129279cc0a570506ec8385d
+identity_absent=yes
+collection_error=none
+exit=1
+.FFFFFFFFFFFFFF..F...F                                                   [100%]
+=================================== FAILURES ===================================
+_________________________ test_differential_cell[M-2] __________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:180: in test_differential_cell
+    assert claude == (expected_decision, expected_kind), (
+E   AssertionError: M-2: Claude differs from expectation table: expected ('deny', 'no-test-resolved'), got ('allow', '')
+E   assert ('allow', '') == ('deny', 'no-test-resolved')
+E     
+E     At index 0 diff: 'allow' != 'deny'
+E     Use -v to get more diff
+_________________________ test_differential_cell[M-3] __________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:180: in test_differential_cell
+    assert claude == (expected_decision, expected_kind), (
+E   AssertionError: M-3: Claude differs from expectation table: expected ('deny', 'no-test-resolved'), got ('allow', '')
+E   assert ('allow', '') == ('deny', 'no-test-resolved')
+E     
+E     At index 0 diff: 'allow' != 'deny'
+E     Use -v to get more diff
+_________________________ test_differential_cell[M-4] __________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:177: in test_differential_cell
+    assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E   AssertionError: M-4: gate decisions differ: Claude=('allow', ''), Codex=('deny', 'no-test-resolved')
+E   assert 'allow' == 'deny'
+E     
+E     - deny
+E     + allow
+_________________________ test_differential_cell[M-5] __________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:177: in test_differential_cell
+    assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E   AssertionError: M-5: gate decisions differ: Claude=('allow', ''), Codex=('deny', 'no-test-resolved')
+E   assert 'allow' == 'deny'
+E     
+E     - deny
+E     + allow
+_________________________ test_differential_cell[M-6] __________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:177: in test_differential_cell
+    assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E   AssertionError: M-6: gate decisions differ: Claude=('allow', ''), Codex=('deny', 'no-test-resolved')
+E   assert 'allow' == 'deny'
+E     
+E     - deny
+E     + allow
+_________________________ test_differential_cell[M-7] __________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:177: in test_differential_cell
+    assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E   AssertionError: M-7: gate decisions differ: Claude=('allow', ''), Codex=('deny', 'no-test-resolved')
+E   assert 'allow' == 'deny'
+E     
+E     - deny
+E     + allow
+_________________________ test_differential_cell[M-8] __________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:177: in test_differential_cell
+    assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E   AssertionError: M-8: gate decisions differ: Claude=('allow', ''), Codex=('deny', '')
+E   assert 'allow' == 'deny'
+E     
+E     - deny
+E     + allow
+_________________________ test_differential_cell[M-9] __________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:180: in test_differential_cell
+    assert claude == (expected_decision, expected_kind), (
+E   AssertionError: M-9: Claude differs from expectation table: expected ('deny', 'no-test-resolved'), got ('allow', '')
+E   assert ('allow', '') == ('deny', 'no-test-resolved')
+E     
+E     At index 0 diff: 'allow' != 'deny'
+E     Use -v to get more diff
+_________________________ test_differential_cell[M-10] _________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:180: in test_differential_cell
+    assert claude == (expected_decision, expected_kind), (
+E   AssertionError: M-10: Claude differs from expectation table: expected ('allow', ''), got ('deny', 'no-test-resolved')
+E   assert ('deny', 'no-test-resolved') == ('allow', '')
+E     
+E     At index 0 diff: 'deny' != 'allow'
+E     Use -v to get more diff
+_________________________ test_differential_cell[M-11] _________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:177: in test_differential_cell
+    assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E   AssertionError: M-11: gate decisions differ: Claude=('deny', 'no-test-resolved'), Codex=('allow', '')
+E   assert 'deny' == 'allow'
+E     
+E     - allow
+E     + deny
+_________________________ test_differential_cell[M-12] _________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:177: in test_differential_cell
+    assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E   AssertionError: M-12: gate decisions differ: Claude=('allow', ''), Codex=('deny', 'no-test-resolved')
+E   assert 'allow' == 'deny'
+E     
+E     - deny
+E     + allow
+____________________ test_differential_cell[M-13/m13-leaf] _____________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:180: in test_differential_cell
+    assert claude == (expected_decision, expected_kind), (
+E   AssertionError: M-13/m13-leaf: Claude differs from expectation table: expected ('deny', 'judge-error'), got ('deny', 'no-test-resolved')
+E   assert ('deny', 'no-test-resolved') == ('deny', 'judge-error')
+E     
+E     At index 1 diff: 'no-test-resolved' != 'judge-error'
+E     Use -v to get more diff
+________________ test_differential_cell[M-13/m13-intermediate] _________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:180: in test_differential_cell
+    assert claude == (expected_decision, expected_kind), (
+E   AssertionError: M-13/m13-intermediate: Claude differs from expectation table: expected ('deny', 'judge-error'), got ('deny', 'no-test-resolved')
+E   assert ('deny', 'no-test-resolved') == ('deny', 'judge-error')
+E     
+E     At index 1 diff: 'no-test-resolved' != 'judge-error'
+E     Use -v to get more diff
+_________________________ test_differential_cell[M-14] _________________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:179: in test_differential_cell
+    assert claude[1] == codex[1], f"{cell}: denial kinds differ: Claude={claude}, Codex={codex}"
+E   AssertionError: M-14: denial kinds differ: Claude=('deny', 'no-test-resolved'), Codex=('deny', 'judge-error')
+E   assert 'no-test-resolved' == 'judge-error'
+E     
+E     - judge-error
+E     + no-test-resolved
+_______________________ test_differential_cell[M-18/m14] _______________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:177: in test_differential_cell
+    assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E   AssertionError: M-18/m14: gate decisions differ: Claude=('allow', ''), Codex=('deny', 'judge-error')
+E   assert 'allow' == 'deny'
+E     
+E     - deny
+E     + allow
+_________________ test_expectation_table_deny_count_is_derived _________________
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py:193: in test_expectation_table_deny_count_is_derived
+    assert observed_deny_count == expected_deny_count, (
+E   AssertionError: Claude: denial count differs from expectation table: expected 13, got 6
+E   assert 6 == 13
+=========================== short test summary info ============================
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-2]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-3]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-4]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-5]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-6]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-7]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-8]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-9]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-10]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-11]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-12]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-13/m13-leaf]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-13/m13-intermediate]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-14]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-18/m14]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-unfixed-347i1yo6/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_expectation_table_deny_count_is_derived
+16 failed, 6 passed in 19.60s
+
+AC-6.1 separate checks (cell IDs; M-13 split into leaf and intermediate):
+gate-decision-equality expected=['M-11', 'M-12', 'M-4', 'M-5', 'M-6', 'M-7', 'M-8'] observed=['M-11', 'M-12', 'M-18/m14', 'M-4', 'M-5', 'M-6', 'M-7', 'M-8'] extra=['M-18/m14']
+expectation-table expected-additional=['M-10', 'M-13/m13-intermediate', 'M-13/m13-leaf', 'M-14', 'M-2', 'M-3', 'M-9'] observed-table=['M-10', 'M-13/m13-intermediate', 'M-13/m13-leaf', 'M-2', 'M-3', 'M-9'] observed-kind-mismatch=['M-14'] unaccounted=[]
+M-14 reaches the independent kind-equality assertion first; its expected judge-error table row would also disagree.
+Derived denial-count assertion also fails on the unfixed tree.
