@@ -152,6 +152,14 @@
       "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_scopes_nested_state_to_the_target_project"
     },
     {
+      "name": "CX-CANON",
+      "_mechanism": "Task 2 AC-1.4: restore Path.resolve for every _project_root return via _canonical_root.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        return Path(identity.canonical_directory(str(path)))",
+      "replace": "        return path.resolve()",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_case_spelled_root_m8_denies"
+    },
+    {
       "name": "CX-FOLD",
       "_mechanism": "Task 2 AC-2.2: remove the fold_py_suffix call while leaving the callee intact.",
       "file": "hooks/h-mad-codex-tdd-gate.py",

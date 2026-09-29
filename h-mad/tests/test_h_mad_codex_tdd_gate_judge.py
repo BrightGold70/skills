@@ -283,6 +283,21 @@ def test_codex_case_root_m8_denies(tmp_path, on_disk, spelled):
     _expect_gate(root, str(tmp_path / spelled / "tests/proj/src/prod.py"), "deny", "no-test-resolved")
 
 
+@pytest.mark.parametrize("on_disk,spelled", [("Case", "case"), ("case", "Case")], ids=["forward", "reverse"])
+def test_codex_case_spelled_root_m8_denies(tmp_path, on_disk, spelled):
+    physical = tmp_path / on_disk / "proj"
+    physical.mkdir(parents=True)
+    assert_case_insensitive(tmp_path)
+    _file(physical, "src/prod.py")
+    write_state(physical, {HOSTILE_KEY: {"phase": "step5"}})
+    root = tmp_path / spelled / "proj"
+    # Path.resolve keeps the spelled case, so only the on-disk canonicaliser can
+    # make the target relative to the root.
+    assert str(root.resolve()) != str(physical.resolve())
+
+    _expect_gate(root, "src/prod.py", "deny", "no-test-resolved")
+
+
 def test_codex_case_directory_m9_denies(tmp_path):
     root = _root(tmp_path)
     assert_case_insensitive(root)
