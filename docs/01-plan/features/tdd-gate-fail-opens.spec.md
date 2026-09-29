@@ -13,12 +13,17 @@ shared by both gates (D1, D3, D4), a Codex patch-header grammar that matches Cod
 kind (D5). A cross-gate differential pins that both gates return the same decision for the same
 spelling, so the D4 class cannot return.
 
+It also closes one carried defect that the operator folded in (OD-6, FR-8). The Codex gate's shell
+policy refuses the documented resume oracle, `h_mad_resume_decision.py`, while any feature on the
+state chain is in `step5`. As a result a Codex-hosted `/h-mad` cannot run it there.
+
 ## Goal
 
 While a feature is in `step5`, every spelling of a governed production Python file — case variant,
 symlinked directory, symlinked root, `..` after a symlink, padded patch header — is refused by both
 gates exactly as its canonical spelling is. A spelling that cannot be resolved is refused
-`judge-error`. The judge never waits past its budget plus one bounded reap grace.
+`judge-error`. The judge never waits past its budget plus one bounded reap grace. A Codex-hosted
+`/h-mad` can run the resume oracle in its documented form while the gate is armed.
 
 ## Binding decisions and where this spec goes beyond them
 
@@ -38,8 +43,11 @@ is operator-approved. The orchestrator relayed seven binding decisions (operator
 Measuring the tree for this spec found members of the same classes that B2 and B6, **read
 literally**, do not close. Each is written below as an operator decision (OD) with the resolution this
 spec uses so its ACs are testable. None weakens B1–B7; each one refuses more or decides by identity
-where the binding text decides by spelling. The operator approved all five ODs, each with the
-resolution below, on 2026-09-29 (commit `662b1ce1`).
+where the binding text decides by spelling. The operator approved OD-1…OD-5, each with the
+resolution below, on 2026-09-29 (commit `662b1ce1`). OD-6 is different. It is not a gap in B1–B7.
+It is a carried defect outside B1's D1–D5 scope, which the operator decided on 2026-09-29 to fold
+into this feature. It is also the one OD that moves a verdict toward ALLOW for a shell command, and
+only for one read-only script.
 
 | OD | Gap in the literal decision (measured, §"Measured premises") | Resolution this spec uses |
 |---|---|---|
@@ -47,7 +55,8 @@ resolution below, on 2026-09-29 (commit `662b1ce1`).
 | OD-2 | B6 names **trailing** whitespace. Codex 0.158.0 trims **both** ends of a header line, with the Unicode `White_Space` set, before matching the marker. An indented header after a normal one is accepted by Codex and missed by the gate's `^\*\*\* ` anchor, so the patch is allowed (M-17). Trailing U+00A0, U+3000, U+2028, VT and FF are trimmed by Codex and not by the gate (M-15). | The gate recognises a header on a line trimmed at **both** ends with exactly Codex's whitespace set, then refuses a remaining control byte (FR-4). |
 | OD-3 | B3 says any-case `.py` is production. It does not say whether the basename exemptions (`test_*.py`, `*_test.py`, `conftest*.py`) see the folded suffix. The two gates spell the exemption differently (`test_*.py` glob vs `name.startswith("test_")`), so leaving it open lets them disagree on `test_x.PY`. | The `.py` fold happens **before** every name test: production classification and all three basename exemptions run on the name with its suffix folded to `.py`; the stem stays case-sensitive (FR-2). |
 | OD-4 | B4 does not say when an unresolvable target is refused. Refusing it in a repository with no `step5` state would change every non-H-MAD repository. | The refusal applies only when H-MAD state governs the target (`active` or `unreadable`); with no governing state the gate allows, exactly as today (FR-3). It applies to **any** suffix, because an unresolvable link's own name says nothing about its referent. |
-| OD-5 | B7's differential ("same spellings, same decision") would fail on divergences that the predecessor feature specified on purpose: an exempt write on an unreadable chain (Claude allows, Codex refuses — predecessor OD-A), an outside-root target (Codex refuses every file type; Claude governs only `.py`), and relative targets (Claude joins the root, Codex joins the payload `cwd`). | The differential's domain is absolute in-root spellings over a readable chain (FR-6). The three excluded divergences are listed under "Residuals", each with the reason it is out of domain. |
+| OD-5 | B7's differential ("same spellings, same decision") would fail on divergences that the predecessor feature specified on purpose: an exempt write on an unreadable chain (Claude allows, Codex refuses — predecessor OD-A), an outside-root target (Codex refuses every file type; Claude governs only `.py`), and relative targets (Claude joins the root, Codex joins the payload `cwd`). | The differential's domain is absolute in-root spellings over a readable chain (FR-6). "In-root" is decided in one of two ways. For a resolvable spelling, the canonical target must be inside the canonical root. For an unresolvable spelling (FR-3), which has no canonical target, its **resolved prefix** must be inside the canonical root. The resolved prefix is the longest spelled prefix that FR-1 step 2 walks before FR-3's predicate holds. Both gates must then agree on decision and kind. Every required cell, M-12–M-14 and M-18 included, is in the domain. The three excluded divergences, and the unresolvable spellings that fall outside the domain, are listed under "Residuals", each with the reason it is out of domain. |
+| OD-6 | Not a gap in B1–B7: this is a carried defect folded into this feature. The Codex gate's `SAFE_HMAD_SCRIPT_OPTIONS` has no entry for `h_mad_resume_decision.py`. The three host adapters document `--session-id "$(cat …)"`, and `$(` fails `SIMPLE_SHELL_COMMAND`. So while any feature on the chain is in `step5`, a Codex-hosted `/h-mad` cannot run the documented resume oracle. This is live wherever the gate is armed, HemaSuite included (`h-mad/references/grok-runtime.md` §"The TDD gate" names HemaSuite's tracked `.codex/hooks.json`). | Operator decision 2026-09-29: fold it in (FR-8). The safe list admits the script with exactly its parser's long options. The script gains `--session-id-from-git-dir`, which reads the minted id file itself, so the documented command has no command substitution. The three adapters' oracle line moves to that form. |
 
 ## Measured premises
 
@@ -144,6 +153,27 @@ carrying the build and date above.
 D5: `h_mad_tdd_judge._run_bounded([python, "-c", "Popen(['sleep','12'], start_new_session=True);
 sleep(30)"], ., now+2.0)` → `elapsed=12.0 timed_out=True rc=-9` (the gap report's reading,
 reproduced).
+
+Codex resume oracle (OD-6, FR-8). This reading was taken 2026-09-29 at skills `78e35abf` with
+Python 3.14.7. It is a scratch probe that imported the gate from its path and called
+`_safe_shell_command(command, root, cwd)`. The probe was deleted after running, and T0's probe owes
+the committed cells.
+- `SAFE_HMAD_SCRIPT_OPTIONS` has 10 keys, and `h_mad_resume_decision.py` is not one of them.
+- `h_mad_resume_decision.py`'s `main()` declares five long options besides `--help`: `--state`,
+  `--feature`, `--host`, `--session-id` and `--now`.
+- The oracle line under §"Context budget and claims" in `h-mad/references/codex-runtime.md`,
+  `grok-runtime.md` and `agy-runtime.md` passes `--session-id "$(cat "$(git rev-parse
+  --absolute-git-dir)/h-mad-session-id.<feature>")"`.
+
+The gate results on the unfixed tree:
+- the documented line: `SIMPLE_SHELL_COMMAND.fullmatch` is `None` and the result is `False`;
+- the same line with a literal uuid as `--session-id`: `False`, because there is no map entry;
+- `git rev-parse --absolute-git-dir`: `False` (`git` is not in `READ_ONLY_COMMANDS`).
+
+With an in-memory entry of FR-8's six options:
+- the literal-uuid form and the `--session-id-from-git-dir` form: `True`;
+- the documented `$(` form: still `False`;
+- `-h`, `--bogus x`, and a `~/…` script path: each `False`.
 
 ## Terms
 
@@ -401,9 +431,23 @@ reproduced).
   the Codex gate, D3 on the Claude gate (and in the differential), D4 on both, D5 on the judge and
   on both gates' kind handling. A **shared differential** runs the same fixtures and spellings
   through both gates and asserts equal decisions:
-  - **Domain**: absolute Write spellings whose canonical target is inside the canonical root, over
-    a readable chain, in two state modes (governing `step5` with `codex_status: exhausted`, and a
-    `step3`-only file). Cells: M-1…M-14 and M-18, plus the controls `notes.md`, `tests/test_x.py`
+  - **Domain**: absolute Write spellings that are **in-root**, over a readable chain, in two state
+    modes: governing `step5` with `codex_status: exhausted`, and a `step3`-only file. "In-root" is
+    decided without needing a canonical target that FR-3 does not produce:
+    - a **resolvable** spelling is in-root when its canonical target (FR-1) is inside the canonical
+      root;
+    - an **unresolvable** spelling (FR-3, either arm) is in-root when its **resolved prefix** is
+      inside the canonical root. The resolved prefix is the longest prefix of the spelled
+      components, after FR-1 step 1, that FR-1 step 2 walks before FR-3's predicate holds. Every
+      component of that prefix exists, resolves, and can be opened, so FR-1 step 3 gives it a
+      canonical form. "Inside" includes equal to the canonical root.
+    For an in-root unresolvable spelling, both gates must agree on the decision and, when both
+    deny, on the kind. FR-3 fires at step 2, before step 6's inside-root test, so the expected
+    result is `judge-error` under the governing state and allow under the `step3`-only state. The
+    resolved prefix of each required unresolvable cell is inside the canonical root: `R/docs` for
+    M-12, `R/src` for M-13's leaf case and for M-14, and `R` for M-13's intermediate case
+    (`lnk -> nowhere`). The same holds for each of them under M-18. So no required cell falls
+    outside the domain. Cells: M-1…M-14 and M-18, plus the controls `notes.md`, `tests/test_x.py`
     and `sub/test_x.PY`.
   - **Assertions**: the two decisions are equal on every cell; on every cell where both deny, the
     kinds are equal (the Codex kind is parsed from `kind=([a-z-]+)` in the reason); each cell's
@@ -437,7 +481,104 @@ reproduced).
     trim (AC-4.2, AC-4.1; separate mutations), the control-byte refusal (AC-4.4), the `\n`-only split
     (AC-4.6), the bounded reap (AC-5.1), the reap-failure → `judge-timeout` mapping on the name-map
     path and on the pytest path (AC-5.3; separate mutations), the priority of `judge-timeout`
-    (AC-5.3), and the `JUDGE_DENY_RE` branch for `judge-timeout` (AC-5.4).
+    (AC-5.3), the `JUDGE_DENY_RE` branch for `judge-timeout` (AC-5.4), the
+    `h_mad_resume_decision.py` entry in `SAFE_HMAD_SCRIPT_OPTIONS` (AC-8.1), that entry's equality
+    with the parser's options, mutated by adding one option to the entry (AC-8.2), the id-file read
+    behind `--session-id-from-git-dir` (AC-8.3), its `cannot_judge` answer when the id cannot be
+    read (AC-8.4), and the mutual exclusion of `--session-id` with `--session-id-from-git-dir`
+    (AC-8.5).
+
+### FR-8: The Codex gate admits the documented resume oracle (OD-6)
+
+- **Description**: A Codex-hosted `/h-mad` must be able to run the resume oracle in its documented
+  form while any feature on the state chain is in `step5`. There are three changes.
+  1. **Safe list.** `SAFE_HMAD_SCRIPT_OPTIONS` in `h-mad/hooks/h-mad-codex-tdd-gate.py` gains the
+     key `h_mad_resume_decision.py`. Its value is exactly the set of long options that the
+     script's own argparse parser declares, minus `--help`. After change 2 that is `--feature`,
+     `--host`, `--now`, `--session-id`, `--session-id-from-git-dir` and `--state`: six options,
+     counted from the `add_argument` calls in `main()` plus the new one. `_safe_hmad_script` gains
+     no per-script value check for this key, and it falls through to its closing `return True`.
+     The script is read-only: `decide` only reads the state file, and change 2 adds only a
+     `git rev-parse` call. The lexical subset `SIMPLE_SHELL_COMMAND`, the trusted-executable rule,
+     and the `scripts_root` containment of the script path are unchanged. So `$`, `~` and command
+     substitution stay refused, and the script path stays a literal absolute path, as each
+     adapter's §"Context budget and claims" already requires.
+  2. **Session id with no command substitution.** This is a **code change** to
+     `h-mad/scripts/h_mad_resume_decision.py`. It adds a boolean flag, `--session-id-from-git-dir`,
+     in one argparse mutually exclusive group with `--session-id`. With the flag, the script runs
+     `git rev-parse --absolute-git-dir` in its own working directory under a bound of 10 s. It
+     reads `<git dir>/h-mad-session-id.<feature>`, where `<feature>` is the `--feature` value, and
+     takes the stripped content as the session id. It then decides exactly as
+     `--session-id <that id>` would.
+     - **Failure modes.** Each of these makes the script print `cannot_judge`, whatever `--host`
+       says: `git` absent from `PATH`; a non-zero `git` exit, which includes a working directory
+       outside any repository; the bound expiring; the id file absent; the id file unreadable
+       (`OSError`); and an id that is empty after stripping. The flag asked for an id, and
+       "could not read it" is not "no id given". The token keeps its one documented meaning: the
+       oracle could not judge.
+     - **Usage errors.** Passing both `--session-id` and `--session-id-from-git-dir` is an argparse
+       error: exit 2, empty stdout, and `not allowed with argument` on stderr. Callers read the
+       stdout token, never `$?`, and an empty stdout is "no decision", so they halt.
+     - **Why this form.** An environment-variable prefix fails the gate: an `argv[0]` containing
+       `=` is refused. A file-path flag would need the literal git-dir path. `git rev-parse` is
+       itself refused under `step5` (§"Measured premises"), so a session resuming mid-`step5`
+       could not derive that path through the gate. A literal uuid pasted as `--session-id`
+       passes the gate, but it moves the minted file's value through the agent's own
+       transcription. The script-side read removes both of these.
+  3. **Adapters.** The fenced resume-oracle line under §"Context budget and claims" in
+     `h-mad/references/codex-runtime.md`, `grok-runtime.md` and `agy-runtime.md` becomes
+     `python3 "<HMAD_SKILL_ROOT>/scripts/h_mad_resume_decision.py" --host <host> --state
+     docs/.bkit-memory.json --feature "<feature>" --session-id-from-git-dir`. `<host>` stays as
+     each adapter spells it today (`codex`, `grok`, `agy`). agy does not run the Codex gate. It
+     changes too because `h-mad/tests/test_host_runtime_docs.py` pins one oracle form across all
+     three adapters (`HOST_ADAPTERS`). The adapters describe an unreadable id file as giving the
+     oracle an empty id. That prose becomes "the oracle cannot read the id and returns
+     `cannot_judge`". codex and agy spell it "the oracle receives an empty id and returns
+     `cannot_judge`". grok spells it "An unreadable id file gives the oracle an empty id and
+     `cannot_judge`". The mint line and the `h_mad_state_write.py` lines are unchanged (see
+     Residuals). The Claude-host line in `h-mad/SKILL.md` (`--session-id "<this session's id>"`) is
+     unchanged, because the Claude gate does not police shell commands.
+- **Acceptance Criteria** (a governing `step5` state unless stated; "fixed"/"unfixed" name the
+  observable that differs):
+  - AC-8.1 (gate admits the oracle). This runs end to end through the Codex gate, with the
+    shell payload shape of `test_codex_hook_allows_exact_safe_hmad_control_script`
+    (`h-mad/tests/test_h_mad_codex_runtime.py`). The command is each adapter's oracle line, taken
+    from the adapter file, with `<HMAD_SKILL_ROOT>` replaced by the literal absolute skill root and
+    `<feature>` by a literal name. Fixed: allow (rc 0, empty stdout). Unfixed: deny, with the reason
+    beginning "H-MAD Phase 5 permits only explicit test, read-only, and H-MAD control commands".
+    The same pair holds for the literal form `--session-id <uuid>`. Control: the pre-FR-8
+    `--session-id "$(cat …)"` line is denied fixed and unfixed (the lexical subset did not loosen).
+  - AC-8.2 (exact options). A test derives the long options of `h_mad_resume_decision.py`'s parser,
+    minus `--help`, and asserts that they equal the safe-list entry. The test never types the set.
+    Fixed: equal. Unfixed: the entry is absent. Under governing state, a command carrying
+    `--bogus x` and one carrying `-h` are each denied, fixed and unfixed.
+  - AC-8.3 (the flag reads the minted id). Each case is its own: a git repository, and a linked
+    worktree whose git dir is not `<root>/.git`. The id is minted exactly as the adapter's mint
+    line writes it (a trailing newline included). The state holds the feature with
+    `last_completed_phase` 4. First, with it owned by the minted id, `--host codex
+    --session-id-from-git-dir` prints `enter_autonomous`. Second, with it owned by another session
+    that is live under `--now`, the same command prints `owned_elsewhere`. Each token equals what
+    `--session-id <file content>` prints. Unfixed: exit 2 with `unrecognized arguments`, empty
+    stdout.
+  - AC-8.4 (fail-closed). Each failure mode of change 2 is its own case, each under
+    `--host codex` and under `--host claude`, and each prints `cannot_judge`. The cases: id file
+    absent; empty; whitespace-only; mode 000 (the case asserts that reading raises
+    `PermissionError`, and it fails, never skips, when that does not hold); working directory
+    outside any repository; `git` absent from a hermetic `PATH`. The `--host claude` case
+    discriminates. Without the flag's own fail-closed branch, a missing id reaches `decide` as
+    `None`, and on the Claude host that is not `cannot_judge`: it prints `enter_autonomous`
+    against the AC-8.3 state. Unfixed: exit 2, empty stdout.
+  - AC-8.5 (mutual exclusion). Both `--session-id x` and `--session-id-from-git-dir` give exit 2,
+    empty stdout, and stderr containing `not allowed with argument`. Unfixed: exit 2 with
+    `unrecognized arguments` instead.
+  - AC-8.6 (adapters). Each of the three adapters' fenced oracle line contains
+    `--session-id-from-git-dir`, and no `$`. `test_host_runtime_docs.py` changes in two named,
+    reviewed deltas. First, the `oracle` condition of `test_claims_section_fenced_lines` moves
+    from `"--session-id " + SID_READ` to the new flag. Second, `test_claims_lines_execute_across_invocations`
+    selects the oracle line by the new flag, and its oracle run still returns the minted owner's
+    token. Its other cases (`create-claim`, `claim`, `beat`, `set`, `release`, `mint`,
+    `oracle-first`, `no-dollar-sid`) are unchanged and stay green. Fixed: AC-8.1 passes on the
+    line the adapter carries. Unfixed: the line contains `$(`.
 
 ## Contract: tokens and kinds the gates emit
 
@@ -456,6 +597,16 @@ reproduced).
   gains `judge-timeout`, so it has 12 members (count of the frozenset literal after the edit).
   `judge-timeout` means "the runner could not reap the test process's pipes within the grace"; the
   caller refuses the write and reports it separately from a slow test (`timeout`).
+- **Resume oracle** (`h_mad_resume_decision.py`, FR-8). The script prints exactly one of the tokens
+  in its docstring: `start_fresh`, `resume_manual`, `enter_autonomous`, `halted`, `complete`,
+  `owned_elsewhere`, `cannot_judge`. FR-8 adds no token. `cannot_judge` gains six causes, the
+  failure modes of `--session-id-from-git-dir`, and each means "could not judge; do not initialise
+  or claim". An argparse usage error gives an empty stdout, rc 2, and a message on stderr: an
+  unknown option, a missing `--state`/`--feature`, or `--session-id` together with
+  `--session-id-from-git-dir`. The caller reads the token and treats an empty stdout as no
+  decision (halt). It never reads `$?`. Under a governing `step5` state, the Codex gate either
+  allows the oracle command (rc 0, empty stdout) or denies it with the kind-less shell-policy
+  reason.
 
 ## Non-Functional Requirements
 
@@ -463,9 +614,11 @@ reproduced).
   `# M:H11`) and one directory listing per existing leaf. FR-5 adds at most `REAP_GRACE_S` to a
   timed-out judge.
 - **Security**: a workflow guard, not a sandbox (`h-mad/references/codex-runtime.md` §"Trust
-  boundary"). No knob or environment variable is added.
+  boundary"). No environment variable is added. FR-8 adds one CLI flag,
+  `--session-id-from-git-dir`, to `h_mad_resume_decision.py`. It also admits that one read-only
+  script to the Codex gate's shell allow-list, and it adds no value check.
 - **Compatibility**: every existing test in `h-mad/tests` passes, apart from the deltas named in
-  AC-5.2 and AC-5.5 and the verdict changes FR-1 lists. The Codex gate's `--self-check` prints
+  AC-5.2, AC-5.5 and AC-8.6 and the verdict changes FR-1 lists. The Codex gate's `--self-check` prints
   `CODEX-TDD-GATE: PASS`.
 
 ## Residuals (stated exactly)
@@ -502,10 +655,32 @@ reproduced).
   (Claude allows, Codex refuses — predecessor OD-A); an outside-root target (Codex refuses every
   file type when governed, Claude governs only `.py`); relative targets (Claude joins the root,
   Codex the payload `cwd`).
+- **Unresolvable spellings outside the differential's domain (FR-6)**. The first is an
+  unresolvable spelling whose resolved prefix is outside the canonical root, such as a dangling
+  link under an outside-root directory. It belongs to the outside-root divergence class above:
+  Claude reads the target's own chain, and Codex reads `_any_phase5_status(root)`. The second is a
+  root that is itself unresolvable, which has no canonical root, so every spelling under it is
+  outside the domain. No required cell is in either category. The differential makes no claim
+  that the gates agree on these spellings.
 - **The detached descendant keeps running** after a reap failure (FR-5).
 - **Host hook timeouts** are not measured (predecessor OQ-D1); FR-5 bounds the judge, not the host.
 - **Over-recognised Codex headers** (M-23, trimmed hunk lines) are governed; a false refusal is
   possible there.
+- **FR-8 closes the oracle line only.** Each adapter's §"Context budget and claims" still documents
+  five `h_mad_state_write.py` lines: `--create --claim`, `--claim`, `--beat`, `--set` and
+  `--release`. They use `"$HMAD_SKILL_ROOT/…"` and `"$(cat …)"`, and `$` is outside
+  `SIMPLE_SHELL_COMMAND`'s class (read from the code at `78e35abf`). So the Codex gate still
+  refuses them under a governing `step5` state. That covers a heartbeat (`--beat`) or a release
+  during Phase 5. FR-8 does not change them. The operator's fold decision names the resume
+  oracle. Closing them is a separate decision.
+- **Paths outside the lexical subset.** A skill-root path containing a character outside
+  `SIMPLE_SHELL_COMMAND`'s class cannot be passed to the oracle under a governing state, for
+  example `~`, `$`, `(`, `;` or a non-ASCII letter. This is true of every script on the safe
+  list today.
+- **Unreadable state.** When `_any_phase5_status` is `unknown`, the Codex gate refuses every shell
+  command ("H-MAD state is unreadable; refusing shell execution fail-closed."), and the oracle is
+  refused with them. That is unchanged. The oracle's own answer on an unreadable state file would
+  be `cannot_judge`.
 
 ## Out-of-Scope
 
@@ -529,9 +704,12 @@ reproduced).
 - Plan v1.0's OQ-P1 is decided (operator, 2026-09-29: refuse) and folded into FR-3's second arm
   and AC-3.6. Plan PD-5's measurement is taken (Edit refused on Claude Code 2.1.284); FR-1's leaf
   rule is unamended.
+- OD-6 is decided (operator, 2026-09-29: fold the Codex resume denial into this feature) and is
+  specified as FR-8.
 
 ## Version History
 - v1.0: Initial specification draft (2026-09-29) from brainstorm v1.1 (c83c62fe) and operator decisions B1-B7. FR-1 one target-normalisation rule (D3, D4), FR-2 .py fold (D1), FR-3 unresolvable target refused judge-error when governed (OQ1), FR-4 Codex header grammar (D2), FR-5 bounded reap + judge-timeout (D5, OQ2), FR-6 pinned repros + cross-gate differential, FR-7 mutation. OD-1..OD-5 raised from measurements at 1a77e1c4 / codex-cli 0.158.0 (on-disk spelling, leading-whitespace headers, fold before name tests, governed-only refusal, differential domain); each owes operator confirmation.
 - v1.1: Revision (2026-09-29) answering plan v1.0 (f5e44a50) owed items and operator decisions. OQ-P1 decided refuse: FR-3 gains a second arm (an existing root/target component the on-disk-spelling primitive cannot open or list is unresolvable; judge-error when governed, allow otherwise; never fall back to the spelling), FR-1 step 3 cross-reference, AC-3.6 (a/b/c), AC-7.1 mutation row, permission residual split; 0311 reading measured at f5e44a50. PD-5 recorded as a measured premise: Edit on a leaf symlink refused on Claude Code 2.1.284, MultiEdit/NotebookEdit absent from that build (unmeasurable), FR-1 leaf rule unamended; not re-derivable by T0's probe. PD-2 applied to FR-5: REAP_GRACE_S = 1.0 s, six-field NamedTuple adding reap_failed, AC-5.1 bound 4.0 s, worst case 41.0 s. AC-5.2 corrected: only test_run_bounded_kills_the_process_group unpacks _run_bounded. PD-4: table stays until T0's committed reading replaces it.
 - v1.2: OD status (2026-09-29): OD-1..OD-5 recorded as operator-approved 2026-09-29 (662b1ce1) in the Binding-decisions preamble and Open Questions; 'open decision' renamed 'operator decision'. No requirement changed.
 - v1.3: Revision (2026-09-29) applying plan v1.2 (4192ad8c) owed items under plan PD-4 (no committed probe or test invokes codex). Assumptions: a later Codex that trims differently is caught only if the manual R-4 reading is re-taken against the new binary. Measured premises: the Codex-writes column, the trim set and the leaf-symlink writer rows are manual R-4/R-5 readings, and the tables are replaced by a pointer to T0's unfixed reading together with its manual R-4 and R-5 rows; OQ-P1 cell wording unchanged (gate-side). FR-1 gains AC-1.11, the outside-root symlink control of the M:H20 raw-spelling conjunct (plan R-3): fixed and unfixed both deny no-test-resolved, the H20B mutant must turn the fixed gate to allow, and H20B does not move the cell on the unfixed tree (measured at 4192ad8c). AC-7.1 unchanged.
+- v1.4: Corrective revision (2026-09-29) answering plan audit cycle 2 (codex must #2) and operator decision OD-6. FR-6/OD-5: differential-domain membership defined for unresolvable targets: in-root when the resolved prefix (longest spelled prefix FR-1 step 2 walks before FR-3's predicate holds) is inside the canonical root; both gates agree on decision and kind; M-12-M-14 and M-18 in domain; out-of-domain unresolvable spellings listed under Residuals. OD-6 (operator 2026-09-29, fold the carried Codex resume denial): new FR-8 with AC-8.1-AC-8.6: SAFE_HMAD_SCRIPT_OPTIONS admits h_mad_resume_decision.py with exactly its parser's long options minus --help (six); code change adds --session-id-from-git-dir (script reads <git dir>/h-mad-session-id.<feature>; every read failure prints cannot_judge; exclusive with --session-id); the three adapters' oracle line moves to that form (test_host_runtime_docs deltas named). AC-7.1 gains five FR-8 mutation rows (T8 floor 20 -> 25). Measured premise for FR-8 at 78e35abf; Contract, NFR, Residuals, Open Questions updated.
