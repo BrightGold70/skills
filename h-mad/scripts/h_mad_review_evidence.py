@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -147,7 +148,7 @@ def scan_grok(log_text: str) -> dict | None:
         if t == "usage":
             usage = event.get("usage")
             value = usage.get("reasoning_tokens") if isinstance(usage, dict) else None
-            if type(value) in (int, float):
+            if type(value) in (int, float) and (not isinstance(value, float) or math.isfinite(value)):
                 thinking += int(value)
         if t == "end":
             complete = True
@@ -223,7 +224,8 @@ def scan(log_text: str) -> dict:
                     # raises -- which would abort the scan and lose the tool counts
                     # too, turning a reported hollow pass into a cannot-judge.
                     value = usage.get("thinking_tokens")
-                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    if (isinstance(value, (int, float)) and not isinstance(value, bool)
+                            and (not isinstance(value, float) or math.isfinite(value))):
                         thinking += int(value)
             continue
 

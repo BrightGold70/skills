@@ -1,5 +1,7 @@
 """RED tests for Grok review evidence and the two agy scan robustness fixes."""
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,6 +24,43 @@ sys.path.insert(0, str(SCRIPTS))
 
 import h_mad_review_evidence as ev  # noqa: E402
 import h_mad_archreview_cycle as ar  # noqa: E402
+import h_mad_audit_cycle as audit_cycle  # noqa: E402
+
+
+@pytest.mark.parametrize("bad_number", ["1e999", "NaN", "-Infinity"])
+def test_nonfinite_reasoning_is_skipped_by_both_scanners(bad_number):
+    grok = ('{"type":"usage","usage":{"reasoning_tokens":' + bad_number + '}}\n'
+            '{"type":"usage","usage":{"reasoning_tokens":7}}\n'
+            '{"type":"end","stopReason":"end_turn"}\n')
+    agy = ('{"event":"step_update","step_update":{"step_type":"agent_response",'
+           '"state":"DONE","usage":{"thinking_tokens":' + bad_number + '}}}\n'
+           '{"event":"step_update","step_update":{"step_type":"agent_response",'
+           '"state":"DONE","usage":{"thinking_tokens":7}}}\n')
+    assert ev.scan_grok(grok)["thinking"] == 7
+    assert ev.scan(agy)["thinking"] == 7
+
+
+@pytest.mark.parametrize("bad_number", ["1e999", "NaN", "-Infinity"])
+def test_nonfinite_reasoning_keeps_cli_and_effort_readable(tmp_path, bad_number):
+    log = tmp_path / "review.ndjson"
+    log.write_text(
+        '{"type":"tool_call","toolCallId":"read-1"}\n'
+        '{"type":"tool_call_update","toolCallId":"read-1","status":"completed"}\n'
+        '{"type":"usage","usage":{"reasoning_tokens":' + bad_number + '}}\n'
+        '{"type":"usage","usage":{"reasoning_tokens":7}}\n'
+        '{"type":"end","stopReason":"end_turn"}\n', encoding="utf-8")
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith("CLAUDE") and key != "HPW_AGENT_BACKEND"}
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS / "h_mad_review_evidence.py"), str(log)],
+        input="", text=True, capture_output=True, env=env, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "EVIDENCE: PASS" in result.stdout
+    assert "thinking=7" in result.stdout
+    effort = audit_cycle.measure_effort(log)
+    assert effort["shape"] == "grok"
+    assert effort["thinking"] == 7
 
 
 def test_scan_grok_counts_f0():

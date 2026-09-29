@@ -3495,8 +3495,8 @@ _cmd_audit_cycle() {
 
   i=1
   while [ "$i" -le "$passes" ]; do
-    rm -f "${report[$i]}" "${report[$i]}.done" "${out[$i]}" || true
-    for p in "${report[$i]}" "${report[$i]}.done" "${out[$i]}"; do
+    rm -f "${report[$i]}" "${report[$i]}.done" "${out[$i]}" "${log[$i]}" || true
+    for p in "${report[$i]}" "${report[$i]}.done" "${out[$i]}" "${log[$i]}"; do
       [ ! -e "$p" ] || { printf 'ERROR: channel not cleared: %s\n' "$p" >&2; exit 3; }
     done
     rm -f "${prompt[$i]}" "${asm[$i]}" || true

@@ -91,6 +91,20 @@
       "find": "if counts[\"agy_events\"] == 0:",
       "replace": "if counts[\"agy_events\"] == 0 or scan_grok(text) is not None:",
       "test": "tests/test_h_mad_review_evidence_grok.py::test_cli_mixed_agy_f0_equals_agy_alone"
+    },
+    {
+      "name": "d1-grok-nonfinite-guard-dropped",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "if type(value) in (int, float) and (not isinstance(value, float) or math.isfinite(value)):",
+      "replace": "if type(value) in (int, float):",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_nonfinite_reasoning_is_skipped_by_both_scanners"
+    },
+    {
+      "name": "d1-agy-nonfinite-guard-dropped",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "if (isinstance(value, (int, float)) and not isinstance(value, bool)\n                            and (not isinstance(value, float) or math.isfinite(value))):",
+      "replace": "if isinstance(value, (int, float)) and not isinstance(value, bool):",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_nonfinite_reasoning_is_skipped_by_both_scanners"
     }
   ]
 }

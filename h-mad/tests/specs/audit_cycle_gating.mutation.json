@@ -12,8 +12,8 @@
   {
    "name": "shell-channel-clear-assertion-drop",
    "file": "scripts/hmad-dispatch.sh",
-   "find": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\"; do\n      [ ! -e \"$p\" ] || { printf 'ERROR: channel not cleared: %s\\n' \"$p\" >&2; exit 3; }\n    done",
-   "replace": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\"; do\n      :\n    done",
+   "find": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\"; do\n      [ ! -e \"$p\" ] || { printf 'ERROR: channel not cleared: %s\\n' \"$p\" >&2; exit 3; }\n    done",
+   "replace": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\"; do\n      :\n    done",
    "failure_test": "test_verb_unremovable_path"
   },
   {

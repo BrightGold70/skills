@@ -9,6 +9,7 @@
     "tests/test_hmad_dispatch_progress_grok.py",
     "tests/test_hmad_dispatch_exec.py",
     "tests/test_hmad_dispatch_audit_cycle.py",
+    "tests/test_hmad_dispatch_audit_cycle_grok.py",
     "-q"
   ],
   "target_command": [
@@ -150,6 +151,13 @@
       "find": "_cmd_exec \"${agent[$i]}\"",
       "replace": "_cmd_exec grok",
       "test": "tests/test_hmad_dispatch_audit_cycle.py::test_verb_two_distinct_dispatches"
+    },
+    {
+      "name": "d2-audit-cycle-log-clear-dropped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\"; do",
+      "replace": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\"; do",
+      "test": "tests/test_hmad_dispatch_audit_cycle_grok.py::test_audit_cycle_clears_stale_grok_log_before_truncated_retry"
     }
   ]
 }
