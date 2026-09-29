@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-29 · gotcha · [0.7] · `h-mad,mutation-harness,handoff:2026-09-29-three-features-merged` — mutation harness runs pytest with cwd h-mad/: a test shelling out 'git archive <sha> h-mad' reads BASELINE_NOT_GREEN there; pin cwd to the repo root
+- 2026-09-29 · gotcha · [0.7] · `h-mad,worktree,merge,handoff:2026-09-29-three-features-merged` — Tests that pin 'this checkout's path' pass in the worktree and fail on merged main; docs must carry <HMAD_SKILL_ROOT>, and the merged-tree suite must run before push even at identity=y
+- 2026-09-29 · pattern · [0.7] · `h-mad,phase6,review,handoff:2026-09-29-three-features-merged` — A fresh-context adversarial 6a verifier found reproducible gate/scan defects in 3 of 3 features after suite, mutation harness and agy READY_TO_MERGE all passed; run it before merge, not after
 - 2026-09-29 · gotcha · [0.7] · `zsh,shell,measurement,handoff:2026-09-29-three-features-in-5c` — zsh does not word-split unquoted $VAR: pytest $TS ran nothing ('no tests ran') and nearly read as a result; spell paths or use arrays
 - 2026-09-29 · gotcha · [0.7] · `shell,locale,h-mad,handoff:2026-09-29-three-features-in-5c` — comm between sorted node-id lists is only valid under one collation: raw comm gave 1631 missing, LC_ALL=C re-sort gave 0
 - 2026-09-29 · pattern · [0.7] · `h-mad,tdd,codex,handoff:2026-09-29-three-features-in-5c` — ~1/3 of codex GREEN BLOCKs were RED-test defects; fix as a test-only amendment commit and SWEEP every occurrence of the defect before re-dispatch
