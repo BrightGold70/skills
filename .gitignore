@@ -51,3 +51,6 @@ Thumbs.db
 # lanes have since closed, so the contents are stale in both directions
 # (`wsg.phase=4` with WSG Phase 5 closed; `gateway.phase=5` with #18 archived).
 lanestate/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
