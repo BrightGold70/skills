@@ -1,0 +1,13 @@
+{
+  "agy_events": 99,
+  "collected": "tdd-gate-fail-opens.design.audit.v2.p2.md",
+  "failed": 0,
+  "log": "/tmp/audit_tdd-gate-fail-opens_design_cycle2_p2.log",
+  "ok": 7,
+  "pass": 2,
+  "readable": true,
+  "shape": "parsed",
+  "status": "SUCCESS",
+  "thinking": 21763,
+  "tools": 7
+}
