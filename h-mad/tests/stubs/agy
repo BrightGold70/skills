@@ -11,6 +11,11 @@ if [ -n "${HMAD_STUB_ENV_CAPTURE:-}" ]; then
   printf 'HPW_AGENT_BACKEND=%s\n' "${HPW_AGENT_BACKEND-<unset>}" > "$HMAD_STUB_ENV_CAPTURE"
 fi
 
+if [ -n "${HMAD_STUB_CLAUDE_ENV_CAPTURE:-}" ]; then
+  for _n in $(compgen -e); do case "$_n" in CLAUDE*) printf '%s\n' "$_n" ;; esac; done \
+    | LC_ALL=C sort > "$HMAD_STUB_CLAUDE_ENV_CAPTURE"
+fi
+
 # Capture the prompt (last arg) if asked.
 if [ -n "${HMAD_STUB_AGY_PROMPT_CAPTURE:-}" ]; then
   printf '%s' "${!#}" > "$HMAD_STUB_AGY_PROMPT_CAPTURE"

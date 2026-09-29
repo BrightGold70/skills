@@ -1,0 +1,33 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_assemble_tdd_agent.py",
+    "tests/test_h_mad_assemble_tdd.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "t1-timeout-judged-by-value",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "args.timeout is not None",
+      "replace": "args.timeout not in (None, 900)",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_agent_grok_explicit_timeout_wins"
+    },
+    {
+      "name": "w10a-grok-by-default",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "ap.add_argument(\"--agent\", choices=(\"codex\", \"grok\"), default=\"codex\")",
+      "replace": "ap.add_argument(\"--agent\", choices=(\"codex\", \"grok\"), default=\"grok\")",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestCli::test_a_clean_assembly_prints_pass_and_the_command_block"
+    }
+  ]
+}

@@ -252,7 +252,7 @@
       "_mechanism": "Task 10 W5BF: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_state_without_step5_is_allowed must reject the changed behavior.",
       "file": "hooks/h-mad-tdd-gate.sh",
       "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
-      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
+      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 fallback=none record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_state_without_step5_is_allowed"
     },
     {
@@ -260,7 +260,7 @@
       "_mechanism": "Task 10 W5BF2: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_empty_target_rule[no-step5-root] must reject the changed behavior.",
       "file": "hooks/h-mad-tdd-gate.sh",
       "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
-      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
+      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 fallback=none record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_empty_target_rule[no-step5-root]"
     },
     {
@@ -268,7 +268,7 @@
       "_mechanism": "Task 10 W5BF3: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_outside_root_target_is_governed_by_root[no-step5] must reject the changed behavior.",
       "file": "hooks/h-mad-tdd-gate.sh",
       "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
-      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
+      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 fallback=none record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_outside_root_target_is_governed_by_root[no-step5]"
     },
     {

@@ -1,0 +1,103 @@
+records: /var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmp.dWfuONVzh4
+1 failed, 4569 passed, 1 warning in 809.05s (0:13:29)
+--- permitted edit (Task 1 stub or Task 12 migration): h-mad/tests/mutation-specs/claude_gate_judge_wiring.json
+diff --git a/h-mad/tests/mutation-specs/claude_gate_judge_wiring.json b/h-mad/tests/mutation-specs/claude_gate_judge_wiring.json
+index 86f6f468..b9c49499 100644
+--- a/h-mad/tests/mutation-specs/claude_gate_judge_wiring.json
++++ b/h-mad/tests/mutation-specs/claude_gate_judge_wiring.json
+@@ -252,7 +252,7 @@
+       "_mechanism": "Task 10 W5BF: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_state_without_step5_is_allowed must reject the changed behavior.",
+       "file": "hooks/h-mad-tdd-gate.sh",
+       "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
+-      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
++      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 fallback=none record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
+       "test": "tests/test_h_mad_tdd_gate_judge.py::test_state_without_step5_is_allowed"
+     },
+     {
+@@ -260,7 +260,7 @@
+       "_mechanism": "Task 10 W5BF2: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_empty_target_rule[no-step5-root] must reject the changed behavior.",
+       "file": "hooks/h-mad-tdd-gate.sh",
+       "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
+-      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
++      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 fallback=none record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
+       "test": "tests/test_h_mad_tdd_gate_judge.py::test_empty_target_rule[no-step5-root]"
+     },
+     {
+@@ -268,7 +268,7 @@
+       "_mechanism": "Task 10 W5BF3: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_outside_root_target_is_governed_by_root[no-step5] must reject the changed behavior.",
+       "file": "hooks/h-mad-tdd-gate.sh",
+       "find": "  SOUT=$(python3 \"$JUDGE\" state --root \"$ROOT_ABS\" \"$@\" 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W5B",
+-      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
++      "replace": "  SOUT=$'TDD-STATE: active codex-escape=no blocker=1 records=1 fallback=none record=forced,available,/nowhere/docs/.bkit-memory.json,absent\\nrc=0'  # M:W5B",
+       "test": "tests/test_h_mad_tdd_gate_judge.py::test_outside_root_target_is_governed_by_root[no-step5]"
+     },
+     {
+  stated change: h-mad/tests/mutation-specs/claude_gate_judge_wiring.json count=3/3 rest_equals_base=True
+--- permitted edit (Task 1 stub or Task 12 migration): h-mad/tests/stubs/agy
+diff --git a/h-mad/tests/stubs/agy b/h-mad/tests/stubs/agy
+index b9f29905..ddd2a6bf 100755
+--- a/h-mad/tests/stubs/agy
++++ b/h-mad/tests/stubs/agy
+@@ -11,6 +11,11 @@ if [ -n "${HMAD_STUB_ENV_CAPTURE:-}" ]; then
+   printf 'HPW_AGENT_BACKEND=%s\n' "${HPW_AGENT_BACKEND-<unset>}" > "$HMAD_STUB_ENV_CAPTURE"
+ fi
+ 
++if [ -n "${HMAD_STUB_CLAUDE_ENV_CAPTURE:-}" ]; then
++  for _n in $(compgen -e); do case "$_n" in CLAUDE*) printf '%s\n' "$_n" ;; esac; done \
++    | LC_ALL=C sort > "$HMAD_STUB_CLAUDE_ENV_CAPTURE"
++fi
++
+ # Capture the prompt (last arg) if asked.
+ if [ -n "${HMAD_STUB_AGY_PROMPT_CAPTURE:-}" ]; then
+   printf '%s' "${!#}" > "$HMAD_STUB_AGY_PROMPT_CAPTURE"
+  stated change: h-mad/tests/stubs/agy count=1/1 rest_equals_base=True
+--- permitted edit (Task 1 stub or Task 12 migration): h-mad/tests/stubs/codex
+diff --git a/h-mad/tests/stubs/codex b/h-mad/tests/stubs/codex
+index 77af3338..e32649dc 100755
+--- a/h-mad/tests/stubs/codex
++++ b/h-mad/tests/stubs/codex
+@@ -11,6 +11,11 @@ if [ -n "${HMAD_STUB_ENV_CAPTURE:-}" ]; then
+   printf 'HPW_AGENT_BACKEND=%s\n' "${HPW_AGENT_BACKEND-<unset>}" > "$HMAD_STUB_ENV_CAPTURE"
+ fi
+ 
++if [ -n "${HMAD_STUB_CLAUDE_ENV_CAPTURE:-}" ]; then
++  for _n in $(compgen -e); do case "$_n" in CLAUDE*) printf '%s\n' "$_n" ;; esac; done \
++    | LC_ALL=C sort > "$HMAD_STUB_CLAUDE_ENV_CAPTURE"
++fi
++
+ # Consume stdin (the piped prompt); capture it if asked.
+ # HMAD_STUB_CODEX_ECHO_STDIN models the REAL codex behaviour that produced the
+ # verdict-laundering defect: `codex exec ... -` echoes the piped prompt into its
+  stated change: h-mad/tests/stubs/codex count=1/1 rest_equals_base=True
+--- permitted edit (Task 1 stub or Task 12 migration): h-mad/tests/test_h_mad_tdd_gate_judge.py
+diff --git a/h-mad/tests/test_h_mad_tdd_gate_judge.py b/h-mad/tests/test_h_mad_tdd_gate_judge.py
+index 9ad3ecce..af604b8b 100644
+--- a/h-mad/tests/test_h_mad_tdd_gate_judge.py
++++ b/h-mad/tests/test_h_mad_tdd_gate_judge.py
+@@ -83,7 +83,7 @@ def _assert(result, expected: str, kind: str = "", hook: Path = HOOK):
+ 
+ 
+ def _tree_b(tmp_path: Path, *, judge_line: str = "TDD-JUDGE: DENY kind=judge-error reason=stub",
+-            judge_rc: int = 0, state_line: str = "TDD-STATE: active codex-escape=yes blocker=0 records=1 record=feat,exhausted,/x/docs/.bkit-memory.json,absent",
++            judge_rc: int = 0, state_line: str = "TDD-STATE: active codex-escape=yes blocker=0 records=1 fallback=none record=feat,exhausted,/x/docs/.bkit-memory.json,absent",
+             state_rc: int = 0, marker: bool = False) -> tuple[Path, Path]:
+     tree = tmp_path / "B"
+     hook = tree / "h-mad/hooks/h-mad-tdd-gate.sh"
+  stated change: h-mad/tests/test_h_mad_tdd_gate_judge.py count=1/1 rest_equals_base=True
+--- permitted edit (Task 1 stub or Task 12 migration): h-mad/tests/test_h_mad_tdd_judge.py
+diff --git a/h-mad/tests/test_h_mad_tdd_judge.py b/h-mad/tests/test_h_mad_tdd_judge.py
+index 167b81fa..25c5db43 100644
+--- a/h-mad/tests/test_h_mad_tdd_judge.py
++++ b/h-mad/tests/test_h_mad_tdd_judge.py
+@@ -24,7 +24,7 @@ import h_mad_tdd_judge as judge  # noqa: E402 — the intended new-symbol RED
+ 
+ ACTIVE_RE = re.compile(
+     r"^TDD-STATE: active codex-escape=(yes|no) blocker=(0|[1-9][0-9]*) "
+-    r"records=([1-9][0-9]*)( record=[^ ,]+,[^ ,]+,[^ ,]+,"
++    r"records=([1-9][0-9]*) fallback=(none|(grok|invalid):([1-9][0-9]*))( record=[^ ,]+,[^ ,]+,[^ ,]+,"
+     r"(absent|null|grok|claude|invalid:[^ ,]+))+$"
+ )
+ 
+  stated change: h-mad/tests/test_h_mad_tdd_judge.py count=1/1 rest_equals_base=True
+FLOOR: PASS files=270 suite_rc=1
+rc=0

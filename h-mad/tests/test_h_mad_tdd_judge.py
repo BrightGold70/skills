@@ -24,7 +24,7 @@ import h_mad_tdd_judge as judge  # noqa: E402 — the intended new-symbol RED
 
 ACTIVE_RE = re.compile(
     r"^TDD-STATE: active codex-escape=(yes|no) blocker=(0|[1-9][0-9]*) "
-    r"records=([1-9][0-9]*)( record=[^ ,]+,[^ ,]+,[^ ,]+,"
+    r"records=([1-9][0-9]*) fallback=(none|(grok|invalid):([1-9][0-9]*))( record=[^ ,]+,[^ ,]+,[^ ,]+,"
     r"(absent|null|grok|claude|invalid:[^ ,]+))+$"
 )
 

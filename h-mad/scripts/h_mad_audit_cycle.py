@@ -14,7 +14,8 @@ from collections import namedtuple
 from pathlib import Path
 
 from h_mad_extract_report import DISPATCH_BOUNDARY
-from h_mad_review_evidence import scan
+from h_mad_review_evidence import scan, scan_grok
+from h_mad_review_evidence import _CODEX_HEADER_RE as _CODEX_BANNER
 
 
 # `log_path` defaults to None so a four-field caller — every existing one — keeps
@@ -559,17 +560,20 @@ def measure_effort(log_path: Path | None) -> dict | None:
         # `invariants.base.md` §Test discrimination, applied to a log format.
         counts["shape"] = "codex-text"
     else:
+        grok = scan_grok(text)
+        if grok is not None and grok["complete"]:
+            return {"readable": True, "shape": "grok", "agy_events": 0,
+                    "tools": grok["tools"], "ok": grok["ok"],
+                    "unresolved": grok["unresolved"], "thinking": grok["thinking"],
+                    "stop_reason": grok["stop_reason"]}
+        if grok is not None:
+            return {"readable": True, "shape": "grok-truncated", "agy_events": 0}
         # Readable, non-empty, neither an agy transcript nor a codex one: a stray
         # `--log`, a wrapper's stdout, the wrong path. Still "find the right file",
         # and still blocking — unchanged from before this fix.
         counts["shape"] = "unparseable"
     return counts
 
-
-# The codex CLI's own first line, e.g. `OpenAI Codex v0.153.2`. Anchored at a line
-# start and matched only in the head of the file so a transcript that merely QUOTES
-# the banner further down is not mistaken for one.
-_CODEX_BANNER = re.compile(r"^OpenAI Codex v", re.MULTILINE)
 
 EFFORT_SUFFIX = ".effort.json"
 
@@ -629,8 +633,16 @@ def _effort_items(results: list[PassResult]) -> list[str]:
             items.append(f"p{result.index} not measured (codex-text log; the effort "
                          "counters read agy stream-json only)")
             continue
-        line = (f"p{result.index} tools={effort['tools']} ok={effort['ok']} "
-                f"failed={effort['failed']} thinking={effort['thinking']}")
+        if effort.get("shape") == "grok-truncated":
+            items.append(f"p{result.index} not measured (grok log truncated — no end event; "
+                         "counts withheld)")
+            continue
+        if effort.get("shape") == "grok":
+            line = (f"p{result.index} tools={effort['tools']} ok={effort['ok']} "
+                    f"unresolved={effort['unresolved']} thinking={effort['thinking']} format=grok")
+        else:
+            line = (f"p{result.index} tools={effort['tools']} ok={effort['ok']} "
+                    f"failed={effort['failed']} thinking={effort['thinking']}")
         if effort["ok"] <= DELIVERY_FLOOR:
             line += (f" low-evidence (<= the {DELIVERY_FLOOR} calls the report-file "
                      "contract itself costs, so possibly no reads)")
@@ -879,6 +891,10 @@ def combine(results: list[PassResult]) -> tuple[str, str | None]:
             return "UNVERIFIED", f"low_evidence_unmeasurable:p{result.index}"
         if shape == "empty":
             return "UNVERIFIED", f"low_evidence:p{result.index}"
+        if shape == "grok-truncated":
+            return "UNVERIFIED", f"low_evidence_unmeasurable:p{result.index}"
+        if shape not in ("parsed", "grok"):
+            return "UNVERIFIED", f"shape_unrouted:p{result.index}"
         if result.effort.get("ok", 0) <= DELIVERY_FLOOR:
             return "UNVERIFIED", f"low_evidence:p{result.index}"
 

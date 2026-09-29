@@ -581,7 +581,8 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
                     with trace.open("a", encoding="utf-8") as trace_f:
                         trace_f.write(json.dumps(row) + "\\n")
                     fcntl.flock(lock_f, fcntl.LOCK_UN)
-            record(kind, argv)
+            log = argv[argv.index("--log") + 1] if "--log" in argv else ""
+            record(kind, argv, log_existed=bool(log and Path(log).exists()))
             PY
               local expected="${HMAD_CMD_EXEC_SYNC_STARTS:-0}"
               if [ "$expected" -gt 0 ]; then
@@ -604,7 +605,7 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
             PY
               fi
               /opt/anaconda3/bin/python3.11 - "$trace" cmd_exec_exit "${HMAD_STUB_AGY_RC:-0}" "$@" <<'PY'
-            import json, fcntl, sys
+            import json, fcntl, os, sys
             from pathlib import Path
             trace = Path(sys.argv[1])
             kind = sys.argv[2]
@@ -630,7 +631,12 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
             if out:
                 Path(out).write_text("# Audit\\n\\n## Must-fix\\nNone\\n\\n## Should-fix\\nNone\\n", encoding="utf-8")
             if log:
-                Path(log).write_text('{"event":"result"}\\n', encoding="utf-8")
+                retry_text = os.environ.get("HMAD_STUB_RETRY_LOG_TEXT")
+                if retry_text is None:
+                    Path(log).write_text('{"event":"result"}\\n', encoding="utf-8")
+                else:
+                    with Path(log).open("a", encoding="utf-8") as stream:
+                        stream.write(retry_text)
             record(kind, argv, rc=rc)
             PY
               return "${HMAD_STUB_AGY_RC:-0}"
@@ -643,7 +649,8 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
     )
     harness.chmod(harness.stat().st_mode | stat.S_IXUSR)
 
-    full_env = dict(os.environ)
+    full_env = {key: value for key, value in os.environ.items()
+                if not key.startswith("CLAUDE") and key != "HPW_AGENT_BACKEND"}
     for key in [k for k in full_env if k.startswith("HMAD_ORCA_")]:
         full_env.pop(key, None)
     for key in (
@@ -673,7 +680,9 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
         ["bash", str(harness), str(lib), str(trace), *function_args],
         capture_output=True,
         text=True,
+        input="",
         env=full_env,
+        timeout=30,
     )
     return result, trace
 
@@ -966,7 +975,9 @@ def test_verb_clears_all_three_channels(tmp_path):
         assert not report.exists(), "stale report must be cleared before dispatch"
         assert not done.exists(), "stale report .done must be cleared before dispatch"
         assert out.exists() and "stale channel" not in out.read_text(encoding="utf-8")
-        assert log.read_text(encoding="utf-8").startswith("stale channel\n"), "--log is deliberately not cleared"
+        assert log.exists() and "stale channel" not in log.read_text(encoding="utf-8"), (
+            "the new pass must replace stale log evidence"
+        )
         assert len(read_jsonl(assemble_calls)) == 1, "assembly must run once for one pass"
         cycle_argv = read_jsonl(cycle_calls)[0]
         assert "--grace" in cycle_argv and cycle_argv[cycle_argv.index("--grace") + 1] == "13"

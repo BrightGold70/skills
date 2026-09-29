@@ -1,0 +1,46 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_cycle_grok.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "a1-grok-truncated-render-dropped",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if effort.get(\"shape\") == \"grok-truncated\":",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_audit_cycle_grok.py::test_effort_items_render_grok_and_grok_truncated"
+    },
+    {
+      "name": "a2-grok-truncated-route-dropped",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if shape == \"grok-truncated\":",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_audit_cycle_grok.py::test_combine_f_trunc_is_unmeasurable"
+    },
+    {
+      "name": "a3-grok-before-banner",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    elif _CODEX_BANNER.search(text[:4096]):",
+      "replace": "    elif _CODEX_BANNER.search(text[:4096]) and scan_grok(text) is None:",
+      "test": "tests/test_h_mad_audit_cycle_grok.py::test_measure_effort_banner_then_f0_is_codex_text"
+    },
+    {
+      "name": "w7a-grok-before-agy-in-effort",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    if counts.get(\"agy_events\", 0) > 0:",
+      "replace": "    if counts.get(\"agy_events\", 0) > 0 and scan_grok(text) is None:",
+      "test": "tests/test_h_mad_audit_cycle_grok.py::test_measure_effort_mixed_agy_f0_is_parsed"
+    }
+  ]
+}

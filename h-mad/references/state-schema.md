@@ -43,6 +43,8 @@ Per-feature state under top-level key `orchestrator_state`. Pre-existing bkit fi
 | `halt_ts` | ISO datetime \| null | When halt occurred. |
 | `last_marker` | string | Last `[H-MAD]` marker emitted. |
 | `substrate` | object \| null | **Optional.** Dispatch environment, written at Phase-5 start from `hmad-dispatch env`: `{"name":"orca","agents":{"codex":"term_…","agy":"term_…"}}`. Additive — records predating it stay valid, and `required` is unchanged. `h_mad_telemetry.py record` copies it onto the run row (J11). |
+| `codex_status` | `available` \| `unavailable` \| `exhausted` \| null | Optional Codex availability declaration; absent/null means available. An unavailable or exhausted status permits a Phase-5 authoring fallback and routes the audit leg. |
+| `fallback_agent` | `grok` \| `claude` \| null | Optional Phase-5 author when Codex is out. Absent/null/`claude` keeps Claude's test-first fallback; `grok` selects Grok and blocks Claude's production writes. `HMAD_CODEX_UNAVAILABLE` does not override `grok`. Audit routing to `--surfaces agy,grok` is orchestrator-enforced, not read automatically by the audit script. |
 
 ## Concurrency rule
 

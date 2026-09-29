@@ -18,7 +18,7 @@
     {
       "name": "null-thinking-crashes-the-scan",
       "file": "scripts/h_mad_review_evidence.py",
-      "find": "                    if isinstance(value, (int, float)) and not isinstance(value, bool):\n                        thinking += int(value)",
+      "find": "                    if (isinstance(value, (int, float)) and not isinstance(value, bool)\n                            and (not isinstance(value, float) or math.isfinite(value))):\n                        thinking += int(value)",
       "replace": "                    thinking += int(value)"
     },
     {

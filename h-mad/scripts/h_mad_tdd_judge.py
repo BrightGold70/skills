@@ -117,6 +117,16 @@ def _active_records(data: dict, path: Path) -> Tuple[Record, ...]:
                  if isinstance(value, dict) and value.get("phase") == "step5")
 
 
+def _fallback_fold(records: Sequence[Record]) -> str:
+    invalid = next((i for i, r in enumerate(records, 1) if r.fallback.startswith("invalid:")), 0)
+    if invalid:
+        return f"invalid:{invalid}"
+    grok = next((i for i, r in enumerate(records, 1) if r.fallback == "grok"), 0)  # M:F2
+    if grok:
+        return f"grok:{grok}"
+    return "none"
+
+
 def read_chain(root: Path, target: Optional[Path]) -> Chain:
     real_root = Path(os.path.realpath(root))
     dirs = [real_root]
@@ -368,7 +378,8 @@ def format_state_line(chain: Chain, root: Path) -> str:
         return f"TDD-STATE: unreadable file={_enc(str(chain.error_file))} error={chain.error}"
     escape = bool(chain.records) and all(r.codex_status in ESCAPE_STATUSES for r in chain.records)  # M:C3
     blocker = next((i for i, r in enumerate(chain.records, 1) if r.codex_status not in ESCAPE_STATUSES), 0)  # M:C5
-    line = f"TDD-STATE: active codex-escape={'yes' if escape else 'no'} blocker={blocker} records={len(chain.records)}"
+    line = (f"TDD-STATE: active codex-escape={'yes' if escape else 'no'} blocker={blocker} "
+            f"records={len(chain.records)} fallback={_fallback_fold(chain.records)}")  # M:F0
     for record in chain.records:
         fallback = record.fallback
         if fallback.startswith("invalid:"):

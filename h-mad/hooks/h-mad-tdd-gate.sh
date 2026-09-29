@@ -82,12 +82,15 @@ _read_state() {
   ESCAPE=${BASH_REMATCH[1]}
   BLOCKER=${BASH_REMATCH[2]}
   RECORDS=${BASH_REMATCH[3]}
-  local word count=0 record=""
+  FALLBACK=${BASH_REMATCH[4]}  # M:F3
+  FALLBACK_POS=${BASH_REMATCH[6]:-0}
+  local word count=0 record="" frecord=""
   set -f
   for word in $SOUT; do
     case "$word" in record=*)
       count=$((count + 1))
       if [ "$count" = "$BLOCKER" ]; then record=${word#record=}; fi
+      if [ "$count" = "$FALLBACK_POS" ]; then frecord=${word#record=}; fi
       ;;
     esac
   done
@@ -99,7 +102,9 @@ _read_state() {
     [ "$BLOCKER" != 0 ] || _refuse judge-error "state blocker mismatch"
   fi
   [ "$BLOCKER" -le "$RECORDS" ] || _refuse judge-error "state blocker out of range"
+  [ "$FALLBACK_POS" -le "$RECORDS" ] || _refuse judge-error "state fallback position out of range"  # M:F4
   BLOCKER_RECORD=$record
+  FALLBACK_RECORD=$frecord
 }
 
 trap _on_exit EXIT  # M:T1
@@ -161,7 +166,7 @@ if [ -n "$ROOT_ABS" ]; then case "$TARGET_PATH" in "$R"/*) IN_ROOT=yes ;; esac; 
 _chain_may_hold_state "$ROOT_ABS" "$TARGET_PATH" || _allow
 
 STATE_UNREADABLE_RE='^TDD-STATE: unreadable file=([^ ]+) error=([A-Za-z_-][A-Za-z0-9_-]*)$'
-STATE_ACTIVE_RE='^TDD-STATE: active codex-escape=(yes|no) blocker=(0|[1-9][0-9]*) records=([1-9][0-9]*)( record=[^ ,]+,[^ ,]+,[^ ,]+,(absent|null|grok|claude|invalid:[^ ,]+))+$'
+STATE_ACTIVE_RE='^TDD-STATE: active codex-escape=(yes|no) blocker=(0|[1-9][0-9]*) records=([1-9][0-9]*) fallback=(none|(grok|invalid):([1-9][0-9]*))( record=[^ ,]+,[^ ,]+,[^ ,]+,(absent|null|grok|claude|invalid:[^ ,]+))+$'
 JUDGE_ALLOW_RE='^TDD-JUDGE: ALLOW kind=red-measured source=(impl-plan|name-map) test=[^ ]+$'
 JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-error) reason=(.+)$'
 
@@ -197,6 +202,28 @@ Dispatch this module to Codex: hmad-dispatch exec codex <promptfile>  (or: send 
 Codex looks available (codex on PATH). If it is out of quota, record it —
   python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $BLOCKER_KEY --set codex_status=exhausted \"$BLOCKER_FILE\"
 then Claude may author the fallback (still test-first). Or export HMAD_CODEX_UNAVAILABLE=1 for a one-off."
+fi
+
+# fallback_agent (FR-2): codex-authorship has already refused every case where codex is available.
+if [ "$FALLBACK" != none ]; then
+  FB_KEY=$(_pct_decode "${FALLBACK_RECORD%%,*}")
+  FB_FILE=${FALLBACK_RECORD#*,}; FB_FILE=${FB_FILE#*,}; FB_FILE=$(_pct_decode "${FB_FILE%%,*}")
+  FB_TAG=${FALLBACK_RECORD##*,}
+  case "$FALLBACK" in
+    grok:*)    [ "$FB_TAG" = grok ] ;;
+    invalid:*) [ "${FB_TAG#invalid:}" != "$FB_TAG" ] ;;
+  esac || _refuse judge-error "state fallback=$FALLBACK disagrees with its record's tag $FB_TAG"  # M:F1
+  case "$FALLBACK" in
+    grok:*)
+      _refuse fallback-grok "fallback_agent=grok — Phase 5 is authored by grok while codex is out, not by Claude.
+Dispatch this module to grok: hmad-dispatch exec grok <promptfile>  (stage it with h_mad_assemble_tdd.py --agent grok).
+HMAD_CODEX_UNAVAILABLE does not override fallback_agent=grok. For a one-off Claude escape, record it —
+  python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $FB_KEY --set fallback_agent=claude \"$FB_FILE\"" ;;
+    invalid:*)
+      FB_VALUE=$(_pct_decode "${FB_TAG#invalid:}")
+      _refuse fallback-invalid "fallback_agent=$FB_VALUE is not valid (valid: grok|claude) — refusing the write, fail-closed.
+  Fix it: python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $FB_KEY --set fallback_agent=grok|claude|null \"$FB_FILE\"" ;;
+  esac
 fi
 
 JOUT=$(python3 "$JUDGE" judge --root "$ROOT_ABS" --target "$TARGET_PATH" 2>/dev/null; printf 'rc=%s' "$?")  # M:W2

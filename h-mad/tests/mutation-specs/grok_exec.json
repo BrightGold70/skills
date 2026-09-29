@@ -1,0 +1,163 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_grok_readers.py",
+    "tests/test_hmad_dispatch_exec_grok.py",
+    "tests/test_hmad_dispatch_progress_grok.py",
+    "tests/test_hmad_dispatch_exec.py",
+    "tests/test_hmad_dispatch_audit_cycle.py",
+    "tests/test_hmad_dispatch_audit_cycle_grok.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "p1-usage-not-a-closer",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "or $e.type == \"usage\" or $e.type == \"end\")",
+      "replace": "or $e.type == \"end\")",
+      "test": "tests/test_hmad_dispatch_grok_readers.py::test_grok_final_message_per_closer"
+    },
+    {
+      "name": "p2-tool-call-not-a-closer",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "elif ($e.type == \"tool_call\" or $e.type == \"tool_call_update\"",
+      "replace": "elif ($e.type == \"tool_call_update\"",
+      "test": "tests/test_hmad_dispatch_grok_readers.py::test_grok_final_message_per_closer"
+    },
+    {
+      "name": "p3-tool-call-update-not-a-closer",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "elif ($e.type == \"tool_call\" or $e.type == \"tool_call_update\"",
+      "replace": "elif ($e.type == \"tool_call\"",
+      "test": "tests/test_hmad_dispatch_grok_readers.py::test_grok_final_message_per_closer"
+    },
+    {
+      "name": "p4-thought-appended",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "if $e.type == \"text\" then .cur +=",
+      "replace": "if ($e.type == \"text\" or $e.type == \"thought\") then .cur +=",
+      "test": "tests/test_hmad_dispatch_grok_readers.py::test_grok_final_message_ignores_thought_decoy"
+    },
+    {
+      "name": "p5-region-unscoped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "tail -n \"+$(( pre + 1 ))\"",
+      "replace": "tail -n +1",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_reads_only_its_own_region"
+    },
+    {
+      "name": "p6-always-complete",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "as $_ (\"truncated\"; \"complete\")",
+      "replace": "as $_ (\"complete\"; \"complete\")",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_truncated_recovers_the_verdict"
+    },
+    {
+      "name": "p7-last-tool-guard-dropped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "| if .seen | not then empty",
+      "replace": "| if false then empty",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_omits_the_last_tool_line_without_tool_calls"
+    },
+    {
+      "name": "p8-counts-seen-not-completed",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": " and $e.status == \"completed\"",
+      "replace": "",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_counts_completed_not_seen_ids"
+    },
+    {
+      "name": "p9-jq-failure-reads-truncated",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    *) echo jqfail ;;",
+      "replace": "    *) echo truncated ;;",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_with_failing_jq_is_not_parsed"
+    },
+    {
+      "name": "l1-banner-step-skipped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "elif _codex_banner_in_head \"$log\"",
+      "replace": "elif false",
+      "test": "tests/test_hmad_dispatch_progress_grok.py::test_progress_banner_then_f0_is_codex_text"
+    },
+    {
+      "name": "l2-fallback-first-key-only",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "\\{.*\\\"type\\\"",
+      "replace": "\\{[[:space:]]*\\\"type\\\"",
+      "test": "tests/test_hmad_dispatch_progress_grok.py::test_progress_key_order_line_on_the_fallback_route"
+    },
+    {
+      "name": "l3-depth-bound-65",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "_GROK_MAX_DEPTH=64",
+      "replace": "_GROK_MAX_DEPTH=65",
+      "test": "tests/test_hmad_dispatch_progress_grok.py::test_progress_depth_boundary"
+    },
+    {
+      "name": "l4-depth-filter-dropped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "| select(_grok_over(0) | not)",
+      "replace": "",
+      "test": "tests/test_hmad_dispatch_progress_grok.py::test_progress_depth_boundary"
+    },
+    {
+      "name": "l5-banner-window-8192",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "head -c 4096",
+      "replace": "head -c 8192",
+      "test": "tests/test_hmad_dispatch_progress_grok.py::test_window_edge_log_is_grok_ndjson"
+    },
+    {
+      "name": "w1-grok-arm-for-every-agent",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ \"$agent\" = grok ]; then\n    # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:",
+      "replace": "  if true; then\n    # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_exec_runs_headless_with_the_right_flags"
+    },
+    {
+      "name": "w2-scrub-reaches-codex",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "\"$wait_secs\" codex \"${args[@]}\"",
+      "replace": "\"$wait_secs\" env \"${child_env[@]}\" codex \"${args[@]}\"",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_codex_and_agy_keep_claude_env"
+    },
+    {
+      "name": "w3a-segmenter-for-agy",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "resp=\"$(_agy_ndjson_response",
+      "replace": "resp=\"$(_grok_final_message",
+      "test": "tests/test_hmad_dispatch_exec.py::test_agy_exec_stdout_is_the_response"
+    },
+    {
+      "name": "w5-grok-checked-before-agy",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if grep -aqE '^[[:space:]]*\\{[[:space:]]*\"event\"",
+      "replace": "  _grok_log_has_events \"$log\" && { printf 'grok-ndjson'; return 0; }\n  if grep -aqE '^[[:space:]]*\\{[[:space:]]*\"event\"",
+      "test": "tests/test_hmad_dispatch_progress_grok.py::test_progress_agy_init_plus_f0_is_agy_ndjson"
+    },
+    {
+      "name": "w8-every-pass-is-grok",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "_cmd_exec \"${agent[$i]}\"",
+      "replace": "_cmd_exec grok",
+      "test": "tests/test_hmad_dispatch_audit_cycle.py::test_verb_two_distinct_dispatches"
+    },
+    {
+      "name": "d2-audit-cycle-log-clear-dropped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\"; do",
+      "replace": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\"; do",
+      "test": "tests/test_hmad_dispatch_audit_cycle_grok.py::test_audit_cycle_clears_stale_grok_log_before_truncated_retry"
+    }
+  ]
+}

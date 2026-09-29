@@ -885,7 +885,7 @@ _cmd_verify() {
   return 1
 }
 
-_cmd_resolved_model() {  # <codex|agy> [--log <f>] — what model actually ran
+_cmd_resolved_model() {  # <codex|agy|grok> [--log <f>] — what model actually ran
   # With nothing pinned, `exec` inherits each agent's own configuration, so the
   # resolved model is the only evidence of what a 5d/5e dispatch ran — and a model
   # that cannot execute a tool still returns a well-formed STATUS: BLOCKED. The
@@ -2045,8 +2045,124 @@ _agy_last_step() {  # <log> <pre_lines> -> "N step_update events; last tool: <na
       end' 2>/dev/null || true
 }
 
+_GROK_TYPES_RE='thought|text|available_commands|tool_call|tool_call_update|usage|end'
+_GROK_MAX_DEPTH=64
+_GROK_JQ_DEFS='def _grok_over($d): if $d > $max then true
+    elif (type == "object" or type == "array") then any(.[]; _grok_over($d + 1))
+    else false end;
+  def _grok_obj: (fromjson? // empty) | select(type == "object")
+    | select(_grok_over(0) | not);'
+_GROK_RENDER_PROG='def _grok_flush: if .run == null then .
+    else .out += ["  · " + (if .run == "thought" then "thinking" else "reply text" end)
+                  + " (\(.k) events)"] | .run = null | .k = 0 end;
+  def _grok_emit($l): _grok_flush | .out += [$l];
+  [split("\n")[] | _grok_obj] as $evs
+  | ([$evs[] | select(.type == "tool_call" and (.toolCallId | type) == "string")
+      | {key: .toolCallId, value: (.toolName | tostring)}] | from_entries) as $names
+  | reduce $evs[] as $ev ({out: [], run: null, k: 0};
+      if ($ev.type | type) != "string" then .
+      elif $ev.type == "thought" or $ev.type == "text" then
+        (if .run == $ev.type then . else _grok_flush | .run = $ev.type end) | .k += 1
+      elif $ev.type == "available_commands" then .
+      elif $ev.type == "tool_call_update" and $ev.status == null then .
+      elif $ev.type == "tool_call" then
+        _grok_emit("  · tool \($ev.toolName) \($ev.status)"
+          + (if $ev.rawInput == null then "" else " " + ($ev.rawInput | tojson | .[0:70]) end))
+      elif $ev.type == "tool_call_update" then
+        _grok_emit("  · tool \(($ev.toolCallId | if type == "string" then $names[.] else null end) // "?") \($ev.status)")
+      elif $ev.type == "usage" then
+        _grok_emit("  · turn usage (\($ev.usage.output_tokens) out, \($ev.usage.reasoning_tokens) reasoning)")
+      elif $ev.type == "end" then
+        _grok_emit("  · END stopReason=\($ev.stopReason) turns=\($ev.num_turns)")
+      else _grok_emit("  · \($ev.type)") end)
+  | _grok_flush | .out[]'
+
+_grok_region() {  # <log> <pre_lines> -> the lines after pre_lines; the only place the offset is spelled
+  local log="$1" pre="$2"
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  tail -n "+$(( pre + 1 ))" "$log" 2>/dev/null || true
+}
+
+_grok_final_message() {  # <log> <pre_lines> -> the last non-empty text segment, or nothing
+  local log="$1" pre="$2"
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  _grok_region "$log" "$pre" | jq -nR -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS"'
+    reduce (inputs | _grok_obj) as $e
+      ({last: "", cur: ""};
+       if $e.type == "text" then .cur += (if ($e.data | type) == "string" then $e.data else "" end)
+       elif ($e.type == "tool_call" or $e.type == "tool_call_update"
+             or $e.type == "usage" or $e.type == "end")
+         then (if (.cur | length) > 0 then .last = .cur else . end) | .cur = ""
+       else . end)
+    | if (.cur | length) > 0 then .cur elif (.last | length) > 0 then .last else empty end' \
+    2>/dev/null || true
+}
+
+_grok_region_state() {  # <log> <pre_lines> -> complete | truncated | nojq | jqfail
+  local log="$1" pre="$2" st="" rc=0
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  command -v jq >/dev/null 2>&1 || { echo nojq; return 0; }
+  st="$(_grok_region "$log" "$pre" | jq -nR -r --argjson max "$_GROK_MAX_DEPTH" \
+    "$_GROK_JQ_DEFS"' reduce (inputs | _grok_obj | select(.type == "end")) as $_ ("truncated"; "complete")' \
+    2>/dev/null)" || rc=$?
+  case "$rc:$st" in
+    0:complete|0:truncated) echo "$st" ;;
+    *) echo jqfail ;;
+  esac
+}
+
+_grok_stop_reason() {  # <log> <pre_lines> -> the last end event's stopReason, or nothing
+  local log="$1" pre="$2"
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  _grok_region "$log" "$pre" | jq -nR -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS"'
+    reduce (inputs | _grok_obj | select(.type == "end")) as $e (null; ($e.stopReason // "-") | tostring)
+    | values' 2>/dev/null || true
+}
+
+_grok_last_tool() {  # <log> <pre_lines> -> "N tool calls completed; last tool: <name> <status>" or nothing
+  local log="$1" pre="$2"
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  _grok_region "$log" "$pre" | jq -nR -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS"'
+    reduce (inputs | _grok_obj
+            | select(.type == "tool_call" or .type == "tool_call_update")) as $e
+      ({names: {}, done: {}, seen: false, last: null};
+       (if $e.type == "tool_call" then .seen = true else . end)
+       | (if $e.type == "tool_call" and ($e.toolCallId | type) == "string"
+          then .names[$e.toolCallId] = ($e.toolName // "?") else . end)
+       | (if $e.type == "tool_call_update" and $e.status == "completed"
+             and ($e.toolCallId | type) == "string"
+          then .done[$e.toolCallId] = true else . end)
+       | (if $e.status != null then .last = $e else . end))
+    | if .seen | not then empty
+      else "\(.done | length) tool calls completed; last tool: "
+           + (if .last == null then "none"
+              else (((.last.toolCallId | strings) as $i | .names[$i]) // "?")
+                   + " " + (.last.status | tostring) end)
+      end' 2>/dev/null || true
+}
+
 # Classify a transcript so `progress` renders it with the right lens.
-_exec_log_format() {  # <logfile> -> agy-ndjson | codex-text | empty | missing
+_codex_banner_in_head() {  # <logfile> -> rc 0 iff a line in the first 4096 bytes starts with OpenAI Codex v
+  local h
+  h="$(head -c 4096 "$1" 2>/dev/null)" || h=""
+  case $'\n'"$h" in *$'\n''OpenAI Codex v'*) return 0 ;; esac
+  return 1
+}
+
+_grok_log_has_events() {  # <logfile> -> rc 0 iff a line is a Grok event within the depth limit
+  local log="$1" rc=0
+  if command -v jq >/dev/null 2>&1; then
+    jq -nR -e --argjson max "$_GROK_MAX_DEPTH" --arg re "$_GROK_TYPES_RE" \
+      "$_GROK_JQ_DEFS"' ($re | split("|")) as $t
+      | first(inputs | _grok_obj
+              | select((.type | type) == "string") | .type as $x
+              | select(any($t[]; . == $x))) | true' "$log" >/dev/null 2>&1 || rc=$?
+    case "$rc" in 0) return 0 ;; 4) return 1 ;; esac
+  fi
+  grep -aqE "^[[:space:]]*\{.*\"type\"[[:space:]]*:[[:space:]]*\"(${_GROK_TYPES_RE})\"" "$log" 2>/dev/null
+}
+
+_exec_log_format() {  # <logfile> -> agy-ndjson | codex-text | grok-ndjson | empty | missing
   local log="$1"
   [ -f "$log" ] || { printf 'missing'; return 0; }
   [ -s "$log" ] || { printf 'empty'; return 0; }
@@ -2057,6 +2173,10 @@ _exec_log_format() {  # <logfile> -> agy-ndjson | codex-text | empty | missing
   # exercising the codex branch in a test named for the agy one.
   if grep -aqE '^[[:space:]]*\{[[:space:]]*"event"[[:space:]]*:[[:space:]]*"(init|step_update|result)"' "$log" 2>/dev/null; then
     printf 'agy-ndjson'
+  elif _codex_banner_in_head "$log"; then
+    printf 'codex-text'
+  elif _grok_log_has_events "$log"; then
+    printf 'grok-ndjson'
   else
     printf 'codex-text'
   fi
@@ -2612,6 +2732,19 @@ _render_progress() {  # <logfile> [lines]
           + " turns=" + ((.result.num_turns // 0) | tostring)
           + " " + ((.result.duration_seconds // 0) | floor | tostring) + "s"
         else empty end' 2>/dev/null | tail -n "$n"
+  elif [ "$fmt" = grok-ndjson ]; then
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "  (grok stream — jq not on PATH, cannot render)"
+    else
+      local grender grc=0
+      grender="$(tail -n 400 "$log" 2>/dev/null \
+        | jq -Rs -r --argjson max "$_GROK_MAX_DEPTH" "$_GROK_JQ_DEFS$_GROK_RENDER_PROG")" || grc=$?
+      if [ "$grc" -ne 0 ]; then
+        echo "  (grok stream — jq failed, cannot render)"
+      elif [ -n "$grender" ]; then
+        printf '%s\n' "$grender" | tail -n "$n"
+      fi
+    fi
   else
     # codex text transcript, rendered ONLY past the echoed prompt.
     #
@@ -2734,7 +2867,7 @@ _codex_input_too_large() {  # <log> <pre_lines> -> "max_chars=N actual_chars=M" 
   printf 'max_chars=%s actual_chars=%s' "${maxc:-?}" "${actc:-?}"
 }
 
-_cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox]
+_cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox] [grok: --sandbox <profile>]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
   # to reap: this verb returns the agent's own exit code, no idle poll. The agent's
@@ -2757,8 +2890,8 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   _need "${1:-}" agent || return $?
   _need "${2:-}" promptfile || return $?
   local agent="$1" promptfile="$2"; shift 2
-  case "$agent" in codex|agy) ;;
-    *) echo "hmad-dispatch: exec: unknown agent '$agent' (expected codex|agy)" >&2; return 2 ;;
+  case "$agent" in codex|agy|grok) ;;
+    *) echo "hmad-dispatch: exec: unknown agent '$agent' (expected codex|agy|grok)" >&2; return 2 ;;
   esac
   [ -f "$promptfile" ] || { echo "hmad-dispatch: no such prompt file: $promptfile" >&2; return 2; }
 
@@ -2834,8 +2967,8 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
     --out) out="$2"; shift 2 ;;
     --log) log="$2"; shift 2 ;;             # stream live transcript here for `tail -f`
     --timeout) timeout="$2"; shift 2 ;;
-    --sandbox) sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox
-    --effort) effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort
+    --sandbox) sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox; grok: passed verbatim
+    --effort) effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort; grok: --reasoning-effort
     *) _unknown_opt exec "$1"; return $? ;;
   esac; done
 
@@ -2936,6 +3069,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   case "$agent" in
     codex) : "${HPW_AGENT_BACKEND:=codex}" ;;
     agy)   : "${HPW_AGENT_BACKEND:=gemini}" ;;
+    grok)  ;;   # grok's default is applied in child_env only
   esac
   export HPW_AGENT_BACKEND
   # Dispatch-start marker for the heartbeat's elapsed field. Set before the start
@@ -2943,7 +3077,36 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   _HMAD_EXEC_T0="$SECONDS"
   _exec_stamp start "$agent" "$label" "$cd_dir" || true
   local heartbeat_sec="${HMAD_EXEC_HEARTBEAT_SEC:-120}"
-  if [ "$agent" = codex ]; then
+  local child_env=() _v grok_state="" grok_final=""
+  for _v in $(compgen -e); do case "$_v" in CLAUDE*) child_env+=(-u "$_v") ;; esac; done
+  child_env+=("HPW_AGENT_BACKEND=${HPW_AGENT_BACKEND:-claude}")
+  if [ "$agent" = grok ]; then
+    # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:
+    # the prompt travels as a file, never as an argv element (AC-3.5).
+    local gargs=(--cwd "$cd_dir" --always-approve --output-format streaming-json
+                 --prompt-file "$bounded_prompt")
+    [ -n "$model" ]   && gargs+=(--model "$model")
+    [ -n "$effort" ]  && gargs+=(--reasoning-effort "$effort")
+    [ -n "$sandbox" ] && gargs+=(--sandbox "$sandbox")
+    if [ -f "$log" ]; then pre_lines="$(wc -l < "$log" 2>/dev/null | tr -d " ")"; fi
+    [ -n "$pre_lines" ] || pre_lines=0
+    _HMAD_EXEC_BEAT_LOG="$log"
+    ( cd "$cd_dir" && _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
+      "$wait_secs" env "${child_env[@]}" grok "${gargs[@]}" ) < /dev/null >> "$log" 2>&1 || rc=$?
+    _HMAD_EXEC_BEAT_LOG=""
+    grok_state="$(_grok_region_state "$log" "$pre_lines")"
+    grok_final="$(_grok_final_message "$log" "$pre_lines")"
+    if [ "$grok_state" = complete ] && [ -n "$grok_final" ]; then
+      verdict="$grok_final"
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$grok_final" | _write_out_atomic "$out"
+      printf '%s\n' "$grok_final"
+      echo "hmad-dispatch: exec: grok stopReason=$(_grok_stop_reason "$log" "$pre_lines")" >&2
+      [ -n "$auto_log" ] && _render_progress "$log" 40 >&2 || true
+      [ -n "$auto_log" ] && rm -f "$log"
+    else
+      final_empty=1
+    fi
+  elif [ "$agent" = codex ]; then
     local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || { rm -f "$bounded_prompt"; return 1; }
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
                 --output-last-message "$last" --skip-git-repo-check)
@@ -2978,7 +3141,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       final_empty=1
     fi
     rm -f "$last"
-  else
+  elif [ "$agent" = agy ]; then
     # agy `--print` prints ONLY the response to stdout (verified), so no last-message
     # file. Headless needs --dangerously-skip-permissions or a tool request blocks
     # until the print timeout; agy is already launched that way in panes. cwd is agy's
@@ -3107,7 +3270,17 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       last_step="$(_agy_last_step "$log" "$pre_lines")"
       [ -n "$last_step" ] && echo "hmad-dispatch: exec: last step reached — ${last_step}" >&2
     fi
-    local recovered
+    if [ "$agent" = grok ]; then
+      case "$grok_state" in
+        truncated) echo "hmad-dispatch: exec: TRUNCATED — no end event in this dispatch's grok stream" >&2 ;;
+        nojq)      echo "hmad-dispatch: exec: grok stream not parsed — jq not on PATH" >&2 ;;
+        jqfail)    echo "hmad-dispatch: exec: grok stream not parsed — jq failed" >&2 ;;
+      esac
+      local grok_last
+      grok_last="$(_grok_last_tool "$log" "$pre_lines")"
+      [ -n "$grok_last" ] && echo "hmad-dispatch: exec: last step reached — ${grok_last}" >&2
+    fi
+    local recovered=""
     local echo_expected=0
     [ "$agent" = codex ] && echo_expected=1
     if [ "$agent" = agy ]; then
@@ -3132,7 +3305,13 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       # `exec agy` recovery has always used and it costs nothing to keep behind
       # the structured path, so the change is additive rather than a swap.
       [ -n "$recovered" ] || recovered="$(_verdict_after_boundary "$log" "$boundary" 0 "$pre_lines")"
-    else
+    elif [ "$agent" = grok ]; then
+      # A grok log is recovered only through its structured stream.
+      recovered="$grok_final"
+      if [ -n "$recovered" ] && ! _recovered_has_verdict "$recovered"; then
+        recovered=""
+      fi
+    elif [ "$agent" = codex ]; then
       recovered="$(_verdict_after_boundary "$log" "$boundary" "$echo_expected")"
     fi
     if [ -n "$recovered" ]; then
@@ -3181,7 +3360,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   fi
 
   _exec_stamp exit "$agent" "$label" "$cd_dir" "$rc" "${verdict:-no-verdict}" || true
-  _cmd_notify "$agent exec" "rc=$rc verdict=${verdict:-no-verdict}" || true
+  _cmd_notify "$agent exec" "rc=$rc verdict=${verdict:-no-verdict}" 2>/dev/null || true
 
   # A 124 says the WATCHDOG killed the child, not that the work is missing (#22).
   #
@@ -3271,8 +3450,8 @@ _cmd_audit_cycle() {
       return 2; }
     local _s
     for _s in "${_surf[@]}"; do
-      case "$_s" in agy|codex) ;;
-        *) echo "hmad-dispatch: audit-cycle: --surfaces: unknown agent '$_s' (agy|codex)" >&2
+      case "$_s" in agy|codex|grok) ;;
+        *) echo "hmad-dispatch: audit-cycle: --surfaces: unknown agent '$_s' (agy|codex|grok)" >&2
            return 2 ;;
       esac
     done
@@ -3316,8 +3495,8 @@ _cmd_audit_cycle() {
 
   i=1
   while [ "$i" -le "$passes" ]; do
-    rm -f "${report[$i]}" "${report[$i]}.done" "${out[$i]}" || true
-    for p in "${report[$i]}" "${report[$i]}.done" "${out[$i]}"; do
+    rm -f "${report[$i]}" "${report[$i]}.done" "${out[$i]}" "${log[$i]}" || true
+    for p in "${report[$i]}" "${report[$i]}.done" "${out[$i]}" "${log[$i]}"; do
       [ ! -e "$p" ] || { printf 'ERROR: channel not cleared: %s\n' "$p" >&2; exit 3; }
     done
     rm -f "${prompt[$i]}" "${asm[$i]}" || true

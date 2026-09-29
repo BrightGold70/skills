@@ -1,0 +1,102 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_gate_fallback_agent.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "g1-block-grok-falls-through",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "    grok:*)\n      _refuse fallback-grok",
+      "replace": "    grok:*) ;;\n    __never__)\n      _refuse fallback-grok",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_gate_matrix"
+    },
+    {
+      "name": "g2-env-bypasses-block-grok",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "      _refuse fallback-grok",
+      "replace": "      [ -n \"${HMAD_CODEX_UNAVAILABLE:-}\" ] || _refuse fallback-grok",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_gate_matrix"
+    },
+    {
+      "name": "g3-reads-another-feature",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "path, _fallback_tag(value))",
+      "replace": "path, _fallback_tag(next(iter(states.values()))))",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_gate_matrix"
+    },
+    {
+      "name": "g4-block-invalid-falls-through",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "    invalid:*)\n      FB_VALUE",
+      "replace": "    invalid:*) ;;\n    __never__)\n      FB_VALUE",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_invalid_class_blocks_each_value_alone"
+    },
+    {
+      "name": "g5-string-null-collapses",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        if value in (\"grok\", \"claude\"):",
+      "replace": "        if value in (\"grok\", \"claude\", \"null\"):",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_invalid_class_blocks_each_value_alone"
+    },
+    {
+      "name": "g6-falsy-reads-as-absent",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if \"fallback_agent\" not in state:",
+      "replace": "    if not state.get(\"fallback_agent\"):",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_invalid_class_blocks_each_value_alone"
+    },
+    {
+      "name": "g7-invalid-never-governs",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if invalid:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_fold_invalid_record_governs_over_grok"
+    },
+    {
+      "name": "g8-fold-reads-the-first-record-only",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    grok = next((i for i, r in enumerate(records, 1) if r.fallback == \"grok\"), 0)  # M:F2",
+      "replace": "    grok = 1 if records[0].fallback == \"grok\" else 0  # M:F2",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_second_active_record_holding_grok_blocks"
+    },
+    {
+      "name": "g9-fallback-position-unchecked",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  [ \"$FALLBACK_POS\" -le \"$RECORDS\" ] || _refuse judge-error \"state fallback position out of range\"  # M:F4",
+      "replace": "  :  # M:F4",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_state_stub_fallback_position_out_of_range_is_judge_error"
+    },
+    {
+      "name": "g10-fallback-field-optional",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": " fallback=(none|(grok|invalid):([1-9][0-9]*))(",
+      "replace": "( fallback=(none|(grok|invalid):([1-9][0-9]*)))?(",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_state_stub_fallback_field_is_judge_error"
+    },
+    {
+      "name": "g11-grok-fold-tag-unchecked",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "    grok:*)    [ \"$FB_TAG\" = grok ] ;;",
+      "replace": "    grok:*)    true ;;",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_state_stub_grok_fold_naming_a_non_grok_record_is_judge_error"
+    },
+    {
+      "name": "g12-invalid-fold-tag-unchecked",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "    invalid:*) [ \"${FB_TAG#invalid:}\" != \"$FB_TAG\" ] ;;",
+      "replace": "    invalid:*) true ;;",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_state_stub_invalid_fold_naming_a_valid_record_is_judge_error"
+    }
+  ]
+}

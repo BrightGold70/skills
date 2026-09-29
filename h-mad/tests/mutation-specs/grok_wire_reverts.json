@@ -1,0 +1,123 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_assemble_tdd_agent.py",
+    "tests/test_h_mad_resolved_model_grok.py",
+    "tests/test_h_mad_review_evidence_grok.py",
+    "tests/test_h_mad_audit_cycle_grok.py",
+    "tests/test_hmad_dispatch_exec_grok.py",
+    "tests/test_hmad_dispatch_progress_grok.py",
+    "tests/test_hmad_dispatch_audit_cycle_grok.py",
+    "tests/test_h_mad_tdd_gate_fallback_agent.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "wr3-assembler-drops-agent",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        agent=args.agent,",
+      "replace": "",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_agent_grok_block_names_exec_grok_with_1500"
+    },
+    {
+      "name": "wr4-resolver-grok-branch-deleted",
+      "file": "scripts/h_mad_resolved_model.py",
+      "find": "    if a.agent == \"grok\":\n        grok_from_log(a.log)\n        return 0",
+      "replace": "",
+      "test": "tests/test_h_mad_resolved_model_grok.py::test_grok_reads_the_model_from_the_last_end"
+    },
+    {
+      "name": "wr6-cli-never-calls-scan-grok",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "grok = None if codex_banner_in_head(text) else scan_grok(text)",
+      "replace": "grok = None",
+      "test": "tests/test_h_mad_review_evidence_grok.py::test_cli_f0_prints_grok_evidence_pass"
+    },
+    {
+      "name": "wr7-1-effort-never-calls-scan-grok",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        grok = scan_grok(text)",
+      "replace": "        grok = None",
+      "test": "tests/test_h_mad_audit_cycle_grok.py::test_measure_effort_reads_f0_as_grok"
+    },
+    {
+      "name": "wr7-2-grok-truncated-route-deleted",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if shape == \"grok-truncated\":\n            return \"UNVERIFIED\", f\"low_evidence_unmeasurable:p{result.index}\"",
+      "replace": "",
+      "test": "tests/test_h_mad_audit_cycle_grok.py::test_combine_routes_hand_built_grok_truncated_to_unmeasurable"
+    },
+    {
+      "name": "wr9-1-grok-arm-never-entered",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ \"$agent\" = grok ]; then\n    # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:",
+      "replace": "  if false; then\n    # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_argv_carries_prompt_file_and_headless_flags"
+    },
+    {
+      "name": "wr9-2-child-env-scrub-dropped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "\"$wait_secs\" env \"${child_env[@]}\" grok \"${gargs[@]}\"",
+      "replace": "\"$wait_secs\" grok \"${gargs[@]}\"",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_child_env_has_no_claude_names"
+    },
+    {
+      "name": "wr9-3-final-message-never-read",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "grok_final=\"$(_grok_final_message \"$log\" \"$pre_lines\")\"",
+      "replace": "grok_final=\"\"",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_f0_prints_the_final_message"
+    },
+    {
+      "name": "wr9-4-last-tool-never-read",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "grok_last=\"$(_grok_last_tool \"$log\" \"$pre_lines\")\"",
+      "replace": "grok_last=\"\"",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_empty_path_names_the_last_tool"
+    },
+    {
+      "name": "wr10-1-format-never-grok",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  elif _grok_log_has_events \"$log\"; then",
+      "replace": "  elif false; then",
+      "test": "tests/test_hmad_dispatch_progress_grok.py::test_progress_f0_is_grok_ndjson"
+    },
+    {
+      "name": "wr10-2-grok-render-arm-skipped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "elif [ \"$fmt\" = grok-ndjson ]; then",
+      "replace": "elif false; then",
+      "test": "tests/test_hmad_dispatch_progress_grok.py::test_progress_f0_renders_counts_without_delta_text"
+    },
+    {
+      "name": "wr11-surfaces-refuse-grok",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "case \"$_s\" in agy|codex|grok) ;;",
+      "replace": "case \"$_s\" in agy|codex) ;;",
+      "test": "tests/test_hmad_dispatch_audit_cycle_grok.py::test_audit_cycle_dispatches_the_grok_pass_through_exec_grok"
+    },
+    {
+      "name": "wr12-1-state-line-never-folds",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": " fallback={_fallback_fold(chain.records)}\")  # M:F0",
+      "replace": " fallback=none\")  # M:F0",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_format_state_line_emits_the_fallback_fold"
+    },
+    {
+      "name": "wr12-2-gate-never-reads-the-fold",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  FALLBACK=${BASH_REMATCH[4]}  # M:F3",
+      "replace": "  FALLBACK=none  # M:F3",
+      "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_block_grok_reads_the_active_features_fallback_agent"
+    }
+  ]
+}

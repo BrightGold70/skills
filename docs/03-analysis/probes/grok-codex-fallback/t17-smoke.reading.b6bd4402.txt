@@ -1,0 +1,45 @@
+wrapper realpath: /Users/kimhawk/orca/skills-grok-codex-fallback/h-mad/bin/hmad-dispatch
+STATUS: DONE
+hmad-dispatch: exec: grok stopReason=end_turn
+hmad-dispatch: grok exec rc=0
+rc=0
+--- out
+STATUS: DONE
+--- progress
+hmad-dispatch: progress /var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmp.z0tSMi0oXr/smoke.log
+  format: grok-ndjson · lines: 366 · bytes: 570674
+  liveness: LIVE (last write 3s ago)
+  --- last 25 events ---
+  · tool run_terminal_command pending {"command":"orca skills get orchestration 2>/dev/null | head -c 80000"
+  · tool run_terminal_command in_progress
+  · tool run_terminal_command in_progress
+  · tool run_terminal_command completed
+  · thinking (44 events)
+  · turn usage (115 out, 82 reasoning)
+  · tool grep pending {"pattern":"worker_done","path":"/Users/kimhawk/.agents/skills/h-mad",
+  · tool grep completed
+  · thinking (42 events)
+  · turn usage (162 out, 78 reasoning)
+  · tool read_file pending {"target_file":"/Users/kimhawk/.agents/skills/h-mad/references/codex-i
+  · tool read_file pending {"target_file":"/Users/kimhawk/.agents/skills/h-mad/scripts/hmad-dispa
+  · tool read_file completed
+  · tool read_file completed
+  · thinking (45 events)
+  · turn usage (150 out, 98 reasoning)
+  · tool run_terminal_command pending {"command":"env | rg -i 'task|dispatch|orca|hmad' || true; orca orches
+  · tool run_terminal_command in_progress
+  · tool run_terminal_command in_progress
+  · tool run_terminal_command in_progress
+  · tool run_terminal_command completed
+  · thinking (46 events)
+  · reply text (3 events)
+  · turn usage (274 out, 271 reasoning)
+  · END stopReason=end_turn turns=8
+--- resolved-model
+RESOLVED-MODEL agent=grok model=grok-4.7-build effort=- resolved=1 source=/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmp.z0tSMi0oXr/smoke.log
+--- evidence
+EVIDENCE: PASS tools=10 ok=10 unresolved=0 thinking=1018 format=grok stop_reason=end_turn
+--- measure_effort
+{"agy_events": 0, "ok": 10, "readable": true, "shape": "grok", "stop_reason": "end_turn", "thinking": 1018, "tools": 10, "unresolved": 0}
+SMOKE: PASS
+rc=0

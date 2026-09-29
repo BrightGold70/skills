@@ -34,12 +34,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
 
 
 _AGY_EVENTS = frozenset({"init", "step_update", "result"})
+_GROK_TYPES = frozenset({"thought", "text", "available_commands", "tool_call",
+                         "tool_call_update", "usage", "end"})
+GROK_MAX_DEPTH = 64
+CODEX_BANNER_HEAD = 4096
 
 
 # --- codex text transcripts (#27) ---------------------------------------------
@@ -72,6 +77,10 @@ _CODEX_OUTCOME_RE = re.compile(r"^ (succeeded|failed) in \d+(?:\.\d+)?m?s:", re.
 _CODEX_EXEC_RE = re.compile(r"^exec$", re.M)
 
 
+def codex_banner_in_head(text: str) -> bool:
+    return _CODEX_HEADER_RE.search(text[:CODEX_BANNER_HEAD]) is not None
+
+
 def scan_codex_text(log_text: str) -> dict | None:
     """Measure tool activity in a codex TEXT transcript.
 
@@ -96,6 +105,59 @@ def scan_codex_text(log_text: str) -> dict | None:
         "agrees": exec_lines == len(outcomes),
         "complete": complete,
     }
+
+
+def _json_deeper_than(value: object, bound: int) -> bool:
+    stack = [(value, 0)]
+    while stack:
+        node, depth = stack.pop()
+        if depth > bound:
+            return True
+        if isinstance(node, dict):
+            stack.extend((child, depth + 1) for child in node.values())
+        elif isinstance(node, list):
+            stack.extend((child, depth + 1) for child in node)
+    return False
+
+
+def scan_grok(log_text: str) -> dict | None:
+    seen = False
+    tools: set = set()
+    ok: set = set()
+    thinking = 0
+    complete = False
+    stop_reason = None
+    for line in log_text.split("\n"):
+        try:
+            event = json.loads(line)
+        except (ValueError, RecursionError):
+            continue
+        if not isinstance(event, dict):
+            continue
+        if _json_deeper_than(event, GROK_MAX_DEPTH):
+            continue
+        t = event.get("type")
+        if not (isinstance(t, str) and t in _GROK_TYPES):
+            continue
+        seen = True
+        call_id = event.get("toolCallId")
+        if t in ("tool_call", "tool_call_update") and isinstance(call_id, str):
+            tools.add(call_id)
+        if t == "tool_call_update" and event.get("status") == "completed" and isinstance(call_id, str):
+            ok.add(call_id)
+        if t == "usage":
+            usage = event.get("usage")
+            value = usage.get("reasoning_tokens") if isinstance(usage, dict) else None
+            if type(value) in (int, float) and (not isinstance(value, float) or math.isfinite(value)):
+                thinking += int(value)
+        if t == "end":
+            complete = True
+            reason = event.get("stopReason")
+            stop_reason = reason if isinstance(reason, str) else None
+    if not seen:
+        return None
+    return {"tools": len(tools), "ok": len(ok), "unresolved": len(tools) - len(ok),
+            "thinking": thinking, "complete": complete, "stop_reason": stop_reason}
 
 
 def scan(log_text: str) -> dict:
@@ -128,7 +190,7 @@ def scan(log_text: str) -> dict:
             continue
         try:
             event = json.loads(line)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, RecursionError):
             continue
         if not isinstance(event, dict):
             continue
@@ -138,7 +200,8 @@ def scan(log_text: str) -> dict:
         # not wider: a bare `{"step_update": …}` line with no `event` key is what
         # a hand-built fixture emits, never agy, and counting it here while the
         # shell calls the file codex-text would make the two instruments disagree.
-        if event.get("event") in _AGY_EVENTS:
+        event_name = event.get("event")
+        if isinstance(event_name, str) and event_name in _AGY_EVENTS:
             agy_events += 1
 
         result = event.get("result")
@@ -161,7 +224,8 @@ def scan(log_text: str) -> dict:
                     # raises -- which would abort the scan and lose the tool counts
                     # too, turning a reported hollow pass into a cannot-judge.
                     value = usage.get("thinking_tokens")
-                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    if (isinstance(value, (int, float)) and not isinstance(value, bool)
+                            and (not isinstance(value, float) or math.isfinite(value))):
                         thinking += int(value)
             continue
 
@@ -181,7 +245,7 @@ def scan(log_text: str) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("log", help="the dispatch's --log transcript (agy NDJSON)")
+    ap.add_argument("log", help="the dispatch's --log transcript (agy NDJSON or grok streaming-json)")
     args = ap.parse_args(argv)
 
     path = Path(args.log)
@@ -216,6 +280,20 @@ def main(argv: list[str] | None = None) -> int:
         # anyway -- its own output saying `The requested view_file tool is
         # unavailable in this session, so I could not inspect the worktree`. A
         # verdict over a tree the leg never read, and nothing could see it.
+        grok = None if codex_banner_in_head(text) else scan_grok(text)
+        if grok is not None:
+            if not grok["complete"]:
+                print(f"ERROR: {path} is a grok stream with no `end` event (killed, still "
+                      "running, or copied mid-write) — no counts published", file=sys.stderr)
+                print("EVIDENCE: UNREADABLE reason=truncated_no_end")
+                return 2
+            verdict = "PASS" if grok["ok"] >= 1 else "NONE"
+            line = (f"EVIDENCE: {verdict} tools={grok['tools']} ok={grok['ok']} "
+                    f"unresolved={grok['unresolved']} thinking={grok['thinking']} format=grok")
+            if grok["stop_reason"]:
+                line += f" stop_reason={grok['stop_reason']}"
+            print(line)
+            return 0
         codex = scan_codex_text(text)
         if codex is not None:
             if codex["complete"]:
