@@ -54,3 +54,11 @@ every carve-out file reports its stated change and `rest_equals_base=True`.
 `SMOKE: PASS` against grok 1.0.41: `RESOLVED-MODEL agent=grok model=grok-4.7-build`,
 `EVIDENCE: PASS tools=10 ok=10 unresolved=0 thinking=1018 format=grok stop_reason=end_turn`
 (`probes/grok-codex-fallback/t17-smoke.reading.b6bd4402.txt`).
+
+## 5f — wire registry
+
+`verify --base 8ef6009f` (the rebase base): `WIREREG: FAIL registered=40 verified=36 missing=4`.
+All 15 of this feature's records verify. The four missing are `multi-host-runtime` Task 5, Task 6,
+Task 7 (WIRE 1) and Task 7 (WIRE 2), registered on main in `6156a2dc`, whose pins exist only on
+the unmerged mhr branch. Operator decision 2026-09-29: accept and record; they clear when mhr merges
+(last). The 5c sha after the rebase: `4f705707ee083f967c4bcbf2635e67cca4f08faf`. `challenge` is warning-only.
