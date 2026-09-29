@@ -431,6 +431,14 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    `h_mad_cycle_counts.py` as `max(N) - 1` over these `analysis.v<N>.md` files — there is no
    counter. Overwriting one file instead of adding the next `v<N>` silently reports a multi-cycle
    Phase 6 as zero iterate cycles, and erases the record of what each cycle measured.
+
+   **A delegated verifier's report is this analysis.** When a fresh-context verifier writes the
+   gap analysis, save its report as `<feature>.analysis.v<N>.md` — not under a name of its own.
+   grok-codex-fallback and multi-host-runtime saved theirs as `<feature>.gap.v1.md`, which no
+   counter reads, then narrated their 6b cycles inside the unversioned file; both recorded
+   `iterate_cycles=0`. `h_mad_phase7_preconditions.py` now blocks `analysis_unversioned` when no
+   `analysis.v<N>.md` exists, and `iterate_cycles_unrecorded` when state claims more iterate
+   cycles than the files derive.
 7. Parse match rate. If ≥90% AND tests 100%: advance. Else: Phase 6b iterate —
    **unless the shortfall is `design-vs-spec`**, which 6b cannot close. 6b is a
    mechanical fix loop; it cannot decide which of two documents is right, and

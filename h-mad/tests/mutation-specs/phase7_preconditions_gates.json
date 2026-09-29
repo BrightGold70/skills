@@ -38,6 +38,30 @@
       "find": "            if not parked[\"spec_dirs\"]:",
       "replace": "            if False:",
       "test": "tests/test_h_mad_phase7_preconditions.py::TestParkedMutationSpecs::test_no_specs_dir_at_all_is_a_warning_not_a_verdict"
+    },
+    {
+      "name": "an-unversioned-only-analysis-closes-the-feature",
+      "_mechanism": "grok-codex-fallback / multi-host-runtime exactly: only `analysis.md` (plus a `gap.v1.md`) exists, telemetry derives iterate_cycles=0, and the gate closes Phase 7 anyway.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "        if not analysis_artifacts(Path(docs_root), feature):",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestVersionedAnalysis::test_an_unversioned_only_analysis_blocks"
+    },
+    {
+      "name": "state-claiming-more-iterate-cycles-than-the-files-passes",
+      "_mechanism": "v1 written, then each 6b cycle overwrote it in place: existence passes, telemetry records fewer cycles than ran, and nothing says so.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "                    and claimed > derived):",
+      "replace": "                    and False):",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestVersionedAnalysis::test_state_claiming_more_iterate_cycles_than_the_files_show_blocks"
+    },
+    {
+      "name": "no-docs-root-silently-skips-the-versioned-analysis-check",
+      "_mechanism": "'I could not check' reads as a pass: an API caller without docs_root gets no signal that the versioned-analysis gate never ran.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "            \"code\": \"analysis_versions_unverified\",",
+      "replace": "            \"code\": \"pending_specs_unverified\",",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestVersionedAnalysis::test_no_docs_root_is_a_warning_not_a_pass_or_a_verdict"
     }
   ]
 }

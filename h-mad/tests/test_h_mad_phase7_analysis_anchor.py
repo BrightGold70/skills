@@ -65,6 +65,8 @@ def project(root: Path, *, analysis: str | None = PASSING) -> Path:
     state.write_text(json.dumps({"orchestrator_state": {"demo": RECORD}}), encoding="utf-8")
     if analysis is not None:
         (docs / "03-analysis" / "demo.analysis.md").write_text(analysis, encoding="utf-8")
+    # Phase 7 also requires the per-cycle artifact telemetry counts (analysis_unversioned).
+    (docs / "03-analysis" / "demo.analysis.v1.md").write_text(PASSING, encoding="utf-8")
     return state
 
 

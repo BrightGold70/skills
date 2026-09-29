@@ -22,6 +22,7 @@ import re
 import sys
 from pathlib import Path
 
+from h_mad_cycle_counts import analysis_artifacts, iterate_cycles
 from h_mad_telemetry import resolve_docs_root
 
 MATCH_RATE_THRESHOLD = 90.0
@@ -208,6 +209,45 @@ def check(record: dict, analysis_path: Path, spec_dirs: list[Path] | None = None
     # The name that SELECTED the record, when the caller has it: a record whose
     # `feature` field drifted from its key would otherwise skip this gate silently.
     feature = feature or record.get("feature")
+
+    # Telemetry's iterate_cycles is `max(N) - 1` over `<feature>.analysis.v<N>.md`
+    # and reads no counter (SKILL §Telemetry). An analysis kept only as the
+    # unversioned copy records every multi-cycle Phase 6 as zero iterations:
+    # grok-codex-fallback and multi-host-runtime closed that way, their verifier
+    # report saved as `gap.v1.md` and each 6b cycle narrated in one overwritten file.
+    if docs_root is None:
+        warnings.append({
+            "code": "analysis_versions_unverified",
+            "detail": "no docs root given, so the versioned gap analyses were not "
+                      "checked; pass docs_root, or run the CLI, which anchors on the state file.",
+        })
+    elif isinstance(feature, str) and feature:
+        if not analysis_artifacts(Path(docs_root), feature):
+            blockers.append({
+                "code": "analysis_unversioned",
+                "detail": (
+                    f"no {feature}.analysis.v<N>.md under {Path(docs_root) / '03-analysis'} "
+                    "or docs/archive/*/<feature>/. Telemetry derives iterate_cycles from "
+                    "these files (max(N) - 1), so an unversioned-only analysis records "
+                    "zero. Save 6a's analysis as v1 and each 6b cycle as the next v<N> "
+                    "(inline-protocols.md §Phase 6 step 6, §Phase 6b step 3)."
+                ),
+            })
+        else:
+            claimed = record.get("iterate_cycles")
+            derived = iterate_cycles(Path(docs_root), feature)
+            if (isinstance(claimed, int) and not isinstance(claimed, bool)
+                    and claimed > derived):
+                blockers.append({
+                    "code": "iterate_cycles_unrecorded",
+                    "detail": (
+                        f"state records iterate_cycles={claimed} but the versioned "
+                        f"analyses derive {derived}: a 6b cycle overwrote a previous "
+                        "v<N> instead of writing the next one. Telemetry reports the "
+                        "derived count."
+                    ),
+                })
+
     if docs_root is None:
         warnings.append({
             "code": "pending_specs_unverified",

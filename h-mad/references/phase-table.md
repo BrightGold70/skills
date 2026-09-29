@@ -13,8 +13,8 @@
 ## Phase 6 sub-steps
 
 - **6a-prime** — Final architectural review via agy (`references/agy-architectural-reviewer-prompt.md`). Halt on `WITH_FIXES` or `NO` verdict.
-- **6a** — Inline gap analysis (`references/inline-protocols.md §Phase 6`) → `docs/03-analysis/<feature>.analysis.md`. Parse match rate.
-- **6b** — If match rate < 90%, inline iterate (`references/inline-protocols.md §Phase 6b`) — 5-cycle cap. After each cycle, re-run gap analysis. Loop until ≥90% AND 100% test pass. On cap exhaust: halt `step6:iterate_max_cycles`.
+- **6a** — Inline gap analysis (`references/inline-protocols.md §Phase 6`) → `docs/03-analysis/<feature>.analysis.v1.md` plus the latest copy `docs/03-analysis/<feature>.analysis.md`. Parse match rate.
+- **6b** — If match rate < 90%, inline iterate (`references/inline-protocols.md §Phase 6b`) — 5-cycle cap. After each cycle, re-run gap analysis into the next `analysis.v<N>.md` (never overwrite) and refresh the latest copy. Loop until ≥90% AND 100% test pass. On cap exhaust: halt `step6:iterate_max_cycles`.
 
 ## Phase 7 sub-steps
 
