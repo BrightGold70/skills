@@ -37,6 +37,8 @@ import re
 import sys
 from pathlib import Path
 
+from h_mad_host import classify_host
+
 DEFAULT_WINDOW = 1_000_000
 DEFAULT_CEILING = 45.0
 # The RUN ceiling is a different question from the advisor ceiling and deliberately
@@ -134,6 +136,7 @@ def last_context_tokens(transcript: Path) -> int | None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--transcript", help="session JSONL (default: newest for cwd)")
+    ap.add_argument("--host", help="explicit host (claude, codex, agy, grok)")
     ap.add_argument("--cwd", default=os.getcwd(), help="project dir used to find it")
     ap.add_argument(
         "--window",
@@ -150,6 +153,18 @@ def main(argv: list[str] | None = None) -> int:
     # --ceiling still wins in either mode.
     ap.add_argument("--ceiling", type=float, default=None)
     args = ap.parse_args(argv)
+    host_class, host_value = classify_host()
+    if args.host is not None:
+        host_class, host_value = classify_host(explicit_host=args.host)
+    if host_class == "declared":
+        print(f"ERROR: HMAD_HOST={host_value} has no Claude transcript to measure", file=sys.stderr)
+        print(f"CTXBUDGET: UNKNOWN reason=host_unsupported host={host_value}")
+        return 2
+    if host_class == "unknown":
+        print("ERROR: HMAD_HOST is not a known host value", file=sys.stderr)
+        shown = host_value if re.fullmatch(r"[A-Za-z0-9._-]+", host_value) else json.dumps(host_value)
+        print(f"CTXBUDGET: UNKNOWN reason=unknown_host host={shown}")
+        return 2
     ceiling = args.ceiling
     if ceiling is None:
         ceiling = RUN_CEILING if args.mode == "run" else DEFAULT_CEILING

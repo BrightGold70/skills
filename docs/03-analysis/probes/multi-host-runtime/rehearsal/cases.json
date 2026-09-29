@@ -1,0 +1,759 @@
+[
+  {
+    "id": "codex-R1",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R1.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "codex-R2",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R2.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R3",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R3.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "codex-R4",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R4.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "codex-R6-test",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R6-test.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R6-echo",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R6-echo.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R6-grep",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R6-grep.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R6-ls",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R6-ls.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R7-sed",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R7-sed.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "codex-R7-grep",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R7-grep.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "codex-R8",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R8.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "codex-R9",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R9.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "codex-R10",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R10.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R11",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R11.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "codex-R12-absent",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R12-absent.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=codex"
+  },
+  {
+    "id": "codex-R12-wrong",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R12-wrong.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=codex"
+  },
+  {
+    "id": "codex-R13-error",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R13-error.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R13-empty",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R13-empty.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R13-skill-error",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R13-skill-error.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "codex-R14-a",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R14-a.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R14-b",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R14-b.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R14-c",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R14-c.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R14-d",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R14-d.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R14-e",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R14-e.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R14-f",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R14-f.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "codex-R14-g",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R14-g.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "codex-R14-h",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R14-h.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "codex-R15",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-R15.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 codex input shape unobserved"
+  },
+  {
+    "id": "agy-R1",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R1.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R2",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R2.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R3",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R3.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "agy-R4",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R4.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R6-test",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R6-test.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R6-echo",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R6-echo.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R6-grep",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R6-grep.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R6-ls",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R6-ls.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R7-sed",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R7-sed.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R7-grep",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R7-grep.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R8",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R8.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "agy-R9",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R9.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R10",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R10.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R11",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R11.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "agy-R12-absent",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R12-absent.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=agy"
+  },
+  {
+    "id": "agy-R12-wrong",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R12-wrong.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=agy"
+  },
+  {
+    "id": "agy-R13-error",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R13-error.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R13-empty",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R13-empty.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R13-skill-error",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R13-skill-error.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "agy-R14-a",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R14-a.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R14-b",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R14-b.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R14-c",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R14-c.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R14-d",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R14-d.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R14-e",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R14-e.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R14-f",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R14-f.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "agy-R14-g",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R14-g.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "agy-R14-h",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R14-h.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "agy-R15",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-R15.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy output shape unobserved"
+  },
+  {
+    "id": "grok-R1",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R1.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "grok-R2",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R2.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R3",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R3.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "grok-R4",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R4.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "grok-R6-test",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R6-test.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R6-echo",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R6-echo.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R6-grep",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R6-grep.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R6-ls",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R6-ls.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R7-sed",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R7-sed.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "grok-R7-grep",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R7-grep.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "grok-R8",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R8.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "grok-R9",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R9.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "grok-R10",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R10.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R11",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R11.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "grok-R12-absent",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R12-absent.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=grok"
+  },
+  {
+    "id": "grok-R12-wrong",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R12-wrong.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=grok"
+  },
+  {
+    "id": "grok-R13-error",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R13-error.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R13-empty",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R13-empty.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R13-skill-error",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R13-skill-error.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "grok-R14-a",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R14-a.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R14-b",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R14-b.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R14-c",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R14-c.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R14-d",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R14-d.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R14-e",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R14-e.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R14-f",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R14-f.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+  },
+  {
+    "id": "grok-R14-g",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R14-g.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "grok-R14-h",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R14-h.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "grok-R15",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R15.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 grok output shape unobserved"
+  },
+  {
+    "id": "grok-R5",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-R5.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 grok did not list h-mad"
+  },
+  {
+    "id": "v112-correct",
+    "mode": "v112",
+    "out": "v112-correct.log",
+    "record": {
+      "last_completed_phase": null,
+      "halt_reason": null
+    },
+    "feature": "multi-host-runtime",
+    "expected": "PASS V-11.2"
+  },
+  {
+    "id": "v112-wrong-reason",
+    "mode": "v112",
+    "out": "v112-wrong-reason.log",
+    "record": {
+      "last_completed_phase": null,
+      "halt_reason": null
+    },
+    "feature": "multi-host-runtime",
+    "expected": "FAIL V-11.2 status line mismatch"
+  },
+  {
+    "id": "v112-nonnull",
+    "mode": "v112",
+    "out": "v112-nonnull.log",
+    "record": {
+      "last_completed_phase": null,
+      "halt_reason": null
+    },
+    "feature": "multi-host-runtime",
+    "expected": "FAIL V-11.2 status line mismatch"
+  },
+  {
+    "id": "v112-two-lines",
+    "mode": "v112",
+    "out": "v112-two-lines.log",
+    "record": {
+      "last_completed_phase": null,
+      "halt_reason": null
+    },
+    "feature": "multi-host-runtime",
+    "expected": "FAIL V-11.2 status line count"
+  },
+  {
+    "id": "replay-grok",
+    "mode": "v111",
+    "host": "grok",
+    "log": "../../grok-codex-fallback/stream-json.2026-09-28.ndjson",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "replay-agy",
+    "mode": "v111",
+    "host": "agy",
+    "log": "../../grok-codex-fallback/plan-audit-v1-p2-agy.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "replay-codex",
+    "mode": "v111",
+    "host": "codex",
+    "log": "../../../../../h-mad/tests/fixtures/codex-text-8-exec.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "codex-output-injection",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-output-injection.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "note": "Design residual: codex output that reproduces a whole event is read as an event."
+  }
+]

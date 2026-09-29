@@ -39,6 +39,7 @@ from h_mad_state_ownership import (  # noqa: E402
     OWNERSHIP_STALE_AFTER_SECONDS,  # noqa: F401  (re-exported: callers import it from here)
     owner_is_live,
 )
+from h_mad_host import classify_host  # noqa: E402
 
 
 def _phase_num(value) -> int:
@@ -88,12 +89,30 @@ def _owned_elsewhere(feat_state: dict, session_id: str | None, now: str | None) 
     return owner_is_live(feat_state.get("owner_heartbeat_ts"), now)
 
 
+CANNOT_JUDGE_WITHOUT_SESSION = "cannot_judge"
+
+
+def _host_verdict(session_id: str | None, host: str | None = None) -> str | None:
+    host_class, _host_value = classify_host()
+    if host is not None:
+        host_class, _host_value = classify_host(explicit_host=host)
+    if host_class == "unknown":
+        return CANNOT_JUDGE_WITHOUT_SESSION
+    if host_class == "claude" or session_id:
+        return None
+    return CANNOT_JUDGE_WITHOUT_SESSION
+
+
 def decide(
     state_file: Path,
     feature: str,
     session_id: str | None = None,
     now: str | None = None,
+    host: str | None = None,
 ) -> str:
+    host_verdict = _host_verdict(session_id, host)
+    if host_verdict is not None:
+        return host_verdict
     if not state_file.is_file():
         return "start_fresh"
     try:
@@ -132,6 +151,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="h-mad resume decision (v2.2)")
     parser.add_argument("--state", required=True, type=Path)
     parser.add_argument("--feature", required=True)
+    parser.add_argument("--host", help="explicit host (claude, codex, agy, grok)")
     parser.add_argument(
         "--session-id",
         help="This session's id. Pass it to get the owned_elsewhere token when "
@@ -139,7 +159,7 @@ def main() -> int:
     )
     parser.add_argument("--now", help="Reference time for staleness (testing)")
     args = parser.parse_args()
-    print(decide(args.state, args.feature, session_id=args.session_id, now=args.now))
+    print(decide(args.state, args.feature, session_id=args.session_id, now=args.now, host=args.host))
     return 0
 
 

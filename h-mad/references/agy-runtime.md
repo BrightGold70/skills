@@ -12,8 +12,8 @@ tool traces, not from renaming Claude paths. The distinction matters: agy's conf
 
 agy discovers global customizations under `~/.gemini/config/` and workspace ones under `.agents/`
 (walking up to the repository root). Set `HMAD_SKILL_ROOT` to the installed package containing this
-reference, resolved from the loaded skill path — typically
-`~/.gemini/config/skills/h-mad`. Run scripts as `python3 "$HMAD_SKILL_ROOT/scripts/<script>.py"`
+reference, resolved from the loaded skill path — the operator-installed link
+`~/.gemini/config/skills/h-mad` (§Install below), when it exists. Run scripts as `python3 "$HMAD_SKILL_ROOT/scripts/<script>.py"`
 and the dispatcher as `"$HMAD_SKILL_ROOT/bin/hmad-dispatch"`. Never derive the package from a
 user-specific checkout.
 
@@ -25,6 +25,8 @@ The project root is `git rev-parse --show-toplevel`. Project state and invariant
 agy even when the package is correctly mounted. Do not run it as a gate here, and do not "fix" it
 by repointing it at a `~/.agy` path — no such directory exists. Validate instead that
 `$HMAD_SKILL_ROOT` contains `SKILL.md`, `scripts/`, `references/`, `hooks/`, and `agents/`.
+Pass `--agy-skills-dir ~/.gemini/config/skills` to check this host's own installed skill root;
+the host-specific command is in §Install.
 
 ## Hooks
 
@@ -83,6 +85,83 @@ under `~/.gemini/config/projects/*.json`; there is no per-project `memory/MEMORY
 `scripts/h_mad_check_memory_index.py` correctly reports that none exists. Do not repoint it at
 `~/.claude/projects` — that is a different host's store, and measuring it from agy would report
 another host's caps as this one's.
+
+## Install
+
+Link both skills from the checkout into agy's skill directory:
+
+```bash
+ln -s /path/to/checkout/h-mad ~/.gemini/config/skills/h-mad
+ln -s /path/to/checkout/handoff ~/.gemini/config/skills/handoff
+```
+
+For either link, an existing non-symlink at either path is an operator decision and is never overwritten.
+
+Check the installed links with:
+
+```bash
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_install_check.py" --agy-skills-dir ~/.gemini/config/skills
+```
+
+## Context budget and claims
+
+Use the explicit host flag for the budget and resume oracle. These commands show this checkout's absolute script path; update it for another installation. The budget check is:
+
+```bash
+python3 "/Users/kimhawk/orca/skills-multi-host-runtime/h-mad/scripts/h_mad_context_budget.py" --host agy
+```
+
+`CTXBUDGET: UNKNOWN reason=host_unsupported` is expected, not an `OK` verdict. The
+80% run ceiling is unenforced on agy; substitute: none. There is no context indicator
+the orchestrator can read from this host.
+
+agy has no documented session-id environment variable. Mint an id once at bootstrap
+in the checkout's git directory, per feature. A second mint prints `SID: NOT_MINTED`:
+the existing file belongs to another or earlier session, so halt for the operator. It is
+never deleted or reused without the operator. Each subsequent command reads the id from
+that file in its own shell invocation. Keep `<feature>` literal here and replace it with
+the active feature name when executing these lines. The resume oracle decides the route
+before any state write; use `--create --claim` only for its `start_fresh` verdict.
+
+```bash
+( set -C; python3 -c 'import uuid; print(uuid.uuid4())' > "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>" ) && echo "SID: MINTED" || echo "SID: NOT_MINTED"
+python3 "/Users/kimhawk/orca/skills-multi-host-runtime/h-mad/scripts/h_mad_resume_decision.py" --host agy --state docs/.bkit-memory.json --feature "<feature>" --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --create --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --beat --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --set current_phase=5 --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --release --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+```
+
+If the id file becomes unreadable, the oracle receives an empty id and returns
+`cannot_judge`; an owner without the file may receive `owned_elsewhere`. An operator
+who deletes or rewrites the file while the session is live can give it another session's
+id or none.
+
+## Construct mapping
+
+The status and mapping below apply to the agy host. Sources identify the observations
+and design references behind each mapping.
+
+| construct | status | mapping | source |
+|---|---|---|---|
+| `subagent-call` | mapped | Use `define_subagent`, then `invoke_subagent` with the agent role and task. | Observed agy `init.tools` in `plan-audit-v1-p2-agy.log`. |
+| `skill-call` | mapped | Load the installed agy skill under `~/.gemini/config/skills`. | agy `skills.md`. |
+| `advisor` | not-applicable | agy has no advisor tool; use `hmad-dispatch exec` for codex\|grok, or `define_subagent` and `invoke_subagent` with review context in the prompt. | Observed agy tools; design D9.3. |
+| `send-message` | not-applicable | `send_message` target semantics are undocumented; dispatch a fresh author with the previous report path. | Observed agy tools; design D9.3. |
+| `hook-event` | mapped | Use `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop`; there is no `SessionStart`. | agy `hooks.md`. |
+| `session-id-env` | not-applicable | agy has no documented session id variable; mint the file id with `uuid.uuid4()` and pass it to the oracle, which may return `owned_elsewhere`. | F13; FR-9 minted-id procedure. |
+| `claude-config-dir` | not-applicable | Claude's settings scope does not apply because agy's config root is `~/.gemini/config`. | agy `hooks.md`. |
+| `claude-md` | mapped | Read workspace rules from `.agents/`. | agy `rules.md`. |
+| `claude-skills-dir` | mapped | Resolve `$HMAD_SKILL_ROOT` from the loaded skill path under `~/.gemini/config/skills/h-mad`. | agy `skills.md`. |
+| `claude-agents-dir` | not-applicable | agy has no file-based agent registry; define the role with `define_subagent`. | Observed agy tools. |
+| `claude-hooks-dir` | not-applicable | agy hooks are configured in `hooks.json`, not in Claude's hook directory. | agy `hooks.md`. |
+| `claude-settings` | not-applicable | agy does not read Claude's settings file; its global hooks live in `~/.gemini/config/hooks.json`. | agy `hooks.md`. |
+| `claude-handoffs-dir` | mapped | Keep the plain handoff file store that every host reads and writes through its shell. | Observed handoff index file. |
+| `claude-projects-store` | not-applicable | agy keeps project records under `~/.gemini/config/projects/*.json`, so Claude's project store is the wrong memory index. | Observed agy project records. |
+| `claude-home-bare` | not-applicable | Claude's home is a different root; agy's configuration lives under `~/.gemini/config`. | agy `hooks.md`. |
+| `session-reset-command` | not-applicable | agy has no documented reset command; start a fresh `agy` session. | agy documentation directory; design D9.3. |
+| `skill-slash-invocation` | mapped | Invoke the installed agy skill by name. | agy `skills.md`. |
 
 ## What does not change
 

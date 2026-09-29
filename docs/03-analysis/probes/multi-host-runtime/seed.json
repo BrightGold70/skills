@@ -1,0 +1,188 @@
+{
+  "$comment": "Frozen copy of the spec seed at 6494b3c; measures BASE_SHA before the registry exists; no test reads this file.",
+  "constructs": [
+    {
+      "id": "subagent-call",
+      "pattern": "\\bAgent\\(|\\bsubagent_type\\b",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code Agent calls and subagent_type arguments."
+    },
+    {
+      "id": "skill-call",
+      "pattern": "\\bSkill\\(",
+      "skills": [
+        "h-mad",
+        "handoff"
+      ],
+      "description": "Claude Code Skill calls."
+    },
+    {
+      "id": "advisor",
+      "pattern": "\\badvisor\\(\\)",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code advisor calls."
+    },
+    {
+      "id": "send-message",
+      "pattern": "\\bSendMessage\\b",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code SendMessage tool references."
+    },
+    {
+      "id": "hook-event",
+      "pattern": "\\b(?:PreToolUse|PostToolUse|PostToolUseFailure|PermissionRequest|SessionStart)\\b|\\bStop(?=-hook\\b)",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code hook event names."
+    },
+    {
+      "id": "task-tools",
+      "pattern": "\\b(?:TaskCreate|TaskUpdate|TaskList|TaskGet|TodoWrite)\\b",
+      "skills": [
+        "handoff"
+      ],
+      "description": "Claude Code task and todo tool names."
+    },
+    {
+      "id": "tool-search",
+      "pattern": "\\bToolSearch\\b",
+      "skills": [
+        "handoff"
+      ],
+      "description": "Claude Code ToolSearch tool references."
+    },
+    {
+      "id": "session-id-env",
+      "pattern": "\\bCLAUDE_CODE_SESSION_ID\\b",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code session ID environment variable."
+    },
+    {
+      "id": "claude-config-dir",
+      "pattern": "\\bCLAUDE_CONFIG_DIR\\b",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code configuration directory environment variable."
+    },
+    {
+      "id": "skill-root-env",
+      "pattern": "\\bCLAUDE_SKILLS_ROOT\\b",
+      "skills": [
+        "handoff"
+      ],
+      "description": "Claude Code skill root environment variable."
+    },
+    {
+      "id": "todo-tools-optin",
+      "pattern": "\\bCLAUDE_CODE_ENABLE_TODO_TOOLS\\b",
+      "skills": [
+        "handoff"
+      ],
+      "description": "Claude Code todo tool opt-in environment variable."
+    },
+    {
+      "id": "claude-md",
+      "pattern": "\\bCLAUDE\\.md\\b",
+      "skills": [
+        "h-mad",
+        "handoff"
+      ],
+      "description": "Claude Code project instruction file."
+    },
+    {
+      "id": "claude-skills-dir",
+      "pattern": "(?:~|\\$HOME|\\$\\{HOME\\})/\\.claude/skills\\b",
+      "skills": [
+        "h-mad",
+        "handoff"
+      ],
+      "description": "Claude Code skills directory."
+    },
+    {
+      "id": "claude-agents-dir",
+      "pattern": "(?:~|\\$HOME|\\$\\{HOME\\})/\\.claude/agents\\b",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code agents directory."
+    },
+    {
+      "id": "claude-hooks-dir",
+      "pattern": "(?:~|\\$HOME|\\$\\{HOME\\})/\\.claude/hooks\\b",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code hooks directory."
+    },
+    {
+      "id": "claude-settings",
+      "pattern": "(?:~|\\$HOME|\\$\\{HOME\\})/\\.claude/settings(?:\\.local)?\\.json",
+      "skills": [
+        "h-mad",
+        "handoff"
+      ],
+      "description": "Claude Code settings files."
+    },
+    {
+      "id": "claude-handoffs-dir",
+      "pattern": "(?:~|\\$HOME|\\$\\{HOME\\})/\\.claude/handoffs\\b",
+      "skills": [
+        "h-mad",
+        "handoff"
+      ],
+      "description": "Claude Code handoffs directory."
+    },
+    {
+      "id": "claude-projects-store",
+      "pattern": "(?:~|\\$HOME|\\$\\{HOME\\})/\\.claude/projects\\b|\\bMEMORY\\.md\\b",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code projects store and memory file."
+    },
+    {
+      "id": "claude-homunculus",
+      "pattern": "(?:~|\\$HOME|\\$\\{HOME\\})/\\.claude/homunculus\\b",
+      "skills": [
+        "handoff"
+      ],
+      "description": "Claude Code homunculus directory."
+    },
+    {
+      "id": "claude-home-bare",
+      "pattern": "(?:~|\\$HOME|\\$\\{HOME\\})/\\.claude\\b(?!/)",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Bare Claude Code home directory."
+    },
+    {
+      "id": "session-reset-command",
+      "pattern": "`/(?:clear|compact)\\b",
+      "skills": [
+        "h-mad",
+        "handoff"
+      ],
+      "description": "Claude Code clear and compact slash commands."
+    },
+    {
+      "id": "skill-slash-invocation",
+      "pattern": "`/(?:h-mad|handoff)\\b",
+      "skills": [
+        "h-mad",
+        "handoff"
+      ],
+      "description": "Claude Code h-mad and handoff slash commands."
+    }
+  ]
+}

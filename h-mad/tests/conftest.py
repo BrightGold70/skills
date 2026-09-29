@@ -99,3 +99,25 @@ def _protect_live_wire_registry():
         "disabled the path-redirection branch in the wire registry writer.",
         pytrace=False,
     )
+
+
+import os
+
+_AMBIENT_HOST_KEYS = ("HPW_AGENT_BACKEND", "HMAD_HOST", "HMAD_CONTEXT_WINDOW")
+
+
+@pytest.fixture
+def hermetic_env():
+    """Build a subprocess environment carrying no ambient Claude or host markers."""
+    def make(**extra: str) -> dict[str, str]:
+        env = {k: v for k, v in os.environ.items()
+               if not k.startswith("CLAUDE") and k not in _AMBIENT_HOST_KEYS}
+        env.update(extra)
+        return env
+    return make
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_host_skill_roots(monkeypatch, tmp_path):
+    monkeypatch.setenv("HMAD_AGENTS_SKILLS_DIR", str(tmp_path / "absent-agents-skills"))
+    monkeypatch.setenv("HMAD_AGY_SKILLS_DIR", str(tmp_path / "absent-agy-skills"))

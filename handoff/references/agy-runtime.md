@@ -9,9 +9,9 @@ from renaming Claude paths. agy's config root is `~/.gemini/config`, **not** `~/
 ## Resolve the skill package
 
 Set `HANDOFF_SKILL_ROOT` to the installed package containing this reference, resolved from the
-loaded skill path — typically `~/.gemini/config/skills/handoff` — never from a user-specific
-checkout. All bundled commands then live under `$HANDOFF_SKILL_ROOT/scripts/`. If the package is
-incomplete, stop and report the missing path.
+loaded skill path — the operator-installed link `~/.gemini/config/skills/handoff`, when it exists —
+never from a user-specific checkout. All bundled commands then live under
+`$HANDOFF_SKILL_ROOT/scripts/`. If the package is incomplete, stop and report the missing path.
 
 Do not use a Claude-specific skill-root variable or home-directory path in agy commands.
 
@@ -52,6 +52,23 @@ Modes, ordering and stop conditions are unchanged from `../SKILL.md`. Two host f
   is host-specific. agy has no per-project auto-memory store (`~/.gemini/config/projects/` holds
   flat JSON records), so do not attempt to mirror a lesson into one, and do not write into
   `~/.claude/projects` — that is a different host's store.
+
+## Construct mapping
+
+| construct | status | mapping | source |
+|---|---|---|---|
+| `skill-call` | mapped | Invoke the installed agy handoff skill by name. | agy `skills.md` |
+| `task-tools` | not-applicable | agy's `manage_task` manages background tasks, not a checklist, so there is no rung 1 task sink. Restore to `.omc/notepad.md` when writable, then an inline checklist. | observed agy tools |
+| `tool-search` | not-applicable | agy supplies its tool list at start and has no todo tool to load; `manage_task` manages background tasks. | observed agy tools: `init.tools` of `plan-audit-v1-p2-agy.log` |
+| `skill-root-env` | mapped | Resolve `HANDOFF_SKILL_ROOT` from the loaded handoff skill path. | agy `skills.md` |
+| `todo-tools-optin` | not-applicable | agy has no todo tool, so there is no opt-in setting to enable. | observed agy tools: `init.tools` of `plan-audit-v1-p2-agy.log` |
+| `claude-md` | mapped | Read workspace rules under `.agents/`. | agy `rules.md` |
+| `claude-skills-dir` | mapped | Load handoff from the installed `~/.gemini/config/skills/handoff` package. | agy `skills.md` |
+| `claude-settings` | not-applicable | agy does not read Claude's settings file; its hooks live in `~/.gemini/config/hooks.json`. | agy `hooks.md` |
+| `claude-handoffs-dir` | mapped | Keep the existing shared handoff file store. | observed shared store index |
+| `session-reset-command` | not-applicable | agy has no documented reset command; start a fresh `agy` session for READ. | agy docs dir |
+| `skill-slash-invocation` | mapped | Invoke the installed agy handoff skill by name. | agy `skills.md` |
+| `claude-homunculus` | mapped | Keep the optional file read when the source path is present. | observed optional store path |
 
 ## Safety invariants
 

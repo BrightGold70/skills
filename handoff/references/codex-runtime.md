@@ -46,6 +46,23 @@ Do not use a Claude-specific skill-root variable or home-directory path in Codex
   liveness oracle, restore only its origin-scoped tasks, stamp the takeover, make the scoped commit,
   acknowledge it, and return to the current session. It does not perform full READ reconciliation.
 
+## Construct mapping
+
+| construct | status | mapping | source |
+|---|---|---|---|
+| `skill-call` | mapped | Use the installed handoff skill named in Codex's Skills instructions; load its `SKILL.md` when invoked. | observed Codex Skills instructions (DP16) |
+| `task-tools` | not-applicable | No current rung 1 task checklist tool is evidenced; `update_plan` remains a lead from older rollouts. Restore to `.omc/notepad.md` when writable, then an inline checklist. | A3; observed Codex 0.142.0 rollouts (DP16) |
+| `tool-search` | not-applicable | No rung 1 todo tool is evidenced, so there is no deferred task tool to load. | A3; Codex 0.157.1 feature list |
+| `skill-root-env` | mapped | Resolve `HANDOFF_SKILL_ROOT` from the loaded handoff `SKILL.md` path. | existing adapter rule; observed Codex Skills instructions (DP16) |
+| `todo-tools-optin` | not-applicable | No rung 1 todo tool is evidenced, so there is no opt-in setting to enable. | A3; Codex 0.157.1 feature list |
+| `claude-md` | mapped | Read `AGENTS.md` for project instructions. | observed Codex rollouts (DP16) |
+| `claude-skills-dir` | mapped | Load handoff from its installed `~/.agents/skills/handoff` package path. | observed Codex Skills instructions (DP16) |
+| `claude-settings` | not-applicable | Codex hooks use a hooks file rather than Claude's settings file. | observed Codex hooks configuration (DP16) |
+| `claude-handoffs-dir` | mapped | Keep the existing shared handoff file store; Codex reads and writes it through the shell. | observed shared store index |
+| `session-reset-command` | not-applicable | No Codex reset command is evidenced; start a fresh `codex exec` session for READ. | Codex 0.157.1 help; observed prompt history (DP16) |
+| `skill-slash-invocation` | mapped | Name the installed skill as `$handoff` or in plain text. | observed Codex Skills instructions (DP16) |
+| `claude-homunculus` | mapped | Keep the optional file read when the source path is present. | observed optional store path |
+
 ## Safety invariants
 
 Keep the source fail-closed rules: never choose a different branch's newest handoff without user

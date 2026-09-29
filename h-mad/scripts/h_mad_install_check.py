@@ -40,7 +40,9 @@ kind of action a preflight must not take.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 DEFAULT_SKILLS_LINK = Path.home() / ".claude" / "skills" / "h-mad"
@@ -51,6 +53,19 @@ CHECKOUT_MARKER = "SKILL.md"
 
 #: Where the hook link must land inside the checkout.
 HOOK_RELPATH = ("hooks", "h-mad-tdd-gate.sh")
+
+AGENTS_SKILLS_ENV = "HMAD_AGENTS_SKILLS_DIR"
+AGY_SKILLS_ENV = "HMAD_AGY_SKILLS_DIR"
+AGY_INSTALLED_NAMES = ("h-mad", "handoff")
+SIBLING_KINDS = ("NOT_SYMLINK", "DANGLING", "WRONG_CHECKOUT")
+
+
+def default_host_roots(environ: Mapping[str, str] | None = None) -> tuple[str, str]:
+    env = os.environ if environ is None else environ
+    home = Path.home()
+    agents = env[AGENTS_SKILLS_ENV] if AGENTS_SKILLS_ENV in env else str(home / ".agents" / "skills")
+    agy = env[AGY_SKILLS_ENV] if AGY_SKILLS_ENV in env else str(home / ".gemini" / "config" / "skills")
+    return agents, agy
 
 
 def _check_skills_link(skills_link: Path) -> tuple[list[str], Path | None]:
@@ -134,7 +149,32 @@ def check_siblings(repo: Path, skills_dir: Path) -> list[str]:
     return issues
 
 
-def check(skills_link: Path, hook_link: Path, repo: Path | None = None) -> list[str]:
+def checkout_skill_names(repo: Path) -> list[str]:
+    return [p.parent.name for p in sorted(Path(repo).glob("*/" + CHECKOUT_MARKER))]
+
+
+def split_agy_root(
+    lines: Iterable[str], skills_dir: Path, names: Iterable[str], installed: Iterable[str]
+) -> tuple[list[str], list[str]]:
+    installed_set = set(installed)
+    issues: list[str] = []
+    details: list[str] = []
+    for line in lines:
+        owner = next(((name, kind) for name in names for kind in SIBLING_KINDS
+                      if line.startswith(f"SIBLING_{kind}:{skills_dir / name} ")), None)
+        if owner is None or owner[0] in installed_set:
+            issues.append(line)
+        else:
+            details.append(f"AGY_SIBLING_COLLISION:{skills_dir / owner[0]} kind={owner[1]}")
+    return issues, details
+
+
+def check(
+    skills_link: Path, hook_link: Path, repo: Path | None = None, *,
+    agents_skills_dir: Path | str | None = None,
+    agy_skills_dir: Path | str | None = None,
+    details: list[str] | None = None,
+) -> list[str]:
     """All issues with the install shape; empty means healthy."""
     skill_issues, checkout = _check_skills_link(skills_link)
     hook_issues, hook_target = _check_hook_link(hook_link)
@@ -159,6 +199,16 @@ def check(skills_link: Path, hook_link: Path, repo: Path | None = None) -> list[
     )
     if sibling_repo is not None:
         issues += check_siblings(sibling_repo, skills_link.parent)
+        if agents_skills_dir is not None:
+            issues += check_siblings(sibling_repo, Path(agents_skills_dir).expanduser())
+        if agy_skills_dir is not None:
+            agy_root = Path(agy_skills_dir).expanduser()
+            agy_issues, agy_details = split_agy_root(
+                check_siblings(sibling_repo, agy_root), agy_root,
+                checkout_skill_names(sibling_repo), AGY_INSTALLED_NAMES)
+            issues += agy_issues
+            if details is not None:
+                details.extend(sorted(agy_details))
 
     return issues
 
@@ -175,6 +225,8 @@ def main() -> int:
         help="checkout whose sibling skills to check; defaults to whatever "
              "--skills-link resolves to",
     )
+    parser.add_argument("--agents-skills-dir", default=None)
+    parser.add_argument("--agy-skills-dir", default=None)
     args = parser.parse_args()
 
     # The one genuine operational error: no path to check, so there is no
@@ -192,10 +244,23 @@ def main() -> int:
         )
         return 2
 
+    default_agents, default_agy = default_host_roots()
+    agents_dir = args.agents_skills_dir if args.agents_skills_dir is not None else default_agents
+    agy_dir = args.agy_skills_dir if args.agy_skills_dir is not None else default_agy
+    if not agents_dir.strip() or not agy_dir.strip():
+        print("ERROR: --agents-skills-dir and --agy-skills-dir must name a path", file=sys.stderr)
+        print("INSTALL: UNREADABLE")
+        print("  nothing was checked, so this is not a verdict about the install — pass a path for each skill root.")
+        return 2
+    details: list[str] = []
+
     issues = check(
         Path(args.skills_link),
         Path(args.hook_link),
         Path(args.repo) if args.repo else None,
+        agents_skills_dir=agents_dir,
+        agy_skills_dir=agy_dir,
+        details=details,
     )
 
     if issues:
@@ -205,6 +270,8 @@ def main() -> int:
     else:
         print("INSTALL: PASS")
         print("OK")
+    for line in details:
+        print(line)
     # Exit 0 on either verdict; the caller reads the token, never `$?`.
     return 0
 
