@@ -99,7 +99,16 @@ def test_pin_file_guard_mutation_is_caught_by_harness(tmp_path: Path) -> None:
     """
     from h_mad_mutation_harness import run_spec
 
-    root = Path(__file__).resolve().parents[2]
+    # A scratch copy, never the live tree: the harness rewrites conftest on disk
+    # for the length of each inner run, and a concurrent pytest in the live tree
+    # would import the mutant. The copy is outside any repo, so the tree lock
+    # falls back to <root>/.h-mad and the HEAD check reads None (never "moved").
+    import shutil
+    live = Path(__file__).resolve().parents[1]
+    root = tmp_path / "tree"
+    for part in ("tests", "scripts"):
+        shutil.copytree(live / part, root / "h-mad" / part,
+                        ignore=shutil.ignore_patterns("__pycache__"))
     spec = tmp_path / "mutations.json"
     spec.write_text(json.dumps({
         "root": str(root),
