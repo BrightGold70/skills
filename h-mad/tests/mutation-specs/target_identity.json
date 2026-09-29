@@ -1,0 +1,62 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_target_identity.py",
+    "tests/test_h_mad_tdd_gate_judge.py",
+    "tests/test_h_mad_codex_tdd_gate_judge.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "TI1",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        return _path_from_fd(fd, path)",
+      "replace": "        return os.path.realpath(path)",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_case_directory_m9_denies"
+    },
+    {
+      "name": "TI2",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "            names = tuple(sorted(matching))",
+      "replace": "            names = (os.path.basename(spelled_target),)",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_hard_link_alias_denies"
+    },
+    {
+      "name": "TI3",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        canonical_root = canonical_directory(spelled_root)",
+      "replace": "        canonical_root = spelled_root",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_symlinked_root_denies"
+    },
+    {
+      "name": "TI4",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        except FileNotFoundError:  # M:TI4\n            try:\n                prefix = canonical_directory(deepest_directory)\n            except OSError:\n                return Identity(canonical_root, \"\", deepest_directory, (), True, 2,\n                                deepest_directory)\n            return Identity(canonical_root, \"\", prefix, (), True, 1, current)",
+      "replace": "        except FileNotFoundError:  # M:TI4\n            absent = True\n            break",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_unresolvable_governed_is_judge_error"
+    },
+    {
+      "name": "TI5",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        except OSError:  # M:TI5\n            try:\n                prefix = canonical_directory(deepest_directory)\n            except OSError:\n                return Identity(canonical_root, \"\", deepest_directory, (), True, 2,\n                                deepest_directory)\n            return Identity(canonical_root, \"\", prefix, (), True, 1, current)",
+      "replace": "        except OSError:  # M:TI5\n            absent = True\n            break",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_unresolvable_governed_is_judge_error"
+    },
+    {
+      "name": "TI6",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        except OSError:\n            return Identity(canonical_root, \"\", current, (), True, 2, current)\n\n    parent = os.path.dirname(referent_path)",
+      "replace": "        except OSError:\n            return Identity(canonical_root, spelled_target, deepest_directory,\n                            (os.path.basename(spelled_target),), False, 0, \"\")\n\n    parent = os.path.dirname(referent_path)",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_unreadable_component_step5"
+    }
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ]
+}

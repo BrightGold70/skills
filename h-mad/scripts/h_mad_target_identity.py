@@ -94,7 +94,8 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
         except OSError:
             return Identity(canonical_root, "", deepest_directory, (), True, 2,
                             deepest_directory)
-        return Identity(canonical_root, spelled_target, prefix,
+        canonical_target = os.path.join(prefix, os.path.relpath(spelled_target, deepest_directory))
+        return Identity(canonical_root, canonical_target, prefix,
                         (os.path.basename(spelled_target),), False, 0, "")
 
     if referent_stat is None:
