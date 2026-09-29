@@ -5,6 +5,7 @@ V-0: READING=E1_DOES_NOT_BLOCK FORM_A=BLOCKS FORM_B=BLOCKS CHOSEN=b E1=present E
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -13,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tdd_gate_support import build_venv, dd7_cells, decision, fake_venv, hook_form, sleeper, write_state
+from tdd_gate_support import assert_case_insensitive, build_venv, dd7_cells, decision, fake_venv, hook_form, sleeper, write_state
 
 
 HOOK = Path(__file__).resolve().parents[1] / "hooks" / "h-mad-tdd-gate.sh"
@@ -98,6 +99,22 @@ def _tree_b(tmp_path: Path, *, judge_line: str = "TDD-JUDGE: DENY kind=judge-err
         f"if verb=='state':\n sys.stdout.write({state_line!r})\n sys.exit({state_rc})\n"
         + (f"Path({str(tree / 'marker')!r}).write_text('reached')\n" if marker else "")
         + f"sys.stdout.write({judge_line!r})\nsys.exit({judge_rc})\n",
+        encoding="utf-8",
+    )
+    identity = tree / "h-mad/scripts/h_mad_target_identity.py"
+    identity.write_text(
+        "import os\n"
+        "def canonicalise(root, target):\n"
+        " path = os.path.normpath(os.path.join(root, target))\n"
+        " return (os.path.realpath(root), os.path.dirname(path), "
+        "os.path.dirname(path), os.path.basename(path))\n"
+        "def emit_canon(record):\n"
+        " root, target, prefix, name = record\n"
+        " print('CANON 1')\n"
+        " for key, value in (('root', root), ('target', target), ('prefix', prefix)):\n"
+        "  print(key + ' ' + value)\n"
+        " print('unresolvable no')\n print('arm 0')\n print('component ')\n"
+        " print('names 1')\n print('name ' + name)\n",
         encoding="utf-8",
     )
     return hook, tree
@@ -449,3 +466,303 @@ def test_root_name_glob_characters_are_literal(tmp_path):
     root.mkdir()
     write_state(root, {HOSTILE_KEY: {"phase": "step5"}})
     _assert(_gate(root, arg="tests/x.py", bin_dir=_bin(tmp_path, codex=True)), "allow")
+
+
+@pytest.mark.parametrize("cell", ["m4", "m5"])
+def test_claude_symlinked_test_dir_denies(tmp_path, cell):
+    root = _root(tmp_path)
+    src = root / "src"
+    src.mkdir()
+    (root / "tests").symlink_to(src, target_is_directory=True)
+    if cell == "m4":
+        _file(root, "src/prod.py")
+    _assert(_gate(root, arg=f"tests/{'prod' if cell == 'm4' else 'newmod'}.py",
+                  bin_dir=_bin(tmp_path)), "deny", "no-test-resolved")
+
+
+def test_claude_dotdot_after_symlink_denies(tmp_path):
+    root = _root(tmp_path)
+    _file(root, "src/prod.py")
+    (root / "tests").symlink_to(root / "src", target_is_directory=True)
+    (root / "src/sub").mkdir()
+    (root / "src/l").symlink_to("sub", target_is_directory=True)
+    _assert(_gate(root, arg="tests/l/../prod.py", bin_dir=_bin(tmp_path)),
+            "deny", "no-test-resolved")
+
+
+def test_claude_symlinked_root_denies(tmp_path):
+    physical = tmp_path / "R/real"
+    _file(physical, "x.py")
+    write_state(physical, {"feat": {"phase": "step5", "codex_status": "exhausted"}})
+    spelled = tmp_path / "R/tests/link"
+    spelled.parent.mkdir()
+    spelled.symlink_to("../real", target_is_directory=True)
+    assert "tests" in spelled.parts and spelled.resolve() == physical
+    b = _bin(tmp_path)
+    _assert(_gate(spelled, arg=str(spelled / "x.py"), bin_dir=b), "deny", "no-test-resolved")
+    _assert(_gate(physical, arg=str(physical / "x.py"), bin_dir=b), "deny", "no-test-resolved")
+
+
+@pytest.mark.parametrize("direction", ["forward", "reverse"])
+def test_claude_case_root_m8_denies(tmp_path, direction):
+    assert_case_insensitive(tmp_path)
+    disk, spelled = ("Case", "case") if direction == "forward" else ("case", "Case")
+    root = tmp_path / disk / "tests/proj"
+    _file(root, "src/prod.py")
+    write_state(root, {"feat": {"phase": "step5", "codex_status": "exhausted"}})
+    target = tmp_path / spelled / "tests/proj/src/prod.py"
+    assert target.exists()
+    _assert(_gate(root, arg=str(target), bin_dir=_bin(tmp_path)), "deny", "no-test-resolved")
+
+
+def test_claude_case_directory_m9_denies(tmp_path):
+    assert_case_insensitive(tmp_path)
+    root = _root(tmp_path)
+    disk = _file(root, "Tests/prod.py")
+    assert (root / "tests/prod.py").samefile(disk)
+    result = _gate(root, arg="tests/prod.py", bin_dir=_bin(tmp_path))
+    _assert(result, "deny", "no-test-resolved")
+
+
+@pytest.mark.parametrize("cell", ["m10", "m11"])
+def test_claude_toward_allow_m10_m11(tmp_path, cell):
+    root = _root(tmp_path)
+    if cell == "m10":
+        _file(root, "fixtures/helper.py")
+        arg = "FIXTURES/helper.py"
+        assert (root / arg).exists()
+    else:
+        _file(root, "tests/helper.py")
+        (root / "src").mkdir()
+        (root / "src/tl").symlink_to("../tests", target_is_directory=True)
+        arg = "src/tl/helper.py"
+    _assert(_gate(root, arg=arg, bin_dir=_bin(tmp_path)), "allow")
+
+
+@pytest.mark.parametrize("shape", ["absent-leaf", "absent-parent"])
+def test_claude_new_file_denies_without_judge_error(tmp_path, shape):
+    root = _root(tmp_path)
+    arg = "src/new.py" if shape == "absent-leaf" else "src/newpkg/mod.py"
+    (root / "src").mkdir()
+    out = _assert(_gate(root, arg=arg, bin_dir=_bin(tmp_path)), "deny")
+    assert out.kind != "judge-error"
+
+
+def test_claude_hard_link_alias_denies(tmp_path):
+    root = _root(tmp_path)
+    production = _file(root, "src/prod.py")
+    alias = root / "src/test_prod.py"
+    os.link(production, alias)
+    assert production.stat().st_ino == alias.stat().st_ino
+    _assert(_gate(root, arg="src/test_prod.py", bin_dir=_bin(tmp_path)),
+            "deny", "no-test-resolved")
+
+
+@pytest.mark.parametrize("name,expected", [("lnk", "deny"), ("tests", "allow"), ("src", "deny")])
+def test_claude_outside_root_symlink_keeps_raw_conjunct(tmp_path, name, expected):
+    root = _root(tmp_path)
+    outside = tmp_path / "out"
+    (outside / "tests").mkdir(parents=True)
+    (outside / "src").mkdir()
+    (outside / "lnk").symlink_to("tests", target_is_directory=True)
+    _assert(_gate(root, arg=str(outside / name / "x.py"), bin_dir=_bin(tmp_path)),
+            expected, "no-test-resolved" if expected == "deny" else "")
+
+
+def test_claude_fold_existing_leaf_denies(tmp_path):
+    root = _root(tmp_path)
+    _file(root, "src/prod.PY")
+    _assert(_gate(root, arg="src/prod.PY", bin_dir=_bin(tmp_path)), "deny", "no-test-resolved")
+
+
+@pytest.mark.parametrize("suffix", ["m3", "pY", "Py"])
+def test_claude_fold_new_leaf_denies(tmp_path, suffix):
+    root = _root(tmp_path)
+    (root / "src").mkdir()
+    ext = "PY" if suffix == "m3" else suffix
+    _assert(_gate(root, arg=f"src/new.{ext}", bin_dir=_bin(tmp_path)), "deny", "no-test-resolved")
+
+
+def test_claude_test_shaped_names_stay_exempt(tmp_path):
+    root = _root(tmp_path)
+    b = _bin(tmp_path)
+    for name in ("test_x.PY", "x_test.pY", "conftest.Py"):
+        _assert(_gate(root, arg=f"src/{name}", bin_dir=b), "allow")
+
+
+def test_claude_trailing_space_is_not_folded(tmp_path):
+    root = _root(tmp_path)
+    _assert(_gate(root, arg="src/prod.py ", bin_dir=_bin(tmp_path)), "allow")
+
+
+def _unresolvable(root: Path, cell: str) -> tuple[str, str]:
+    if cell == "m12":
+        (root / "src").mkdir()
+        (root / "docs/d.md").symlink_to("../src/newprod.py")
+        return "docs/d.md", str(root / "docs/d.md")
+    if cell == "m13-leaf":
+        (root / "src").mkdir()
+        (root / "src/dang.py").symlink_to("nowhere/x.py")
+        return "src/dang.py", str(root / "src/dang.py")
+    if cell == "m13-intermediate":
+        (root / "lnk").symlink_to("nowhere", target_is_directory=True)
+        return "lnk/x.py", str(root / "lnk")
+    (root / "src").mkdir()
+    (root / "src/loopa.py").symlink_to("loopb.py")
+    (root / "src/loopb.py").symlink_to("loopa.py")
+    return "src/loopa.py", str(root / "src/loopa.py")
+
+
+@pytest.mark.parametrize("cell", ["m12", "m13-leaf", "m13-intermediate", "m14"])
+def test_claude_unresolvable_governed_is_judge_error(tmp_path, cell):
+    root = _root(tmp_path)
+    arg, component = _unresolvable(root, cell)
+    out = _assert(_gate(root, arg=arg, bin_dir=_bin(tmp_path)), "deny", "judge-error")
+    assert "arm=1" in out.reason and component in out.reason
+
+
+def test_claude_unresolvable_step3_allows(tmp_path):
+    root = _root(tmp_path, active=False)
+    arg, _ = _unresolvable(root, "m13-leaf")
+    _assert(_gate(root, arg=arg, bin_dir=_bin(tmp_path)), "allow")
+
+
+def _unreadable_referent(root: Path, kind: str) -> tuple[Path, Path]:
+    src = root / "src"
+    src.mkdir()
+    private = root / "private"
+    private.mkdir()
+    sealed = private / "sealed"
+    if kind == "a":
+        sealed.write_text("pass\n")
+    else:
+        sealed.mkdir()
+    target = src / "link.py"
+    target.symlink_to("../private/sealed", target_is_directory=kind == "b")
+    sealed.chmod(0)
+    return target, sealed
+
+
+@pytest.mark.parametrize("kind", ["a", "b"])
+def test_claude_unreadable_component_step5(tmp_path, kind):
+    root = _root(tmp_path)
+    target, sealed = _unreadable_referent(root, kind)
+    try:
+        with pytest.raises(PermissionError):
+            os.open(target, os.O_RDONLY)
+        out = _assert(_gate(root, arg=str(target), bin_dir=_bin(tmp_path)),
+                      "deny", "judge-error")
+        assert "arm=2" in out.reason and str(target) in out.reason
+    finally:
+        sealed.chmod(0o755)
+
+
+@pytest.mark.parametrize("kind", ["a", "b"])
+def test_claude_unreadable_component_step3_allows(tmp_path, kind):
+    root = _root(tmp_path, active=False)
+    target, sealed = _unreadable_referent(root, kind)
+    try:
+        with pytest.raises(PermissionError):
+            os.open(target, os.O_RDONLY)
+        _assert(_gate(root, arg=str(target), bin_dir=_bin(tmp_path)), "allow")
+    finally:
+        sealed.chmod(0o755)
+
+
+@pytest.mark.parametrize("active", [True, False], ids=["active", "inactive"])
+def test_claude_root_open_failure_refuses_only_when_governed(tmp_path, active):
+    root = _root(tmp_path, active=active)
+    b = _bin(tmp_path)
+    root.chmod(0o311)
+    try:
+        with pytest.raises(PermissionError):
+            os.open(root, os.O_RDONLY)
+        out = _assert(_gate(root, arg="src/prod.py", bin_dir=b),
+                      "deny" if active else "allow", "judge-error" if active else "")
+        if active:
+            assert "arm=2" in out.reason and str(root) in out.reason
+    finally:
+        root.chmod(0o755)
+
+
+@pytest.mark.parametrize("variant", [
+    "unknown-key", "missing-key", "second-header", "version-2", "arm-3",
+    "unresolvable-maybe", "names-negative", "count-mismatch", "bad-pct",
+    "directory-with-names", "file-with-zero-names",
+])
+def test_claude_canon_protocol_error_is_judge_error(tmp_path, variant):
+    root = _root(tmp_path)
+    target = _file(root, "src/file.py")
+    if variant == "directory-with-names":
+        target = root / "src/dir.py"
+        target.mkdir()
+        assert target.is_dir()
+    else:
+        assert target.is_file()
+    b = _bin(tmp_path)
+    hook, tree = _tree_b(tmp_path,
+                         judge_line="TDD-JUDGE: ALLOW kind=red-measured source=impl-plan test=x.py")
+    fields = ["CANON 1", f"root {root}", f"target {target.parent}",
+              f"prefix {target.parent}", "unresolvable no", "arm 0",
+              "component ", "names 1", f"name {target.name}"]
+    if variant == "unknown-key":
+        fields.insert(1, "surprise x")
+    elif variant == "missing-key":
+        fields.remove("arm 0")
+    elif variant == "second-header":
+        fields.append("CANON 1")
+    elif variant == "version-2":
+        fields[0] = "CANON 2"
+    elif variant == "arm-3":
+        fields[5] = "arm 3"
+    elif variant == "unresolvable-maybe":
+        fields[4] = "unresolvable maybe"
+    elif variant == "names-negative":
+        fields[7] = "names -1"
+    elif variant == "count-mismatch":
+        fields[7] = "names 2"
+    elif variant == "bad-pct":
+        fields[-1] = "name bad%GG.py"
+    elif variant == "directory-with-names":
+        fields[2] = f"target {target}"
+    else:
+        fields[7] = "names 0"
+        fields.pop()
+    record = "\n".join(fields)
+    (tree / "h-mad/scripts/h_mad_target_identity.py").write_text(
+        "def canonicalise(*args, **kwargs):\n return None\n"
+        f"def emit_canon(record):\n print({record!r})\n", encoding="utf-8")
+    _assert(_gate(root, arg=str(target), bin_dir=b, hook=hook), "deny", "judge-error", hook)
+
+
+def test_claude_gate_is_bash_3_2_clean(tmp_path):
+    patterns = [
+        (r"\b(local|declare|typeset)\s+-[a-zA-Z]*n\b", "local -n _out=$1"),
+        (r"\b(local|declare|typeset)\s+-[a-zA-Z]*A\b", "declare -A m"),
+        (r"\b(declare|typeset)\s+-[a-zA-Z]*g\b", "declare -g X=1"),
+        (r"\b(mapfile|readarray)\b", "mapfile -t a < f"),
+        (r"\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?(,|\^)", "${name,,}"),
+    ]
+    source = HOOK.read_text(encoding="utf-8")
+    for index, (pattern, fixture) in enumerate(patterns):
+        assert re.search(pattern, fixture), f"pattern {index} misses its positive fixture"
+        assert all(not re.search(other, fixture) for j, (other, _) in enumerate(patterns)
+                   if j != index), f"pattern {index} overlaps another fixture"
+        assert not re.search(pattern, source), f"bash 3.2 forbidden construct: {fixture}"
+    root = _root(tmp_path)
+    (root / "src").mkdir()
+    b = _bin(tmp_path)
+    env = {"PATH": f"{b}:/usr/bin:/bin", "HOME": str(Path.home()),
+           "CLAUDE_PROJECT_DIR": str(root)}
+    result = subprocess.run(["/bin/bash", str(HOOK), "src/new.py"], cwd=root, env=env,
+                            stdin=subprocess.DEVNULL, text=True, capture_output=True,
+                            timeout=60, check=False)
+    out = _assert(result, "deny")
+    assert out.kind != "judge-error"
+    assert not any(word in result.stderr for word in
+                   ("invalid option", "bad substitution", "command not found"))
+
+
+def test_claude_single_pwd_p_is_the_h8_walk():
+    lines = [line for line in HOOK.read_text(encoding="utf-8").splitlines() if "pwd -P" in line]
+    assert len(lines) == 1 and "# M:H8" in lines[0]

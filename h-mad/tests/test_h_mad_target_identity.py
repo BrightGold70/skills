@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import importlib
 import os
+import re
+import subprocess
 from pathlib import Path
+from urllib.parse import quote_from_bytes
 
 import pytest
 
@@ -251,3 +254,52 @@ def test_case_insensitive_precondition_is_asserted(tmp_path, monkeypatch, reques
             assert_case_insensitive(tmp_path)
     identity = request.getfixturevalue("identity")
     assert identity.canonical_directory(str(tmp_path))
+
+
+def _bash_function(source: str, name: str) -> str:
+    lines = source.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith(f"{name}() {{")]
+    assert len(starts) == 1, f"missing or duplicated {name} bash function"
+    start = starts[0]
+    if lines[start].rstrip().endswith("}"):
+        return lines[start]
+    ends = [i for i in range(start + 1, len(lines)) if lines[i] == "}"]
+    assert ends, f"unterminated {name} bash function"
+    return "\n".join(lines[start:ends[0] + 1])
+
+
+def test_canon_record_fields_survive_pct_capture(identity, capsys):
+    hook = Path(__file__).resolve().parents[1] / "hooks/h-mad-tdd-gate.sh"
+    source = hook.read_text(encoding="utf-8")
+    functions = "\n".join(_bash_function(source, name) for name in ("_pct_decode", "_pct_capture"))
+    record = identity.Identity("/r\n", "/t\n", "/p\n", ("name\n", "\n\n", "end\x01", "\x01", ""),
+                               False, 0, "component\n")
+    fields = [("root", record.root), ("target", record.target), ("prefix", record.prefix),
+              ("component", record.component)] + [("name", name) for name in record.names]
+    manual = [f"{key} {quote_from_bytes(value.encode('utf-8'), safe='/')}" for key, value in fields]
+    identity.emit_canon(record)
+    emitted = capsys.readouterr().out.splitlines()
+    from_emit = [line for line in emitted if line.startswith(("root ", "target ", "prefix ",
+                                                               "component ", "name "))]
+    assert from_emit == manual, "emit_canon and the manual CANON 1 fields must agree"
+    for lines in (manual, from_emit):
+        for (key, expected), line in zip(fields, lines, strict=True):
+            assert line.startswith(key + " ")
+            encoded = line[len(key) + 1:]
+            script = functions + "\nvalue=\n_pct_capture value \"$1\"\nprintf '%s\\0' \"$value\"\n"
+            result = subprocess.run(["/bin/bash", "-c", script, "--", encoded],
+                                    capture_output=True, check=True, timeout=10)
+            assert result.stdout == expected.encode("utf-8") + b"\0", (key, expected, result.stderr)
+
+
+def test_py_suffixes_match_bash_fold(identity):
+    hook = Path(__file__).resolve().parents[1] / "hooks/h-mad-tdd-gate.sh"
+    source = hook.read_text(encoding="utf-8")
+    fold = _bash_function(source, "_fold_py")
+    suffixes = tuple(dict.fromkeys(re.findall(r"\.(?:py|pY|Py|PY)\b", fold)))
+    assert suffixes == identity.PY_SUFFIXES
+    for marker in ("# M:H6", "*.md|*.yaml", "!= *.py"):
+        site = source.find(marker)
+        assert site >= 0, f"missing per-name classification site {marker}"
+        preceding = source[max(0, site - 300):site]
+        assert "_fold_py" in preceding, f"{marker} must read a folded name"
