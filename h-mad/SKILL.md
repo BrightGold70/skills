@@ -503,16 +503,25 @@ now enforced mechanically, not left to discipline:
   exec codex` (subprocess) or its pane (`send`) — go through Codex's process, **not**
   Claude's Write/Edit tool, so they never reach the hook. A prod write that *does*
   reach the hook is therefore Claude self-implementing, and is refused.
-- The block fires **only when Codex is available** (the `codex` CLI is on PATH and no
-  unavailable declaration is set). That is the answer to "use Codex when quota is
-  enough": the default assumes Codex can author, so Claude cannot.
-- **Falling back is explicit and auditable**, never silent. To let Claude author
-  (e.g. Codex is genuinely out of quota or unreachable), record it:
-  `h_mad_state_write.py --feature <feat> --set codex_status=exhausted <state_file>`
-  (validated enum: `available|unavailable|exhausted`), or export
-  `HMAD_CODEX_UNAVAILABLE=1` for a one-off. Then Claude's writes pass — still under
-  the test-first gate. A false declaration is a visible lie in the state record, not
-  an invisible shortcut.
+- Codex availability is checked first: when the CLI is on PATH and the chain has
+  no unavailable declaration, the hook refuses Claude's production write as
+  `codex-authorship`. Record `codex_status=exhausted` or `unavailable` with
+  `h_mad_state_write.py --feature <feat> --set codex_status=exhausted <state_file>`,
+  or export `HMAD_CODEX_UNAVAILABLE=1` for a one-off outage.
+- When Codex is unavailable, `fallback_agent` selects its author. The gate folds
+  **every** `step5` record on the target's state chain, not just one `ACTIVE`
+  feature: any invalid value blocks as `fallback-invalid`; otherwise any `grok`
+  blocks Claude as `fallback-grok`. The hook emits these kinds in a JSON
+  `permissionDecision: deny` response with exit 0, never an "exit 1" contract.
+  Absent, `null`, or `claude` on all those
+  records retains Claude's test-first fallback. Set a valid value with
+  `h_mad_state_write.py --feature <feat> --set fallback_agent=grok|claude|null <state_file>`.
+  `HMAD_CODEX_UNAVAILABLE` does not override `fallback_agent=grok`; change that
+  recorded value to `claude` for a one-off Claude escape.
+- Codex writes pass `h-mad/hooks/h-mad-codex-tdd-gate.py`. Grok writes pass
+  **no write-time test-first gate**; the RED/GREEN dispatch and independent
+  verification still carry the test-first obligation. A false availability or
+  fallback declaration remains visible in the state record.
 
 Test files, docs, config, and shell are never gated; only production `.py`. The
 gate stands down outside `step5` and disarms at 5g (`phase = null`).
@@ -546,6 +555,11 @@ supported, on their natural side of 5d/5e:
   instead, labelled as such — a config says what will run, never what did. That check matters because a model can be configured that
   **cannot execute a single tool** (`gpt-5.6-luna`, measured): it still writes
   prose, so it comes back as a well-formed `STATUS: BLOCKED`, not as an error.
+- **`exec grok`** — an explicit RED/GREEN implementer fallback when Codex is out
+  and `fallback_agent=grok`. Stage with `h_mad_assemble_tdd.py --agent grok`;
+  its default timeout is 1500 seconds. Grok's GREEN, mutation, wiring, and audit
+  precision are **unmeasured** (D4), so its verdict remains a claim until the
+  independent checks run.
 - **`exec agy`** — the 5e-review (and Phase 3/4/5b audit) dispatch. Runs `agy --print`
   under `--output-format stream-json`, so the transcript is a live NDJSON event stream
   and the wrapper lifts the final response out of the stream's `result` event. A
@@ -1875,10 +1889,14 @@ defect — but a same-surface run now **says so on stderr** instead of looking l
 surface's blind spot, and on one feature the second leg was hollow in 21 of 22 passes while the
 union reported as two.
 
+When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,grok`
+for the independent audit legs (§"Teammate audit leg").
+
 **Which two surfaces — routed by whether codex can run, and by whether this is the document's
 first gate.** First gating cycle of a document, codex available: `codex` + `agy` (or `codex` +
 `doc-auditor` full pass where agy is not dispatched — #77). Codex unavailable (§"Teammate audit
-leg"): `doc-auditor` teammate + `agy`, with the teammate holding codex's leg and **gating**.
+leg"): `grok` + `agy` when `fallback_agent=grok`; otherwise `doc-auditor` teammate + `agy`.
+The stand-in holds codex's leg and **gates**.
 **Revision cycles** (§"Document-audit round cap"): `codex` gates and the `doc-auditor` reviews the
 DIFF (§"Delta self-review", advisory) — the delta review is the second surface, not a second full
 pass. Never two full passes of one surface, and never the teammate full pass *plus* codex on the
@@ -2825,9 +2843,21 @@ fi
 
 ## Teammate audit leg — when codex is unavailable
 
-When the codex leg above cannot run, a fresh-context `doc-auditor` teammate takes its place in the
-union and **gates**. This is the audit-side twin of the Phase-5 authoring fallback, and it keys off
-the **same declaration** — there is no second switch to set or to forget:
+If `codex_status` records Codex unavailable and `fallback_agent=grok`, prefer
+Grok as the independent stand-in: dispatch the audit with
+`h_mad_audit_cycle.py --surfaces agy,grok`. Grok's GREEN, mutation, wiring, and
+audit precision remain **unmeasured** (D4); check its reported evidence against
+source. This audit routing is an orchestrator decision, not a script reading
+`fallback_agent` for you. A codex audit round is still owed when Codex returns.
+Switching the leg from `doc-auditor` to `grok` changes the stamped leg set: the
+exit check reports `legs_changed:` once, starts a new baseline, and needs two
+fresh agreeing cycles with the new set. When `fallback_agent` is absent, `null`,
+or `claude`, the existing teammate path below is unchanged.
+
+On that existing path, when the codex leg above cannot run, a fresh-context
+`doc-auditor` teammate takes its place in the union and **gates**. This is the
+audit-side twin of the Phase-5 authoring fallback; it keys off the same
+`codex_status` declaration:
 
 ```bash
 python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
