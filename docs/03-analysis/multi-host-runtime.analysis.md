@@ -1,5 +1,23 @@
 # Multi-host runtime analysis
 
+## Phase 6 verdict
+
+Match Rate: 97% (49.5 / 51 ACs; fresh-context verifier, `multi-host-runtime.gap.v1.md`). 6a-prime:
+`READY_TO_MERGE` (agy, tools=17; `multi-host-runtime.archreview.v1.md`). 5f after the rebase onto
+`52a78ca8`: `WIREREG: PASS registered=40 verified=40`. Rebased suite: 1 failed (baseline) / 4940 passed.
+The verifier reproduced four defects; operator decision 2026-09-29: fix all four in 6b.
+- 6b cycle 1 (`8cf71e05`): D1 grok adapter now states the merged gate's refusal form; D4 install
+  check expands `~`. Codex's D3 change (an invented `exec_input` log format that real codex logs
+  never match) was discarded by operator decision.
+- 6b cycle 2 (`935ac2f4`): D2 `--host` flag on h_mad_context_budget.py / h_mad_resume_decision.py
+  (outranks `HMAD_HOST`; unknown refused), adapters document it, codex gate allow-list gains
+  `--host` for the budget script only; D3 kept as the design's stated residual and pinned by one
+  rehearsal case (`REHEARSAL: PASS n=93`). Suite 1 failed (baseline) / 4955 passed.
+- Carried: the documented resume call is still denied by the codex gate (script absent from
+  `SAFE_HMAD_SCRIPT_OPTIONS`; `$(cat …)` fails its shell rule) — pre-existing; V-11.1..V-11.5 live
+  runs remain an operator step; replay-agy deviation rated CHANGED/LOW (the design contradicts
+  itself; both verdicts FAIL).
+
 ## Baseline at BASE_SHA
 
 `BASE_SHA=3b5c4388b4f11b7011eacf7aae6f95a6445f433f`, derived as the parent of the `BASELINE: OK` commit on `feature/multi-host-runtime`.
