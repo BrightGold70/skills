@@ -29,7 +29,7 @@
       "file": "scripts/h_mad_target_identity.py",
       "find": "        canonical_root = canonical_directory(spelled_root)",
       "replace": "        canonical_root = spelled_root",
-      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_symlinked_root_denies"
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_symlinked_root_inside_tests_still_denies_production"
     },
     {
       "name": "TI4",

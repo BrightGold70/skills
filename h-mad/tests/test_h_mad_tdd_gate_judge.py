@@ -503,6 +503,18 @@ def test_claude_symlinked_root_denies(tmp_path):
     _assert(_gate(physical, arg=str(physical / "x.py"), bin_dir=b), "deny", "no-test-resolved")
 
 
+def test_claude_symlinked_root_inside_tests_still_denies_production(tmp_path):
+    physical = tmp_path / "tests/real"
+    _file(physical, "x.py")
+    write_state(physical, {"feat": {"phase": "step5", "codex_status": "exhausted"}})
+    spelled = tmp_path / "tests/link"
+    spelled.symlink_to("real", target_is_directory=True)
+    assert spelled.resolve() == physical
+
+    _assert(_gate(spelled, arg=str(spelled / "x.py"), bin_dir=_bin(tmp_path)),
+            "deny", "no-test-resolved")
+
+
 @pytest.mark.parametrize("direction", ["forward", "reverse"])
 def test_claude_case_root_m8_denies(tmp_path, direction):
     assert_case_insensitive(tmp_path)
