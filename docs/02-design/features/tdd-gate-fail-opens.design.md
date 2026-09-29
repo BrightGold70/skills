@@ -6,7 +6,8 @@ Both TDD gates decide a write from one stdlib canonicaliser, `canonicalise`, in 
 `h-mad/scripts/h_mad_target_identity.py`. The Codex gate calls it in-process. The Claude gate
 receives one percent-encoded record from the single `python3` invocation that today computes
 `TARGET_PATH` (`# M:H11`), and that same invocation also replaces the `pwd -P` that computes
-`ROOT_ABS`. The record carries every hard-link name of the leaf, one unresolvable flag for both
+`ROOT_ABS`. The record carries every non-symlink hard-link name of the final referent, taken
+from that referent's parent, one unresolvable flag for both
 FR-3 arms, and the spelled component. Each gate then applies its own exemptions to every name.
 A governed unresolvable target, a governed bad `apply_patch` header, and a judge reap that
 outlives `REAP_GRACE_S` all refuse `judge-error` or `judge-timeout`. The resume oracle is admitted
@@ -39,11 +40,12 @@ h_mad_target_identity.canonicalise(root, target, cwd=None) -> Identity
                         deepest existing directory of the target
                         (fcntl F_GETPATH of an O_RDONLY fd; OSError propagates)
   os.lstat / os.stat    component walk (arm 1: lstat succeeds, stat raises)
-  scandir               only the leaf's canonical parent, and only when the leaf exists
+  scandir               the final referent's canonical parent, only when that referent is a file
   fold_py_suffix        four ASCII suffixes, shared tuple PY_SUFFIXES
 
 Claude hook  h-mad-tdd-gate.sh
   one python3 -c  (# M:H11 stays on this call) -> emit_canon record
+  _pct_capture    the only capture of a percent-decoded CANON field
   _read_canon     the only reader
   _fold_py        the same four literals, applied once per name
   per-name loops  basename case (# M:H6), suffix-allow case, non-.py test
@@ -82,7 +84,8 @@ Rejected placements, each for a reason already visible in the tree:
   predicate. Arm number travels in the reason text.
 - Base64 for the name list. The hook already decodes percent-escapes with `_pct_decode`. A
   base64 decoder would be a second grammar, and a `base64` CLI would be a second process or a
-  macOS/GNU flag split. Percent-encoding carries every directory-entry byte except NUL.
+  macOS/GNU flag split. Percent-encoding carries every directory-entry byte except NUL, by
+`os.fsencode` of the field and then `%HH` of every other byte.
 
 ## Detailed Design
 
@@ -91,17 +94,36 @@ Rejected placements, each for a reason already visible in the tree:
 New module `h-mad/scripts/h_mad_target_identity.py`. Stdlib only (`os`, `fcntl`, `stat`).
 
 `canonical_directory(path: str) -> str` opens `path` with `os.open(path, os.O_RDONLY)`, calls
-`fcntl.fcntl(fd, fcntl.F_GETPATH, bytes(1024))`, decodes, and `rstrip`s trailing NULs. The fd
-is closed on every path. `OSError` propagates, including an absent `F_GETPATH` attribute only
-after the fallback below. When `fcntl.F_GETPATH` is absent, the function returns
-`os.path.realpath(path)` and keeps the spelling realpath produced. That fallback has no test
-in this feature (PD-3: no Linux runner). The residual is a Linux host whose realpath spelling
-disagrees with a future F_GETPATH reading; adding a Linux runner is a spec amendment, and a
-skip is not the stand-in.
+`fcntl.fcntl(fd, fcntl.F_GETPATH, bytes(1024))`, strips trailing NUL bytes, and decodes with
+`os.fsdecode` (the process filesystem error handler, `surrogateescape` on this interpreter).
+It does not call `bytes.decode` or `str.encode`. The fd is closed on every path. `OSError`
+propagates, including an absent `F_GETPATH` attribute only after the fallback below. When
+`fcntl.F_GETPATH` is absent, the function returns `os.path.realpath(path)` and keeps the
+spelling realpath produced. That fallback is the spelling rule for a host without `F_GETPATH`
+(PD-3: no Linux runner). It is not the encoding rule: the `str` the fallback returns is
+already filesystem-decoded, and percent-encoding of that `str` still goes through
+`os.fsencode` and then `%HH`. The residual of the fallback is a Linux host whose realpath
+spelling disagrees with a future F_GETPATH reading; adding a Linux runner is a spec
+amendment, and a skip is not the stand-in.
+
+The encoding axis is every byte of an F_GETPATH result and every byte percent-encoding emits.
+`os.fsencode` and `os.fsdecode` are the only conversion. A strict UTF-8 decode of the buffer,
+or a strict UTF-8 encode of the field, is the defect. The non-UTF-8 test does not create a
+directory entry. It passes the bytes of a name containing `0xFF` through `os.fsdecode`, the
+percent-encoder, and `os.fsencode`, asserts the encoded field contains `%FF`, asserts the
+`os.fsencode` result equals the original bytes, and asserts a strict UTF-8 decode of those
+bytes raises `UnicodeDecodeError` and a strict UTF-8 encode of the `os.fsdecode` result raises
+`UnicodeEncodeError`. Creating that name on the volume measured for this revision raises
+`OSError` errno 92 (`Illegal byte sequence`). That refusal is the volume, which is why the
+test drives the functions. A volume that accepts the byte is not where this test creates the
+entry: `scandir` there would hand the same surrogate `str` to the same encoder.
 
 `canonicalise(root: str, target: str, cwd: str | None = None) -> Identity` is the walk. It
 calls `canonical_directory` for the root, for `cwd` when `cwd` is a non-empty string, and for
-the deepest existing directory of the target. It lists only the leaf's canonical parent.
+the deepest existing directory of the target. When the leaf exists and its final referent is
+a file, the hard-link scan lists that referent's canonical parent. The directory the scan
+lists is the canonical parent of the final referent, never the parent of the spelled leaf
+when those differ.
 
 `Identity` is a `NamedTuple` with fields `root`, `target`, `prefix`, `names`, `unresolvable`,
 `arm`, `component`. `names` is a `tuple` of `str`. `unresolvable` is `bool`. `arm` is `0`, `1`,
@@ -129,36 +151,60 @@ same `stat` result supplies `st_dev` and `st_ino`.
 
 Arm 2 is an `OSError` from an operation this function actually performs: `canonical_directory`
 on the root, on the payload cwd, or on the deepest existing directory of the target, or the
-listing of the leaf's canonical parent. There is no spelling fallback (OQ-P1 closed).
+listing of the final referent's canonical parent. There is no spelling fallback (OQ-P1 closed).
 
 | Component | Opened with F_GETPATH | Listed with scandir |
 |---|---|---|
 | Root directory | yes | no |
 | Intermediate ancestor of the target | no; the deepest existing directory's F_GETPATH returns the on-disk path of the whole prefix | no |
-| Deepest existing directory | yes | only when that directory is the leaf's parent |
-| Leaf's parent, leaf exists | yes (it is the deepest existing directory) | yes, inode match |
-| Leaf file | no | no |
+| Deepest existing directory | yes | only when the final referent is a file and this directory is that referent's parent |
+| Parent of a regular-file leaf | yes (it is the deepest existing directory) | yes: non-symlink entries whose non-following inode matches |
+| Regular leaf file | no | no |
+| Leaf symlink whose final referent is a file | yes: opened without `O_NOFOLLOW`, so F_GETPATH names the referent and the scan directory is that referent's parent | no; the scan lists the parent, not the leaf |
+| Leaf symlink whose final referent is a directory | yes, to learn the referent is a directory | no; `names` stays empty and no child of that directory is scanned |
+| Symlink entry inside the scanned parent | no | excluded, even when a following stat would share the inode |
 | Absent remainder after the walk stops | no | no |
 | Codex payload cwd | yes, before `_payload_cwd_base` | no |
 
 An unreadable ancestor that still has an openable descendant is not an arm-2 site: the open
 is the descendant, and F_GETPATH on that descendant returns the ancestor's on-disk spelling.
-The leaf file is never the fd passed to F_GETPATH. One path from the leaf misses sibling
-hard-link names, and PD-1's R-1 row shows F_GETPATH succeeding on a readable child of a
-mode-`0311` directory, which would miss AC-3.6 (b).
+F_GETPATH's basename is never the name list. A regular leaf is not opened. A symlink leaf is
+opened without `O_NOFOLLOW` only so F_GETPATH and `os.fstat` name the final referent and
+select that referent's parent; sibling hard links are the other non-symlink entries of that
+parent. Taking the F_GETPATH basename alone misses those siblings, and PD-1's R-1 row shows
+F_GETPATH succeeding on a readable child of a mode-`0311` directory, which would miss
+AC-3.6 (b) if that success were treated as a listing.
 
 AC-3.6 (a): absent `tests/newmod.py` under on-disk `Tests/` at mode `0311`. The deepest
 existing directory is `Tests/`, the open fails, arm 2. AC-3.6 (b): `src/` at mode `0311` with
 existing `src/prod.py`. The parent is both opened and listed; either `OSError` is arm 2.
 
-A leaf symlink is followed (every symlink on the walk is followed). The names returned are the
-referent's names in the referent's canonical parent. FR-1's referent rule stands (PD-5).
+The axis is which directory the hard-link scan lists, and which entries of that directory
+are names. Follow the leaf to its final referent before choosing the directory, then admit an
+entry only when `DirEntry.is_symlink()` is false and `DirEntry.stat(follow_symlinks=False)`
+has the referent's `(st_dev, st_ino)`. `DirEntry.stat` defaults to `follow_symlinks=True`;
+that default is forbidden for the comparison, because a symlink sibling then matches the
+inode and is admitted as a hard link. One `os.open` without `O_NOFOLLOW` follows a symlink
+chain to the final referent; the scan does not stop after one hop. FR-1's referent rule
+stands (PD-5).
 
-For an existing leaf, `names` is every directory entry of the canonical parent whose
-`(st_dev, st_ino)` equals the leaf's, sorted lexicographically, at least one. The canonicaliser
-does not evaluate an exemption. For an absent leaf, `names` is the one spelled leaf name
-(FR-1 step 5). `target` on a resolvable result is the canonical parent joined with the
-lexicographically first returned name. The gate later chooses the judge path itself.
+A leaf whose final referent is a directory is not a file identity: no hard-link scan of that
+directory's children, `names` stays empty, and `target` is the referent directory's on-disk
+path.
+
+For an existing file referent, `names` is every non-symlink directory entry of that
+referent's canonical parent whose non-following `(st_dev, st_ino)` equals the referent's,
+sorted lexicographically, at least one. The canonicaliser does not evaluate an exemption.
+For an absent leaf, `names` is the one spelled leaf name (FR-1 step 5). `target` on a
+resolvable file result is that canonical parent joined with the lexicographically first
+returned name. The gate later chooses the judge path itself.
+
+Residual of the scan rule, exactly: a dangling or looping leaf is arm 1 (`os.lstat`
+succeeds and `os.stat` raises) and is not scanned; a referent whose parent cannot be listed
+is arm 2; a hard link of the referent that lives in another directory stays outside the scan
+(the spec's hard-link residual); a symlink entry in the referent's parent is excluded even
+when a following stat would match; an entry that is not a symlink and shares the inode is
+included.
 
 ### Claude record and the one call
 
@@ -167,7 +213,8 @@ still needs a root: `_read_state` refuses when `ROOT_ABS` is empty. `RAW_TARGET=
 stays where it is, immediately before today's `ROOT_ABS` assignment, so the raw spelling is
 saved before the call.
 
-The invocation replaces both the `ROOT_ABS=$(cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null && pwd -P)` assignment and the `# M:H11` `os.path.normpath`
+The invocation replaces both the `ROOT_ABS=$(cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null && pwd
+-P)` assignment and the `# M:H11` `os.path.normpath`
 call. The marker `# M:H11` stays on the replacement, and the mutation object named `H11` is
 re-derived onto that new text at the same guard. The `-c` program resolves its own script path
 the way `# M:W6` resolves `BASH_SOURCE` (`os.path.realpath` of the hook path, then `scripts/`
@@ -194,12 +241,32 @@ names <decimal>
 name <pct>
 ```
 
-`name` repeats exactly `names` times. Percent-encoding uses the existing `_pct_decode`:
-`[ "$1" = % ] && return 0; printf '%b' "${1//%/\\x}"`. Every byte outside ASCII alphanumeric
-plus `/`, `-`, `.`, and `_` is encoded as `%HH`, so each field is one physical line. Newline
-is `%0A`, space is `%20`, `%` is `%25`. NUL is not a directory-entry byte and is not emitted
-(`\0` would truncate `printf %b`). The decoder is this one function. A second decoder is a
-second grammar for the same list.
+`name` repeats exactly `names` times. The percent-encoded fields are `root`, `target`,
+`prefix`, `component`, and each `name`. Encoding is `os.fsencode` of the field, then `%HH`
+of every byte outside ASCII alphanumeric plus `/`, `-`, `.`, and `_`, so each field is one
+physical line. Newline is `%0A`, space is `%20`, `%` is `%25`. NUL is not a directory-entry
+byte and is not emitted (a NUL would truncate `printf %b`). The byte producer stays the
+existing `_pct_decode`. Its body is the same one function: `[ "$1" = % ] && return 0; printf '%b' "${1//%/\\x}"`.
+A second decoder is a second grammar for the same list.
+
+The capture axis is every one of those five field roles. Bash command substitution strips
+every trailing newline, so assigning any of them with a bare command substitution or with
+backticks drops a filename that ends in a newline. `_pct_capture` is the only capture.
+It runs `_pct_decode` inside exactly one command substitution, appends one `0x01` byte
+inside that substitution, assigns with `printf -v` through a nameref, and strips exactly
+one trailing `0x01`. It is not itself called via command substitution or backticks. A value
+that ends in a newline, a value that is only newlines, a value that ends in `0x01`, a value
+that is only `0x01`, and an empty value all survive.
+
+The round-trip test builds one `CANON 1` record in which `root`, `target`, `prefix`,
+`component`, and `name` each end in a newline, plus a field that is only newlines, a field
+that ends in `0x01`, and an empty field, and reads every field back through `_pct_capture`.
+The same test calls `emit_canon` on an `Identity` whose `root`, `target`, `prefix`,
+`component`, and each name end in a newline and reads that record back. Residual, exactly:
+an assignment inside `_read_canon` that captures any of those five field roles with a bare
+command substitution or with backticks. The six existing `_pct_decode` call sites on the
+state and blocker path still strip trailing newlines. They are outside this protocol. A
+change to the body of `_pct_decode` still changes them, because they call the same function.
 
 `_read_canon` is the only reader. Unparseable is `judge-error` with no spelled-leaf fallback:
 unknown key, missing key, a second `CANON` header, a version other than `1`, `arm` outside
@@ -233,7 +300,8 @@ A protocol or crash failure is always `judge-error`. FR-3's unresolvable predica
 governed-only. Those are different properties of the gate.
 
 After T3, `grep 'pwd -P' h-mad/hooks/h-mad-tdd-gate.sh` may match only the `# M:H8` walk:
-`d=$(dirname "$target"); while [ ! -e "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done; d=$(cd "$d" 2>/dev/null && pwd -P) || return 0  # M:H8`.
+`d=$(dirname "$target"); while [ ! -e "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done;
+d=$(cd "$d" 2>/dev/null && pwd -P) || return 0  # M:H8`.
 That walk runs on the canonical target, or on the resolved prefix when unresolvable, where
 `pwd -P` is the identity. The `# M:H8` line stays byte-identical, so its mutation find stays.
 The residual: the locator is the `# M:H8` comment. A second `pwd -P` means the one-canonicaliser
@@ -287,7 +355,8 @@ insert on `sys.path` if absent, `import_module("h_mad_target_identity")`.
 otherwise each of payload `project_dir`, payload `cwd`, and `os.getcwd()`, and for a directory
 candidate `git -C <path> rev-parse --show-toplevel` or that candidate; otherwise
 `Path.cwd().resolve()`. Each of the four `return` sites passes the selected path through
-`canonical_directory` instead of `Path.resolve()` or `Path.cwd().resolve()`. Those four returns carry no `# M:` marker. An
+`canonical_directory` instead of `Path.resolve()` or `Path.cwd().resolve()`. Those four returns
+carry no `# M:` marker. An
 `OSError` leaves the root unresolvable. `_main_guarded` catches that `OSError` inside the
 function so it does not reach `# M:G2` (which judge-errors even when not governed). It then
 runs `_any_phase5_status` on the spelled path; if that scan raises `OSError`, the status is
@@ -404,7 +473,14 @@ and a `judge-timeout` outcome stops further runs (the same `break` set that toda
 `venv-escapes-root`, `timeout`, and `pytest-missing`). `KINDS` gains the token. `JUDGE_DENY_RE`
 in the Claude hook gains `judge-timeout` as one more alternative in the `kind=(…)` group.
 `test_claude_gate_kind` and `test_codex_gate_kind` each gain a `judge-timeout` row. AC-5.1's
-bound is 4.0 s. Worst case for a governed write is `JUDGE_BUDGET_S` (40.0) plus
+bound is 4.0 s, which is `2.0 + REAP_GRACE_S + 1.0` on the `_run_bounded` repro. AC-5.3's
+bound is the `budget_s` that the `judge()` call passes, plus `REAP_GRACE_S`, plus 1.0 s, and
+it is measured on `judge()` twice, each run alone: once with `NAME_MAP` replaced by a
+detaching script (the bounded run inside `resolve`), and once with `select_interpreter`
+returning a fake venv interpreter that detaches (the bounded run inside `judge`; the
+name-map path is left intact). A test that calls `_run_bounded` and never `judge()` does
+not implement AC-5.3. The unfixed observable on each AC-5.3 run is `timeout` after the
+descendant exits. Worst case for a governed write is `JUDGE_BUDGET_S` (40.0) plus
 `REAP_GRACE_S` plus process start.
 
 ### FR-8 git-dir read
@@ -421,7 +497,8 @@ one argparse mutually exclusive group with `--session-id`. With the flag, `main`
 before `decide`. Any failure prints `cannot_judge` and does not call `decide`.
 
 `GIT_DIR_BOUND_S = 10.0` is the module-level constant. It is not `REAP_GRACE_S` and not
-`DRAIN_SECONDS`. The bound is `subprocess.run(["git", "rev-parse", "--absolute-git-dir"], timeout=GIT_DIR_BOUND_S, capture_output=True, text=True)`.
+`DRAIN_SECONDS`. The bound is `subprocess.run(["git", "rev-parse", "--absolute-git-dir"],
+timeout=GIT_DIR_BOUND_S, capture_output=True, text=True)`.
 `subprocess.TimeoutExpired` is the bound-expired branch. The `timeout` and `gtimeout` CLIs are
 not used (§"Portable time bounds"). The script is already Python, so the bounder it can enforce
 without a second CLI is the stdlib `timeout` argument. A linked worktree's
@@ -480,11 +557,20 @@ printed and is not a softening.
 | `FR-8 literal-uuid` | codex | step5 |
 | `FR-8 flag` | codex | step5 |
 
-Anything else that moves deny to allow is a failure. The comparator exits non-zero when a key
-is present in one reading and absent from the other, or when a deny-to-allow key is outside
-that table. It prints `COMPARE: PASS softened=N approved=N` or `COMPARE: FAIL`. T0's
-self-comparison is `PASS softened=0`. T0's injected unapproved key is `FAIL`. T9 is
-`COMPARE: PASS softened=6 approved=6`.
+Anything else that moves deny to allow is a failure. A completed comparison is a verdict.
+The script prints `COMPARE: PASS softened=N approved=N` or `COMPARE: FAIL`, prints each
+offending key on stdout when the verdict is `COMPARE: FAIL`, and exits 0 either way.
+`COMPARE: FAIL` is the verdict for a key present in one reading and absent from the other,
+or for a deny-to-allow key outside that table. A non-zero exit is only an operational
+error: a reading path is missing, unreadable, or invalid, so the comparison did not run,
+and that path prints no `COMPARE:` token. A crash that prints no token and exits non-zero
+is that operational error, not a verdict. Plan v1.4 PD-4 still says the comparator exits
+non-zero on those two verdicts. This design does not, because `h-mad/invariants.base.md`
+under Audit-gate signal discipline governs a checker: the verdict is a stdout token and the
+exit status is 0. The resume script's argparse exit 2 (AC-8.5) is a different program and
+stays. T0's self-comparison is `COMPARE: PASS softened=0` and exit 0. T0's injected
+unapproved key is `COMPARE: FAIL` and exit 0. T9 is `COMPARE: PASS softened=6 approved=6`
+and exit 0.
 
 Lines that are not gate keys use a different first field, so a missing primitive row cannot
 hide inside a gate-key check and a primitive row cannot be required to carry `gate=`:
@@ -558,7 +644,8 @@ oracle line and empty-id prose under `## Context budget and claims`.
 The oracle line in each of the three adapters is the one fenced `h_mad_resume_decision.py`
 invocation whose `--session-id` value is the `$(cat "$(git rev-parse --absolute-git-dir)/…")`
 substitution. T12 replaces that invocation with
-`python3 "<HMAD_SKILL_ROOT>/scripts/h_mad_resume_decision.py" --host <host> --state docs/.bkit-memory.json --feature "<feature>" --session-id-from-git-dir`,
+`python3 "<HMAD_SKILL_ROOT>/scripts/h_mad_resume_decision.py" --host <host> --state
+docs/.bkit-memory.json --feature "<feature>" --session-id-from-git-dir`,
 host spelled `codex`, `grok`, or `agy`. The five `h_mad_state_write.py` lines in the same fence
 keep the `$(cat …)` substitution. FR-8 closes the oracle line only. The Claude-host line in
 `h-mad/SKILL.md` (`--session-id "<this session's id>"`) stays.
@@ -613,7 +700,7 @@ over the committed specs is the acceptance check.
 | Component | File | Change |
 |---|---|---|
 | `canonicalise`, `canonical_directory`, `fold_py_suffix`, `emit_canon`, `Identity`, `PY_SUFFIXES` | `h-mad/scripts/h_mad_target_identity.py` | new |
-| Claude gate: one call, `_read_canon`, `_fold_py`, per-name loops, `judge-timeout` in `JUDGE_DENY_RE` | `h-mad/hooks/h-mad-tdd-gate.sh` | modify |
+| Claude gate: one call, `_pct_capture`, `_read_canon`, `_fold_py`, per-name loops, `judge-timeout` in `JUDGE_DENY_RE` | `h-mad/hooks/h-mad-tdd-gate.sh` | modify |
 | Codex gate: identity load, root, cwd, targets, fold, header grammar, safe-list key | `h-mad/hooks/h-mad-codex-tdd-gate.py` | modify |
 | `BoundedRun`, `REAP_GRACE_S`, `judge-timeout` | `h-mad/scripts/h_mad_tdd_judge.py` | modify |
 | `build_parser`, `session_id_from_git_dir`, `GIT_DIR_BOUND_S` | `h-mad/scripts/h_mad_resume_decision.py` | modify |
@@ -633,6 +720,7 @@ exclusive group. No new environment variable.
 ## API / Interface Changes
 
 - `canonicalise(root, target, cwd=None) -> Identity` and `canonical_directory(path) -> str`.
+- `_pct_capture` captures every percent-decoded CANON field. `_pct_decode` stays the byte producer. The capture is not a second decoder.
 - `emit_canon` writes the field list in §"Claude record and the one call".
 - `_run_bounded` returns `BoundedRun`, with `reap_failed` added after the five values it returns today.
 - `_targets` returns `TargetParse` (`bad_header` last). `_relative_target` returns
@@ -668,17 +756,17 @@ The plan's order stands. This column is the anchor set: the functions the task r
 
 | Task | Rewrites |
 |---|---|
-| T0 | new `reproduce.py` and `compare_readings.py`; prints the grammar in §"REPRO line grammar"; commits the two comparator controls |
-| T1 | new module: `canonical_directory`, `canonicalise`, `fold_py_suffix`, `emit_canon` |
-| T2 | `_load_identity`, `_project_root` (four returns), cwd before `_payload_cwd_base`, `_relative_target`, `_is_production_python`, the body under `# M:G5`. Leaves `G1`, `G5`, `G7`, `G10`, `W1`, `W5A` finds matching |
-| T3 | the one `# M:H11` call, `_read_canon`, `_fold_py`, the three per-name loops. Re-derives `H11` and `H6`. Leaves `H8`, `H15`, `H18`, `H19`, `H20`, `W2`, `H3`, `H16` finds matching. Updates `_tree_b` |
+| T0 | new `reproduce.py` and `compare_readings.py`; prints the grammar in §"REPRO line grammar"; both comparator controls exit 0, and `COMPARE: FAIL` is a verdict |
+| T1 | new module: `canonical_directory`, `canonicalise`, `fold_py_suffix`, `emit_canon`. The leaf scan follows a symlink leaf to the referent's parent and excludes symlink entries. `os.fsdecode` and `os.fsencode` are the filesystem codecs. The non-UTF-8 function test, the newline round-trip, and the AC-1.7 `os.path.realpath` substitution land here |
+| T2 | `_load_identity`, `_project_root` (four returns), cwd before `_payload_cwd_base`, `_relative_target`, `_is_production_python`, the body under `# M:G5`. Connection tests, callee left intact: `canonical_directory` removed (M-8 and M-9, each alone); unconditional `canonical_directory` on `script.resolve()` inside `_safe_shell_command` only, and on an empty cwd, each alone; fold removed (AC-2.2 `src/new.pY` and `src/new.Py`, each alone) and unconditional fold before the unresolvable branch (AC-3.1 and AC-2.4, each alone). Leaves `G1`, `G5`, `G7`, `G10`, `W1`, `W5A` finds matching |
+| T3 | the one `# M:H11` call, `_pct_capture` for every percent-decoded CANON field, `_read_canon`, `_fold_py`, the three per-name loops. Connection tests, module file left in place: the canonicalise call removed (M-9); unconditional use of the canonical target where the raw conjunct must stay (AC-1.11). Re-derives `H11` and `H6`. Leaves `H8`, `H15`, `H18`, `H19`, `H20`, `W2`, `H3`, `H16` finds matching. Updates `_tree_b` |
 | T4 | `_patch_header_paths`, `TargetParse`, `_targets`, `--self-check`. Removes `PATCH_TARGET` |
-| T5 | `REAP_GRACE_S`, `BoundedRun`, `_run_bounded`, the priority tuple, `KINDS`, `JUDGE_DENY_RE`. Leaves the `# M:K3` line matching. Unpack delta: `test_run_bounded_kills_the_process_group` |
-| T6 | new differential test importing `decision` and `hermetic_env` from `h-mad/tests/tdd_gate_support.py`. The `conftest.py` fixture of the same name is a different function. Existing `test_dd7_differential_matches_the_published_cells` assertion text stays |
+| T5 | `REAP_GRACE_S`, `BoundedRun`, `_run_bounded`, the priority tuple, `KINDS`, `JUDGE_DENY_RE`. Leaves the `# M:K3` line matching. Unpack delta: `test_run_bounded_kills_the_process_group`. Two AC-5.3 `judge()` tests, each run alone: a detaching name-map script, and a detaching fake venv interpreter |
+| T6 | new differential test importing `decision` and `hermetic_env` from `h-mad/tests/tdd_gate_support.py`. The `conftest.py` fixture of the same name is a different function. AC-6.1 runs on the fixed tree and, separately, on the unfixed tree for both failure sets. AC-6.2 runs once with FR-1 removed from Claude and once with FR-1 removed from Codex. Existing `test_dd7_differential_matches_the_published_cells` assertion text stays |
 | T7 | the `Hook:` paragraph in place, the `h_mad_tdd_judge.py` bullet, two sentences under `### Trust boundary`. No kind tokens added under either adapter's `## The TDD gate` |
 | T8 | new mutation objects for AC-7.1's guards; re-derive only the finds this table marks as rewritten |
-| T9 | re-run the probe; `COMPARE: PASS softened=6 approved=6` |
-| T10 | `build_parser`, the mutually exclusive flag, `session_id_from_git_dir`, `GIT_DIR_BOUND_S`, the six failure branches before `decide` |
+| T9 | re-run the probe; `COMPARE: PASS softened=6 approved=6` and exit 0 |
+| T10 | `build_parser`, the mutually exclusive flag, `session_id_from_git_dir`, `GIT_DIR_BOUND_S`, the six failure branches before `decide`. Removal of the git-dir read with the flag still accepted (`decide` called with `None`; AC-8.4 on claude prints `enter_autonomous`). Unconditional read when only `--session-id` is passed (`owned_elsewhere` becomes `enter_autonomous`). AC-8.5 both flags still exit 2 and the read does not run |
 | T11 | one new key in `SAFE_HMAD_SCRIPT_OPTIONS`; no new branch in `_safe_hmad_script` |
 | T12 | three oracle lines, three empty-id sentences, and the two `test_host_runtime_docs.py` deltas plus the `SID_READ` control delta below |
 
@@ -707,12 +795,55 @@ table. Codex kind is parsed with `kind=([a-z-]+)`. Each assertion has its own fa
 line in this draft's census. The implementer re-derives it with grep before editing and does
 not change it. AC-6.3 re-runs `dd7_differential.py`.
 
-A connection test fails when the call is removed and the callee remains: Claude's one `python3`
-must import the new module (the `_tree_b` stub is the fixture that makes the import observable),
-and `_is_production_python` must call `fold_py_suffix` (a mutation that inlines `.py` only, and
-a mutation that skips the per-name loop, each red on AC-1.9). AC-1.9's fixture is `src/prod.py`
-and `src/test_prod.py` on one inode, spelled `src/test_prod.py`. Its AC-7.1 mutation makes T1
-return only the spelled name.
+The wire set is four boundary crossings: the Claude canonicalise call, the Codex
+`canonical_directory` placements, the Codex `fold_py_suffix` call, and the resume git-dir
+read. `_load_identity` loading the module and `fold_py_suffix` inside `_is_production_python`
+are two wires, because a removal of one does not move the other's cell. Each wire has a
+removal test, with the callee left intact, and a forced-unconditional-fire test. The Test Plan
+rows are the directions and the discriminators. The wire count is the four crossings, not the
+row count. An empty spelled target is not a Claude discriminator: the record's target is empty
+too, so substituting it does not move the `# M:H13` refusal.
+
+Claude removal leaves the module file in place and deletes the canonicalise call. M-9 (AC-1.5)
+expects deny `no-test-resolved` and observes allow. The unconditional arm uses the canonical
+target where the raw spelling must still be consulted: drop the raw conjunct. AC-1.11
+`out/lnk/x.py` expects deny `no-test-resolved` and observes allow, and the call still runs.
+`_tree_b` is the fixture that makes the import observable. It is not itself the removal test.
+
+Codex `canonical_directory` removal puts `Path.resolve` and `Path.cwd().resolve` back at the
+four `_project_root` returns, the payload cwd, and `_relative_target`. The import stays. M-9
+(AC-1.5) covers a directory component (expects deny, observes allow) and M-8 covers the root
+(AC-1.4: Codex expects deny `no-test-resolved`, observes outside). Each is its own run. The
+unconditional arm has two fixtures, each run alone, and they are still one wire. The first
+replaces `Path.resolve` at one stayed site: `script.resolve()` inside `_safe_shell_command`
+only. A path spelled `case/f.py` under an on-disk directory `Case` has realpath parent `case`
+and `F_GETPATH` parent `Case` (the rows in §"Verified premises"). The test spells a
+shell-script path under `_safe_shell_command` with the other case from its on-disk directory,
+expects the `Path.resolve` spelling, and fails when `canonical_directory` is forced onto that
+call. A mutation of a different stayed site does not satisfy this test. The second fixture
+forces the call on an empty cwd. `_payload_cwd_base` returns root when cwd is empty.
+`os.open` of an empty path raises `OSError` errno 2, so a governed relative target becomes
+`judge-error` instead of the join-to-root path.
+
+Codex fold removal leaves `fold_py_suffix` in the module. AC-2.2's `src/new.pY` and
+`src/new.Py` are each their own run: each allows where it must deny. The unconditional arm
+runs the fold, or the production test, before the unresolvable branch. AC-3.1 (M-12 stays
+`judge-error`, the suffix is not consulted) and AC-2.4 (trailing-space `src/prod.py` stays
+allow) are each their own run. Residual for this wire: folding a name that is not a
+production-test input is a further member. These two runs are the boundary. AC-2.5's
+`src/prod.PY` end-to-end pin is not a substitute for the two AC-2.2 runs.
+
+Resume removal keeps the flag accepted and calls `decide` with `None`. On `--host claude`, a
+session owned by another live session expects `owned_elsewhere`, and `None` prints
+`enter_autonomous` (AC-8.4). The unconditional arm runs the read when only `--session-id` is
+passed: `--session-id` of another live session, without the git-dir flag, expects
+`owned_elsewhere`, and an unconditional read substitutes the minted owner and prints
+`enter_autonomous`. AC-8.5 is the rejection arm of the same wire: both flags exit 2 and the
+read does not run.
+
+AC-1.9's fixture is `src/prod.py` and `src/test_prod.py` on one inode, spelled
+`src/test_prod.py`. Its AC-7.1 mutation makes T1 return only the spelled name. That mutation
+is the hard-link rule, not a connection-removal test.
 
 No new test and no mutation `command` invokes an agent CLI. The constructed `PATH` is the one
 in §"REPRO line grammar".
@@ -722,21 +853,103 @@ in §"REPRO line grammar".
 | Scenario | What fails red | AC |
 |---|---|---|
 | Case-variant and `..`-after-symlink spellings of a governed production file | both gates allow on the unfixed tree where the spec's today-column says allow | 1.1–1.6, 1.8 |
-| Canonicaliser unit: walk, F_GETPATH, inode match, lexical remainder | direct call | 1.7, 1.10 |
+| Each gate's canonicaliser on M-8 and M-9 directories | direct call asserts the on-disk spelling | 1.7 |
+| Same canonicaliser test with `os.path.realpath` substituted | that run fails; the negative control is run, not asserted as a product expectation | 1.7 |
+| Case precondition: create `a`, then `os.path.exists("A")` | a failed precondition fails and never skips | 1.10 |
+| Newline round-trip of every percent-decoded CANON field | `root`, `target`, `prefix`, `component`, and each `name` ending in a newline survive `_pct_capture`, including a field that is only newlines, a field that ends in `0x01`, and an empty field | record |
+| Non-UTF-8 function test, no directory entry created | bytes containing `0xFF` through `os.fsdecode`, the percent-encoder, and `os.fsencode`; asserts `%FF`, the round trip, `UnicodeDecodeError`, and `UnicodeEncodeError` | encode |
+| Leaf-symlink scan | scan directory is the referent's parent; a symlink sibling is excluded; a non-symlink same-inode entry is included | FR-1 step 4 |
 | `src/prod.py` and `src/test_prod.py` on one inode, spelled `src/test_prod.py` | both gates allow | 1.9 |
 | Outside-root `out/lnk/x.py` with `lnk -> tests` | stays deny `no-test-resolved`; positive `out/tests/x.py` allows; `out/src/x.py` denies | 1.11 |
 | `.py` / `.pY` / `.Py` / `.PY` before basename and suffix tests, both gates | AC-2.2 | 2.1–2.5 |
-| Dangling, loop, and mode-`0311` open or list failure, governed | allow on the unfixed tree for AC-3.6 (a); deny `no-test-resolved` for (b) | 3.1–3.6 |
+| Dangling, loop, and mode-`0311` open or list failure, governed | allow on the unfixed tree for AC-3.6 (a); deny `no-test-resolved` for (b) | 3.1–3.3, 3.5, 3.6 |
+| Each gate's resolver on a loop fixture | direct call asserts unresolvable | 3.4 |
+| Same loop path through `os.path.realpath` | that run returns without error; its own run | 3.4 |
 | Header trim, exact marker, control byte, empty path, `--self-check` | trailing-space header is invisible to `PATCH_TARGET` today | 4.1–4.7 |
-| Reap past `REAP_GRACE_S` | `judge-timeout` within 4.0 s; plain timeout stays `timeout` | 5.1–5.5 |
+| `--self-check` with the trailing trim removed | prints `CODEX-TDD-GATE: FAIL parser`; the trim-removed mutant is run | 4.7 |
+| Reap past `REAP_GRACE_S` | `judge-timeout` within 4.0 s; plain timeout stays `timeout`; AC-5.1's unfixed return at ≈ 12 s is run on this row | 5.1, 5.2 |
+| `judge()` with `NAME_MAP` replaced by a detaching script | DENY `judge-timeout` within the `budget_s` that call passes, plus `REAP_GRACE_S`, plus 1.0 s; the bounded run is the one inside `resolve`; unfixed is `timeout` after the descendant exits; not a `_run_bounded`-only test | 5.3 |
+| `judge()` with `select_interpreter` returning a fake venv interpreter that detaches | same per-path bound; the bounded run is the one inside `judge`; the name-map path is left intact; its own fixture | 5.3 |
+| Judge stub printing `TDD-JUDGE: DENY kind=judge-timeout reason=r` rc 0 | Claude fixed is `BLOCK kind=judge-timeout`; Claude unfixed is `BLOCK kind=judge-error`; Codex reason contains `kind=judge-timeout` | 5.4 |
 | `test_claude_gate_kind` and `test_codex_gate_kind` gain `judge-timeout` | the parametrize tuples today list the eleven tokens in §"Verified premises" | 5.5 |
-| Differential over the FR-6 domain | new test | 6.1–6.3 |
+| Differential on the fixed tree | the differential passes | 6.1 |
+| Differential on the unfixed tree, gate-equality | fails on exactly M-4, M-5, M-6, M-7, M-8, M-11 and M-12; run, not asserted | 6.1 |
+| Same unfixed run, expectation-table | additionally fails on M-2, M-3, M-9, M-10, M-13 and M-14; its own check; run, not asserted | 6.1 |
+| Differential with FR-1 removed from the Claude gate only | the Codex call stays; the run fails | 6.2 |
+| Differential with FR-1 removed from the Codex gate only | the Claude call stays; the run fails | 6.2 |
 | `test_dd7_differential_matches_the_published_cells` | assertion text unchanged | 6.3 |
 | Each AC-7.1 guard mutated alone | T8 | 7.1 |
 | Safe-list key equals `build_parser()` options minus `--help` | key absent today | 8.1, 8.2 |
 | Worktree git dir, hermetic `PATH` without `git`, six failure branches, `--host claude` | missing id on claude reaches `decide` | 8.3, 8.4 |
-| Both flags | exit 2, stderr contains `not allowed with argument` | 8.5 |
+| Both flags | exit 2, stderr contains `not allowed with argument`; the git-dir read does not run | 8.5 |
 | Oracle condition and oracle-line selection in `test_host_runtime_docs.py` | the `oracle` lambdas require `SID_READ` | 8.6 |
+| Claude canonicalise call removed, module file left in place | M-9 expects deny `no-test-resolved` and observes allow | 1.5 |
+| Claude canonical target used where the raw conjunct must stay | AC-1.11 `out/lnk/x.py` expects deny `no-test-resolved` and observes allow; the call still runs | 1.11 |
+| Codex `canonical_directory` removed, import left in place | M-9 expects deny and observes allow; M-8 expects deny `no-test-resolved` and observes outside; each run alone | 1.5, 1.4 |
+| `canonical_directory` forced onto `script.resolve()` inside `_safe_shell_command` only | shell-script path spelled in the other case from its on-disk directory; expects the `Path.resolve` spelling | connection |
+| `canonical_directory` forced on an empty cwd | a governed relative target becomes `judge-error` instead of the join-to-root path | connection |
+| Codex `fold_py_suffix` removed, callee left intact | AC-2.2 `src/new.pY` and `src/new.Py`, each alone, allow where they must deny | 2.2 |
+| Fold or the production test runs before the unresolvable branch | AC-3.1 stays `judge-error`; AC-2.4 trailing-space `src/prod.py` stays allow; each run alone | 3.1, 2.4 |
+| Resume git-dir read removed, flag still accepted | `decide` is called with `None`; on `--host claude` that prints `enter_autonomous` | 8.4 |
+| Git-dir read runs when only `--session-id` is passed | `--session-id` of another live session expects `owned_elsewhere`; the unconditional read prints `enter_autonomous` | 8.3 |
+
+The axis is every spec acceptance criterion whose acceptance text names a negative control that
+is run, or a separate run per side. The rule is that each such run is its own Test Plan row, and
+the negative control is executed. Residual, exactly: a spec acceptance criterion of that shape
+whose only Test Plan home is a row shared with a different procedure. Ranges that already share
+one procedure stay one row: 1.1–1.6 and 1.8, 2.1–2.5, 3.1–3.3 and 3.5 and 3.6, 4.1–4.7 beside
+the explicit AC-4.7 row, 5.1 and 5.2, 5.5, 8.1 and 8.2, 8.3 and 8.4.
+
+AC-1.7 says: "a unit test drives each gate's canonicaliser on M-8's and M-9's directories and
+asserts the on-disk spelling; with `os.path.realpath` substituted for the canonicaliser the same
+test fails (the negative control is run, not asserted)." The on-disk-spelling row drives each
+gate's canonicaliser. The realpath row is that same test with `os.path.realpath` substituted,
+and that run is executed.
+
+AC-1.10 says: "each case-dependent AC asserts its precondition — the fixture volume is
+case-insensitive (create `a`, then `os.path.exists("A")`) — and **fails**, never skips, when it
+does not hold." The case-precondition row creates `a` and asserts `os.path.exists("A")`. A
+failed precondition fails and never skips.
+
+AC-3.4 says: "a loop fixture drives each gate's resolver directly and asserts it reports
+unresolvable, with a negative control that `os.path.realpath` of the same path returns without
+error." The resolver row is the direct assertion. The realpath row is the same path through
+`os.path.realpath`, and that run returns without error.
+
+AC-4.7 says: "`--self-check` exits 0 printing `CODEX-TDD-GATE: PASS`; with the trailing trim
+removed it prints `CODEX-TDD-GATE: FAIL parser`." The trim-removed row is that mutant, run. The
+header row beside it is the grammar cases, not the mutant.
+
+AC-5.1 says: "the gap repro — `_run_bounded` with deadline `start + 2.0` on a child that
+detaches `sleep 12` and sleeps 30 — fixed: returns in under `2.0 + REAP_GRACE_S + 1.0` s = 4.0 s
+and reports `reap_failed=True`; unfixed: returns at ≈ 12 s. The test kills the detached sleeper
+through its pidfile in teardown." The reap row runs the unfixed return at ≈ 12 s. It is not left
+inside a range that also holds the kind rows.
+
+AC-5.3 says: "`judge()` with the name map replaced by a detaching script, and separately with a
+fake venv interpreter that detaches — each returns DENY `judge-timeout` within `budget_s +
+REAP_GRACE_S + 1.0` s; unfixed: `timeout` after the descendant exits." One row calls `judge()`
+with `NAME_MAP` replaced by a detaching script. The other calls `judge()` with
+`select_interpreter` returning a fake venv interpreter that detaches. Each run is alone. The
+bound is the `budget_s` that call passes, plus `REAP_GRACE_S`, plus 1.0 s.
+
+AC-5.4 says: "Claude gate end to end with a judge stub printing `TDD-JUDGE: DENY
+kind=judge-timeout reason=r` rc 0 — fixed: `BLOCK kind=judge-timeout`; unfixed: `BLOCK
+kind=judge-error`. Codex gate: the reason contains `kind=judge-timeout`." The stub row is that
+end-to-end run. The parametrize row under 5.5 is a different procedure.
+
+AC-6.1 says: "the differential passes on the fixed tree. On the unfixed tree its gate-equality
+assertion fails on exactly M-4, M-5, M-6, M-7, M-8, M-11 and M-12 (the cells where the gates
+disagree today, per §"Measured premises"), and its expectation-table assertion additionally
+fails on M-2, M-3, M-9, M-10, M-13 and M-14 — run, not asserted." That Measured premises heading
+is the spec's, not §"Verified premises" in this design. The fixed row is the passing run. The
+gate-equality row is the unfixed run failing on exactly M-4, M-5, M-6, M-7, M-8, M-11 and M-12.
+The expectation row is that same unfixed run additionally failing on M-2, M-3, M-9, M-10, M-13
+and M-14. Each check is its own.
+
+AC-6.2 says: "removing FR-1 from either gate alone makes the differential fail (run once per
+gate)." One row removes FR-1 from the Claude gate only. One row removes FR-1 from the Codex gate
+only.
 
 Reviewed deltas the spec's compatibility sentence does not list. They are decided here so
 existing tests stay discriminating:
@@ -763,7 +976,8 @@ existing tests stay discriminating:
 **Single-source contract.** One `canonicalise` for both gates. The bash fold is a checked copy
 of `PY_SUFFIXES` because the Claude gate's one Python process is already the canonicaliser
 call; the equivalence test is the byte-equivalence the contract allows. One header grammar
-(`_patch_header_paths`). One name-list decoder (`_pct_decode`). One arm flag.
+(`_patch_header_paths`). One byte producer (`_pct_decode`) and one capture (`_pct_capture`) for
+every percent-decoded CANON field. One arm flag.
 
 **No new external dependency**, including **Dispatched agent CLIs are not script dependencies.**
 The module is stdlib. The probe, the new tests, and every mutation `command` reach no agent
@@ -791,11 +1005,16 @@ before T3 the mutant does not move the cell. Each new alternation branch gets it
 (T8), run alone.
 
 **Guard narrowing.** The ALLOW relaxations are the six rows of the approved table, checked by
-`compare_readings.py` over the probe corpus. A softening outside that table fails the compare.
+`compare_readings.py` over the probe corpus. A softening outside that table is a verdict:
+the comparator prints `COMPARE: FAIL` and exits 0.
 
-**Connection enforcement.** The Claude import and the per-name fold call each have a test that
-fails when the connection is removed and the callee remains (AC-1.9's mutation returns only the
-spelled name; the `_tree_b` stub is what makes the import the thing the symlink test consumes).
+**Connection enforcement.** The wire set is four boundary crossings: the Claude canonicalise
+call, the Codex `canonical_directory` placements, the Codex `fold_py_suffix` call, and the
+resume git-dir read. Each wire has both directions, and the callee stays intact. The
+discriminators are the connection rows in §"Test Plan" and the prose in §"Test Strategy".
+Residual, exactly: an in-function mapping that is not a boundary crossing. That set is
+`reap_failed` mapped to `judge-timeout` inside `judge`, the `JUDGE_DENY_RE` token, and the
+`SAFE_HMAD_SCRIPT_OPTIONS` registration. Those are not wires.
 
 **Test discrimination** on the copied Codex fixture: leaving the identity module absent keeps
 `kind=judge-error` as the observation. A stub module that emitted a resolvable record would
@@ -808,8 +1027,9 @@ five-field unpack, eleven-kind parametrize, `$(cat)` oracle line, copied tree wi
 identity module, and a replace that assumed `SID_READ` was on the oracle line.
 
 **Assumption verification** and **Behavioural premises carry their command.** §"Verified
-premises" records the commands re-run for this draft. F_GETPATH, `ALLOW_MISSING`, and
-`O_SEARCH` are not re-probed here; PD-1's R-1 is the authority, and T0 re-derives it. The
+premises" records the commands re-run for this draft. F_GETPATH was re-probed for this
+revision (the rows in §"Verified premises"). `ALLOW_MISSING` and `O_SEARCH` are not
+re-probed here; PD-1's R-1 is the authority for those two, and T0 re-derives that row. The
 argparse mutual-exclusion phrase is the spec's substring, not a longer phrase this draft
 executed.
 
@@ -827,11 +1047,16 @@ differential is the self-check cases plus AC-4.1–AC-4.7 against the R-4 code p
 a reimplementation of Codex. A later codex-cli that trims differently is caught when R-4 is
 re-taken by hand.
 
-**Operator-override preservation**, **Audit-gate signal discipline**, **Standalone / no plugin
-dependency**, **Incident replay**, **Wrapper–runtime reconciliation.** This feature does not
-change the audit gate, the override sidecar, or a wrapper over an external runtime's CLI. The
-probe replays gate behaviour through `tdd_gate_support`, which is the in-repo harness, and the
-agent-tool rows stay manual because no committed artifact may invoke the agent.
+**Operator-override preservation**, **Standalone / no plugin dependency**, **Incident replay**,
+**Wrapper–runtime reconciliation.** This feature does not change the override sidecar or a
+wrapper over an external runtime's CLI. The probe replays gate behaviour through
+`tdd_gate_support`, which is the in-repo harness, and the agent-tool rows stay manual because
+no committed artifact may invoke the agent.
+
+**Audit-gate signal discipline.** `compare_readings.py` is a checker the orchestrator consumes.
+A completed comparison prints `COMPARE: PASS` or `COMPARE: FAIL` and exits 0. A non-zero exit
+is only a missing, unreadable, or invalid reading, and that path prints no `COMPARE:` token.
+The resume script's argparse exit 2 (AC-8.5) is a different program and stays.
 
 **How agy uses this file.** agy reads `h-mad/invariants.base.md` as the base rubric. The agy
 adapter's `## The TDD gate` stays free of judge-kind tokens because no agy gate exists. T12
@@ -842,6 +1067,11 @@ still changes the agy oracle line under `## Context budget and claims`.
 Structural census re-run from the skills root in the session that wrote this draft. `git
 rev-parse --short=8 HEAD` printed `1254595a`. Units are matching lines unless a cell says
 otherwise. Behavioural M-cell readings are T0's probe, not this table.
+
+The encoding, leaf-scan, and capture rows in this table were run in a temporary directory in
+the session that revised this draft, and the directory was deleted after the command. They do
+not move the structural census sha above. The interpreter for those rows was
+`/opt/homebrew/opt/python@3.14/bin/python3.14`, which printed `3.14.7 utf-8 surrogateescape`.
 
 | Premise | Command | Result |
 |---|---|---|
@@ -864,8 +1094,25 @@ otherwise. Behavioural M-cell readings are T0's probe, not this table.
 | D1 assertion | `grep -c "expected one 'Hook: ' line" h-mad/tests/test_h_mad_tdd_gate_docs.py` | 1 matching line |
 | Judge-kind tokens in `## The TDD gate` | extract that section until the next `## ` heading in `grok-runtime.md` and in `agy-runtime.md`, count lines matching any current `KINDS` token | 0 matching lines in each section. The zero is load-bearing: the sections do not list judge kinds, which is why T7 adds none. A later sentence that names a kind moves the zero and T7's "add nothing" has to be re-read |
 | Mutation finds | walk `mutations[].find` in `claude_gate_judge_wiring.json`, `codex_gate_judge_wiring.json`, `tdd_judge_scoring.json` | the object names in §"Mutation anchors". `"M:G1" in find` matches two finds, objects `G1` and `G10`, because `# M:G10` contains the substring `M:G1`. The G1 line itself is one object |
+| Filesystem codec of the probe interpreter | `/opt/homebrew/opt/python@3.14/bin/python3.14 -c 'import sys; print(sys.version.split()[0], sys.getfilesystemencoding(), sys.getfilesystemencodeerrors())'` | `3.14.7 utf-8 surrogateescape` |
+| `0xFF` name round trip | same interpreter, `os.fsencode` of `os.fsdecode` of the bytes `prod` plus `0xFF` plus `.py`; strict UTF-8 decode of those bytes; strict UTF-8 encode of the `os.fsdecode` result; percent-encode via `os.fsencode` then `%HH` | round trip true; `UnicodeDecodeError`; `UnicodeEncodeError`; encoding `prod%FF.py` |
+| Directory entry of a `0xFF` name on this volume | `os.mkdir` of `os.fsdecode` of `d` plus `0xFF`, in a temporary directory that was deleted afterwards | `OSError` errno 92, `Illegal byte sequence`. The non-UTF-8 test does not create that entry. The absence is load-bearing on this volume and incidental on a volume that accepts the byte |
+| Newline directory entry | create a name `nl` plus a newline plus `.py` in that temporary directory and list it | listed, one matching name |
+| Spelled `case/f.py` under on-disk `Case` | `os.path.realpath` parent basename, and `fcntl.F_GETPATH` of an `O_RDONLY` fd, trailing NULs stripped, `os.fsdecode`, parent basename | realpath parent `case`; F_GETPATH parent `Case` |
+| Empty path open | `os.open` of an empty path with `os.O_RDONLY` | `OSError` errno 2, `No such file or directory` |
+| Symlink leaf followed | `src/link.py` pointing at `../tests/t.py`, `os.open` without `O_NOFOLLOW`, then `F_GETPATH` and `os.fstat` | path ends in `/tests/t.py`; the fd is a regular file |
+| Symlink chain, one open | `src/chain.py` pointing at `mid.py` pointing at `../tests/t.py` | path ends in `/tests/t.py`; same inode as the referent |
+| Symlink leaf whose referent is a directory | `src/todir` pointing at `../tests`, one open | the fd is a directory; path ends in `/tests` |
+| Dangling symlink leaf | `src/dang.py` pointing at `../tests/missing.py` | open errno 2; `os.stat` errno 2; `os.lstat` is a symlink |
+| Symlink sibling in the referent parent | hard link `t_hard.py` and symlink `alias.py` pointing at `t.py`; `DirEntry.stat()` with its default, versus `follow_symlinks=False` | the default includes `alias.py` on the referent inode; non-follow excludes `alias.py` and includes `t.py` and `t_hard.py`; `alias.py` is a symlink |
+| Trailing newline through command substitution | `bash -c 'v=$(printf "a\n"); printf "%s" "${#v}"'` | `subst_len=1`. The zero that a bare substitution would need, a preserved trailing newline, does not hold. The reason is bash command substitution, and it is load-bearing for every percent-decoded CANON field |
+| Sentinel capture of percent-decoded fields | `_pct_capture` as specified in §"Claude record and the one call", compared by `openssl base64 -A` with the original bytes | match on root, target, prefix, component, name, a value that is only `0x01`, a value that is only two newlines, and an empty value |
+| `_pct_decode` definitions | `grep -c '^_pct_decode()' h-mad/hooks/h-mad-tdd-gate.sh` | 1 matching line |
+| `_pct_decode` call sites | `grep -c '_pct_decode ' h-mad/hooks/h-mad-tdd-gate.sh` | 6 matching lines. Those six are the state and blocker captures named in §"Claude record and the one call". They are outside the CANON protocol |
 
 `_pct_decode` is the function whose body is `[ "$1" = % ] && return 0; printf '%b' "${1//%/\\x}";`.
+The capture rows in this table are the authority for the `_pct_decode` definition count, the
+call-site count, and the sentinel round trip.
 `_relative_target`'s annotation today is `tuple[Path, str] | None`. `SAFE_HMAD_SCRIPT_OPTIONS`
 keys are the ten listed in §"FR-8 git-dir read". Frontmatter of `h-mad/SKILL.md` is `name: h-mad`
 and the description quoted in §"Documentation surfaces".
@@ -879,3 +1126,4 @@ edit the spec.
 
 ## Version History
 - v1.0: First draft. One canonicaliser module for both gates, one unresolvable flag, percent-encoded name list, bounded reap, and the resume git-dir read before decide.
+- v1.1: Revision (2026-09-29) answering docs/02-design/features/tdd-gate-fail-opens.design.audit.v1.p1.md. Leaf scan follows the referent parent and excludes symlink entries. Percent-decoded CANON fields round-trip through a sentinel capture. F_GETPATH and percent-encoding use os.fsdecode and os.fsencode. compare_readings.py prints COMPARE: FAIL and exits 0. AC-1.7, AC-3.4, AC-5.3, AC-6.1, and AC-6.2 each have their own run. Four boundary wires each have a removal test and an unconditional-fire test.
