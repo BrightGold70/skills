@@ -2614,12 +2614,21 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] [--complete-l
       # simply stops growing in both cases. Non-JSON by design and prefixed `#`,
       # which every reader of an NDJSON log already tolerates.
       # Beat and agent share the log through separate O_APPEND fds, so a beat
-      # can in principle land mid-line and corrupt one JSON event. Accepted, not
-      # unnoticed: every reader here is `fromjson? // empty`, which skips a
-      # malformed line rather than aborting, and a corrupted `result` still falls
-      # through to the text_delta recovery. Degraded, never broken. The same
-      # tolerance covers a caller-supplied --log with no trailing newline.
-      if [ -n "${_HMAD_EXEC_BEAT_LOG:-}" ]; then
+      # appended while the agent is between the two write()s of ONE event lands
+      # inside that event: the event is split, and a completed grok run whose
+      # `end` was split read as TRUNCATED (D4; agy's `result` is exposed the same
+      # way). So beat only on a line boundary — an empty log, or one whose last
+      # byte is a newline (`$(tail -c1)` strips a trailing newline to empty). A
+      # skipped beat is not retried early: the next one is a full interval away,
+      # and the agent's own partial write already moved the log's mtime, which is
+      # what `progress` liveness reads. Residual: the agent can still start a
+      # partial write between the check and the append — a window of one
+      # `tail` fork, not the whole pause between an event's two halves. Readers
+      # stay `fromjson? // empty`-tolerant for that and for a caller-supplied
+      # --log with no trailing newline.
+      if [ -n "${_HMAD_EXEC_BEAT_LOG:-}" ] \
+        && { [ ! -s "${_HMAD_EXEC_BEAT_LOG}" ] \
+             || [ -z "$(tail -c 1 "${_HMAD_EXEC_BEAT_LOG}" 2>/dev/null)" ]; }; then
         printf '#hmad-beat %s %s running %ss\n' \
           "$(date -u +%H:%M:%SZ)" "$hb_agent" "$(( SECONDS - ${_HMAD_EXEC_T0:-0} ))" \
           >> "${_HMAD_EXEC_BEAT_LOG}" 2>/dev/null || true
@@ -3078,7 +3087,16 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   _exec_stamp start "$agent" "$label" "$cd_dir" || true
   local heartbeat_sec="${HMAD_EXEC_HEARTBEAT_SEC:-120}"
   local child_env=() _v grok_state="" grok_final=""
-  for _v in $(compgen -e); do case "$_v" in CLAUDE*) child_env+=(-u "$_v") ;; esac; done
+  # FR-3's class is every NAME matching `^CLAUDE`, read from the real environment
+  # (`env -0`), not from `compgen -e`: that lists only shell identifiers, so a
+  # `CLAUDE-HYPHEN=`/`CLAUDE.DOT=` entry — valid in an environment, invisible to
+  # bash, still passed through to children by bash 4+ — reached the grok child (D3).
+  # NUL-delimited so a value holding a newline cannot forge a name.
+  local _e
+  while IFS= read -r -d '' _e; do
+    _v="${_e%%=*}"
+    case "$_v" in CLAUDE*) child_env+=(-u "$_v") ;; esac
+  done < <(env -0)
   child_env+=("HPW_AGENT_BACKEND=${HPW_AGENT_BACKEND:-claude}")
   if [ "$agent" = grok ]; then
     # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:

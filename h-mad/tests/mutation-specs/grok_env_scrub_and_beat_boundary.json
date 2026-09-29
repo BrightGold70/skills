@@ -1,0 +1,52 @@
+{
+  "_why": "D3 and D4 of the grok-codex-fallback gap report. D3: the grok child's CLAUDE* scrub enumerated names with `compgen -e`, which lists only shell identifiers, so `CLAUDE-HYPHEN=`/`CLAUDE.DOT=` reached the child against FR-3's `^CLAUDE` class. D4: the exec heartbeat appended `#hmad-beat` into the transcript between the two write()s of one event, splitting a grok `end` and turning a completed run into TRUNCATED.",
+  "_provenance": "docs/archive/2026-09/grok-codex-fallback/grok-codex-fallback.gap.v1.md, sections D3 and D4; both reproduced at 182a1e34 before the fix.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_exec_grok.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "scrub-enumerates-compgen",
+      "_mechanism": "Enumerate names from `compgen -e` again. Non-identifier CLAUDE names are invisible to it and reach the grok child.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  done < <(env -0)",
+      "replace": "  done < <(compgen -e | tr '\\n' '\\0')",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_child_env_has_no_non_identifier_claude_names"
+    },
+    {
+      "name": "scrub-drops-unset",
+      "_mechanism": "Match CLAUDE* names but never add `-u`. Every CLAUDE name reaches the child.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    case \"$_v\" in CLAUDE*) child_env+=(-u \"$_v\") ;; esac\n  done",
+      "replace": "    case \"$_v\" in CLAUDE*) : ;; esac\n  done",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_child_env_has_no_non_identifier_claude_names"
+    },
+    {
+      "name": "beat-ignores-line-boundary",
+      "_mechanism": "Beat whenever a beat log is set, regardless of the log's last byte. The beat lands inside a split event again.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if [ -n \"${_HMAD_EXEC_BEAT_LOG:-}\" ] \\\n        && {",
+      "replace": "      if [ -n \"${_HMAD_EXEC_BEAT_LOG:-}\" ] \\\n        || {",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_beat_never_splits_an_event"
+    },
+    {
+      "name": "beat-never-written",
+      "_mechanism": "Make the boundary gate always false. No beat reaches the transcript, so a silent-but-alive run and a dead one look alike.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "|| [ -z \"$(tail -c 1 \"${_HMAD_EXEC_BEAT_LOG}\" 2>/dev/null)\" ]; }; then",
+      "replace": "|| false; } && false; then",
+      "test": "tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_beat_never_splits_an_event"
+    }
+  ]
+}

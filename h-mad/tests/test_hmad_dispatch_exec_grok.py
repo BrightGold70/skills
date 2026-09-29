@@ -1,7 +1,9 @@
 """Phase 5d contracts for dispatching Grok through the exec caller."""
 
+import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -389,3 +391,99 @@ def test_exec_grok_with_failing_jq_is_not_parsed(tmp_path):
         f"exec grok must diagnose jq's failing exit: {r.stderr}"
     )
     assert "TRUNCATED" not in r.stderr, "failing jq must not imply a truncated stream"
+
+
+def _ambient_bash():
+    """The bash the operator's `#!/usr/bin/env bash` resolves to, outside the test PATH.
+
+    The isolated PATH (`bindir:/usr/bin:/bin`) would run the wrapper under macOS's
+    /bin/bash 3.2, which drops non-identifier environment names on import and so
+    hides D3 entirely. The positive control in the D3 test fails loudly if this
+    bash does too.
+    """
+    found = shutil.which("bash")
+    assert found, "no bash on the ambient PATH"
+    return found
+
+
+def test_exec_grok_child_env_has_no_non_identifier_claude_names(tmp_path):
+    """D3 / FR-3: the scrubbed class is every name matching `^CLAUDE`, not only the
+    names bash can list. `CLAUDE-HYPHEN` and `CLAUDE.DOT` are valid in an environment
+    and invisible to `compgen -e`."""
+    bindir = _bindir(tmp_path, [])
+    (bindir / "bash").symlink_to(_ambient_bash())
+    capture = tmp_path / "child-env.txt"
+    stream = tmp_path / "stream.ndjson"
+    stream.write_text(f0_text(), encoding="utf-8")
+    # A python stub, so the capture reads the process environment directly rather
+    # than through a bash that may itself have dropped the names.
+    stub = bindir / "grok"
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        "import os, sys\n"
+        "names = sorted(n for n in os.environ if n.startswith(('CLAUDE', 'KEEP')))\n"
+        f"open({str(capture)!r}, 'w').write(''.join(n + '\\n' for n in names))\n"
+        f"sys.stdout.write(open({str(stream)!r}).read())\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text(HOSTILE_PROMPT, encoding="utf-8")
+    r = run(["exec", "grok", str(prompt), "--cd", str(tmp_path), "--log",
+             str(tmp_path / "run.ndjson")],
+            env={"_BINDIR": str(bindir), **CLAUDE_ENV,
+                 "CLAUDE-HYPHEN": "leak1", "CLAUDE.DOT": "leak2",
+                 "KEEP-HYPHEN": "kept", "KEEP_PLAIN": "kept"})
+    assert capture.exists(), f"exec grok must launch the child: {r.stderr}"
+    names = capture.read_text(encoding="utf-8").splitlines()
+    # Positive control: non-CLAUDE names, identifier or not, still reach the child.
+    assert "KEEP-HYPHEN" in names and "KEEP_PLAIN" in names, (
+        f"the child must still inherit every non-CLAUDE name (control): {names}"
+    )
+    assert [n for n in names if n.startswith("CLAUDE")] == [], (
+        f"exec grok must scrub every ^CLAUDE name from the child, identifier or not: {names}"
+    )
+    assert r.returncode == 0, r.stderr
+
+
+def test_exec_grok_beat_never_splits_an_event(tmp_path):
+    """D4: the heartbeat shares the transcript with grok's stdout. A grok event
+    written in two write() calls, with a pause longer than the beat interval
+    between them, must arrive intact, and the completed run must not read as
+    TRUNCATED."""
+    lines = f0_text().splitlines()
+    end = lines[-1]
+    assert json.loads(end)["type"] == "end", "F0's last event must be `end`"
+    half = len(end) // 2
+    parts = [tmp_path / "p1", tmp_path / "p2", tmp_path / "p3"]
+    parts[0].write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
+    parts[1].write_text(end[:half], encoding="utf-8")
+    parts[2].write_text(end[half:] + "\n", encoding="utf-8")
+    bindir = _bindir(tmp_path, [])
+    stub = bindir / "grok"
+    # Beats land on a line boundary during the first sleep (the control that a
+    # beat is still written at all) and inside the event during the second.
+    stub.write_text(
+        "#!/bin/bash\n"
+        f"cat {shlex.quote(str(parts[0]))}\n"
+        "sleep 2\n"
+        f"cat {shlex.quote(str(parts[1]))}\n"
+        "sleep 3\n"
+        f"cat {shlex.quote(str(parts[2]))}\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text(HOSTILE_PROMPT, encoding="utf-8")
+    log = tmp_path / "run.ndjson"
+    r = run(["exec", "grok", str(prompt), "--cd", str(tmp_path), "--log", str(log)],
+            env={"_BINDIR": str(bindir), "HMAD_EXEC_HEARTBEAT_SEC": "1"})
+    text = log.read_text(encoding="utf-8")
+    assert "#hmad-beat" in text, "the heartbeat must still beat into the transcript"
+    assert end in text.splitlines(), (
+        "the split `end` event must arrive intact:\n"
+        + "\n".join(line[:120] for line in text.splitlines()[-6:])
+    )
+    assert "TRUNCATED" not in r.stderr, f"a completed run must not read as TRUNCATED: {r.stderr}"
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "STATUS: DONE\n", r.stderr
