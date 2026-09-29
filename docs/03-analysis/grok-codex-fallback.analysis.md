@@ -1,5 +1,16 @@
 # grok-codex-fallback analysis
 
+## Phase 6 verdict
+
+Match Rate: 98% (fresh-context verifier, `grok-codex-fallback.gap.v1.md`). 6a-prime:
+`READY_TO_MERGE` (agy, tools=4 — thin; `grok-codex-fallback.archreview.v1.md`). The verifier
+reproduced four defects; operator decision 2026-09-29: fix D1 and D2 in 6b, carry D3 and D4.
+6b cycle 1 (1 iterate cycle): D1 non-finite reasoning tokens skipped in both scanners; D2
+audit-cycle clears each pass log before dispatch. RED 7 failed / 19 passed with the production
+hunks reverted; 66 passed with them; new mutation rows ALL_CAUGHT; anchors 1161/1161; full suite 1
+failed (baseline) / 4576 passed. Carried: D3 (non-identifier `CLAUDE*` env names reach the grok
+child) and D4 (heartbeat can split an event; fails closed).
+
 Phase 5 readings recorded from 2026-09-29, after the rebase onto main `8ef6009f` (merge of
 codex-tdd-gate-defects). Tasks 1–11 and 13 were implemented before the rebase; their readings live
 in their commit messages.
