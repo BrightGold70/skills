@@ -152,6 +152,54 @@
       "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_scopes_nested_state_to_the_target_project"
     },
     {
+      "name": "CX-FOLD",
+      "_mechanism": "Task 2 AC-2.2: remove the fold_py_suffix call while leaving the callee intact.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    path = Path(_load_identity().fold_py_suffix(relative))",
+      "replace": "    path = Path(relative)",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_fold_new_leaf_denies"
+    },
+    {
+      "name": "CX-GOV",
+      "_mechanism": "Task 2 AC-3.3: refuse an unresolvable target without checking governing phase state.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if resolved.unresolvable:\n            if phase5_status in {\"active\", \"unknown\"}:",
+      "replace": "        if resolved.unresolvable:\n            if True:",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_unresolvable_step3_allows"
+    },
+    {
+      "name": "CX-RESOLVE-M9",
+      "_mechanism": "Task 2 WIRE 1 removal: resolve _relative_target with Path.resolve while retaining the identity import.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    resolved = identity.canonicalise(str(root), str(Path(raw).expanduser()), str(base))",
+      "replace": "    path = (base / Path(raw).expanduser()).resolve()\n    resolved = identity.Identity(str(root), str(path), str(path.parent), (path.name,), False, 0, \"\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_case_directory_m9_denies"
+    },
+    {
+      "name": "CX-FORCE-SCRIPT",
+      "_mechanism": "Task 2 WIRE 1 forced: canonical_directory on script.resolve inside _safe_shell_command.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        script = script.resolve() if script.is_absolute() else (Path.cwd() / script).resolve()",
+      "replace": "        script = Path(_load_identity().canonical_directory(str(script.resolve() if script.is_absolute() else (Path.cwd() / script).resolve())))",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_safe_shell_script_keeps_path_resolve_spelling"
+    },
+    {
+      "name": "CX-FORCE-CWD",
+      "_mechanism": "Task 2 WIRE 1 forced: canonical_directory on an empty payload cwd.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        base = _payload_cwd_base(root, cwd)\n    except RuntimeError:",
+      "replace": "        base = Path(identity.canonical_directory(cwd)) if cwd == \"\" else _payload_cwd_base(root, cwd)\n    except RuntimeError:",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_empty_cwd_joins_root"
+    },
+    {
+      "name": "CX-FOLD-FORCE",
+      "_mechanism": "Task 2 WIRE 2 forced: consult folding production classifier before unresolvable handling.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if resolved.unresolvable:\n            if phase5_status in {\"active\", \"unknown\"}:",
+      "replace": "        if not _is_production_python(raw):\n            continue\n        if bool(resolved.unresolvable):\n            if phase5_status in {\"active\", \"unknown\"}:",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_forced_fold_does_not_exempt_dangling_test_name"
+    },
+    {
       "name": "CX-LTRIM",
       "_mechanism": "Task 4 AC-4.2: removing leading header trim must expose the indented production target.",
       "file": "hooks/h-mad-codex-tdd-gate.py",

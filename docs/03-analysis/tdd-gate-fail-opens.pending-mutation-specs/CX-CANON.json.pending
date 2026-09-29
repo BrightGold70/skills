@@ -1,0 +1,12 @@
+{
+  "spec": "h-mad/tests/mutation-specs/codex_gate_judge_wiring.json",
+  "reason": "SURVIVED 2026-09-30: test_codex_case_root_m8_denies passes with _canonical_root using Path.resolve(); needs a discriminating pin before promotion",
+  "row": {
+    "name": "CX-CANON",
+    "_mechanism": "Task 2 AC-1.4: restore Path.resolve for every _project_root return via _canonical_root.",
+    "file": "hooks/h-mad-codex-tdd-gate.py",
+    "find": "        return Path(identity.canonical_directory(str(path)))",
+    "replace": "        return path.resolve()",
+    "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_case_root_m8_denies"
+  }
+}
