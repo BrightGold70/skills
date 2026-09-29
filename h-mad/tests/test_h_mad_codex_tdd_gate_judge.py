@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 from pathlib import Path
 import runpy
@@ -12,7 +13,7 @@ import time
 
 import pytest
 
-from tdd_gate_support import build_venv, fake_venv, hermetic_env, shell_corpus, sleeper, write_plan, write_state
+from tdd_gate_support import assert_case_insensitive, build_venv, fake_venv, hermetic_env, shell_corpus, sleeper, write_plan, write_state
 
 
 CODEX_GATE = Path(__file__).resolve().parents[1] / "hooks" / "h-mad-codex-tdd-gate.py"
@@ -230,6 +231,243 @@ def test_codex_gate_keeps_no_private_resolver():
     source = CODEX_GATE.read_text(encoding="utf-8")
     for token in ("_target_phase5_status", "_derived_test", "_test_exit", "h_mad_derive_test_path.sh"):
         assert token not in source, f"hook still owns private resolution: {token}"
+
+
+def _expect_gate(root: Path, target: str, expected: str, kind: str = "", *, cwd: str | None = None) -> str:
+    verdict, reason, _ = _run(root, _payload(target, cwd=cwd))
+    assert verdict == expected, f"{target}: expected {expected} kind={kind}, got {verdict}: {reason}"
+    if kind:
+        assert f"kind={kind}" in reason, f"{target}: expected kind={kind}, got {verdict}: {reason}"
+    return reason
+
+
+@pytest.mark.parametrize("on_disk,spelled", [("Case", "case"), ("case", "Case")], ids=["forward", "reverse"])
+def test_codex_case_root_m8_denies(tmp_path, on_disk, spelled):
+    root = tmp_path / on_disk / "tests/proj"
+    root.mkdir(parents=True)
+    assert_case_insensitive(tmp_path)
+    _file(root, "src/prod.py")
+    write_state(root, {HOSTILE_KEY: {"phase": "step5"}})
+    _expect_gate(root, str(tmp_path / spelled / "tests/proj/src/prod.py"), "deny", "no-test-resolved")
+
+
+def test_codex_case_directory_m9_denies(tmp_path):
+    root = _root(tmp_path)
+    assert_case_insensitive(root)
+    _file(root, "Tests/prod.py")
+    _expect_gate(root, "tests/prod.py", "deny", "no-test-resolved")
+
+
+def test_codex_toward_allow_m10(tmp_path):
+    root = _root(tmp_path)
+    assert_case_insensitive(root)
+    _file(root, "fixtures/helper.py")
+    _expect_gate(root, "FIXTURES/helper.py", "allow")
+
+
+def test_codex_m11_stays_allow(tmp_path):
+    root = _root(tmp_path)
+    _file(root, "tests/helper.py")
+    (root / "src").mkdir()
+    (root / "src/tl").symlink_to("../tests", target_is_directory=True)
+    _expect_gate(root, "src/tl/helper.py", "allow")
+
+
+@pytest.mark.parametrize("relative", ["src/brandnew.py", "src/newpkg/mod.py"], ids=["absent-leaf", "absent-parent"])
+def test_codex_new_file_denies_without_judge_error(tmp_path, relative):
+    root = _root(tmp_path)
+    (root / "src").mkdir()
+    _expect_gate(root, relative, "deny", "no-test-resolved")
+
+
+def test_codex_hard_link_alias_denies(tmp_path):
+    root = _root(tmp_path)
+    source = _file(root, "src/prod.py")
+    alias = root / "src/test_prod.py"
+    os.link(source, alias)
+    assert os.stat(source).st_ino == os.stat(alias).st_ino, "hard-link fixture must share an inode"
+    _expect_gate(root, "src/test_prod.py", "deny", "no-test-resolved")
+
+
+def test_codex_fold_existing_leaf_denies(tmp_path):
+    root = _root(tmp_path)
+    _file(root, "src/prod.PY")
+    _expect_gate(root, "src/prod.PY", "deny", "no-test-resolved")
+
+
+@pytest.mark.parametrize("relative", ["src/new.PY", "src/new.pY", "src/new.Py"], ids=["m3", "pY", "Py"])
+def test_codex_fold_new_leaf_denies(tmp_path, relative):
+    root = _root(tmp_path)
+    (root / "src").mkdir()
+    _expect_gate(root, relative, "deny", "no-test-resolved")
+
+
+@pytest.mark.parametrize("relative,expected", [
+    ("sub/test_x.PY", "allow"), ("sub/x_test.PY", "allow"),
+    ("sub/conftest.PY", "allow"), ("sub/TEST_x.py", "deny"),
+])
+def test_codex_test_shaped_names_stay_exempt(tmp_path, relative, expected):
+    root = _root(tmp_path)
+    (root / "sub").mkdir()
+    _expect_gate(root, relative, expected, "no-test-resolved" if expected == "deny" else "")
+
+
+def test_codex_trailing_space_is_not_folded(tmp_path):
+    root = _root(tmp_path)
+    (root / "src").mkdir()
+    _expect_gate(root, "src/prod.py ", "allow")
+
+
+def test_codex_d1_repro_patch_denies(tmp_path):
+    root = _root(tmp_path)
+    _file(root, "src/prod.PY")
+    verdict, reason, _ = _run(root, {"tool_name": "apply_patch", "tool_input": {
+        "patch": "*** Begin Patch\n*** Update File: src/prod.PY\n@@\n-X = 1\n+X = 2\n*** End Patch\n"}})
+    assert verdict == "deny", f"D-1 patch was {verdict}: {reason}"
+    assert "kind=no-test-resolved" in reason, reason
+
+
+def _unresolvable(root: Path, variant: str) -> tuple[str, str]:
+    if variant == "m12":
+        (root / "docs/d.md").symlink_to("../src/newprod.py")
+        return "docs/d.md", str(root / "docs/d.md")
+    if variant == "m13-leaf":
+        (root / "src").mkdir()
+        (root / "src/dang.py").symlink_to("nowhere/x.py")
+        return "src/dang.py", str(root / "src/dang.py")
+    if variant == "m13-intermediate":
+        (root / "lnk").symlink_to("nowhere", target_is_directory=True)
+        return "lnk/x.py", str(root / "lnk")
+    (root / "src").mkdir()
+    (root / "src/loopa.py").symlink_to("loopb.py")
+    (root / "src/loopb.py").symlink_to("loopa.py")
+    return "src/loopa.py", str(root / "src/loopa.py")
+
+
+@pytest.mark.parametrize("variant", ["m12", "m13-leaf", "m13-intermediate", "m14"])
+def test_codex_unresolvable_governed_is_judge_error(tmp_path, variant):
+    root = _root(tmp_path)
+    target, component = _unresolvable(root, variant)
+    reason = _expect_gate(root, target, "deny", "judge-error")
+    assert component in reason, f"missing unresolvable component {component}: {reason}"
+
+
+@pytest.mark.parametrize("variant", ["m13-leaf", "m13-intermediate", "m14"])
+def test_codex_unresolvable_step3_allows(tmp_path, variant):
+    root = _root(tmp_path)
+    write_state(root, {HOSTILE_KEY: {"phase": "step3"}})
+    target, _ = _unresolvable(root, variant)
+    _expect_gate(root, target, "allow")
+
+
+def test_codex_resolver_reports_loop_unresolvable(tmp_path):
+    root = _root(tmp_path)
+    target, _ = _unresolvable(root, "m14")
+    spec = importlib.util.spec_from_file_location("codex_gate_identity_test", CODEX_GATE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        identity = module._relative_target(root, target)
+    except (OSError, RuntimeError) as exc:
+        pytest.fail(f"loop resolver raised {type(exc).__name__} instead of returning unresolvable Identity: {exc}")
+    assert getattr(identity, "unresolvable", False) is True, f"loop resolver returned {identity!r}"
+
+
+@pytest.mark.parametrize("cell", ["a", "b"])
+def test_codex_unreadable_component_step5(tmp_path, cell):
+    _unreadable_component_case(tmp_path, cell, "step5", "deny", "judge-error")
+
+
+@pytest.mark.parametrize("cell", ["a", "b"])
+def test_codex_unreadable_component_step3_allows(tmp_path, cell):
+    _unreadable_component_case(tmp_path, cell, "step3", "allow")
+
+
+def _unreadable_component_case(tmp_path: Path, cell: str, phase: str, expected: str, kind: str = "") -> None:
+    root = _root(tmp_path)
+    write_state(root, {HOSTILE_KEY: {"phase": phase}})
+    if cell == "a":
+        directory = root / "Tests"
+        directory.mkdir()
+        target = "tests/newmod.py"
+    else:
+        directory = root / "src"
+        _file(root, "src/prod.py")
+        target = "src/prod.py"
+    directory.chmod(0o311)
+    try:
+        with pytest.raises(PermissionError):
+            os.listdir(directory)
+        reason = _expect_gate(root, target, expected, kind)
+        if kind:
+            assert str(directory) in reason, f"missing unreadable component {directory}: {reason}"
+    finally:
+        directory.chmod(0o755)
+
+
+@pytest.mark.parametrize("phase", ["active", "unknown", "inactive"])
+def test_codex_root_open_failure_refuses_only_when_governed(tmp_path, phase):
+    root = _root(tmp_path)
+    write_state(root, {HOSTILE_KEY: {"phase": "step5" if phase == "active" else "step3"}})
+    if phase == "unknown":
+        (root / "docs/.bkit-memory.json").write_text("{bad json", encoding="utf-8")
+    root.chmod(0o311)
+    try:
+        with pytest.raises(PermissionError):
+            os.listdir(root)
+        reason = _expect_gate(root, str(root / "src/prod.py"), "allow" if phase == "inactive" else "deny",
+                              "" if phase == "inactive" else "judge-error")
+        if phase != "inactive":
+            assert str(root) in reason, f"missing root component {root}: {reason}"
+    finally:
+        root.chmod(0o755)
+
+
+@pytest.mark.parametrize("variant", ["missing", "loop", "mode000", "mode0311"])
+def test_codex_payload_cwd_oserror_uses_payload_cwd_base(tmp_path, variant):
+    root = _root(tmp_path)
+    _file(root, "src/prod.py")
+    cwd = root / "badcwd"
+    if variant == "loop":
+        cwd.symlink_to("badcwd")
+    elif variant.startswith("mode"):
+        cwd.mkdir()
+        cwd.chmod(0 if variant == "mode000" else 0o311)
+    try:
+        target = "src/prod.py" if variant in {"missing", "loop"} else "../src/prod.py"
+        reason = _expect_gate(root, target, "deny", "no-test-resolved", cwd=str(cwd))
+        assert "before src/prod.py" in reason, f"cwd join chose the wrong target: {reason}"
+    finally:
+        if variant.startswith("mode"):
+            cwd.chmod(0o755)
+
+
+def test_codex_safe_shell_script_keeps_path_resolve_spelling(tmp_path):
+    root = _root(tmp_path)
+    scripts = CODEX_GATE.parent.parent / "scripts"
+    script = scripts / "h_mad_wire_registry.py"
+    upper = scripts.parent / "SCRIPTS" / script.name
+    assert os.path.exists(upper), "case-insensitive SCRIPTS precondition failed"
+    spec = importlib.util.spec_from_file_location("codex_gate_shell_test", CODEX_GATE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._safe_shell_command(f"python3 {script} challenge", root, str(root)) is True
+    assert module._safe_shell_command(f"python3 {upper} challenge", root, str(root)) is False
+
+
+def test_codex_empty_cwd_joins_root(tmp_path):
+    root = _root(tmp_path)
+    _file(root, "src/prod.py")
+    _expect_gate(root, "src/prod.py", "deny", "no-test-resolved", cwd="")
+
+
+def test_codex_forced_fold_does_not_exempt_dangling_test_name(tmp_path):
+    root = _root(tmp_path)
+    (root / "sub").mkdir()
+    (root / "sub/test_x.PY").symlink_to("nowhere.py")
+    _expect_gate(root, "sub/test_x.PY", "deny", "judge-error")
 
 
 @pytest.fixture(scope="module")
