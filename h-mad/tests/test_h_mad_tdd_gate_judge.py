@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tdd_gate_support import assert_case_insensitive, build_venv, dd7_cells, decision, fake_venv, hook_form, sleeper, write_state
+from tdd_gate_support import assert_case_insensitive, build_venv, dd7_cells, decision, detaching_sleeper, fake_venv, hook_form, sleeper, stop_detached, write_state
 
 
 HOOK = Path(__file__).resolve().parents[1] / "hooks" / "h-mad-tdd-gate.sh"
@@ -122,7 +122,7 @@ def _tree_b(tmp_path: Path, *, judge_line: str = "TDD-JUDGE: DENY kind=judge-err
 
 @pytest.mark.parametrize("kind", ["red-measured", "no-test-resolved", "test-missing", "venv-escapes-root",
                                   "pytest-missing", "pytest-error", "no-tests-ran", "no-summary",
-                                  "test-passing", "timeout", "judge-error"])
+                                  "test-passing", "timeout", "judge-timeout", "judge-error"])
 def test_claude_gate_kind(tmp_path, kind):
     root = _root(tmp_path)
     _file(root, TARGET)
@@ -147,11 +147,26 @@ def test_claude_gate_kind(tmp_path, kind):
         fake_venv(root / "hematology-paper-writer", "exit 1")
     elif kind == "timeout":
         sleeper(fake_venv(root / "hematology-paper-writer", "exit 0"), tmp_path / "sleeper.pid", 90)
+    elif kind == "judge-timeout":
+        pidfile = tmp_path / "detached.pid"
+        detaching_sleeper(fake_venv(root / "hematology-paper-writer", "exit 0"), pidfile, 90,
+                           parent_seconds=90)
     hook = _tree_b(tmp_path, judge_line="TDD-JUDGE: MAYBE")[0] if kind == "judge-error" else HOOK
-    result = _gate(root, payload=_payload(str(root / target)), bin_dir=bin_dir, hook=hook,
-                   timeout=120.0 if kind == "timeout" else 60.0)
+    try:
+        result = _gate(root, payload=_payload(str(root / target)), bin_dir=bin_dir, hook=hook,
+                       timeout=120.0 if kind in ("timeout", "judge-timeout") else 60.0)
+    finally:
+        if kind == "judge-timeout":
+            stop_detached(pidfile)
     _assert(result, "allow" if kind == "red-measured" else "deny",
             "" if kind == "red-measured" else kind, hook)
+
+
+def test_claude_gate_judge_timeout_stub(tmp_path):
+    root = _root(tmp_path)
+    hook, _ = _tree_b(tmp_path, judge_line="TDD-JUDGE: DENY kind=judge-timeout reason=r", judge_rc=0)
+    result = _gate(root, arg=str(root / TARGET), bin_dir=_bin(tmp_path), hook=hook)
+    _assert(result, "deny", "judge-timeout", hook)
 
 
 @pytest.mark.parametrize("variant,line,rc", [

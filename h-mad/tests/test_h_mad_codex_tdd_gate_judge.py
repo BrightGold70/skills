@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from tdd_gate_support import assert_case_insensitive, build_venv, fake_venv, hermetic_env, shell_corpus, sleeper, write_plan, write_state
+from tdd_gate_support import assert_case_insensitive, build_venv, detaching_sleeper, fake_venv, hermetic_env, shell_corpus, sleeper, stop_detached, write_plan, write_state
 
 
 CODEX_GATE = Path(__file__).resolve().parents[1] / "hooks" / "h-mad-codex-tdd-gate.py"
@@ -89,7 +89,7 @@ def _pid_gone(pidfile: Path) -> None:
 @pytest.mark.parametrize("kind", [
     "red-measured", "no-test-resolved", "test-missing", "venv-escapes-root",
     "pytest-missing", "pytest-error", "no-tests-ran", "no-summary",
-    "test-passing", "timeout", "judge-error",
+    "test-passing", "timeout", "judge-timeout", "judge-error",
 ])
 def test_codex_gate_kind(tmp_path, kind):
     root = _root(tmp_path)
@@ -120,6 +120,10 @@ def test_codex_gate_kind(tmp_path, kind):
         python = fake_venv(root / "hematology-paper-writer", "exit 0")
         pidfile = tmp_path / "sleeper.pid"
         sleeper(python, pidfile, seconds=90)
+    elif kind == "judge-timeout":
+        python = fake_venv(root / "hematology-paper-writer", "exit 0")
+        pidfile = tmp_path / "detached.pid"
+        detaching_sleeper(python, pidfile, seconds=90, parent_seconds=90)
     elif kind == "judge-error":
         other = tmp_path / "B"
         gate = other / "hooks/h-mad-codex-tdd-gate.py"
@@ -127,10 +131,14 @@ def test_codex_gate_kind(tmp_path, kind):
         shutil.copyfile(CODEX_GATE, gate)
         _file(other, "scripts/h_mad_tdd_judge.py", 'raise ImportError("broken judge for AC-5.4")\n')
 
-    verdict, reason, elapsed = _run(
-        root, _payload(target), gate=gate if kind == "judge-error" else CODEX_GATE,
-        timeout=120.0 if kind == "timeout" else 60.0,
-    )
+    try:
+        verdict, reason, elapsed = _run(
+            root, _payload(target), gate=gate if kind == "judge-error" else CODEX_GATE,
+            timeout=120.0 if kind in ("timeout", "judge-timeout") else 60.0,
+        )
+    finally:
+        if kind == "judge-timeout":
+            stop_detached(pidfile)
     if kind == "red-measured":
         assert verdict == "allow", (verdict, reason)
     else:
@@ -139,6 +147,30 @@ def test_codex_gate_kind(tmp_path, kind):
     if kind == "timeout":
         assert elapsed < 60.0, f"judge exceeded its 40-second budget: {elapsed:.2f}s"
         _pid_gone(pidfile)
+
+
+def test_codex_gate_judge_timeout_reason(tmp_path):
+    root = _root(tmp_path)
+    _file(root, TARGET)
+    other = tmp_path / "B"
+    gate = other / "hooks/h-mad-codex-tdd-gate.py"
+    gate.parent.mkdir(parents=True)
+    shutil.copyfile(CODEX_GATE, gate)
+    stub = other / "scripts/h_mad_tdd_judge.py"
+    stub.parent.mkdir(parents=True)
+    shutil.copyfile(CODEX_GATE.parents[1] / "scripts/h_mad_target_identity.py",
+                    stub.parent / "h_mad_target_identity.py")
+    stub.write_text(
+        "from types import SimpleNamespace\n"
+        "def read_chain(root, target):\n"
+        "    return SimpleNamespace(value='active', records=())\n"
+        "def judge(root, target, records):\n"
+        "    return SimpleNamespace(decision='DENY', kind='judge-timeout', reason='stub')\n",
+        encoding="utf-8",
+    )
+    verdict, reason, _ = _run(root, _payload(), gate=gate)
+    assert verdict == "deny", f"judge-timeout stub must deny: {verdict}: {reason}"
+    assert "kind=judge-timeout" in reason, reason
 
 
 def test_root_step5_governs_a_subproject_with_its_own_state(tmp_path):

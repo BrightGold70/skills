@@ -14,8 +14,8 @@ from urllib.parse import unquote
 
 import pytest
 
-from tdd_gate_support import (build_venv, fake_venv, hermetic_env, marker_shim,
-                              sleeper, write_plan, write_state)
+from tdd_gate_support import (build_venv, detaching_sleeper, fake_venv, hermetic_env,
+                              marker_shim, sleeper, stop_detached, write_plan, write_state)
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 JUDGE_PATH = SCRIPTS / "h_mad_tdd_judge.py"
@@ -456,10 +456,100 @@ def test_run_bounded_kills_the_process_group(tmp_path):
     pidfile = tmp_path / "child.pid"
     script = sleeper(tmp_path / "runner", pidfile, 30)
     start = time.monotonic()
-    _, _, _, timed_out, _ = judge._run_bounded([str(script)], root, start + 1.0)
+    _, _, _, timed_out, _, reap_failed = judge._run_bounded([str(script)], root, start + 1.0)
     assert timed_out
+    assert reap_failed is False
     assert time.monotonic() - start < 6.0
     _pid_gone(pidfile)
+
+
+def test_run_bounded_reap_failure_is_bounded(tmp_path):
+    root = _root(tmp_path)
+    pidfile = tmp_path / "detached.pid"
+    script = detaching_sleeper(tmp_path / "runner", pidfile, 12)
+    start = time.monotonic()
+    try:
+        result = judge._run_bounded([str(script)], root, start + 2.0)
+        elapsed = time.monotonic() - start
+        assert elapsed < 4.0, f"post-kill reap blocked for {elapsed:.2f}s"
+        assert result.timed_out is True
+        assert result.reap_failed is True
+    finally:
+        stop_detached(pidfile)
+
+
+def test_run_bounded_plain_timeout_is_not_reap_failure(tmp_path):
+    root = _root(tmp_path)
+    pidfile = tmp_path / "ordinary.pid"
+    script = sleeper(tmp_path / "runner", pidfile, 30)
+    start = time.monotonic()
+    result = judge._run_bounded([str(script)], root, start + 1.0)
+    assert result.timed_out is True
+    assert result.reap_failed is False
+    assert time.monotonic() - start < 4.0
+    _pid_gone(pidfile)
+
+
+def test_judge_name_map_detach_is_judge_timeout(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    pidfile = tmp_path / "map-detached.pid"
+    script = detaching_sleeper(tmp_path / "map.sh", pidfile, 12)
+    monkeypatch.setattr(judge, "NAME_MAP", script)
+    budget_s = 2.0
+    start = time.monotonic()
+    try:
+        verdict = judge.judge(root, _target(root, "tools/x.py"), (), budget_s=budget_s,
+                              fallback_interpreter=sys.executable)
+        elapsed = time.monotonic() - start
+        assert (verdict.decision, verdict.kind) == ("DENY", "judge-timeout"), verdict
+        assert elapsed < budget_s + judge.REAP_GRACE_S + 1.0, f"name map reap took {elapsed:.2f}s"
+    finally:
+        stop_detached(pidfile)
+
+
+def test_judge_venv_interpreter_detach_is_judge_timeout(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    pidfile = tmp_path / "pytest-detached.pid"
+    script = detaching_sleeper(tmp_path / "interpreter", pidfile, 12)
+    monkeypatch.setattr(judge, "select_interpreter", lambda *args: str(script))
+    budget_s = 2.0
+    start = time.monotonic()
+    try:
+        verdict = judge.judge(root, target, _records(root), budget_s=budget_s,
+                              fallback_interpreter=sys.executable)
+        elapsed = time.monotonic() - start
+        assert (verdict.decision, verdict.kind) == ("DENY", "judge-timeout"), verdict
+        assert elapsed < budget_s + judge.REAP_GRACE_S + 1.0, f"pytest reap took {elapsed:.2f}s"
+    finally:
+        stop_detached(pidfile)
+
+
+def test_judge_timeout_has_priority(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    target = _target(root)
+    first = _plan_test(root, "tests/test_first.py", red=False)
+    first.write_text("import missing_module_for_judge_priority\n", encoding="utf-8")
+    second = _plan_test(root, "tests/test_second.py", red=False)
+    _task_plan(root, "**Production file**: `tools/w.py`\n**Test file**: `tests/test_first.py`",
+               "**Production file**: `tools/w.py`\n**Test file**: `tests/test_second.py`")
+    pidfile = tmp_path / "priority-detached.pid"
+    script = detaching_sleeper(tmp_path / "interpreter", pidfile, 12)
+    monkeypatch.setattr(judge, "select_interpreter",
+                        lambda test, *args: str(script) if test == second else sys.executable)
+    budget_s = 3.0
+    start = time.monotonic()
+    try:
+        verdict = judge.judge(root, target, _records(root), budget_s=budget_s,
+                              fallback_interpreter=sys.executable)
+        elapsed = time.monotonic() - start
+        assert (verdict.decision, verdict.kind) == ("DENY", "judge-timeout"), verdict
+        assert "test_first.py: pytest-error" in verdict.reason, verdict.reason
+        assert "test_second.py: judge-timeout" in verdict.reason, verdict.reason
+        assert elapsed < budget_s + judge.REAP_GRACE_S + 1.0, f"priority reap took {elapsed:.2f}s"
+    finally:
+        stop_detached(pidfile)
 
 
 def test_name_map_runs_under_the_budget(tmp_path, monkeypatch):

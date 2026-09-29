@@ -6,9 +6,11 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import stat
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -157,6 +159,27 @@ def marker_shim(python: Path, marker: Path) -> Path:
 
 def sleeper(path: Path, pidfile: Path, seconds: int) -> Path:
     return _shell_script(path, f"sleep {int(seconds)} &\necho $! > {shlex.quote(str(pidfile))}\nwait")
+
+
+def detaching_sleeper(path: Path, pidfile: Path, seconds: int, *, parent_seconds: int = 30) -> Path:
+    grandchild = ("import os, time; from pathlib import Path; "
+                  f"Path({str(pidfile)!r}).write_text(str(os.getpid())); "
+                  f"time.sleep({int(seconds)})")
+    parent = ("import subprocess, sys, time; "
+              f"subprocess.Popen([sys.executable, '-c', {grandchild!r}], "
+              f"start_new_session=True); time.sleep({int(parent_seconds)})")
+    return _shell_script(path, f"exec {shlex.quote(sys.executable)} -c {shlex.quote(parent)} \"$@\"")
+
+
+def stop_detached(pidfile: Path) -> None:
+    deadline = time.monotonic() + 1.0
+    while not pidfile.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    if pidfile.exists():
+        try:
+            os.kill(int(pidfile.read_text(encoding="utf-8")), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 @dataclass(frozen=True)
