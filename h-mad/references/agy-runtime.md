@@ -105,10 +105,10 @@ python3 "$HMAD_SKILL_ROOT/scripts/h_mad_install_check.py" --agy-skills-dir ~/.ge
 
 ## Context budget and claims
 
-Use the explicit host flag for the budget and resume oracle. These commands show this checkout's absolute script path; update it for another installation. The budget check is:
+Use the explicit host flag for the budget and resume oracle. Replace `<HMAD_SKILL_ROOT>` with the literal absolute path of the resolved skill root before running: the codex TDD gate accepts only a literal absolute script path (it rejects `$` and `~`), and a checkout path must never be written into this file. The budget check is:
 
 ```bash
-python3 "/Users/kimhawk/orca/skills-multi-host-runtime/h-mad/scripts/h_mad_context_budget.py" --host agy
+python3 "<HMAD_SKILL_ROOT>/scripts/h_mad_context_budget.py" --host agy
 ```
 
 `CTXBUDGET: UNKNOWN reason=host_unsupported` is expected, not an `OK` verdict. The
@@ -125,7 +125,7 @@ before any state write; use `--create --claim` only for its `start_fresh` verdic
 
 ```bash
 ( set -C; python3 -c 'import uuid; print(uuid.uuid4())' > "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>" ) && echo "SID: MINTED" || echo "SID: NOT_MINTED"
-python3 "/Users/kimhawk/orca/skills-multi-host-runtime/h-mad/scripts/h_mad_resume_decision.py" --host agy --state docs/.bkit-memory.json --feature "<feature>" --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "<HMAD_SKILL_ROOT>/scripts/h_mad_resume_decision.py" --host agy --state docs/.bkit-memory.json --feature "<feature>" --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
 python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --create --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
 python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
 python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --beat --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"

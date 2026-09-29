@@ -249,8 +249,10 @@ def _shell_verdict(root: Path, cwd: Path, command: str) -> tuple[str, str]:
 def test_codex_gate_allows_documented_budget_command_in_step5(tmp_path):
     adapter = CODEX_GATE.parent.parent / "references" / "codex-runtime.md"
     script = CODEX_GATE.parent.parent / "scripts" / "h_mad_context_budget.py"
-    command = f'python3 "{script}" --host codex'
-    assert command in adapter.read_text(encoding="utf-8")
+    documented = 'python3 "<HMAD_SKILL_ROOT>/scripts/h_mad_context_budget.py" --host codex'
+    assert documented in adapter.read_text(encoding="utf-8")
+    command = documented.replace("<HMAD_SKILL_ROOT>", str(script.parent.parent))
+    assert command == f'python3 "{script}" --host codex'
     root = _root(tmp_path)
     verdict, reason, _ = _run(
         root, {"tool_name": "exec_command", "tool_input": {"cmd": command}, "cwd": str(root)},

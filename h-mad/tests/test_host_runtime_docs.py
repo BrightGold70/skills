@@ -194,7 +194,8 @@ def test_claims_lines_execute_across_invocations(adapter_id: str, tmp_path: Path
 
     def run(line: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", "-c", line.replace("<feature>", "fixture-feature")],
+            ["bash", "-c", line.replace("<feature>", "fixture-feature")
+             .replace("<HMAD_SKILL_ROOT>", str(REPO_ROOT / "h-mad"))],
             cwd=repo, env=env, capture_output=True, text=True, timeout=60.0,
         )
 
@@ -285,9 +286,11 @@ def test_context_budget_section(adapter_id: str, token: str) -> None:
 def test_budget_line_runs_and_reports_host(adapter_id: str, tmp_path: Path, hermetic_env) -> None:
     section = _claims(adapter_id, "budget line runs and reports host")
     host = adapter_id.removeprefix("h-mad-")
-    pattern = re.compile(rf'^python3 "{re.escape(str(REPO_ROOT / "h-mad" / "scripts" / "h_mad_context_budget.py"))}" --host {host}$')
+    # The adapter carries the portable placeholder, never a checkout path; the runner substitutes it.
+    pattern = re.compile(rf'^python3 "<HMAD_SKILL_ROOT>/scripts/h_mad_context_budget\.py" --host {host}$')
     lines = [line for line in _fenced_lines(section) if pattern.fullmatch(line)]
     assert len(lines) == 1, f"Context budget and claims needs exactly one fenced {host} budget command"
+    lines = [lines[0].replace("<HMAD_SKILL_ROOT>", str(REPO_ROOT / "h-mad"))]
     empty_home = tmp_path / "home"
     empty_home.mkdir()
     result = subprocess.run(
@@ -304,6 +307,12 @@ def test_budget_line_runs_and_reports_host(adapter_id: str, tmp_path: Path, herm
 def test_adapter_has_no_inline_host_assignment(adapter_id: str) -> None:
     text = ADAPTERS[adapter_id].read_text(encoding="utf-8")
     assert not re.search(r"(?m)^HMAD_HOST=\S+\s+python3\b", text)
+
+
+@pytest.mark.parametrize("adapter_id", HOST_ADAPTERS, ids=HOST_ADAPTERS)
+def test_adapter_names_no_user_checkout_path(adapter_id: str) -> None:
+    text = ADAPTERS[adapter_id].read_text(encoding="utf-8")
+    assert not re.search(r'python3 "/(?:Users|home)/', text)
 
 
 @pytest.mark.parametrize(
