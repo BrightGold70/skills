@@ -101,8 +101,10 @@ ln -s /path/to/checkout/handoff ~/.agents/skills/handoff
 ```
 
 For either link, an existing non-symlink at either path is an operator decision and is never overwritten.
-Creating the link does not re-arm HemaSuite's codex TDD gate: its tracked
-`.codex/hooks.json` reads `{"hooks": {}}`.
+Creating the link does not re-arm HemaSuite's codex TDD gate by itself. The gate fires because
+HemaSuite's tracked `.codex/hooks.json` registers `h-mad-codex-tdd-gate.py` under `PreToolUse` and
+Codex has trusted that entry (`hooks.state` in `$CODEX_HOME/config.toml`). Verified live 2026-09-29:
+a `codex exec` in HemaSuite logged `hook: PreToolUse Blocked` while a feature there was in `step5`.
 
 Check the installed links with:
 

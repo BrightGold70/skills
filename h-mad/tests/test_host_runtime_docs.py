@@ -348,7 +348,10 @@ def test_install_section(adapter_id: str, case: str) -> None:
     elif case == "never-overwritten":
         assert "an existing non-symlink at either path is an operator decision and is never overwritten" in section, "Install must protect existing non-symlinks"
     elif case == "codex-hooks-json":
-        assert ".codex/hooks.json" in section and '{"hooks": {}}' in section, "Install must describe the tracked empty Codex hooks file"
+        assert ".codex/hooks.json" in section and "PreToolUse" in section and "h-mad-codex-tdd-gate.py" in section, "Install must say the tracked Codex hooks file registers the gate"
+        # The file was described as `{"hooks": {}}` while HemaSuite's tracked copy registered the
+        # gate; a live `codex exec` there logged `hook: PreToolUse Blocked` on 2026-09-29.
+        assert '{"hooks": {}}' not in section, "Install must not describe the Codex hooks file as empty"
     else:
         assert "does not re-arm" in section, "Install must explain that linking does not re-arm the Codex TDD gate"
         assert 'python3 "$HMAD_SKILL_ROOT/scripts/h_mad_install_check.py" --agents-skills-dir ~/.agents/skills' in section, "Install must include the host-specific checker"
