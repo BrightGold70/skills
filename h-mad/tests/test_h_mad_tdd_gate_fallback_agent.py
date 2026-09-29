@@ -206,6 +206,9 @@ def test_state_stub_fallback_field_is_judge_error(tmp_path, field):
 def test_state_stub_fallback_position_out_of_range_is_judge_error(tmp_path):
     out = _stub_outcome(tmp_path, PREFIX + " fallback=grok:2" + RECORD + "grok")
     _assert_class(out, ("deny", "judge-error"))
+    # The tag agreement check also refuses judge-error for this line, so the kind alone
+    # cannot show the range check ran; its own diagnostic does (row G9).
+    assert "state fallback position out of range" in out.reason
 
 
 def test_fold_invalid_record_governs_over_grok(tmp_path):
