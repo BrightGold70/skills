@@ -1,0 +1,11 @@
+{
+ "verdict": "PASS",
+ "files": {
+  "tdd-gate-fail-opens.impl-plan.md": "56950036d77d611a50c90df1091b1ce430c131da80e30f36f4dd218f52b5e1ed"
+ },
+ "suite": "FAIL",
+ "legs": [
+  "agy",
+  "codex"
+ ]
+}
