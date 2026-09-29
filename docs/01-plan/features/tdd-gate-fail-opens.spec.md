@@ -56,9 +56,15 @@ Reading taken 2026-09-29 at skills `1a77e1c4` (the three code files are byte-ide
 empty), macOS 27.0, APFS (case-insensitive, the default), Python 3.14.7, codex-cli 0.158.0. The gap
 report measured codex 0.157.1; every D2 cell it reported reproduced unchanged on 0.158.0. The
 scratch probes were deleted after running; the committed re-run is **owed** at
-`docs/03-analysis/probes/tdd-gate-fail-opens/reproduce.py` (orchestrator), and its reading replaces
-this table. That reading does not exist yet (plan PD-4, task T0), so this table stays until T0
-commits its unfixed reading, and is then replaced by a pointer to that one reading.
+`docs/03-analysis/probes/tdd-gate-fail-opens/reproduce.py` (orchestrator). That probe drives only
+the two gates and the judge and never invokes `codex` (plan PD-4; `h-mad/invariants.base.md`
+§"Dispatched agent CLIs are not script dependencies"), so it re-derives the **gate** columns only.
+The "Codex writes" column of M-15…M-23, Codex's trim set and Codex `apply_patch` following a leaf
+symlink come from the plan's **manual** R-4 reading, and the Claude Code leaf-symlink rows from its
+manual R-5 reading; T0 enters each as a manual row carrying its exact command, tool version and
+date. Neither reading exists in committed form yet (plan PD-4, task T0), so these tables stay until
+T0 commits its unfixed reading, and are then replaced by a pointer to that one reading **together
+with its manual R-4 and R-5 rows**.
 
 Fixture for M-1…M-14 and M-18: a git root with `src/prod.py`, and `docs/.bkit-memory.json` =
 `{"orchestrator_state":{"feat":{"phase":"step5","codex_status":"exhausted"}}}` (so the Claude
@@ -87,8 +93,9 @@ outside" is the Codex gate's kind-less "write target is outside or unreadable" d
 | M-18 | M-13 and M-14 under a state file holding only a `step3` record | ALLOW | ALLOW | OD-4 control |
 
 Codex patch headers (Codex gate, `apply_patch` payload `{"tool_name":"apply_patch","cwd":<root>,
-"tool_input":{"command":P}}`; Codex = the real `apply_patch` of codex-cli 0.158.0 invoked as
-`argv[0]=apply_patch` in a copy of the fixture):
+"tool_input":{"command":P}}`; "Codex writes" = codex-cli 0.158.0's own `apply_patch` invoked as
+`argv[0]=apply_patch` in a scratch copy of the fixture, a manual reading (plan R-4) that no
+committed probe or test re-derives):
 
 | Id | Header in P | Codex gate today | Codex writes |
 |---|---|---|---|
@@ -104,7 +111,8 @@ Codex patch headers (Codex gate, `apply_patch` payload `{"tool_name":"apply_patc
 Codex's trim set, measured: it trims U+0009, U+000B, U+000C, U+000D, U+0020, U+0085, U+00A0, U+2003, U+2028, U+3000
 and does not trim U+001C, U+001E, U+001F, U+200B, U+FEFF. That is the Unicode `White_Space`
 property (Rust `char::is_whitespace`), which equals Python `str.isspace()` **minus U+001C–U+001F**.
-The code points not run are inferred from the property, not measured.
+The code points not run are inferred from the property, not measured. The trim set is a manual
+reading (plan R-4), not an output of T0's committed probe.
 
 Canonicalisation primitives (a directory `Case/` spelled `case/`; a directory stored NFD, spelled
 NFC): `os.path.realpath`, `Path.resolve` and bash builtin `pwd -P` return the spelled form;
@@ -214,6 +222,21 @@ reproduced).
   - AC-1.10: each case-dependent AC asserts its precondition — the fixture volume is
     case-insensitive (create `a`, then `os.path.exists("A")`) — and **fails**, never skips, when it
     does not hold.
+  - AC-1.11 (outside-root symlink control, step 7, the `# M:H20` raw-spelling conjunct; plan R-3):
+    Claude gate, root `R`, outside-root directory `out/` with `out/lnk -> tests`; target
+    `out/lnk/x.py`, whose canonical path enters `tests/` and whose raw spelling does not. Fixed:
+    deny `no-test-resolved` (not exempted: the raw conjunct does not hold); unfixed: deny
+    `no-test-resolved` (plan R-3's reading at `983c2f85`). The two are equal by design: this AC is
+    a regression pin, and its discriminating observable is the mutant, not the unfixed tree — with
+    the raw conjunct dropped (the existing `H20B` mutation in
+    `h-mad/tests/mutation-specs/claude_gate_judge_wiring.json`, which keeps only the
+    `$TARGET_PATH` test) the fixed gate must return rc 0 with no stdout (allow). On the unfixed
+    tree `H20B` does **not** move this cell, because `TARGET_PATH` is only `normpath`'d there
+    (measured 2026-09-29 at `4192ad8c`: R-3 run against a temporary copy of `h-mad/` carrying
+    `H20B` printed the same three lines as the unmutated gate; copy and script deleted after
+    running). So `H20B` is a valid kill only against the fixed tree. The same fixture's two
+    other R-3 cells are asserted beside it: `out/tests/x.py` (raw and canonical both match) allow;
+    `out/src/x.py` (neither) deny `no-test-resolved`.
 
 ### FR-2: The `.py` suffix is case-folded before every name test (D1; B3, OD-3)
 
@@ -495,7 +518,9 @@ reproduced).
 - APFS on the measuring machine is case-insensitive and normalisation-insensitive (the default).
   AC-1.10 turns this into a checked precondition.
 - Codex's `apply_patch` grammar is as measured on codex-cli 0.158.0; a later Codex that trims
-  differently is caught by AC-4.6 only if the owed probe re-runs against the new binary.
+  differently is caught only if the **manual** Codex-grammar reading (plan R-4) is re-taken by hand against the new binary. AC-4.6 pins the gate against the
+  grammar as measured on 0.158.0; no committed probe or test invokes `codex` (plan PD-4), so
+  nothing committed detects the change.
 
 ## Open Questions
 
@@ -509,3 +534,4 @@ reproduced).
 - v1.0: Initial specification draft (2026-09-29) from brainstorm v1.1 (c83c62fe) and operator decisions B1-B7. FR-1 one target-normalisation rule (D3, D4), FR-2 .py fold (D1), FR-3 unresolvable target refused judge-error when governed (OQ1), FR-4 Codex header grammar (D2), FR-5 bounded reap + judge-timeout (D5, OQ2), FR-6 pinned repros + cross-gate differential, FR-7 mutation. OD-1..OD-5 raised from measurements at 1a77e1c4 / codex-cli 0.158.0 (on-disk spelling, leading-whitespace headers, fold before name tests, governed-only refusal, differential domain); each owes operator confirmation.
 - v1.1: Revision (2026-09-29) answering plan v1.0 (f5e44a50) owed items and operator decisions. OQ-P1 decided refuse: FR-3 gains a second arm (an existing root/target component the on-disk-spelling primitive cannot open or list is unresolvable; judge-error when governed, allow otherwise; never fall back to the spelling), FR-1 step 3 cross-reference, AC-3.6 (a/b/c), AC-7.1 mutation row, permission residual split; 0311 reading measured at f5e44a50. PD-5 recorded as a measured premise: Edit on a leaf symlink refused on Claude Code 2.1.284, MultiEdit/NotebookEdit absent from that build (unmeasurable), FR-1 leaf rule unamended; not re-derivable by T0's probe. PD-2 applied to FR-5: REAP_GRACE_S = 1.0 s, six-field NamedTuple adding reap_failed, AC-5.1 bound 4.0 s, worst case 41.0 s. AC-5.2 corrected: only test_run_bounded_kills_the_process_group unpacks _run_bounded. PD-4: table stays until T0's committed reading replaces it.
 - v1.2: OD status (2026-09-29): OD-1..OD-5 recorded as operator-approved 2026-09-29 (662b1ce1) in the Binding-decisions preamble and Open Questions; 'open decision' renamed 'operator decision'. No requirement changed.
+- v1.3: Revision (2026-09-29) applying plan v1.2 (4192ad8c) owed items under plan PD-4 (no committed probe or test invokes codex). Assumptions: a later Codex that trims differently is caught only if the manual R-4 reading is re-taken against the new binary. Measured premises: the Codex-writes column, the trim set and the leaf-symlink writer rows are manual R-4/R-5 readings, and the tables are replaced by a pointer to T0's unfixed reading together with its manual R-4 and R-5 rows; OQ-P1 cell wording unchanged (gate-side). FR-1 gains AC-1.11, the outside-root symlink control of the M:H20 raw-spelling conjunct (plan R-3): fixed and unfixed both deny no-test-resolved, the H20B mutant must turn the fixed gate to allow, and H20B does not move the cell on the unfixed tree (measured at 4192ad8c). AC-7.1 unchanged.
