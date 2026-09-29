@@ -42,8 +42,10 @@ Operator decisions (2026-09-29): scope **D1–D5 all**; D4 **resolve first** in 
 Merged `codex-tdd-gate-defects` (main `8ef6009f`), the shared judge `h-mad/scripts/h_mad_tdd_judge.py`, and grok-codex-fallback's fold (`52a78ca8`). Codex must be available for Phase 5 authorship.
 
 ## Open Questions
-- Should an unresolvable symlink (a dangling link, or a loop) as the target be refused (judge-error) or treated as not-a-file? Proposed: refuse.
-- Should D5's reap failure surface as a distinct DENY kind (for example `judge-timeout`), or fold into `timeout`?
+None. Both were closed by operator decision on 2026-09-29:
+- **Unresolvable symlink target** (a dangling link or a loop): **refuse** (judge-error). Fail-closed.
+- **D5 reap failure:** surfaces as a **distinct DENY kind, `judge-timeout`**, kept separate from `timeout`, so a reap failure is never mistaken for a slow test.
 
 ## Version History
 - v1.0: Initial brainstorm draft (2026-09-29), from the codex-tdd-gate-defects gap report v1 and three operator decisions.
+- v1.1: Operator APPROVED (2026-09-29). OQ1 → refuse; OQ2 → distinct `judge-timeout` DENY kind.
