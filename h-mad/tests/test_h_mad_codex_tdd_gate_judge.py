@@ -327,6 +327,146 @@ def test_codex_d1_repro_patch_denies(tmp_path):
     assert "kind=no-test-resolved" in reason, reason
 
 
+@pytest.mark.parametrize("suffix", [
+    pytest.param("\r", id="crlf"), pytest.param(" ", id="space"),
+    pytest.param("\t", id="tab"), pytest.param("\u00a0", id="nbsp"),
+    pytest.param("\u3000", id="u3000"), pytest.param("\u2028", id="u2028"),
+    pytest.param("\u0085", id="u0085"), pytest.param("\u2003", id="u2003"),
+    pytest.param("\v", id="vt"), pytest.param("\f", id="ff"),
+])
+def test_codex_trailing_header_whitespace_denies(tmp_path, suffix):
+    root = _root(tmp_path)
+    _file(root, "src/prod.py")
+    patch = f"*** Begin Patch\n*** Update File: src/prod.py{suffix}\n@@\n-a\n+b\n*** End Patch\n"
+    verdict, reason, _ = _run(root, {"tool_name": "apply_patch", "tool_input": {"patch": patch}})
+    assert verdict == "deny", f"trailing header whitespace must gate src/prod.py: {verdict}: {reason}"
+    assert "kind=no-test-resolved" in reason, f"trailing header whitespace lost the production target: {reason}"
+
+
+@pytest.mark.parametrize("variant,patch", [
+    pytest.param("m16", "*** Begin Patch\n *** Update File: src/prod.py\n@@\n-a\n+b\n*** End Patch\n", id="m16"),
+    pytest.param("m17", "*** Begin Patch\n*** Add File: docs/x.md\n+x\n  *** Update File: src/prod.py\n@@\n-a\n+b\n*** End Patch\n", id="m17"),
+])
+def test_codex_indented_header_denies(tmp_path, variant, patch):
+    root = _root(tmp_path)
+    _file(root, "src/prod.py")
+    verdict, reason, _ = _run(root, {"tool_name": "apply_patch", "tool_input": {"patch": patch}})
+    assert verdict == "deny", f"{variant} indented header must gate src/prod.py: {verdict}: {reason}"
+    assert "kind=no-test-resolved" in reason, f"{variant} indented header lost the production target: {reason}"
+
+
+def test_codex_move_to_trailing_space_denies(tmp_path):
+    root = _root(tmp_path)
+    _file(root, "docs/a.md", "a\n")
+    verdict, reason, _ = _run(root, {"tool_name": "apply_patch", "tool_input": {
+        "patch": "*** Begin Patch\n*** Update File: docs/a.md\n*** Move to: src/prod2.py \n@@\n-a\n+b\n*** End Patch\n",
+    }})
+    assert verdict == "deny", f"trailing-space Move to must gate src/prod2.py: {verdict}: {reason}"
+    assert "kind=no-test-resolved" in reason, f"trailing-space Move to lost its production target: {reason}"
+
+
+@pytest.mark.parametrize("variant,path", [
+    pytest.param("m20", "src/n.py\x1f", id="m20"),
+    pytest.param("u0001", "src/pr\x01od.py", id="u0001"),
+])
+def test_codex_control_byte_header_is_judge_error(tmp_path, variant, path):
+    root = _root(tmp_path)
+    patch = f"*** Begin Patch\n*** Add File: {path}\n+x\n*** End Patch\n"
+    verdict, reason, _ = _run(root, {"tool_name": "apply_patch", "tool_input": {"patch": patch}})
+    assert verdict == "deny", f"{variant} control byte header must be refused: {verdict}: {reason}"
+    assert "kind=judge-error" in reason, f"{variant} control byte header needs judge-error: {reason}"
+    assert "header" in reason.lower(), f"{variant} refusal must name the bad header: {reason}"
+
+
+@pytest.mark.parametrize("header", [
+    "*** update file: src/prod.py", "***  Update File: src/prod.py",
+    "*** Update File:src/prod.py", "**** Update File: src/prod.py",
+    "*** Update File:\tsrc/prod.py",
+], ids=["lowercase", "double-space", "missing-space", "extra-star", "tab-after-colon"])
+def test_codex_inexact_marker_is_unidentified(tmp_path, header):
+    root = _root(tmp_path)
+    _file(root, "src/prod.py")
+    patch = f"*** Begin Patch\n{header}\n@@\n-a\n+b\n*** End Patch\n"
+    verdict, reason, _ = _run(root, {"tool_name": "apply_patch", "tool_input": {"patch": patch}})
+    assert verdict == "deny", f"inexact marker must be unidentified: {header!r}: {verdict}: {reason}"
+    assert "could not identify" in reason, f"inexact marker was recognized: {header!r}: {reason}"
+    assert "kind=" not in reason, f"inexact marker acquired a target kind: {header!r}: {reason}"
+
+
+@pytest.mark.parametrize("variant,path", [
+    pytest.param("m20", "src/n.py\x1f", id="m20"),
+    pytest.param("u0001", "src/pr\x01od.py", id="u0001"),
+])
+def test_codex_control_byte_header_step3_allows(tmp_path, variant, path):
+    root = _root(tmp_path)
+    write_state(root, {HOSTILE_KEY: {"phase": "step3"}})
+    patch = f"*** Begin Patch\n*** Add File: {path}\n+x\n*** End Patch\n"
+    verdict, reason, _ = _run(root, {"tool_name": "apply_patch", "tool_input": {"patch": patch}})
+    assert verdict == "allow", f"{variant} non-governing control header raised or denied: {verdict}: {reason}"
+
+
+def test_codex_bad_header_does_not_raise_when_inactive(tmp_path):
+    root = _root(tmp_path)
+    write_state(root, {HOSTILE_KEY: {"phase": "step3"}})
+    patch = "*** Begin Patch\n*** Update File: \n@@\n-a\n+b\n*** End Patch\n"
+    verdict, reason, _ = _run(root, {"tool_name": "apply_patch", "tool_input": {"patch": patch}})
+    assert verdict == "allow", f"inactive bad header must not raise or deny: {verdict}: {reason}"
+    assert "raised" not in reason, f"inactive bad header raised: {reason}"
+
+
+@pytest.mark.parametrize("code_point,trimmed", [
+    pytest.param(0x20, True, id="u0020"), pytest.param(0x09, True, id="u0009"),
+    pytest.param(0x0B, True, id="u000b"), pytest.param(0x0C, True, id="u000c"),
+    pytest.param(0x0D, True, id="u000d"), pytest.param(0x85, True, id="u0085"),
+    pytest.param(0xA0, True, id="u00a0"), pytest.param(0x3000, True, id="u3000"),
+    pytest.param(0x2028, True, id="u2028"), pytest.param(0x1C, False, id="u001c"),
+    pytest.param(0x1F, False, id="u001f"), pytest.param(0x200B, False, id="u200b"),
+    pytest.param(0xFEFF, False, id="ufeff"),
+])
+def test_codex_trim_set_code_points(code_point, trimmed):
+    spec = importlib.util.spec_from_file_location("codex_gate_header_trim_test", CODEX_GATE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    parser = getattr(module, "_patch_header_paths", None)
+    assert callable(parser), "header trim-set parser _patch_header_paths is missing"
+    character = chr(code_point)
+    paths, bad_header = parser(f"{character}*** Update File: src/prod.py{character}\n")
+    if trimmed:
+        assert (paths, bad_header) == (["src/prod.py"], ""), f"U+{code_point:04X} must trim at both ends: {paths!r}, {bad_header!r}"
+    else:
+        assert paths == [], f"U+{code_point:04X} must not trim at the leading end: {paths!r}"
+        assert bad_header == "", f"U+{code_point:04X} leading non-trim is not a recognized bad header: {bad_header!r}"
+        paths, bad_header = parser(f"*** Update File: src/prod.py{character}\n")
+        if code_point in {0x1C, 0x1F}:
+            assert paths == [] and character in bad_header, f"U+{code_point:04X} trailing control must be a bad header: {paths!r}, {bad_header!r}"
+        else:
+            assert (paths, bad_header) == ([f"src/prod.py{character}"], ""), f"U+{code_point:04X} must remain in the path: {paths!r}, {bad_header!r}"
+
+
+def test_patch_header_paths_split_on_newline_only():
+    spec = importlib.util.spec_from_file_location("codex_gate_header_split_test", CODEX_GATE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    parser = getattr(module, "_patch_header_paths", None)
+    assert callable(parser), "newline-only patch header parser _patch_header_paths is missing"
+    header = "*** Update File: src/prod.py\u2028inside\x1cstill\u0085one-line"
+    paths, bad_header = parser(f"*** Begin Patch\n{header}\n*** End Patch\n")
+    assert paths == [], f"newline-only split must not produce a partial path: {paths!r}"
+    assert bad_header == header, f"newline-only split must retain the whole bad header: {bad_header!r}"
+
+
+def test_codex_empty_header_path_is_judge_error(tmp_path):
+    root = _root(tmp_path)
+    patch = "*** Begin Patch\n*** Update File: \n@@\n-a\n+b\n*** End Patch\n"
+    verdict, reason, _ = _run(root, {"tool_name": "apply_patch", "tool_input": {"patch": patch}})
+    assert verdict == "deny", f"empty header path must be refused: {verdict}: {reason}"
+    assert "kind=judge-error" in reason, f"empty header path must be judge-error: {reason}"
+    assert "*** Update File:" in reason, f"empty path refusal must name its header: {reason}"
+    assert "could not identify" not in reason, f"empty path was treated as an unidentified target: {reason}"
+
+
 def _unresolvable(root: Path, variant: str) -> tuple[str, str]:
     if variant == "m12":
         (root / "docs/d.md").symlink_to("../src/newprod.py")
