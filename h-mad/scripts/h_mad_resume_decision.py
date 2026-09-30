@@ -175,18 +175,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--state", required=True, type=Path)
     parser.add_argument("--feature", required=True)
     parser.add_argument("--host", help="explicit host (claude, codex, agy, grok)")
-    parser.add_argument(
+    identity = parser.add_mutually_exclusive_group()
+    identity.add_argument(
         "--session-id",
         help="This session's id. Pass it to get the owned_elsewhere token when "
         "another live session holds the feature; omit to opt out of the check.",
     )
+    identity.add_argument("--session-id-from-git-dir", action="store_true")
     parser.add_argument("--now", help="Reference time for staleness (testing)")
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
-    print(decide(args.state, args.feature, session_id=args.session_id, now=args.now, host=args.host))
+    session_id = args.session_id
+    if args.session_id_from_git_dir:
+        session_id = session_id_from_git_dir(args.feature)
+        if session_id is None:
+            print("cannot_judge")
+            return 0
+    print(decide(args.state, args.feature, session_id=session_id, now=args.now, host=args.host))
     return 0
 
 
