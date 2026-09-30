@@ -1,0 +1,42 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_leak_reaper.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "LR-NOREAP",
+      "_mechanism": "skill-candidates exec-pane leak row: the finalizer reports leaks but never kills them; the orphan must survive and the end-to-end test must see it.",
+      "file": "tests/conftest.py",
+      "find": "    reap([pid for pid, _ in leaked])\n",
+      "replace": "    pass\n",
+      "test": "tests/test_leak_reaper.py::test_conftest_finalizer_reaps_a_leak_at_session_end"
+    },
+    {
+      "name": "LR-NOSCAN",
+      "_mechanism": "the finalizer never looks: leaked is always empty, so nothing is reported or reaped.",
+      "file": "tests/conftest.py",
+      "find": "    leaked = find_leaked(markers)\n",
+      "replace": "    leaked = []\n",
+      "test": "tests/test_leak_reaper.py::test_conftest_finalizer_reaps_a_leak_at_session_end"
+    },
+    {
+      "name": "LR-ANCESTRY",
+      "_mechanism": "drop the ancestry exclusion: the reaper may match its own process tree.",
+      "file": "tests/leak_reaper.py",
+      "find": "        if not pid_text.isdigit() or int(pid_text) in skip:\n",
+      "replace": "        if not pid_text.isdigit():\n",
+      "test": "tests/test_leak_reaper.py::test_never_matches_its_own_process_or_an_ancestor_that_names_the_marker"
+    }
+  ]
+}

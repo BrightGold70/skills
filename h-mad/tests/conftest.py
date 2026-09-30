@@ -121,3 +121,34 @@ def hermetic_env():
 def _hermetic_host_skill_roots(monkeypatch, tmp_path):
     monkeypatch.setenv("HMAD_AGENTS_SKILLS_DIR", str(tmp_path / "absent-agents-skills"))
     monkeypatch.setenv("HMAD_AGY_SKILLS_DIR", str(tmp_path / "absent-agy-skills"))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _reap_processes_leaked_by_this_run(tmp_path_factory, request):
+    """Reap, at session end, every process whose argv names this run's tmp tree.
+
+    A timed-out `subprocess.run` kills only its direct child; what that child
+    started is re-parented to PID 1 and keeps running. One leaked
+    `hmad-dispatch.sh exec-pane agy` spun for 22 h against a deleted pytest
+    tmpdir (docs/skill-candidates.md, "reap LEAKED exec-pane wrapper
+    processes"). The run's basetemp is the positive identifier: the suite points
+    every wrapper and stub at a tmp_path, and nothing outside the run does.
+    Reaped processes are reported, not hidden — each one is a test that leaked.
+    """
+    from leak_reaper import find_leaked, reap
+
+    yield
+    base = tmp_path_factory.getbasetemp()
+    markers = sorted({str(base), str(base.resolve())})
+    leaked = find_leaked(markers)
+    if not leaked:
+        return
+    reap([pid for pid, _ in leaked])
+    reporter = request.config.pluginmanager.get_plugin("terminalreporter")
+    lines = [f"[leak-reaper] reaped {len(leaked)} process(es) leaked under {base}:"]
+    lines += [f"[leak-reaper]   pid {pid}: {command[:200]}" for pid, command in leaked]
+    for line in lines:
+        if reporter is not None:
+            reporter.write_line(line, yellow=True)
+        else:
+            print(line)
