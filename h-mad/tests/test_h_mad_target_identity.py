@@ -367,3 +367,26 @@ def test_dotdot_through_unreadable_directory_is_lexical(identity, root, leaf):
     assert result.unresolvable is False, f"observed: {result!r}"
     assert result.target == str(root / leaf)
     assert result.names == (os.path.basename(leaf),)
+
+
+DOT_SPELLINGS = [
+    "tests/./sub/../../src/prod.py",
+    "tests/./../src/prod.py",
+    "tests/sub/./../../src/prod.py",
+    "./tests/sub/../.././src/prod.py",
+]
+
+
+@pytest.mark.parametrize("relative", DOT_SPELLINGS)
+def test_dot_component_does_not_shift_dotdot(identity, root, relative):
+    # Review of fix/tdd-gate-residuals (2026-09-30): a `.` component left in
+    # `current` made the next `..` strip only the `.`, so the identity landed
+    # one directory deeper (under tests/) than the kernel. Built by string
+    # concatenation: pathlib would drop the `.` and hide the defect.
+    (root / "tests/sub").mkdir(parents=True)
+    (root / "src").mkdir()
+    referent = root / "src/prod.py"
+    referent.write_text("pass\n")
+    assert os.path.samefile(str(root) + "/" + relative, referent), "kernel precondition"
+    result = identity.canonicalise(str(root), relative)
+    assert result.target == str(referent), f"observed: {result!r}"

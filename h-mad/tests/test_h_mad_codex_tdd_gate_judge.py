@@ -285,6 +285,15 @@ def _expect_gate(root: Path, target: str, expected: str, kind: str = "", *, cwd:
     return reason
 
 
+
+@pytest.mark.parametrize("relative", ["tests/./sub/../../src/prod.py", "tests/./../src/prod.py"])
+def test_codex_dot_then_dotdot_into_production_denies(tmp_path, relative):
+    root = _root(tmp_path)
+    (root / "tests/sub").mkdir(parents=True)
+    _file(root, "src/prod.py")
+    assert os.path.samefile(str(root) + "/" + relative, root / "src/prod.py"), "kernel precondition"
+    _expect_gate(root, relative, "deny")
+
 def test_codex_dotdot_after_symlink_denies(tmp_path):
     root = _root(tmp_path)
     _file(root, "src/prod.py")

@@ -430,6 +430,16 @@ def test_mode_000_project_dir_refuses(tmp_path, spelling):
     finally:
         root.chmod(original_mode)
 
+
+@pytest.mark.parametrize("relative", ["tests/./sub/../../src/prod.py", "tests/./../src/prod.py"])
+def test_claude_dot_then_dotdot_into_production_denies(tmp_path, relative):
+    root = _root(tmp_path)
+    (root / "tests/sub").mkdir(parents=True)
+    _file(root, "src/prod.py")
+    target = str(root) + "/" + relative
+    assert os.path.samefile(target, root / "src/prod.py"), "kernel precondition"
+    _assert(_gate(root, arg=target, bin_dir=_bin(tmp_path)), "deny")
+
 def test_codex_authorship_hint_names_blocker_key_and_state_file(tmp_path):
     root = tmp_path / "my proj"
     root.mkdir()

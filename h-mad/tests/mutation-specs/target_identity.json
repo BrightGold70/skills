@@ -75,6 +75,14 @@
       "find": "                    current = os.path.dirname(current)\n",
       "replace": "                    current = canonical_directory(os.path.dirname(current))\n",
       "test": "tests/test_h_mad_target_identity.py::test_dotdot_through_unreadable_directory_is_lexical"
+    },
+    {
+      "name": "TI10",
+      "_mechanism": "Review finding 2026-09-30: keep `.` components in the walk; the next `..` then strips only the `.` and the identity lands one directory deeper than the kernel (a production write spelled via tests/./.. is exempted).",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        if not part or part == \".\":  # M:TI10",
+      "replace": "        if not part:  # M:TI10",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_dot_then_dotdot_into_production_denies"
     }
   ],
   "target_command": [

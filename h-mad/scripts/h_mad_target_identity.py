@@ -82,7 +82,7 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
     absent = False
     components = spelled_target.split(os.path.sep)
     for index, part in enumerate(components):
-        if not part:
+        if not part or part == ".":  # M:TI10 a kept `.` would make the next `..` strip only itself
             continue
         if part == "..":
             try:

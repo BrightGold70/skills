@@ -198,7 +198,8 @@ With an in-memory entry of FR-8's six options:
      Codex: `_payload_cwd_base`). No lexical `..` collapse happens before step 2.
   2. **Deepest existing ancestor.** Walk the target's components from the left, asking the kernel
      at each prefix (so `..` is taken after the preceding symlink, as the kernel takes it; out of
-     an existing non-symlink directory `..` is its lexical parent, which is not opened — v1.6, N-1). The
+     an existing non-symlink directory `..` is its lexical parent, which is not opened; `.` components
+     are dropped from the walk first, so a `.` never absorbs the next `..` — v1.6, N-1). The
      prefix where the next component does not exist splits the target into an existing part and a
      remainder. If FR-3's predicate holds at any prefix, stop: the target is unresolvable.
   3. **Canonicalise the existing part** with every symlink followed and every component rendered in
@@ -331,8 +332,9 @@ With an in-memory entry of FR-8's six options:
   applies to a root that can be entered but not listed (mode 0311). (On the Codex gate an absent
   `CODEX_PROJECT_DIR` is not a root case: the gate falls through to its next root candidate.)
   **`..` is not an arm-2 site for a plain directory** (operator decision 2026-09-30, N-1): `..`
-  out of an existing non-symlink directory takes its lexical parent, which is the kernel's, and
-  does not open it, so an `x`-only directory on the way does not make the target unresolvable.
+  out of an existing non-symlink directory takes its lexical parent, which is the kernel's once `.`
+  components are dropped from the walk (a kept `.` made `tests/./../src/prod.py` resolve under
+  `tests/`: a fail-open present before v1.6 and fixed with it), and does not open it, so an `x`-only directory on the way does not make the target unresolvable.
   `..` out of a symlink still opens the link's referent.
   A non-strict `os.path.realpath` or `Path.resolve` alone cannot implement this predicate: on a loop
   it returns the lexical path without error (measured).
