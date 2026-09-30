@@ -238,6 +238,38 @@
       "find": "    for line in patch.split(\"\\n\"):",
       "replace": "    for line in patch.splitlines():",
       "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_patch_header_paths_split_on_newline_only"
+    },
+    {
+      "name": "CX-SAFE",
+      "_mechanism": "Task 11 AC-8.1: the resume key deleted from SAFE_HMAD_SCRIPT_OPTIONS.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    \"h_mad_resume_decision.py\": {",
+      "replace": "    \"h_mad_resume_decision.py.deleted\": {",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_admits_resume_oracle_forms"
+    },
+    {
+      "name": "CX-EQ",
+      "_mechanism": "Task 11 AC-8.2: one option added to the resume entry.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        \"--state\", \"--feature\", \"--host\", \"--session-id\", \"--now\", \"--session-id-from-git-dir\",",
+      "replace": "        \"--state\", \"--feature\", \"--host\", \"--session-id\", \"--now\", \"--session-id-from-git-dir\", \"--extra\",",
+      "test": "tests/test_h_mad_codex_runtime.py::test_safe_list_resume_options_equal_parser"
+    },
+    {
+      "name": "CX-OPT-LONG",
+      "_mechanism": "Task 11 AC-8.2 post-registration: the -- membership condition replaced by False.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if token.startswith(\"--\") and token.split(\"=\", 1)[0] not in allowed_options:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_refuses_unknown_resume_options[bogus]"
+    },
+    {
+      "name": "CX-OPT-SHORT",
+      "_mechanism": "Task 11 AC-8.2 post-registration: the single-dash condition replaced by False.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if token.startswith(\"-\") and not token.startswith(\"--\"):",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_refuses_unknown_resume_options[dash-h]"
     }
   ]
 }

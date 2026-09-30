@@ -46,6 +46,9 @@ SAFE_HMAD_SCRIPT_OPTIONS = {
     "h_mad_do_preconditions.py": {"--feature", "--repo-root"},
     "h_mad_extract_verdict.py": {"--after-marker", "--allowed", "--feature", "--key", "--phase"},
     "h_mad_identifier_sweep.py": {"--allow", "--include-history", "--root"},
+    "h_mad_resume_decision.py": {
+        "--state", "--feature", "--host", "--session-id", "--now", "--session-id-from-git-dir",
+    },
     "h_mad_state_validate.py": {"--feature", "--strict-only"},
     "h_mad_state_write.py": {
         "--beat", "--claim", "--create", "--drop-undeclared", "--feature", "--force",
