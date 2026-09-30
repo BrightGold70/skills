@@ -9,7 +9,7 @@
     "-q"
   ],
   "target_command": [
-    "/opt/anaconda3/bin/python",
+    "python3.11",
     "-m",
     "pytest",
     "-q"

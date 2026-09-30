@@ -1,0 +1,50 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_gate_differential.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "DIFF-TI8",
+      "_mechanism": "Task 6 blind spot: '..' after a symlink collapses lexically (M-6); the mapped-prefix differential must see the gate judge a different path.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "                if stat.S_ISLNK(os.lstat(current).st_mode):",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_tdd_gate_differential.py::test_mapped_prefix_cell_names_the_kernels_test[MX-6]"
+    },
+    {
+      "name": "DIFF-TI9",
+      "_mechanism": "Task 6 blind spot: '..' re-opens an x-only parent (N-1); the mapped-prefix differential must see the gate judge a different path.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "                    current = os.path.dirname(current)\n",
+      "replace": "                    current = canonical_directory(os.path.dirname(current))\n",
+      "test": "tests/test_h_mad_tdd_gate_differential.py::test_mapped_prefix_cell_names_the_kernels_test[MX-N1]"
+    },
+    {
+      "name": "DIFF-TI10",
+      "_mechanism": "Task 6 blind spot: a kept '.' absorbs the next '..'; the mapped-prefix differential must see the gate judge a different path.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        if not part or part == \".\":  # M:TI10",
+      "replace": "        if not part:  # M:TI10",
+      "test": "tests/test_h_mad_tdd_gate_differential.py::test_mapped_prefix_cell_names_the_kernels_test[MX-dot]"
+    },
+    {
+      "name": "DIFF-TI11",
+      "_mechanism": "Task 6 blind spot: lexical normpath before the walk (M-6 class); the mapped-prefix differential must see the gate judge a different path.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "    spelled_target = os.path.join(base, target)\n",
+      "replace": "    spelled_target = os.path.normpath(os.path.join(base, target))\n",
+      "test": "tests/test_h_mad_tdd_gate_differential.py::test_mapped_prefix_cell_names_the_kernels_test[MX-6]"
+    }
+  ]
+}

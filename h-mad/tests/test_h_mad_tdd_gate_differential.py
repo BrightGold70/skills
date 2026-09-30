@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -42,6 +43,25 @@ EXPECTATIONS = (
     ("tests/test_x.py", "allow", ""),
     ("sub/test_x.PY", "allow", ""),
 )
+
+# Cells under a prefix the name map CAN map (shared/<x>.py -> shared/tests/test_<x>.py).
+# The EXPECTATIONS fixture root has no such prefix, so every deny there reads
+# no-test-resolved whichever path a gate judged. Here the kernel's target maps to
+# a named test that does not exist, so a gate that judged the kernel's target says
+# test-missing and names that test, while a gate that judged the spelled tests/...
+# path says no-test-resolved or allows. Each entry: (cell, decision, kind, mapped
+# test named in the reason or "").
+MAPPED = (
+    ("MX-6", "deny", "test-missing", "shared/tests/test_prod.py"),
+    ("MX-gap1b", "deny", "test-missing", "shared/tests/test_prod.py"),
+    ("MX-dot", "deny", "test-missing", "shared/tests/test_prod.py"),
+    ("MX-N1", "deny", "test-missing", "shared/tests/test_prod.py"),
+    ("MX-N1-exempt", "allow", "", ""),
+    ("AC-1.8/absent-leaf", "deny", "test-missing", "shared/tests/test_brandnew.py"),
+    ("AC-1.8/absent-parent", "deny", "test-missing", "shared/tests/test_mod.py"),
+    ("AC-1.9/hardlink", "deny", "test-missing", "shared/tests/test_prod.py"),
+)
+SEALED: list[Path] = []
 
 
 def _write(path: Path) -> None:
@@ -110,7 +130,45 @@ def _fixture(base: Path, cell: str) -> tuple[Path, Path, Path | None]:
         relative, prefix = "src/loopa.py", root / "src"
     elif cell in ("notes.md", "tests/test_x.py", "sub/test_x.PY"):
         relative = cell
+    elif cell.startswith(("MX-", "AC-1.")):
+        return root, _mapped_fixture(root, cell), None
     return root, root / relative, prefix
+
+
+def _mapped_fixture(root: Path, cell: str) -> str:
+    shared = root / "shared"
+    _write(shared / "prod.py")
+    (shared / "tests").mkdir(parents=True)
+    (shared / "lib/sub").mkdir(parents=True)
+    _write(shared / "lib/prod.py")
+    if cell == "MX-6":
+        (shared / "tests/l").symlink_to("../lib", target_is_directory=True)
+        spelled, kernel = "shared/tests/l/../prod.py", shared / "prod.py"
+    elif cell == "MX-gap1b":
+        (shared / "tests/l").symlink_to("../lib/sub", target_is_directory=True)
+        spelled, kernel = "shared/tests/l/new/../../prod.py", shared / "lib/prod.py"
+    elif cell == "MX-dot":
+        spelled, kernel = "shared/tests/./../prod.py", shared / "prod.py"
+    elif cell.startswith("MX-N1"):
+        (shared / "a/b").mkdir(parents=True)
+        spelled = ("shared/a/b/../../tests/test_x.py" if cell == "MX-N1-exempt"
+                   else "shared/a/b/../../prod.py")
+        kernel = shared / ("tests/test_x.py" if cell == "MX-N1-exempt" else "prod.py")
+        (shared / "a").chmod(0o311)
+        SEALED.append(shared / "a")
+    elif cell == "AC-1.8/absent-leaf":
+        spelled, kernel = "shared/brandnew.py", None
+    elif cell == "AC-1.8/absent-parent":
+        spelled, kernel = "shared/newpkg/mod.py", None
+    else:  # AC-1.9/hardlink
+        os.link(shared / "prod.py", shared / "test_prod.py")
+        assert os.stat(shared / "prod.py").st_ino == os.stat(shared / "test_prod.py").st_ino
+        spelled, kernel = "shared/test_prod.py", shared / "prod.py"
+    target = str(root) + "/" + spelled  # string join: pathlib would drop the '.'
+    if kernel is not None and kernel.exists():
+        assert os.path.realpath(target) == os.path.realpath(kernel) or (
+            os.path.samefile(target, kernel)), f"{cell}: kernel precondition"
+    return target
 
 
 def _bin(base: Path) -> Path:
@@ -123,7 +181,7 @@ def _bin(base: Path) -> Path:
     return bin_dir
 
 
-def _run(root: Path, target: Path, bin_dir: Path, gate: str) -> tuple[str, str]:
+def _run(root: Path, target: Path | str, bin_dir: Path, gate: str) -> tuple[str, str, str]:
     payload = {"tool_name": "Write", "tool_input": {"file_path": str(target)}}
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HMAD_STUB_HOSTILE": "all"}
     if gate == "claude":
@@ -139,14 +197,15 @@ def _run(root: Path, target: Path, bin_dir: Path, gate: str) -> tuple[str, str]:
     if gate == "claude":
         outcome = decision(result, hook_form(CLAUDE))
         assert outcome.decision != "invalid", f"Claude gate protocol invalid: {outcome}"
-        return outcome.decision, outcome.kind
+        return outcome.decision, outcome.kind, outcome.reason
     if result.returncode == 0 and result.stdout.strip() in ("", "{}"):
-        return "allow", ""
+        return "allow", "", ""
     assert result.returncode == 0, f"Codex gate failed: {result.stderr}"
     output = json.loads(result.stdout)["hookSpecificOutput"]
     assert output["permissionDecision"] == "deny", f"Codex gate protocol invalid: {output}"
-    match = re.search(r"kind=([a-z-]+)", output["permissionDecisionReason"])
-    return "deny", match.group(1) if match else ""
+    reason = output["permissionDecisionReason"]
+    match = re.search(r"kind=([a-z-]+)", reason)
+    return "deny", match.group(1) if match else "", reason
 
 
 def _observed(base: Path, cell: str) -> tuple[tuple[str, str], tuple[str, str]]:
@@ -158,21 +217,25 @@ def _observed(base: Path, cell: str) -> tuple[tuple[str, str], tuple[str, str]]:
             f"{cell}: resolved prefix {canonical_prefix} is outside canonical root {canonical_root}"
         )
     bin_dir = _bin(base)
-    return (_run(root, target, bin_dir, "claude"),
-            _run(root, target, bin_dir, "codex"))
+    try:
+        return (_run(root, target, bin_dir, "claude"),
+                _run(root, target, bin_dir, "codex"))
+    finally:
+        while SEALED:
+            SEALED.pop().chmod(0o755)
 
 
 @pytest.fixture(scope="module")
 def observed_cells(tmp_path_factory):
     base = tmp_path_factory.mktemp("tdd-differential")
-    return {cell: _observed(base / f"cell-{index}", cell)
-            for index, (cell, _, _) in enumerate(EXPECTATIONS)}
+    cells = [row[0] for row in EXPECTATIONS] + [row[0] for row in MAPPED]
+    return {cell: _observed(base / f"cell-{index}", cell) for index, cell in enumerate(cells)}
 
 
 @pytest.mark.parametrize("cell,expected_decision,expected_kind", EXPECTATIONS,
                          ids=[row[0] for row in EXPECTATIONS])
 def test_differential_cell(observed_cells, cell, expected_decision, expected_kind):
-    claude, codex = observed_cells[cell]
+    claude, codex = (outcome[:2] for outcome in observed_cells[cell])
     assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
     if claude[0] == codex[0] == "deny":
         assert claude[1] == codex[1], f"{cell}: denial kinds differ: Claude={claude}, Codex={codex}"
@@ -187,9 +250,20 @@ def test_differential_cell(observed_cells, cell, expected_decision, expected_kin
 def test_expectation_table_deny_count_is_derived(observed_cells):
     expected_deny_count = sum(decision == "deny" for _, decision, _ in EXPECTATIONS)
     for gate_index, gate in enumerate(("Claude", "Codex")):
-        observed_deny_count = sum(outcomes[gate_index][0] == "deny"
-                                  for outcomes in observed_cells.values())
+        observed_deny_count = sum(observed_cells[cell][gate_index][0] == "deny"
+                                  for cell, _, _ in EXPECTATIONS)
         assert observed_deny_count == expected_deny_count, (
             f"{gate}: denial count differs from expectation table: "
             f"expected {expected_deny_count}, got {observed_deny_count}"
         )
+
+
+@pytest.mark.parametrize("cell,expected_decision,expected_kind,mapped_test", MAPPED,
+                         ids=[row[0] for row in MAPPED])
+def test_mapped_prefix_cell_names_the_kernels_test(observed_cells, cell, expected_decision,
+                                                    expected_kind, mapped_test):
+    for gate, (decision_, kind, reason) in zip(("Claude", "Codex"), observed_cells[cell]):
+        assert (decision_, kind) == (expected_decision, expected_kind), (
+            f"{cell}: {gate} judged a different path than the kernel's: got {(decision_, kind)}: {reason}")
+        if mapped_test:
+            assert mapped_test in reason, f"{cell}: {gate} reason does not name {mapped_test}: {reason}"

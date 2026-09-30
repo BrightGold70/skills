@@ -155,6 +155,32 @@ tell which path was judged, and it hides N-1's class and the second Gap-1 instan
 (`tests/l/new/../../prod.py`). AC-1.8's absent-leaf and absent-parent cells and the hard-link
 mixed-names cell are still absent from it.
 
+**Residual disposition, 2026-10-01 (branch `fix/carried-residuals`):**
+- **Closed with code:**
+  - Non-UTF-8 session-id file → `cannot_judge` (mutation RD-UTF8, `4a3499a5`).
+  - Absolute interpreters normalised to `python3.11` in nine specs' `command` and `target_command`
+    (the list above names three; the census found nine).
+  - Pre-walk `normpath` (TI11) and T4 `marker[:-1]` (CX-HDR-BARE) now have mutation rows
+    (`df8f8db6`).
+  - The Task 6 blind spot is closed. `MAPPED` cells in `test_h_mad_tdd_gate_differential.py` sit
+    under the name-map prefix `shared/`, so a gate that judges the kernel's target says
+    `test-missing` and names `shared/tests/test_<x>.py`, and a gate that judges the spelled
+    `tests/…` path cannot. The cells are M-6, the second Gap-1 instance, `.`-then-`..`, N-1 (and
+    its exempt control), AC-1.8's absent leaf and absent parent, and AC-1.9's hard link. Spec
+    `tdd_gate_differential.json` mutates TI8/TI9/TI10/TI11 against them: ALL_CAUGHT.
+  - AC-1.9 was predicted `no-test-resolved` and measured `test-missing`. The gate judges the hard
+    link's production name, which is the stricter reading and is what the cell now pins.
+- **Closed without change:** the two timing tests. They did not reproduce: 15 of 15 passed under a
+  24-core CPU load, and all passed in three full-suite runs on 2026-10-01. Loosening their bounds
+  without a reproduction would weaken them.
+- **Recorded, not done (evidence bookkeeping for a closed feature; no behaviour depends on it):**
+  - `reading-fixed.txt` still lacks the `MANUAL:` R-4/R-5 lines.
+  - The T0 absent-line control was never run.
+  - There is no committed record of the T7 re-check.
+  - The census row counts stop at `f61bb908`. Rows added since: TI9, TI10, TI11, CX-RUN,
+    CX-RUN-INNER, CX-RUN-TIMEOUT, CX-HDR-BARE, CX-ROOT-ENTER, CG-ROOT-CONJ, CG-ROOT-000, RD-UTF8,
+    and the four DIFF-TI rows.
+
 Skill candidates filed on main in `198f2908` (`docs/skill-candidates.md`, "HemaSuite #10 handover
 triage"):
 - **(a)** An agy report that says `Evidence: 0 files opened` is scored zero-evidence even when its
