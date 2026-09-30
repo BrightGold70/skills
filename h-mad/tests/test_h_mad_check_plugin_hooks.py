@@ -19,6 +19,12 @@ configs that reproduce them:
     unknown keys "$schema", "once" in hooks.SessionStart[0] ignored   (bkit 2.0.8)
     unknown key "$schema" ignored                                     (bkit 2.1.38, pre-patch)
 
+Both were recorded under Claude Code 2.1.270. From 2.1.286 the validator admits
+"$schema" at the top level, so those same configs now yield `"once"` alone and
+nothing at all. The recorded texts stay here as history; the verbatim negative
+controls use "legacy", a top-level key 2.1.286 still rejects, in the same
+positions.
+
 The singular/plural swap between them is not cosmetic — it is `len(findings)`,
 and a mutant that always writes "keys" passes every test that only greps for
 `$schema`.
@@ -52,6 +58,10 @@ SCRIPT = SCRIPTS / "h_mad_check_plugin_hooks.py"
 # The exact lines this repo recorded from the TUI, verbatim.
 RECORDED_TWO = 'hooks.json: unknown keys "$schema", "once" in hooks.SessionStart[0] ignored'
 RECORDED_ONE = 'hooks.json: unknown key "$schema" ignored'
+# The same two lines as the 2.1.286 validator renders them, with "legacy" in the
+# position "$schema" held (2.1.286 admits "$schema").
+CURRENT_TWO = 'hooks.json: unknown keys "legacy", "once" in hooks.SessionStart[0] ignored'
+CURRENT_ONE = 'hooks.json: unknown key "legacy" ignored'
 
 # The pre-patch shape that produced RECORDED_TWO: an unknown top-level key AND
 # an unknown matcher-level key, in that order.
@@ -83,6 +93,15 @@ PRE_PATCH_ONE = {
 
 # What the patch left behind, and what the live cache is expected to look like.
 PATCHED = {k: v for k, v in PRE_PATCH_ONE.items() if k != "$schema"}
+
+
+def _legacy(cfg: dict) -> dict:
+    """The same config with "legacy" in the first position, where "$schema" was."""
+    return {("legacy" if k == "$schema" else k): v for k, v in cfg.items()}
+
+
+CURRENT_SHAPE_TWO = _legacy(PRE_PATCH_TWO)
+CURRENT_SHAPE_ONE = _legacy(PRE_PATCH_ONE)
 
 
 def stage(tmp_path: Path, cfg: object, name: str = "hooks.json") -> Path:
@@ -133,11 +152,11 @@ class TestAgainstTheLiveBinary:
     def test_top_level_key_set_still_matches(self) -> None:
         blob = self._blob()
         hits = re.findall(
-            rb'new Set\(\[("description","hooks","modules","surface")\]\)', blob
+            rb'new Set\(\[("\$schema","description","hooks","modules","surface")\]\)', blob
         )
         assert hits, (
             "the top-level key set is no longer spelled "
-            '["description","hooks","modules","surface"] in the binary — '
+            '["$schema","description","hooks","modules","surface"] in the binary — '
             "TOP in h_mad_check_plugin_hooks.py may be stale"
         )
         found = {k.strip('"') for k in hits[0].decode().split(",")}
@@ -168,20 +187,33 @@ class TestTheRecordedWarnings:
     """The negative controls: configs that MUST produce the exact recorded text."""
 
     def test_bkit_208_shape_reproduces_the_two_key_line_verbatim(self) -> None:
-        assert message(findings(PRE_PATCH_TWO)) == RECORDED_TWO
+        assert message(findings(CURRENT_SHAPE_TWO)) == CURRENT_TWO
 
     def test_bkit_2138_shape_reproduces_the_one_key_line_verbatim(self) -> None:
-        assert message(findings(PRE_PATCH_ONE)) == RECORDED_ONE
+        assert message(findings(CURRENT_SHAPE_ONE)) == CURRENT_ONE
+
+    def test_recorded_texts_differ_from_current_only_by_the_admitted_key(self) -> None:
+        """The 2.1.270 recordings are the current texts with "$schema" in the
+        position "legacy" now holds; nothing else about the rendering moved."""
+        assert RECORDED_TWO == CURRENT_TWO.replace('"legacy"', '"$schema"')
+        assert RECORDED_ONE == CURRENT_ONE.replace('"legacy"', '"$schema"')
+
+    def test_recorded_bkit_shapes_under_2_1_286(self) -> None:
+        """2.1.286 admits "$schema": bkit 2.0.8's shape keeps only the matcher
+        finding and bkit 2.1.38's pre-patch shape is clean."""
+        assert message(findings(PRE_PATCH_TWO)) == (
+            'hooks.json: unknown key "once" in hooks.SessionStart[0] ignored')
+        assert findings(PRE_PATCH_ONE) == []
 
     def test_the_plural_tracks_the_count_not_the_content(self) -> None:
         """One finding says "key", two say "keys". A mutant that hardcodes
         either passes half these tests and fails this one."""
-        assert message(findings(PRE_PATCH_ONE)).startswith("hooks.json: unknown key ")
-        assert message(findings(PRE_PATCH_TWO)).startswith("hooks.json: unknown keys ")
+        assert message(findings(CURRENT_SHAPE_ONE)).startswith("hooks.json: unknown key ")
+        assert message(findings(CURRENT_SHAPE_TWO)).startswith("hooks.json: unknown keys ")
 
     def test_the_matcher_finding_names_its_site(self) -> None:
-        found = findings(PRE_PATCH_TWO)
-        assert found == ['"$schema"', '"once" in hooks.SessionStart[0]']
+        found = findings(CURRENT_SHAPE_TWO)
+        assert found == ['"legacy"', '"once" in hooks.SessionStart[0]']
 
     def test_a_second_matcher_is_indexed_from_zero(self) -> None:
         cfg = {
@@ -280,11 +312,11 @@ class TestTruncationAndOverflow:
 
 class TestCLI:
     def test_a_warning_file_exits_one_and_names_the_plugin(self, tmp_path: Path) -> None:
-        p = stage(tmp_path, PRE_PATCH_ONE)
+        p = stage(tmp_path, CURRENT_SHAPE_ONE)
         r = run_cli(f"bkit={p}")
         assert r.returncode == 1
         assert "WARN" in r.stdout
-        assert f"Plugin bkit: {RECORDED_ONE}" in r.stdout
+        assert f"Plugin bkit: {CURRENT_ONE}" in r.stdout
 
     def test_a_clean_file_exits_zero(self, tmp_path: Path) -> None:
         p = stage(tmp_path, PATCHED)
@@ -296,7 +328,7 @@ class TestCLI:
         self, tmp_path: Path
     ) -> None:
         good = stage(tmp_path, PATCHED, "good.json")
-        bad = stage(tmp_path, PRE_PATCH_TWO, "bad.json")
+        bad = stage(tmp_path, CURRENT_SHAPE_TWO, "bad.json")
         r = run_cli(f"a={good}", f"b={bad}", f"c={good}")
         assert r.returncode == 1
 

@@ -16,12 +16,12 @@
   ],
   "mutations": [
     {
-      "name": "schema-becomes-an-allowed-top-level-key",
-      "_mechanism": "The exact fail-open this check exists to detect: widen TOP by the one key that was actually warning, and every recorded warning silently becomes CLEAN. This is also the mutation that proves the negative controls are load-bearing rather than decorative.",
+      "name": "schema-becomes-unknown-again",
+      "_mechanism": "Claude Code 2.1.286 admits \"$schema\" at the top level; dropping it from TOP re-creates the 2.1.270 warning for bkit's pre-patch shape, which the 2.1.286 expectation must reject.",
       "file": "scripts/h_mad_check_plugin_hooks.py",
-      "find": "TOP = {\"description\", \"hooks\", \"modules\", \"surface\"}",
-      "replace": "TOP = {\"description\", \"hooks\", \"modules\", \"surface\", \"$schema\"}",
-      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTheRecordedWarnings::test_bkit_2138_shape_reproduces_the_one_key_line_verbatim"
+      "find": "TOP = {\"$schema\", \"description\", \"hooks\", \"modules\", \"surface\"}",
+      "replace": "TOP = {\"description\", \"hooks\", \"modules\", \"surface\"}",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTheRecordedWarnings::test_recorded_bkit_shapes_under_2_1_286"
     },
     {
       "name": "once-becomes-an-allowed-matcher-key",
@@ -110,6 +110,14 @@
       "find": "    if not found:\n        return None",
       "replace": "    if False:\n        return None",
       "test": "tests/test_h_mad_check_plugin_hooks.py::TestThePatchedShapeIsClean::test_patched_config_renders_no_message"
+    },
+    {
+      "name": "negative-control-key-becomes-allowed",
+      "_mechanism": "The fail-open this check exists to detect: widen TOP by the key the negative controls use (\"legacy\", in the position \"$schema\" held under 2.1.270) and every warning shape silently becomes CLEAN. Proves the negative controls are load-bearing.",
+      "file": "scripts/h_mad_check_plugin_hooks.py",
+      "find": "TOP = {\"$schema\", \"description\", \"hooks\", \"modules\", \"surface\"}",
+      "replace": "TOP = {\"$schema\", \"description\", \"hooks\", \"modules\", \"surface\", \"legacy\"}",
+      "test": "tests/test_h_mad_check_plugin_hooks.py::TestTheRecordedWarnings::test_bkit_2138_shape_reproduces_the_one_key_line_verbatim"
     }
   ]
 }

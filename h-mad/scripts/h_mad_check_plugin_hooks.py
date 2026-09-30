@@ -14,13 +14,16 @@ into a function over a file. `findings()` builds the same list Claude Code's
 emitter builds; an EMPTY list is the whole point — that is the emitter's early
 return, and an early return is why no warning appears.
 
-The constants are transcribed from the 2.1.270 binary (the minified names are
+The constants are transcribed from the 2.1.286 binary (the minified names are
 per-build and are recorded only to make the transcription auditable):
 
-    yko = new Set(["description","hooks","modules","surface"])   # top level
-    _ko = new Set(["matcher","hooks"])                           # matcher level
-    bko = 5    (max keys listed before "and N more")
-    npn = 40   (key-name truncation)
+    Cyn = new Set(["$schema","description","hooks","modules","surface"])   # top level
+    Ryn = new Set(["matcher","hooks"])                                     # matcher level
+    xyn = 5    (max keys listed before "and N more")
+    H9e = 40   (key-name truncation)
+
+2.1.286 added "$schema" to the top-level set; 2.1.270 (yko/_ko/bko/npn) had the
+other four only, which is why bkit's "$schema" line was recorded as a warning.
 
 `tests/test_h_mad_check_plugin_hooks.py` re-greps the live binary for the two
 SET CONTENTS on every run and fails when they drift, so this docstring is not
@@ -41,7 +44,7 @@ import json
 import pathlib
 import sys
 
-TOP = {"description", "hooks", "modules", "surface"}
+TOP = {"$schema", "description", "hooks", "modules", "surface"}
 MATCHER = {"matcher", "hooks"}
 MAXKEYS, TRUNC = 5, 40
 
