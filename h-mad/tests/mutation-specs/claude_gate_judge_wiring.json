@@ -347,6 +347,14 @@
       "find": "  [ -n \"$PRODUCTION_TARGET\" ] || PRODUCTION_TARGET=${CANON_TARGET%/*}/$NAME",
       "replace": "  [ -n \"$PRODUCTION_TARGET\" ] || PRODUCTION_TARGET=$CANON_PREFIX/$NAME",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_absent_intermediate_dirs_judge_the_real_target[two-absent]"
+    },
+    {
+      "name": "CG-PRODNAME",
+      "_mechanism": "archreview v4 #2: the production-target loop no longer skips test names, so a hard-linked test name can be judged.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "    test_*.py|*_test.py|conftest*.py) continue ;;",
+      "replace": "    __no_such_name__) continue ;;",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_hardlink_mixed_names_judges_the_production_name"
     }
   ]
 }

@@ -597,6 +597,27 @@ def test_claude_hard_link_alias_denies(tmp_path):
             "deny", "no-test-resolved")
 
 
+def test_claude_hardlink_mixed_names_judges_the_production_name(tmp_path):
+    from test_h_mad_codex_tdd_gate_judge import _payload as codex_payload, _run as run_codex
+
+    root = _root(tmp_path)
+    target = "hematology-paper-writer/tools/test_a.py"
+    alias = _file(root, target)
+    production = root / "hematology-paper-writer/tools/z.py"
+    os.link(alias, production)
+    assert alias.stat().st_ino == production.stat().st_ino
+
+    codex_decision, codex_reason, _ = run_codex(root, codex_payload(target))
+    assert codex_decision == "deny", codex_reason
+    assert "kind=test-missing" in codex_reason, codex_reason
+    mapped_test = "hematology-paper-writer/tests/test_z.py"
+    assert mapped_test in codex_reason, codex_reason
+
+    claude = _assert(_gate(root, arg=target, bin_dir=_bin(tmp_path)),
+                     codex_decision, "test-missing")
+    assert mapped_test in claude.reason, claude.reason
+
+
 @pytest.mark.parametrize("name,expected", [("lnk", "deny"), ("tests", "allow"), ("src", "deny")])
 def test_claude_outside_root_symlink_keeps_raw_conjunct(tmp_path, name, expected):
     root = _root(tmp_path)

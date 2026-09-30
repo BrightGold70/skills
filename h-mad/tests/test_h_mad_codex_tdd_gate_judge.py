@@ -348,6 +348,18 @@ def test_codex_hard_link_alias_denies(tmp_path):
     _expect_gate(root, "src/test_prod.py", "deny", "no-test-resolved")
 
 
+def test_codex_hardlink_mixed_names_judges_the_production_name(tmp_path):
+    root = _root(tmp_path)
+    target = "hematology-paper-writer/tools/test_a.py"
+    alias = _file(root, target)
+    production = root / "hematology-paper-writer/tools/z.py"
+    os.link(alias, production)
+    assert alias.stat().st_ino == production.stat().st_ino
+
+    reason = _expect_gate(root, target, "deny", "test-missing")
+    assert "hematology-paper-writer/tests/test_z.py" in reason, reason
+
+
 def test_codex_fold_existing_leaf_denies(tmp_path):
     root = _root(tmp_path)
     _file(root, "src/prod.PY")
