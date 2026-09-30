@@ -457,22 +457,7 @@ def _main_guarded() -> int:
             continue
         if resolved.unresolvable:
             if phase5_status in {"active", "unknown"}:
-                component = resolved.component
-                try:
-                    info = os.stat(component)
-                    parent = os.path.dirname(component)
-                    with os.scandir(parent) as entries:
-                        names = sorted(
-                            entry.name for entry in entries
-                            if not entry.is_symlink()
-                            and (entry_info := entry.stat(follow_symlinks=False)).st_dev == info.st_dev
-                            and entry_info.st_ino == info.st_ino
-                        )
-                    if names:
-                        component = os.path.join(parent, names[0])
-                except OSError:
-                    pass
-                return _deny(f"H-MAD Phase 5 target is unresolvable ({component}); refusing fail-closed. kind=judge-error")
+                return _deny(f"H-MAD Phase 5 target is unresolvable ({resolved.component}); refusing fail-closed. kind=judge-error")
             continue
         production = []
         for name in resolved.names:

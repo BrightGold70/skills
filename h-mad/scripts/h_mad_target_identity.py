@@ -35,12 +35,31 @@ def canonical_directory(path: str) -> str:
         os.close(fd)
 
 
+def _on_disk_component(component: str) -> str:
+    try:
+        info = os.stat(component)
+        parent = os.path.dirname(component)
+        with os.scandir(parent) as entries:
+            names = sorted(
+                entry.name for entry in entries
+                if not entry.is_symlink()
+                and (entry_info := entry.stat(follow_symlinks=False)).st_dev == info.st_dev
+                and entry_info.st_ino == info.st_ino
+            )
+        if names:
+            component = os.path.join(parent, names[0])
+    except OSError:
+        pass
+    return component
+
+
 def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
     spelled_root = os.path.abspath(root)
     try:
         canonical_root = canonical_directory(spelled_root)
     except OSError:
-        return Identity(spelled_root, "", spelled_root, (), True, 2, spelled_root)
+        return Identity(spelled_root, "", spelled_root, (), True, 2,
+                        _on_disk_component(spelled_root))
 
     if not target:
         return Identity(canonical_root, "", canonical_root, (), False, 0, "")
@@ -76,14 +95,14 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
                 prefix = canonical_directory(deepest_directory)
             except OSError:
                 return Identity(canonical_root, "", deepest_directory, (), True, 2,
-                                deepest_directory)
+                                _on_disk_component(deepest_directory))
             return Identity(canonical_root, "", prefix, (), True, 1, current)
         except OSError:  # M:TI5
             try:
                 prefix = canonical_directory(deepest_directory)
             except OSError:
                 return Identity(canonical_root, "", deepest_directory, (), True, 2,
-                                deepest_directory)
+                                _on_disk_component(deepest_directory))
             return Identity(canonical_root, "", prefix, (), True, 1, current)
         if stat.S_ISDIR(referent_stat.st_mode):
             deepest_directory = current
@@ -93,7 +112,7 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
             prefix = canonical_directory(deepest_directory)
         except OSError:
             return Identity(canonical_root, "", deepest_directory, (), True, 2,
-                            deepest_directory)
+                            _on_disk_component(deepest_directory))
         canonical_target = os.path.join(prefix, os.path.relpath(spelled_target, deepest_directory))
         return Identity(canonical_root, canonical_target, prefix,
                         (os.path.basename(spelled_target),), False, 0, "")
@@ -105,7 +124,8 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
         try:
             canonical_target = canonical_directory(current)
         except OSError:
-            return Identity(canonical_root, "", current, (), True, 2, current)
+            return Identity(canonical_root, "", current, (), True, 2,
+                            _on_disk_component(current))
         return Identity(canonical_root, canonical_target, canonical_target, (), False, 0, "")
 
     referent_path = current
@@ -118,13 +138,15 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
             finally:
                 os.close(fd)
         except OSError:
-            return Identity(canonical_root, "", current, (), True, 2, current)
+            return Identity(canonical_root, "", current, (), True, 2,
+                            _on_disk_component(current))
 
     parent = os.path.dirname(referent_path)
     try:
         prefix = canonical_directory(parent)
     except OSError:
-        return Identity(canonical_root, "", parent, (), True, 2, parent)
+        return Identity(canonical_root, "", parent, (), True, 2,
+                        _on_disk_component(parent))
     try:
         with os.scandir(prefix) as entries:
             matching = []
@@ -137,9 +159,11 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
                     matching.append(entry.name)
             names = tuple(sorted(matching))
     except OSError:
-        return Identity(canonical_root, "", prefix, (), True, 2, parent)
+        return Identity(canonical_root, "", prefix, (), True, 2,
+                        _on_disk_component(parent))
     if not names:
-        return Identity(canonical_root, "", prefix, (), True, 2, parent)
+        return Identity(canonical_root, "", prefix, (), True, 2,
+                        _on_disk_component(parent))
     return Identity(canonical_root, os.path.join(prefix, names[0]), prefix,
                     names, False, 0, "")
 

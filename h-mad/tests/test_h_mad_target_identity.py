@@ -146,7 +146,9 @@ def test_unreadable_directory_is_arm_2(identity, root, kind):
         assert_case_insensitive(root)
         directory = root / "Tests"
         relative = "tests/newmod.py"
-        failed = root / "tests"
+        # The component is reported in its on-disk spelling (operator decision
+        # 2026-09-30, archreview v2 F3: the canonicaliser, not the gate, owns it).
+        failed = root / "Tests"
     else:
         directory = root / "src"
         relative = "src/prod.py"

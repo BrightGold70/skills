@@ -34,23 +34,31 @@
     {
       "name": "TI4",
       "file": "scripts/h_mad_target_identity.py",
-      "find": "        except FileNotFoundError:  # M:TI4\n            try:\n                prefix = canonical_directory(deepest_directory)\n            except OSError:\n                return Identity(canonical_root, \"\", deepest_directory, (), True, 2,\n                                deepest_directory)\n            return Identity(canonical_root, \"\", prefix, (), True, 1, current)",
+      "find": "        except FileNotFoundError:  # M:TI4\n            try:\n                prefix = canonical_directory(deepest_directory)\n            except OSError:\n                return Identity(canonical_root, \"\", deepest_directory, (), True, 2,\n                                _on_disk_component(deepest_directory))\n            return Identity(canonical_root, \"\", prefix, (), True, 1, current)",
       "replace": "        except FileNotFoundError:  # M:TI4\n            absent = True\n            break",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_unresolvable_governed_is_judge_error"
     },
     {
       "name": "TI5",
       "file": "scripts/h_mad_target_identity.py",
-      "find": "        except OSError:  # M:TI5\n            try:\n                prefix = canonical_directory(deepest_directory)\n            except OSError:\n                return Identity(canonical_root, \"\", deepest_directory, (), True, 2,\n                                deepest_directory)\n            return Identity(canonical_root, \"\", prefix, (), True, 1, current)",
+      "find": "        except OSError:  # M:TI5\n            try:\n                prefix = canonical_directory(deepest_directory)\n            except OSError:\n                return Identity(canonical_root, \"\", deepest_directory, (), True, 2,\n                                _on_disk_component(deepest_directory))\n            return Identity(canonical_root, \"\", prefix, (), True, 1, current)",
       "replace": "        except OSError:  # M:TI5\n            absent = True\n            break",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_unresolvable_governed_is_judge_error"
     },
     {
       "name": "TI6",
       "file": "scripts/h_mad_target_identity.py",
-      "find": "        except OSError:\n            return Identity(canonical_root, \"\", current, (), True, 2, current)\n\n    parent = os.path.dirname(referent_path)",
+      "find": "        except OSError:\n            return Identity(canonical_root, \"\", current, (), True, 2,\n                            _on_disk_component(current))\n\n    parent = os.path.dirname(referent_path)",
       "replace": "        except OSError:\n            return Identity(canonical_root, spelled_target, deepest_directory,\n                            (os.path.basename(spelled_target),), False, 0, \"\")\n\n    parent = os.path.dirname(referent_path)",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_unreadable_component_step5"
+    },
+    {
+      "name": "TI7",
+      "_mechanism": "6b F3 (archreview v2, operator decision 2026-09-30): the arm-2 component is not reported in its on-disk spelling.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        if names:\n            component = os.path.join(parent, names[0])",
+      "replace": "        if False:\n            component = os.path.join(parent, names[0])",
+      "test": "tests/test_h_mad_target_identity.py::test_unresolvable_component_is_reported_in_on_disk_spelling"
     }
   ],
   "target_command": [
