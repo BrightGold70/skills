@@ -44,6 +44,13 @@ dropping the bound. This holds for a one-off local command too; do not reason fr
 successful `command -v` to an exemption. For anything you commit or hand on, the form is a
 forbidden external CLI dependency besides.
 
+Under the Phase-5 TDD gate, `run` is admitted only in exactly that shape
+(`--timeout <positive integer> -- <cmd...>`) and only when `<cmd...>` would be admitted on its
+own by the same gate: pytest, a read-only command, an allowed `hmad-dispatch` verb, an
+allow-listed h-mad script, or the project's `.venv` python running pytest. So
+`hmad-dispatch run --timeout 600 -- python3 -m pytest <tests> -q` is the bounded test run to use,
+and wrapping any other command in `run` is refused the same as running it bare.
+
 ## Your Job
 
 For RED phase (5d): write failing tests for this module based on the impl-plan task above. Tests should be exhaustive but bounded to the task's scope. Verify they FAIL by running `pytest <test_path> -v`.

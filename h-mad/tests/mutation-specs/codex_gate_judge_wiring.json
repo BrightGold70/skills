@@ -294,6 +294,30 @@
       "find": "        if not os.access(root.root, os.X_OK):  # M:CX-ROOT-ENTER",
       "replace": "        if False:  # M:CX-ROOT-ENTER",
       "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_mode_000_root_refuses_whatever_the_phase"
+    },
+    {
+      "name": "CX-RUN",
+      "_mechanism": "codex-run-verb-conflict: drop the run-verb branch; run falls back to SAFE_DISPATCH_VERBS and the template's bounded pytest is denied again.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if argv[1] == \"run\":  # M:CX-RUN",
+      "replace": "        if False:  # M:CX-RUN",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_allows_run_verb_around_a_trusted_command"
+    },
+    {
+      "name": "CX-RUN-INNER",
+      "_mechanism": "codex-run-verb-conflict: stop re-checking the wrapped command; run then launders any command past the gate.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "                    and _safe_argv(argv[5:], root, cwd))  # M:CX-RUN-INNER",
+      "replace": "                    and True)  # M:CX-RUN-INNER",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_run_verb_around_an_untrusted_or_malformed_command"
+    },
+    {
+      "name": "CX-RUN-TIMEOUT",
+      "_mechanism": "codex-run-verb-conflict: accept a zero timeout; hmad-dispatch refuses it, so the gate must not claim it is a bounded run.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "and int(argv[3]) > 0 and argv[4] == \"--\"",
+      "replace": "and int(argv[3]) >= 0 and argv[4] == \"--\"",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_run_verb_around_an_untrusted_or_malformed_command"
     }
   ]
 }

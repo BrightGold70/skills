@@ -318,6 +318,50 @@ def test_codex_hook_allows_observational_hmad_dispatch_verb(tmp_path):
     assert result.stdout.strip() in ("", "{}")
 
 
+
+def _hook_decision(project, command):
+    result = _run_hook(project, {"tool_name": "Bash", "tool_input": {"command": command}})
+    assert result.returncode == 0, result.stderr
+    if result.stdout.strip() in ("", "{}"):
+        return "allow"
+    return json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"]
+
+
+def test_codex_hook_allows_run_verb_around_a_trusted_command(tmp_path):
+    # codex-run-verb-conflict (HemaSuite handover 2026-10-01): the implementer
+    # template bounds commands with `hmad-dispatch run --timeout <s> -- <cmd>`,
+    # so the gate must admit `run` when the wrapped command is itself trusted.
+    project = _active_project(tmp_path)
+    dispatch = ROOT / "bin" / "hmad-dispatch"
+    for command in (
+        f"{dispatch} run --timeout 60 -- python3 -m pytest tests/test_x.py -q",
+        f"{dispatch} run --timeout 5 -- python3 -m pytest -q",
+        f"{dispatch} run --timeout 5 -- cat notes.md",
+        f"{dispatch} run --timeout 5 -- {dispatch} env",
+    ):
+        assert _hook_decision(project, command) == "allow", command
+
+
+def test_codex_hook_denies_run_verb_around_an_untrusted_or_malformed_command(tmp_path):
+    project = _active_project(tmp_path)
+    dispatch = ROOT / "bin" / "hmad-dispatch"
+    for command in (
+        f"{dispatch} run --timeout 60 -- rm -rf x",
+        f"{dispatch} run --timeout 60 -- python3 -c pass",
+        f"{dispatch} run --timeout 60 -- git status",
+        f"{dispatch} run --timeout 60 -- {dispatch} exec agy p.md",
+        f"{dispatch} run --timeout 60 -- {dispatch} run --timeout 1 -- rm x",
+        f"{dispatch} run --timeout 60 --",
+        f"{dispatch} run --timeout 60 pytest -q",
+        f"{dispatch} run -- pytest -q",
+        f"{dispatch} run --timeout abc -- pytest -q",
+        f"{dispatch} run --timeout 0 -- pytest -q",
+        f"{dispatch} run --timeout 5 --timeout 6 -- pytest -q",
+        f"{dispatch} run --help",
+        f"{dispatch} run",
+    ):
+        assert _hook_decision(project, command) == "deny", command
+
 def test_codex_hook_rejects_untrusted_executable_paths(tmp_path):
     project = _active_project(tmp_path)
     for command in (

@@ -347,6 +347,10 @@ def _safe_shell_command(command: str, root: Path | None = None, cwd: object = No
         argv = shlex.split(command)
     except ValueError:
         return False
+    return _safe_argv(argv, root, cwd)
+
+
+def _safe_argv(argv: list[str], root: Path | None, cwd: object) -> bool:
     if not argv:
         return False
     if "=" in argv[0] and not argv[0].startswith(("/", ".")):
@@ -363,7 +367,15 @@ def _safe_shell_command(command: str, root: Path | None = None, cwd: object = No
         return True
     if executable in {"hmad-dispatch", "hmad-dispatch.sh"}:
         expected = (Path(__file__).resolve().parents[1] / "bin" / "hmad-dispatch").resolve()
-        return resolved_executable == expected and len(argv) >= 2 and argv[1] in SAFE_DISPATCH_VERBS
+        if resolved_executable != expected or len(argv) < 2:
+            return False
+        if argv[1] == "run":  # M:CX-RUN
+            # `run --timeout <s> -- <cmd...>` executes <cmd>: admit it only in
+            # exactly that shape and only when <cmd> is itself trusted.
+            return (len(argv) >= 6 and argv[2] == "--timeout" and argv[3].isdigit()
+                    and int(argv[3]) > 0 and argv[4] == "--"
+                    and _safe_argv(argv[5:], root, cwd))  # M:CX-RUN-INNER
+        return argv[1] in SAFE_DISPATCH_VERBS
     if executable.startswith("python") and len(argv) >= 2:
         script = Path(os.path.expandvars(argv[1])).expanduser()
         script = script.resolve() if script.is_absolute() else (Path.cwd() / script).resolve()
