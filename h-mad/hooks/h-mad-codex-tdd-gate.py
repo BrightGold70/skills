@@ -94,7 +94,7 @@ def _canonical_root(path: Path) -> Path | Identity:
     try:
         return Path(identity.canonical_directory(str(path)))
     except OSError:
-        return identity.Identity(str(path), "", str(path), (), True, 2, str(path))
+        return identity.Identity(str(path), "", str(path), (), True, 2, identity._on_disk_component(str(path)))
 
 
 def _project_root(payload: dict[str, Any]) -> Path | Identity:

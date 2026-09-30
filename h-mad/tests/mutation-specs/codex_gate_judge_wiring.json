@@ -278,6 +278,14 @@
       "find": "                base = _payload_cwd_base(root, str(base))",
       "replace": "                base = base",
       "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_canonical_cwd_is_rechecked_by_payload_cwd_base"
+    },
+    {
+      "name": "CX-ROOT-ONDISK",
+      "_mechanism": "archreview v6: the Codex root arm-2 component reverts to the spelled root instead of its on-disk spelling.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        return identity.Identity(str(path), \"\", str(path), (), True, 2, identity._on_disk_component(str(path)))",
+      "replace": "        return identity.Identity(str(path), \"\", str(path), (), True, 2, str(path))",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_root_open_failure_names_the_on_disk_root"
     }
   ]
 }

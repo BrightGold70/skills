@@ -650,6 +650,21 @@ def test_codex_root_open_failure_refuses_only_when_governed(tmp_path, phase):
         root.chmod(0o755)
 
 
+def test_codex_root_open_failure_names_the_on_disk_root(tmp_path):
+    root = _root(tmp_path).rename(tmp_path / "Proj")
+    assert_case_insensitive(root)
+    spelled_root = root.with_name("proj")
+    original_mode = root.stat().st_mode & 0o7777
+    root.chmod(0o311)
+    try:
+        with pytest.raises(PermissionError):
+            os.open(spelled_root, os.O_RDONLY)
+        reason = _expect_gate(spelled_root, str(spelled_root / "src/prod.py"), "deny", "judge-error")
+        assert str(root) in reason, f"missing on-disk root component {root}: {reason}"
+    finally:
+        root.chmod(original_mode)
+
+
 @pytest.mark.parametrize("variant", ["missing", "loop", "mode000", "mode0311"])
 def test_codex_payload_cwd_oserror_uses_payload_cwd_base(tmp_path, variant):
     root = _root(tmp_path)
