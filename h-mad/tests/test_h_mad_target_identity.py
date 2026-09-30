@@ -167,6 +167,24 @@ def test_unreadable_directory_is_arm_2(identity, root, kind):
     assert result.target == ""
 
 
+@pytest.mark.parametrize("mode", [0o311, 0o000], ids=["dir-0311", "dir-000"])
+def test_unresolvable_component_is_reported_in_on_disk_spelling(identity, root, mode):
+    root = Path(identity.canonical_directory(str(root)))
+    assert_case_insensitive(root)
+    directory = root / "Tests"
+    directory.mkdir()
+    original_mode = directory.stat().st_mode & 0o7777
+    directory.chmod(mode)
+    try:
+        with pytest.raises(PermissionError, match="Permission denied"):
+            os.listdir(directory)
+        result = identity.canonicalise(str(root), "tests/newmod.py")
+    finally:
+        directory.chmod(original_mode)
+    assert result.unresolvable is True
+    assert result.component == str(directory), f"observed component: {result.component!r}"
+
+
 def test_root_open_failure_is_arm_2(identity, root):
     root.chmod(0o311)
     try:
