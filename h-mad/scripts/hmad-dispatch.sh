@@ -3051,7 +3051,9 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   local boundary; boundary="$(_dispatch_boundary)"
   local bounded_prompt; bounded_prompt="$(mktemp -t hmad_exec_prompt.XXXXXX)" || return 1
   {
-    if [ -n "$_coord" ]; then
+    # Codex's exec sandbox cannot reach the Orca socket; omit the handle so the
+    # template's documented fallback skips worker_done and prints STATUS.
+    if [ "$agent" != codex ] && [ -n "$_coord" ]; then
       printf '[H-MAD] worker_done coordinator handle (use as --to): %s\n\n' "$_coord"
     fi
     cat "$promptfile"

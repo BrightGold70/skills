@@ -1253,13 +1253,13 @@ def test_exec_prepends_the_coordinator_handle_when_one_resolves(tmp_path):
     — which is how 6a-prime and 5e are actually dispatched — the placeholder reached
     the agent as prose with nothing to resolve it against.
     """
-    b = _bindir(tmp_path, ["codex"])
-    stdin_cap = tmp_path / "stdin.txt"
-    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
-            env=_env(b, HMAD_STUB_STDIN_CAPTURE=str(stdin_cap),
+    b = _bindir(tmp_path, ["agy"])
+    prompt_cap = tmp_path / "prompt_seen.txt"
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_AGY_PROMPT_CAPTURE=str(prompt_cap),
                      HMAD_ORCA_COORDINATOR_TERMINAL="term_abc123"))
     assert r.returncode == 0, r.stderr
-    delivered = stdin_cap.read_text()
+    delivered = prompt_cap.read_text()
     # FIRST line: the templates say "at the top of your task spec", and an agent
     # that has to hunt for it is one that reports the fallback instead.
     assert delivered.splitlines()[0] == (
@@ -1267,6 +1267,21 @@ def test_exec_prepends_the_coordinator_handle_when_one_resolves(tmp_path):
     ), delivered[:200]
     # The prompt itself still arrives intact, and so does the J23 boundary.
     assert "RED task: write a failing test." in delivered
+    assert _BOUNDARY in delivered
+
+
+def test_exec_codex_omits_the_handle_line_even_when_a_coordinator_resolves(tmp_path):
+    """Codex's exec sandbox cannot reach the Orca socket; use the STATUS fallback."""
+    b = _bindir(tmp_path, ["codex"])
+    stdin_cap = tmp_path / "stdin.txt"
+    prompt = _prompt(tmp_path)
+    r = run(["exec", "codex", str(prompt), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_STDIN_CAPTURE=str(stdin_cap),
+                     HMAD_ORCA_COORDINATOR_TERMINAL="term_abc123"))
+    assert r.returncode == 0, r.stderr
+    delivered = stdin_cap.read_text()
+    assert "worker_done coordinator handle" not in delivered
+    assert delivered.splitlines()[0] == prompt.read_text().splitlines()[0]
     assert _BOUNDARY in delivered
 
 
