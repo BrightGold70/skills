@@ -318,6 +318,14 @@
       "find": "and int(argv[3]) > 0 and argv[4] == \"--\"",
       "replace": "and int(argv[3]) >= 0 and argv[4] == \"--\"",
       "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_run_verb_around_an_untrusted_or_malformed_command"
+    },
+    {
+      "name": "CX-HDR-BARE",
+      "_mechanism": "Carried residual (tdd-gate-fail-opens T4): drop the bare-marker check; a header trimmed to '*** Update File:' (empty path) is then neither a path nor a bad header, and the patch passes with no target.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "            if header == marker[:-1]:\n",
+      "replace": "            if False:\n",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_empty_header_path_is_judge_error"
     }
   ]
 }

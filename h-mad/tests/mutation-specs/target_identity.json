@@ -83,6 +83,14 @@
       "find": "        if not part or part == \".\":  # M:TI10",
       "replace": "        if not part:  # M:TI10",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_dot_then_dotdot_into_production_denies"
+    },
+    {
+      "name": "TI11",
+      "_mechanism": "Carried residual (tdd-gate-fail-opens 5d): restore a lexical normpath before the walk; '..' after a symlink then collapses lexically instead of following the kernel (M-6 class).",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "    spelled_target = os.path.join(base, target)\n",
+      "replace": "    spelled_target = os.path.normpath(os.path.join(base, target))\n",
+      "test": "tests/test_h_mad_target_identity.py::test_dotdot_after_symlink_follows_the_kernel"
     }
   ],
   "target_command": [
