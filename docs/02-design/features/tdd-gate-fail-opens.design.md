@@ -8,7 +8,7 @@ receives one percent-encoded record from the single `python3` invocation that to
 `TARGET_PATH` (`# M:H11`), and that same invocation also replaces the `pwd -P` that computes
 `ROOT_ABS`. The record carries every non-symlink hard-link name of the final referent, taken
 from that referent's parent, one unresolvable flag for both
-FR-3 arms, and the spelled component. Each gate then applies its own exemptions to every name.
+FR-3 arms, and the failing component (on-disk spelling at arm 2). Each gate then applies its own exemptions to every name.
 A governed unresolvable target, a governed bad `apply_patch` header, and a judge reap that
 outlives `REAP_GRACE_S` all refuse `judge-error` or `judge-timeout`. The resume oracle is admitted
 by a new safe-list key and by `--session-id-from-git-dir`, which reads the minted id before
@@ -130,7 +130,8 @@ path is a usable contained directory (the Codex call-site rule in §"Codex call 
 `OSError` from `canonical_directory` on the root, from `canonical_directory` on the target's
 deepest existing directory, or from the listing of the final referent's parent is caught
 inside `canonicalise` and returned as an arm-2 `Identity`: `unresolvable` true, `arm` 2,
-`names` empty, `target` empty, `component` the spelled component. That `OSError` does not
+`names` empty, `target` empty, `component` the failing component in its on-disk spelling (the
+`component` rule below). That `OSError` does not
 propagate. An `OSError` from `canonical_directory` on the payload cwd is not that result.
 When the leaf exists and its final referent is a file, the hard-link scan lists that
 referent's canonical parent. The directory the scan
@@ -139,7 +140,24 @@ when those differ.
 
 `Identity` is a `NamedTuple` with fields `root`, `target`, `prefix`, `names`, `unresolvable`,
 `arm`, `component`. `names` is a `tuple` of `str`. `unresolvable` is `bool`. `arm` is `0`, `1`,
-or `2`. `component` is the spelled component that failed, or empty.
+or `2`. `component` is empty when `arm` is `0`. At `arm` `1` it is the spelled component (the
+arm-1 returns do not pass through the lookup below; the component is one `os.stat` already
+failed on). At `arm` `2` it is the failing component, as a path, in its on-disk spelling as
+resolved by the canonicaliser itself:
+`_on_disk_component(component)` calls `os.stat` on the spelled component, `os.scandir` on its
+parent, and among that parent's non-symlink entries with the same `st_dev` and `st_ino` takes
+the sorted-first name, joined to the parent. That covers a case-variant spelling and a
+hard-link sibling alike. When that lookup itself raises `OSError` (the component is absent, or
+its parent cannot be listed), `component` is the spelled component unchanged. Every arm-2
+`return` in `canonicalise` passes its component through `_on_disk_component`; there is no
+second derivation. Both gates use `component` as-is. Neither gate re-derives the on-disk
+spelling (the Codex gate's former `os.stat`/`os.scandir` block in `_main_guarded` is gone).
+This is the operator decision of 2026-09-30 after 6a-prime cycle 2
+(`docs/03-analysis/tdd-gate-fail-opens.archreview.v2.md`, single-source contract), landed in
+`d06d82f6`, and pinned by
+`h-mad/tests/test_h_mad_target_identity.py::test_unresolvable_component_is_reported_in_on_disk_spelling`
+and `::test_unreadable_directory_is_arm_2[a-absent-leaf]` (spelled `tests`, expected on-disk
+`Tests`).
 
 `PY_SUFFIXES = (".py", ".pY", ".Py", ".PY")`. `fold_py_suffix(name: str) -> str` replaces a
 trailing member of that tuple with `.py` and leaves the stem byte-for-byte. It does not call
@@ -301,9 +319,11 @@ for that directory record. The reader accepts it. It is not a protocol error. A 
 record with `names` greater than 0 is a protocol error, because the scan does not list the
 directory's children. A file referent with `names=0` is a protocol error. Unresolvable record:
 `unresolvable=yes`, `arm` `1` or `2`, `names=0`, no `name` lines, `target` empty, `component`
-the spelled component's bytes, `prefix` the resolved prefix (the longest prefix step 2 walked
-before the predicate). When the failed component is the root, `prefix`, `root`, and
-`component` are all the spelled root and `target` stays empty. Empty spelled target:
+the bytes of the failing component (spelled at arm 1, on-disk at arm 2 with the spelled
+fallback: §"Canonicaliser", the `component` rule), `prefix` the resolved prefix (the longest prefix step 2 walked
+before the predicate). When the failed component is the root, `prefix` and `root` are the
+spelled root, `component` is that root in its on-disk spelling (the spelled root when the
+lookup fails, which includes an absent root), and `target` stays empty. Empty spelled target:
 `unresolvable=no`, `names=0`, `target` empty, `root` set. That record parses, and the existing
 `# M:H13` refusal then fires on the empty spelled target. The empty-target record is the one
 whose `target` is empty and whose `unresolvable` is `no`; the directory record is the one
@@ -359,7 +379,15 @@ Identify the block by its enclosing `CANON_UNRESOLVABLE` test and its `CANON_ARM
 those move, re-locate it as the refusal that comes before the first `_chain_may_hold_state`
 call on `CANON_PREFIX`. Pin residual: the pinning test covers only the absent-root member
 (`CLAUDE_PROJECT_DIR` names a path that does not exist). No pin covers a root that exists but
-is not enterable (mode `000`). Codex parity for this case is covered under §"Codex call
+is not enterable (mode `000`). Conjunct residual, from the arm-2 `component` rule: `root` is
+the spelled root and `component` is its on-disk spelling, so the `CANON_COMPONENT` equals
+`CANON_ROOT` conjunct is false whenever the root exists and is spelled other than on disk.
+Measured at `d2e21094` by calling `canonicalise` on a mode-`000` directory `Proj` spelled
+`proj` from a scratch probe deleted afterwards: `arm` 2, `root` ending `proj`, `component`
+ending `Proj`. That root is not enterable, yet this block does not fire for it and the hook
+falls through to `_chain_may_hold_state`. An absent root is unaffected (the lookup fails and
+`component` stays spelled). Whether the conjunct should compare against the on-disk spelling
+is owed to the operator; this revision does not change the hook. Codex parity for this case is covered under §"Codex call
 sites", where it is recorded as not met on the tree.
 
 An exception the one-shot does not catch, an import failure or a raise after `emit_canon`,
@@ -423,10 +451,11 @@ candidate `git -C <path> rev-parse --show-toplevel` or that candidate; otherwise
 `Path.cwd().resolve()`. Each of the four `return` sites passes the selected path through
 `canonical_directory` instead of `Path.resolve()` or `Path.cwd().resolve()`. Those four returns
 carry no `# M:` marker. An `OSError` from `canonical_directory` on the selected root is the arm-2 `Identity`
-(`component` the spelled root). It does not propagate, so it does not reach `# M:G2` (which
-judge-errors even when not governed). `_main_guarded` then runs `_any_phase5_status` on the
-spelled path; if that scan raises `OSError`, the status is `unknown`. `active` and `unknown`
-refuse `judge-error` naming the spelled root. `inactive` allows.
+(`component` the root in its on-disk spelling, the spelled root when that lookup fails). It
+does not propagate, so it does not reach `# M:G2` (which judge-errors even when not governed).
+`_main_guarded` then runs `_any_phase5_status` on `Path(root.component)`, used as-is; if that
+scan raises `OSError`, the status is `unknown`. `active` and `unknown` refuse `judge-error`
+naming `root.component`. `inactive` allows.
 
 Parity with the Claude root-refuse is not met on the tree, and this design does not close the
 gap. The operator decision of 2026-09-30 assumes that the Codex gate refuses an absent or
@@ -1293,3 +1322,4 @@ edit the spec.
 - v1.2: Corrective revision, not re-audited (2026-09-29), answering docs/02-design/features/tdd-gate-fail-opens.design.audit.v2.p1.md and docs/02-design/features/tdd-gate-fail-opens.design.audit.v2.p2.md. AC-3.6 gains separate step3-only controls for cells (a) and (b), each with a PermissionError precondition that fails and never skips. AC-8.4 runs each listed failure case on Claude and on Codex, including a mode-000 PermissionError fixture. A Claude root-open failure is an arm-2 record the hook routes as unresolvable-with-component, so an ungoverned write is allowed. A payload-cwd OSError falls back through _payload_cwd_base; a root or target OSError stays unresolvable. After the pipe drain expires, proc.wait uses the remaining REAP_GRACE_S. The fold witness is governed dangling sub/test_x.PY. A directory referent may carry names=0. New and modified tests name exact paths. T0 self-comparison prints COMPARE: PASS softened=0 approved=0.
 - v1.3: Operator decision (2026-09-30), sourced from spec v1.5: the Codex-gate key M-18 M-14 under step3 joins the approved deny-to-allow set as its seventh row (unfixed reading decision=deny kind=judge-error, fixed decision=allow kind=-). The approved table, the Verdicts that move toward ALLOW list, the T9 comparator expectation (COMPARE: PASS softened=7 approved=7) and the Guard narrowing count move from six to seven. Nothing else changes.
 - v1.4: Corrective revision, not re-audited (2026-09-30), from the operator decision after 6a-prime cycles 1 and 3 (docs/03-analysis/tdd-gate-fail-opens.archreview.v1.md, .v3.md). The Claude root-open rule is narrowed: the governed-only rule, including an ungoverned allow, applies only when the root can be entered and its state read (mode 0311). An absent, non-directory or non-enterable root is refused judge-error 'project root (CLAUDE_PROJECT_DIR) cannot be entered' before _chain_may_hold_state, pinned by h-mad/tests/test_h_mad_tdd_gate_judge.py::test_unenterable_project_dir_refuses (absent-root member only). Codex parity on the mode-000 member is recorded as NOT met on the tree (rglob swallows EACCES, status inactive, allow) and owed to the operator.
+- v1.5: Corrective revision, not re-audited (2026-09-30), from the operator decision after 6a-prime cycle 2 (docs/03-analysis/tdd-gate-fail-opens.archreview.v2.md, single-source contract), landed in d06d82f6, answering 6a-prime cycle 4 finding #3 (docs/03-analysis/tdd-gate-fail-opens.archreview.v4.md). The arm-2 component is the failing component in its on-disk spelling as resolved by the canonicaliser's _on_disk_component (sorted-first non-symlink same-inode name in its parent; spelled component when that lookup raises OSError); arm 1 stays spelled; both gates use it as-is with no gate-side re-derivation. For a root failure prefix and root stay the spelled root and component is its on-disk spelling. Pinned by h-mad/tests/test_h_mad_target_identity.py::test_unresolvable_component_is_reported_in_on_disk_spelling and ::test_unreadable_directory_is_arm_2[a-absent-leaf]. New conjunct residual: the Claude root-refuse CANON_COMPONENT=CANON_ROOT test is false for an existing mis-cased root, owed to the operator.
