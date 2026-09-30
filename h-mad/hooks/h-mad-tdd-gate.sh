@@ -240,8 +240,7 @@ if [ -z "$TARGET_PATH" ]; then
 fi
 
 if [ "$CANON_UNRESOLVABLE" = yes ]; then
-  if [ "$CANON_ARM" = 2 ] && [ "$CANON_COMPONENT" = "$CANON_ROOT" ] &&
-     { [ ! -d "$CANON_ROOT" ] || [ ! -x "$CANON_ROOT" ]; }; then
+  if [ "$CANON_ARM" = 2 ] && { [ ! -d "$CANON_ROOT" ] || [ ! -x "$CANON_ROOT" ]; }; then
     _refuse judge-error "project root (CLAUDE_PROJECT_DIR) cannot be entered"
   fi
   _chain_may_hold_state "$ROOT_ABS" "$CANON_PREFIX" || _allow

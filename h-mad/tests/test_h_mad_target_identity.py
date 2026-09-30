@@ -344,3 +344,26 @@ def test_py_suffixes_match_bash_fold(identity):
         assert site >= 0, f"missing per-name classification site {marker}"
         preceding = source[max(0, site - 300):site]
         assert "_fold_py" in preceding, f"{marker} must read a folded name"
+
+
+@pytest.mark.parametrize("leaf", ["tests/test_x.py", "src/prod.py"], ids=["exempt", "production"])
+def test_dotdot_through_unreadable_directory_is_lexical(identity, root, leaf):
+    # Operator decision N-1 (2026-09-30): `..` out of an existing non-symlink
+    # directory takes the lexical parent, which the kernel also uses, and never
+    # opens it. An `x`-only (0311) directory must not make the target arm 2.
+    (root / "tests").mkdir()
+    (root / "src").mkdir()
+    if leaf == "src/prod.py":
+        (root / leaf).write_text("pass\n")
+    sealed = root / "a"
+    (sealed / "b").mkdir(parents=True)
+    sealed.chmod(0o311)
+    try:
+        with pytest.raises(PermissionError, match="Permission denied"):
+            os.listdir(sealed)
+        result = identity.canonicalise(str(root), f"a/b/../../{leaf}")
+    finally:
+        sealed.chmod(0o700)
+    assert result.unresolvable is False, f"observed: {result!r}"
+    assert result.target == str(root / leaf)
+    assert result.names == (os.path.basename(leaf),)

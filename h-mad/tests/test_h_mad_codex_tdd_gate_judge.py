@@ -650,6 +650,33 @@ def test_codex_root_open_failure_refuses_only_when_governed(tmp_path, phase):
         root.chmod(0o755)
 
 
+
+@pytest.mark.parametrize("phase", ["active", "inactive"])
+def test_codex_mode_000_root_refuses_whatever_the_phase(tmp_path, phase):
+    # Operator decision D-2 (2026-09-30): parity with the Claude root-refuse.
+    # rglob yields nothing on a root it cannot enter, so the gate must refuse
+    # before it looks for state, not infer "inactive" from an empty walk.
+    root = _root(tmp_path)
+    write_state(root, {HOSTILE_KEY: {"phase": "step5" if phase == "active" else "step3"}})
+    original_mode = root.stat().st_mode & 0o7777
+    root.chmod(0)
+    try:
+        with pytest.raises(PermissionError):
+            os.open(root, os.O_RDONLY)
+        process = subprocess.run(
+            [sys.executable, str(CODEX_GATE)], input=json.dumps(_payload(str(root / "src/prod.py"))),
+            capture_output=True, text=True, cwd=tmp_path,
+            env=hermetic_env(CODEX_PROJECT_DIR=str(root), HMAD_STUB_HOSTILE="all"),
+            timeout=60, check=False,
+        )
+    finally:
+        root.chmod(original_mode)
+    assert process.returncode == 0, process.stderr
+    decision = json.loads(process.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny", decision
+    reason = decision["permissionDecisionReason"]
+    assert "kind=judge-error" in reason and "cannot be entered" in reason, reason
+
 def test_codex_root_open_failure_names_the_on_disk_root(tmp_path):
     root = _root(tmp_path).rename(tmp_path / "Proj")
     assert_case_insensitive(root)

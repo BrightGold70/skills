@@ -99,7 +99,7 @@ outside" is the Codex gate's kind-less "write target is outside or unreadable" d
 | M-12 | `docs/d.md -> ../src/newprod.py` (dangling) | ALLOW | deny no-test-resolved | B4 |
 | M-13 | `src/dang.py -> nowhere/x.py` (dangling); `lnk/x.py`, `lnk -> nowhere` | deny no-test-resolved (both) | deny no-test-resolved (both) | B4 |
 | M-14 | `src/loopa.py -> loopb.py -> loopa.py` (loop) | deny no-test-resolved | deny no-test-resolved | B4 |
-| M-18 | M-13 and M-14 under a state file holding only a `step3` record | ALLOW | ALLOW | OD-4 control |
+| M-18 | M-13 and M-14 under a state file holding only a `step3` record | ALLOW | ALLOW on M-13; deny judge-error on M-14 (fixed: allow, the approved change in FR-1 "Verdict changes toward ALLOW") | OD-4 control |
 
 Codex patch headers (Codex gate, `apply_patch` payload `{"tool_name":"apply_patch","cwd":<root>,
 "tool_input":{"command":P}}`; "Codex writes" = codex-cli 0.158.0's own `apply_patch` invoked as
@@ -321,6 +321,18 @@ With an in-memory entry of FR-8's six options:
   - with no governing state, the gate allows, as today (the Claude fast path
     `_chain_may_hold_state` and the `TDD-STATE: none` rule are unchanged).
   The suffix is not consulted: a dangling `docs/d.md` whose referent is `src/newprod.py` is refused.
+  **Project root that cannot be entered** (design v1.4; operator decisions 2026-09-30, D-1/D-2/D-3):
+  when the root is absent, not a directory, or not traversable (no `x`, e.g. mode 000), the state
+  under it cannot be read, so whether the write is governed is unknowable. Both gates then refuse
+  `judge-error` ("project root … cannot be entered") whatever the phase, before any state lookup.
+  The test is on the root itself, not on the arm-2 component's spelling, so a root spelled in a
+  different case from its on-disk name is refused the same way. The governed-only rule above
+  applies to a root that can be entered but not listed (mode 0311). (On the Codex gate an absent
+  `CODEX_PROJECT_DIR` is not a root case: the gate falls through to its next root candidate.)
+  **`..` is not an arm-2 site for a plain directory** (operator decision 2026-09-30, N-1): `..`
+  out of an existing non-symlink directory takes its lexical parent, which is the kernel's, and
+  does not open it, so an `x`-only directory on the way does not make the target unresolvable.
+  `..` out of a symlink still opens the link's referent.
   A non-strict `os.path.realpath` or `Path.resolve` alone cannot implement this predicate: on a loop
   it returns the lexical path without error (measured).
 - **Acceptance Criteria**:
@@ -329,7 +341,9 @@ With an in-memory entry of FR-8's six options:
   - AC-3.2: M-13 (leaf and intermediate component, each its own case) and M-14 — fixed: both gates
     deny `judge-error`; unfixed: both deny `no-test-resolved`. The kind is the discriminating
     observable.
-  - AC-3.3 (OD-4 control): M-18 — both gates allow, fixed and unfixed.
+  - AC-3.3 (OD-4 control): M-18 — fixed: both gates allow. Unfixed: both allow, except the Codex
+    gate on M-14, which denies `judge-error` (the approved change in FR-1 "Verdict changes toward
+    ALLOW").
   - AC-3.4: a loop fixture drives each gate's resolver directly and asserts it reports unresolvable,
     with a negative control that `os.path.realpath` of the same path returns without error.
   - AC-3.5: the Codex deny reason carries the token `kind=judge-error`; the Claude deny carries
@@ -468,7 +482,7 @@ With an in-memory entry of FR-8's six options:
   - AC-6.1: the differential passes on the fixed tree. On the unfixed tree its gate-equality
     assertion fails on exactly M-4, M-5, M-6, M-7, M-8, M-11 and M-12 (the cells where the gates
     disagree today, per §"Measured premises"), and its expectation-table assertion additionally
-    fails on M-2, M-3, M-9, M-10, M-13 and M-14 — run, not asserted.
+    fails on M-2, M-3, M-9, M-10, M-13, M-14 and M-18's Codex M-14 cell — run, not asserted.
   - AC-6.2: removing FR-1 from either gate alone makes the differential fail (run once per gate).
   - AC-6.3: `docs/03-analysis/probes/codex-tdd-gate-defects/dd7_differential.py` re-run on the fixed
     tree reproduces its published cells; any changed cell is a stated, reviewed delta.
@@ -721,3 +735,4 @@ With an in-memory entry of FR-8's six options:
 - v1.3: Revision (2026-09-29) applying plan v1.2 (4192ad8c) owed items under plan PD-4 (no committed probe or test invokes codex). Assumptions: a later Codex that trims differently is caught only if the manual R-4 reading is re-taken against the new binary. Measured premises: the Codex-writes column, the trim set and the leaf-symlink writer rows are manual R-4/R-5 readings, and the tables are replaced by a pointer to T0's unfixed reading together with its manual R-4 and R-5 rows; OQ-P1 cell wording unchanged (gate-side). FR-1 gains AC-1.11, the outside-root symlink control of the M:H20 raw-spelling conjunct (plan R-3): fixed and unfixed both deny no-test-resolved, the H20B mutant must turn the fixed gate to allow, and H20B does not move the cell on the unfixed tree (measured at 4192ad8c). AC-7.1 unchanged.
 - v1.4: Corrective revision (2026-09-29) answering plan audit cycle 2 (codex must #2) and operator decision OD-6. FR-6/OD-5: differential-domain membership defined for unresolvable targets: in-root when the resolved prefix (longest spelled prefix FR-1 step 2 walks before FR-3's predicate holds) is inside the canonical root; both gates agree on decision and kind; M-12-M-14 and M-18 in domain; out-of-domain unresolvable spellings listed under Residuals. OD-6 (operator 2026-09-29, fold the carried Codex resume denial): new FR-8 with AC-8.1-AC-8.6: SAFE_HMAD_SCRIPT_OPTIONS admits h_mad_resume_decision.py with exactly its parser's long options minus --help (six); code change adds --session-id-from-git-dir (script reads <git dir>/h-mad-session-id.<feature>; every read failure prints cannot_judge; exclusive with --session-id); the three adapters' oracle line moves to that form (test_host_runtime_docs deltas named). AC-7.1 gains five FR-8 mutation rows (T8 floor 20 -> 25). Measured premise for FR-8 at 78e35abf; Contract, NFR, Residuals, Open Questions updated.
 - v1.5: Operator decision (2026-09-30): FR-1 'Verdict changes toward ALLOW' gains the Codex-gate key cell=M-18 M-14 state=step3, deny judge-error -> allow, approved (unfixed reading reading-unfixed.txt at a737962a: Codex deny judge-error, Claude allow; step3 is ungoverned). The approved deny-to-allow set is now 7 keys (design table's 6 plus this one); this spec states no count of that set. No other requirement changed; the M-18 table row, AC-3.3 and AC-6.1 still state the unfixed Codex M-14 cell as allow and are left for a separate decision.
+- v1.6: Operator decisions (2026-09-30, post-merge; report §"Carry Items" at 8d9c9047). D-1: FR-3 states the design v1.4 root-refuse for a root that cannot be entered, on both gates. D-2/D-3: that refuse is spelling-independent and Codex now matches it. N-1: `..` out of a non-symlink directory is lexical, not an arm-2 site. D-4: the M-18 row, AC-3.3 and AC-6.1 now state the unfixed Codex M-14 cell as deny `judge-error`.

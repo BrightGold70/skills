@@ -408,6 +408,28 @@ def test_unenterable_project_dir_refuses(tmp_path):
     assert "CLAUDE_PROJECT_DIR" in out.reason
 
 
+
+@pytest.mark.parametrize("spelling", ["as-on-disk", "mis-cased"])
+def test_mode_000_project_dir_refuses(tmp_path, spelling):
+    # Operator decisions D-2/D-3 (2026-09-30): a root that exists but cannot be
+    # entered is refused whatever its spelling; the refusal does not depend on
+    # the arm-2 component equalling the spelled root.
+    root = _root(tmp_path, active=False).rename(tmp_path / "Proj")
+    spelled = root if spelling == "as-on-disk" else root.with_name("proj")
+    if spelling == "mis-cased":
+        assert spelled.exists() and spelled.name not in os.listdir(tmp_path), "case-insensitive precondition"
+    original_mode = root.stat().st_mode & 0o7777
+    root.chmod(0)
+    try:
+        with pytest.raises(PermissionError):
+            os.open(spelled, os.O_RDONLY)
+        result = _gate(root, arg=str(spelled / "src/prod.py"), bin_dir=_bin(tmp_path), cwd=tmp_path,
+                       extra_env={"CLAUDE_PROJECT_DIR": str(spelled)})
+        out = _assert(result, "deny", "judge-error")
+        assert "cannot be entered" in out.reason, out.reason
+    finally:
+        root.chmod(original_mode)
+
 def test_codex_authorship_hint_names_blocker_key_and_state_file(tmp_path):
     root = tmp_path / "my proj"
     root.mkdir()

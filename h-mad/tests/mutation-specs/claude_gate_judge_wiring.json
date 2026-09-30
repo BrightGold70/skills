@@ -355,6 +355,22 @@
       "find": "    test_*.py|*_test.py|conftest*.py) continue ;;",
       "replace": "    __no_such_name__) continue ;;",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_hardlink_mixed_names_judges_the_production_name"
+    },
+    {
+      "name": "CG-ROOT-CONJ",
+      "_mechanism": "D-3 (operator 2026-09-30): restore the CANON_COMPONENT = CANON_ROOT conjunct; a mis-cased mode-000 root then skips the root-refuse.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  if [ \"$CANON_ARM\" = 2 ] && { [ ! -d \"$CANON_ROOT\" ] || [ ! -x \"$CANON_ROOT\" ]; }; then",
+      "replace": "  if [ \"$CANON_ARM\" = 2 ] && [ \"$CANON_COMPONENT\" = \"$CANON_ROOT\" ] && { [ ! -d \"$CANON_ROOT\" ] || [ ! -x \"$CANON_ROOT\" ]; }; then",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_mode_000_project_dir_refuses"
+    },
+    {
+      "name": "CG-ROOT-000",
+      "_mechanism": "D-3 pin residual: drop the not-enterable test; a mode-000 root then falls through to _chain_may_hold_state.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  if [ \"$CANON_ARM\" = 2 ] && { [ ! -d \"$CANON_ROOT\" ] || [ ! -x \"$CANON_ROOT\" ]; }; then",
+      "replace": "  if [ \"$CANON_ARM\" = 2 ] && [ ! -e \"$CANON_ROOT\" ]; then",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_mode_000_project_dir_refuses"
     }
   ]
 }

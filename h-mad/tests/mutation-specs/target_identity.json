@@ -67,6 +67,14 @@
       "find": "                if stat.S_ISLNK(os.lstat(current).st_mode):",
       "replace": "                if False:",
       "test": "tests/test_h_mad_target_identity.py::test_dotdot_after_symlink_follows_the_kernel"
+    },
+    {
+      "name": "TI9",
+      "_mechanism": "N-1 (operator 2026-09-30): re-open the lexical parent of a non-symlink directory; an x-only directory then makes the target arm 2.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "                    current = os.path.dirname(current)\n",
+      "replace": "                    current = canonical_directory(os.path.dirname(current))\n",
+      "test": "tests/test_h_mad_target_identity.py::test_dotdot_through_unreadable_directory_is_lexical"
     }
   ],
   "target_command": [

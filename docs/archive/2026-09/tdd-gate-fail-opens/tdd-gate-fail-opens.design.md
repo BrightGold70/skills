@@ -365,8 +365,9 @@ the hook does with it depends on whether the root can be entered:
   `_chain_may_hold_state` never runs. The state under such a root cannot be read, so whether
   the write is governed is unknowable. The block sits first inside
   `if [ "$CANON_UNRESOLVABLE" = yes ]`, before `_chain_may_hold_state "$ROOT_ABS" "$CANON_PREFIX"`.
-  It fires when `CANON_ARM` is `2`, `CANON_COMPONENT` equals `CANON_ROOT`, and
-  `[ ! -d "$CANON_ROOT" ] || [ ! -x "$CANON_ROOT" ]` holds. This is the operator decision of
+  It fires when `CANON_ARM` is `2` and `[ ! -d "$CANON_ROOT" ] || [ ! -x "$CANON_ROOT" ]` holds
+  (v1.6, D-3: the former `CANON_COMPONENT` equals `CANON_ROOT` conjunct is dropped; a root that
+  cannot be entered is necessarily the failing component). This is the operator decision of
   2026-09-30, taken after 6a-prime cycles 1 and 3
   (`docs/03-analysis/tdd-gate-fail-opens.archreview.v1.md`,
   `docs/03-analysis/tdd-gate-fail-opens.archreview.v3.md`). The block is kept. The pin, from
@@ -377,7 +378,7 @@ Locator residual: the reason string alone does not identify this block. The hook
 refusals with that reason. The other is the empty-`ROOT_ABS` guard `[ -n "$ROOT_ABS" ] ||`.
 Identify the block by its enclosing `CANON_UNRESOLVABLE` test and its `CANON_ARM` conjunct. If
 those move, re-locate it as the refusal that comes before the first `_chain_may_hold_state`
-call on `CANON_PREFIX`. Pin residual: the pinning test covers only the absent-root member
+call on `CANON_PREFIX`. **Superseded in v1.6** (operator decisions D-2/D-3, 2026-09-30): the conjunct below is dropped, the mode-000 and mis-cased mode-000 members are pinned by `test_mode_000_project_dir_refuses[as-on-disk|mis-cased]`, and Codex parity is closed. The residual text is kept as history. Pin residual: the pinning test covers only the absent-root member
 (`CLAUDE_PROJECT_DIR` names a path that does not exist). No pin covers a root that exists but
 is not enterable (mode `000`). Conjunct residual, from the arm-2 `component` rule: `root` is
 the spelled root and `component` is its on-disk spelling, so the `CANON_COMPONENT` equals
@@ -456,6 +457,8 @@ does not propagate, so it does not reach `# M:G2` (which judge-errors even when 
 `_main_guarded` then runs `_any_phase5_status` on `Path(root.component)`, used as-is; if that
 scan raises `OSError`, the status is `unknown`. `active` and `unknown` refuse `judge-error`
 naming `root.component`. `inactive` allows.
+
+**Closed in v1.6** (operator decision D-2, 2026-09-30): before any state walk, the Codex gate refuses `judge-error` ("project root (CODEX_PROJECT_DIR) cannot be entered") when the selected root is not traversable (`os.access(root, X_OK)` false), whatever the phase. Pinned by `test_codex_mode_000_root_refuses_whatever_the_phase`; mutation `CX-ROOT-ENTER`. The v1.5 text follows as history.
 
 Parity with the Claude root-refuse is not met on the tree, and this design does not close the
 gap. The operator decision of 2026-09-30 assumes that the Codex gate refuses an absent or
@@ -1323,3 +1326,4 @@ edit the spec.
 - v1.3: Operator decision (2026-09-30), sourced from spec v1.5: the Codex-gate key M-18 M-14 under step3 joins the approved deny-to-allow set as its seventh row (unfixed reading decision=deny kind=judge-error, fixed decision=allow kind=-). The approved table, the Verdicts that move toward ALLOW list, the T9 comparator expectation (COMPARE: PASS softened=7 approved=7) and the Guard narrowing count move from six to seven. Nothing else changes.
 - v1.4: Corrective revision, not re-audited (2026-09-30), from the operator decision after 6a-prime cycles 1 and 3 (docs/03-analysis/tdd-gate-fail-opens.archreview.v1.md, .v3.md). The Claude root-open rule is narrowed: the governed-only rule, including an ungoverned allow, applies only when the root can be entered and its state read (mode 0311). An absent, non-directory or non-enterable root is refused judge-error 'project root (CLAUDE_PROJECT_DIR) cannot be entered' before _chain_may_hold_state, pinned by h-mad/tests/test_h_mad_tdd_gate_judge.py::test_unenterable_project_dir_refuses (absent-root member only). Codex parity on the mode-000 member is recorded as NOT met on the tree (rglob swallows EACCES, status inactive, allow) and owed to the operator.
 - v1.5: Corrective revision, not re-audited (2026-09-30), from the operator decision after 6a-prime cycle 2 (docs/03-analysis/tdd-gate-fail-opens.archreview.v2.md, single-source contract), landed in d06d82f6, answering 6a-prime cycle 4 finding #3 (docs/03-analysis/tdd-gate-fail-opens.archreview.v4.md). The arm-2 component is the failing component in its on-disk spelling as resolved by the canonicaliser's _on_disk_component (sorted-first non-symlink same-inode name in its parent; spelled component when that lookup raises OSError); arm 1 stays spelled; both gates use it as-is with no gate-side re-derivation. For a root failure prefix and root stay the spelled root and component is its on-disk spelling. Pinned by h-mad/tests/test_h_mad_target_identity.py::test_unresolvable_component_is_reported_in_on_disk_spelling and ::test_unreadable_directory_is_arm_2[a-absent-leaf]. New conjunct residual: the Claude root-refuse CANON_COMPONENT=CANON_ROOT test is false for an existing mis-cased root, owed to the operator.
+- v1.6: Post-merge operator decisions (2026-09-30; report §"Carry Items"). D-3: the Claude root-refuse drops the CANON_COMPONENT=CANON_ROOT conjunct. D-2: the Codex gate refuses a root that cannot be entered before `_any_phase5_status`. N-1: in the canonicaliser's `..` rule, an existing non-symlink directory takes `os.path.dirname(current)` and does not open it, so an x-only directory on the way is not arm 2 (the symlink branch still opens the referent). Pins: test_mode_000_project_dir_refuses, test_codex_mode_000_root_refuses_whatever_the_phase, test_dotdot_through_unreadable_directory_is_lexical; mutations CG-ROOT-CONJ, CG-ROOT-000, CX-ROOT-ENTER, TI9.

@@ -286,6 +286,14 @@
       "find": "        return identity.Identity(str(path), \"\", str(path), (), True, 2, identity._on_disk_component(str(path)))",
       "replace": "        return identity.Identity(str(path), \"\", str(path), (), True, 2, str(path))",
       "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_root_open_failure_names_the_on_disk_root"
+    },
+    {
+      "name": "CX-ROOT-ENTER",
+      "_mechanism": "D-2 (operator 2026-09-30): skip the enterable-root check; rglob sees no state under a mode-000 root and the gate allows.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if not os.access(root.root, os.X_OK):  # M:CX-ROOT-ENTER",
+      "replace": "        if False:  # M:CX-ROOT-ENTER",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_mode_000_root_refuses_whatever_the_phase"
     }
   ]
 }

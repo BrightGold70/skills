@@ -89,7 +89,9 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
                 if stat.S_ISLNK(os.lstat(current).st_mode):
                     current = os.path.dirname(canonical_directory(current))
                 else:
-                    current = canonical_directory(os.path.dirname(current))
+                    # N-1: an existing non-symlink directory's spelled parent is
+                    # its physical parent; opening it would refuse an x-only one.
+                    current = os.path.dirname(current)
             except OSError:
                 return Identity(canonical_root, "", current, (), True, 2,
                                 _on_disk_component(current))

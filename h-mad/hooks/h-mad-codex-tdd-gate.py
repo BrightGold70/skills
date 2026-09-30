@@ -424,6 +424,8 @@ def _main_guarded() -> int:
     payload = _payload()
     root = _project_root(payload)
     if not isinstance(root, Path):
+        if not os.access(root.root, os.X_OK):  # M:CX-ROOT-ENTER (D-2: rglob sees no state under it)
+            return _deny(f"H-MAD project root (CODEX_PROJECT_DIR) cannot be entered ({root.component}); refusing fail-closed. kind=judge-error")
         try:
             phase5_status = _any_phase5_status(Path(root.component))
         except OSError:
