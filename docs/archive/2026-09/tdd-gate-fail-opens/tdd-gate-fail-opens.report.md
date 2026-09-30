@@ -106,6 +106,20 @@ Operator items (analysis v2 §"Design-vs-spec items"; not defects, not counted i
   operator can accept and document it, or narrow `h_mad_target_identity.py:92` to a lexical parent
   for non-symlink directories.
 
+**Operator decisions, 2026-09-30 (post-merge):**
+- **D-1, D-4 — amend the spec.** FR-3 is to state the design v1.4 root-refuse narrowing. The M-18
+  row, AC-3.3 and AC-6.1 are to state the unfixed Codex M-14 cell as deny `judge-error`.
+  Documentation only.
+- **D-2 — fix parity.** The Codex gate refuses `judge-error` when the selected root cannot be
+  entered (`X_OK` false), before `_any_phase5_status` runs. Add a mode-000 pin on both gates.
+- **D-3 — drop the conjunct.** The Claude root-refuse fires on arm 2 whenever the root is not `-d`
+  or not `-x`, without the `CANON_COMPONENT = CANON_ROOT` test. A root that cannot be entered is
+  necessarily the failing component. Add a mis-cased mode-000 pin.
+- **N-1 — narrow.** At `h_mad_target_identity.py:92`, an existing non-symlink directory takes the
+  lexical parent (`os.path.dirname`) and does not open it. Add a control cell for the 0311 exempt
+  row. The symlink branch (`:90`) is unchanged.
+- D-2, D-3 and N-1 are code changes, owed as a follow-up TDD change on `main`.
+
 Carried residuals (analysis v2 §"Carried findings and residuals"):
 - `session_id_from_git_dir` (`h_mad_resume_decision.py:59-64`) catches only `OSError`, so a
   non-UTF-8 id file escapes as `UnicodeDecodeError`. It fails closed with rc 1 but does not print
