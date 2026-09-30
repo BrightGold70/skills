@@ -62,3 +62,7 @@ cd /Users/kimhawk/orca/skills   # feature/tdd-gate-fail-opens
 
 **Related docs:**
 - Sender's closeout: `/Users/kimhawk/orca/HemaSuite/docs/handoffs/2026-09-30-main__rcc-closed-jev-gate-passed.md` (Open / Blocked Items).
+
+## Resolution (2026-09-30, session 9cfdf8ab)
+
+**Decided: the skills side was wrong; HemaSuite's pin is correct.** The premise "it failed before this feature too" did not hold: skills `main` and this feature's base `15681a53` both give `kind=test-missing`; only `feature/tdd-gate-fail-opens` gave `no-test-resolved`. Cause: `h-mad/hooks/h-mad-tdd-gate.sh` built `PRODUCTION_TARGET=$CANON_PREFIX/$NAME`, and `CANON_PREFIX` is the deepest EXISTING directory, so absent intermediate directories collapsed to `<root>/<name>`. Fixed test-first: RED `13f18121`, GREEN `e1dfed23` (`${CANON_TARGET%/*}/$NAME`, mutation row CG-PARENT). Acceptance: HemaSuite `tests/test_h_mad_tdd_gate.py` 9 passed. No HemaSuite change needed.
