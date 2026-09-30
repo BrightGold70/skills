@@ -86,10 +86,13 @@ def test_no_agent_output_is_byte_identical_to_base(
     )
     base_skill = checkout / "h-mad"
     prompt = tmp_path / "prompt.txt"
-    base = run_cli(base_skill / "scripts" / SCRIPT.name, plan, tmp_path, prompt)
+    # Both runs render the base template: the pin is on the script's no-agent
+    # behaviour, and a later edit to the template's prose is not a change to it.
+    template = ("--template", str(base_skill / "references" / "codex-implementer-prompt.md"))
+    base = run_cli(base_skill / "scripts" / SCRIPT.name, plan, tmp_path, prompt, *template)
     assert base.returncode == 0, base.stdout + base.stderr
     base_prompt = prompt.read_bytes()
-    current = run_cli(SCRIPT, plan, tmp_path, prompt)
+    current = run_cli(SCRIPT, plan, tmp_path, prompt, *template)
     assert current.returncode == 0, current.stdout + current.stderr
     assert current.stdout == base.stdout.replace(str(base_skill), str(SKILL_DIR)), (
         "no-agent stdout must be byte-identical to the base after its SKILL_DIR replacement"

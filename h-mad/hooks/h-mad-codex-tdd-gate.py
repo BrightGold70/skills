@@ -21,13 +21,12 @@ import subprocess
 import sys
 from functools import cache
 from importlib import import_module
-from typing import Any
+from typing import TYPE_CHECKING, Any, NamedTuple
+
+if TYPE_CHECKING:
+    from h_mad_target_identity import Identity
 
 
-PATCH_TARGET = re.compile(
-    r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$",
-    re.MULTILINE,
-)
 SIMPLE_SHELL_COMMAND = re.compile(r"[A-Za-z0-9_./:@%+=,'\" \t-]+")
 READ_ONLY_COMMANDS = {"cat", "grep", "head", "jq", "ls", "pwd", "shasum", "tail", "wc"}
 SAFE_DISPATCH_VERBS = {
@@ -47,6 +46,9 @@ SAFE_HMAD_SCRIPT_OPTIONS = {
     "h_mad_do_preconditions.py": {"--feature", "--repo-root"},
     "h_mad_extract_verdict.py": {"--after-marker", "--allowed", "--feature", "--key", "--phase"},
     "h_mad_identifier_sweep.py": {"--allow", "--include-history", "--root"},
+    "h_mad_resume_decision.py": {
+        "--state", "--feature", "--host", "--session-id", "--now", "--session-id-from-git-dir",
+    },
     "h_mad_state_validate.py": {"--feature", "--strict-only"},
     "h_mad_state_write.py": {
         "--beat", "--claim", "--create", "--drop-undeclared", "--feature", "--force",
@@ -87,17 +89,25 @@ def _payload() -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _project_root(payload: dict[str, Any]) -> Path:
+def _canonical_root(path: Path) -> Path | Identity:
+    identity = _load_identity()
+    try:
+        return Path(identity.canonical_directory(str(path)))
+    except OSError:
+        return identity.Identity(str(path), "", str(path), (), True, 2, identity._on_disk_component(str(path)))
+
+
+def _project_root(payload: dict[str, Any]) -> Path | Identity:
     explicit = os.environ.get("CODEX_PROJECT_DIR")
     if explicit:
-        path = Path(explicit).expanduser().resolve()
+        path = Path(explicit).expanduser()
         if path.is_dir():
-            return path
+            return _canonical_root(path)
 
     for candidate in (payload.get("project_dir"), payload.get("cwd"), os.getcwd()):
         if not candidate:
             continue
-        path = Path(str(candidate)).expanduser().resolve()
+        path = Path(str(candidate)).expanduser()
         if not path.is_dir():
             continue
         result = subprocess.run(
@@ -107,9 +117,9 @@ def _project_root(payload: dict[str, Any]) -> Path:
             check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip()).resolve()
-        return path
-    return Path.cwd().resolve()
+            return _canonical_root(Path(result.stdout.strip()).expanduser())
+        return _canonical_root(path)
+    return _canonical_root(Path.cwd())
 
 
 def _read_regular_text(path: Path) -> str:
@@ -150,20 +160,58 @@ def _any_phase5_status(root: Path) -> str:
     return "inactive"
 
 
-def _targets(payload: dict[str, Any]) -> tuple[str, list[str], str]:
+class TargetParse(NamedTuple):
+    tool: str
+    paths: list[str]
+    command: str
+    bad_header: str
+
+
+def _patch_header_paths(patch: str) -> tuple[list[str], str]:
+    markers = (
+        "*** Add File: ", "*** Update File: ",
+        "*** Delete File: ", "*** Move to: ",
+    )
+    paths: list[str] = []
+    bad_header = ""
+    for line in patch.split("\n"):
+        start, end = 0, len(line)
+        while start < end and line[start].isspace() and not "\x1c" <= line[start] <= "\x1f":
+            start += 1
+        while end > start and line[end - 1].isspace() and not "\x1c" <= line[end - 1] <= "\x1f":
+            end -= 1
+        header = line[start:end]
+        for marker in markers:
+            if header == marker[:-1]:
+                if not bad_header:
+                    bad_header = header
+                break
+            if header.startswith(marker):
+                path = header[len(marker):]
+                if not path or any(ord(char) < 0x20 or ord(char) == 0x7f for char in path):
+                    if not bad_header:
+                        bad_header = header
+                else:
+                    paths.append(path)
+                break
+    return paths, bad_header
+
+
+def _targets(payload: dict[str, Any]) -> TargetParse:
     tool = str(payload.get("tool_name") or "")
     raw = payload.get("tool_input")
     args = raw if isinstance(raw, dict) else {}
     if tool in {"Write", "Edit"}:
         path = str(args.get("file_path") or args.get("path") or "")
-        return tool, [path] if path else [], ""
+        return TargetParse(tool, [path] if path else [], "", "")
     if tool == "apply_patch":
         patch = str(args.get("patch") or args.get("command") or "")
-        return tool, PATCH_TARGET.findall(patch), ""
+        paths, bad_header = _patch_header_paths(patch)
+        return TargetParse(tool, paths, "", bad_header)
     if tool in {"exec_command", "shell_command", "shell", "Bash", "Shell"}:
         command = str(args.get("cmd") or args.get("command") or "")
-        return tool, [], command
-    return tool, [], ""
+        return TargetParse(tool, [], command, "")
+    return TargetParse(tool, [], "", "")
 
 
 def _payload_cwd_base(root: Path, cwd: Any) -> Path:
@@ -174,20 +222,36 @@ def _payload_cwd_base(root: Path, cwd: Any) -> Path:
     return root
 
 
-def _relative_target(root: Path, raw: str, cwd: Any = None) -> tuple[Path, str] | None:
-    if not raw:
-        return None
-    candidate = Path(raw).expanduser()
-    absolute = candidate.resolve() if candidate.is_absolute() else (_payload_cwd_base(root, cwd) / candidate).resolve()
+def _relative_target(root: Path, raw: str, cwd: Any = None) -> Identity | None:
+    identity = _load_identity()
     try:
-        relative = absolute.relative_to(root).as_posix()
+        base = _payload_cwd_base(root, cwd)
+    except RuntimeError:
+        base = root
+    if isinstance(cwd, str) and cwd and base != root:
+        try:
+            base = Path(identity.canonical_directory(str(Path(cwd).expanduser())))
+            try:
+                base = _payload_cwd_base(root, str(base))
+            except RuntimeError:
+                base = root
+        except OSError:
+            try:
+                base = _payload_cwd_base(root, cwd)
+            except RuntimeError:
+                base = root
+    resolved = identity.canonicalise(str(root), str(Path(raw).expanduser()), str(base))
+    if resolved.unresolvable:
+        return resolved
+    try:
+        Path(resolved.target).relative_to(root)
     except ValueError:
         return None
-    return absolute, relative
+    return resolved
 
 
 def _is_production_python(relative: str) -> bool:
-    path = Path(relative)
+    path = Path(_load_identity().fold_py_suffix(relative))
     name = path.name
     if path.suffix != ".py":
         return False
@@ -320,9 +384,21 @@ def _load_judge() -> Any:
     return import_module("h_mad_tdd_judge")
 
 
+@cache
+def _load_identity() -> Any:
+    scripts = str(Path(__file__).resolve().parents[1] / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    return import_module("h_mad_target_identity")
+
+
 def main() -> int:
     if sys.argv[1:] == ["--self-check"]:
-        if PATCH_TARGET.findall("*** Update File: pkg/module.py\n") != ["pkg/module.py"]:
+        if any(_patch_header_paths(patch) != (["src/prod.py"], "") for patch in (
+            "*** Update File: src/prod.py\n",
+            "*** Update File: src/prod.py \n",
+            "  *** Update File: src/prod.py\n",
+        )):
             print("CODEX-TDD-GATE: FAIL parser", file=sys.stderr)
             return 2
         unsafe = (
@@ -347,8 +423,19 @@ def _main_guarded() -> int:
 
     payload = _payload()
     root = _project_root(payload)
-    tool, targets, command = _targets(payload)
+    if not isinstance(root, Path):
+        try:
+            phase5_status = _any_phase5_status(Path(root.component))
+        except OSError:
+            phase5_status = "unknown"
+        if phase5_status in {"active", "unknown"}:
+            return _deny(f"H-MAD Phase 5 root is unreadable ({root.component}); refusing fail-closed. kind=judge-error")
+        return 0
+    tool, targets, command, bad_header = _targets(payload)
     phase5_status = _any_phase5_status(root)
+
+    if bad_header and phase5_status in {"active", "unknown"}:
+        return _deny(f"H-MAD Phase 5 patch has a bad header {bad_header!r}; refusing fail-closed. kind=judge-error")
 
     if command and phase5_status == "unknown":
         return _deny("H-MAD state is unreadable; refusing shell execution fail-closed.")
@@ -368,12 +455,24 @@ def _main_guarded() -> int:
             if phase5_status in {"active", "unknown"}:
                 return _deny("H-MAD Phase 5 write target is outside or unreadable; refusing fail-closed.")
             continue
-        absolute, relative = resolved
+        if resolved.unresolvable:
+            if phase5_status in {"active", "unknown"}:
+                return _deny(f"H-MAD Phase 5 target is unresolvable ({resolved.component}); refusing fail-closed. kind=judge-error")
+            continue
+        production = []
+        for name in resolved.names:
+            absolute = Path(resolved.target).parent / name
+            relative = absolute.relative_to(root).as_posix()
+            if _is_production_python(relative):
+                production.append((name, absolute, relative))
+        if not production:
+            continue
+        _, absolute, relative = min(production)
         judge = _load_judge()
         chain = judge.read_chain(root, absolute)  # M:W5A
         if chain.value == "unreadable":
             return _deny(f"H-MAD state governing this write is unreadable ({chain.error_file}: {chain.error}); refusing fail-closed. kind=judge-error")
-        if chain.value != "active" or not _is_production_python(relative):
+        if chain.value != "active":
             continue
         verdict = judge.judge(root, absolute, chain.records)  # M:W1
         if verdict.decision != "ALLOW":

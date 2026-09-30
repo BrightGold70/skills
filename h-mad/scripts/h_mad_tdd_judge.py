@@ -23,9 +23,10 @@ from h_mad_wire_pin_gate import _parse_tasks  # noqa: E402
 KINDS = frozenset({"red-measured", "no-test-resolved", "test-missing",
                    "venv-escapes-root", "pytest-missing", "pytest-error",
                    "no-tests-ran", "no-summary", "test-passing", "timeout",
-                   "judge-error"})
+                   "judge-timeout", "judge-error"})
 STATE_VALUES = ("none", "active", "unreadable")
 JUDGE_BUDGET_S = 40.0
+REAP_GRACE_S = 1.0
 ESCAPE_STATUSES = frozenset({"unavailable", "exhausted"})
 NAME_MAP = Path(_HERE) / "h_mad_derive_test_path.sh"
 
@@ -58,6 +59,15 @@ class Resolution(NamedTuple):
     missing: Tuple[Path, ...]
     notes: Tuple[str, ...]
     verdict: Optional[Verdict]
+
+
+class BoundedRun(NamedTuple):
+    returncode: Optional[int]
+    out: str
+    err: str
+    timed_out: bool
+    error: str
+    reap_failed: bool
 
 
 def _inside(path: str, root: str) -> bool:
@@ -182,16 +192,17 @@ def _is_present(path: Path) -> bool:
         return False
 
 
-def _run_bounded(argv: Sequence[str], cwd: Path, deadline: float) -> Tuple[Optional[int], str, str, bool, str]:
+def _run_bounded(argv: Sequence[str], cwd: Path, deadline: float) -> BoundedRun:
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        return None, "", "", True, ""
+        return BoundedRun(None, "", "", True, "", False)
     try:
         proc = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 start_new_session=True)
     except OSError as exc:
-        return None, "", "", False, f"{type(exc).__name__}: {exc}"
+        return BoundedRun(None, "", "", False, f"{type(exc).__name__}: {exc}", False)
+    reap_failed = False
     try:
         out, err = proc.communicate(timeout=remaining)
         timed_out = False
@@ -200,9 +211,22 @@ def _run_bounded(argv: Sequence[str], cwd: Path, deadline: float) -> Tuple[Optio
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        out, err = proc.communicate()
+        reap_start = time.monotonic()
+        try:
+            out, err = proc.communicate(timeout=REAP_GRACE_S)
+        except subprocess.TimeoutExpired as exc:
+            out, err = exc.output or b"", exc.stderr or b""
+            proc.stdout.close()
+            proc.stderr.close()
+            reap_failed = True
+            remaining = max(0.0, REAP_GRACE_S - (time.monotonic() - reap_start))
+            try:
+                proc.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                pass
         timed_out = True
-    return proc.returncode, out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace"), timed_out, ""
+    return BoundedRun(proc.returncode, out.decode("utf-8", errors="replace"),
+                      err.decode("utf-8", errors="replace"), timed_out, "", reap_failed)
 
 
 def resolve(root: Path, target: Path, records: Sequence[Record], *, deadline: float) -> Resolution:
@@ -254,8 +278,10 @@ def resolve(root: Path, target: Path, records: Sequence[Record], *, deadline: fl
         notes.append("name map: target outside root")
         return Resolution("", (), (), tuple(notes), _deny("no-test-resolved", "no test resolved" + _notes(notes)))
     rel = real_target.relative_to(real_root).as_posix()
-    returncode, out, err, timed_out, error = _run_bounded(["bash", str(NAME_MAP), rel], real_root, deadline)
+    returncode, out, err, timed_out, error, reap_failed = _run_bounded(["bash", str(NAME_MAP), rel], real_root, deadline)
     mapped = out.strip()  # M:R5
+    if reap_failed:
+        return Resolution("", (), (), tuple(notes), _deny("judge-timeout", "name map reap timed out" + _notes(notes)))
     if timed_out:
         return Resolution("", (), (), tuple(notes), _deny("timeout", "name map timed out" + _notes(notes)))
     if not mapped:
@@ -351,16 +377,18 @@ def judge(root: Path, target: Path, records: Sequence[Record], *, budget_s: floa
         if isinstance(interpreter, Verdict):
             return interpreter._replace(reason=interpreter.reason + _notes(resolution.notes))
         argv = [interpreter, "-m", "pytest", str(test), "-x", "-q", "--no-header"]
-        returncode, out, err, timed_out, error = _run_bounded(argv, cwd, deadline)
+        returncode, out, err, timed_out, error, reap_failed = _run_bounded(argv, cwd, deadline)
         kind = "no-summary" if error else score(out + "\n" + err, timed_out)  # M:K3
+        if reap_failed:
+            kind = "judge-timeout"
         entry = _output_entry(out + "\n" + err, error)
         outcomes.append((test, kind, returncode, entry))
         if kind == "red-measured":
             return Verdict("ALLOW", kind, "", resolution.source, test)
-        if kind in ("venv-escapes-root", "timeout", "pytest-missing"):
+        if kind in ("venv-escapes-root", "judge-timeout", "timeout", "pytest-missing"):
             break
     kinds = [item[1] for item in outcomes]
-    kind = next((name for name in ("timeout", "pytest-missing", "pytest-error", "no-summary",
+    kind = next((name for name in ("judge-timeout", "timeout", "pytest-missing", "pytest-error", "no-summary",
                                    "no-tests-ran", "test-passing") if name in kinds), "no-summary")
     details = [f"{_display(test, root)}: {result} (rc={rc}; {entry})"
                for test, result, rc, entry in outcomes]

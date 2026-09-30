@@ -75,8 +75,8 @@
       "name": "H6",
       "_mechanism": "Task 10 H6: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_exempt_write_on_unreadable_chain_is_allowed[state-file] must reject the changed behavior.",
       "file": "hooks/h-mad-tdd-gate.sh",
-      "find": "case \"${TARGET_PATH##*/}\" in  # M:H6",
-      "replace": "_find_judge; _read_state --target \"$TARGET_PATH\"; case \"${TARGET_PATH##*/}\" in  # M:H6",
+      "find": "  case \"$FOLDED_NAME\" in  # M:H6",
+      "replace": "  _find_judge; _read_state --target \"$TARGET_PATH\"; case \"$FOLDED_NAME\" in  # M:H6",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_exempt_write_on_unreadable_chain_is_allowed[state-file]"
     },
     {
@@ -107,8 +107,8 @@
       "name": "H11",
       "_mechanism": "Task 10 H11: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_traversal_target_is_gated[absolute] must reject the changed behavior.",
       "file": "hooks/h-mad-tdd-gate.sh",
-      "find": "  TARGET_PATH=$(python3 -c 'import os,sys;print(os.path.normpath(os.path.join(sys.argv[1],sys.argv[2])))' \"$ROOT_ABS\" \"$TARGET_PATH\")  # M:H11",
-      "replace": "  TARGET_PATH=$(python3 -c 'import os,sys;print(os.path.join(sys.argv[1],sys.argv[2]))' \"$ROOT_ABS\" \"$TARGET_PATH\")  # M:H11",
+      "find": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import canonicalise,emit_canon;emit_canon(canonicalise(sys.argv[2],sys.argv[3]))' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
+      "replace": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import Identity,emit_canon;root=os.path.realpath(sys.argv[2]);target=os.path.join(root,sys.argv[3]);emit_canon(Identity(root,target,os.path.dirname(target),(os.path.basename(target),),False,0,\"\"))' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_traversal_target_is_gated[absolute]"
     },
     {
@@ -310,6 +310,51 @@
       "find": "    assert len(starts) == 1, f\"expected one 'Hook: ' line, found {len(starts)}\"  # M:D1",
       "replace": "    starts = starts or [0]  # M:D1",
       "test": "tests/test_h_mad_tdd_gate_docs.py::test_locators_fail_loudly[hook-line]"
+    },
+    {
+      "name": "CG-CANON",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import canonicalise,emit_canon;emit_canon(canonicalise(sys.argv[2],sys.argv[3]))' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
+      "replace": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import Identity,emit_canon;root=os.path.realpath(sys.argv[2]);target=os.path.normpath(os.path.join(root,sys.argv[3]));emit_canon(Identity(root,target,os.path.dirname(target),(os.path.basename(target),),False,0,\"\"))' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_case_directory_m9_denies"
+    },
+    {
+      "name": "CG-FOLD",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "    *.py|*.pY|*.Py|*.PY) printf -v \"$1\" '%s' \"${2%.*}.py\" ;;",
+      "replace": "    *.py|*.pY|*.Py|*.PY) printf -v \"$1\" '%s' \"$2\" ;;",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_fold_new_leaf_denies"
+    },
+    {
+      "name": "CG-GOV",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  _chain_may_hold_state \"$ROOT_ABS\" \"$CANON_PREFIX\" || _allow",
+      "replace": "  _refuse judge-error \"unresolvable arm=$CANON_ARM component=$CANON_COMPONENT\"",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_unresolvable_step3_allows"
+    },
+    {
+      "name": "CG-JT",
+      "_mechanism": "Remove judge-timeout from the Claude gate DENY alternatives; the stubbed judge verdict must be blocked with its kind.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-timeout|judge-error) reason=(.+)$'",
+      "replace": "JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-error) reason=(.+)$'",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_gate_judge_timeout_stub"
+    },
+    {
+      "name": "CG-PARENT",
+      "_mechanism": "6b pin drift (HemaSuite brief): the judged path is built from the deepest existing directory instead of the canonical target's parent.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  [ -n \"$PRODUCTION_TARGET\" ] || PRODUCTION_TARGET=${CANON_TARGET%/*}/$NAME",
+      "replace": "  [ -n \"$PRODUCTION_TARGET\" ] || PRODUCTION_TARGET=$CANON_PREFIX/$NAME",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_absent_intermediate_dirs_judge_the_real_target[two-absent]"
+    },
+    {
+      "name": "CG-PRODNAME",
+      "_mechanism": "archreview v4 #2: the production-target loop no longer skips test names, so a hard-linked test name can be judged.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "    test_*.py|*_test.py|conftest*.py) continue ;;",
+      "replace": "    __no_such_name__) continue ;;",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_hardlink_mixed_names_judges_the_production_name"
     }
   ]
 }

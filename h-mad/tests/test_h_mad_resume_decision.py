@@ -1,5 +1,9 @@
 import json
+import os
+import shutil
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -9,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = REPO_ROOT / "h-mad" / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
+import h_mad_resume_decision as resume_decision  # noqa: E402
 from h_mad_resume_decision import _phase_num, decide  # noqa: E402
 
 
@@ -70,6 +75,13 @@ def test_decide_current_phase_complete_with_phase7_last(tmp_path: Path) -> None:
         {"current_phase": "complete", "last_completed_phase": "phase7"},
     )
     assert decide(state, "feat") == "complete"
+    # Keep the sentinel assertion discriminating: phase7 alone also completes.
+    sentinel_only = _write_state(
+        tmp_path, "feat", {"current_phase": "complete", "last_completed_phase": 4}
+    )
+    assert decide(sentinel_only, "feat") == "complete", (
+        "current_phase=complete must complete even below the phase7 threshold"
+    )
 
 
 def test_decide_routing_thresholds(tmp_path: Path) -> None:
@@ -164,3 +176,356 @@ def test_decide_missing_feature_or_state_starts_fresh(tmp_path: Path) -> None:
     state = _write_state(tmp_path, "other", {"last_completed_phase": "step7"})
     assert decide(state, "absent") == "start_fresh"
     assert decide(tmp_path / "nonexistent.json", "feat") == "start_fresh"
+
+
+@pytest.fixture
+def minted_identity():
+    # Exercise agent-authored markdown, glob characters, markers and newlines
+    # through the shared hostile-input knob instead of a tidy UUID fixture.
+    result = subprocess.run(
+        [str(REPO_ROOT / "h-mad" / "tests" / "stubs" / "orca"),
+         "worktree", "set", "--comment", "fixture"],
+        env={"PATH": os.environ["PATH"], "HMAD_STUB_HOSTILE": "all"},
+        capture_output=True, text=True, check=True, timeout=10,
+    )
+    session_id = json.loads(result.stdout)["result"]["worktree"]["comment"]
+    # A feature is a filename suffix, so keep hostile data but no path separator.
+    feature = "resume " + session_id.replace("/", "_")
+    return feature, session_id
+
+
+@pytest.fixture
+def git_checkout(tmp_path: Path, monkeypatch):
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+                 "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY"):
+        monkeypatch.delenv(name, raising=False)
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", str(root)], capture_output=True,
+                   text=True, check=True, timeout=10)
+    subprocess.run(
+        ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+         "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+         "commit", "--allow-empty", "-m", "Fixture root"],
+        cwd=root, capture_output=True, text=True, check=True, timeout=10,
+    )
+    return root
+
+
+@pytest.mark.parametrize("checkout", ["repo", "worktree"])
+def test_session_id_from_git_dir_reads_minted_id(
+    checkout, tmp_path: Path, monkeypatch, git_checkout, minted_identity
+) -> None:
+    root = git_checkout
+    cwd = root
+    if checkout == "worktree":
+        cwd = tmp_path / "linked worktree"
+        subprocess.run(["git", "worktree", "add", "--detach", str(cwd)],
+                       cwd=root, capture_output=True, text=True, check=True, timeout=10)
+    monkeypatch.chdir(cwd)
+    git_dir = Path(subprocess.run(
+        ["git", "rev-parse", "--absolute-git-dir"],
+        capture_output=True, text=True, check=True, timeout=10,
+    ).stdout.strip())
+    if checkout == "worktree":
+        assert git_dir.resolve() != (root / ".git").resolve(), (
+            "the linked worktree must use its own git directory"
+        )
+    feature, session_id = minted_identity
+    (git_dir / ("h-mad-session-id." + feature)).write_text(
+        session_id + "\n", encoding="utf-8"
+    )
+    calls = []
+    real_run = subprocess.run
+
+    def recorded_run(*args, **kwargs):
+        calls.append((args, kwargs))
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", recorded_run)
+    read_id = resume_decision.session_id_from_git_dir
+    assert read_id(feature) == session_id.strip(), (
+        "session_id_from_git_dir must read the current checkout's minted id and strip it"
+    )
+    assert calls == [((['git', 'rev-parse', '--absolute-git-dir'],),
+                      {"timeout": 10.0, "capture_output": True, "text": True})], (
+        "git-dir discovery must use subprocess.run with the stdlib timeout bound"
+    )
+
+
+@pytest.mark.parametrize(
+    "failure", ["absent", "empty", "whitespace", "mode000", "outside-repo",
+                "no-git", "bound-expired"]
+)
+def test_session_id_from_git_dir_failure_returns_none(
+    failure, tmp_path: Path, monkeypatch, git_checkout, minted_identity
+) -> None:
+    monkeypatch.chdir(git_checkout)
+    feature, session_id = minted_identity
+    id_file = git_checkout / ".git" / ("h-mad-session-id." + feature)
+    if failure != "absent":
+        contents = {"empty": "", "whitespace": " \t\n \r\n"}.get(
+            failure, session_id + "\n"
+        )
+        id_file.write_text(contents, encoding="utf-8")
+    if failure == "mode000":
+        id_file.chmod(0o000)
+        try:
+            with pytest.raises(PermissionError, match="Permission denied"):
+                id_file.read_text(encoding="utf-8")
+            read_id = resume_decision.session_id_from_git_dir
+            assert read_id(feature) is None, (
+                "session_id_from_git_dir must return None when reading the id raises OSError"
+            )
+        finally:
+            id_file.chmod(0o600)
+        return
+    if failure == "outside-repo":
+        monkeypatch.chdir(tmp_path)
+        result = subprocess.run(["git", "rev-parse", "--absolute-git-dir"],
+                                capture_output=True, text=True, timeout=10)
+        assert result.returncode != 0, "outside-repo must exercise a non-zero git exit"
+    if failure in ("no-git", "bound-expired"):
+        bin_dir = tmp_path / "hermetic bin"
+        bin_dir.mkdir()
+        monkeypatch.setenv("PATH", str(bin_dir))
+        if failure == "no-git":
+            assert shutil.which("git") is None, "the hermetic PATH must contain no git"
+        else:
+            stub = bin_dir / "git"
+            stub.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(5)\n",
+                            encoding="utf-8")
+            stub.chmod(0o755)
+            read_id = resume_decision.session_id_from_git_dir
+            monkeypatch.setattr(resume_decision, "GIT_DIR_BOUND_S", 0.5)
+    read_id = resume_decision.session_id_from_git_dir
+    started = time.monotonic()
+    assert read_id(feature) is None, (
+        f"session_id_from_git_dir must return None for {failure}"
+    )
+    if failure == "bound-expired":
+        assert time.monotonic() - started < 2.0, (
+            "git-dir discovery must return well before the git stub's five-second sleep"
+        )
+
+
+def test_build_parser_is_module_level() -> None:
+    parser = resume_decision.build_parser()
+    options = {option for action in parser._actions for option in action.option_strings}
+    assert {"--state", "--feature", "--host", "--session-id", "--now"} <= options, (
+        "module-level build_parser must preserve all five existing long options"
+    )
+
+
+def test_git_dir_bound_constant() -> None:
+    assert resume_decision.GIT_DIR_BOUND_S == 10.0, (
+        "GIT_DIR_BOUND_S must independently bound git-dir discovery at ten seconds"
+    )
+
+
+@pytest.mark.parametrize(
+    "checkout,ownership",
+    [("repo", "owner"), ("repo", "other"),
+     ("worktree", "owner"), ("worktree", "other")],
+    ids=["repo-owner", "repo-other", "worktree-owner", "worktree-other"],
+)
+def test_git_dir_flag_matches_session_id_token(
+    checkout, ownership, tmp_path: Path, git_checkout, minted_identity
+) -> None:
+    feature, session_id = minted_identity
+    cwd = git_checkout
+    if checkout == "worktree":
+        cwd = tmp_path / "linked worktree"
+        subprocess.run(["git", "worktree", "add", "--detach", str(cwd)],
+                       cwd=git_checkout, capture_output=True, text=True,
+                       check=True, timeout=10)
+        # Reading the main checkout's id must not satisfy the worktree pin.
+        (git_checkout / ".git" / ("h-mad-session-id." + feature)).write_text(
+            session_id + "\nwrong checkout", encoding="utf-8"
+        )
+    git_dir = Path(subprocess.run(
+        ["git", "rev-parse", "--absolute-git-dir"], cwd=cwd,
+        capture_output=True, text=True, check=True, timeout=10,
+    ).stdout.strip())
+    id_file = git_dir / ("h-mad-session-id." + feature)
+    id_file.write_text(session_id + "\n", encoding="utf-8")
+    state = _write_state(tmp_path, feature, {
+        "last_completed_phase": 4,
+        "owner_session_id": (session_id if ownership == "owner"
+                             else session_id + "\nother live owner"),
+        "owner_heartbeat_ts": "2026-07-22T01:00:00Z",
+    })
+    command = [sys.executable, str(SCRIPT_DIR / "h_mad_resume_decision.py"),
+               "--state", str(state), "--feature", feature, "--host", "codex",
+               "--now", "2026-07-22T01:05:00Z"]
+    explicit = subprocess.run(
+        command + ["--session-id", id_file.read_text(encoding="utf-8").strip()],
+        cwd=cwd, capture_output=True, text=True, timeout=10,
+    )
+    expected = "enter_autonomous" if ownership == "owner" else "owned_elsewhere"
+    assert explicit.returncode == 0 and explicit.stdout.strip() == expected, (
+        "the explicit minted session id must establish the ownership control token"
+    )
+    flagged = subprocess.run(command + ["--session-id-from-git-dir"], cwd=cwd,
+                             capture_output=True, text=True, timeout=15)
+    assert flagged.stdout.strip() == explicit.stdout.strip(), (
+        "main --session-id-from-git-dir must propagate the current checkout's "
+        f"minted id to decide and print {expected}; got {flagged.stdout!r}; "
+        f"stderr={flagged.stderr!r}"
+    )
+    assert flagged.returncode == 0, "the git-dir flag must be a successful CLI route"
+
+
+@pytest.mark.parametrize(
+    "host,failure",
+    [(host, failure) for host in ("codex", "claude")
+     for failure in ("absent", "empty", "whitespace", "mode000", "outside-repo",
+                     "no-git", "bound-expired")],
+    ids=[f"{host}-{failure}" for host in ("codex", "claude")
+         for failure in ("absent", "empty", "whitespace", "mode000", "outside-repo",
+                         "no-git", "bound-expired")],
+)
+def test_git_dir_flag_failure_is_cannot_judge(
+    host, failure, tmp_path: Path, monkeypatch, capsys, git_checkout, minted_identity
+) -> None:
+    feature, session_id = minted_identity
+    state = _write_state(tmp_path, feature, {
+        "last_completed_phase": 4, "owner_session_id": session_id,
+        "owner_heartbeat_ts": "2026-07-22T01:00:00Z",
+    })
+    cwd = git_checkout
+    id_file = git_checkout / ".git" / ("h-mad-session-id." + feature)
+    if failure != "absent":
+        id_file.write_text(
+            {"empty": "", "whitespace": " \t\n \r\n"}.get(failure, session_id + "\n"),
+            encoding="utf-8",
+        )
+    if failure == "mode000":
+        id_file.chmod(0o000)
+    if failure == "outside-repo":
+        cwd = tmp_path
+        probe = subprocess.run(["git", "rev-parse", "--absolute-git-dir"],
+                               cwd=cwd, capture_output=True, text=True, timeout=10)
+        assert probe.returncode != 0, "outside-repo must exercise a failed git lookup"
+    if failure in ("no-git", "bound-expired"):
+        bin_dir = tmp_path / "hermetic bin"
+        bin_dir.mkdir()
+        monkeypatch.setenv("PATH", str(bin_dir))
+        if failure == "no-git":
+            assert shutil.which("git") is None, "no-git must have no git executable"
+        else:
+            stub = bin_dir / "git"
+            stub.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(5)\n",
+                            encoding="utf-8")
+            stub.chmod(0o755)
+            monkeypatch.setattr(resume_decision, "GIT_DIR_BOUND_S", 0.5)
+    command = [sys.executable, str(SCRIPT_DIR / "h_mad_resume_decision.py"),
+               "--state", str(state), "--feature", feature, "--host", host,
+               "--now", "2026-07-22T01:05:00Z", "--session-id-from-git-dir"]
+    started = time.monotonic()
+    try:
+        if failure == "mode000":
+            with pytest.raises(PermissionError, match="Permission denied"):
+                id_file.read_text(encoding="utf-8")
+        if failure == "bound-expired":
+            # Patch the bound in the same process as main, not across a subprocess.
+            monkeypatch.chdir(cwd)
+            monkeypatch.setattr(sys, "argv", command[1:])
+            try:
+                returncode = resume_decision.main()
+            except SystemExit as error:
+                returncode = error.code
+            captured = capsys.readouterr()
+            stdout, stderr = captured.out, captured.err
+        else:
+            result = subprocess.run(command, cwd=cwd, capture_output=True,
+                                    text=True, timeout=15)
+            returncode, stdout, stderr = result.returncode, result.stdout, result.stderr
+        assert stdout.strip() == "cannot_judge", (
+            f"main must print cannot_judge for {host}/{failure} without falling "
+            f"through to decide with no identity; got {stdout!r}; stderr={stderr!r}"
+        )
+        assert returncode == 0, "an unreadable git-dir id must return a verdict at exit 0"
+        if failure == "bound-expired":
+            assert time.monotonic() - started < 2.0, (
+                "main must bound discovery well before the git stub's five-second sleep"
+            )
+    finally:
+        if failure == "mode000":
+            id_file.chmod(0o600)
+
+
+@pytest.fixture
+def recording_git(tmp_path: Path, monkeypatch, git_checkout):
+    bin_dir = tmp_path / "recording bin"
+    bin_dir.mkdir()
+    record = tmp_path / "git invocations.json"
+    stub = bin_dir / "git"
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\nfrom pathlib import Path\n"
+        f"Path({str(record)!r}).write_text(json.dumps(sys.argv[1:]))\n"
+        f"print({str(git_checkout / '.git')!r})\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ["PATH"])
+    assert shutil.which("git") == str(stub), "the recording stub must be first on PATH"
+    return record
+
+
+def test_git_dir_flag_excludes_session_id(
+    tmp_path: Path, git_checkout, minted_identity, recording_git
+) -> None:
+    feature, session_id = minted_identity
+    state = _write_state(tmp_path, feature, {"last_completed_phase": 4})
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT_DIR / "h_mad_resume_decision.py"),
+         "--state", str(state), "--feature", feature, "--session-id", session_id,
+         "--session-id-from-git-dir"],
+        cwd=git_checkout, capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 2, "conflicting identity options must exit 2"
+    assert result.stdout == "", "conflicting identity options must print no verdict"
+    assert "not allowed with argument" in result.stderr, (
+        "build_parser must reject identity options as mutually exclusive; "
+        f"stderr={result.stderr!r}"
+    )
+    assert not recording_git.exists(), "argument rejection must precede git-dir discovery"
+
+
+def test_build_parser_offers_the_git_dir_flag() -> None:
+    parser = resume_decision.build_parser()
+    options = {option for action in parser._actions for option in action.option_strings
+               if option.startswith("--") and option != "--help"}
+    assert options == {"--state", "--feature", "--host", "--session-id", "--now",
+                       "--session-id-from-git-dir"}, (
+        "build_parser must offer exactly the six FR-8 long options, including "
+        f"--session-id-from-git-dir; got {sorted(options)!r}"
+    )
+
+
+def test_session_id_alone_does_not_read_git_dir(
+    tmp_path: Path, git_checkout, minted_identity, recording_git
+) -> None:
+    feature, session_id = minted_identity
+    (git_checkout / ".git" / ("h-mad-session-id." + feature)).write_text(
+        session_id + "\n", encoding="utf-8"
+    )
+    state = _write_state(tmp_path, feature, {
+        "last_completed_phase": 4, "owner_session_id": session_id,
+        "owner_heartbeat_ts": "2026-07-22T01:00:00Z",
+    })
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT_DIR / "h_mad_resume_decision.py"),
+         "--state", str(state), "--feature", feature, "--host", "codex",
+         "--session-id", session_id + "\nother live session",
+         "--now", "2026-07-22T01:05:00Z"],
+        cwd=git_checkout, capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0 and result.stdout.strip() == "owned_elsewhere", (
+        "main must preserve the explicit other session's ownership verdict"
+    )
+    assert not recording_git.exists(), (
+        "main with only --session-id must not invoke git, even when the minted id is readable"
+    )

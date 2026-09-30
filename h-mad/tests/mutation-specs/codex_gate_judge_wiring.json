@@ -150,6 +150,142 @@
       "find": "        chain = judge.read_chain(root, absolute)  # M:W5A",
       "replace": "        chain = judge.Chain(\"active\", (judge.Record(\"forced\", \"available\", root / \"docs\" / \".bkit-memory.json\", \"absent\"),), None, \"\")  # M:W5A",
       "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_scopes_nested_state_to_the_target_project"
+    },
+    {
+      "name": "CX-CANON",
+      "_mechanism": "Task 2 AC-1.4: restore Path.resolve for every _project_root return via _canonical_root.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        return Path(identity.canonical_directory(str(path)))",
+      "replace": "        return path.resolve()",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_case_spelled_root_m8_denies"
+    },
+    {
+      "name": "CX-FOLD",
+      "_mechanism": "Task 2 AC-2.2: remove the fold_py_suffix call while leaving the callee intact.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    path = Path(_load_identity().fold_py_suffix(relative))",
+      "replace": "    path = Path(relative)",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_fold_new_leaf_denies"
+    },
+    {
+      "name": "CX-GOV",
+      "_mechanism": "Task 2 AC-3.3: refuse an unresolvable target without checking governing phase state.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if resolved.unresolvable:\n            if phase5_status in {\"active\", \"unknown\"}:",
+      "replace": "        if resolved.unresolvable:\n            if True:",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_unresolvable_step3_allows"
+    },
+    {
+      "name": "CX-RESOLVE-M9",
+      "_mechanism": "Task 2 WIRE 1 removal: resolve _relative_target with Path.resolve while retaining the identity import.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    resolved = identity.canonicalise(str(root), str(Path(raw).expanduser()), str(base))",
+      "replace": "    path = (base / Path(raw).expanduser()).resolve()\n    resolved = identity.Identity(str(root), str(path), str(path.parent), (path.name,), False, 0, \"\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_case_directory_m9_denies"
+    },
+    {
+      "name": "CX-FORCE-SCRIPT",
+      "_mechanism": "Task 2 WIRE 1 forced: canonical_directory on script.resolve inside _safe_shell_command.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        script = script.resolve() if script.is_absolute() else (Path.cwd() / script).resolve()",
+      "replace": "        script = Path(_load_identity().canonical_directory(str(script.resolve() if script.is_absolute() else (Path.cwd() / script).resolve())))",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_safe_shell_script_keeps_path_resolve_spelling"
+    },
+    {
+      "name": "CX-FORCE-CWD",
+      "_mechanism": "Task 2 WIRE 1 forced: canonical_directory on an empty payload cwd.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        base = _payload_cwd_base(root, cwd)\n    except RuntimeError:",
+      "replace": "        base = Path(identity.canonical_directory(cwd)) if cwd == \"\" else _payload_cwd_base(root, cwd)\n    except RuntimeError:",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_empty_cwd_joins_root"
+    },
+    {
+      "name": "CX-FOLD-FORCE",
+      "_mechanism": "Task 2 WIRE 2 forced: consult folding production classifier before unresolvable handling.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if resolved.unresolvable:\n            if phase5_status in {\"active\", \"unknown\"}:",
+      "replace": "        if not _is_production_python(raw):\n            continue\n        if bool(resolved.unresolvable):\n            if phase5_status in {\"active\", \"unknown\"}:",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_forced_fold_does_not_exempt_dangling_test_name"
+    },
+    {
+      "name": "CX-LTRIM",
+      "_mechanism": "Task 4 AC-4.2: removing leading header trim must expose the indented production target.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        while start < end and line[start].isspace() and not \"\\x1c\" <= line[start] <= \"\\x1f\":",
+      "replace": "        while False and start < end and line[start].isspace() and not \"\\x1c\" <= line[start] <= \"\\x1f\":",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_indented_header_denies"
+    },
+    {
+      "name": "CX-TTRIM",
+      "_mechanism": "Task 4 AC-4.1 and AC-4.7: removing trailing header trim must lose the production target and fail self-check.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        while end > start and line[end - 1].isspace() and not \"\\x1c\" <= line[end - 1] <= \"\\x1f\":",
+      "replace": "        while False and end > start and line[end - 1].isspace() and not \"\\x1c\" <= line[end - 1] <= \"\\x1f\":",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_trailing_header_whitespace_denies"
+    },
+    {
+      "name": "CX-CTRL",
+      "_mechanism": "Task 4 AC-4.4: removing control-byte validation must accept an invalid header path.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "                if not path or any(ord(char) < 0x20 or ord(char) == 0x7f for char in path):",
+      "replace": "                if not path:",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_control_byte_header_is_judge_error"
+    },
+    {
+      "name": "CX-SPLIT",
+      "_mechanism": "Task 4 AC-4.6: splitlines must truncate a control-bearing header instead of retaining the whole line.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    for line in patch.split(\"\\n\"):",
+      "replace": "    for line in patch.splitlines():",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_patch_header_paths_split_on_newline_only"
+    },
+    {
+      "name": "CX-SAFE",
+      "_mechanism": "Task 11 AC-8.1: the resume key deleted from SAFE_HMAD_SCRIPT_OPTIONS.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    \"h_mad_resume_decision.py\": {",
+      "replace": "    \"h_mad_resume_decision.py.deleted\": {",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_admits_resume_oracle_forms"
+    },
+    {
+      "name": "CX-EQ",
+      "_mechanism": "Task 11 AC-8.2: one option added to the resume entry.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        \"--state\", \"--feature\", \"--host\", \"--session-id\", \"--now\", \"--session-id-from-git-dir\",",
+      "replace": "        \"--state\", \"--feature\", \"--host\", \"--session-id\", \"--now\", \"--session-id-from-git-dir\", \"--extra\",",
+      "test": "tests/test_h_mad_codex_runtime.py::test_safe_list_resume_options_equal_parser"
+    },
+    {
+      "name": "CX-OPT-LONG",
+      "_mechanism": "Task 11 AC-8.2 post-registration: the -- membership condition replaced by False.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if token.startswith(\"--\") and token.split(\"=\", 1)[0] not in allowed_options:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_refuses_unknown_resume_options[bogus]"
+    },
+    {
+      "name": "CX-OPT-SHORT",
+      "_mechanism": "Task 11 AC-8.2 post-registration: the single-dash condition replaced by False.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if token.startswith(\"-\") and not token.startswith(\"--\"):",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_refuses_unknown_resume_options[dash-h]"
+    },
+    {
+      "name": "CX-CWD-RECHECK",
+      "_mechanism": "6b F1 (archreview v1): the canonical cwd is not passed back through _payload_cwd_base.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "                base = _payload_cwd_base(root, str(base))",
+      "replace": "                base = base",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_canonical_cwd_is_rechecked_by_payload_cwd_base"
+    },
+    {
+      "name": "CX-ROOT-ONDISK",
+      "_mechanism": "archreview v6: the Codex root arm-2 component reverts to the spelled root instead of its on-disk spelling.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        return identity.Identity(str(path), \"\", str(path), (), True, 2, identity._on_disk_component(str(path)))",
+      "replace": "        return identity.Identity(str(path), \"\", str(path), (), True, 2, str(path))",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_root_open_failure_names_the_on_disk_root"
     }
   ]
 }

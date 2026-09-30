@@ -61,6 +61,38 @@
       "find": "    if _pytest_missing(proc_output):  # M:K1",
       "replace": "    if _pytest_missing(proc_output) and _suite_summary(proc_output) is None:  # M:K1",
       "test": "tests/test_h_mad_tdd_judge.py::test_whole_line_no_module_is_pytest_missing_even_after_red"
+    },
+    {
+      "name": "JT-REAP",
+      "_mechanism": "Remove the post-kill communicate timeout; the detached-pipe test must reject an unbounded reap.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "            out, err = proc.communicate(timeout=REAP_GRACE_S)",
+      "replace": "            out, err = proc.communicate()",
+      "test": "tests/test_h_mad_tdd_judge.py::test_run_bounded_reap_failure_is_bounded"
+    },
+    {
+      "name": "JT-NM",
+      "_mechanism": "Ignore failed name-map reap; the judge must report judge-timeout.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if reap_failed:\n        return Resolution(\"\", (), (), tuple(notes), _deny(\"judge-timeout\", \"name map reap timed out\" + _notes(notes)))",
+      "replace": "    if False:\n        return Resolution(\"\", (), (), tuple(notes), _deny(\"judge-timeout\", \"name map reap timed out\" + _notes(notes)))",
+      "test": "tests/test_h_mad_tdd_judge.py::test_judge_name_map_detach_is_judge_timeout"
+    },
+    {
+      "name": "JT-PY",
+      "_mechanism": "Ignore failed pytest-path reap; the judge must report judge-timeout.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        if reap_failed:\n            kind = \"judge-timeout\"",
+      "replace": "        if False:\n            kind = \"judge-timeout\"",
+      "test": "tests/test_h_mad_tdd_judge.py::test_judge_venv_interpreter_detach_is_judge_timeout"
+    },
+    {
+      "name": "JT-PRIO",
+      "_mechanism": "Move judge-timeout to the end of the priority tuple; the second detached test must still outrank the first pytest-error.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    kind = next((name for name in (\"judge-timeout\", \"timeout\", \"pytest-missing\", \"pytest-error\", \"no-summary\",\n                                   \"no-tests-ran\", \"test-passing\") if name in kinds), \"no-summary\")",
+      "replace": "    kind = next((name for name in (\"timeout\", \"pytest-missing\", \"pytest-error\", \"no-summary\",\n                                   \"no-tests-ran\", \"test-passing\", \"judge-timeout\") if name in kinds), \"no-summary\")",
+      "test": "tests/test_h_mad_tdd_judge.py::test_judge_timeout_has_priority"
     }
   ]
 }

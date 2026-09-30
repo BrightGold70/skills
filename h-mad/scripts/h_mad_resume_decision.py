@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -40,6 +41,28 @@ from h_mad_state_ownership import (  # noqa: E402
     owner_is_live,
 )
 from h_mad_host import classify_host  # noqa: E402
+
+
+GIT_DIR_BOUND_S = 10.0
+
+
+def session_id_from_git_dir(feature: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--absolute-git-dir"],
+            timeout=GIT_DIR_BOUND_S, capture_output=True, text=True,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        session_id = (Path(result.stdout.strip()) / ("h-mad-session-id." + feature)).read_text(
+            encoding="utf-8"
+        ).strip()
+    except OSError:
+        return None
+    return session_id or None
 
 
 def _phase_num(value) -> int:
@@ -147,19 +170,31 @@ def decide(
     return "resume_manual"
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="h-mad resume decision (v2.2)")
     parser.add_argument("--state", required=True, type=Path)
     parser.add_argument("--feature", required=True)
     parser.add_argument("--host", help="explicit host (claude, codex, agy, grok)")
-    parser.add_argument(
+    identity = parser.add_mutually_exclusive_group()
+    identity.add_argument(
         "--session-id",
         help="This session's id. Pass it to get the owned_elsewhere token when "
         "another live session holds the feature; omit to opt out of the check.",
     )
+    identity.add_argument("--session-id-from-git-dir", action="store_true")
     parser.add_argument("--now", help="Reference time for staleness (testing)")
-    args = parser.parse_args()
-    print(decide(args.state, args.feature, session_id=args.session_id, now=args.now, host=args.host))
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    session_id = args.session_id
+    if args.session_id_from_git_dir:
+        session_id = session_id_from_git_dir(args.feature)
+        if session_id is None:
+            print("cannot_judge")
+            return 0
+    print(decide(args.state, args.feature, session_id=session_id, now=args.now, host=args.host))
     return 0
 
 

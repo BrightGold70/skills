@@ -1,0 +1,160 @@
+CX-CANON: _canonical_root canonical_directory -> Path.resolve()
+CX-RESOLVE-M9: _relative_target canonicalise -> Path.resolve() identity facade
+Payload cwd: usable contained cwd canonical_directory -> Path.resolve()
+.......FFF.FFF...F...F                                                   [100%]
+=================================== FAILURES ===================================
+_________________________ test_differential_cell[M-8] __________________________
+
+observed_cells = {'M-1': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), 'M-2': (('deny', 'no-test-resolved'), ('deny', '...st-resolved'), ('deny', 'no-test-resolved')), 'M-4': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), ...}
+cell = 'M-8', expected_decision = 'deny', expected_kind = 'no-test-resolved'
+
+    @pytest.mark.parametrize("cell,expected_decision,expected_kind", EXPECTATIONS,
+                             ids=[row[0] for row in EXPECTATIONS])
+    def test_differential_cell(observed_cells, cell, expected_decision, expected_kind):
+        claude, codex = observed_cells[cell]
+        assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+        if claude[0] == codex[0] == "deny":
+>           assert claude[1] == codex[1], f"{cell}: denial kinds differ: Claude={claude}, Codex={codex}"
+E           AssertionError: M-8: denial kinds differ: Claude=('deny', 'no-test-resolved'), Codex=('deny', '')
+E           assert 'no-test-resolved' == ''
+E             
+E             + no-test-resolved
+
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py:178: AssertionError
+_________________________ test_differential_cell[M-9] __________________________
+
+observed_cells = {'M-1': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), 'M-2': (('deny', 'no-test-resolved'), ('deny', '...st-resolved'), ('deny', 'no-test-resolved')), 'M-4': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), ...}
+cell = 'M-9', expected_decision = 'deny', expected_kind = 'no-test-resolved'
+
+    @pytest.mark.parametrize("cell,expected_decision,expected_kind", EXPECTATIONS,
+                             ids=[row[0] for row in EXPECTATIONS])
+    def test_differential_cell(observed_cells, cell, expected_decision, expected_kind):
+        claude, codex = observed_cells[cell]
+>       assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E       AssertionError: M-9: gate decisions differ: Claude=('deny', 'no-test-resolved'), Codex=('allow', '')
+E       assert 'deny' == 'allow'
+E         
+E         - allow
+E         + deny
+
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py:176: AssertionError
+_________________________ test_differential_cell[M-10] _________________________
+
+observed_cells = {'M-1': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), 'M-2': (('deny', 'no-test-resolved'), ('deny', '...st-resolved'), ('deny', 'no-test-resolved')), 'M-4': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), ...}
+cell = 'M-10', expected_decision = 'allow', expected_kind = ''
+
+    @pytest.mark.parametrize("cell,expected_decision,expected_kind", EXPECTATIONS,
+                             ids=[row[0] for row in EXPECTATIONS])
+    def test_differential_cell(observed_cells, cell, expected_decision, expected_kind):
+        claude, codex = observed_cells[cell]
+>       assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E       AssertionError: M-10: gate decisions differ: Claude=('allow', ''), Codex=('deny', 'no-test-resolved')
+E       assert 'allow' == 'deny'
+E         
+E         - deny
+E         + allow
+
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py:176: AssertionError
+_________________________ test_differential_cell[M-12] _________________________
+
+observed_cells = {'M-1': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), 'M-2': (('deny', 'no-test-resolved'), ('deny', '...st-resolved'), ('deny', 'no-test-resolved')), 'M-4': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), ...}
+cell = 'M-12', expected_decision = 'deny', expected_kind = 'judge-error'
+
+    @pytest.mark.parametrize("cell,expected_decision,expected_kind", EXPECTATIONS,
+                             ids=[row[0] for row in EXPECTATIONS])
+    def test_differential_cell(observed_cells, cell, expected_decision, expected_kind):
+        claude, codex = observed_cells[cell]
+        assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+        if claude[0] == codex[0] == "deny":
+>           assert claude[1] == codex[1], f"{cell}: denial kinds differ: Claude={claude}, Codex={codex}"
+E           AssertionError: M-12: denial kinds differ: Claude=('deny', 'judge-error'), Codex=('deny', 'no-test-resolved')
+E           assert 'judge-error' == 'no-test-resolved'
+E             
+E             - no-test-resolved
+E             + judge-error
+
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py:178: AssertionError
+____________________ test_differential_cell[M-13/m13-leaf] _____________________
+
+observed_cells = {'M-1': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), 'M-2': (('deny', 'no-test-resolved'), ('deny', '...st-resolved'), ('deny', 'no-test-resolved')), 'M-4': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), ...}
+cell = 'M-13/m13-leaf', expected_decision = 'deny'
+expected_kind = 'judge-error'
+
+    @pytest.mark.parametrize("cell,expected_decision,expected_kind", EXPECTATIONS,
+                             ids=[row[0] for row in EXPECTATIONS])
+    def test_differential_cell(observed_cells, cell, expected_decision, expected_kind):
+        claude, codex = observed_cells[cell]
+        assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+        if claude[0] == codex[0] == "deny":
+>           assert claude[1] == codex[1], f"{cell}: denial kinds differ: Claude={claude}, Codex={codex}"
+E           AssertionError: M-13/m13-leaf: denial kinds differ: Claude=('deny', 'judge-error'), Codex=('deny', 'no-test-resolved')
+E           assert 'judge-error' == 'no-test-resolved'
+E             
+E             - no-test-resolved
+E             + judge-error
+
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py:178: AssertionError
+________________ test_differential_cell[M-13/m13-intermediate] _________________
+
+observed_cells = {'M-1': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), 'M-2': (('deny', 'no-test-resolved'), ('deny', '...st-resolved'), ('deny', 'no-test-resolved')), 'M-4': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), ...}
+cell = 'M-13/m13-intermediate', expected_decision = 'deny'
+expected_kind = 'judge-error'
+
+    @pytest.mark.parametrize("cell,expected_decision,expected_kind", EXPECTATIONS,
+                             ids=[row[0] for row in EXPECTATIONS])
+    def test_differential_cell(observed_cells, cell, expected_decision, expected_kind):
+        claude, codex = observed_cells[cell]
+        assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+        if claude[0] == codex[0] == "deny":
+>           assert claude[1] == codex[1], f"{cell}: denial kinds differ: Claude={claude}, Codex={codex}"
+E           AssertionError: M-13/m13-intermediate: denial kinds differ: Claude=('deny', 'judge-error'), Codex=('deny', 'no-test-resolved')
+E           assert 'judge-error' == 'no-test-resolved'
+E             
+E             - no-test-resolved
+E             + judge-error
+
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py:178: AssertionError
+_______________________ test_differential_cell[M-18/m14] _______________________
+
+observed_cells = {'M-1': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), 'M-2': (('deny', 'no-test-resolved'), ('deny', '...st-resolved'), ('deny', 'no-test-resolved')), 'M-4': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), ...}
+cell = 'M-18/m14', expected_decision = 'allow', expected_kind = ''
+
+    @pytest.mark.parametrize("cell,expected_decision,expected_kind", EXPECTATIONS,
+                             ids=[row[0] for row in EXPECTATIONS])
+    def test_differential_cell(observed_cells, cell, expected_decision, expected_kind):
+        claude, codex = observed_cells[cell]
+>       assert claude[0] == codex[0], f"{cell}: gate decisions differ: Claude={claude}, Codex={codex}"
+E       AssertionError: M-18/m14: gate decisions differ: Claude=('allow', ''), Codex=('deny', 'judge-error')
+E       assert 'allow' == 'deny'
+E         
+E         - deny
+E         + allow
+
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py:176: AssertionError
+_________________ test_expectation_table_deny_count_is_derived _________________
+
+observed_cells = {'M-1': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), 'M-2': (('deny', 'no-test-resolved'), ('deny', '...st-resolved'), ('deny', 'no-test-resolved')), 'M-4': (('deny', 'no-test-resolved'), ('deny', 'no-test-resolved')), ...}
+
+    def test_expectation_table_deny_count_is_derived(observed_cells):
+        expected_deny_count = sum(decision == "deny" for _, decision, _ in EXPECTATIONS)
+        for gate_index, gate in enumerate(("Claude", "Codex")):
+            observed_deny_count = sum(outcomes[gate_index][0] == "deny"
+                                      for outcomes in observed_cells.values())
+>           assert observed_deny_count == expected_deny_count, (
+                f"{gate}: denial count differs from expectation table: "
+                f"expected {expected_deny_count}, got {observed_deny_count}"
+            )
+E           AssertionError: Codex: denial count differs from expectation table: expected 13, got 14
+E           assert 14 == 13
+
+/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py:192: AssertionError
+=========================== short test summary info ============================
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-8]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-9]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-10]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-12]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-13/m13-leaf]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-13/m13-intermediate]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[M-18/m14]
+FAILED ../../../../var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/hmad-t6-remove-codex-udx4q088/h-mad/tests/test_h_mad_tdd_gate_differential.py::test_expectation_table_deny_count_is_derived
+8 failed, 14 passed in 6.35s

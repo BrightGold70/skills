@@ -1,0 +1,44 @@
+# T8 mutation census — f61bb908 — 2026-09-30
+target_identity: MUTATION: ALL_CAUGHT mutations=6 caught=6 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/6
+claude_gate_judge_wiring: MUTATION: ALL_CAUGHT mutations=41 caught=41 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/41
+codex_gate_judge_wiring: MUTATION: ALL_CAUGHT mutations=32 caught=32 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=4/11 timeout_kills=0 untargeted=0/32
+tdd_judge_scoring: MUTATION: ALL_CAUGHT mutations=10 caught=10 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=3/5 timeout_kills=0 untargeted=0/10
+resume_decision_git_dir: MUTATION: ALL_CAUGHT mutations=5 caught=5 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=7/7 timeout_kills=0 untargeted=0/5
+ANCHORS: ANCHORS_OK specs=121 mutations=1236 ok=1236 drifted=0
+floor at 644f8bf6 (plan v1.4 command): (AC-=21 separate-mutations=3 in-each-gate=1 -> 25
+
+guard  1 CG-CANON         caught
+guard  2 CX-CANON         caught
+guard  3 TI1              caught
+guard  4 TI2              caught
+guard  5 TI3              caught
+guard  6 CG-FOLD          caught
+guard  7 CX-FOLD          caught
+guard  8 TI4              caught
+guard  9 TI5              caught
+guard 10 TI6              caught
+guard 11 CG-GOV           caught
+guard 11 CX-GOV           caught
+guard 12 CX-LTRIM         caught
+guard 13 CX-TTRIM         caught
+guard 14 CX-CTRL          caught
+guard 15 CX-SPLIT         caught
+guard 16 JT-REAP          caught
+guard 17 JT-NM            caught
+guard 18 JT-PY            caught
+guard 19 JT-PRIO          caught
+guard 20 CG-JT            caught
+guard 21 CX-SAFE          caught
+guard 22 CX-EQ            caught
+guard 23 RD-READ          caught
+guard 24 RD-CJ            caught
+guard 25 RD-MX            caught
+extra    CX-RESOLVE-M9    caught
+extra    CX-FORCE-SCRIPT  caught
+extra    CX-FORCE-CWD     caught
+extra    CX-FOLD-FORCE    caught
+extra    RD-WIRE          caught
+extra    RD-FORCE         caught
+extra    CX-OPT-LONG      caught
+extra    CX-OPT-SHORT     caught
+extra    H20B             caught

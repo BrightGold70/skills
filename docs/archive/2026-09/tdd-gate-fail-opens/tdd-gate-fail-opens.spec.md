@@ -225,7 +225,14 @@ With an in-memory entry of FR-8's six options:
      `os.path.realpath` calls are then identities.
 - **Verdict changes toward ALLOW** (identity, not weakening; each lands the write in an exempt
   location): M-10 (both gates), M-11 (Claude gate; the Codex gate already allows), and a leaf
-  symlink into `tests/` (Claude gate; Codex already follows it).
+  symlink into `tests/` (Claude gate; Codex already follows it). One further change is not an
+  exempt-location identity and is approved separately (operator, 2026-09-30): the Codex gate on
+  M-18's M-14 case (the loop under the `step3`-only state; probe key `cell=M-18 M-14 gate=codex
+  state=step3`) moves deny `judge-error` → allow. The unfixed reading
+  (`docs/03-analysis/probes/tdd-gate-fail-opens/reading-unfixed.txt`, committed at `a737962a`)
+  has the Codex gate deny it and the Claude gate allow it; `step3` is ungoverned, so the unfixed
+  Codex gate was refusing a symlink loop outside Phase 5 (also observed in
+  `docs/03-analysis/probes/tdd-gate-fail-opens/t6-unfixed-differential.txt`).
 - **Acceptance Criteria** (fixture as in §"Measured premises"; "fixed"/"unfixed" name the observable
   that differs):
   - AC-1.1 (D4): M-4 and M-5 — fixed: the Claude gate denies with the same kind as M-1
@@ -713,3 +720,4 @@ With an in-memory entry of FR-8's six options:
 - v1.2: OD status (2026-09-29): OD-1..OD-5 recorded as operator-approved 2026-09-29 (662b1ce1) in the Binding-decisions preamble and Open Questions; 'open decision' renamed 'operator decision'. No requirement changed.
 - v1.3: Revision (2026-09-29) applying plan v1.2 (4192ad8c) owed items under plan PD-4 (no committed probe or test invokes codex). Assumptions: a later Codex that trims differently is caught only if the manual R-4 reading is re-taken against the new binary. Measured premises: the Codex-writes column, the trim set and the leaf-symlink writer rows are manual R-4/R-5 readings, and the tables are replaced by a pointer to T0's unfixed reading together with its manual R-4 and R-5 rows; OQ-P1 cell wording unchanged (gate-side). FR-1 gains AC-1.11, the outside-root symlink control of the M:H20 raw-spelling conjunct (plan R-3): fixed and unfixed both deny no-test-resolved, the H20B mutant must turn the fixed gate to allow, and H20B does not move the cell on the unfixed tree (measured at 4192ad8c). AC-7.1 unchanged.
 - v1.4: Corrective revision (2026-09-29) answering plan audit cycle 2 (codex must #2) and operator decision OD-6. FR-6/OD-5: differential-domain membership defined for unresolvable targets: in-root when the resolved prefix (longest spelled prefix FR-1 step 2 walks before FR-3's predicate holds) is inside the canonical root; both gates agree on decision and kind; M-12-M-14 and M-18 in domain; out-of-domain unresolvable spellings listed under Residuals. OD-6 (operator 2026-09-29, fold the carried Codex resume denial): new FR-8 with AC-8.1-AC-8.6: SAFE_HMAD_SCRIPT_OPTIONS admits h_mad_resume_decision.py with exactly its parser's long options minus --help (six); code change adds --session-id-from-git-dir (script reads <git dir>/h-mad-session-id.<feature>; every read failure prints cannot_judge; exclusive with --session-id); the three adapters' oracle line moves to that form (test_host_runtime_docs deltas named). AC-7.1 gains five FR-8 mutation rows (T8 floor 20 -> 25). Measured premise for FR-8 at 78e35abf; Contract, NFR, Residuals, Open Questions updated.
+- v1.5: Operator decision (2026-09-30): FR-1 'Verdict changes toward ALLOW' gains the Codex-gate key cell=M-18 M-14 state=step3, deny judge-error -> allow, approved (unfixed reading reading-unfixed.txt at a737962a: Codex deny judge-error, Claude allow; step3 is ungoverned). The approved deny-to-allow set is now 7 keys (design table's 6 plus this one); this spec states no count of that set. No other requirement changed; the M-18 table row, AC-3.3 and AC-6.1 still state the unfixed Codex M-14 cell as allow and are left for a separate decision.

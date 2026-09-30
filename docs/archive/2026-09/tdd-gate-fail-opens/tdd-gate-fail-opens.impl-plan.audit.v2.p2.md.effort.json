@@ -1,0 +1,13 @@
+{
+  "agy_events": 19,
+  "collected": "tdd-gate-fail-opens.impl-plan.audit.v2.p2.md",
+  "failed": 0,
+  "log": "/tmp/audit_tdd-gate-fail-opens_impl-plan_cycle2_p2.log",
+  "ok": 1,
+  "pass": 2,
+  "readable": true,
+  "shape": "parsed",
+  "status": "SUCCESS",
+  "thinking": 12069,
+  "tools": 1
+}

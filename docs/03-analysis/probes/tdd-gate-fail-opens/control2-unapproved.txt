@@ -1,0 +1,2 @@
+COMPARE: FAIL
+cell=M-1 gate=codex state=step5 deny-to-allow unapproved

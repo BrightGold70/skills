@@ -1,0 +1,58 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_resume_decision.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "RD-READ",
+      "_mechanism": "AC-8.3 id-file read: the read returns an empty string.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "        session_id = (Path(result.stdout.strip()) / (\"h-mad-session-id.\" + feature)).read_text(",
+      "replace": "        session_id = \"\" if True else (Path(result.stdout.strip()) / (\"h-mad-session-id.\" + feature)).read_text(",
+      "test": "tests/test_h_mad_resume_decision.py::test_git_dir_flag_matches_session_id_token"
+    },
+    {
+      "name": "RD-CJ",
+      "_mechanism": "AC-8.4: the None branch removed, so decide is called with None.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "        if session_id is None:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_resume_decision.py::test_git_dir_flag_failure_is_cannot_judge"
+    },
+    {
+      "name": "RD-MX",
+      "_mechanism": "AC-8.5: the flag added outside the exclusive group.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    identity.add_argument(\"--session-id-from-git-dir\", action=\"store_true\")",
+      "replace": "    parser.add_argument(\"--session-id-from-git-dir\", action=\"store_true\")",
+      "test": "tests/test_h_mad_resume_decision.py::test_git_dir_flag_excludes_session_id"
+    },
+    {
+      "name": "RD-WIRE",
+      "_mechanism": "Connection removal: the flag is accepted and session_id_from_git_dir is not called.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "        session_id = session_id_from_git_dir(args.feature)",
+      "replace": "        session_id = None",
+      "test": "tests/test_h_mad_resume_decision.py::test_git_dir_flag_matches_session_id_token"
+    },
+    {
+      "name": "RD-FORCE",
+      "_mechanism": "Connection forced: the read runs even when only --session-id is passed.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    session_id = args.session_id\n",
+      "replace": "    session_id = args.session_id; session_id_from_git_dir(args.feature)\n",
+      "test": "tests/test_h_mad_resume_decision.py::test_session_id_alone_does_not_read_git_dir"
+    }
+  ]
+}

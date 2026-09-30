@@ -1,0 +1,80 @@
+REPRO: family=primitive cell=case value='/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmp5luyt7lh/Case/sub'
+REPRO: family=primitive cell=unicode value='/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmp5luyt7lh/é'
+REPRO: family=primitive cell=file-case value='/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmp5luyt7lh/Case/sub/Prod.py'
+REPRO: family=primitive cell=unreadable value='error=13'
+REPRO: family=primitive cell=child-of-0311 value='/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/tmp5luyt7lh/Tests/prod.py'
+REPRO: family=primitive cell=O_RDONLY-0311 value=errno=13
+REPRO: family=primitive cell=O_EVTONLY-0311 value=errno=13
+REPRO: family=primitive cell=O_SEARCH-0311 value=absent
+REPRO: family=primitive cell=listdir-0311 value=errno=13
+REPRO: family=primitive cell=capabilities F_GETPATH=True ALLOW_MISSING=False O_SEARCH=False
+REPRO: agent-cli-reachable=no
+REPRO: cell=M-1 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-1 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-2 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-2 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-3 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-3 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-4 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-4 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-5 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-5 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-6 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-6 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-7 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-7 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-8 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-8 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-9 gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-9 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-10 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-10 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-11 gate=claude state=step5 decision=allow kind=-
+REPRO: cell=M-11 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-12 gate=claude state=step5 decision=deny kind=judge-error
+REPRO: cell=M-12 gate=codex state=step5 decision=deny kind=judge-error
+REPRO: cell=M-13 gate=claude state=step5 decision=deny kind=judge-error
+REPRO: cell=M-13 gate=codex state=step5 decision=deny kind=judge-error
+REPRO: cell=M-13 intermediate gate=claude state=step5 decision=deny kind=judge-error
+REPRO: cell=M-13 intermediate gate=codex state=step5 decision=deny kind=judge-error
+REPRO: cell=M-14 gate=claude state=step5 decision=deny kind=judge-error
+REPRO: cell=M-14 gate=codex state=step5 decision=deny kind=judge-error
+REPRO: cell=M-18 gate=claude state=step3 decision=allow kind=-
+REPRO: cell=M-18 gate=codex state=step3 decision=allow kind=-
+REPRO: cell=M-18 M-13 intermediate gate=claude state=step3 decision=allow kind=-
+REPRO: cell=M-18 M-13 intermediate gate=codex state=step3 decision=allow kind=-
+REPRO: cell=M-18 M-14 gate=claude state=step3 decision=allow kind=-
+REPRO: cell=M-18 M-14 gate=codex state=step3 decision=allow kind=-
+REPRO: cell=leaf-symlink gate=claude state=step5 decision=allow kind=-
+REPRO: cell=leaf-symlink gate=codex state=step5 decision=allow kind=-
+REPRO: cell=leaf-symlink gate=claude state=step3 decision=allow kind=-
+REPRO: cell=leaf-symlink gate=codex state=step3 decision=allow kind=-
+REPRO: cell=M-15 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-15 nbsp gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-15 crlf gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-16 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-21 gate=codex state=step5 decision=allow kind=-
+REPRO: cell=M-22 gate=codex state=step5 decision=deny kind=outside
+REPRO: cell=M-17 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-19 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=M-20 gate=codex state=step5 decision=deny kind=judge-error
+REPRO: cell=M-23 gate=codex state=step5 decision=deny kind=no-test-resolved
+REPRO: family=oq-p1 cell=AC-3.6(a) state=step5 listdir=errno=13
+REPRO: cell=OQ-P1 a gate=claude state=step5 decision=deny kind=judge-error
+REPRO: cell=OQ-P1 a gate=codex state=step5 decision=deny kind=judge-error
+REPRO: family=oq-p1 cell=AC-3.6(b) state=step5 listdir=errno=13
+REPRO: cell=OQ-P1 b gate=claude state=step5 decision=deny kind=judge-error
+REPRO: cell=OQ-P1 b gate=codex state=step5 decision=deny kind=judge-error
+REPRO: family=oq-p1 cell=AC-3.6(a) state=step3 listdir=errno=13
+REPRO: cell=OQ-P1 a gate=claude state=step3 decision=allow kind=-
+REPRO: cell=OQ-P1 a gate=codex state=step3 decision=allow kind=-
+REPRO: family=oq-p1 cell=AC-3.6(b) state=step3 listdir=errno=13
+REPRO: cell=OQ-P1 b gate=claude state=step3 decision=allow kind=-
+REPRO: cell=OQ-P1 b gate=codex state=step3 decision=allow kind=-
+REPRO: cell=R-3 symlink-tests gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=R-3 tests gate=claude state=step5 decision=allow kind=-
+REPRO: cell=R-3 src gate=claude state=step5 decision=deny kind=no-test-resolved
+REPRO: cell=FR-8 cat-subst gate=codex state=step5 decision=deny kind=outside
+REPRO: cell=FR-8 literal-uuid gate=codex state=step5 decision=allow kind=-
+REPRO: cell=FR-8 flag gate=codex state=step5 decision=allow kind=-
+REPRO: family=d5 elapsed=3.0 timed_out=True rc=-9

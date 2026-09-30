@@ -1,9 +1,11 @@
+import importlib.util
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 
+import pytest
 import yaml
 
 
@@ -192,6 +194,117 @@ def test_codex_hook_allows_exact_safe_hmad_control_script(tmp_path):
     })
     assert result.returncode == 0
     assert result.stdout.strip() in ("", "{}")
+
+
+def test_safe_list_resume_options_equal_parser(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    import h_mad_resume_decision
+
+    expected = {
+        option
+        for action in h_mad_resume_decision.build_parser()._actions
+        for option in action.option_strings
+    } - {"--help", "-h"}
+    spec = importlib.util.spec_from_file_location(
+        "codex_gate_resume_options", ROOT / "hooks" / "h-mad-codex-tdd-gate.py",
+    )
+    assert spec and spec.loader
+    hook = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hook)
+
+    key = "h_mad_resume_decision.py"
+    assert key in hook.SAFE_HMAD_SCRIPT_OPTIONS, "resume oracle safe-list entry is missing"
+    assert hook.SAFE_HMAD_SCRIPT_OPTIONS[key] == expected, (
+        "resume oracle safe-list options must equal build_parser() options excluding help"
+    )
+
+
+@pytest.mark.parametrize("form", ["literal-uuid", "git-dir-flag"])
+def test_codex_hook_admits_resume_oracle_forms(tmp_path, form):
+    project = _active_project(tmp_path)
+    script = ROOT / "scripts" / "h_mad_resume_decision.py"
+    command = (
+        f"python3 {script} --host codex --state docs/.bkit-memory.json"
+        " --feature feature --now 2026-09-30T00:00:00Z"
+    )
+    if form == "literal-uuid":
+        command += " --session-id 7d8cf5c2-8c80-4ea1-9f5b-dbf894266d56"
+    else:
+        command += " --session-id-from-git-dir"
+    result = _run_hook(project, {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    })
+    assert result.returncode == 0, f"resume oracle {form} must be admitted: {result.stderr}"
+    assert result.stdout == "", f"resume oracle {form} must be admitted: {result.stdout}"
+
+
+@pytest.mark.parametrize("host", ["codex", "grok", "agy"])
+def test_codex_hook_admits_adapter_oracle_lines(tmp_path, host):
+    adapter = (ROOT / "references" / f"{host}-runtime.md").read_text(encoding="utf-8")
+    oracle_lines = [
+        line
+        for fence in adapter.split("```")[1::2]
+        for line in fence.splitlines()
+        if "h_mad_resume_decision.py" in line and "--session-id-from-git-dir" in line
+    ]
+    assert len(oracle_lines) == 1, (
+        f"{host} adapter must contain exactly one fenced resume oracle line with "
+        f"--session-id-from-git-dir; found {len(oracle_lines)}"
+    )
+    command = oracle_lines[0].replace("<HMAD_SKILL_ROOT>", str(ROOT)).replace("<feature>", "fixture-feature")
+    project = _active_project(tmp_path / "project [*] `quoted` résumé")
+    result = _run_hook(project, {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    })
+    assert result.returncode == 0, f"{host} adapter oracle must be admitted: {result.stderr}"
+    assert result.stdout == "", f"{host} adapter oracle must be admitted under governing state: {result.stdout}"
+
+
+def test_codex_hook_refuses_cat_subst_oracle(tmp_path):
+    project = _active_project(tmp_path)
+    script = ROOT / "scripts" / "h_mad_resume_decision.py"
+    command = (
+        f"python3 {script} --host codex --state docs/.bkit-memory.json --feature feature"
+        ' --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.feature")"'
+    )
+    result = _run_hook(project, {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    })
+    assert result.returncode == 0, f"cat substitution denial must be a hook verdict: {result.stderr}"
+    assert result.stdout, (
+        f"cat substitution oracle must be denied; got rc={result.returncode}, stdout={result.stdout!r}"
+    )
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny", (
+        "cat substitution oracle must be denied even with a registered resume script"
+    )
+
+
+@pytest.mark.parametrize("option", ["--bogus x", "-h"], ids=["bogus", "dash-h"])
+def test_codex_hook_refuses_unknown_resume_options(tmp_path, option):
+    project = _active_project(tmp_path)
+    script = ROOT / "scripts" / "h_mad_resume_decision.py"
+    command = (
+        f"python3 {script} --host codex --state docs/.bkit-memory.json"
+        " --feature feature --now 2026-09-30T00:00:00Z --session-id-from-git-dir"
+    )
+    command += f" {option}"
+    result = _run_hook(project, {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    })
+    assert result.returncode == 0, f"resume option denial must be a hook verdict: {result.stderr}"
+    assert result.stdout, (
+        f"resume oracle option {option!r} must be denied; "
+        f"got rc={result.returncode}, stdout={result.stdout!r}"
+    )
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny", (
+        f"resume oracle option {option!r} must be denied"
+    )
 
 
 def test_codex_hook_allows_observational_hmad_dispatch_verb(tmp_path):
