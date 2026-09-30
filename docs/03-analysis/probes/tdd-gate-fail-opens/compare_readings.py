@@ -17,6 +17,9 @@ APPROVED: frozenset[Key] = frozenset({
     ("leaf-symlink", "claude", "step5"),
     ("FR-8 literal-uuid", "codex", "step5"),
     ("FR-8 flag", "codex", "step5"),
+    # Operator decision 2026-09-30: the unfixed Codex gate denied this loop at
+    # step3 (judge-error); ungoverned state must allow, as the Claude gate does.
+    ("M-18 M-14", "codex", "step3"),
 })
 GATE_LINE = re.compile(
     r"^REPRO: cell=(?P<cell>.+?) gate=(?P<gate>claude|codex) "

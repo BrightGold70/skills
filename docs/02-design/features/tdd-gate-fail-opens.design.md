@@ -625,6 +625,11 @@ printed and is not a softening.
 | `leaf-symlink` | claude | step5 |
 | `FR-8 literal-uuid` | codex | step5 |
 | `FR-8 flag` | codex | step5 |
+| `M-18 M-14` | codex | step3 |
+
+The seventh row is operator-approved (2026-09-30) and sourced from spec v1.5: the unfixed
+reading has `decision=deny kind=judge-error` for it, the fixed reading has `decision=allow
+kind=-`, and the Claude gate already allows the same key unfixed.
 
 Anything else that moves deny to allow is a failure. A completed comparison is a verdict.
 The script prints `COMPARE: PASS softened=N approved=N` or `COMPARE: FAIL`, prints each
@@ -638,7 +643,7 @@ non-zero on those two verdicts. This design does not, because `h-mad/invariants.
 under Audit-gate signal discipline governs a checker: the verdict is a stdout token and the
 exit status is 0. The resume script's argparse exit 2 (AC-8.5) is a different program and
 stays. T0's self-comparison is `COMPARE: PASS softened=0 approved=0` and exit 0. T0's injected
-unapproved key is `COMPARE: FAIL` and exit 0. T9 is `COMPARE: PASS softened=6 approved=6`
+unapproved key is `COMPARE: FAIL` and exit 0. T9 is `COMPARE: PASS softened=7 approved=7`
 and exit 0.
 
 Lines that are not gate keys use a different first field, so a missing primitive row cannot
@@ -731,6 +736,8 @@ Only these, and `compare_readings.py` is the mechanical check over the probe cor
 - M-11, Claude gate, `step5`.
 - `leaf-symlink`, Claude gate, `step5`.
 - `FR-8 literal-uuid` and `FR-8 flag`, Codex gate, `step5`.
+- `M-18 M-14`, Codex gate, `step3` (operator decision 2026-09-30, spec v1.5; `step3` is
+  ungoverned, and the unfixed Codex gate denied this symlink loop outside Phase 5).
 
 `FR-8 cat-subst` stays deny. Any other existing test that changes verdict is stop-and-report.
 `# M:H20`'s raw conjunct is an added condition on an ALLOW, read beside the canonical value.
@@ -849,7 +856,7 @@ The plan's order stands. This column is the anchor set: the functions the task r
 | T6 | new `h-mad/tests/test_h_mad_tdd_gate_differential.py`, importing `decision` and `hermetic_env` from `h-mad/tests/tdd_gate_support.py`. The `conftest.py` fixture of the same name is a different function. AC-6.1 runs on the fixed tree and, separately, on the unfixed tree for both failure sets. AC-6.2 runs once with FR-1 removed from Claude and once with FR-1 removed from Codex. Existing `test_dd7_differential_matches_the_published_cells` in `h-mad/tests/test_h_mad_tdd_gate_judge.py` keeps its assertion text. This file does not replace that test |
 | T7 | the `Hook:` paragraph in place, the `h_mad_tdd_judge.py` bullet, two sentences under `### Trust boundary`. No kind tokens added under either adapter's `## The TDD gate` |
 | T8 | new mutation objects in `h-mad/tests/mutation-specs/target_identity.json` (AC-1.5, AC-1.9, AC-1.3, AC-3.1, AC-3.2, AC-3.6) and `h-mad/tests/mutation-specs/resume_decision_git_dir.json` (AC-8.3, AC-8.4, AC-8.5). Re-derive rewritten finds in `h-mad/tests/mutation-specs/claude_gate_judge_wiring.json` (fold AC-2.2, governing-state AC-3.3, `JUDGE_DENY_RE` AC-5.4, H11, H6), `h-mad/tests/mutation-specs/codex_gate_judge_wiring.json` (AC-1.4, fold AC-2.2, AC-3.3, AC-4.2, AC-4.1, AC-4.4, AC-4.6, AC-8.1, AC-8.2), and `h-mad/tests/mutation-specs/tdd_judge_scoring.json` (AC-5.1, both AC-5.3 paths, priority). `h-mad/tests/mutation-specs/resume_decision_cannot_judge.json` is not edited |
-| T9 | re-run the probe; `COMPARE: PASS softened=6 approved=6` and exit 0 |
+| T9 | re-run the probe; `COMPARE: PASS softened=7 approved=7` and exit 0 |
 | T10 | `build_parser`, the mutually exclusive flag, `session_id_from_git_dir`, `GIT_DIR_BOUND_S`, the failure cases before `decide`. Each case runs under `--host codex` and under `--host claude`: id file absent; empty; whitespace-only; mode `000` (reading raises `PermissionError`, and the test fails, never skips, when it does not); working directory outside any repository; `git` absent from a hermetic `PATH`; the bound expiring. Removal of the git-dir read with the flag still accepted (`decide` called with `None`; on `--host claude` that prints `enter_autonomous`). Unconditional read when only `--session-id` is passed (`owned_elsewhere` becomes `enter_autonomous`). AC-8.5 both flags still exit 2 and the read does not run |
 | T11 | one new key in `SAFE_HMAD_SCRIPT_OPTIONS`; no new branch in `_safe_hmad_script` |
 | T12 | three oracle lines, three empty-id sentences, and the two `test_host_runtime_docs.py` deltas plus the `SID_READ` control delta below |
@@ -1106,7 +1113,7 @@ when the id file is present and the flag can read it. `H20B` is scored only afte
 before T3 the mutant does not move the cell. Each new alternation branch gets its own mutation
 (T8), run alone.
 
-**Guard narrowing.** The ALLOW relaxations are the six rows of the approved table, checked by
+**Guard narrowing.** The ALLOW relaxations are the seven rows of the approved table, checked by
 `compare_readings.py` over the probe corpus. A softening outside that table is a verdict:
 the comparator prints `COMPARE: FAIL` and exits 0.
 
@@ -1232,3 +1239,4 @@ edit the spec.
 - v1.0: First draft. One canonicaliser module for both gates, one unresolvable flag, percent-encoded name list, bounded reap, and the resume git-dir read before decide.
 - v1.1: Revision (2026-09-29) answering docs/02-design/features/tdd-gate-fail-opens.design.audit.v1.p1.md. Leaf scan follows the referent parent and excludes symlink entries. Percent-decoded CANON fields round-trip through a sentinel capture. F_GETPATH and percent-encoding use os.fsdecode and os.fsencode. compare_readings.py prints COMPARE: FAIL and exits 0. AC-1.7, AC-3.4, AC-5.3, AC-6.1, and AC-6.2 each have their own run. Four boundary wires each have a removal test and an unconditional-fire test.
 - v1.2: Corrective revision, not re-audited (2026-09-29), answering docs/02-design/features/tdd-gate-fail-opens.design.audit.v2.p1.md and docs/02-design/features/tdd-gate-fail-opens.design.audit.v2.p2.md. AC-3.6 gains separate step3-only controls for cells (a) and (b), each with a PermissionError precondition that fails and never skips. AC-8.4 runs each listed failure case on Claude and on Codex, including a mode-000 PermissionError fixture. A Claude root-open failure is an arm-2 record the hook routes as unresolvable-with-component, so an ungoverned write is allowed. A payload-cwd OSError falls back through _payload_cwd_base; a root or target OSError stays unresolvable. After the pipe drain expires, proc.wait uses the remaining REAP_GRACE_S. The fold witness is governed dangling sub/test_x.PY. A directory referent may carry names=0. New and modified tests name exact paths. T0 self-comparison prints COMPARE: PASS softened=0 approved=0.
+- v1.3: Operator decision (2026-09-30), sourced from spec v1.5: the Codex-gate key M-18 M-14 under step3 joins the approved deny-to-allow set as its seventh row (unfixed reading decision=deny kind=judge-error, fixed decision=allow kind=-). The approved table, the Verdicts that move toward ALLOW list, the T9 comparator expectation (COMPARE: PASS softened=7 approved=7) and the Guard narrowing count move from six to seven. Nothing else changes.

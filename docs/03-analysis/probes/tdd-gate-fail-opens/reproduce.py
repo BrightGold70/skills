@@ -194,7 +194,8 @@ def fr8() -> None:
                           ("FR-8 literal-uuid", "00000000-0000-4000-8000-000000000001"),
                           ("FR-8 flag", None)):
         args = "--session-id-from-git-dir" if session is None else f"--session-id {session}"
-        command = (f"python3 {quote(str(script))} --host codex --state docs/.bkit-memory.json "
+        # Use the gate's trusted interpreter instead of the fixture's PATH shim.
+        command = (f"{quote(sys.executable)} {quote(str(script))} --host codex --state docs/.bkit-memory.json "
                    f"--feature feat {args}")
         with tempfile.TemporaryDirectory() as raw:
             root, bin_dir = fixture(Path(raw))

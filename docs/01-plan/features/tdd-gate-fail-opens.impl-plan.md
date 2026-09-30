@@ -28,7 +28,7 @@ is stated once here. Where the plan text disagrees, do not follow it.
    comparator exits non-zero on its verdicts. That text is superseded.
 2. **T0 self-comparison.** It prints `COMPARE: PASS softened=0 approved=0` and exits 0. Plan PD-4 and
    the plan's T0 row say `PASS softened=0`, without the `approved=` field. The injected unapproved
-   key prints `COMPARE: FAIL` and exits 0. T9 prints `COMPARE: PASS softened=6 approved=6` and exits 0.
+   key prints `COMPARE: FAIL` and exits 0. T9 prints `COMPARE: PASS softened=7 approved=7` and exits 0.
 3. **Reap shape.** After `killpg`, `_run_bounded` runs `proc.communicate(timeout=REAP_GRACE_S)`. On
    `subprocess.TimeoutExpired` it closes `stdout` and `stderr` and reaps with
    `proc.wait(timeout=remaining)`, where `remaining = max(0.0, REAP_GRACE_S - elapsed)` and `elapsed`
@@ -195,9 +195,10 @@ and (b) under `step5` and `step3`, and R-3's outside-root cells. The non-key lin
 `REPRO: agent-cli-reachable=no`. Manual R-4 and R-5 rows are entered by hand as lines beginning
 `MANUAL:`, and the script never prints them.
 `compare_readings.py OLD NEW` keys gate lines on `(cell, gate, state)`. It fails on a key present in
-one reading and absent from the other, and on any deny-to-allow key outside the approved six:
+one reading and absent from the other, and on any deny-to-allow key outside the approved seven:
 `M-10`/claude/step5, `M-10`/codex/step5, `M-11`/claude/step5, `leaf-symlink`/claude/step5,
-`FR-8 literal-uuid`/codex/step5, `FR-8 flag`/codex/step5. On `COMPARE: FAIL` it prints each
+`FR-8 literal-uuid`/codex/step5, `FR-8 flag`/codex/step5, `M-18 M-14`/codex/step3 (the seventh,
+operator decision 2026-09-30: unfixed `decision=deny kind=judge-error`, fixed `decision=allow kind=-`). On `COMPARE: FAIL` it prints each
 offending key on stdout.
 A reading is valid only when its `REPRO: agent-cli-reachable=` line carries the value `no` (design
 §"REPRO line grammar"). `parse_reading` reads that line itself, not only the gate keys, and raises
@@ -207,7 +208,7 @@ exit with the message on stderr and prints no `COMPARE:` token, in either argume
 **Code structure**:
 ```python
 # compare_readings.py
-APPROVED: frozenset[tuple[str, str, str]]  # the six (cell, gate, state) keys above
+APPROVED: frozenset[tuple[str, str, str]]  # the seven (cell, gate, state) keys above
 def parse_reading(path: Path) -> dict[tuple[str, str, str], tuple[str, str]]: ...  # key -> (decision, kind); raises ValueError on an invalid reading
 def compare(old: dict, new: dict) -> tuple[bool, int, int, list[str]]: ...  # ok, softened, approved, offending
 def main(argv: list[str]) -> int: ...  # prints the COMPARE: token; 0 on PASS and on FAIL
@@ -1019,7 +1020,7 @@ of `codex_gate_judge_wiring.json`, and each is reported caught by its own parame
 runs `compare_readings.py reading-unfixed.txt reading-fixed.txt` and commits that output.
 
 **Acceptance Criteria**:
-- [ ] The comparison prints `COMPARE: PASS softened=6 approved=6` and exits 0.
+- [ ] The comparison prints `COMPARE: PASS softened=7 approved=7` and exits 0.
 - [ ] `FR-8 cat-subst` is present in both readings and stays deny.
 - [ ] The fixed reading contains `REPRO: agent-cli-reachable=no`.
 
@@ -1316,3 +1317,4 @@ Units are matching lines unless stated.
 - v1.0: First draft (2026-09-29), Phase 5a, planned against design v1.2 (48d639f7), spec v1.4 (644f8bf6), plan v1.4 (1254595a); answers no audit cycle. Fourteen tasks: design T10 split into T10a (callee) and T10b (wiring) so the resume WIRE-PIN goes red for a caller reason. Design governs over plan v1.4 on comparator exit status and approved= field, the proc.wait remaining-grace reap, and file paths. 32 mutation rows: 26 over the 25 AC-7.1 guards, 6 connection rows.
 - v1.1: Answers impl-plan audit round 1 (codex p1: 3 must, 1 should, 1 nit; agy p2: 3 must) (2026-09-29). Bash 3.2 rule for the Claude gate stated once, _pct_capture moved from a nameref to printf -v by name, new guard test_claude_gate_is_bash_3_2_clean (T3 now 23 functions, 16 RED, 7 guards); no absolute interpreter path in any command or new spec (PY probed per interpreter_has_pytest, new specs write python3.11); T10a asserts inclusion of the five options; T6 unfixed run overlays tdd_gate_support.py; T2 forced-script test observes _safe_shell_command's boolean; T10b forced guard asserts the recording git stub saw no call; _read_canon directory/file rule specified; T1 heading renamed. Tasks 14, wiring 3, mutation rows 32 unchanged.
 - v1.2: Corrective revision, not re-audited (2026-09-29), answering docs/01-plan/features/tdd-gate-fail-opens.impl-plan.audit.v2.p1.md (codex: 3 must, 1 should; the agy p2 pass was hollow and disregarded). T0 gains control 3 (reading-invalid.txt with agent-cli-reachable=yes: non-zero exit, no COMPARE: token, both argument orders; RED recorded as COMPARE: PASS before the validity check). T4 gains test_codex_empty_header_path_is_judge_error and the trimmed-marker-equality rule that makes the empty path reachable (T4 now 10 functions, 7 RED, 3 guards). T11 gains post-registration mutation rows CX-OPT-LONG and CX-OPT-SHORT, each caught by its own case of test_codex_hook_refuses_unknown_resume_options, with a landed-mutation check (mutation rows 32 to 34: 26 AC-7.1, 6 connection, 2 post-registration). T2 specifies the _main_guarded arm-2 branch (not isinstance(root, Path)) before _any_phase5_status, scanning Path(root.component). Tasks 14, wiring 3, floor 25 unchanged.
+- v1.3: Operator decision 2026-09-30, answers no audit cycle. The Codex-gate cell `M-18 M-14`/codex/step3 moves deny to allow and is APPROVED (unfixed reading-unfixed.txt line 47 `decision=deny kind=judge-error`; fixed `decision=allow kind=-`). The approved set grows from six to seven: departure item 2 and the T9 AC now read `COMPARE: PASS softened=7 approved=7`; T0's key list and the `APPROVED` comment name seven. T0's committed control outputs are historical and not re-derived. Tasks 14, wiring 3, mutation rows 34 unchanged.

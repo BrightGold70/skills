@@ -1,0 +1,11 @@
+KIND: cell=M-12 gate=codex state=step5 no-test-resolved -> judge-error
+KIND: cell=M-13 gate=claude state=step5 no-test-resolved -> judge-error
+KIND: cell=M-13 gate=codex state=step5 no-test-resolved -> judge-error
+KIND: cell=M-13 intermediate gate=claude state=step5 no-test-resolved -> judge-error
+KIND: cell=M-13 intermediate gate=codex state=step5 no-test-resolved -> judge-error
+KIND: cell=M-14 gate=claude state=step5 no-test-resolved -> judge-error
+KIND: cell=M-16 gate=codex state=step5 outside -> no-test-resolved
+KIND: cell=M-8 gate=codex state=step5 outside -> no-test-resolved
+KIND: cell=OQ-P1 b gate=claude state=step5 no-test-resolved -> judge-error
+KIND: cell=OQ-P1 b gate=codex state=step5 no-test-resolved -> judge-error
+COMPARE: PASS softened=7 approved=7
