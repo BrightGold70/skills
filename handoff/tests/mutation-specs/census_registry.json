@@ -214,6 +214,14 @@
       "find": "        coverage.append((Path(f).name, n+len(bumps), rowish, []))",
       "replace": "        coverage.append((Path(f).name, n+len(bumps)+len(unclosed), rowish, []))",
       "test": "tests/test_skill_candidates_census.py::test_coverage_DISAGREES_when_a_bold_name_never_closes"
+    },
+    {
+      "name": "unanchor-the-already-open-bump-marker",
+      "_mechanism": "hpw:276 QUOTES `(*already open above, recurrence raised*)` mid-tail while being a real candidate. An unanchored alternative reclassifies it as a bump and drops the very row that reports the gap.",
+      "file": "scripts/skill_candidates_census.py",
+      "find": "|^\\s*\\(\\*already open above, recurrence raised\\*\\)')",
+      "replace": "|\\(\\*already open above, recurrence raised\\*\\)')",
+      "test": "tests/test_skill_candidates_census.py::test_one_row_one_trap"
     }
   ]
 }

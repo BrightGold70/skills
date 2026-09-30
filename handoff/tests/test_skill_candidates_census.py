@@ -99,6 +99,19 @@ def test_no_arguments_refuses_instead_of_reporting_zero() -> None:
             "a back-reference points at another row and is not itself a candidate",
         ),
         (
+            "- **a** (*already open above, recurrence raised*): seen again — candidate: yes\n",
+            0,
+            "HemaSuite's bump spelling (hpw:253 bidirectional-cross-doc-check) was "
+            "double-counted as a live candidate",
+        ),
+        (
+            "- **a**: the regex misses `(*already open above, recurrence raised*)` "
+            "— candidate: yes\n",
+            1,
+            "a row that QUOTES the marker mid-tail is a real candidate (hpw:276); "
+            "the marker only counts directly after the name",
+        ),
+        (
             "- **a** *(still open; partially eased — see note)*: candidate: yes\n",
             1,
             "a parenthetical that is NOT a bump marker must not be swallowed — "

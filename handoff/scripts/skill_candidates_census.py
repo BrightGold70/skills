@@ -74,7 +74,10 @@ TRIAGE = re.compile(r'DECLINED[^(\n]{0,40}\(triage:\s*([^)]*)\)')
 CAND = re.compile(r'candidate:\s*\**([A-Za-z-]+)')
 # A bump/back-ref announces itself right after the bold name. `(still open; ...)`
 # is NOT here on purpose -- that is the canonical row of live-e2e-pane-janitor.
-BUMP = re.compile(r'recurrence, not a new row|no new recurrence|existing row, recurrence bumped|^\s*\(row ~\d+\)')
+# `^\s*\(\*already open above` is anchored like `(row ~N)`: HemaSuite's hpw:276
+# QUOTES this marker mid-tail while being a real candidate, so an unanchored
+# phrase would drop the very row that reports the gap.
+BUMP = re.compile(r'recurrence, not a new row|no new recurrence|existing row, recurrence bumped|^\s*\(row ~\d+\)|^\s*\(\*already open above, recurrence raised\*\)')
 OPEN = ("yes", "maybe")
 
 def rows(p):
