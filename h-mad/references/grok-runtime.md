@@ -112,7 +112,7 @@ for its `start_fresh` verdict.
 
 ```bash
 ( set -C; python3 -c 'import uuid; print(uuid.uuid4())' > "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>" ) && echo "SID: MINTED" || echo "SID: NOT_MINTED"
-python3 "<HMAD_SKILL_ROOT>/scripts/h_mad_resume_decision.py" --host grok --state docs/.bkit-memory.json --feature "<feature>" --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
+python3 "<HMAD_SKILL_ROOT>/scripts/h_mad_resume_decision.py" --host grok --state docs/.bkit-memory.json --feature "<feature>" --session-id-from-git-dir
 python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --create --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
 python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --claim "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
 python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --beat --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
@@ -120,8 +120,7 @@ python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json -
 python3 "$HMAD_SKILL_ROOT/scripts/h_mad_state_write.py" docs/.bkit-memory.json --feature "<feature>" --release --session-id "$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"
 ```
 
-An unreadable id file gives the oracle an empty id and `cannot_judge`; an owner
-without its file may receive `owned_elsewhere`. If an operator deletes or rewrites
+If the id file becomes unreadable, the oracle cannot read the id and returns `cannot_judge`. If an operator deletes or rewrites
 the file while its session is live, that session can receive another id or none.
 
 ## Memory index
