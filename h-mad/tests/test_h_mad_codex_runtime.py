@@ -239,6 +239,29 @@ def test_codex_hook_admits_resume_oracle_forms(tmp_path, form):
     assert result.stdout == "", f"resume oracle {form} must be admitted: {result.stdout}"
 
 
+@pytest.mark.parametrize("host", ["codex", "grok", "agy"])
+def test_codex_hook_admits_adapter_oracle_lines(tmp_path, host):
+    adapter = (ROOT / "references" / f"{host}-runtime.md").read_text(encoding="utf-8")
+    oracle_lines = [
+        line
+        for fence in adapter.split("```")[1::2]
+        for line in fence.splitlines()
+        if "h_mad_resume_decision.py" in line and "--session-id-from-git-dir" in line
+    ]
+    assert len(oracle_lines) == 1, (
+        f"{host} adapter must contain exactly one fenced resume oracle line with "
+        f"--session-id-from-git-dir; found {len(oracle_lines)}"
+    )
+    command = oracle_lines[0].replace("<HMAD_SKILL_ROOT>", str(ROOT)).replace("<feature>", "fixture-feature")
+    project = _active_project(tmp_path / "project [*] `quoted` résumé")
+    result = _run_hook(project, {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    })
+    assert result.returncode == 0, f"{host} adapter oracle must be admitted: {result.stderr}"
+    assert result.stdout == "", f"{host} adapter oracle must be admitted under governing state: {result.stdout}"
+
+
 def test_codex_hook_refuses_cat_subst_oracle(tmp_path):
     project = _active_project(tmp_path)
     script = ROOT / "scripts" / "h_mad_resume_decision.py"

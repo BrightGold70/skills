@@ -157,11 +157,12 @@ def test_claims_section_fenced_lines(adapter_id: str, case: str) -> None:
         "beat": lambda line: "--beat" in line and "--session-id " + SID_READ in line,
         "set": lambda line: "--set" in line and "--session-id " + SID_READ in line,
         "release": lambda line: "--release" in line and "--session-id " + SID_READ in line,
-        "oracle": lambda line: "h_mad_resume_decision.py" in line and "--session-id " + SID_READ in line,
+        "oracle": lambda line: "h_mad_resume_decision.py" in line and "--session-id-from-git-dir" in line and "$" not in line,
         "mint": lambda line: all(token in line for token in ("set -C", "uuid.uuid4()", "h-mad-session-id.<feature>", "SID: NOT_MINTED")),
     }
     if case in conditions:
-        assert any(conditions[case](line) for line in lines), f"{case} needs its own fenced command with full session-id read"
+        property_name = "--session-id-from-git-dir and no dollar substitution" if case == "oracle" else "full session-id read"
+        assert any(conditions[case](line) for line in lines), f"{case} needs its own fenced command with {property_name}"
     elif case == "oracle-first":
         assert oracle_lines and state_lines, "oracle-first requires oracle and state-write commands"
         assert lines.index(oracle_lines[0]) < min(lines.index(line) for line in state_lines), "resume oracle must precede every state write"
@@ -179,8 +180,8 @@ def test_claims_lines_execute_across_invocations(adapter_id: str, tmp_path: Path
     lines = _fenced_lines(_claims(adapter_id, "claims lines execute across invocations"))
     mint = next((line for line in lines if "SID: MINTED" in line and "SID: NOT_MINTED" in line), None)
     create = next((line for line in lines if "--create --claim " + SID_READ in line), None)
-    oracle = next((line for line in lines if "h_mad_resume_decision.py" in line and "--session-id " + SID_READ in line), None)
-    assert mint and create and oracle, "mint, create-claim and resume-oracle fenced lines are required"
+    oracle = next((line for line in lines if "h_mad_resume_decision.py" in line and "--session-id-from-git-dir" in line), None)
+    assert mint and create and oracle, "mint, create-claim and resume-oracle with --session-id-from-git-dir fenced lines are required"
 
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -214,9 +215,11 @@ def test_claims_lines_execute_across_invocations(adapter_id: str, tmp_path: Path
 
     decision = run(oracle)
     assert decision.returncode == 0, f"resume oracle must run with the minted id: {decision.stdout} {decision.stderr}"
-    assert "cannot_judge" not in decision.stdout and "owned_elsewhere" not in decision.stdout, "owner's resume oracle must not reject its own claim"
-    control = run(oracle.replace(SID_READ, '""'))
-    assert "cannot_judge" in control.stdout, "oracle without the file's session id must report cannot_judge"
+    assert decision.stdout.strip() == "resume_manual", "minted owner's resume oracle must return resume_manual"
+    sid_file.unlink()
+    control = run(oracle)
+    assert control.returncode == 0, f"missing-id oracle must return a verdict: {control.stdout} {control.stderr}"
+    assert control.stdout.strip() == "cannot_judge", "oracle without the minted id file must report cannot_judge"
 
 
 @pytest.mark.parametrize("adapter_id", (*HOST_ADAPTERS, "handoff-codex", "handoff-agy", "handoff-grok"), ids=(*HOST_ADAPTERS, "handoff-codex", "handoff-agy", "handoff-grok"))
