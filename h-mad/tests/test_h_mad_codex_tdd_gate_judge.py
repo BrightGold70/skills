@@ -285,6 +285,15 @@ def _expect_gate(root: Path, target: str, expected: str, kind: str = "", *, cwd:
     return reason
 
 
+def test_codex_dotdot_after_symlink_denies(tmp_path):
+    root = _root(tmp_path)
+    _file(root, "src/prod.py")
+    (root / "tests").mkdir()
+    (root / "src/sub").mkdir()
+    (root / "tests/l").symlink_to("../src/sub", target_is_directory=True)
+    _expect_gate(root, "tests/l/../prod.py", "deny", "no-test-resolved")
+
+
 @pytest.mark.parametrize("on_disk,spelled", [("Case", "case"), ("case", "Case")], ids=["forward", "reverse"])
 def test_codex_case_root_m8_denies(tmp_path, on_disk, spelled):
     root = tmp_path / on_disk / "tests/proj"

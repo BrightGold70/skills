@@ -292,8 +292,8 @@ def main() -> None:
     measure("M-3", relative="src/new.PY")
     measure("M-4", lambda r, _: symlink(r / "tests", "src"), relative="tests/prod.py")
     measure("M-5", lambda r, _: symlink(r / "tests", "src"), relative="tests/newmod.py")
-    measure("M-6", lambda r, _: (symlink(r / "tests", "src"),
-                                 (r / "src/sub").mkdir(), symlink(r / "src/l", "../src/sub")),
+    measure("M-6", lambda r, _: ((r / "tests").mkdir(),
+                                 (r / "src/sub").mkdir(), symlink(r / "tests/l", "../src/sub")),
             relative="tests/l/../prod.py")
     m7()
     m8()

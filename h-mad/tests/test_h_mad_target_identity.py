@@ -89,6 +89,27 @@ def test_symlink_chain_resolves_in_one_open(identity, root):
     assert os.stat(result.target).st_ino == os.stat(referent).st_ino
 
 
+def test_dotdot_after_symlink_follows_the_kernel(identity, root):
+    (root / "tests").mkdir()
+    (root / "src/sub").mkdir(parents=True)
+    referent = root / "src/prod.py"
+    referent.write_text("pass\n")
+    (root / "tests/l").symlink_to("../src/sub", target_is_directory=True)
+    relative = "tests/l/../prod.py"
+    assert os.path.samefile(root / relative, referent), "M-6 must reach production through the kernel"
+    result = identity.canonicalise(str(root), relative)
+    assert result.target == str(referent), "dotdot after a symlink must follow the kernel's referent"
+    assert "prod.py" in result.names, "the resolved production leaf must appear in the identity names"
+
+
+def test_dotdot_inside_absent_remainder_collapses_lexically(identity, root):
+    assert not (root / "newdir").exists()
+    result = identity.canonicalise(str(root), "newdir/sub/../x.py")
+    assert result.target == str(root / "newdir/x.py"), "dotdot in an absent remainder must collapse lexically"
+    assert result.names == ("x.py",)
+    assert result.unresolvable is False
+
+
 def test_directory_referent_has_no_names(identity, root):
     src, tests = root / "src", root / "tests"
     src.mkdir()

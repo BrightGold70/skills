@@ -67,14 +67,14 @@ def _fixture(base: Path, cell: str) -> tuple[Path, Path, Path | None]:
     prefix = None
     if cell in ("M-2", "M-3"):
         relative = "src/prod.PY" if cell == "M-2" else "src/new.PY"
-    elif cell in ("M-4", "M-5", "M-6"):
+    elif cell in ("M-4", "M-5"):
         (root / "tests").symlink_to("src", target_is_directory=True)
-        if cell == "M-6":
-            (root / "src/sub").mkdir()
-            (root / "src/l").symlink_to("../src/sub", target_is_directory=True)
-            relative = "tests/l/../prod.py"
-        else:
-            relative = "tests/prod.py" if cell == "M-4" else "tests/newmod.py"
+        relative = "tests/prod.py" if cell == "M-4" else "tests/newmod.py"
+    elif cell == "M-6":
+        (root / "tests").mkdir()
+        (root / "src/sub").mkdir()
+        (root / "tests/l").symlink_to("../src/sub", target_is_directory=True)
+        relative = "tests/l/../prod.py"
     elif cell == "M-7":
         _write(root / "x.py")
         spelled = base / "R/tests/link"

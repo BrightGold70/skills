@@ -510,9 +510,9 @@ def test_claude_symlinked_test_dir_denies(tmp_path, cell):
 def test_claude_dotdot_after_symlink_denies(tmp_path):
     root = _root(tmp_path)
     _file(root, "src/prod.py")
-    (root / "tests").symlink_to(root / "src", target_is_directory=True)
+    (root / "tests").mkdir()
     (root / "src/sub").mkdir()
-    (root / "src/l").symlink_to("sub", target_is_directory=True)
+    (root / "tests/l").symlink_to("../src/sub", target_is_directory=True)
     _assert(_gate(root, arg="tests/l/../prod.py", bin_dir=_bin(tmp_path)),
             "deny", "no-test-resolved")
 
