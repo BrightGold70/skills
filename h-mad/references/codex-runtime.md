@@ -32,6 +32,9 @@ exact H-MAD control-script allowlist are trusted code. A malicious test can muta
 import time; do not run unreviewed or adversarial tests under this contract. Use an OS/container
 sandbox with production paths mounted read-only when executing untrusted test code. The hook's
 `--self-check` establishes parser and policy behavior only; it does not strengthen this boundary.
+A judge subprocess whose reap fails after a timeout is DENY `judge-timeout`. A governed write
+target the canonicaliser cannot resolve is DENY `judge-error`, and the reason names the
+component that failed.
 
 For pytest, the judge walks from the test file toward the project root and chooses the nearest
 `.venv` with `.venv/bin/python`. Before using it, the judge requires realpath containment of both

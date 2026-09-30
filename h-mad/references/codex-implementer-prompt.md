@@ -17,9 +17,9 @@ You are Codex implementing module `<INLINE_MODULE_NAME>` for feature `<INLINE_FE
 Working directory: `<INLINE_REPO_ROOT>`.
 Branch: `feature/NNN-<INLINE_FEATURE_SLUG>` (already checked out by Phase 5c).
 Hook: Codex's `h-mad-codex-tdd-gate.py` guards `apply_patch` and shell writes; Claude's `h-mad-tdd-gate.sh` guards `Write` and `Edit`. Both are ARMED during this phase and block production-code writes unless:
-- The path is a test file (`test_*.py`, `*_test.py`, `conftest*.py`, `*/tests/*`, `*/fixtures/*`) — allowed unconditionally.
+- The path is a test file (`test_*.py`, `*_test.py`, `conftest*.py`, `*/tests/*`, `*/fixtures/*`) — allowed unconditionally. Both gates judge a path by its resolved identity (the on-disk spelling reached through symlinks, from a canonical project root), so a re-cased, symlinked or hard-linked spelling of a production file is still production code; a target neither gate can resolve is denied with `judge-error`.
 - The path is markdown / yaml / json / toml / txt / rst — allowed unconditionally.
-- For production code, resolve the test from the impl-plan Task first, else the name map; allow the write only if that test exists and pytest's summary shows `N failed`.
+- For production code (a `.py` suffix in any case, `.PY` included), resolve the test from the impl-plan Task first, else the name map; allow the write only if that test exists and pytest's summary shows `N failed`.
 
 This means during RED phase (5d) you write tests freely (test paths bypass the hook); during GREEN phase (5e) you can only modify production code if a matching failing test exists.
 
