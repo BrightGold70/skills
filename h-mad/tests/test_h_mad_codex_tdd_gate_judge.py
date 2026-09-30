@@ -149,6 +149,18 @@ def test_codex_gate_kind(tmp_path, kind):
         _pid_gone(pidfile)
 
 
+@pytest.mark.parametrize("depth", ["one-absent", "two-absent"])
+def test_codex_absent_intermediate_dirs_judge_the_real_target(tmp_path, depth):
+    root = _root(tmp_path)
+    if depth == "one-absent":
+        (root / "hematology-paper-writer").mkdir()
+    target = "hematology-paper-writer/tools/x.py"
+    verdict, reason, _ = _run(root, _payload(target))
+    assert verdict == "deny", (verdict, reason)
+    assert "kind=test-missing" in reason, reason
+    assert "hematology-paper-writer/tests/test_x.py" in reason, reason
+
+
 def test_codex_gate_judge_timeout_reason(tmp_path):
     root = _root(tmp_path)
     _file(root, TARGET)

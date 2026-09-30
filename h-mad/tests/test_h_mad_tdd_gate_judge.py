@@ -162,6 +162,18 @@ def test_claude_gate_kind(tmp_path, kind):
             "" if kind == "red-measured" else kind, hook)
 
 
+@pytest.mark.parametrize("depth", ["one-absent", "two-absent"])
+def test_claude_absent_intermediate_dirs_judge_the_real_target(tmp_path, depth):
+    root = _root(tmp_path)
+    if depth == "one-absent":
+        (root / "hematology-paper-writer").mkdir()
+    target = "hematology-paper-writer/tools/x.py"
+    result = _gate(root, payload=_payload(str(root / target)), bin_dir=_bin(tmp_path),
+                   extra_env={"HMAD_CODEX_UNAVAILABLE": "1"})
+    out = _assert(result, "deny", "test-missing")
+    assert "hematology-paper-writer/tests/test_x.py" in out.reason, out
+
+
 def test_claude_gate_judge_timeout_stub(tmp_path):
     root = _root(tmp_path)
     hook, _ = _tree_b(tmp_path, judge_line="TDD-JUDGE: DENY kind=judge-timeout reason=r", judge_rc=0)
