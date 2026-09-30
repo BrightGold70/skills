@@ -60,7 +60,7 @@ def session_id_from_git_dir(feature: str) -> str | None:
         session_id = (Path(result.stdout.strip()) / ("h-mad-session-id." + feature)).read_text(
             encoding="utf-8"
         ).strip()
-    except OSError:
+    except (OSError, UnicodeDecodeError):  # M:RD-UTF8 an undecodable id is no id, not a crash
         return None
     return session_id or None
 

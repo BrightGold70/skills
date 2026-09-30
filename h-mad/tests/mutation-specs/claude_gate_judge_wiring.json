@@ -1,7 +1,7 @@
 {
   "root": "../..",
   "command": [
-    "/opt/anaconda3/bin/python",
+    "python3.11",
     "-m",
     "pytest",
     "tests/test_h_mad_tdd_gate_judge.py",

@@ -255,7 +255,7 @@ def test_session_id_from_git_dir_reads_minted_id(
 
 @pytest.mark.parametrize(
     "failure", ["absent", "empty", "whitespace", "mode000", "outside-repo",
-                "no-git", "bound-expired"]
+                "no-git", "bound-expired", "non-utf8"]
 )
 def test_session_id_from_git_dir_failure_returns_none(
     failure, tmp_path: Path, monkeypatch, git_checkout, minted_identity
@@ -268,6 +268,12 @@ def test_session_id_from_git_dir_failure_returns_none(
             failure, session_id + "\n"
         )
         id_file.write_text(contents, encoding="utf-8")
+    if failure == "non-utf8":
+        # Carried residual (tdd-gate-fail-opens report): a non-UTF-8 id file
+        # escaped as UnicodeDecodeError instead of reading as "no id".
+        id_file.write_bytes(b"\xff\xfe" + session_id.encode("utf-8") + b"\n")
+        with pytest.raises(UnicodeDecodeError):
+            id_file.read_text(encoding="utf-8")
     if failure == "mode000":
         id_file.chmod(0o000)
         try:
@@ -380,10 +386,10 @@ def test_git_dir_flag_matches_session_id_token(
     "host,failure",
     [(host, failure) for host in ("codex", "claude")
      for failure in ("absent", "empty", "whitespace", "mode000", "outside-repo",
-                     "no-git", "bound-expired")],
+                     "no-git", "bound-expired", "non-utf8")],
     ids=[f"{host}-{failure}" for host in ("codex", "claude")
          for failure in ("absent", "empty", "whitespace", "mode000", "outside-repo",
-                         "no-git", "bound-expired")],
+                         "no-git", "bound-expired", "non-utf8")],
 )
 def test_git_dir_flag_failure_is_cannot_judge(
     host, failure, tmp_path: Path, monkeypatch, capsys, git_checkout, minted_identity
@@ -400,6 +406,8 @@ def test_git_dir_flag_failure_is_cannot_judge(
             {"empty": "", "whitespace": " \t\n \r\n"}.get(failure, session_id + "\n"),
             encoding="utf-8",
         )
+    if failure == "non-utf8":
+        id_file.write_bytes(b"\xff\xfe" + session_id.encode("utf-8") + b"\n")
     if failure == "mode000":
         id_file.chmod(0o000)
     if failure == "outside-repo":

@@ -53,6 +53,14 @@
       "find": "    session_id = args.session_id\n",
       "replace": "    session_id = args.session_id; session_id_from_git_dir(args.feature)\n",
       "test": "tests/test_h_mad_resume_decision.py::test_session_id_alone_does_not_read_git_dir"
+    },
+    {
+      "name": "RD-UTF8",
+      "_mechanism": "Carried residual (tdd-gate-fail-opens): catch only OSError again; a non-UTF-8 id file then escapes as UnicodeDecodeError and --session-id-from-git-dir crashes instead of printing cannot_judge.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    except (OSError, UnicodeDecodeError):  # M:RD-UTF8",
+      "replace": "    except OSError:  # M:RD-UTF8",
+      "test": "tests/test_h_mad_resume_decision.py::test_git_dir_flag_failure_is_cannot_judge"
     }
   ]
 }
