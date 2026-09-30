@@ -270,6 +270,14 @@
       "find": "        if token.startswith(\"-\") and not token.startswith(\"--\"):",
       "replace": "        if False:",
       "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_refuses_unknown_resume_options[dash-h]"
+    },
+    {
+      "name": "CX-CWD-RECHECK",
+      "_mechanism": "6b F1 (archreview v1): the canonical cwd is not passed back through _payload_cwd_base.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "                base = _payload_cwd_base(root, str(base))",
+      "replace": "                base = base",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_canonical_cwd_is_rechecked_by_payload_cwd_base"
     }
   ]
 }

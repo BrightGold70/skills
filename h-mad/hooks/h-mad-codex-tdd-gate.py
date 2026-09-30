@@ -231,6 +231,10 @@ def _relative_target(root: Path, raw: str, cwd: Any = None) -> Identity | None:
     if isinstance(cwd, str) and cwd and base != root:
         try:
             base = Path(identity.canonical_directory(str(Path(cwd).expanduser())))
+            try:
+                base = _payload_cwd_base(root, str(base))
+            except RuntimeError:
+                base = root
         except OSError:
             try:
                 base = _payload_cwd_base(root, cwd)
