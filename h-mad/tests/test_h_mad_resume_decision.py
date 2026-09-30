@@ -1,5 +1,9 @@
 import json
+import os
+import shutil
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -9,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = REPO_ROOT / "h-mad" / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
+import h_mad_resume_decision as resume_decision  # noqa: E402
 from h_mad_resume_decision import _phase_num, decide  # noqa: E402
 
 
@@ -164,3 +169,148 @@ def test_decide_missing_feature_or_state_starts_fresh(tmp_path: Path) -> None:
     state = _write_state(tmp_path, "other", {"last_completed_phase": "step7"})
     assert decide(state, "absent") == "start_fresh"
     assert decide(tmp_path / "nonexistent.json", "feat") == "start_fresh"
+
+
+@pytest.fixture
+def minted_identity():
+    # Exercise agent-authored markdown, glob characters, markers and newlines
+    # through the shared hostile-input knob instead of a tidy UUID fixture.
+    result = subprocess.run(
+        [str(REPO_ROOT / "h-mad" / "tests" / "stubs" / "orca"),
+         "worktree", "set", "--comment", "fixture"],
+        env={"PATH": os.environ["PATH"], "HMAD_STUB_HOSTILE": "all"},
+        capture_output=True, text=True, check=True, timeout=10,
+    )
+    session_id = json.loads(result.stdout)["result"]["worktree"]["comment"]
+    # A feature is a filename suffix, so keep hostile data but no path separator.
+    feature = "resume " + session_id.replace("/", "_")
+    return feature, session_id
+
+
+@pytest.fixture
+def git_checkout(tmp_path: Path, monkeypatch):
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+                 "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY"):
+        monkeypatch.delenv(name, raising=False)
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", str(root)], capture_output=True,
+                   text=True, check=True, timeout=10)
+    subprocess.run(
+        ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+         "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+         "commit", "--allow-empty", "-m", "Fixture root"],
+        cwd=root, capture_output=True, text=True, check=True, timeout=10,
+    )
+    return root
+
+
+@pytest.mark.parametrize("checkout", ["repo", "worktree"])
+def test_session_id_from_git_dir_reads_minted_id(
+    checkout, tmp_path: Path, monkeypatch, git_checkout, minted_identity
+) -> None:
+    root = git_checkout
+    cwd = root
+    if checkout == "worktree":
+        cwd = tmp_path / "linked worktree"
+        subprocess.run(["git", "worktree", "add", "--detach", str(cwd)],
+                       cwd=root, capture_output=True, text=True, check=True, timeout=10)
+    monkeypatch.chdir(cwd)
+    git_dir = Path(subprocess.run(
+        ["git", "rev-parse", "--absolute-git-dir"],
+        capture_output=True, text=True, check=True, timeout=10,
+    ).stdout.strip())
+    if checkout == "worktree":
+        assert git_dir.resolve() != (root / ".git").resolve(), (
+            "the linked worktree must use its own git directory"
+        )
+    feature, session_id = minted_identity
+    (git_dir / ("h-mad-session-id." + feature)).write_text(
+        session_id + "\n", encoding="utf-8"
+    )
+    calls = []
+    real_run = subprocess.run
+
+    def recorded_run(*args, **kwargs):
+        calls.append((args, kwargs))
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", recorded_run)
+    read_id = resume_decision.session_id_from_git_dir
+    assert read_id(feature) == session_id.strip(), (
+        "session_id_from_git_dir must read the current checkout's minted id and strip it"
+    )
+    assert calls == [((['git', 'rev-parse', '--absolute-git-dir'],),
+                      {"timeout": 10.0, "capture_output": True, "text": True})], (
+        "git-dir discovery must use subprocess.run with the stdlib timeout bound"
+    )
+
+
+@pytest.mark.parametrize(
+    "failure", ["absent", "empty", "whitespace", "mode000", "outside-repo",
+                "no-git", "bound-expired"]
+)
+def test_session_id_from_git_dir_failure_returns_none(
+    failure, tmp_path: Path, monkeypatch, git_checkout, minted_identity
+) -> None:
+    monkeypatch.chdir(git_checkout)
+    feature, session_id = minted_identity
+    id_file = git_checkout / ".git" / ("h-mad-session-id." + feature)
+    if failure != "absent":
+        contents = {"empty": "", "whitespace": " \t\n \r\n"}.get(
+            failure, session_id + "\n"
+        )
+        id_file.write_text(contents, encoding="utf-8")
+    if failure == "mode000":
+        id_file.chmod(0o000)
+        try:
+            with pytest.raises(PermissionError, match="Permission denied"):
+                id_file.read_text(encoding="utf-8")
+            read_id = resume_decision.session_id_from_git_dir
+            assert read_id(feature) is None, (
+                "session_id_from_git_dir must return None when reading the id raises OSError"
+            )
+        finally:
+            id_file.chmod(0o600)
+        return
+    if failure == "outside-repo":
+        monkeypatch.chdir(tmp_path)
+        result = subprocess.run(["git", "rev-parse", "--absolute-git-dir"],
+                                capture_output=True, text=True, timeout=10)
+        assert result.returncode != 0, "outside-repo must exercise a non-zero git exit"
+    if failure in ("no-git", "bound-expired"):
+        bin_dir = tmp_path / "hermetic bin"
+        bin_dir.mkdir()
+        monkeypatch.setenv("PATH", str(bin_dir))
+        if failure == "no-git":
+            assert shutil.which("git") is None, "the hermetic PATH must contain no git"
+        else:
+            stub = bin_dir / "git"
+            stub.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(5)\n",
+                            encoding="utf-8")
+            stub.chmod(0o755)
+            read_id = resume_decision.session_id_from_git_dir
+            monkeypatch.setattr(resume_decision, "GIT_DIR_BOUND_S", 0.5)
+    read_id = resume_decision.session_id_from_git_dir
+    started = time.monotonic()
+    assert read_id(feature) is None, (
+        f"session_id_from_git_dir must return None for {failure}"
+    )
+    if failure == "bound-expired":
+        assert time.monotonic() - started < 2.0, (
+            "git-dir discovery must return well before the git stub's five-second sleep"
+        )
+
+
+def test_build_parser_is_module_level() -> None:
+    parser = resume_decision.build_parser()
+    options = {option for action in parser._actions for option in action.option_strings}
+    assert {"--state", "--feature", "--host", "--session-id", "--now"} <= options, (
+        "module-level build_parser must preserve all five existing long options"
+    )
+
+
+def test_git_dir_bound_constant() -> None:
+    assert resume_decision.GIT_DIR_BOUND_S == 10.0, (
+        "GIT_DIR_BOUND_S must independently bound git-dir discovery at ten seconds"
+    )
