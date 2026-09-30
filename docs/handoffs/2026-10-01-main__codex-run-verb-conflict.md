@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills
 **Handover-From:** HemaSuite · BrightGold70/citation-fidelity-judge · session ee5d7357-00a9-4192-8c8d-375e4ab3c317
+**Taken-Over-By:** skills · main · session c7b2354c-1a9e-4733-95f0-a728f60cbbea · 2026-10-01
 **Supersedes:** none — first on this topic
 
 ## Session Summary
