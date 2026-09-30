@@ -74,15 +74,27 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
             except OSError:
                 base = resolved_cwd
 
-    spelled_target = os.path.normpath(os.path.join(base, target))
+    spelled_target = os.path.join(base, target)
     current = os.path.sep
     deepest_directory = current
+    deepest_directory_index = -1
     referent_stat = None
     absent = False
-    for part in spelled_target.split(os.path.sep):
+    components = spelled_target.split(os.path.sep)
+    for index, part in enumerate(components):
         if not part:
             continue
-        current = os.path.join(current, part)
+        if part == "..":
+            try:
+                if stat.S_ISLNK(os.lstat(current).st_mode):
+                    current = os.path.dirname(canonical_directory(current))
+                else:
+                    current = canonical_directory(os.path.dirname(current))
+            except OSError:
+                return Identity(canonical_root, "", current, (), True, 2,
+                                _on_disk_component(current))
+        else:
+            current = os.path.join(current, part)
         try:
             os.lstat(current)
         except OSError:
@@ -106,6 +118,7 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
             return Identity(canonical_root, "", prefix, (), True, 1, current)
         if stat.S_ISDIR(referent_stat.st_mode):
             deepest_directory = current
+            deepest_directory_index = index
 
     if absent:
         try:
@@ -113,9 +126,10 @@ def canonicalise(root: str, target: str, cwd: str | None = None) -> Identity:
         except OSError:
             return Identity(canonical_root, "", deepest_directory, (), True, 2,
                             _on_disk_component(deepest_directory))
-        canonical_target = os.path.join(prefix, os.path.relpath(spelled_target, deepest_directory))
+        canonical_target = os.path.normpath(
+            os.path.join(prefix, *components[deepest_directory_index + 1:]))
         return Identity(canonical_root, canonical_target, prefix,
-                        (os.path.basename(spelled_target),), False, 0, "")
+                        (os.path.basename(canonical_target),), False, 0, "")
 
     if referent_stat is None:
         referent_stat = os.stat(current)

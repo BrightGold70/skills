@@ -59,6 +59,14 @@
       "find": "        if names:\n            component = os.path.join(parent, names[0])",
       "replace": "        if False:\n            component = os.path.join(parent, names[0])",
       "test": "tests/test_h_mad_target_identity.py::test_unresolvable_component_is_reported_in_on_disk_spelling"
+    },
+    {
+      "name": "TI8",
+      "_mechanism": "6b M-6 (gap analysis v1 Gap 1): a '..' after a symlink is taken lexically (parent of the spelled link) instead of after the link, as the kernel does.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "                if stat.S_ISLNK(os.lstat(current).st_mode):",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_target_identity.py::test_dotdot_after_symlink_follows_the_kernel"
     }
   ],
   "target_command": [
