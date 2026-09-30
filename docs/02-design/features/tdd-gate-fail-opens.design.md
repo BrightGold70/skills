@@ -321,7 +321,10 @@ Bash order after a parsed record:
    pass the empty `target` field into `_chain_may_hold_state` (that function returns 1 when its
    target argument is empty, and the caller would `_allow` without reading state) and it does
    not take `_read_state`'s empty-`ROOT_ABS` refusal (that refusal is `judge-error` before any
-   governed check). Governed (chain `active` or unreadable) refuses `judge-error` with reason
+   governed check). When the failed component is the root and that root is absent, not a
+   directory, or not enterable, the hook first refuses `judge-error` `project root
+   (CLAUDE_PROJECT_DIR) cannot be entered` and runs neither function (see the root-open rule
+   below). Governed (chain `active` or unreadable) refuses `judge-error` with reason
    `unresolvable arm=<N> component=<decoded component>`. Not governed: `_allow`. The gate
    branches only on `unresolvable`. `arm` is inside the reason, which is what AC-3.6 reads.
    The flag is not a verdict; governed versus not stays the bash decision. `TDD-STATE: none`
@@ -331,10 +334,36 @@ Bash order after a parsed record:
    runs on the canonical target.
 
 A protocol or crash failure is always `judge-error`. That class is a non-zero `python3` or a
-record `_read_canon` cannot parse. A root-open failure is the arm-2 record above, exit 0, and
-FR-3's governed-only rule applies to it, including an ungoverned allow. An exception the
-one-shot does not catch, an import failure or a raise after `emit_canon`, stays in the crash
-class.
+record `_read_canon` cannot parse. A root-open failure is the arm-2 record above, exit 0. What
+the hook does with it depends on whether the root can be entered:
+
+- Root enterable and its state readable, for example a root at mode `0311` (enterable, not
+  listable): FR-3's governed-only rule applies, including an ungoverned allow. Measured: `step3`
+  allows, `step5` refuses `judge-error` `unresolvable arm=2 component=<root>`.
+- Root absent, not a directory, or not enterable: the hook refuses `judge-error` with reason
+  `project root (CLAUDE_PROJECT_DIR) cannot be entered`, whatever the phase, and
+  `_chain_may_hold_state` never runs. The state under such a root cannot be read, so whether
+  the write is governed is unknowable. The block sits first inside
+  `if [ "$CANON_UNRESOLVABLE" = yes ]`, before `_chain_may_hold_state "$ROOT_ABS" "$CANON_PREFIX"`.
+  It fires when `CANON_ARM` is `2`, `CANON_COMPONENT` equals `CANON_ROOT`, and
+  `[ ! -d "$CANON_ROOT" ] || [ ! -x "$CANON_ROOT" ]` holds. This is the operator decision of
+  2026-09-30, taken after 6a-prime cycles 1 and 3
+  (`docs/03-analysis/tdd-gate-fail-opens.archreview.v1.md`,
+  `docs/03-analysis/tdd-gate-fail-opens.archreview.v3.md`). The block is kept. The pin, from
+  the earlier feature codex-tdd-gate-defects, is
+  `h-mad/tests/test_h_mad_tdd_gate_judge.py::test_unenterable_project_dir_refuses`.
+
+Locator residual: the reason string alone does not identify this block. The hook has two
+refusals with that reason. The other is the empty-`ROOT_ABS` guard `[ -n "$ROOT_ABS" ] ||`.
+Identify the block by its enclosing `CANON_UNRESOLVABLE` test and its `CANON_ARM` conjunct. If
+those move, re-locate it as the refusal that comes before the first `_chain_may_hold_state`
+call on `CANON_PREFIX`. Pin residual: the pinning test covers only the absent-root member
+(`CLAUDE_PROJECT_DIR` names a path that does not exist). No pin covers a root that exists but
+is not enterable (mode `000`). Codex parity for this case is covered under §"Codex call
+sites", where it is recorded as not met on the tree.
+
+An exception the one-shot does not catch, an import failure or a raise after `emit_canon`,
+stays in the crash class.
 
 After T3, `grep 'pwd -P' h-mad/hooks/h-mad-tdd-gate.sh` may match only the `# M:H8` walk:
 `d=$(dirname "$target"); while [ ! -e "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done;
@@ -398,6 +427,26 @@ carry no `# M:` marker. An `OSError` from `canonical_directory` on the selected 
 judge-errors even when not governed). `_main_guarded` then runs `_any_phase5_status` on the
 spelled path; if that scan raises `OSError`, the status is `unknown`. `active` and `unknown`
 refuse `judge-error` naming the spelled root. `inactive` allows.
+
+Parity with the Claude root-refuse is not met on the tree, and this design does not close the
+gap. The operator decision of 2026-09-30 assumes that the Codex gate refuses an absent or
+non-enterable root through `unknown`. That holds only for the mode-`0311` member. Measured at
+`13f18121`, driving the real gate with the codex test module's `_payload` and `hermetic_env`
+from a scratch probe that was deleted afterwards:
+
+- Mode-`000` `CODEX_PROJECT_DIR` holding `step5` state: `is_dir()` is true, so the root is
+  selected. `canonical_directory` fails, which is arm 2. `_any_phase5_status` then does not
+  raise, because `Path.rglob` yields no match on a root it cannot enter (Python 3.11.8 through
+  the gate, 3.14 when called directly). The status is therefore `inactive`, and the gate
+  allows. The Claude gate refuses the same case.
+- Absent `CODEX_PROJECT_DIR`: this is not a root-open case on Codex. `_project_root` takes that
+  variable only when `is_dir()` is true, so the gate falls through to the next candidate and
+  judges a different root.
+- Mode `0311` holding `step5` state: the gate refuses `judge-error` (`root is unreadable`), and
+  under `step3` it allows. The Claude gate does the same.
+
+Whether the Codex gate should refuse the mode-`000` member is owed to the operator (spec and
+plan). No committed probe carries this reading yet.
 
 The payload cwd is passed through `canonical_directory` only when it is a usable contained
 directory: a non-empty string whose `Path.resolve` result `is_dir()` and which is the root or
@@ -828,7 +877,10 @@ not collapse into a broader one:
   exception. A payload-cwd `OSError` falls back through `_payload_cwd_base`.
 - Claude: no parseable record, or a non-zero `python3`, is `judge-error` via the existing
   trap or via `_read_canon`. The call is not wrapped in `||`. A root-open failure is a
-  parseable arm-2 record and a zero exit, so this bullet does not apply to it.
+  parseable arm-2 record and a zero exit, so this bullet does not apply to it. That failure
+  follows the governed-only rule only when the root can be entered. An absent or non-enterable
+  root is refused `judge-error` `project root (CLAUDE_PROJECT_DIR) cannot be entered`
+  (§"Claude record and the one call", root-open rule).
 - Codex: root and target arm-2 results are the `Identity`, read inside `_main_guarded`, and
   mapped to `judge-error` only when governed. They do not propagate to `# M:G2`. A payload-cwd
   `OSError` is not one of those results.
@@ -1240,3 +1292,4 @@ edit the spec.
 - v1.1: Revision (2026-09-29) answering docs/02-design/features/tdd-gate-fail-opens.design.audit.v1.p1.md. Leaf scan follows the referent parent and excludes symlink entries. Percent-decoded CANON fields round-trip through a sentinel capture. F_GETPATH and percent-encoding use os.fsdecode and os.fsencode. compare_readings.py prints COMPARE: FAIL and exits 0. AC-1.7, AC-3.4, AC-5.3, AC-6.1, and AC-6.2 each have their own run. Four boundary wires each have a removal test and an unconditional-fire test.
 - v1.2: Corrective revision, not re-audited (2026-09-29), answering docs/02-design/features/tdd-gate-fail-opens.design.audit.v2.p1.md and docs/02-design/features/tdd-gate-fail-opens.design.audit.v2.p2.md. AC-3.6 gains separate step3-only controls for cells (a) and (b), each with a PermissionError precondition that fails and never skips. AC-8.4 runs each listed failure case on Claude and on Codex, including a mode-000 PermissionError fixture. A Claude root-open failure is an arm-2 record the hook routes as unresolvable-with-component, so an ungoverned write is allowed. A payload-cwd OSError falls back through _payload_cwd_base; a root or target OSError stays unresolvable. After the pipe drain expires, proc.wait uses the remaining REAP_GRACE_S. The fold witness is governed dangling sub/test_x.PY. A directory referent may carry names=0. New and modified tests name exact paths. T0 self-comparison prints COMPARE: PASS softened=0 approved=0.
 - v1.3: Operator decision (2026-09-30), sourced from spec v1.5: the Codex-gate key M-18 M-14 under step3 joins the approved deny-to-allow set as its seventh row (unfixed reading decision=deny kind=judge-error, fixed decision=allow kind=-). The approved table, the Verdicts that move toward ALLOW list, the T9 comparator expectation (COMPARE: PASS softened=7 approved=7) and the Guard narrowing count move from six to seven. Nothing else changes.
+- v1.4: Corrective revision, not re-audited (2026-09-30), from the operator decision after 6a-prime cycles 1 and 3 (docs/03-analysis/tdd-gate-fail-opens.archreview.v1.md, .v3.md). The Claude root-open rule is narrowed: the governed-only rule, including an ungoverned allow, applies only when the root can be entered and its state read (mode 0311). An absent, non-directory or non-enterable root is refused judge-error 'project root (CLAUDE_PROJECT_DIR) cannot be entered' before _chain_may_hold_state, pinned by h-mad/tests/test_h_mad_tdd_gate_judge.py::test_unenterable_project_dir_refuses (absent-root member only). Codex parity on the mode-000 member is recorded as NOT met on the tree (rglob swallows EACCES, status inactive, allow) and owed to the operator.
