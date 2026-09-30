@@ -1,0 +1,12 @@
+{
+  "spec": "h-mad/tests/mutation-specs/resume_decision_git_dir.json",
+  "reason": "T10a GREEN: the guard lives in session_id_from_git_dir; its catching test is T10b's CLI test",
+  "row": {
+    "name": "RD-READ",
+    "_mechanism": "AC-8.3 id-file read: the read returns an empty string.",
+    "file": "scripts/h_mad_resume_decision.py",
+    "find": "        session_id = (Path(result.stdout.strip()) / (\"h-mad-session-id.\" + feature)).read_text(",
+    "replace": "        session_id = \"\" if True else (Path(result.stdout.strip()) / (\"h-mad-session-id.\" + feature)).read_text(",
+    "test": "tests/test_h_mad_resume_decision.py::test_git_dir_flag_matches_session_id_token"
+  }
+}
