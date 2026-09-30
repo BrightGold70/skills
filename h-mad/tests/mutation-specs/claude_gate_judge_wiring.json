@@ -339,6 +339,14 @@
       "find": "JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-timeout|judge-error) reason=(.+)$'",
       "replace": "JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-error) reason=(.+)$'",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_gate_judge_timeout_stub"
+    },
+    {
+      "name": "CG-PARENT",
+      "_mechanism": "6b pin drift (HemaSuite brief): the judged path is built from the deepest existing directory instead of the canonical target's parent.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  [ -n \"$PRODUCTION_TARGET\" ] || PRODUCTION_TARGET=${CANON_TARGET%/*}/$NAME",
+      "replace": "  [ -n \"$PRODUCTION_TARGET\" ] || PRODUCTION_TARGET=$CANON_PREFIX/$NAME",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_absent_intermediate_dirs_judge_the_real_target[two-absent]"
     }
   ]
 }

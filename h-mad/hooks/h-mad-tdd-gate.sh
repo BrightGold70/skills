@@ -283,7 +283,7 @@ for NAME in "${CANON_NAMES[@]}"; do
   _fold_py FOLDED_NAME "$NAME"
   if [[ "$FOLDED_NAME" != *.py ]]; then continue; fi
   ALL_NON_PY=no
-  [ -n "$PRODUCTION_TARGET" ] || PRODUCTION_TARGET=$CANON_PREFIX/$NAME
+  [ -n "$PRODUCTION_TARGET" ] || PRODUCTION_TARGET=${CANON_TARGET%/*}/$NAME
 done
 [ "$ALL_NON_PY" = yes ] && _allow
 TARGET_PATH=$PRODUCTION_TARGET
