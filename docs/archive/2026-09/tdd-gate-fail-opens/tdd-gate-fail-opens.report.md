@@ -119,6 +119,11 @@ Operator items (analysis v2 §"Design-vs-spec items"; not defects, not counted i
   lexical parent (`os.path.dirname`) and does not open it. Add a control cell for the 0311 exempt
   row. The symlink branch (`:90`) is unchanged.
 - D-2, D-3 and N-1 are code changes, owed as a follow-up TDD change on `main`.
+- **Closed** in `962c47fb` (branch `fix/tdd-gate-residuals`): D-2, D-3, N-1 fixed; D-1/D-4 spec
+  v1.6 and design v1.6 amended. Pins `test_mode_000_project_dir_refuses`,
+  `test_codex_mode_000_root_refuses_whatever_the_phase`,
+  `test_dotdot_through_unreadable_directory_is_lexical`; mutations TI9, CX-ROOT-ENTER, CG-ROOT-CONJ,
+  CG-ROOT-000 ALL_CAUGHT. Full suite 5221 passed / 1 known failure; HemaSuite gate tests 9/9.
 
 Carried residuals (analysis v2 §"Carried findings and residuals"):
 - `session_id_from_git_dir` (`h_mad_resume_decision.py:59-64`) catches only `OSError`, so a

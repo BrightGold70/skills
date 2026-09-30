@@ -197,7 +197,8 @@ With an in-memory entry of FR-8's six options:
   1. **Absolute join.** A relative target is joined to its base exactly as today (Claude: the root;
      Codex: `_payload_cwd_base`). No lexical `..` collapse happens before step 2.
   2. **Deepest existing ancestor.** Walk the target's components from the left, asking the kernel
-     at each prefix (so `..` is taken after the preceding symlink, as the kernel takes it). The
+     at each prefix (so `..` is taken after the preceding symlink, as the kernel takes it; out of
+     an existing non-symlink directory `..` is its lexical parent, which is not opened — v1.6, N-1). The
      prefix where the next component does not exist splits the target into an existing part and a
      remainder. If FR-3's predicate holds at any prefix, stop: the target is unresolvable.
   3. **Canonicalise the existing part** with every symlink followed and every component rendered in
@@ -482,7 +483,8 @@ With an in-memory entry of FR-8's six options:
   - AC-6.1: the differential passes on the fixed tree. On the unfixed tree its gate-equality
     assertion fails on exactly M-4, M-5, M-6, M-7, M-8, M-11 and M-12 (the cells where the gates
     disagree today, per §"Measured premises"), and its expectation-table assertion additionally
-    fails on M-2, M-3, M-9, M-10, M-13, M-14 and M-18's Codex M-14 cell — run, not asserted.
+    fails on M-2, M-3, M-9, M-10, M-13 and M-14 — run, not asserted. M-18's M-14 cell additionally
+    fails both assertions on the unfixed tree (Claude allows, Codex denies `judge-error`; v1.6, D-4).
   - AC-6.2: removing FR-1 from either gate alone makes the differential fail (run once per gate).
   - AC-6.3: `docs/03-analysis/probes/codex-tdd-gate-defects/dd7_differential.py` re-run on the fixed
     tree reproduces its published cells; any changed cell is a stated, reviewed delta.
