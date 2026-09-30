@@ -650,6 +650,40 @@ def test_codex_safe_shell_script_keeps_path_resolve_spelling(tmp_path):
     assert module._safe_shell_command(f"python3 {upper} challenge", root, str(root)) is False
 
 
+def test_codex_canonical_cwd_is_rechecked_by_payload_cwd_base(tmp_path, monkeypatch):
+    """Pin the canonical-cwd containment call shape required by the design.
+
+    A reachable escape (a canonical cwd outside the root) is not constructible
+    without a race on this host, so this test pins the required call shape.
+    """
+    spec = importlib.util.spec_from_file_location("codex_gate_canonical_cwd_test", CODEX_GATE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    identity = module._load_identity()
+    # Match the gate's canonical project root through its identity loader.
+    root = Path(identity.canonical_directory(str(_root(tmp_path))))
+    target = _file(root, "src/prod.py")
+    cwd = root / "src"
+    canonical_cwd = identity.canonical_directory(str(cwd))
+    calls = []
+    original = module._payload_cwd_base
+
+    def recording_payload_cwd_base(project_root, payload_cwd):
+        calls.append(payload_cwd)
+        return original(project_root, payload_cwd)
+
+    monkeypatch.setattr(module, "_payload_cwd_base", recording_payload_cwd_base)
+    resolved = module._relative_target(root, "prod.py", str(cwd))
+
+    assert resolved is not None
+    assert Path(resolved.target) == target
+    assert calls[0] == str(cwd), f"raw cwd must be checked first: {calls!r}"
+    assert canonical_cwd in calls[1:], (
+        f"canonical cwd must be rechecked after raw cwd: {calls!r}"
+    )
+
+
 def test_codex_empty_cwd_joins_root(tmp_path):
     root = _root(tmp_path)
     _file(root, "src/prod.py")
