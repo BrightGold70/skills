@@ -1,0 +1,2 @@
+{"event": "step_update", "step_update": {"step_index": 1, "state": "ACTIVE", "step_type": "tool", "tool_name": "view_file", "tool_info": {"name": "view_file", "parameters": {"FilePath": "docs/.bkit-memory.json"}}}}
+{"event": "step_update", "step_update": {"step_index": 1, "state": "DONE", "step_type": "tool", "tool_name": "view_file", "tool_info": {"name": "view_file", "parameters": {"FilePath": "docs/.bkit-memory.json"}, "output": "{}"}}}

@@ -80,11 +80,16 @@ def grok_events(rows: list[dict]) -> tuple[list[Event], bool]:
         if row.get("type") == "tool_call_update" and row.get("status") == "completed":
             updates[row.get("toolCallId")] = row
     events = []
+    called = {row.get("toolCallId") for row in rows if row.get("type") == "tool_call"}
+    if any(row.get("toolCallId") not in called for row in rows if row.get("type") == "tool_call_update"):
+        # A completed update with no tool_call is an action the log does not show the input of.
+        events.append(Event("other", "orphan tool_call_update", True, None))
     for row in rows:
         if row.get("type") != "tool_call":
             continue
         tool = row.get("toolName")
         if tool not in ("run_terminal_command", "read_file"):
+            events.append(Event("other", str(tool), True, None))
             continue
         raw = row.get("rawInput")
         value = raw.get("command" if tool == "run_terminal_command" else "target_file") if isinstance(raw, dict) else None
@@ -105,17 +110,30 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
         if row.get("event") == "step_update" and isinstance(step, dict) and step.get("state") == "DONE":
             done[step.get("step_index")] = step
     events = []
-    seen = set()
+    seen: dict[object, str] = {}
     for row in rows:
         step = row.get("step_update")
-        if row.get("event") != "step_update" or not isinstance(step, dict) or step.get("step_type") != "tool":
+        if row.get("event") != "step_update" or not isinstance(step, dict):
+            continue
+        if step.get("step_type") != "tool":
+            # Step types observed in real agy logs; any other could act, so it is unmapped.
+            if step.get("step_type") not in ("agent_response", "user_input", "checkpoint"):
+                events.append(Event("other", str(step.get("step_type")), True, None))
             continue
         index = step.get("step_index")
+        if index is None:
+            raise ShapeError("agy input shape unobserved")
+        info = step.get("tool_info")
+        identity = json.dumps([step.get("tool_name"), info.get("parameters") if isinstance(info, dict) else None],
+                              sort_keys=True, default=str)
         if index in seen:
+            if seen[index] != identity:
+                raise ShapeError("agy input shape unobserved")
             continue
-        seen.add(index)
+        seen[index] = identity
         tool = step.get("tool_name")
         if tool not in ("run_command", "view_file"):
+            events.append(Event("other", str(tool), True, None))
             continue
         info = step.get("tool_info")
         params = info.get("parameters") if isinstance(info, dict) else None
@@ -265,7 +283,14 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
             rows = ndjson(log)
             events, listed = grok_events(rows) if host == "grok" else agy_events(rows)
         read_adapter = read_skill = declared = script_before_adapter = adapter_seen = False
+        # The lazy pass (operator decision 2026-10-01) needs proof that nothing but reads ran.
+        # Only the host's file-read tool can give that proof: any shell command forfeits it,
+        # because a shell classifier is a denylist and a denylist leaks.
+        shelled = unmapped = False
         for event in events:
+            if event.tool == "other":
+                unmapped = True
+                continue
             if event.tool == "read":
                 paths = [event.value] if isinstance(event.value, str) else event.value
                 for is_skill, heading in ((False, adapter), (True, skill)):
@@ -283,6 +308,7 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
                                 else:
                                     read_adapter = True
                 continue
+            shelled = True
             for tokens in simple_tokens(event.value):
                 for command in classify(tokens.copy()):
                     mentioned = bool(MENTION.search(" ".join(command.tokens)))
@@ -311,7 +337,18 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
                                         else:
                                             read_adapter = True
         if not read_adapter:
-            return "FAIL V-11.1 no adapter read", 0
+            # A read-only call need not load the adapter, provided every event is a file-read tool
+            # call: no shell command and no tool or step the classifier does not map. Anything
+            # unproven needed the adapter: FAIL. Codex has no file-read tool (every event is a
+            # shell exec), so `shelled` keeps it from ever showing itself read-only.
+            if script_before_adapter or shelled or unmapped:
+                return "FAIL V-11.1 no adapter read", 0
+            if host == "grok" and not listed:
+                return "FAIL V-11.1 grok did not list h-mad", 0
+            if not read_skill:
+                prefix = "UNVERIFIED" if host == "grok" else "FAIL"
+                return f"{prefix} V-11.1 no observed SKILL.md read", 0
+            return "PASS V-11.1 lazy (no script ran)", 0
         if host == "grok" and not listed:
             return "FAIL V-11.1 grok did not list h-mad", 0
         if not declared:

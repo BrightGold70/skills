@@ -755,5 +755,140 @@
     "root": ".",
     "expected": "PASS V-11.1",
     "note": "Design residual: codex output that reproduces a whole event is read as an event."
+  },
+  {
+    "id": "agy-L1-lazy",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L1-lazy.log",
+    "root": ".",
+    "expected": "PASS V-11.1 lazy (no script ran)",
+    "note": "Operator decision 2026-10-01: a read-only status that runs no script, no dispatch and no unclassified command need not read the adapter."
+  },
+  {
+    "id": "agy-L2-python-c",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L2-python-c.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "Any unclassified command forfeits the lazy pass, even one that names no h-mad script. Any shell command forfeits the lazy pass; only the host's file-read tool proves a read."
+  },
+  {
+    "id": "agy-L3-unmapped-tool",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L3-unmapped-tool.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A tool the classifier does not map cannot be shown read-only, so the adapter was required."
+  },
+  {
+    "id": "agy-L4-redirect",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L4-redirect.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A redirect makes a 'safe' command a write; the lazy pass refuses it. Any shell command forfeits the lazy pass; only the host's file-read tool proves a read."
+  },
+  {
+    "id": "agy-L5-no-skill",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L5-no-skill.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "The lazy pass still requires the skill load."
+  },
+  {
+    "id": "agy-L6-script",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L6-script.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A script run without the adapter read stays a FAIL."
+  },
+  {
+    "id": "codex-L1-lazy",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-L1-lazy.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "No lazy pass on codex: it has no file-read tool, every event is a shell exec."
+  },
+  {
+    "id": "agy-L7-backtick",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L7-backtick.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A backtick substitution inside a 'safe' echo can execute anything. Any shell command forfeits the lazy pass; only the host's file-read tool proves a read."
+  },
+  {
+    "id": "agy-L8-dollar-paren",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L8-dollar-paren.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A $(...) substitution inside a 'safe' echo can execute anything. Any shell command forfeits the lazy pass; only the host's file-read tool proves a read."
+  },
+  {
+    "id": "agy-L9-no-step-index",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L9-no-step-index.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved",
+    "note": "A tool step with no step_index could hide behind another step's dedupe."
+  },
+  {
+    "id": "agy-L10-unknown-step-type",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L10-unknown-step-type.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A step type not observed in real agy logs could act, so it is unmapped."
+  },
+  {
+    "id": "grok-L1-lazy",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-L1-lazy.log",
+    "root": ".",
+    "expected": "PASS V-11.1 lazy (no script ran)",
+    "note": "Lazy pass on grok: file-read tool calls only, h-mad listed, SKILL.md read."
+  },
+  {
+    "id": "grok-L2-orphan-update",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-L2-orphan-update.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A completed update with no tool_call hides its input, so it is unmapped."
+  },
+  {
+    "id": "agy-L11-duplicate-index",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L11-duplicate-index.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved",
+    "note": "Two different steps sharing one step_index could hide a write behind a read."
+  },
+  {
+    "id": "grok-L3-orphan-failed-update",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-L3-orphan-failed-update.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "An orphan update is unmapped whatever its status; a failed action still acted."
   }
 ]

@@ -736,6 +736,20 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       whose returned text holds the first `# ` heading line counts as a content read; the smoke
       proves the adapter was opened, not that every line was read. A read through a glob such as
       `references/*.md` does not name the file and fails, which is the conservative direction.
+      **Lazy exception (operator decision 2026-10-01, after the live smoke).** A call need not
+      read the adapter when every event in its log is a call to the host's **file-read tool**
+      (agy `view_file`, grok `read_file`) or an agy step of type `agent_response`, `user_input`
+      or `checkpoint`. Such a call's verdict is the distinct token
+      `PASS V-11.1 lazy (no script ran)`, and it still requires the skill load below.
+      **Any shell command forfeits the exception.** A shell classifier is a denylist: two
+      fresh-context review passes found 14 ways to execute or write through commands it rated
+      safe. So a log with a shell command, or with a tool or step type the classifier does not
+      map, and no adapter read is `FAIL … no adapter read`. A grok `tool_call_update` with no
+      `tool_call`, whatever its status, counts as unmapped. An agy tool step with no `step_index`, or two different steps
+      sharing one index, is `UNVERIFIED` (a shape error). **Codex can never qualify**, because
+      every codex event is a shell exec. The adapter carries paths, hooks, claims and the
+      install-check quirk. A pure status read uses none of them, but bootstrap and every script
+      do. The rule is rehearsed by the `*-L*` cases in `rehearsal/cases.json`.
     - **Skill load.** For codex and agy: an observed successful content read of h-mad's
       `SKILL.md`, by the same predicate; none observed → `FAIL`. For grok: `h-mad` listed in some
       `available_commands` event's `commands` (a list of plain strings, F11) is a

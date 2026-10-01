@@ -9,10 +9,14 @@ description: "Orchestrate the seven-phase H-MAD development workflow end to end 
 
 This package supports Claude Code, OpenAI Codex, the Antigravity CLI (`agy`) and the grok CLI
 (`grok`). In Codex, read [references/codex-runtime.md](references/codex-runtime.md) before
-bootstrap; in agy, read [references/agy-runtime.md](references/agy-runtime.md); in grok, read
-[references/grok-runtime.md](references/grok-runtime.md) before bootstrap. Apply that adapter's path, hook,
-collaboration, checkpoint, and author/reviewer mappings as overrides to the host-specific
-instructions below. Phase gates, state tokens, evidence requirements, and stop conditions do not
+bootstrap; in agy, read [references/agy-runtime.md](references/agy-runtime.md) before
+bootstrap; in grok, read [references/grok-runtime.md](references/grok-runtime.md) before
+bootstrap. The adapter is required before any bootstrap, script, `hmad-dispatch` call or write.
+A read-only `/h-mad status` on agy or grok may skip it, but only if it reads files through the
+host's own file-read tool and runs no shell command at all (operator decision 2026-10-01; live
+smoke V-11.1). On codex, read it anyway, because every codex step is a shell command. Apply
+that adapter's path, hook, collaboration, checkpoint, and author/reviewer mappings as overrides
+to the host-specific instructions below. Phase gates, state tokens, evidence requirements, and stop conditions do not
 change between hosts.
 
 Adapt a new host by adding an adapter beside these, never by rewriting the Claude spelling in

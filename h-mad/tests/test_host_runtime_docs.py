@@ -586,3 +586,26 @@ def test_remedy_count_sentence_names_the_eleventh_row() -> None:
     lines = [line for line in section.splitlines() if "all ten have one" in line]
     assert len(lines) == 1, "First-run auto-bootstrap needs exactly one remedy-count sentence"
     assert "the eleventh row, `AGY_SIBLING_COLLISION`" in lines[0], "remedy-count sentence must name the eleventh AGY_SIBLING_COLLISION row"
+
+
+@pytest.mark.parametrize("host", ("codex", "agy", "grok"))
+def test_host_runtime_adapter_read_precedes_bootstrap(host: str) -> None:
+    # The agy clause once carried no timing while codex and grok said "before bootstrap".
+    section = " ".join(_section((REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8"), "## Host runtime").split())
+    link = f"[references/{host}-runtime.md](references/{host}-runtime.md)"
+    assert f"{link} before bootstrap" in section, f"{host} adapter read must be timed before bootstrap"
+
+
+def test_host_runtime_states_the_lazy_read_only_exception() -> None:
+    section = " ".join(_section((REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8"), "## Host runtime").split())
+    assert "required before any bootstrap, script, `hmad-dispatch` call or write" in section
+    assert "read-only `/h-mad status`" in section
+
+
+def test_live_smoke_v111_rehearsal_passes() -> None:
+    # The V-11.1 classifier (smoke_assert.py) carries the lazy read-only exception; its committed
+    # rehearsal is the only thing that pins it.
+    script = REPO_ROOT / "docs/03-analysis/probes/multi-host-runtime/smoke_assert.py"
+    result = subprocess.run([sys.executable, str(script), "rehearse"], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+    assert "PASS V-11.1 lazy (no script ran)" in result.stdout

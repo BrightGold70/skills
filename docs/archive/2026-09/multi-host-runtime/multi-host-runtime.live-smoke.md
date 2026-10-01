@@ -55,3 +55,51 @@ FR-11 is exercised live on all three hosts:
 - Cost is reported where the host provides it: V-11.5.
 - V-11.1 (adapter read) passed on grok only. It is unverifiable on codex by design, and it fails
   on agy exactly as the rehearsal predicted.
+
+## Addendum 2026-10-01: operator decision on agy V-11.1
+
+**Decision: lazy.** The adapter is required before any bootstrap, script, `hmad-dispatch` call or
+write. A read-only `/h-mad status` on agy or grok may skip it when it reads files only through the
+host's file-read tool and runs no shell command. A pure status read uses nothing the adapter
+carries: its paths, hooks, claims and the install-check quirk.
+
+Changes:
+
+- `smoke_assert.py` `v111` issues the distinct token `PASS V-11.1 lazy (no script ran)`. It does so
+  only when every event is a file-read tool call (agy `view_file`, grok `read_file`) or a non-acting
+  agy step (`agent_response`, `user_input`, `checkpoint`), and when a `SKILL.md` read is observed.
+  - Any shell command, unmapped tool, unknown step type or orphan grok update (of any status),
+    without the adapter read, gives `FAIL … no adapter read`.
+  - An agy tool step with no index, or a reused index, gives `UNVERIFIED`.
+  - Codex cannot qualify, because every codex event is a shell exec.
+- **Why the rule is shell-free.** The first cut accepted "side-effect-free" shell commands. Two
+  fresh-context review passes then found 14 ways to execute or write through them:
+  - command substitution;
+  - `bash <script> -c`;
+  - a path-qualified `cat`;
+  - `PATH=` / `BASH_ENV=` assignments;
+  - `rg --hostname-bin`;
+  - `sed … -i`;
+  - codex `apply_patch` and MCP entries;
+  - agy steps with no index, a reused index or an unknown step type;
+  - orphan grok updates.
+
+  A shell denylist leaks, so the lazy pass now trusts none of it. Most of those shell bypasses also
+  touch the pre-existing "is this an adapter read" classification. That is a separate, older
+  residual of D10 and is out of scope here.
+- A third review pass found no lazy-pass bypass that executes or writes. **One residual is still
+  open, and it predates this change.** The `SKILL.md` read can be satisfied by a decoy path
+  ending in `/h-mad/SKILL.md` (grok), or by the path appearing in an agy `view_file` parameter
+  other than `FilePath`. The non-lazy PASS has the same gap. The fix would be to match only
+  `FilePath` and anchor the path to the repo root or `$HMAD_SKILL_ROOT`.
+- Fifteen rehearsal cases were added (`*-L*`, n=93 → 108). Each guard was mutation-probed and
+  killed. A codex-only guard survived its probe because the shell rule subsumes it, so it was
+  removed.
+- The spec's V-11.1 clause carries the exception.
+- `h-mad/SKILL.md` §"Host runtime" states the rule, and now times the agy adapter read "before
+  bootstrap", as it already did for codex and grok.
+
+**The agy row above stays FAIL, and it is not re-scored.** The live agy log was kept in the
+session scratchpad and was never committed. The record above names only the first failing check,
+so whether the run qualifies for the lazy pass is unknown. Under the new rule, the live agy
+V-11.1 verdict is **UNVERIFIED (log not retained)** until an agy smoke is re-run.
