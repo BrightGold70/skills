@@ -329,7 +329,8 @@ def read_operands(command: Command) -> list[str] | None:
     args, ops, i = command.tokens[1:], [], 0
     if command.name not in ("cat", "nl", "head", "tail", "sed"):
         return None
-    script = command.name != "sed"
+    # With any -e, GNU sed reads every non-option argument as a file (`sed -n 1p -e 2p f` reads 1p).
+    script = command.name != "sed" or "-e" in args or "--expression" in args
     while i < len(args):
         item = args[i]
         if command.name in ("head", "tail") and item == "-n" and i + 1 < len(args) and re.fullmatch(r"\+?\d+", args[i + 1]):
@@ -376,7 +377,13 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
                 return [Command("script", tokens, assignments, name)]
             if item.startswith("-m") and MODULE.fullmatch(item[2:].split(".")[-1]):
                 return [Command("script", tokens, assignments, name)]
-        operand = next((a for a in args if not a.startswith("-")), "")
+        operand = ""
+        for a in args:
+            if a in ("-", "-c"):
+                break  # stdin or -c code runs; a script name after it is only an argument
+            if not a.startswith("-"):
+                operand = a
+                break
         if SCRIPT.fullmatch(Path(operand).name):
             return [Command("script", tokens, assignments, name)]
     if SCRIPT.fullmatch(name):
@@ -388,7 +395,8 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
         if re.fullmatch(r"hmad-dispatch(\.sh)?", Path(operand).name):
             return [Command("dispatch", tokens, assignments, name)]
     # rg is not safe: --pre and --hostname-bin run programs, and its option set is too rich to allowlist.
-    safe = {"cat", "head", "tail", "nl", "sed", "grep", "ls", "test", "[", "echo", "wc", "stat"}
+    # test/[ are not safe: zsh math-evaluates a subscript in `-v 'x[NAME=5]'`, which assigns.
+    safe = {"cat", "head", "tail", "nl", "sed", "grep", "ls", "echo", "wc", "stat"}
     if name in safe and (name != "sed" or sed_safe(args)):
         return [Command("read" if name in {"cat", "head", "tail", "nl", "sed"} else "safe",
                         tokens, assignments, name)]
@@ -496,7 +504,9 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
                             script_before_adapter = True
                         if command.kind == "unknown" and mentioned:
                             return "UNVERIFIED V-11.1 unclassified command before the adapter read", 0
-                    if command.kind == "script" and f"HMAD_HOST={host}" in command.assignments:
+                    host_values = [a.split("=", 1)[1] for a in command.assignments if a.startswith("HMAD_HOST=")]
+                    # The last assignment wins, so every one must name this host.
+                    if command.kind == "script" and host_values and all(v == host for v in host_values):
                         declared = True
                     if command.kind == "read":
                         operands = read_operands(command) if sole else None

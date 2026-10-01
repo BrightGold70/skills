@@ -754,9 +754,13 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         An agy `run_command` is taken to run at the workspace root unless it carries a `Cwd`.
       - `bash`/`zsh -c` is followed only when every argument before `-c` is an option:
         `bash <script> -c …` runs `<script>`.
-      - `rg` is not a safe command (`--pre` and `--hostname-bin` run programs). A `sed` read is
-        safe only if every argument is checked, because GNU sed accepts `-e` scripts after a file
-        operand.
+      - `rg` is not a safe command (`--pre` and `--hostname-bin` run programs), and neither are
+        `test`/`[` (zsh math-evaluates the subscript in `-v 'x[NAME=5]'`, which assigns). A
+        `sed` read is safe only if every argument is checked, because GNU sed accepts `-e`
+        scripts after a file operand. With any `-e`, every non-option argument is a file.
+      - A script run is `HMAD_HOST`-declared only if every `HMAD_HOST=` assignment on the command
+        names the host (the last one wins). `python3 -` and `python3 -c` run stdin or code, so an
+        `h_mad_*.py` name after them is only an argument, not a script run.
       - **Residual (design, codex only):** a codex text log cannot separate a command's output
         from a following `exec` entry, so output that reproduces whole events is read as events
         (case `codex-output-injection`). Live codex V-11.1 is `UNVERIFIED` for the related shape

@@ -182,7 +182,16 @@ Changes:
     `sed_safe` stopped checking at the first operand, while GNU sed runs a later `-e w`/`e`
     script; it now checks every argument. Cases `F6`–`F8` cover these (n=174), and a
     cache-proof sweep kills 42/42 guards. That reviewer's other finding, codex output forging
-    whole `exec` blocks, is the documented design residual. **Residual, LOW (environment):** the log cannot
+    whole `exec` blocks, is the documented design residual.
+
+    A third fresh reviewer found three more:
+    - `[ -v 'x[HMAD_SKILL_ROOT=5]' ]` assigns through subscript math (`test`/`[` are no longer
+      safe);
+    - `HMAD_HOST=codex HMAD_HOST=agy` counted as declared, although the last assignment wins;
+    - `python3 - h_mad_x.py` counted as a script run, although it runs stdin.
+
+    It also noted that with any `-e`, GNU sed reads `1p` as a file. Cases `F9`–`F12` cover these
+    (n=178), and a cache-proof sweep kills 46/46 guards. **Residual, LOW (environment):** the log cannot
     show what the host shell sources before the first command. `zsh -lc` reads the login profile,
     which could `cd`, define functions or set `RIPGREP_CONFIG_PATH`/`GREP_OPTIONS`. The checker
     trusts the session's starting environment, which the smoke's operator controls.

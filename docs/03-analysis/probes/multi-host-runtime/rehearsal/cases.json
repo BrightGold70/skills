@@ -1532,5 +1532,41 @@
     "root": ".",
     "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read",
     "note": "GNU sed takes -e after a file operand; a late `e` script runs a command. sed_safe checks every argument."
+  },
+  {
+    "id": "agy-F9-test-v-subscript",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-F9-test-v-subscript.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "`[ -v 'x[HMAD_SKILL_ROOT=5]' ]` assigns through zsh subscript math with no `$`; test/[ are not safe."
+  },
+  {
+    "id": "codex-F10-duplicate-hmad-host",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-F10-duplicate-hmad-host.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=codex",
+    "note": "`HMAD_HOST=codex HMAD_HOST=agy` -- the last assignment wins; every HMAD_HOST assignment must name the host."
+  },
+  {
+    "id": "codex-F11-python-stdin-script-arg",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-F11-python-stdin-script-arg.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=codex",
+    "note": "`python3 - h_mad_x.py` runs stdin; a script name after `-` or `-c` is only an argument."
+  },
+  {
+    "id": "codex-F12-gnu-sed-e-makes-files",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-F12-gnu-sed-e-makes-files.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "With any -e, GNU sed reads `1,999p` as a second file, so the read has two operands and is refused."
   }
 ]
