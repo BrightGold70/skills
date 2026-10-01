@@ -1,0 +1,42 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_unscorable_report.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "AC-CONTRA",
+      "_mechanism": "skill-candidates (a): drop the transcript cross-check; a self-reported zero contradicted by 20+ parsed reads is mis-scored as a hollow pass again.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                and effort.get(\"ok\", 0) > DELIVERY_FLOOR):  # M:AC-CONTRA",
+      "replace": "                and False):  # M:AC-CONTRA",
+      "test": "tests/test_h_mad_unscorable_report.py::test_self_reported_zero_contradicted_by_the_transcript_is_its_own_token"
+    },
+    {
+      "name": "AC-CONTRA-FLOOR",
+      "_mechanism": "weaken the floor to >= ; a transcript AT the delivery floor (the report-file write alone) would then 'contradict' a genuinely hollow pass.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                and effort.get(\"ok\", 0) > DELIVERY_FLOOR):  # M:AC-CONTRA",
+      "replace": "                and effort.get(\"ok\", 0) >= DELIVERY_FLOOR):  # M:AC-CONTRA",
+      "test": "tests/test_h_mad_unscorable_report.py::test_self_reported_zero_stays_zero_evidence_without_a_contradicting_transcript"
+    },
+    {
+      "name": "AC-CONTRA-WIRE",
+      "_mechanism": "connection removal: the report-file screen stops receiving the leg's log, so the cross-check can never run on the report-file path.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    reason = _unscorable_reason(report_path, log_path)\n",
+      "replace": "    reason = _unscorable_reason(report_path)\n",
+      "test": "tests/test_h_mad_unscorable_report.py::test_self_reported_zero_contradicted_by_the_transcript_is_its_own_token"
+    }
+  ]
+}

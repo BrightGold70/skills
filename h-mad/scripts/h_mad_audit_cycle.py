@@ -185,7 +185,7 @@ def _stamp_signature(stamp: Path) -> tuple[int, int] | None:
     return (st.st_mtime_ns, st.st_size)
 
 
-def _unscorable_reason(report_path: Path) -> str | None:
+def _unscorable_reason(report_path: Path, log_path: Path | None = None) -> str | None:
     """Return why a complete-looking report must not be SCORED, or None.
 
     Narrow on purpose: only what is provably not a finished audit. An unreadable
@@ -197,10 +197,10 @@ def _unscorable_reason(report_path: Path) -> str | None:
         text = report_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
-    return _unscorable_reason_text(text)
+    return _unscorable_reason_text(text, log_path)
 
 
-def _unscorable_reason_text(text: str) -> str | None:
+def _unscorable_reason_text(text: str, log_path: Path | None = None) -> str | None:
     """The same screen over report TEXT, for the `--out` extraction path.
 
     Closing the class rather than the instance: the stub arrives the same way
@@ -213,6 +213,14 @@ def _unscorable_reason_text(text: str) -> str | None:
         return "in-progress-sentinel"
     evidence = EVIDENCE_COUNT_RE.search(text)
     if evidence is not None and int(evidence.group(1)) == 0:
+        # A self-reported zero is refused either way. When the leg's own parsed
+        # transcript shows reads above the delivery floor, the two disagree, and
+        # that is a different defect (the report miscounts) from a hollow pass:
+        # name it, so the remedy is to fix the report, not to re-dispatch.
+        effort = measure_effort(log_path) if log_path is not None else None
+        if (effort and effort.get("readable") and effort.get("shape") == "parsed"
+                and effort.get("ok", 0) > DELIVERY_FLOOR):  # M:AC-CONTRA
+            return "self-report-contradicts-transcript"
         return "zero-evidence"
     return None
 
@@ -223,7 +231,8 @@ def is_unscorable(delivered: str) -> bool:
 
 
 def _deliver_report_file(
-    report_path: Path, collected_path: Path, *, overwrite: bool, copy: bool = True
+    report_path: Path, collected_path: Path, *, overwrite: bool, copy: bool = True,
+    log_path: Path | None = None,
 ) -> tuple[str, Path | None]:
     """Deliver a complete report unless it is unscorable.
 
@@ -231,7 +240,7 @@ def _deliver_report_file(
     docs store is the #49q defect, and a later refusal cannot un-write it. The
     `.done` marker is left alone for the same reason -- the leg has not finished.
     """
-    reason = _unscorable_reason(report_path)
+    reason = _unscorable_reason(report_path, log_path)
     if reason is not None:
         return f"{UNSCORABLE_PREFIX}{reason}", None
     if not copy:
@@ -462,7 +471,7 @@ def _collect_unguarded(
             grace > 0 and _run_report_wait(spec.report_path, grace)
         ):
             return _deliver_report_file(
-                spec.report_path, collected_path, overwrite=overwrite
+                spec.report_path, collected_path, overwrite=overwrite, log_path=spec.log_path
             )
         return "none", None
 
@@ -473,7 +482,8 @@ def _collect_unguarded(
         if report_bytes == collected_bytes:
             if report_bytes:
                 return _deliver_report_file(
-                    spec.report_path, collected_path, overwrite=overwrite, copy=False
+                    spec.report_path, collected_path, overwrite=overwrite, copy=False,
+                    log_path=spec.log_path,
                 )
             empty_matching_pair = True
 
@@ -482,12 +492,12 @@ def _collect_unguarded(
 
     if _has_complete_report(spec.report_path):
         return _deliver_report_file(
-            spec.report_path, collected_path, overwrite=overwrite
+            spec.report_path, collected_path, overwrite=overwrite, log_path=spec.log_path
         )
 
     if _run_report_wait(spec.report_path, grace):
         return _deliver_report_file(
-            spec.report_path, collected_path, overwrite=overwrite
+            spec.report_path, collected_path, overwrite=overwrite, log_path=spec.log_path
         )
 
     if spec.out_path is not None:
@@ -495,7 +505,7 @@ def _collect_unguarded(
             spec.out_path, feature=feature, phase=phase, cycle=cycle
         )
         if report_text:
-            reason = _unscorable_reason_text(report_text)
+            reason = _unscorable_reason_text(report_text, spec.log_path)
             if reason is not None:
                 return f"{UNSCORABLE_PREFIX}{reason}", None
             return "out", _write_collected_report(

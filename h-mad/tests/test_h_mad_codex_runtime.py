@@ -542,3 +542,19 @@ def test_codex_hook_is_noop_outside_phase5(tmp_path):
     })
     assert result.returncode == 0
     assert result.stdout.strip() in ("", "{}")
+
+
+def test_codex_hook_admits_mutation_harness_only_for_check_anchors(tmp_path):
+    # skill-candidates (c): the GREEN prompt asks Codex to run --check-anchors on
+    # the spec it appended to. That reads only; a full harness run writes mutants
+    # into production code and stays denied.
+    project = _active_project(tmp_path)
+    harness = ROOT / "scripts" / "h_mad_mutation_harness.py"
+    spec = project / "h-mad/tests/mutation-specs/x.json"
+    assert _hook_decision(project, f"python3 {harness} --check-anchors {spec}") == "allow"
+    for command in (
+        f"python3 {harness} {spec}",
+        f"python3 {harness} --check-anchors /tmp/elsewhere.json",
+        f"python3 {harness} --check-anchors {spec} --apply",
+    ):
+        assert _hook_decision(project, command) == "deny", command

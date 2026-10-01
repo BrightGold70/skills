@@ -40,15 +40,15 @@
     {
       "name": "helper-report-wait-drop",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "    if _run_report_wait(spec.report_path, grace):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
-      "replace": "    if False and _run_report_wait(spec.report_path, grace):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
+      "find": "    if _run_report_wait(spec.report_path, grace):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite, log_path=spec.log_path\n        )\n",
+      "replace": "    if False and _run_report_wait(spec.report_path, grace):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite, log_path=spec.log_path\n        )\n",
       "failure_test": "test_collect_delayed_report"
     },
     {
       "name": "helper-report-wait-force",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "    if _has_complete_report(spec.report_path):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
-      "replace": "    if False and _has_complete_report(spec.report_path):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
+      "find": "    if _has_complete_report(spec.report_path):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite, log_path=spec.log_path\n        )\n",
+      "replace": "    if False and _has_complete_report(spec.report_path):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite, log_path=spec.log_path\n        )\n",
       "failure_test": "test_collect_report_file_present",
       "_mechanism": null
     },
@@ -62,7 +62,7 @@
     {
       "name": "helper-extract-force",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "    if _run_report_wait(spec.report_path, grace):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n\n    if spec.out_path is not None:\n        report_text = _run_extract_report(\n            spec.out_path, feature=feature, phase=phase, cycle=cycle\n        )\n",
+      "find": "    if _run_report_wait(spec.report_path, grace):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite, log_path=spec.log_path\n        )\n\n    if spec.out_path is not None:\n        report_text = _run_extract_report(\n            spec.out_path, feature=feature, phase=phase, cycle=cycle\n        )\n",
       "replace": "    if _run_report_wait(spec.report_path, grace):\n        pass\n\n    if spec.out_path is not None:\n        report_text = _run_extract_report(\n            spec.out_path, feature=feature, phase=phase, cycle=cycle\n        )\n",
       "failure_test": "test_collect_delayed_report"
     },

@@ -268,6 +268,7 @@ def assemble(
     guards: list[str],
     report_file: str,
     template: Path,
+    mutation_spec: str | None = None,
 ) -> tuple[str, dict]:
     try:
         plan_text = impl_plan.read_text(encoding="utf-8")
@@ -384,6 +385,27 @@ def assemble(
         "That path is the scope. Do not widen it — an unscoped run collects the "
         "sibling project and dies on pre-existing errors."
     )
+    # GREEN is where the guards come into existence, so it is where their
+    # mutation rows are cheapest to write: the author knows the exact line that
+    # enforces each one. RED has no guard yet. Scoring stays with the
+    # orchestrator, which runs the harness; GREEN only proposes and checks anchors.
+    if phase == "green":  # M:AT-MUT
+        rows = ("one mutation row per guard this task adds or changes — `name`, "
+                "`_mechanism`, `file`, `find` (must match exactly once), `replace` "
+                "(the smallest edit that disables the guard), `test` (the test that "
+                "must catch it)")
+        lines.append("")
+        if mutation_spec:
+            harness = SKILL_DIR / "scripts" / "h_mad_mutation_harness.py"
+            lines.append(
+                f"**Mutation rows (5e):** append {rows} to `{mutation_spec}`. Then run "
+                f"`{python} {harness} --check-anchors {mutation_spec}` and quote its "
+                "last line. Do not run the harness without `--check-anchors`; the "
+                "orchestrator scores the rows.")
+        else:
+            lines.append(
+                f"**Mutation rows (5e):** list {rows}, in your final message. Do not "
+                "run the mutation harness; the orchestrator scores the rows.")
 
     filled = (
         template_text
@@ -488,6 +510,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--expect-pass", type=int)
     ap.add_argument("--guard", action="append", default=[],
                     help="a regression guard that must pass from the first run; repeatable")
+    ap.add_argument("--mutation-spec", default=None,
+                    help="5e: the spec GREEN appends its mutation rows to")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--log", type=Path)
     ap.add_argument("--prompt", type=Path)
@@ -525,6 +549,7 @@ def main(argv: list[str] | None = None) -> int:
             test_path=args.test_path, python=args.python,
             expect_fail=args.expect_fail, expect_pass=args.expect_pass,
             guards=args.guard, report_file=args.report_file, template=args.template,
+            mutation_spec=args.mutation_spec,  # M:AT-MUT-WIRE
         )
     except Halt as exc:
         print(f"{TOKEN}: HALT {exc.reason}")

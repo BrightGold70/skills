@@ -1019,3 +1019,41 @@ class TestModulePathSlug:
         assert result.returncode == 0, result.stdout
         assert str(chosen) in result.stdout
         assert chosen.exists()
+
+
+def test_green_asks_for_mutation_rows_and_names_the_spec(plan: Path, tmp_path: Path) -> None:
+    """skill-candidates (c), HemaSuite #10 triage: the 5d/5e assembler never asked
+    for a mutation spec, so every row was written by the orchestrator. GREEN now
+    asks for one row per guard, appended to the named spec, plus --check-anchors."""
+    spec = tmp_path / "h-mad/tests/mutation-specs/feat.json"
+    text, _ = call(plan, tmp_path, phase="green", mutation_spec=str(spec))
+    assert "**Mutation rows" in text
+    assert str(spec) in text
+    assert "--check-anchors" in text
+    assert "orchestrator scores" in text
+
+
+def test_green_without_a_spec_asks_for_rows_in_the_final_message(plan: Path, tmp_path: Path) -> None:
+    text, _ = call(plan, tmp_path, phase="green")
+    assert "**Mutation rows" in text
+    assert "final message" in text
+    assert "--check-anchors" not in text, "no spec path, nothing to check"
+
+
+def test_red_does_not_ask_for_mutation_rows(plan: Path, tmp_path: Path) -> None:
+    text, _ = call(plan, tmp_path, phase="red", mutation_spec=str(tmp_path / "x.json"))
+    assert "**Mutation rows" not in text, "RED writes tests only; guards do not exist yet"
+
+
+def test_cli_mutation_spec_reaches_the_green_prompt(plan: Path, tmp_path: Path) -> None:
+    spec = tmp_path / "specs/feat.json"
+    prompt = tmp_path / "prompt.txt"
+    proc = run_cli(
+        "--feature", "f", "--task", "Task 1", "--phase", "green",
+        "--project-root", str(tmp_path), "--module", "m",
+        "--test-path", "tests/t.py", "--impl-plan", str(plan),
+        "--python", PYTHON, "--prompt", str(prompt), "--mutation-spec", str(spec),
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    text = prompt.read_text(encoding="utf-8")
+    assert str(spec) in text and "--check-anchors" in text, "the CLI flag never reached the prompt"

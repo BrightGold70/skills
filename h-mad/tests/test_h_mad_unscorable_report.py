@@ -373,3 +373,49 @@ def test_calibration_no_committed_report_is_refused() -> None:
         f"the gate refuses {len(refused)} of {len(reports)} reports that already "
         f"passed a gating cycle: {refused}"
     )
+
+
+def _agy_log(path: Path, tools_ok: int) -> Path:
+    import json
+    lines = [json.dumps({"event": "step_update", "step_update": {
+        "step_type": "agent_response", "state": "DONE", "usage": {"thinking_tokens": 0}}})]
+    lines += [json.dumps({"event": "step_update", "step_update": {
+        "step_type": "tool", "tool_name": "view_file", "state": "DONE"}})] * tools_ok
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def collect_with_log(ac, report: Path, project_root: Path, log: Path | None):
+    spec = ac.PassSpec(index=1, report_path=report, out_path=None, rc=0, log_path=log)
+    return ac.collect(spec, grace=0.0, project_root=project_root, feature="f",
+                      phase="plan", cycle=8, surface="teammate")
+
+
+def test_self_reported_zero_contradicted_by_the_transcript_is_its_own_token(
+    tmp_path: Path,
+) -> None:
+    """skill-candidates (a), HemaSuite #10 triage: an agy report saying
+    `Evidence: 0 files opened` while its own transcript shows 20+ reads was
+    scored `zero-evidence`. It is still refused, never silently scored, but as a
+    CONTRADICTION the operator can act on, not as a hollow pass."""
+    ac = audit_cycle()
+    report = write_report(tmp_path / "audit/report.md", ZERO_EVIDENCE_ONLY)
+    log = _agy_log(tmp_path / "audit/leg.log", tools_ok=20)
+    delivered, path = collect_with_log(ac, report, tmp_path, log)
+    assert delivered == "unscorable:self-report-contradicts-transcript", delivered
+    assert path is None and not collected_path(tmp_path).exists()
+
+
+@pytest.mark.parametrize("log_kind", ["absent", "at-the-floor", "unreadable"])
+def test_self_reported_zero_stays_zero_evidence_without_a_contradicting_transcript(
+    tmp_path: Path, log_kind: str
+) -> None:
+    ac = audit_cycle()
+    report = write_report(tmp_path / "audit/report.md", ZERO_EVIDENCE_ONLY)
+    log = None
+    if log_kind == "at-the-floor":
+        log = _agy_log(tmp_path / "audit/leg.log", tools_ok=ac.DELIVERY_FLOOR)
+    elif log_kind == "unreadable":
+        log = tmp_path / "audit/missing.log"
+    delivered, _ = collect_with_log(ac, report, tmp_path, log)
+    assert delivered == "unscorable:zero-evidence", (log_kind, delivered)

@@ -1,0 +1,59 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_assemble_tdd.py",
+    "tests/test_h_mad_codex_runtime.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "AT-MUT",
+      "_mechanism": "skill-candidates (c): GREEN stops asking for mutation rows; every row falls back to the orchestrator.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if phase == \"green\":  # M:AT-MUT",
+      "replace": "    if False:  # M:AT-MUT",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_green_asks_for_mutation_rows_and_names_the_spec"
+    },
+    {
+      "name": "AT-MUT-RED",
+      "_mechanism": "ask RED for rows too; RED has no guard yet, so the request is noise that invites fake rows.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if phase == \"green\":  # M:AT-MUT",
+      "replace": "    if True:  # M:AT-MUT",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_red_does_not_ask_for_mutation_rows"
+    },
+    {
+      "name": "AT-MUT-WIRE",
+      "_mechanism": "connection removal: --mutation-spec is parsed but never passed to assemble().",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            mutation_spec=args.mutation_spec,  # M:AT-MUT-WIRE",
+      "replace": "            mutation_spec=None,  # M:AT-MUT-WIRE",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_cli_mutation_spec_reaches_the_green_prompt"
+    },
+    {
+      "name": "CX-MUT-ANCHORS",
+      "_mechanism": "drop the --check-anchors requirement; a full harness run (which writes mutants into production code) would pass the Phase-5 gate.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        return (\"--check-anchors\" in args and bool(specs)  # M:CX-MUT-ANCHORS",
+      "replace": "        return (True and bool(specs)  # M:CX-MUT-ANCHORS",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_admits_mutation_harness_only_for_check_anchors"
+    },
+    {
+      "name": "CX-MUT-WITHIN",
+      "_mechanism": "drop the inside-the-project check on spec paths.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "                and all(_path_within(spec, root) for spec in specs))",
+      "replace": "                and True)",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_admits_mutation_harness_only_for_check_anchors"
+    }
+  ]
+}

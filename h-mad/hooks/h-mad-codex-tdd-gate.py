@@ -46,6 +46,7 @@ SAFE_HMAD_SCRIPT_OPTIONS = {
     "h_mad_do_preconditions.py": {"--feature", "--repo-root"},
     "h_mad_extract_verdict.py": {"--after-marker", "--allowed", "--feature", "--key", "--phase"},
     "h_mad_identifier_sweep.py": {"--allow", "--include-history", "--root"},
+    "h_mad_mutation_harness.py": {"--check-anchors"},
     "h_mad_resume_decision.py": {
         "--state", "--feature", "--host", "--session-id", "--now", "--session-id-from-git-dir",
     },
@@ -325,6 +326,12 @@ def _safe_hmad_script(script: Path, args: list[str], root: Path) -> bool:
             return False
         registry = _option_value(args, "--registry")
         return _path_within(args[0], root) and (registry is None or _path_within(registry, root / ".h-mad"))
+    if script.name == "h_mad_mutation_harness.py":
+        # Only the read-only anchor check: a full run writes mutants into
+        # production code. Every spec it reads must be inside the project.
+        specs = [token for token in args if not token.startswith("-")]
+        return ("--check-anchors" in args and bool(specs)  # M:CX-MUT-ANCHORS
+                and all(_path_within(spec, root) for spec in specs))
     if script.name == "h_mad_wire_registry.py":
         return bool(args) and args[0] in {"challenge", "verify"}
     if script.name == "h_mad_assemble_tdd.py":
