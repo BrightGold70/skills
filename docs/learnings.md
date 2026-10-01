@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-01 · gotcha · [0.7] · `mutation-testing,python,pyc,handoff:2026-10-01-v111-file-tool-only` — Ad-hoc mutation sweeps writing every mutant to one _mut.py reuse a stale .pyc (mtime-second+size) and report false kills; use one module per mutant, dont_write_bytecode, assert mutant!=original.
+- 2026-10-01 · gotcha · [0.7] · `smoke-assert,v111,agy,grok,ordering,handoff:2026-10-01-v111-file-tool-only` — Order tool reads by completion, not issue: hosts run tools in parallel, so a write issued after a read can finish first and change what the read returns.
+- 2026-10-01 · pattern · [0.9] · `smoke-assert,v111,shell,zsh,classifier,handoff:2026-10-01-v111-file-tool-only` — Judging shell command text (read? writes? assigns?) never converges: 17 rounds each found new zsh tricks. Credit only structured tool events; treat every shell command as a possible write.
 - 2026-10-01 · pattern · [0.5] · `h-mad,smoke,mhr,handoff:2026-10-01-backlog-cleared` — A pre-push smoke script whose recover() reverts PRE..HEAD must not run post-merge; run its assertion part only, no revert, and record it as a post-merge variant
 - 2026-10-01 · gotcha · [0.7] · `h-mad,mutation,anchors,handoff:2026-10-01-backlog-cleared` — h-mad has TWO mutation-spec dirs (tests/mutation-specs/ and tests/specs/); --check-anchors on one glob is blind to drift in the other — sweep both after editing anchored code
 - 2026-10-01 · gotcha · [0.7] · `git,stash,handoff:2026-10-01-backlog-cleared` — git stash on a clean tree stashes nothing; the next stash pop applies a FOREIGN stash. To measure old code use git show <rev>:path > tmp, never stash/pop

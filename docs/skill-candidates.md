@@ -2229,3 +2229,11 @@ wrapper-leak row (`4affd9e0`), HemaSuite #10 (a) and (c) (`86479f73`). The censu
 
 - **`--check-anchors` should sweep every spec directory by default**: h-mad keeps mutation specs in BOTH `h-mad/tests/mutation-specs/` and `h-mad/tests/specs/`; after editing `h_mad_audit_cycle.py` the habitual `--check-anchors tests/mutation-specs/*.json` said ANCHORS_OK while three rows in `tests/specs/audit_cycle_connections.mutation.json` had drifted — caught only by a doc-derived test in the full suite. Fix: a no-argument `--check-anchors` (or `--all`) that globs both directories, and name the second directory in SKILL.md's 5e text. — recurrence: 1 — candidate: yes
 - **post-merge variant for spec-literal pre-push smoke scripts**: the mhr V-11 script halts on "integration already pushed" and its `recover()` reverts `PRE..HEAD`, so after a merge it is either unrunnable or destructive; the post-merge run had to be hand-adapted (part 2 only, no revert). A `--post-merge` mode in the probe, or a plan rule that every pre-push smoke states its post-merge form, would make a late live smoke a one-liner. — recurrence: 1 — candidate: maybe
+
+## 2026-10-01 — v111-file-tool-only (scout)
+
+**Reconciled this session: none.** No open row's work was touched. The census reads the count
+above, all unverified here.
+
+- **cache-proof mutation sweep for a probe's rehearsal**: this session ran an ad-hoc `mutsweep.py` about 12 times over `smoke_assert.py` against `rehearsal/cases.json`. It writes one module per mutant, sets no bytecode, asserts the mutant differs from the original, and counts a crashing mutant as killed. Its first version (a single `_mut.py`) reported a false kill from a stale `.pyc`. `h_mad_mutation_harness.py` is pytest-based and does not fit a rehearsal-style probe. — candidate: yes (recurrence ≈12, one session)
+- **fresh-reviewer rotation for adversarial rounds**: the long-running reviewer's "clean" round was followed by 3 HIGH findings from a fresh-context reviewer, and every later round used a new agent. A skill or recipe could encode it: spawn a fresh reviewer per round, pass the closed-class list from a doc, and stop when a fresh round is clean. — candidate: maybe
