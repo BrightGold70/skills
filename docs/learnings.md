@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-02 · solution · [0.7] · `v111,verification,handoff:2026-10-02-v111-review-loop-closed` — A verdict claim ('live verdicts unchanged') needs the live log re-scored and pinned in the rehearsal; R18's claim was false. Search old session scratchpads for retained live logs.
+- 2026-10-02 · gotcha · [0.7] · `pytest,python-version,v111,handoff:2026-10-02-v111-review-loop-closed` — pytest here runs under /opt/anaconda3 python 3.11 (recursive JSON decoder) while python3 is 3.14; a deep-row fixture crashed only in pytest. Run rehearse + mutation sweeps under both interpreters.
+- 2026-10-02 · gotcha · [0.7] · `v111,mutation,review,handoff:2026-10-02-v111-review-loop-closed` — Removing a guard as 'redundant' with another check is unsafe when the two may be satisfied by different events/parses; 3 of 5 V-11.1 review rounds' worst defects came from exactly that. Keep layers; a sweep can't see wrong premises.
 - 2026-10-01 · gotcha · [0.7] · `mutation-testing,python,pyc,handoff:2026-10-01-v111-file-tool-only` — Ad-hoc mutation sweeps writing every mutant to one _mut.py reuse a stale .pyc (mtime-second+size) and report false kills; use one module per mutant, dont_write_bytecode, assert mutant!=original.
 - 2026-10-01 · gotcha · [0.7] · `smoke-assert,v111,agy,grok,ordering,handoff:2026-10-01-v111-file-tool-only` — Order tool reads by completion, not issue: hosts run tools in parallel, so a write issued after a read can finish first and change what the read returns.
 - 2026-10-01 · pattern · [0.9] · `smoke-assert,v111,shell,zsh,classifier,handoff:2026-10-01-v111-file-tool-only` — Judging shell command text (read? writes? assigns?) never converges: 17 rounds each found new zsh tricks. Credit only structured tool events; treat every shell command as a possible write.
