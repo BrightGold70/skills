@@ -796,15 +796,22 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         bound the way reads are: lexically it must be `<root>/h-mad/scripts/h_mad_*.py`, or
         `<link>/scripts/h_mad_*.py` for a `--link`, and the file must exist in the checkout. The
         event must also have completed: a grok `completed` update, or an agy `DONE` row.
-        - A script call that declares this host in any other form gives
+        - The canonical event must itself be a declaring run: the same event's text must also read
+          as an `h_mad_*.py` run carrying `HMAD_HOST=<host>` (amended at review round 20). Matched
+          across events, one event satisfying the template while running a `.sh` or `.json` file
+          and another event supplying the declaration was a fail-open. Other declaring events may
+          take any form. Real hosts also run the adapter's multi-command `$SKILL_ROOT/scripts/…`
+          calls, so requiring every declaration to be canonical would make every realistic log
+          `UNVERIFIED`.
+        - A declaration with no completed canonical declaring event gives
           `UNVERIFIED V-11.1 declaration not in the canonical form`. For codex and agy, a missing
           skill read is still `FAIL`.
         - Another host named in any script's prefix still FAILs.
         - Any other `HMAD_HOST` mention still gives `UNVERIFIED … HMAD_HOST used outside an exact
           declaration`.
         - **Residual:** what other shell events did to the environment, or to how `python3`
-          resolves, is trusted like the starting environment. Examples are a function, alias or
-          export in a persistent shell. Rehearsal case `R19-residual-prior-event-function` pins
+          resolves, or to the shell's working directory, is trusted like the starting
+          environment. Examples are a function, alias, export or `cd` in a persistent shell. Rehearsal case `R19-residual-prior-event-function` pins
           this, and the mention count still catches a literal `HMAD_HOST` in them.
       - **Event shape is checked.** Each violation is `UNVERIFIED`:
         - a grok `toolCallId` reused across `tool_call`s, or one that is not a string;
@@ -816,6 +823,10 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         - an agy `step_index` that is not an integer (a boolean is not an integer);
         - an agy tool step whose `DONE` row comes before its `ACTIVE` row;
         - a `view_file` whose `FilePath` or `AbsolutePath` is present but not a string;
+        - a shell call carrying a parameter not seen in real logs: an agy `run_command` whose
+          parameters are not exactly `CommandLine`, or a grok `run_terminal_command` whose
+          `rawInput` has a key other than `command` and `description`. A per-call working
+          directory, for one, would change what a relative script path names;
         - a grok `tool_call_update` carrying `rawInput`, or a call with more than one terminal
           (`completed`/`failed`) update (real logs end each call with exactly one);
         - an agy tool step with no index, or with an index reused by a different step.
@@ -824,7 +835,9 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         past Python's digit limit, or nests deeper than 200 levels (so the verdict does not depend on
         how deep the interpreter's decoder can recurse) gives `UNVERIFIED V-11.1 unparseable line N`; for codex it gives
         `codex input shape unobserved`. Rows are split on `\n` only, since JSON may carry U+2028,
-        U+2029 or U+0085 raw.
+        U+2029 or U+0085 raw. Shell text that `shlex` cannot split (an apostrophe in a comment,
+        say) is one unknown command. It still taints the filesystem and still counts for the
+        ordering, so a read-based `FAIL` stands.
 
         An agy tool step with no `ACTIVE` row (real logs always pair `ACTIVE` then `DONE`) has no
         known issue time, so it counts as issued at the start of the log.

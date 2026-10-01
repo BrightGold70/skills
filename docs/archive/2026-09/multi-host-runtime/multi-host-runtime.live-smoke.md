@@ -375,3 +375,36 @@ mutants:
 Two guards the sweep showed to be redundant, a leading-`=` check and a script-name check, were
 removed. Live verdicts: grok PASS and agy FAIL, both re-scored from
 committed logs; codex is UNVERIFIED for any log.
+
+Review round 20 (a fresh-context security reviewer, scoped to round 19's changes, 2026-10-02)
+found one fail-open, one conditional fail-open and two drifts:
+- **F1 (HIGH), my own regression.** Round 19 removed the template's script-name check as
+  "redundant". The reasoning was that `classify()`, which supplies `declared`, already requires
+  `h_mad_*.py`. But the template and the declaration came from *different* events. So
+  `HMAD_HOST=agy python3 h-mad/scripts/h_mad_derive_test_path.sh` passed: python3 runs any file,
+  and here it raised a SyntaxError. A `bash -c` declaration elsewhere that never completed
+  supplied `declared`, and the mention count balanced because `HMAD_HOST=x bash -c "A; B"`
+  counted one mention as two declarations. The mutation sweep could not see this, because no
+  fixture combined two events. Now the canonical event must itself be the declaring event.
+  Requiring *every* declaration to be canonical, the reviewer's other option, was tried and
+  rejected: the retained live grok log also declares in its adapter-style `$SKILL_ROOT`
+  multi-command call, and went `UNVERIFIED`.
+- **F2 (MED).** A per-call working directory in the shell-call parameters was ignored, though it
+  changes what a relative script path names. Shell-call parameter keys are now limited to those
+  seen in real logs (agy `{CommandLine}`, grok `{command, description}`), and any other key is a
+  shape error.
+- **D1 and D2 (LOW).** The spec now says non-canonical declarations are allowed beside a
+  canonical declaring event, and describes the `shlex` fallback. The residual now names the
+  working directory.
+
+Cases `R20-*` (15) bring n=271, under both 3.14 and 3.11. At `0ce01a20`, F1 (three hosts or
+forms), its link variant and F2 (agy and grok) all gave PASS. The sweep over 31 guards, run under
+both interpreters with an unmutated control:
+- 28 were killed by a wrong verdict.
+- G5 and G8 were killed only by a crash.
+- The `RecursionError` catch was killed by a crash under 3.11, and has nothing to catch under
+  3.14.
+
+The same-event rule makes a restored script-name check redundant (each survives alone), so only
+the same-event rule is kept. Live verdicts are unchanged and re-scored from the committed logs:
+grok PASS, agy FAIL.

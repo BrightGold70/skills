@@ -176,6 +176,10 @@ def grok_events(rows: list[dict]) -> tuple[list[Event], bool]:
             events.append(Event("other", str(tool), True, None, issued=position[id(row)]))
             continue
         raw = row.get("rawInput")
+        if tool == "run_terminal_command" and isinstance(raw, dict) and not set(raw) <= {"command", "description"}:
+            # Keys seen in real logs. Another (a working directory, say) could change what the
+            # command text means, so it is not ignored.
+            raise ShapeError("grok input shape unobserved")
         value = raw.get("command" if tool == "run_terminal_command" else "target_file") if isinstance(raw, dict) else None
         if not isinstance(value, str):
             raise ShapeError("grok input shape unobserved")
@@ -253,6 +257,8 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
         # view_file names the file read in FilePath (or AbsolutePath); any other parameter is not it.
         value = (params.get("CommandLine") if isinstance(params, dict) and tool == "run_command" else
                  [params[k] for k in ("FilePath", "AbsolutePath") if isinstance(params, dict) and isinstance(params.get(k), str)])
+        if tool == "run_command" and isinstance(params, dict) and set(params) != {"CommandLine"}:
+            raise ShapeError("agy input shape unobserved")  # the only key seen; a cwd would change the text's meaning
         if tool == "run_command" and not isinstance(value, str) or tool == "view_file" and not isinstance(params, dict):
             raise ShapeError("agy input shape unobserved")
         at, finish = done.get(index, (None, None))
@@ -472,10 +478,11 @@ def canonical(text: str, places: Places) -> str | None:
     match = CANONICAL.fullmatch(text)
     if not match:
         return None
-    # The h_mad_*.py name is already required by classify(), which supplies `declared`; a leading
-    # `=` or `-` cannot pass either, since lexically it is never a bound path.
     path = match[2]
     name = posixpath.basename(path)
+    # python3 runs any file, so a .sh or .json under scripts/ fits this template. It still cannot
+    # count: v111 credits a canonical event only when classify() reads that SAME event as a
+    # declaring h_mad_*.py run (review round 20).
     where = lexical(path, places)
     bound = {posixpath.normpath(f"{places.root}/h-mad/scripts/{name}")} | {
         posixpath.normpath(f"{link}/scripts/{name}") for link in places.links}
@@ -522,7 +529,7 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
         # value, `+=`, export, read, a quoted suffix, even a grep for it) cannot be judged.
         exact_declarations = 0
         other_host = False
-        canonical_hosts: set[str] = set()
+        canonical_ok = False
         host_mentions = sum(e.value.count("HMAD_HOST") for e in events if e.tool == "shell")
         # A read counts only if nothing that may write was ISSUED before the read COMPLETED: hosts
         # run tools in parallel, so a write issued after the read but finished first is still in
@@ -562,14 +569,13 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
             # filesystem taint (above), the script/dispatch ordering and the HMAD_HOST declaration.
             shelled = True
             named = canonical(event.value, places) if isinstance(event.value, str) else None
-            if named is not None and event.success:
-                canonical_hosts.add(named)
             try:
                 commands = [c for tokens in simple_tokens(event.value) for c in classify(tokens.copy())]
             except ValueError:
                 # Text shlex cannot split (an apostrophe in a comment, say) is one unknown command:
                 # it still taints and still counts for the ordering, so a read-based FAIL stands.
                 commands = [Command("unknown", [event.value], [], "")]
+            declares = False
             for command in commands:
                 mentioned = bool(MENTION.search(" ".join(command.tokens)))
                 if not read_adapter:
@@ -584,6 +590,12 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
                     exact_declarations += len(values)
                     other_host |= any(v != host for v in values)
                     declared |= host in values
+                    declares |= host in values
+            # The canonical event must itself be a declaring event: matched across events, a
+            # template naming any file and a declaration elsewhere passed (review round 20).
+            # Other declaring events may take other forms; real hosts run the adapter's
+            # multi-command `$SKILL_ROOT` calls too.
+            canonical_ok |= declares and named == host and event.success
         if not read_adapter:
             # A read-only call need not load the adapter, provided every event is a file-read tool
             # call: no shell command and no tool or step the classifier does not map. Anything
@@ -607,7 +619,7 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
         # function, alias or export in a persistent shell) is an accepted residual, like the
         # starting environment. A script call that declared this host in any other form cannot
         # be judged; a missing skill read is still a FAIL.
-        if declared and host not in canonical_hosts:
+        if declared and not canonical_ok:
             if not read_skill and host != "grok":
                 return "FAIL V-11.1 no observed SKILL.md read", 0
             return "UNVERIFIED V-11.1 declaration not in the canonical form", 0

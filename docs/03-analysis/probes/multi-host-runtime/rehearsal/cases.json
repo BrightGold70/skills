@@ -2264,5 +2264,128 @@
     "log": "R19-X2-grok-deep500.log",
     "root": ".",
     "expected": "UNVERIFIED V-11.1 unparseable line 3"
+  },
+  {
+    "id": "agy-R20-F1-sh",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-F1-sh.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R20-F1-json",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-F1-json.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "grok-R20-F1-grok",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R20-F1-grok.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R20-F1-ctrl-Aonly",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-F1-ctrl-Aonly.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "grok-R20-F1-grok-ctrl",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R20-F1-grok-ctrl.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R20-D3-mixed",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-D3-mixed.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R20-D3-ctrl",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-D3-ctrl.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R20-B1-noncanon-done-canon-notdone",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-B1-noncanon-done-canon-notdone.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R20-C1-apos-after",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-C1-apos-after.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R20-C2-apos-before",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-C2-apos-before.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+  },
+  {
+    "id": "agy-R20-C3-apos-bashc",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-C3-apos-bashc.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R20-F2-agy-cwd",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-F2-agy-cwd.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved"
+  },
+  {
+    "id": "grok-R20-F2-grok-cwd",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R20-F2-grok-cwd.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 grok input shape unobserved"
+  },
+  {
+    "id": "agy-R20-F2-agy-cwd-ctrl",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-F2-agy-cwd-ctrl.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R20-L3-link-sh",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R20-L3-link-sh.log",
+    "root": ".",
+    "links": [
+      "/fake/link/h-mad"
+    ],
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   }
 ]
