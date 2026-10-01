@@ -151,12 +151,15 @@ Changes:
     An eighth pass then found hidden commands inside safe ones: ``echo `cp …` `` and zsh's
     `echo ${PATH::=…}`. A ninth pass found zsh math assigning variables, through
     `printf %d HOME=7` and `$[HOME=7]`. An exec with any active expansion (a backtick, `$(`,
-    `$[`, or a braced parameter with an operator) now taints both the shell and the filesystem;
-    only a plain `$NAME`/`${NAME}` does not. `printf` is no longer a safe command.
+    `$[`, or a braced parameter with an operator) now taints both the shell and the filesystem.
+    `printf` is no longer a safe command. A tenth pass found that zsh subscript math
+    (`$PWD[HOME=7]`) assigns through plain-looking syntax. The pattern list therefore became an
+    allowlist: any `$` other than a plain `$NAME`/`${NAME}` with no subscript, and any backtick,
+    is active.
 
     The character allowlist became redundant under the text comparison and was removed. Cases
-    `*-G1`–`G17` cover this; they use a fake `HOME`, so the rehearsal passes unchanged under
-    another `HOME` and working directory (n=165). A cache-proof mutation sweep, with each mutant
+    `*-G1`–`G18` cover this; they use a fake `HOME`, so the rehearsal passes unchanged under
+    another `HOME` and working directory (n=166). A cache-proof mutation sweep, with each mutant
     in its own module and no bytecode, kills all 36 guards. An earlier ad-hoc sweep had reused a
     stale `.pyc` between mutants of equal size written in the same second, and reported one kill
     that was not real. The repo's own harness already guards against this
@@ -164,6 +167,25 @@ Changes:
 
     Still not credited, conservatively: `cd <root> && cat …`, and a read with its own prefix
     assignment.
+
+    An eleventh review pass found no new decoy. A **fresh** reviewer, with no history, then
+    found four more from angles the long-running reviewer had not tried:
+    - `bash /dev/stdin -c '…'` runs stdin, not the `-c` text;
+    - a reused grok `toolCallId`;
+    - a non-tool agy step on a tool step's index supplying its output;
+    - an agy `view_file` whose `FilePath` and `AbsolutePath` name different files.
+
+    All four are closed (cases `F1`–`F5`, n=171).
+
+    A second fresh reviewer found two more. `rg --hostname-bin` runs a program on the full-PASS
+    path; the earlier fix covered only the lazy pass, so `rg` is no longer a safe command. And
+    `sed_safe` stopped checking at the first operand, while GNU sed runs a later `-e w`/`e`
+    script; it now checks every argument. Cases `F6`–`F8` cover these (n=174), and a
+    cache-proof sweep kills 42/42 guards. That reviewer's other finding, codex output forging
+    whole `exec` blocks, is the documented design residual. **Residual, LOW (environment):** the log cannot
+    show what the host shell sources before the first command. `zsh -lc` reads the login profile,
+    which could `cd`, define functions or set `RIPGREP_CONFIG_PATH`/`GREP_OPTIONS`. The checker
+    trusts the session's starting environment, which the smoke's operator controls.
 
 - Fifteen rehearsal cases were added (`*-L*`, n=93 → 108). Each guard was mutation-probed and
   killed. A codex-only guard survived its probe because the shell rule subsumes it, so it was

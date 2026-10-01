@@ -746,7 +746,21 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         lexically names.
       - `~/` and `$HOME/` count only when the logged session's `HOME` is passed as `--home`.
         Without it they never count.
-      - For agy `view_file`, only `FilePath` or `AbsolutePath` names the file read.
+      - For agy `view_file`, only `FilePath` or `AbsolutePath` names the file read, and a read is
+        credited only if every path parameter present names the file.
+      - Event shape is checked before any read is credited, and each violation is `UNVERIFIED`.
+        A grok `toolCallId` reused across two `tool_call`s cannot be paired with its output. A
+        non-tool agy step sharing a tool step's `step_index` could supply that step's output.
+        An agy `run_command` is taken to run at the workspace root unless it carries a `Cwd`.
+      - `bash`/`zsh -c` is followed only when every argument before `-c` is an option:
+        `bash <script> -c …` runs `<script>`.
+      - `rg` is not a safe command (`--pre` and `--hostname-bin` run programs). A `sed` read is
+        safe only if every argument is checked, because GNU sed accepts `-e` scripts after a file
+        operand.
+      - **Residual (design, codex only):** a codex text log cannot separate a command's output
+        from a following `exec` entry, so output that reproduces whole events is read as events
+        (case `codex-output-injection`). Live codex V-11.1 is `UNVERIFIED` for the related shape
+        reason.
       - **Every credited read needs an untouched filesystem.** A read proves a file's content
         only if nothing earlier in the whole log could have written or re-pointed it: `cp` over
         the checkout file, a symlink swap, or a redirect. So an unmapped tool, any command that
@@ -756,9 +770,11 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         does not taint the filesystem, but it still forfeits the lazy pass. The real flow reads
         `SKILL.md` and the adapter before any script, and the live grok run still passes.
       - An exec holding an active expansion counts as untrusted, and it taints both the shell and
-        the filesystem. An active expansion is a backtick, `$(`, zsh `$[…]` math (`HOME=7`
-        assigns), or a braced parameter with any operator (zsh `${NAME::=v}` assigns). It can run or assign inside a command that would
-        otherwise rate as safe. Only plain `$NAME` and `${NAME}` are side-effect free.
+        the filesystem. The rule is an allowlist: the only side-effect-free expansion is a plain
+        `$NAME` or `${NAME}` that is not followed by a subscript. Any other `$` and any backtick
+        is active, because it can run or assign inside a command that would otherwise rate as
+        safe. That covers `$(`, zsh `$[…]` math, `${NAME::=v}`, the subscript `$NAME[HOME=7]`
+        (zsh evaluates it as math) and special parameters.
       - A relative shell path also needs the codex exec's cwd to be the root. An absolute path
         does not.
 
@@ -797,7 +813,9 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       relative paths resolve against the root, and they never expand `~` or a variable, so those
       spellings never count there.
 
-      Nothing is resolved on the scoring machine, and no symlink is followed. These rules apply
+      Nothing is resolved on the scoring machine, and no symlink is followed. The session's
+      starting environment (a login profile sourced before the first command) is outside the log
+      and is trusted. These rules apply
       to both reads, the adapter and `SKILL.md`, and to the full and lazy passes alike.
       **Lazy exception (operator decision 2026-10-01, after the live smoke).** A call need not
       read the adapter when every event in its log is a call to the host's **file-read tool**

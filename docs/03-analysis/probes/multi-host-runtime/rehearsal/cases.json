@@ -1447,5 +1447,90 @@
       "~/.gemini/config/skills/h-mad"
     ],
     "note": "Positive twin of G15/G16 without the assignment: the link read counts."
+  },
+  {
+    "id": "agy-G18-subscript-math",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-G18-subscript-math.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad"
+    ],
+    "note": "zsh evaluates a subscript as math: `echo $PWD[HOME=7]` assigns HOME. Only $NAME/${NAME} with no subscript is a plain expansion."
+  },
+  {
+    "id": "codex-F1-script-before-dash-c",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-F1-script-before-dash-c.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "`bash /dev/stdin -c '…'` runs stdin, not the -c text; -c counts only when every argument before it is an option."
+  },
+  {
+    "id": "grok-F2-reused-tool-call-id",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-F2-reused-tool-call-id.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 grok input shape unobserved",
+    "note": "Two tool_calls sharing one toolCallId cannot be paired with their output."
+  },
+  {
+    "id": "agy-F3-non-tool-done-on-tool-index",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-F3-non-tool-done-on-tool-index.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved",
+    "note": "A non-tool step on a tool step's index could supply its output; the output comes only from that tool step's own DONE."
+  },
+  {
+    "id": "agy-F4-view-file-two-paths",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-F4-view-file-two-paths.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "view_file with FilePath and AbsolutePath naming different files: credited only if every path parameter names the file."
+  },
+  {
+    "id": "agy-F5-view-file-extra-param",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-F5-view-file-extra-param.log",
+    "root": ".",
+    "expected": "PASS V-11.1 lazy (no script ran)",
+    "note": "Positive: a view_file with a non-path string parameter still counts; only FilePath/AbsolutePath are path parameters."
+  },
+  {
+    "id": "codex-F6-rg-hostname-bin",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-F6-rg-hostname-bin.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read",
+    "note": "`rg --hostname-bin` runs a program; rg is not a safe command."
+  },
+  {
+    "id": "codex-F7-gnu-sed-late-w",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-F7-gnu-sed-late-w.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script ran before the adapter was read",
+    "note": "GNU sed takes -e after a file operand; a late `w` script writes. sed_safe checks every argument."
+  },
+  {
+    "id": "codex-F8-gnu-sed-late-e",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-F8-gnu-sed-late-e.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read",
+    "note": "GNU sed takes -e after a file operand; a late `e` script runs a command. sed_safe checks every argument."
   }
 ]

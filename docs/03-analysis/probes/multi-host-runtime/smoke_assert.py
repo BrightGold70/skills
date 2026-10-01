@@ -24,9 +24,15 @@ REDIRECT = re.compile(r"[<>&|]*[<>][<>&|]*")
 PUNCT = set(";&|<>()\n")
 SEPARATOR = set(";&|()\n")
 CODEX_LINE = re.compile(r"^\S+ -lc .* in \S+$")
-# Expansion that can run or assign: a backtick, $( / $((, zsh $[...] math (HOME=7 assigns), or a
-# braced parameter with any operator (zsh ${NAME::=v} assigns). Only plain $NAME / ${NAME} are side-effect free (an allowlist).
-ACTIVE_EXPANSION = re.compile(r"`|\$\(|\$\[|\$\{(?![A-Za-z_][A-Za-z0-9_]*\})")
+# The only side-effect-free expansion is a plain parameter: $NAME or ${NAME}, not followed by a
+# subscript (zsh evaluates $NAME[HOME=7] as math that assigns). Any other `$` (`$(`, `$[`,
+# `${op`, `$NAME[`, special parameters) and any backtick can run or assign: an allowlist.
+PLAIN_PARAM = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})(?![A-Za-z0-9_\[])")
+
+
+def active_expansion(text: str) -> bool:
+    rest = PLAIN_PARAM.sub("", text)
+    return "$" in rest or "`" in rest
 
 
 
@@ -87,7 +93,10 @@ def grok_events(rows: list[dict]) -> tuple[list[Event], bool]:
         if row.get("type") == "tool_call_update" and row.get("status") == "completed":
             updates[row.get("toolCallId")] = row
     events = []
-    called = {row.get("toolCallId") for row in rows if row.get("type") == "tool_call"}
+    ids = [row.get("toolCallId") for row in rows if row.get("type") == "tool_call"]
+    if len(ids) != len(set(ids)):
+        raise ShapeError("grok input shape unobserved")  # a reused id cannot be paired with its output
+    called = set(ids)
     if any(row.get("toolCallId") not in called for row in rows if row.get("type") == "tool_call_update"):
         # A completed update with no tool_call is an action the log does not show the input of.
         events.append(Event("other", "orphan tool_call_update", True, None))
@@ -117,10 +126,18 @@ def grok_events(rows: list[dict]) -> tuple[list[Event], bool]:
 
 def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
     done: dict[object, dict] = {}
+    tool_steps: set = set()
+    other_steps: set = set()
     for row in rows:
         step = row.get("step_update")
-        if row.get("event") == "step_update" and isinstance(step, dict) and step.get("state") == "DONE":
+        if row.get("event") != "step_update" or not isinstance(step, dict):
+            continue
+        (tool_steps if step.get("step_type") == "tool" else other_steps).add(step.get("step_index"))
+        if step.get("state") == "DONE":
             done[step.get("step_index")] = step
+    if tool_steps & other_steps:
+        # Another step type on a tool step's index could supply (or hide) its output.
+        raise ShapeError("agy input shape unobserved")
     events = []
     seen: dict[object, str] = {}
     for row in rows:
@@ -158,9 +175,10 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
         finish = done.get(index)
         end_info = finish.get("tool_info") if finish else None
         output = end_info.get("output") if isinstance(end_info, dict) else None
+        cwd = params.get("Cwd") if tool == "run_command" and isinstance(params.get("Cwd"), str) else None
         events.append(Event("shell" if tool == "run_command" else "read", value, finish is not None,
                             output if isinstance(output, str) else None,
-                            finish is not None and not isinstance(output, str)))
+                            finish is not None and not isinstance(output, str), cwd=cwd))
     return events, False
 
 
@@ -278,9 +296,9 @@ def simple_tokens(text: str) -> list[list[str]]:
 
 
 def sed_safe(args: list[str]) -> bool:
+    """Every argument is checked: GNU sed accepts options, and -e scripts, after a file operand."""
     allowed = {"-n", "--quiet", "--silent", "-E", "-r"}
-    scripts = []
-    i = 0
+    scripts, operands, i = [], [], 0
     while i < len(args):
         item = args[i]
         if item in ("-e", "--expression"):
@@ -291,10 +309,11 @@ def sed_safe(args: list[str]) -> bool:
         elif item.startswith("-"):
             if item not in allowed:
                 return False
-        elif not scripts:
-            scripts.append(item)
-            break
+        else:
+            operands.append(item)
         i += 1
+    if not scripts and operands:
+        scripts.append(operands.pop(0))
     return bool(scripts) and all(re.fullmatch(r"(\d+|\$)?(,(\d+|\$))?p", s) for s in scripts)
 
 
@@ -342,6 +361,8 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
         return [Command("unknown", tokens, assignments, name)]
     if name in ("bash", "sh", "zsh"):
         for i, item in enumerate(args):
+            if not item.startswith("-"):
+                break  # `bash <script> -c ...` runs <script>; -c after an operand is the script's argument
             if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", item):
                 if depth >= 2 or i + 1 >= len(args):
                     return [Command("unknown", tokens, assignments, name)]
@@ -366,10 +387,9 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
         operand = next((a for a in args if not a.startswith("-")), "")
         if re.fullmatch(r"hmad-dispatch(\.sh)?", Path(operand).name):
             return [Command("dispatch", tokens, assignments, name)]
-    safe = {"cat", "head", "tail", "nl", "sed", "grep", "rg", "ls", "test", "[", "echo", "wc", "stat"}
-    if name in safe and (name != "sed" or sed_safe(args)) and (name != "rg" or not any(
-            a.startswith("--pre") or a in ("-z", "--search-zip") or
-            re.fullmatch(r"-[A-Za-z]+", a) and "z" in a for a in args)):
+    # rg is not safe: --pre and --hostname-bin run programs, and its option set is too rich to allowlist.
+    safe = {"cat", "head", "tail", "nl", "sed", "grep", "ls", "test", "[", "echo", "wc", "stat"}
+    if name in safe and (name != "sed" or sed_safe(args)):
         return [Command("read" if name in {"cat", "head", "tail", "nl", "sed"} else "safe",
                         tokens, assignments, name)]
     return [Command("unknown", tokens, assignments, name)]
@@ -424,8 +444,8 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
                             if script_before_adapter and not read_adapter:
                                 return "FAIL V-11.1 a script ran before the adapter was read", 0
                             adapter_seen = True
-                        if event.success and any(names_file(p, host, is_skill, places, True, False, not fs_tainted)
-                                                 for p in paths):
+                        if event.success and paths and all(names_file(p, host, is_skill, places, True, False, not fs_tainted)
+                                                           for p in paths):
                             if event.output_bad:
                                 return f"UNVERIFIED V-11.1 {host} output shape unobserved", 0
                             if event.output is not None and heading in event.output:
@@ -449,7 +469,7 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
             # A command hidden in an expansion is invisible to classify, so it taints the shell and
             # filesystem from here on. A read in the same exec needs no extra rule: an expansion in
             # its path never equals the plain target, and a split-off $( makes it non-sole.
-            active = bool(ACTIVE_EXPANSION.search(event.value))
+            active = active_expansion(event.value)
             if active:
                 tainted = fs_tainted = True
             sole = len(every) == 1
