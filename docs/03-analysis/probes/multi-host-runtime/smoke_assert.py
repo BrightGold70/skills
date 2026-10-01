@@ -117,7 +117,8 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
             continue
         if step.get("step_type") != "tool":
             # Step types observed in real agy logs; any other could act, so it is unmapped.
-            if step.get("step_type") not in ("agent_response", "user_input", "checkpoint"):
+            # system_message is a harness notice (no tool, no parameters), seen in the live smoke.
+            if step.get("step_type") not in ("agent_response", "user_input", "checkpoint", "system_message"):
                 events.append(Event("other", str(step.get("step_type")), True, None))
             continue
         index = step.get("step_index")

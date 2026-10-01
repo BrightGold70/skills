@@ -1274,7 +1274,7 @@ rehearsal is re-run, and the smoke record states that.
   ```bash
   P="$REPO/docs/03-analysis/probes/multi-host-runtime/smoke_assert.py"
   r=$(python3 "$P" v112 --out "$S/out" --record "$B_REC" --feature "$F"); test "$r" = "PASS V-11.2" || stop "${r:-UNREADABLE V-11.2 reason=no_output}"
-  r=$(python3 "$P" v111 --host "$H" --log "$S/log" --root "$REPO"); test "$r" = "PASS V-11.1" || stop "${r:-UNREADABLE V-11.1 reason=no_output}"
+  r=$(python3 "$P" v111 --host "$H" --log "$S/log" --root "$REPO"); case "$r" in "PASS V-11.1"|"PASS V-11.1 lazy (no script ran)") ;; *) stop "${r:-UNREADABLE V-11.1 reason=no_output}" ;; esac
   ```
 - The pinned prompt's "declare `HMAD_HOST`" item is proved from the log by step 4 of the verdict
   (OD-4), never taken on the host's word.

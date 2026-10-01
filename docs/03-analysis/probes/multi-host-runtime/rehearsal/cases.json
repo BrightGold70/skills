@@ -890,5 +890,23 @@
     "root": ".",
     "expected": "FAIL V-11.1 no adapter read",
     "note": "An orphan update is unmapped whatever its status; a failed action still acted."
+  },
+  {
+    "id": "agy-L12-system-message",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-L12-system-message.log",
+    "root": ".",
+    "expected": "PASS V-11.1 lazy (no script ran)",
+    "note": "A system_message step is a harness notice, not an action; the live agy log carries two."
+  },
+  {
+    "id": "live-agy-2026-10-01",
+    "mode": "v111",
+    "host": "agy",
+    "log": "live-agy-2026-10-01.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "The live smoke agy run (agy 1.2.14), re-scored under the lazy rule: 15 shell commands incl. a nested `agy /h-mad status`, so it is not a read-only call and still needed the adapter."
   }
 ]

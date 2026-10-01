@@ -99,7 +99,28 @@ Changes:
 - `h-mad/SKILL.md` §"Host runtime" states the rule, and now times the agy adapter read "before
   bootstrap", as it already did for codex and grok.
 
-**The agy row above stays FAIL, and it is not re-scored.** The live agy log was kept in the
-session scratchpad and was never committed. The record above names only the first failing check,
-so whether the run qualifies for the lazy pass is unknown. Under the new rule, the live agy
-V-11.1 verdict is **UNVERIFIED (log not retained)** until an agy smoke is re-run.
+**Re-scored: the agy row stays FAIL, and the reason is now settled.** The live agy log had
+survived in the original session's scratchpad. It is now committed as
+`rehearsal/live-agy-2026-10-01.log`, case `live-agy-2026-10-01`, so it cannot be lost again.
+
+Under the lazy rule it scores `FAIL V-11.1 no adapter read`. That is because it was **not** a
+read-only status call:
+
+- agy ran 15 shell commands before it ever read the state file. These included `find /`,
+  `zsh -i -c "type h-mad"`, `HMAD_HOST=agy h-mad status …` and a nested
+  `HMAD_HOST=agy agy /h-mad status …`.
+- It read `SKILL.md` at step 9. It then searched for an `h-mad` binary instead of following the
+  adapter instruction.
+- It reached the answer by `cat docs/.bkit-memory.json`.
+
+The status line was still correct, and nothing was written (V-11.2 and V-11.3 PASS). The FAIL is
+the one the new rule exists for: a call that runs commands without the adapter.
+
+Two more things the re-score surfaced:
+
+- The live log carries two `system_message` steps, a harness notice with no tool and no
+  parameters. That type is now on the non-acting list (case `agy-L12-system-message`, n=110).
+  Without it, every real agy log would fail closed.
+- The smoke script's V-11.1 assertion in plan §"The smoke script" and the matching design block
+  compared `= "PASS V-11.1"` exactly. Both now accept the lazy token too, so a lazy pass is no
+  longer reported as a stop.

@@ -785,7 +785,7 @@ landed (its baseline and anchor checks) before scoring it.
   cmp -s "$S/before" "$S/after" || stop "FAIL V-11.3 tree moved"
   test "$(shasum -a 256 "$M" | awk '{print $1}')" = "$B_SHA" || stop "FAIL V-11.3 state file sha256 changed"
   r=$(python3 "$P" v112 --out "$S/out" --record "$B_REC" --feature "$F"); test "$r" = "PASS V-11.2" || stop "${r:-UNREADABLE V-11.2 reason=no_output}"
-  r=$(python3 "$P" v111 --host "$H" --log "$S/log" --root "$REPO"); test "$r" = "PASS V-11.1" || stop "${r:-UNREADABLE V-11.1 reason=no_output}"
+  r=$(python3 "$P" v111 --host "$H" --log "$S/log" --root "$REPO"); case "$r" in "PASS V-11.1"|"PASS V-11.1 lazy (no script ran)") ;; *) stop "${r:-UNREADABLE V-11.1 reason=no_output}" ;; esac
   echo "SMOKE-PASS host=$H merge=$MERGE"
   ```
 
