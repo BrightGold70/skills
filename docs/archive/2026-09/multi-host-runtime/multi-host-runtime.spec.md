@@ -749,7 +749,8 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         for a host loader link passed as `--link`. The smoke verifies every link with
         `readlink -f` before the run, and the live grok run read through the codex link. Nothing
         is resolved on the scoring machine, and no symlink is followed, so a log scores the same
-        anywhere. `--home` only expands `~` in `--link` values.
+        anywhere. `--home` only expands `~` in `--link` values. A `--link` that is neither
+        absolute nor `~/…` is ignored, because it would resolve against the scorer's cwd.
         - A file tool expands neither `~` nor variables; such a spelling is a relative path under
           the root and cannot match.
         - `..` is refused, because through a symlinked component it leaves the directory it
@@ -768,25 +769,60 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         instructions ask.
       - **Shell commands still decide the ordering and the declaration.** A script or dispatch
         before the adapter read FAILs. `bash`/`zsh -c` is followed only when every argument before
-        `-c` is an option. The declaration is judged from text only where text is unambiguous. A
+        `-c` is a short option cluster with no `o`/`O` (those take the next word); a `+` or long
+        option stops it. For python, `-W`/`-X` take the next word, a short cluster holding `c` or
+        `m` ends the search for a script operand, and a long option is not followed. The declaration is judged from text only where text is unambiguous. A
         script's exact prefix token `HMAD_HOST=<value>` counts: another value FAILs, and at least
         one must name this host. Every other occurrence of `HMAD_HOST` in shell text (`env`,
         `export`, `+=`, `read`, even a grep for it) makes the declaration `UNVERIFIED`. `python3 -` and `python3 -c` make an `h_mad_*.py` name a plain argument.
+
+        **Amended 2026-10-01 (operator decision, review round 18): the declaration is judged
+        only from a plain command list.** Text that never runs still parsed as a run: a comment,
+        a heredoc body, the right side of `false &&`, `python3 -X <opt>`, `bash -o -c`. Text that
+        changes the environment without spelling `HMAD_HOST` slipped past the mention count: a
+        quoted name (`HMA""D_HOST`), a function wrapping `python3`, a name built from an
+        expansion (`${n}_HOST`). So the declaration is judged only when **every** shell event in
+        the log is plain, in a positive grammar:
+        - it contains only `A–Z a–z 0–9 _ . / = : , + -`, spaces, tabs, `;` and newlines, so it
+          has no quote, `$`, backtick, redirect, comment, heredoc, `&`, `|`, parenthesis or brace;
+        - each command is a script, a dispatch or a safe read (as classified above), so a keyword,
+          `export`, `alias` or any other command is not plain;
+        - its only prefix assignment is an exact `HMAD_HOST=<lowercase word>`.
+
+        A log with any other shell event gives `UNVERIFIED V-11.1 declaration not in a plain
+        command list`. A FAIL decided outside the declaration stays a FAIL: another host named
+        (`FAIL … declared another HMAD_HOST`), or, for codex and agy, no skill read. A mention
+        mismatch still gives the older `UNVERIFIED … HMAD_HOST used outside an exact
+        declaration`. So `HMAD_HOST=ag"y"`, which zsh does turn into `agy`, is now `UNVERIFIED`.
+        That is the accepted cost.
       - **Event shape is checked.** Each violation is `UNVERIFIED`:
-        - a grok `toolCallId` reused across `tool_call`s;
+        - a grok `toolCallId` reused across `tool_call`s, or one that is not a string;
+        - a grok `tool_call_update` that comes before the `tool_call` it updates (one that never
+          has a `tool_call` is an orphan, below);
         - a non-tool agy step on a tool step's index;
+        - a non-tool agy step that carries `tool_name` or `tool_info`;
+        - an agy `step_update` whose payload is not an object;
+        - an agy `step_index` that is not an integer (a boolean is not an integer);
+        - an agy tool step whose `DONE` row comes before its `ACTIVE` row;
+        - a `view_file` whose `FilePath` or `AbsolutePath` is present but not a string;
         - a grok `tool_call_update` carrying `rawInput`, or a call with more than one terminal
           (`completed`/`failed`) update (real logs end each call with exactly one);
         - an agy tool step with no index, or with an index reused by a different step.
+
+        A log row that is not UTF-8, is not JSON, repeats a key in any object, or holds an integer
+        past Python's digit limit gives `UNVERIFIED V-11.1 unparseable line N`; for codex it gives
+        `codex input shape unobserved`. Rows are split on `\n` only, since JSON may carry U+2028,
+        U+2029 or U+0085 raw.
 
         An agy tool step with no `ACTIVE` row (real logs always pair `ACTIVE` then `DONE`) has no
         known issue time, so it counts as issued at the start of the log.
 
         An orphan grok `tool_call_update`, of any status, is unmapped.
       - **Lazy exception.** A call need not read the adapter when every event is a file-read tool
-        call or an agy step of type `agent_response`, `user_input`, `checkpoint` or
-        `system_message`. Its verdict is `PASS V-11.1 lazy (no script ran)`, and it still
-        requires the skill load below.
+        call. Rows that carry no action are allowed too: grok `available_commands`, `thought`,
+        `text`, `usage` and `end` rows; agy `init` and `result` events; and agy steps of type
+        `agent_response`, `user_input`, `checkpoint` or `system_message`. Its verdict is
+        `PASS V-11.1 lazy (no script ran)`, and it still requires the skill load below.
       - **Residuals:**
         - a partial read (grok `offset`/`limit`, agy line ranges) whose output holds the heading
           counts. This is the original V-11.1 residual: it proves the file was opened, not that

@@ -61,14 +61,37 @@ def strings(value: object) -> list[str]:
     return []
 
 
+def unique_keys(pairs: list[tuple[str, object]]) -> dict:
+    """A repeated key resolves last-wins, so one row could show two different calls."""
+    keys = [key for key, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+
+
+def log_lines(path: Path) -> list[str]:
+    """The log's rows, split on "\\n" only: JSON may carry U+2028, U+2029 or U+0085 raw, and
+    str.splitlines() would cut a row there. A line that is not UTF-8 raises ShapeError."""
+    raw = path.read_bytes().split(b"\n")
+    if raw and raw[-1] == b"":
+        raw.pop()
+    lines = []
+    for number, line in enumerate(raw, 1):
+        try:
+            lines.append(line.decode("utf-8"))
+        except UnicodeDecodeError:
+            raise ShapeError(f"unparseable line {number}") from None
+    return lines
+
+
 def ndjson(path: Path) -> list[dict]:
     rows = []
-    for number, line in enumerate(path.read_text().splitlines(), 1):
+    for number, line in enumerate(log_lines(path), 1):
         if line.startswith("#hmad-beat "):
             continue
         try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
+            row = json.loads(line, object_pairs_hook=unique_keys)
+        except ValueError:  # JSONDecodeError, a duplicate key, or an int past the digit limit
             raise ShapeError(f"unparseable line {number}") from None
         if not isinstance(row, dict):
             raise ShapeError(f"unparseable line {number}")
@@ -80,7 +103,19 @@ def grok_events(rows: list[dict]) -> tuple[list[Event], bool]:
     updates: dict[str, dict] = {}
     terminal: set = set()
     listed = False
+    called_ids = {row.get("toolCallId") for row in rows if row.get("type") == "tool_call"
+                  and type(row.get("toolCallId")) is str}
+    seen_ids: set[str] = set()
     for row in rows:
+        if row.get("type") in ("tool_call", "tool_call_update"):
+            key = row.get("toolCallId")
+            if type(key) is not str:
+                raise ShapeError("grok input shape unobserved")
+            if row.get("type") == "tool_call":
+                seen_ids.add(key)
+            elif key in called_ids and key not in seen_ids:
+                # An update before its call would complete it before it was issued.
+                raise ShapeError("grok input shape unobserved")
         if row.get("type") == "available_commands":
             commands = row.get("commands")
             listed |= isinstance(commands, list) and "h-mad" in [c for c in commands if isinstance(c, str)]
@@ -139,13 +174,22 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
     other_steps: set = set()
     for n, row in enumerate(rows):
         step = row.get("step_update")
-        if row.get("event") != "step_update" or not isinstance(step, dict):
+        if row.get("event") != "step_update":
             continue
-        (tool_steps if step.get("step_type") == "tool" else other_steps).add(step.get("step_index"))
+        if not isinstance(step, dict):
+            raise ShapeError("agy input shape unobserved")  # a step update that cannot be read could be any step
+        index = step.get("step_index")
+        if index is not None and type(index) is not int:
+            raise ShapeError("agy input shape unobserved")
+        if step.get("step_type") != "tool" and ("tool_name" in step or "tool_info" in step):
+            raise ShapeError("agy input shape unobserved")  # a non-tool step that names a tool
+        (tool_steps if step.get("step_type") == "tool" else other_steps).add(index)
         if step.get("state") == "DONE":
-            done[step.get("step_index")] = (n, step)
+            done[index] = (n, step)
         elif step.get("state") == "ACTIVE":
-            active.add(step.get("step_index"))
+            if index in done and index not in active:
+                raise ShapeError("agy input shape unobserved")  # completed before it was issued
+            active.add(index)
     if tool_steps & other_steps:
         # Another step type on a tool step's index could supply (or hide) its output.
         raise ShapeError("agy input shape unobserved")
@@ -156,8 +200,10 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
         if not isinstance(row.get("event"), str) or row.get("event") not in AGY_EVENTS:
             events.append(Event("other", str(row.get("event")), True, None, issued=n))
             continue
-        if row.get("event") != "step_update" or not isinstance(step, dict):
+        if row.get("event") != "step_update":
             continue
+        if not isinstance(step, dict):
+            continue  # not reached: the first pass refused it
         if step.get("step_type") != "tool":
             # Step types observed in real agy logs; any other could act, so it is unmapped.
             # system_message is a harness notice (no tool, no parameters), seen in the live smoke.
@@ -180,6 +226,9 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
             events.append(Event("other", str(tool), True, None, issued=n))
             continue
         params = info.get("parameters") if isinstance(info, dict) else None
+        if tool == "view_file" and isinstance(params, dict) and any(
+                k in params and not isinstance(params[k], str) for k in ("FilePath", "AbsolutePath")):
+            raise ShapeError("agy input shape unobserved")  # every path parameter present must be judged
         # view_file names the file read in FilePath (or AbsolutePath); any other parameter is not it.
         value = (params.get("CommandLine") if isinstance(params, dict) and tool == "run_command" else
                  [params[k] for k in ("FilePath", "AbsolutePath") if isinstance(params, dict) and isinstance(params.get(k), str)])
@@ -198,7 +247,10 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
 
 
 def codex_events(path: Path) -> tuple[list[Event], bool]:
-    lines = path.read_text().splitlines()
+    try:
+        lines = log_lines(path)
+    except ShapeError:
+        raise ShapeError("codex input shape unobserved") from None
     starts = [i for i, line in enumerate(lines) if line == "exec"]
     events = []
     for position, start in enumerate(starts):
@@ -228,7 +280,10 @@ class Places:
         norm = lambda v: posixpath.normpath(os.path.abspath(v))
         home = norm(home) if home else None
         expand = lambda v: (home + v[1:]) if home and (v == "~" or v.startswith("~/")) else v
-        return cls(norm(str(root)), home, tuple(norm(expand(l)) for l in links if not l.startswith("~") or home))
+        # A relative link would resolve against the scorer's cwd, so the same log could score
+        # differently on another machine: only absolute links, or `~/` ones with a home, count.
+        return cls(norm(str(root)), home, tuple(norm(expand(l)) for l in links
+                                                if l.startswith("/") or home and (l == "~" or l.startswith("~/"))))
 
 
 def lexical(value: str, places: Places) -> str | None:
@@ -319,8 +374,12 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
         return [Command("unknown", tokens, assignments, name)]
     if name in ("bash", "sh", "zsh"):
         for i, item in enumerate(args):
-            if not item.startswith("-"):
+            if not item.startswith(("-", "+")):
                 break  # `bash <script> -c ...` runs <script>; -c after an operand is the script's argument
+            if item.startswith(("--", "+")) or re.search(r"[oO]", item):
+                # -o/-O/+o take the next word (so `-o -c` sets an option named -c), and long options
+                # may too: what follows cannot be read as the command string.
+                return [Command("unknown", tokens, assignments, name)]
             if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", item):
                 if depth >= 2 or i + 1 >= len(args):
                     return [Command("unknown", tokens, assignments, name)]
@@ -335,12 +394,26 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
             if item.startswith("-m") and MODULE.fullmatch(item[2:].split(".")[-1]):
                 return [Command("script", tokens, assignments, name)]
         operand = ""
-        for a in args:
-            if a in ("-", "-c"):
-                break  # stdin or -c code runs; a script name after it is only an argument
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "-":
+                break  # stdin runs; a script name after it is only an argument
+            if a.startswith("--"):
+                # `--` and long options (some take the next word) are not followed.
+                return [Command("unknown", tokens, assignments, name)]
             if not a.startswith("-"):
                 operand = a
                 break
+            cluster = a[1:]
+            if "c" in cluster or "m" in cluster:
+                # -c code runs, or a module whose name was not matched above; either way a script
+                # name after it is only an argument. Short options may be clustered (`-Ic`).
+                break
+            taker = next((j for j, ch in enumerate(cluster) if ch in "WX"), None)
+            if taker is not None and taker == len(cluster) - 1:
+                i += 1  # -W/-X take the next word as their argument
+            i += 1
         if SCRIPT.fullmatch(Path(operand).name):
             return [Command("script", tokens, assignments, name)]
     if SCRIPT.fullmatch(name):
@@ -357,6 +430,31 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
     if name in safe and (name != "sed" or sed_safe(args)):
         return [Command("safe", tokens, assignments, name)]
     return [Command("unknown", tokens, assignments, name)]
+
+
+PLAIN_TEXT = re.compile(r"[A-Za-z0-9_./=:,+ \t;\n-]*")
+DECLARATION = re.compile(r"HMAD_HOST=[a-z]+")
+
+
+def plain(text: str) -> bool:
+    """Whether a shell event's text is a plain list the HMAD_HOST declaration can be judged from.
+
+    A positive grammar, not a denylist (operator decision, review round 18): plain words only,
+    joined by `;` or newlines, so no quote, expansion, redirect, comment, heredoc, `&&`/`||`,
+    subshell or brace can change what runs or with what environment. Every command must be a
+    script, a dispatch or a safe read, and its only prefix assignment an exact `HMAD_HOST=<word>`.
+    A keyword, `export` or a function is not a classified command, so it is not plain either. A
+    bare `HMAD_HOST=<word>` with no command is plain here, and caught by the mention count.
+    """
+    if not PLAIN_TEXT.fullmatch(text):
+        return False
+    for tokens in simple_tokens(text):
+        if any(ASSIGN.fullmatch(t) and not DECLARATION.fullmatch(t)
+               for t in tokens[:next((i for i, t in enumerate(tokens) if not ASSIGN.fullmatch(t)), len(tokens))]):
+            return False
+        if any(c.kind not in ("script", "dispatch", "safe") for c in classify(tokens.copy())):
+            return False
+    return True
 
 
 def needle(root: Path, host: str, skill: bool) -> str:
@@ -468,6 +566,14 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
             return "FAIL V-11.1 a script call declared another HMAD_HOST", 0
         if host_mentions != exact_declarations:
             return "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration", 0
+        # Any shell event, in any position, could have set the environment a later script ran
+        # with (a function, an export, a name built from an expansion), so the declaration is
+        # judged only when every shell event is plain (operator decision, review round 18). A
+        # missing skill read is still a FAIL: a non-plain list only leaves the declaration unjudged.
+        if not all(plain(e.value) for e in events if e.tool == "shell" and isinstance(e.value, str)):
+            if not read_skill and host != "grok":
+                return "FAIL V-11.1 no observed SKILL.md read", 0
+            return "UNVERIFIED V-11.1 declaration not in a plain command list", 0
         if not declared:
             return f"FAIL V-11.1 no script call declared HMAD_HOST={host}", 0
         if not read_skill:

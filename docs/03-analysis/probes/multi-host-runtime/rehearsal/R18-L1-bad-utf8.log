@@ -1,0 +1,2 @@
+{"event":"init","x":"ÿ"}
+{"event": "step_update", "step_update": {"step_index": 1, "state": "ACTIVE", "step_type": "tool", "tool_name": "view_file", "tool_info": {"name": "view_file", "parameters": {"FilePath": "h-mad/SKILL.md"}}}}

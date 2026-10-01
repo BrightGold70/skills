@@ -278,3 +278,45 @@ issued at the start of the log. 38 agy fixtures were normalised to real `ACTIVE`
 non-string row type no longer crashes the checker. n=176, the cache-proof sweep kills 35/35 (the
 harness now counts a crashing mutant as killed), and the live verdicts are unchanged.
 
+Review round 18 (a fresh-context reviewer, 2026-10-01) found six fail-opens, two crashes and four
+smaller defects, each with an executed fixture and a control. The report and its generators are
+in `docs/03-analysis/probes/multi-host-runtime/review-r18/`.
+- **The declaration (H1, H2, and a spec gap).** Text that never runs still counted as a run: a
+  comment, a heredoc body, `false && …`, `python3 -X`, `bash -o -c`. Environment changes that do
+  not spell `HMAD_HOST` slipped past the mention count: `HMA""D_HOST`, a function wrapping
+  `python3`, `${n}_HOST`. By operator decision, the declaration is now judged only when every
+  shell event is a plain command list, defined by a positive grammar (see the spec). Otherwise it
+  is `UNVERIFIED … declaration not in a plain command list`.
+- **Ordering (H3).** A grok update before its `tool_call`, and an agy `DONE` before its `ACTIVE`,
+  are now shape errors instead of an early completion.
+- **Shapes (H4, H5, M1, L3).** These are now `UNVERIFIED`: a non-object agy `step_update`, a
+  non-string `FilePath`/`AbsolutePath`, a non-string `toolCallId`, a non-integer `step_index`,
+  and a non-tool step that names a tool. The first two passed before, and the last two crashed
+  the checker.
+- **Parsing (H6, M2, L1).** A duplicate JSON key, a row that is not UTF-8, and an oversized
+  integer are now `unparseable line N`. Rows are split on `\n` only, so a raw U+2028 or U+0085
+  no longer breaks a row.
+- **Links (L2).** A relative `--link` is ignored, since it resolved against the scorer's cwd.
+
+A self-review of the fix found one more fail-open, this time inside the plain grammar.
+`HMAD_HOST=agy python3 -X h-mad/scripts/…` and `HMAD_HOST=agy bash -o -c h-mad/scripts/…` use
+only plain characters, yet `classify` read each as a script run. Live, neither runs the script.
+`classify` now handles the options as the interpreters do:
+- python `-W`/`-X` take the next word;
+- a short cluster holding `c` or `m` ends operand search;
+- a long option is not followed;
+- for bash and zsh, an option cluster with `o`/`O`, a `+` option or a long option before `-c`
+  is not followed.
+
+Cases `R18-*` (43) bring n=219. Every one of the 176 existing expectations still holds. Two
+existing verdicts changed on the reviewer's clean probes, both deliberately:
+`HMAD_HOST=ag"y"` and `"HMAD_HOST=agy" S` are now `UNVERIFIED`. The cache-proof mutation sweep
+over the 23 new guards caught every mutant:
+- 21 were killed by a wrong verdict.
+- 2 (the `toolCallId` and `step_index` type checks) were killed only by a crash. Removing either
+  check reopens the `TypeError` that M1 reported, so these kills are visible but are not verdict
+  kills.
+
+The sweep's first harness crashed on load and showed every mutant as killed. A control mutant
+(the unmodified source) now runs first and must pass. The live verdicts are unchanged: grok PASS,
+codex UNVERIFIED, agy FAIL.

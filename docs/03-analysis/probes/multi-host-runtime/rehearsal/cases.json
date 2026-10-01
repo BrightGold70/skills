@@ -1612,5 +1612,352 @@
     "root": ".",
     "expected": "FAIL V-11.1 no adapter read",
     "note": "A tool step with no ACTIVE row has no known issue time; it is taken as issued at the start, so the write voids the reads."
+  },
+  {
+    "id": "agy-R18-H1-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H1-control.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R18-H1-control-neg",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H1-control-neg.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=agy"
+  },
+  {
+    "id": "agy-R18-H1a-comment",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H1a-comment.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "agy-R18-H1b-heredoc",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H1b-heredoc.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "agy-R18-H1c-false-and",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H1c-false-and.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "agy-R18-H1d-python-X",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H1d-python-X.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R18-H1e-bash-o-c",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H1e-bash-o-c.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "grok-R18-H1f-grok-comment",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-H1f-grok-comment.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "agy-R18-H2-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H2-control.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R18-H2a-quoted-export",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H2a-quoted-export.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "agy-R18-H2b-function-override",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H2b-function-override.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "agy-R18-H2c-var-built-name",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H2c-var-built-name.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "agy-R18-H2d-quoted-name-prefix",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H2d-quoted-name-prefix.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "grok-R18-H3a-control",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-H3a-control.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "grok-R18-H3a-grok-update-before-call",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-H3a-grok-update-before-call.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 grok input shape unobserved"
+  },
+  {
+    "id": "agy-R18-H3b-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H3b-control.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "agy-R18-H3b-agy-done-before-active",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H3b-agy-done-before-active.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved"
+  },
+  {
+    "id": "agy-R18-H4-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H4-control.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "agy-R18-H4-control-lazy",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H4-control-lazy.log",
+    "root": ".",
+    "expected": "PASS V-11.1 lazy (no script ran)"
+  },
+  {
+    "id": "agy-R18-H4a-agy-nondict-step-lazy",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H4a-agy-nondict-step-lazy.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved"
+  },
+  {
+    "id": "agy-R18-H4b-agy-nondict-step-write",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H4b-agy-nondict-step-write.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved"
+  },
+  {
+    "id": "agy-R18-H5-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H5-control.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "agy-R18-H5a-filepath-list",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-H5a-filepath-list.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved"
+  },
+  {
+    "id": "grok-R18-H6-control",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-H6-control.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "grok-R18-H6-duplicate-keys",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-H6-duplicate-keys.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unparseable line 4"
+  },
+  {
+    "id": "grok-R18-M1-control",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-M1-control.log",
+    "root": ".",
+    "expected": "PASS V-11.1 lazy (no script ran)"
+  },
+  {
+    "id": "grok-R18-M1a-grok-list-id",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-M1a-grok-list-id.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 grok input shape unobserved"
+  },
+  {
+    "id": "agy-R18-M1b-agy-list-index",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-M1b-agy-list-index.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved"
+  },
+  {
+    "id": "grok-R18-M3-control",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-M3-control.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "grok-R18-M3-u2028-in-output",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-M3-u2028-in-output.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R18-M3b-u0085-in-output",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-M3b-u0085-in-output.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R18-L1-bad-utf8",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-L1-bad-utf8.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unparseable line 1"
+  },
+  {
+    "id": "agy-R18-L2-int-limit",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-L2-int-limit.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unparseable line 1"
+  },
+  {
+    "id": "agy-R18-C-agy-agentresp-with-tool",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-C-agy-agentresp-with-tool.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved"
+  },
+  {
+    "id": "agy-R18-L2-relative-link",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-L2-relative-link.log",
+    "root": ".",
+    "links": [
+      "rel-link"
+    ],
+    "expected": "FAIL V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "agy-R18-G15-other-assignment",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-G15-other-assignment.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "agy-R18-G16-keyword",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-G16-keyword.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+  },
+  {
+    "id": "grok-R18-G2-cr-whitespace",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R18-G2-cr-whitespace.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "codex-R18-G20-bad-utf8",
+    "mode": "v111",
+    "host": "codex",
+    "log": "R18-G20-codex-bad-utf8.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 codex input shape unobserved"
+  },
+  {
+    "id": "agy-R18-S1-python-X-plain",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-S1-python-X-plain.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R18-S2-bash-o-c-plain",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-S2-bash-o-c-plain.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R18-S3-python-cluster-c",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-S3-python-cluster-c.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R18-S4-python-long-option",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R18-S4-python-long-option.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
   }
 ]

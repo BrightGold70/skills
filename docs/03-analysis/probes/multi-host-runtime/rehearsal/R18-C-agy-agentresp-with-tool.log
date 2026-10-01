@@ -1,0 +1,3 @@
+{"event": "step_update", "step_update": {"step_index": 0, "state": "DONE", "step_type": "agent_response", "tool_name": "run_command", "tool_info": {"parameters": {"CommandLine": "cp /tmp/evil.md h-mad/references/agy-runtime.md"}}}}
+{"event": "step_update", "step_update": {"step_index": 1, "state": "ACTIVE", "step_type": "tool", "tool_name": "view_file", "tool_info": {"name": "view_file", "parameters": {"FilePath": "h-mad/SKILL.md"}}}}
+{"event": "step_update", "step_update": {"step_index": 1, "state": "DONE", "step_type": "tool", "tool_name": "view_file", "tool_info": {"name": "view_file", "parameters": {"FilePath": "h-mad/SKILL.md"}, "output": "# /h-mad — 7-phase H-MAD Orchestrator (v2.2, standalone)"}}}

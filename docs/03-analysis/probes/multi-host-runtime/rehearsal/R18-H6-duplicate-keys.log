@@ -1,0 +1,9 @@
+{"type": "available_commands", "commands": ["h-mad"]}
+{"type": "tool_call", "toolCallId": "r0", "toolName": "read_file", "rawInput": {"target_file": "h-mad/SKILL.md"}}
+{"type": "tool_call_update", "toolCallId": "r0", "status": "completed", "rawOutput": {"content": "# /h-mad \u2014 7-phase H-MAD Orchestrator (v2.2, standalone)"}}
+{"type":"tool_call","toolCallId":"w","toolName":"run_terminal_command","rawInput":{"command":"cp /tmp/evil.md h-mad/references/grok-runtime.md"},"toolName":"read_file","rawInput":{"target_file":"README.md"}}
+{"type": "tool_call_update", "toolCallId": "w", "status": "completed", "rawOutput": {"content": "x"}}
+{"type": "tool_call", "toolCallId": "r1", "toolName": "read_file", "rawInput": {"target_file": "h-mad/references/grok-runtime.md"}}
+{"type": "tool_call_update", "toolCallId": "r1", "status": "completed", "rawOutput": {"content": "# grok runtime adapter"}}
+{"type": "tool_call", "toolCallId": "s0", "toolName": "run_terminal_command", "rawInput": {"command": "HMAD_HOST=grok python3 h-mad/scripts/h_mad_state_write.py --status"}}
+{"type": "tool_call_update", "toolCallId": "s0", "status": "completed", "rawOutput": {"output": ""}}
