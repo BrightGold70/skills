@@ -1,0 +1,11 @@
+exec
+/bin/zsh -lc "cat h-mad/references/codex-runtime.md" in /Users/kimhawk/orca/skills
+ succeeded in 0.01s
+# Codex runtime adapter
+exec
+/bin/zsh -lc "X=../../../../../../../../../../private/tmp/claude-501/-Users-kimhawk-orca-skills/26b2e025-7667-465a-be0f-89c5aa6336ac/scratchpad/review2/dec/h-mad/x; cat /Users/kimhawk/orca/skills/h-mad/\$X/../SKILL.md" in /Users/kimhawk/orca/skills
+ succeeded in 0.01s
+# /h-mad — 7-phase H-MAD Orchestrator (v2.2, standalone)
+exec
+/bin/zsh -lc "HMAD_HOST=codex python3 h-mad/scripts/h_mad_state_write.py --status" in /Users/kimhawk/orca/skills
+ succeeded in 0.01s

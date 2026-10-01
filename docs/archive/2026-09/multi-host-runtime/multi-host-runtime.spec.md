@@ -736,6 +736,53 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       whose returned text holds the first `# ` heading line counts as a content read; the smoke
       proves the adapter was opened, not that every line was read. A read through a glob such as
       `references/*.md` does not name the file and fails, which is the conservative direction.
+      **Naming the file (amended 2026-10-01).** A path names the file only if it resolves to
+      `<root>/h-mad/<file>`. A suffix match is not enough: `/tmp/x/h-mad/SKILL.md` is a decoy.
+      Resolution follows symlinks, so an installed link such as
+      `~/.gemini/config/skills/h-mad/SKILL.md` counts. For agy `view_file`, only `FilePath` or
+      `AbsolutePath` names the file read.
+
+      **A shell read is credited only as the exec's sole command.** The heading check reads the
+      exec's whole output, so `cat <file> >/dev/null; cat <decoy>` or `head -n 0 <file>; echo
+      '<heading>'` would otherwise prove the wrong thing. That gap predates the 2026-10-01 change:
+      HEAD passed those logs too. Apart from head/tail `-n N` and sed's print-only flags, the read
+      command must have exactly one operand, and it must name the file. Any other option counts
+      as an operand and so fails that limit: an option can take a path-like argument that is not
+      read (`nl -s <path>`) or change what is printed (`head -c 0`). With two operands, head/tail `-n` and a sed script
+      print only part of each file, or of the joined stream, so the heading may come from the
+      other one.
+
+      **In a shell read, a path counts only if it is spelled from plain characters:**
+      `[A-Za-z0-9_./-]`, with an optional leading `~/`, or the exact `$HMAD_SKILL_ROOT/<file>`.
+      That rules out a variable, a substitution, a glob, a brace, `=cmd` and a quote, any of which
+      could change what the path names. A `(` glued to a word is a zsh modifier or glob qualifier
+      that rewrites the word. It splits off as a second command, so the read is never the exec's
+      sole command, and its text classifies unknown and taints.
+
+      **A tainted shell earns no read credit at all, absolute paths included.** An earlier command
+      could have changed cwd, `HOME` or a variable, or redefined the reading command itself (a
+      `cat()` function, `PATH`), so even `cat <root>/h-mad/SKILL.md` proves nothing there. A shell
+      is untainted while two conditions hold: the codex exec's cwd is the root, and every earlier
+      command in that shell classified as a read or a safe command.
+      - Anything else taints what follows. That includes any spelling of `cd`, a bare assignment
+        such as `HOME=…`, `printf -v`, a function definition and `export PATH=…`.
+      - Each codex exec is a fresh shell, so the taint resets per exec. agy and grok shells may
+        persist, so the taint lasts for the rest of the log.
+      - A read whose own command carries a prefix assignment (`X=… cat …`) is not credited,
+        because expansion order is shell-specific.
+      - This is an allowlist, because every way to change shell state cannot be enumerated. A
+        legitimate `cd <root> && cat h-mad/…` is therefore not credited, and neither is
+        `$HOME/…`. Both are conservative.
+
+      File-tool reads (agy `view_file`, grok `read_file`) do not run through a shell. Their
+      relative paths resolve against the root, and they never expand `~` or a variable, so those
+      spellings never count there.
+
+      Paths resolve on the machine that scores the log. The filesystem survives codex's
+      fresh-shell reset: a symlink planted by one exec and read through by a later one, which
+      resolves back into the checkout by the time it is scored, is credited. That case is
+      contrived, it is accepted, and it is listed as a residual. These rules apply to both reads, the
+      adapter and `SKILL.md`, and to the full and lazy passes alike.
       **Lazy exception (operator decision 2026-10-01, after the live smoke).** A call need not
       read the adapter when every event in its log is a call to the host's **file-read tool**
       (agy `view_file`, grok `read_file`) or an agy step of type `agent_response`, `user_input`

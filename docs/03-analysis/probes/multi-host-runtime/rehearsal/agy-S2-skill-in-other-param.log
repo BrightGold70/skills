@@ -1,0 +1,2 @@
+{"event": "step_update", "step_update": {"step_index": 1, "state": "ACTIVE", "step_type": "tool", "tool_name": "view_file", "tool_info": {"name": "view_file", "parameters": {"FilePath": "docs/notes.md", "Hint": "h-mad/SKILL.md"}}}}
+{"event": "step_update", "step_update": {"step_index": 1, "state": "DONE", "step_type": "tool", "tool_name": "view_file", "tool_info": {"name": "view_file", "parameters": {"FilePath": "docs/notes.md", "Hint": "h-mad/SKILL.md"}, "output": "# /h-mad \u2014 7-phase H-MAD Orchestrator (v2.2, standalone)"}}}

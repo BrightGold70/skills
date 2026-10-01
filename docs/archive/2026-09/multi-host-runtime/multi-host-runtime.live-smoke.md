@@ -87,11 +87,52 @@ Changes:
   A shell denylist leaks, so the lazy pass now trusts none of it. Most of those shell bypasses also
   touch the pre-existing "is this an adapter read" classification. That is a separate, older
   residual of D10 and is out of scope here.
-- A third review pass found no lazy-pass bypass that executes or writes. **One residual is still
-  open, and it predates this change.** The `SKILL.md` read can be satisfied by a decoy path
-  ending in `/h-mad/SKILL.md` (grok), or by the path appearing in an agy `view_file` parameter
-  other than `FilePath`. The non-lazy PASS has the same gap. The fix would be to match only
-  `FilePath` and anchor the path to the repo root or `$HMAD_SKILL_ROOT`.
+- A third review pass found no lazy-pass bypass that executes or writes. It raised two LOW gaps,
+  and both are now closed:
+  - A grok orphan update of any status, not only `completed`, is unmapped (case `grok-L3`).
+  - **The `SKILL.md` read could be faked.** This one predated the change and affected the full
+    PASS too: `codex-S3` was a full `PASS V-11.1`. A path now names the file only if it resolves
+    to `<root>/h-mad/<file>`, and agy `view_file` counts only `FilePath` or `AbsolutePath`.
+
+    Only a literal absolute path skips the shell-state check. A relative path, a `~` path and
+    `$HMAD_SKILL_ROOT` count only in an untainted shell. Any command that is not a read or safe
+    command taints what follows, including a bare assignment and `printf -v`. Each codex exec is
+    fresh; agy and grok shells may persist.
+
+    This is an allowlist because two more review passes broke the denylist versions:
+    - 9 of 14 cwd decoys (`builtin cd`, `{ cd; }`, `eval cd`, `. script`, …);
+    - then `HOME=`/`export HOME=`/`printf -v HOME` turning `~` into a decoy;
+    - then the name spelled apart (`HMAD_SKILL''_ROOT=`, `${n}_ROOT=`);
+    - then the "literal" absolute path itself: `<root>/h-mad/$X/../SKILL.md`, and a glued zsh
+      modifier `SKILL.md(:s/skills/decx/)`. A shell path now counts only if it is spelled from
+      `[A-Za-z0-9_./-]` (optional leading `~/`); a glued `(` splits off as a second command;
+    - then output attribution, which predates this change (HEAD passes these logs too):
+      `cat <file> >/dev/null; cat <decoy>`, `test … && cat <file>; echo '<heading>'`,
+      `nl -s <file> <decoy>` and `head -c 0`. A shell read is now credited only as the exec's sole
+      command, with one operand and no option except head/tail `-n N` and sed's print-only flags.
+      (Dropping the one-operand limit on a "printed whole" argument was wrong: a fifth pass showed
+      `head -n 1 <file> <decoy>`, `tail -n 1` and `sed -n '$p'` taking the heading from the
+      decoy, on real zsh output.)
+
+    - then a reader redefined in a persistent agy or grok shell (`cat() { … }`,
+      `export PATH=…`), which a literal absolute path did not escape. A tainted shell now credits
+      no read at all.
+
+    All 35 decoys now fail. The legitimate spellings pass: an absolute path, the `~` installed
+    link, and a fresh exec after an earlier `cd`. Cases `*-S1`–`S37` cover this (n=147). Every guard was
+    mutation-killed; S27–S29 pin the taint and path-charset guards in a persistent agy shell,
+    where the sole-read rule alone does not reach. Five redundant clauses survived their probes
+    and were removed: a later-command assignment taint; a separate glued-`(` guard (the split
+    makes the read non-sole); a no-redirect check (a sole read's stdout can only come from its
+    operands); a separate option refusal (any option lands among the operands and fails the
+    one-operand limit); and a codex-only lazy guard.
+
+    **Residual, LOW:** paths resolve on the scoring machine, so the same log can score differently
+    on another machine. On codex, a symlink planted by an earlier exec survives the fresh-shell
+    reset, and a later read through it that resolves into the checkout at scoring time is
+    credited; that is contrived and accepted. `$HOME/…`, `cd <root> && cat …`, a read
+    with its own prefix assignment, and any path with characters outside the plain set are not
+    credited; all are conservative.
 - Fifteen rehearsal cases were added (`*-L*`, n=93 → 108). Each guard was mutation-probed and
   killed. A codex-only guard survived its probe because the shell rule subsumes it, so it was
   removed.

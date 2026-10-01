@@ -908,5 +908,338 @@
     "root": ".",
     "expected": "FAIL V-11.1 no adapter read",
     "note": "The live smoke agy run (agy 1.2.14), re-scored under the lazy rule: 15 shell commands incl. a nested `agy /h-mad status`, so it is not a read-only call and still needed the adapter."
+  },
+  {
+    "id": "grok-S1-decoy-skill-path",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-S1-decoy-skill-path.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 no observed SKILL.md read",
+    "note": "A path that merely ends in h-mad/SKILL.md is not this repo's skill file; the read must resolve to <root>/h-mad/SKILL.md."
+  },
+  {
+    "id": "agy-S2-skill-in-other-param",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S2-skill-in-other-param.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "Only view_file's FilePath/AbsolutePath name the file read; a path in another parameter is not a read of it."
+  },
+  {
+    "id": "codex-S3-reassigned-skill-root",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S3-reassigned-skill-root.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A read whose own command carries a prefix assignment (here HMAD_SKILL_ROOT=) is not credited: expansion order is shell-specific."
+  },
+  {
+    "id": "codex-S4-cd-then-relative",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S4-cd-then-relative.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "After a cd in the same exec, relative h-mad/SKILL.md is another directory's file. The adapter read in a later exec is a fresh shell at root and counts."
+  },
+  {
+    "id": "codex-S5-foreign-cwd",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S5-foreign-cwd.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A codex exec whose cwd is not the checkout root reads its relative paths elsewhere."
+  },
+  {
+    "id": "codex-S6-builtin-cd",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S6-builtin-cd.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`builtin cd` changes cwd without a command named cd; any non-read command taints later relative paths."
+  },
+  {
+    "id": "codex-S7-brace-cd",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S7-brace-cd.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A brace group hides the cd; the allowlist still taints."
+  },
+  {
+    "id": "codex-S8-append-skill-root",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S8-append-skill-root.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`+=` assigns HMAD_SKILL_ROOT without `HMAD_SKILL_ROOT=`; any non-expansion mention untrusts it."
+  },
+  {
+    "id": "codex-S9-printf-v-skill-root",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S9-printf-v-skill-root.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`printf -v` assigns HMAD_SKILL_ROOT; any non-expansion mention untrusts it."
+  },
+  {
+    "id": "codex-S10-cd-earlier-exec",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S10-cd-earlier-exec.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "note": "Positive control: each codex exec is a fresh shell, so a cd in an earlier exec does not taint a later one."
+  },
+  {
+    "id": "agy-S11-persistent-cd",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S11-persistent-cd.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "agy shells may persist, so an earlier cd taints a later relative shell read."
+  },
+  {
+    "id": "agy-S12-no-cd-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S12-no-cd-control.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "note": "Positive twin of agy-S11 without the cd: the relative shell read counts."
+  },
+  {
+    "id": "codex-S13-bare-home",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S13-bare-home.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A bare `HOME=` rebinds what `~` means; a bare assignment taints."
+  },
+  {
+    "id": "codex-S14-export-home",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S14-export-home.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`export HOME=` rebinds `~`; a non-read command taints."
+  },
+  {
+    "id": "codex-S15-printf-v-home",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S15-printf-v-home.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`printf -v HOME` rebinds `~` through a safe command; printf -v taints."
+  },
+  {
+    "id": "codex-S16-quote-split-skill-root",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S16-quote-split-skill-root.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`HMAD_SKILL''_ROOT=` assigns it with the name split; $HMAD_SKILL_ROOT counts only in an untainted shell."
+  },
+  {
+    "id": "codex-S17-indirect-skill-root",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S17-indirect-skill-root.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`${n}_ROOT=` assigns it indirectly; $HMAD_SKILL_ROOT counts only in an untainted shell."
+  },
+  {
+    "id": "codex-S18-var-dotdot",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S18-var-dotdot.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A variable inside an absolute path (<root>/h-mad/$X/../SKILL.md) expands in the shell; only plain path characters are credited."
+  },
+  {
+    "id": "codex-S19-zsh-qual",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S19-zsh-qual.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A glued zsh modifier (path(:s/a/b/)) rewrites the path; a `(` glued to a word voids credit and taints."
+  },
+  {
+    "id": "codex-S20-zsh-qual2",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S20-zsh-qual2.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A glued zsh modifier (path(:s/a/b/)) rewrites the path; a `(` glued to a word voids credit and taints."
+  },
+  {
+    "id": "agy-S21-qualifier-runs-cd",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S21-qualifier-runs-cd.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A zsh glob qualifier (e:...:) runs code in the current shell and can cd; in a persistent agy shell a glued `(` taints later relative reads. Twin of agy-S11/S12."
+  },
+  {
+    "id": "codex-S22-other-command-prints-heading",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S22-other-command-prints-heading.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A read is credited only as the exec's sole command: here `echo` could print the heading the check sees."
+  },
+  {
+    "id": "codex-S23-real-read-discarded",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S23-real-read-discarded.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A redirect discards the real read; a decoy in the same exec printed the heading. Sole command, no redirect."
+  },
+  {
+    "id": "codex-S24-nl-s-not-an-operand",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S24-nl-s-not-an-operand.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`nl -s <path>` takes the path as a separator, not a file; read options that take an argument are refused."
+  },
+  {
+    "id": "codex-S25-head-c0",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S25-head-c0.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`head -c 0` prints nothing of the real file; only `-n N` is allowed for head/tail."
+  },
+  {
+    "id": "codex-S26-empty-read-then-echo",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S26-empty-read-then-echo.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "The read prints nothing; a second command prints the heading. A read is credited only as the exec's sole command."
+  },
+  {
+    "id": "agy-S27-printf-v-persists",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S27-printf-v-persists.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "In a persistent agy shell, `printf -v` in one step repoints $HMAD_SKILL_ROOT for a later sole read; printf -v taints."
+  },
+  {
+    "id": "agy-S28-home-rebound-persists",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S28-home-rebound-persists.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "In a persistent agy shell, a bare HOME= in one step repoints `~` for a later sole read; `~` counts only untainted. (Mutation kill is local: the ~ link exists on the authoring machine.)"
+  },
+  {
+    "id": "agy-S29-env-var-in-path",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S29-env-var-in-path.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A sole read whose path holds a variable ($X from the environment) names whatever $X expands to; only plain path characters are credited."
+  },
+  {
+    "id": "codex-S30-head1",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S30-head1.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "Real zsh output: with two operands, head/tail -n and a sed print script print only part of each file (or the joined stream), so the heading came from the decoy. One operand only."
+  },
+  {
+    "id": "codex-S31-sedlast",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S31-sedlast.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "Real zsh output: with two operands, head/tail -n and a sed print script print only part of each file (or the joined stream), so the heading came from the decoy. One operand only."
+  },
+  {
+    "id": "codex-S32-tail1",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-S32-tail1.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "Real zsh output: with two operands, head/tail -n and a sed print script print only part of each file (or the joined stream), so the heading came from the decoy. One operand only."
+  },
+  {
+    "id": "agy-S33-alias",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S33-alias.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "In a persistent shell an earlier step redefined the reader (function/PATH/alias); a tainted shell credits no read, absolute paths included."
+  },
+  {
+    "id": "agy-S34-func",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S34-func.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "In a persistent shell an earlier step redefined the reader (function/PATH/alias); a tainted shell credits no read, absolute paths included."
+  },
+  {
+    "id": "agy-S35-path",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S35-path.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "In a persistent shell an earlier step redefined the reader (function/PATH/alias); a tainted shell credits no read, absolute paths included."
+  },
+  {
+    "id": "agy-S36-tool-path-skill-root-var",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S36-tool-path-skill-root-var.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A file tool does not expand variables: a view_file of the literal $HMAD_SKILL_ROOT/SKILL.md is not this checkout's file."
+  },
+  {
+    "id": "agy-S37-tool-path-tilde",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-S37-tool-path-tilde.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A file tool is not shown to expand `~`; a view_file of a ~ path is not credited. (Mutation kill is local: the ~ link exists on the authoring machine.)"
   }
 ]

@@ -1,0 +1,3 @@
+{"type": "available_commands", "commands": ["h-mad"]}
+{"type": "tool_call", "toolCallId": "1", "toolName": "read_file", "rawInput": {"target_file": "/tmp/x/h-mad/SKILL.md"}}
+{"type": "tool_call_update", "toolCallId": "1", "status": "completed", "rawOutput": "# /h-mad \u2014 7-phase H-MAD Orchestrator (v2.2, standalone)"}

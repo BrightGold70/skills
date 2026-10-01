@@ -100,8 +100,10 @@ def test_nothing_sources_the_wrapper_so_exit_cannot_kill_a_callers_shell():
     wrapper — `h-mad/bin/hmad-dispatch` uses `exec bash "$REAL" "$@"` — so there is
     no such caller. If one is ever added, this test is where it announces itself.
     """
+    # *.log files are captured tool output (e.g. the multi-host smoke's rehearsal logs), never a
+    # caller: a sentence-ending "." before a path in grep output matched this pattern.
     r = subprocess.run(
-        ["grep", "-rnE", r"(^|\s)(source|\.)\s+\S*hmad-dispatch\.sh",
+        ["grep", "-rnE", "--exclude=*.log", r"(^|\s)(source|\.)\s+\S*hmad-dispatch\.sh",
          str(REPO / "h-mad"), str(REPO / "docs")],
         capture_output=True, text=True,
     )

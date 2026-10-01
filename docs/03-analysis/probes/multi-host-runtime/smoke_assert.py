@@ -22,6 +22,10 @@ REDIRECT = re.compile(r"[<>&|]*[<>][<>&|]*")
 PUNCT = set(";&|<>()\n")
 SEPARATOR = set(";&|()\n")
 CODEX_LINE = re.compile(r"^\S+ -lc .* in \S+$")
+# A shell path operand is credited only if it is spelled from plain characters: no variable,
+# substitution, glob, brace, `=cmd` or quote can change what it names (an allowlist).
+SHELL_PATH = re.compile(r"(~/)?[A-Za-z0-9_./-]+")
+
 
 
 class ShapeError(Exception):
@@ -35,6 +39,7 @@ class Event:
     success: bool
     output: str | None
     output_bad: bool = False
+    cwd: str | None = None
 
 
 @dataclass
@@ -138,7 +143,9 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
             continue
         info = step.get("tool_info")
         params = info.get("parameters") if isinstance(info, dict) else None
-        value = params.get("CommandLine") if isinstance(params, dict) and tool == "run_command" else strings(params)
+        # view_file names the file read in FilePath (or AbsolutePath); any other parameter is not it.
+        value = (params.get("CommandLine") if isinstance(params, dict) and tool == "run_command" else
+                 [params[k] for k in ("FilePath", "AbsolutePath") if isinstance(params, dict) and isinstance(params.get(k), str)])
         if tool == "run_command" and not isinstance(value, str) or tool == "view_file" and not isinstance(params, dict):
             raise ShapeError("agy input shape unobserved")
         finish = done.get(index)
@@ -160,14 +167,36 @@ def codex_events(path: Path) -> tuple[list[Event], bool]:
         if not body or not CODEX_LINE.match(body[0]):
             raise ShapeError("codex input shape unobserved")
         success = len(body) > 1 and body[1].startswith(" succeeded in")
-        events.append(Event("shell", body[0], success, "\n".join(body[2:]) if success else None))
+        cwd = body[0].rsplit(" in ", 1)[-1]
+        events.append(Event("shell", body[0], success, "\n".join(body[2:]) if success else None, cwd=cwd))
     return events, False
 
 
-def names_file(value: str, host: str, skill: bool) -> bool:
+def names_file(value: str, host: str, skill: bool, root: Path, shell_ok: bool, in_shell: bool) -> bool:
+    """True when value names this checkout's file: it resolves to <root>/h-mad/<file>.
+
+    A suffix match is not enough: /tmp/x/h-mad/SKILL.md ends the same way and is a decoy. An
+    installed link (e.g. ~/.gemini/config/skills/h-mad) still counts, because it resolves here.
+    In a shell, nothing counts unless shell_ok: an earlier command could have changed cwd, HOME,
+    a variable, PATH, or redefined the reading command itself, so even a literal absolute path
+    proves nothing in a tainted shell. File tools do not expand `~` or variables, so those
+    spellings never count there; their relative paths are workspace-relative and count.
+    """
     filename = "SKILL.md" if skill else f"references/{host}-runtime.md"
-    forms = [f"h-mad/{filename}", f"$HMAD_SKILL_ROOT/{filename}", f"${{HMAD_SKILL_ROOT}}/{filename}"]
-    return any(value == form or value.endswith("/" + form) for form in forms)
+    if in_shell and not shell_ok:
+        return False  # a tainted shell may have moved cwd, HOME, a variable, PATH or `cat` itself
+    if value in (f"$HMAD_SKILL_ROOT/{filename}", f"${{HMAD_SKILL_ROOT}}/{filename}"):
+        return in_shell
+    if in_shell and not SHELL_PATH.fullmatch(value):
+        return False
+    if value.startswith("~") and not in_shell:
+        return False
+    try:
+        path = Path(value).expanduser()
+        path = path if path.is_absolute() else root / path
+        return path.resolve() == (root / "h-mad" / filename).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
 
 
 def simple_tokens(text: str) -> list[list[str]]:
@@ -221,12 +250,44 @@ def sed_safe(args: list[str]) -> bool:
     return bool(scripts) and all(re.fullmatch(r"(\d+|\$)?(,(\d+|\$))?p", s) for s in scripts)
 
 
+def read_operands(command: Command) -> list[str] | None:
+    """The files a read command prints, or None when an option makes that uncertain.
+
+    Exactly one operand is allowed, after head/tail `-n N` and sed's print-only flags. Any other
+    option lands among the operands and fails that limit: an option can take a path-like argument
+    that is not read (nl -s <path>) or change what is printed (head -c 0). With two operands,
+    head/tail -n and a sed script print only part of each file (or of the joined stream), so the
+    heading may come from the other.
+    """
+    args, ops, i = command.tokens[1:], [], 0
+    if command.name not in ("cat", "nl", "head", "tail", "sed"):
+        return None
+    script = command.name != "sed"
+    while i < len(args):
+        item = args[i]
+        if command.name in ("head", "tail") and item == "-n" and i + 1 < len(args) and re.fullmatch(r"\+?\d+", args[i + 1]):
+            i += 2
+        elif command.name in ("head", "tail") and re.fullmatch(r"-n?\+?\d+", item):
+            i += 1
+        elif command.name == "sed" and item in ("-e", "--expression"):
+            script, i = True, i + 2
+        elif command.name == "sed" and item in ("-n", "--quiet", "--silent", "-E", "-r"):
+            i += 1
+        elif not script:
+            script, i = True, i + 1
+        else:
+            ops.append(item)
+            i += 1
+    return ops if len(ops) == 1 else None
+
+
 def classify(tokens: list[str], depth: int = 0) -> list[Command]:
     assignments = []
     while tokens and ASSIGN.fullmatch(tokens[0]):
         assignments.append(tokens.pop(0))
     if not tokens:
-        return []
+        # A bare assignment runs nothing but rebinds a variable (HOME, PWD ...); keep it visible.
+        return [Command("assign", [], assignments)] if assignments else []
     name = Path(tokens[0]).name
     args = tokens[1:]
     if any(t.startswith("\0") for t in tokens):
@@ -288,6 +349,12 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
         # Only the host's file-read tool can give that proof: any shell command forfeits it,
         # because a shell classifier is a denylist and a denylist leaks.
         shelled = unmapped = False
+        # A shell path that depends on shell state (relative, `~`, $HMAD_SKILL_ROOT) names this
+        # checkout only while the shell is known untouched: an allowlist, because every way to
+        # change cwd, HOME or a variable cannot be enumerated. Any command that is not a read or
+        # a safe command (a bare assignment included) and `printf -v` taint what follows. Each codex exec is a
+        # fresh shell; agy and grok shells may persist, so their taint does too.
+        tainted = False
         for event in events:
             if event.tool == "other":
                 unmapped = True
@@ -295,7 +362,7 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
             if event.tool == "read":
                 paths = [event.value] if isinstance(event.value, str) else event.value
                 for is_skill, heading in ((False, adapter), (True, skill)):
-                    if any(names_file(p, host, is_skill) for p in paths):
+                    if any(names_file(p, host, is_skill, root, True, False) for p in paths):
                         if not is_skill:
                             if script_before_adapter and not read_adapter:
                                 return "FAIL V-11.1 a script ran before the adapter was read", 0
@@ -310,8 +377,25 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
                                     read_adapter = True
                 continue
             shelled = True
+            at_root = event.cwd is None or Path(event.cwd).resolve() == root.resolve()
+            if host == "codex":
+                tainted = False
+            # The heading check reads the exec's whole output, so a read is credited only when it
+            # is the exec's sole command: otherwise another command could have printed the heading.
+            # A zsh modifier glued to a path (`f(:s/a/b/)`) splits off as a second command, so it
+            # is never sole either; its text never classifies read/safe, so it also taints.
+            every = [c for part in simple_tokens(event.value) for c in classify(part.copy())]
+            sole = len(every) == 1
             for tokens in simple_tokens(event.value):
-                for command in classify(tokens.copy()):
+                commands = classify(tokens.copy())
+                for command in commands:
+                    # A read whose own command carries a prefix assignment is not credited: whether
+                    # its paths expand before or after the assignment is shell-specific. The prefix
+                    # lasts one command, so it does not taint later ones; a bare one is kind "assign".
+                    relative_ok = at_root and not tainted and not command.assignments
+                    if (command.kind not in ("read", "safe")
+                            or command.name == "printf" and any(t.startswith("-v") for t in command.tokens)):
+                        tainted = True
                     mentioned = bool(MENTION.search(" ".join(command.tokens)))
                     if not read_adapter:
                         if command.kind in ("script", "dispatch"):
@@ -323,13 +407,16 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
                     if command.kind == "script" and f"HMAD_HOST={host}" in command.assignments:
                         declared = True
                     if command.kind == "read":
+                        operands = read_operands(command) if sole else None
                         for is_skill, heading in ((False, adapter), (True, skill)):
-                            if any(names_file(t, host, is_skill) for t in command.tokens[1:]):
+                            if any(names_file(t, host, is_skill, root, relative_ok, True)
+                                   for t in command.tokens[1:]):
                                 if not is_skill:
                                     if script_before_adapter and not read_adapter:
                                         return "FAIL V-11.1 a script ran before the adapter was read", 0
                                     adapter_seen = True
-                                if event.success:
+                                if event.success and operands is not None and any(names_file(
+                                        o, host, is_skill, root, relative_ok, True) for o in operands):
                                     if event.output_bad:
                                         return f"UNVERIFIED V-11.1 {host} output shape unobserved", 0
                                     if event.output is not None and heading in event.output:
