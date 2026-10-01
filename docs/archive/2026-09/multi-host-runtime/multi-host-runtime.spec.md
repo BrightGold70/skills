@@ -736,11 +736,31 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       whose returned text holds the first `# ` heading line counts as a content read; the smoke
       proves the adapter was opened, not that every line was read. A read through a glob such as
       `references/*.md` does not name the file and fails, which is the conservative direction.
-      **Naming the file (amended 2026-10-01).** A path names the file only if it resolves to
-      `<root>/h-mad/<file>`. A suffix match is not enough: `/tmp/x/h-mad/SKILL.md` is a decoy.
-      Resolution follows symlinks, so an installed link such as
-      `~/.gemini/config/skills/h-mad/SKILL.md` counts. For agy `view_file`, only `FilePath` or
-      `AbsolutePath` names the file read.
+      **Naming the file (amended 2026-10-01).** The decision is made from the log's text alone,
+      never from the scoring machine's filesystem, so a log scores the same anywhere. A path names
+      the file only if, lexically normalised, it equals `<root>/h-mad/<file>` or `<link>/<file>`.
+      Each `<link>` is a host loader link passed as `--link`, which the smoke has verified with
+      `readlink -f` before the run.
+      - A suffix match is not enough: `/tmp/x/h-mad/SKILL.md` is a decoy.
+      - `..` is refused, because through a symlinked component it leaves the directory it
+        lexically names.
+      - `~/` and `$HOME/` count only when the logged session's `HOME` is passed as `--home`.
+        Without it they never count.
+      - For agy `view_file`, only `FilePath` or `AbsolutePath` names the file read.
+      - **Every credited read needs an untouched filesystem.** A read proves a file's content
+        only if nothing earlier in the whole log could have written or re-pointed it: `cp` over
+        the checkout file, a symlink swap, or a redirect. So an unmapped tool, any command that
+        is not a read or safe command (except `cd`/`pushd`/`popd`/`pwd`, which write nothing)
+        and any output redirect taint the filesystem. That taint never resets, because the
+        filesystem survives codex's fresh-shell reset. grok's `grep` tool is read-only, so it
+        does not taint the filesystem, but it still forfeits the lazy pass. The real flow reads
+        `SKILL.md` and the adapter before any script, and the live grok run still passes.
+      - An exec holding an active expansion counts as untrusted, and it taints both the shell and
+        the filesystem. An active expansion is a backtick, `$(`, zsh `$[…]` math (`HOME=7`
+        assigns), or a braced parameter with any operator (zsh `${NAME::=v}` assigns). It can run or assign inside a command that would
+        otherwise rate as safe. Only plain `$NAME` and `${NAME}` are side-effect free.
+      - A relative shell path also needs the codex exec's cwd to be the root. An absolute path
+        does not.
 
       **A shell read is credited only as the exec's sole command.** The heading check reads the
       exec's whole output, so `cat <file> >/dev/null; cat <decoy>` or `head -n 0 <file>; echo
@@ -752,12 +772,10 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       print only part of each file, or of the joined stream, so the heading may come from the
       other one.
 
-      **In a shell read, a path counts only if it is spelled from plain characters:**
-      `[A-Za-z0-9_./-]`, with an optional leading `~/`, or the exact `$HMAD_SKILL_ROOT/<file>`.
-      That rules out a variable, a substitution, a glob, a brace, `=cmd` and a quote, any of which
-      could change what the path names. A `(` glued to a word is a zsh modifier or glob qualifier
-      that rewrites the word. It splits off as a second command, so the read is never the exec's
-      sole command, and its text classifies unknown and taints.
+      A variable, glob, brace or `=cmd` in a shell path keeps its special character, so it can
+      never equal the plain target path. A `(` glued to a word is a zsh modifier or glob
+      qualifier that rewrites the word. It splits off as a second command, so the read is never
+      the exec's sole command, and its text classifies unknown and taints.
 
       **A tainted shell earns no read credit at all, absolute paths included.** An earlier command
       could have changed cwd, `HOME` or a variable, or redefined the reading command itself (a
@@ -765,24 +783,22 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       is untainted while two conditions hold: the codex exec's cwd is the root, and every earlier
       command in that shell classified as a read or a safe command.
       - Anything else taints what follows. That includes any spelling of `cd`, a bare assignment
-        such as `HOME=…`, `printf -v`, a function definition and `export PATH=…`.
+        such as `HOME=…`, `printf` (`-v` assigns, and zsh evaluates `%d` arguments as math that
+        can assign), a function definition and `export PATH=…`.
       - Each codex exec is a fresh shell, so the taint resets per exec. agy and grok shells may
         persist, so the taint lasts for the rest of the log.
       - A read whose own command carries a prefix assignment (`X=… cat …`) is not credited,
         because expansion order is shell-specific.
       - This is an allowlist, because every way to change shell state cannot be enumerated. A
         legitimate `cd <root> && cat h-mad/…` is therefore not credited, and neither is
-        `$HOME/…`. Both are conservative.
+        `$HOME/…` without `--home`. Both are conservative.
 
       File-tool reads (agy `view_file`, grok `read_file`) do not run through a shell. Their
       relative paths resolve against the root, and they never expand `~` or a variable, so those
       spellings never count there.
 
-      Paths resolve on the machine that scores the log. The filesystem survives codex's
-      fresh-shell reset: a symlink planted by one exec and read through by a later one, which
-      resolves back into the checkout by the time it is scored, is credited. That case is
-      contrived, it is accepted, and it is listed as a residual. These rules apply to both reads, the
-      adapter and `SKILL.md`, and to the full and lazy passes alike.
+      Nothing is resolved on the scoring machine, and no symlink is followed. These rules apply
+      to both reads, the adapter and `SKILL.md`, and to the full and lazy passes alike.
       **Lazy exception (operator decision 2026-10-01, after the live smoke).** A call need not
       read the adapter when every event in its log is a call to the host's **file-read tool**
       (agy `view_file`, grok `read_file`) or an agy step of type `agent_response`, `user_input`

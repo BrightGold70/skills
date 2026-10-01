@@ -127,12 +127,44 @@ Changes:
     operands); a separate option refusal (any option lands among the operands and fails the
     one-operand limit); and a codex-only lazy guard.
 
-    **Residual, LOW:** paths resolve on the scoring machine, so the same log can score differently
-    on another machine. On codex, a symlink planted by an earlier exec survives the fresh-shell
-    reset, and a later read through it that resolves into the checkout at scoring time is
-    credited; that is contrived and accepted. `$HOME/…`, `cd <root> && cat …`, a read
-    with its own prefix assignment, and any path with characters outside the plain set are not
-    credited; all are conservative.
+    **Both LOW residuals are now closed (same day).**
+    - *Machine dependence.* The verdict no longer asks the scoring machine anything. Paths
+      compare as normalised text against `<root>/h-mad/<file>` and the `--link` loader links,
+      `~/` and `$HOME/` expand only with `--home`, and `..` is refused. The plan and design
+      smoke now pass `--home "$HOME" --link "$L"`; the smoke verified `$L` with `readlink -f`
+      before the run.
+    - *Codex symlink across execs.* A link read, and `$HMAD_SKILL_ROOT`, also need an untouched
+      filesystem. Anything earlier in the whole log that was not proven read-only (an unmapped
+      tool, a non-read/safe command) forfeits them. Unlike the shell taint, this one never
+      resets.
+
+    A seventh review pass found that only link reads needed the clean filesystem. A `cp` over
+    the checkout file, or `echo … > h-mad/SKILL.md` (a redirect through a safe command, which the
+    tokenizer drops), was still credited. Every credited read now needs an untouched filesystem,
+    and any output redirect taints it. grok's read-only `grep` tool and
+    `cd`/`pushd`/`popd`/`pwd` do not taint it. Scored with all three verified loader links, the
+    retained live logs give the recorded verdicts: grok PASS, codex UNVERIFIED, agy FAIL. The
+    live grok run read its skill through the codex link `~/.agents/skills/h-mad`, so the smoke
+    now verifies and passes all three links. An absolute read in a codex exec whose cwd is not
+    the root now counts; only relative paths need the root cwd.
+
+    An eighth pass then found hidden commands inside safe ones: ``echo `cp …` `` and zsh's
+    `echo ${PATH::=…}`. A ninth pass found zsh math assigning variables, through
+    `printf %d HOME=7` and `$[HOME=7]`. An exec with any active expansion (a backtick, `$(`,
+    `$[`, or a braced parameter with an operator) now taints both the shell and the filesystem;
+    only a plain `$NAME`/`${NAME}` does not. `printf` is no longer a safe command.
+
+    The character allowlist became redundant under the text comparison and was removed. Cases
+    `*-G1`–`G17` cover this; they use a fake `HOME`, so the rehearsal passes unchanged under
+    another `HOME` and working directory (n=165). A cache-proof mutation sweep, with each mutant
+    in its own module and no bytecode, kills all 36 guards. An earlier ad-hoc sweep had reused a
+    stale `.pyc` between mutants of equal size written in the same second, and reported one kill
+    that was not real. The repo's own harness already guards against this
+    (`h_mad_mutation_harness.py` clears `__pycache__`).
+
+    Still not credited, conservatively: `cd <root> && cat …`, and a read with its own prefix
+    assignment.
+
 - Fifteen rehearsal cases were added (`*-L*`, n=93 → 108). Each guard was mutation-probed and
   killed. A codex-only guard survived its probe because the shell rule subsumes it, so it was
   removed.

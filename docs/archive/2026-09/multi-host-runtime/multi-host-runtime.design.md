@@ -1269,12 +1269,14 @@ rehearsal is re-run, and the smoke record states that.
 
 **Smoke script delta.** The plan's script is used with these changes:
 - The `v111()`/`v112()` shell definitions are removed.
-- Part 2's two calls become:
+- Part 2's two calls become below. Every `--link` must be verified with `readlink -f` before the
+  run (the plan's part 1 does, for all three), because V-11.1 credits a read through any of them:
+  the live grok run read its skill through `~/.agents/skills/h-mad`.
 
   ```bash
   P="$REPO/docs/03-analysis/probes/multi-host-runtime/smoke_assert.py"
   r=$(python3 "$P" v112 --out "$S/out" --record "$B_REC" --feature "$F"); test "$r" = "PASS V-11.2" || stop "${r:-UNREADABLE V-11.2 reason=no_output}"
-  r=$(python3 "$P" v111 --host "$H" --log "$S/log" --root "$REPO"); case "$r" in "PASS V-11.1"|"PASS V-11.1 lazy (no script ran)") ;; *) stop "${r:-UNREADABLE V-11.1 reason=no_output}" ;; esac
+  r=$(python3 "$P" v111 --host "$H" --log "$S/log" --root "$REPO" --home "$HOME" --link ~/.agents/skills/h-mad --link ~/.gemini/config/skills/h-mad --link ~/.claude/skills/h-mad); case "$r" in "PASS V-11.1"|"PASS V-11.1 lazy (no script ran)") ;; *) stop "${r:-UNREADABLE V-11.1 reason=no_output}" ;; esac
   ```
 - The pinned prompt's "declare `HMAD_HOST`" item is proved from the log by step 4 of the verdict
   (OD-4), never taken on the host's word.

@@ -3,7 +3,11 @@ exec
  succeeded in 0.01s
 # Codex runtime adapter
 exec
-/bin/zsh -lc "cat h-mad/SKILL.md" in /tmp/x
+/bin/zsh -lc "echo `cp /tmp/dec/SKILL.md h-mad/SKILL.md`" in /Users/kimhawk/orca/skills
+ succeeded in 0.01s
+
+exec
+/bin/zsh -lc "cat h-mad/SKILL.md" in /Users/kimhawk/orca/skills
  succeeded in 0.01s
 # /h-mad — 7-phase H-MAD Orchestrator (v2.2, standalone)
 exec

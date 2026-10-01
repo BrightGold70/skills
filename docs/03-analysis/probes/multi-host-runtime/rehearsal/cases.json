@@ -1159,7 +1159,11 @@
     "log": "agy-S28-home-rebound-persists.log",
     "root": ".",
     "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "In a persistent agy shell, a bare HOME= in one step repoints `~` for a later sole read; `~` counts only untainted. (Mutation kill is local: the ~ link exists on the authoring machine.)"
+    "note": "In a persistent agy shell, a bare HOME= in one step repoints `~` for a later sole read; `~` counts only untainted. Scored with a fake home and link, so the kill holds on any machine.",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad"
+    ]
   },
   {
     "id": "agy-S29-env-var-in-path",
@@ -1240,6 +1244,208 @@
     "log": "agy-S37-tool-path-tilde.log",
     "root": ".",
     "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A file tool is not shown to expand `~`; a view_file of a ~ path is not credited. (Mutation kill is local: the ~ link exists on the authoring machine.)"
+    "note": "A file tool is not shown to expand `~`; a view_file of a ~ path is not credited. Scored with a fake home and link, so the kill holds on any machine.",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad"
+    ]
+  },
+  {
+    "id": "codex-G1-tilde-link",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G1-tilde-link.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "note": "Positive: `~/<verified link>/SKILL.md` counts, resolved as text with the logged HOME, never by this machine's filesystem.",
+    "home": "/home/smoke",
+    "links": [
+      "~/.agents/skills/h-mad"
+    ]
+  },
+  {
+    "id": "codex-G2-home-var-link",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G2-home-var-link.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "note": "Positive: `$HOME/` is the `~/` spelling when the logged HOME is given.",
+    "home": "/home/smoke",
+    "links": [
+      "~/.agents/skills/h-mad"
+    ]
+  },
+  {
+    "id": "codex-G3-link-replanted-earlier-exec",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G3-link-replanted-earlier-exec.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "An earlier exec re-pointed the loader link; the filesystem survives the fresh shell, so a link read after any unproven command does not count.",
+    "home": "/home/smoke",
+    "links": [
+      "~/.agents/skills/h-mad"
+    ]
+  },
+  {
+    "id": "codex-G4-dotdot",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G4-dotdot.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`..` is refused: through a symlinked component it leaves the directory it lexically names."
+  },
+  {
+    "id": "codex-G5-abs-through-local-link",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G5-abs-through-local-link.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "No --link given: an absolute path through a link that exists on the scoring machine no longer counts. The verdict never asks this machine's filesystem."
+  },
+  {
+    "id": "agy-G6-tool-abs-link",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-G6-tool-abs-link.log",
+    "root": ".",
+    "expected": "PASS V-11.1 lazy (no script ran)",
+    "note": "Positive: a file-tool read of the verified link's absolute path counts in the lazy pass.",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad"
+    ]
+  },
+  {
+    "id": "agy-G7-tool-write-then-link-read",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-G7-tool-write-then-link-read.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad"
+    ],
+    "note": "An unmapped tool (write_to_file) may re-point the loader link; a later link read does not count. Full-pass path: the lazy rule is not what fails it."
+  },
+  {
+    "id": "codex-G8-skill-root-after-fs-change",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G8-skill-root-after-fs-change.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "$HMAD_SKILL_ROOT's target is not in the log; after an exec that may have changed the filesystem, a read through it in a fresh shell does not count."
+  },
+  {
+    "id": "codex-G9-skill-root-control",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G9-skill-root-control.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "note": "Positive twin of G8 without the earlier exec: $HMAD_SKILL_ROOT/SKILL.md in an untouched shell and filesystem counts."
+  },
+  {
+    "id": "codex-G10-cp-over-then-read",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G10-cp-over-then-read.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "An earlier exec may have written the checkout file itself (cp over it); a later read of <root>/h-mad/SKILL.md proves nothing. Every credited read needs an untouched filesystem."
+  },
+  {
+    "id": "codex-G11-redirect-write-then-read",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G11-redirect-write-then-read.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "`echo x > h-mad/SKILL.md` writes through a safe command; simple_tokens drops the redirect, so any `>` taints what follows."
+  },
+  {
+    "id": "grok-G12-grep-tool-then-reads",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-G12-grep-tool-then-reads.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "note": "Positive: grok's grep tool is read-only, so it does not taint the filesystem (the live grok run uses it before its reads)."
+  },
+  {
+    "id": "grok-L4-grep-forfeits-lazy",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-L4-grep-forfeits-lazy.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "grok's grep tool is read-only for the filesystem taint, but the lazy pass admits only file-read tool calls, so it still forfeits it."
+  },
+  {
+    "id": "codex-G13-backtick-hides-write",
+    "mode": "v111",
+    "host": "codex",
+    "log": "codex-G13-backtick-hides-write.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "note": "A backtick inside a safe `echo` runs a hidden cp over the file; an active expansion makes the exec untrusted and taints the filesystem."
+  },
+  {
+    "id": "agy-G14-assigning-expansion",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-G14-assigning-expansion.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad"
+    ],
+    "note": "zsh `${HOME::=v}` assigns inside a safe `echo`; in a persistent agy shell it re-points a later `~` read. Only plain $NAME/${NAME} are allowed."
+  },
+  {
+    "id": "agy-G15-printf-math-assigns-home",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-G15-printf-math-assigns-home.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad"
+    ],
+    "note": "zsh `printf %d HOME=7` evaluates math and assigns HOME; printf is not a safe command."
+  },
+  {
+    "id": "agy-G16-dollar-bracket-math",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-G16-dollar-bracket-math.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad"
+    ],
+    "note": "zsh `$[HOME=7]` is math that assigns; `$[` is an active expansion."
+  },
+  {
+    "id": "agy-G17-math-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-G17-math-control.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad"
+    ],
+    "note": "Positive twin of G15/G16 without the assignment: the link read counts."
   }
 ]

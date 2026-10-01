@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import posixpath
 import re
 import shlex
 import sys
@@ -22,9 +24,9 @@ REDIRECT = re.compile(r"[<>&|]*[<>][<>&|]*")
 PUNCT = set(";&|<>()\n")
 SEPARATOR = set(";&|()\n")
 CODEX_LINE = re.compile(r"^\S+ -lc .* in \S+$")
-# A shell path operand is credited only if it is spelled from plain characters: no variable,
-# substitution, glob, brace, `=cmd` or quote can change what it names (an allowlist).
-SHELL_PATH = re.compile(r"(~/)?[A-Za-z0-9_./-]+")
+# Expansion that can run or assign: a backtick, $( / $((, zsh $[...] math (HOME=7 assigns), or a
+# braced parameter with any operator (zsh ${NAME::=v} assigns). Only plain $NAME / ${NAME} are side-effect free (an allowlist).
+ACTIVE_EXPANSION = re.compile(r"`|\$\(|\$\[|\$\{(?![A-Za-z_][A-Za-z0-9_]*\})")
 
 
 
@@ -93,6 +95,11 @@ def grok_events(rows: list[dict]) -> tuple[list[Event], bool]:
         if row.get("type") != "tool_call":
             continue
         tool = row.get("toolName")
+        if tool == "grep":
+            # grok's search tool: read-only, so it does not touch the filesystem, but it is not a
+            # file read either, so it still forfeits the lazy pass.
+            events.append(Event("search", str(tool), True, None))
+            continue
         if tool not in ("run_terminal_command", "read_file"):
             events.append(Event("other", str(tool), True, None))
             continue
@@ -172,31 +179,72 @@ def codex_events(path: Path) -> tuple[list[Event], bool]:
     return events, False
 
 
-def names_file(value: str, host: str, skill: bool, root: Path, shell_ok: bool, in_shell: bool) -> bool:
-    """True when value names this checkout's file: it resolves to <root>/h-mad/<file>.
+@dataclass
+class Places:
+    """Where the file may legitimately be read from, as text: the verdict never asks this machine.
 
-    A suffix match is not enough: /tmp/x/h-mad/SKILL.md ends the same way and is a decoy. An
-    installed link (e.g. ~/.gemini/config/skills/h-mad) still counts, because it resolves here.
-    In a shell, nothing counts unless shell_ok: an earlier command could have changed cwd, HOME,
-    a variable, PATH, or redefined the reading command itself, so even a literal absolute path
-    proves nothing in a tainted shell. File tools do not expand `~` or variables, so those
-    spellings never count there; their relative paths are workspace-relative and count.
+    root is the checkout; home is the logged session's HOME (None: `~` and $HOME never count);
+    links are host loader links the caller verified point at <root>/h-mad (the smoke checks
+    readlink -f before the run). Every comparison is lexical, so a log scores the same anywhere.
+    """
+    root: str
+    home: str | None = None
+    links: tuple[str, ...] = ()
+
+    @classmethod
+    def build(cls, root: Path, home: str | None = None, links: tuple[str, ...] = ()) -> "Places":
+        norm = lambda v: posixpath.normpath(os.path.abspath(v))
+        home = norm(home) if home else None
+        expand = lambda v: (home + v[1:]) if home and (v == "~" or v.startswith("~/")) else v
+        return cls(norm(str(root)), home, tuple(norm(expand(l)) for l in links if not l.startswith("~") or home))
+
+
+def lexical(value: str, places: Places, relative_ok: bool = True) -> str | None:
+    """value as a normalised absolute path, or None when text alone cannot fix what it names."""
+    for prefix in ("$HOME/", "${HOME}/"):
+        if value.startswith(prefix):
+            value = "~/" + value[len(prefix):]
+    if value.startswith("~"):
+        if places.home is None or not value.startswith("~/"):
+            return None
+        value = places.home + value[1:]
+    if ".." in value.split("/"):
+        return None  # through a symlinked component, `..` leaves the directory it lexically names
+    if not value.startswith("/") and not relative_ok:
+        return None  # the shell's cwd is not known to be the root
+    return posixpath.normpath(value if value.startswith("/") else f"{places.root}/{value}")
+
+
+def names_file(value: str, host: str, skill: bool, places: Places, shell_ok: bool, in_shell: bool,
+               fs_ok: bool, at_root: bool = True) -> bool:
+    """True when value names this checkout's file, decided from text alone.
+
+    It must be <root>/h-mad/<file>, or <link>/<file> for a verified loader link. A suffix match
+    is not enough: /tmp/x/h-mad/SKILL.md is a decoy. In a shell nothing counts unless shell_ok:
+    an earlier command could have changed cwd, HOME, a variable, PATH or the reading command
+    itself; a relative path also needs at_root. Nothing counts at all unless fs_ok: a read
+    proves the file's content only if nothing earlier in the whole log could have written or
+    re-pointed it (cp over it, a symlink swap, a redirect), and the filesystem survives a codex
+    exec's fresh shell. File tools do not expand `~` or variables, so those spellings never
+    count there; their relative paths are workspace-relative and count.
     """
     filename = "SKILL.md" if skill else f"references/{host}-runtime.md"
+    if not fs_ok:
+        return False  # an earlier event may have written or re-pointed the file
     if in_shell and not shell_ok:
         return False  # a tainted shell may have moved cwd, HOME, a variable, PATH or `cat` itself
     if value in (f"$HMAD_SKILL_ROOT/{filename}", f"${{HMAD_SKILL_ROOT}}/{filename}"):
         return in_shell
-    if in_shell and not SHELL_PATH.fullmatch(value):
+    # No character allowlist is needed: the comparison is textual, so a variable, glob, brace or
+    # `=cmd` keeps its special character and can never equal the plain target path.
+    spelled = re.sub(r"^\$(\{HOME\}|HOME)/", "~/", value)
+    if spelled.startswith("~") and not in_shell:
         return False
-    if value.startswith("~") and not in_shell:
+    path = lexical(value, places, at_root or not in_shell)
+    if path is None:
         return False
-    try:
-        path = Path(value).expanduser()
-        path = path if path.is_absolute() else root / path
-        return path.resolve() == (root / "h-mad" / filename).resolve()
-    except (OSError, RuntimeError, ValueError):
-        return False
+    return path in {posixpath.normpath(f"{places.root}/h-mad/{filename}")} | {
+        posixpath.normpath(f"{link}/{filename}") for link in places.links}
 
 
 def simple_tokens(text: str) -> list[list[str]]:
@@ -318,7 +366,7 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
         operand = next((a for a in args if not a.startswith("-")), "")
         if re.fullmatch(r"hmad-dispatch(\.sh)?", Path(operand).name):
             return [Command("dispatch", tokens, assignments, name)]
-    safe = {"cat", "head", "tail", "nl", "sed", "grep", "rg", "ls", "test", "[", "echo", "printf", "wc", "stat"}
+    safe = {"cat", "head", "tail", "nl", "sed", "grep", "rg", "ls", "test", "[", "echo", "wc", "stat"}
     if name in safe and (name != "sed" or sed_safe(args)) and (name != "rg" or not any(
             a.startswith("--pre") or a in ("-z", "--search-zip") or
             re.fullmatch(r"-[A-Za-z]+", a) and "z" in a for a in args)):
@@ -332,7 +380,7 @@ def needle(root: Path, host: str, skill: bool) -> str:
     return next((line for line in path.read_text().splitlines() if line.startswith("# ")), "")
 
 
-def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
+def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple[str, ...] = ()) -> tuple[str, int]:
     try:
         adapter, skill = needle(root, host, False), needle(root, host, True)
         if not adapter or not skill:
@@ -355,19 +403,29 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
         # a safe command (a bare assignment included) and `printf -v` taint what follows. Each codex exec is a
         # fresh shell; agy and grok shells may persist, so their taint does too.
         tainted = False
+        # The filesystem outlives every shell, codex execs included: anything not proven
+        # read-only (an unmapped tool, a non-read/safe command) may have re-pointed a loader link,
+        # so a read through a link counts only before the first such event. Never reset.
+        fs_tainted = False
+        places = Places.build(root, home, links)
         for event in events:
             if event.tool == "other":
+                unmapped = fs_tainted = True
+                continue
+            if event.tool == "search":
                 unmapped = True
                 continue
             if event.tool == "read":
                 paths = [event.value] if isinstance(event.value, str) else event.value
                 for is_skill, heading in ((False, adapter), (True, skill)):
-                    if any(names_file(p, host, is_skill, root, True, False) for p in paths):
+                    # Mention (for the read-before-script ordering) needs no clean filesystem; credit does.
+                    if any(names_file(p, host, is_skill, places, True, False, True) for p in paths):
                         if not is_skill:
                             if script_before_adapter and not read_adapter:
                                 return "FAIL V-11.1 a script ran before the adapter was read", 0
                             adapter_seen = True
-                        if event.success:
+                        if event.success and any(names_file(p, host, is_skill, places, True, False, not fs_tainted)
+                                                 for p in paths):
                             if event.output_bad:
                                 return f"UNVERIFIED V-11.1 {host} output shape unobserved", 0
                             if event.output is not None and heading in event.output:
@@ -377,7 +435,7 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
                                     read_adapter = True
                 continue
             shelled = True
-            at_root = event.cwd is None or Path(event.cwd).resolve() == root.resolve()
+            at_root = event.cwd is None or posixpath.normpath(event.cwd) == places.root
             if host == "codex":
                 tainted = False
             # The heading check reads the exec's whole output, so a read is credited only when it
@@ -385,6 +443,15 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
             # A zsh modifier glued to a path (`f(:s/a/b/)`) splits off as a second command, so it
             # is never sole either; its text never classifies read/safe, so it also taints.
             every = [c for part in simple_tokens(event.value) for c in classify(part.copy())]
+            # simple_tokens drops redirects, so `echo x > f` would classify safe; an output
+            # redirect anywhere in the exec writes, so it taints what follows.
+            redirects = ">" in event.value
+            # A command hidden in an expansion is invisible to classify, so it taints the shell and
+            # filesystem from here on. A read in the same exec needs no extra rule: an expansion in
+            # its path never equals the plain target, and a split-off $( makes it non-sole.
+            active = bool(ACTIVE_EXPANSION.search(event.value))
+            if active:
+                tainted = fs_tainted = True
             sole = len(every) == 1
             for tokens in simple_tokens(event.value):
                 commands = classify(tokens.copy())
@@ -392,10 +459,15 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
                     # A read whose own command carries a prefix assignment is not credited: whether
                     # its paths expand before or after the assignment is shell-specific. The prefix
                     # lasts one command, so it does not taint later ones; a bare one is kind "assign".
-                    relative_ok = at_root and not tainted and not command.assignments
-                    if (command.kind not in ("read", "safe")
-                            or command.name == "printf" and any(t.startswith("-v") for t in command.tokens)):
+                    relative_ok = not tainted and not command.assignments
+                    fs_ok = not fs_tainted
+                    # printf is not safe: -v assigns, and zsh evaluates %d arguments as math (HOME=7).
+                    if command.kind not in ("read", "safe"):
                         tainted = True
+                        # cd/pushd/popd/pwd move or report the cwd but write nothing (a write
+                        # through them is a redirect, tainted below); anything else may write.
+                        if command.name not in ("cd", "pushd", "popd", "pwd"):
+                            fs_tainted = True
                     mentioned = bool(MENTION.search(" ".join(command.tokens)))
                     if not read_adapter:
                         if command.kind in ("script", "dispatch"):
@@ -409,14 +481,14 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
                     if command.kind == "read":
                         operands = read_operands(command) if sole else None
                         for is_skill, heading in ((False, adapter), (True, skill)):
-                            if any(names_file(t, host, is_skill, root, relative_ok, True)
+                            if any(names_file(t, host, is_skill, places, relative_ok, True, True, at_root)
                                    for t in command.tokens[1:]):
                                 if not is_skill:
                                     if script_before_adapter and not read_adapter:
                                         return "FAIL V-11.1 a script ran before the adapter was read", 0
                                     adapter_seen = True
                                 if event.success and operands is not None and any(names_file(
-                                        o, host, is_skill, root, relative_ok, True) for o in operands):
+                                        o, host, is_skill, places, relative_ok, True, fs_ok, at_root) for o in operands):
                                     if event.output_bad:
                                         return f"UNVERIFIED V-11.1 {host} output shape unobserved", 0
                                     if event.output is not None and heading in event.output:
@@ -424,6 +496,8 @@ def v111(host: str, log: Path, root: Path) -> tuple[str, int]:
                                             read_skill = True
                                         else:
                                             read_adapter = True
+            if redirects:
+                tainted = fs_tainted = True
         if not read_adapter:
             # A read-only call need not load the adapter, provided every event is a file-read tool
             # call: no shell command and no tool or step the classifier does not map. Anything
@@ -475,7 +549,8 @@ def rehearse() -> int:
     failures = 0
     for case in cases:
         if case["mode"] == "v111":
-            actual, _ = v111(case["host"], HERE / "rehearsal" / case["log"], HERE.parents[3] / case["root"])
+            actual, _ = v111(case["host"], HERE / "rehearsal" / case["log"], HERE.parents[3] / case["root"],
+                             case.get("home"), tuple(case.get("links", ())))
         else:
             actual, _ = v112(HERE / "rehearsal" / case["out"], json.dumps(case["record"]), case["feature"])
         print(f"{case['id']}: {actual}")
@@ -491,6 +566,9 @@ def main() -> int:
     p111.add_argument("--host", choices=("codex", "agy", "grok"), required=True)
     p111.add_argument("--log", type=Path, required=True)
     p111.add_argument("--root", type=Path, required=True)
+    p111.add_argument("--home", help="the logged session's HOME; without it `~` and $HOME never count")
+    p111.add_argument("--link", action="append", default=[],
+                      help="a host loader link already verified to resolve to <root>/h-mad (repeatable)")
     p112 = sub.add_parser("v112")
     p112.add_argument("--out", type=Path, required=True)
     p112.add_argument("--record", required=True)
@@ -499,7 +577,7 @@ def main() -> int:
     args = parser.parse_args()
     if args.mode == "rehearse":
         return rehearse()
-    result, code = v111(args.host, args.log, args.root) if args.mode == "v111" else v112(args.out, args.record, args.feature)
+    result, code = v111(args.host, args.log, args.root, args.home, tuple(args.link)) if args.mode == "v111" else v112(args.out, args.record, args.feature)
     print(result)
     return code
 

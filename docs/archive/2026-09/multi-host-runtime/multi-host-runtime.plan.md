@@ -754,6 +754,11 @@ landed (its baseline and anchor checks) before scoring it.
   test -z "$(G status --short --untracked-files=no)" || { echo "HALT tracked changes before the smoke"; exit 1; }
   case "$H" in codex) L=~/.agents/skills/h-mad;; agy) L=~/.gemini/config/skills/h-mad;; grok) L=~/.claude/skills/h-mad;; *) echo "HALT host $H"; exit 1;; esac
   test "$(readlink -f "$L")" = "$REPO/h-mad" || { echo "HALT $L does not load $REPO/h-mad"; exit 1; }
+  # V-11.1 credits reads through every loader link (a host may read through another host's:
+  # the live grok run read ~/.agents/skills/h-mad), so every link passed as --link is verified.
+  for K in ~/.agents/skills/h-mad ~/.gemini/config/skills/h-mad ~/.claude/skills/h-mad; do
+    test "$(readlink -f "$K")" = "$REPO/h-mad" || { echo "HALT $K does not load $REPO/h-mad"; exit 1; }
+  done
   test -f "$A" || { echo "HALT adapter absent from main"; exit 1; }
   AH=$(grep -m1 '^# ' "$A" | sed 's/^# //'); test -n "$AH" || { echo "HALT adapter has no H1"; exit 1; }
   ! grep -q -F -e "$H-runtime.md" -e "$AH" "$S/prompt.txt" || { echo "HALT prompt names the adapter"; exit 1; }
@@ -785,7 +790,7 @@ landed (its baseline and anchor checks) before scoring it.
   cmp -s "$S/before" "$S/after" || stop "FAIL V-11.3 tree moved"
   test "$(shasum -a 256 "$M" | awk '{print $1}')" = "$B_SHA" || stop "FAIL V-11.3 state file sha256 changed"
   r=$(python3 "$P" v112 --out "$S/out" --record "$B_REC" --feature "$F"); test "$r" = "PASS V-11.2" || stop "${r:-UNREADABLE V-11.2 reason=no_output}"
-  r=$(python3 "$P" v111 --host "$H" --log "$S/log" --root "$REPO"); case "$r" in "PASS V-11.1"|"PASS V-11.1 lazy (no script ran)") ;; *) stop "${r:-UNREADABLE V-11.1 reason=no_output}" ;; esac
+  r=$(python3 "$P" v111 --host "$H" --log "$S/log" --root "$REPO" --home "$HOME" --link ~/.agents/skills/h-mad --link ~/.gemini/config/skills/h-mad --link ~/.claude/skills/h-mad); case "$r" in "PASS V-11.1"|"PASS V-11.1 lazy (no script ran)") ;; *) stop "${r:-UNREADABLE V-11.1 reason=no_output}" ;; esac
   echo "SMOKE-PASS host=$H merge=$MERGE"
   ```
 
