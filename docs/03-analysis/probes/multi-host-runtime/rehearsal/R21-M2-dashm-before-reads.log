@@ -1,0 +1,2 @@
+{"event": "step_update", "step_update": {"step_index": 1, "state": "ACTIVE", "step_type": "tool", "tool_name": "run_command", "tool_info": {"name": "run_command", "parameters": {"CommandLine": "HMAD_HOST=agy python3 h-mad/scripts/h_mad_derive_test_path.sh -m h_mad_state_write"}}}}
+{"event": "step_update", "step_update": {"step_index": 1, "state": "DONE", "step_type": "tool", "tool_name": "run_command", "tool_info": {"name": "run_command", "parameters": {"CommandLine": "HMAD_HOST=agy python3 h-mad/scripts/h_mad_derive_test_path.sh -m h_mad_state_write"}, "output": ""}}}

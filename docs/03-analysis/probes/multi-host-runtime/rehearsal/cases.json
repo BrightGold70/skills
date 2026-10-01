@@ -2271,7 +2271,7 @@
     "host": "agy",
     "log": "R20-F1-sh.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
   },
   {
     "id": "agy-R20-F1-json",
@@ -2279,7 +2279,7 @@
     "host": "agy",
     "log": "R20-F1-json.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
   },
   {
     "id": "grok-R20-F1-grok",
@@ -2287,7 +2287,7 @@
     "host": "grok",
     "log": "R20-F1-grok.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
   },
   {
     "id": "agy-R20-F1-ctrl-Aonly",
@@ -2295,7 +2295,7 @@
     "host": "agy",
     "log": "R20-F1-ctrl-Aonly.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "grok-R20-F1-grok-ctrl",
@@ -2303,7 +2303,7 @@
     "host": "grok",
     "log": "R20-F1-grok-ctrl.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R20-D3-mixed",
@@ -2386,6 +2386,126 @@
     "links": [
       "/fake/link/h-mad"
     ],
-    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-A1-ctrl-py",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-A1-ctrl-py.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R21-A1-ctrl-sh",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-A1-ctrl-sh.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-A1-sh-dashm",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-A1-sh-dashm.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-A2-json-dashm",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-A2-json-dashm.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-A3-dispatch-dashm",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-A3-dispatch-dashm.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-A4-emit-dashm",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-A4-emit-dashm.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-C1-otherhost-canon",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-C1-otherhost-canon.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script call declared another HMAD_HOST"
+  },
+  {
+    "id": "agy-R21-C2-two-canon-one-done",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-C2-two-canon-one-done.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-C3-agy-cwd",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-C3-agy-cwd.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 agy input shape unobserved"
+  },
+  {
+    "id": "agy-R21-C4-bashc-balance",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-C4-bashc-balance.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-C5-canon-plus-bashc-plus-echo",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-C5-canon-plus-bashc-plus-echo.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "grok-R21-G1-ctrl",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R21-G1-ctrl.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "grok-R21-G1-grok-sh-dashm",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R21-G1-grok-sh-dashm.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-M1-dashm-plus-bashc",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-M1-dashm-plus-bashc.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R21-M2-dashm-before-reads",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R21-M2-dashm-before-reads.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
   }
 ]

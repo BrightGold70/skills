@@ -49,6 +49,9 @@ class Command:
     tokens: list[str]
     assignments: list[str]
     name: str = ""
+    # The assignments written in this command's own text, for the HMAD_HOST mention count: an
+    # outer `HMAD_HOST=x bash -c "A; B"` reaches A and B but is written, and counted, once.
+    counted: list[str] | None = None
 
 
 def strings(value: object) -> list[str]:
@@ -411,15 +414,14 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
                 if depth >= 2 or i + 1 >= len(args):
                     return [Command("unknown", tokens, assignments, name)]
                 inner = [c for part in simple_tokens(args[i + 1]) for c in classify(part, depth + 1)]
-                for command in inner:
+                for n, command in enumerate(inner):
+                    own = command.assignments if command.counted is None else command.counted
+                    command.counted = (assignments if n == 0 else []) + own
                     command.assignments = assignments + command.assignments
                 return inner
     if PYTHON.fullmatch(name):
-        for i, item in enumerate(args):
-            if item == "-m" and i + 1 < len(args) and MODULE.fullmatch(args[i + 1].split(".")[-1]):
-                return [Command("script", tokens, assignments, name)]
-            if item.startswith("-m") and MODULE.fullmatch(item[2:].split(".")[-1]):
-                return [Command("script", tokens, assignments, name)]
+        # One ordered scan, as python3 parses: options until the first operand, which runs; every
+        # word after it is the script's argv, so a `-m` there selects nothing (review round 21).
         operand = ""
         i = 0
         while i < len(args):
@@ -432,14 +434,25 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
             if not a.startswith("-"):
                 operand = a
                 break
-            cluster = a[1:]
-            if "c" in cluster or "m" in cluster:
-                # -c code runs, or a module whose name was not matched above; either way a script
-                # name after it is only an argument. Short options may be clustered (`-Ic`).
+            cluster, stop = a[1:], False
+            for j, ch in enumerate(cluster):
+                rest = cluster[j + 1:]
+                if ch == "c":
+                    stop = True  # -c code runs; a script name after it is only an argument
+                    break
+                if ch == "m":
+                    # -m runs a module: the rest of the cluster, or the next word.
+                    module = rest or (args[i + 1] if i + 1 < len(args) else "")
+                    if MODULE.fullmatch(module.split(".")[-1]):
+                        return [Command("script", tokens, assignments, name)]
+                    stop = True
+                    break
+                if ch in "WX":
+                    if not rest:
+                        i += 1  # -W/-X take the next word as their argument
+                    break  # ...or the rest of the cluster
+            if stop:
                 break
-            taker = next((j for j, ch in enumerate(cluster) if ch in "WX"), None)
-            if taker is not None and taker == len(cluster) - 1:
-                i += 1  # -W/-X take the next word as their argument
             i += 1
         if SCRIPT.fullmatch(Path(operand).name):
             return [Command("script", tokens, assignments, name)]
@@ -480,9 +493,10 @@ def canonical(text: str, places: Places) -> str | None:
         return None
     path = match[2]
     name = posixpath.basename(path)
-    # python3 runs any file, so a .sh or .json under scripts/ fits this template. It still cannot
-    # count: v111 credits a canonical event only when classify() reads that SAME event as a
-    # declaring h_mad_*.py run (review round 20).
+    if not SCRIPT.fullmatch(name):
+        # python3 runs any file. classify() is NOT an equivalent check: a later `-m h_mad_x` once
+        # made it read a .sh run as a script (review round 21), so the template names the file.
+        return None
     where = lexical(path, places)
     bound = {posixpath.normpath(f"{places.root}/h-mad/scripts/{name}")} | {
         posixpath.normpath(f"{link}/scripts/{name}") for link in places.links}
@@ -587,7 +601,8 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
                         return "UNVERIFIED V-11.1 unclassified command before the adapter read", 0
                 if command.kind == "script":
                     values = [a.split("=", 1)[1] for a in command.assignments if a.startswith("HMAD_HOST=")]
-                    exact_declarations += len(values)
+                    written = command.assignments if command.counted is None else command.counted
+                    exact_declarations += sum(a.startswith("HMAD_HOST=") for a in written)
                     other_host |= any(v != host for v in values)
                     declared |= host in values
                     declares |= host in values

@@ -408,3 +408,27 @@ both interpreters with an unmutated control:
 The same-event rule makes a restored script-name check redundant (each survives alone), so only
 the same-event rule is kept. Live verdicts are unchanged and re-scored from the committed logs:
 grok PASS, agy FAIL.
+
+Review round 21 (a fresh-context code reviewer, scoped to round 20's changes, 2026-10-02) found
+one more fail-open from a single event, again where a check had been removed as redundant.
+`classify()` honoured `-m h_mad_x` anywhere in a python3 command line, including after the script
+operand, where python3 hands it to the script as argv. So
+`HMAD_HOST=agy python3 h-mad/scripts/h_mad_derive_test_path.sh -m h_mad_state_write` matched the
+template (no name check since round 19), read as a declaring script in the same event, and
+balanced the mention count. It passed, and live it raises a SyntaxError on the `.sh` file. Three
+fixes:
+- `canonical()` names `h_mad_*.py` again;
+- `classify()` reads python options in order and stops at the first operand;
+- the `bash -c` double count, noted in rounds 20 and 21, is gone: a prefix assignment counts once
+  where it is written.
+
+Cases `R21-*` (15) bring n=286 under 3.14 and 3.11. At `95ccfd12`, the six `-m` fixtures (agy and
+grok) and the double-count fixture all gave PASS. Six round-20 expectations keep UNVERIFIED with
+a different reason. The sweep, under both interpreters with an unmutated control:
+- killed the `-m` order fix and the double-count fix each alone;
+- shows the name check and the same-event rule are layered. Each survives alone and both
+  together, because the double-count fix also stops round 20's F1. Removing all three is killed.
+
+These are kept as deliberate overlapping layers. Twice now, a check removed as "redundant" was
+only redundant because of a premise that was wrong. Live verdicts are unchanged: grok PASS, agy
+FAIL.

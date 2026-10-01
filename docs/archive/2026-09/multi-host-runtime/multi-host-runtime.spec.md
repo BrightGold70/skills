@@ -770,8 +770,11 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       - **Shell commands still decide the ordering and the declaration.** A script or dispatch
         before the adapter read FAILs. `bash`/`zsh -c` is followed only when every argument before
         `-c` is a short option cluster with no `o`/`O` (those take the next word); a `+` or long
-        option stops it. For python, `-W`/`-X` take the next word, a short cluster holding `c` or
-        `m` ends the search for a script operand, and a long option is not followed. The declaration is judged from text only where text is unambiguous. A
+        option stops it. For python, options are read in order up to the first operand, as python3
+        does: `-W`/`-X` take the rest of the cluster or the next word, `-c` ends the search, `-m`
+        runs the module named by the rest of the cluster or the next word, and a long option is
+        not followed. Every word after the operand is the script's argv, so a later `-m` selects
+        nothing (review round 21). The declaration is judged from text only where text is unambiguous. A
         script's exact prefix token `HMAD_HOST=<value>` counts: another value FAILs, and at least
         one must name this host. Every other occurrence of `HMAD_HOST` in shell text (`env`,
         `export`, `+=`, `read`, even a grep for it) makes the declaration `UNVERIFIED`. `python3 -` and `python3 -c` make an `h_mad_*.py` name a plain argument.
@@ -808,7 +811,9 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
           skill read is still `FAIL`.
         - Another host named in any script's prefix still FAILs.
         - Any other `HMAD_HOST` mention still gives `UNVERIFIED … HMAD_HOST used outside an exact
-          declaration`.
+          declaration`. A prefix assignment counts once where it is written: the outer one in
+          `HMAD_HOST=x bash -c "A; B"` reaches both A and B, but is one mention and one
+          declaration (review round 21).
         - **Residual:** what other shell events did to the environment, or to how `python3`
           resolves, or to the shell's working directory, is trusted like the starting
           environment. Examples are a function, alias, export or `cd` in a persistent shell. Rehearsal case `R19-residual-prior-event-function` pins
