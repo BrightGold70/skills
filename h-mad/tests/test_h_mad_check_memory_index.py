@@ -59,6 +59,9 @@ class TestAgainstTheLiveBinary:
     Matched on VALUES in their declaring context, never on the minified names
     (`F2`, `hD`, `Ams`, `xZn`) — those are regenerated per build and pinning them
     goes red on a rename that changed nothing.
+
+    Minified names may contain `$` (2.1.287 declares `var j$n=0.8,nz=0.7;`), which
+    `\w` does not match, so every name group here is `[\w$]+`.
     """
 
     def _blob(self) -> str:
@@ -67,20 +70,20 @@ class TestAgainstTheLiveBinary:
     def test_the_warn_and_target_fractions_still_match(self) -> None:
         """Both live in one `var` declaration next to the cap machinery."""
         blob = self._blob()
-        m = re.search(r"var (\w+)=0\.8,(\w+)=0\.7;", blob)
+        m = re.search(r"var ([\w$]+)=0\.8,([\w$]+)=0\.7;", blob)
         assert m, "the 0.8/0.7 declaration pair is no longer in the binary"
         assert (WARN_FRAC, TARGET_FRAC) == (0.8, 0.7)
 
     def test_the_byte_cap_is_still_the_splice_cap_in_the_size_warning(self) -> None:
         """`${Ot(d)} (limit: ${Ot(F2)})` — the byte limit the loader reports."""
         blob = self._blob()
-        m = re.search(r"var (\w+)=25000,", blob)
+        m = re.search(r"var ([\w$]+)=25000,", blob)
         assert m, "25000 is no longer declared — BYTE_CAP may be stale"
         assert BYTE_CAP == 25000
 
     def test_the_line_cap_is_still_two_hundred(self) -> None:
         blob = self._blob()
-        assert re.search(r"=200;?\}?function|,(\w+)=200\b", blob), "200 not found"
+        assert re.search(r"=200;?\}?function|,([\w$]+)=200\b", blob), "200 not found"
         assert LINE_CAP == 200
 
     def test_the_silent_drop_wording_still_describes_this_failure(self) -> None:
