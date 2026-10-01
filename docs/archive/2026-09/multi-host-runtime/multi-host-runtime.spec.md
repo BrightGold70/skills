@@ -736,105 +736,66 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
       whose returned text holds the first `# ` heading line counts as a content read; the smoke
       proves the adapter was opened, not that every line was read. A read through a glob such as
       `references/*.md` does not name the file and fails, which is the conservative direction.
-      **Naming the file (amended 2026-10-01).** The decision is made from the log's text alone,
-      never from the scoring machine's filesystem, so a log scores the same anywhere. A path names
-      the file only if, lexically normalised, it equals `<root>/h-mad/<file>` or `<link>/<file>`.
-      Each `<link>` is a host loader link passed as `--link`, which the smoke has verified with
-      `readlink -f` before the run.
-      - A suffix match is not enough: `/tmp/x/h-mad/SKILL.md` is a decoy.
-      - `..` is refused, because through a symlinked component it leaves the directory it
-        lexically names.
-      - `~/` and `$HOME/` count only when the logged session's `HOME` is passed as `--home`.
-        Without it they never count.
-      - For agy `view_file`, only `FilePath` or `AbsolutePath` names the file read, and a read is
-        credited only if every path parameter present names the file.
-      - Event shape is checked before any read is credited, and each violation is `UNVERIFIED`.
-        A grok `toolCallId` reused across two `tool_call`s cannot be paired with its output. A
-        non-tool agy step sharing a tool step's `step_index` could supply that step's output.
-        An agy `run_command` is taken to run at the workspace root unless it carries a `Cwd`.
-      - `bash`/`zsh -c` is followed only when every argument before `-c` is an option:
-        `bash <script> -c …` runs `<script>`.
-      - `rg` is not a safe command (`--pre` and `--hostname-bin` run programs), and neither are
-        `test`/`[` (zsh math-evaluates the subscript in `-v 'x[NAME=5]'`, which assigns). A
-        `sed` read is safe only if every argument is checked, because GNU sed accepts `-e`
-        scripts after a file operand. With any `-e`, every non-option argument is a file.
-      - A script run is `HMAD_HOST`-declared only if every `HMAD_HOST=` assignment on the command
-        names the host (the last one wins). `python3 -` and `python3 -c` run stdin or code, so an
-        `h_mad_*.py` name after them is only an argument, not a script run.
-      - **Residual (design, codex only):** a codex text log cannot separate a command's output
-        from a following `exec` entry, so output that reproduces whole events is read as events
-        (case `codex-output-injection`). Live codex V-11.1 is `UNVERIFIED` for the related shape
-        reason.
-      - **Every credited read needs an untouched filesystem.** A read proves a file's content
-        only if nothing earlier in the whole log could have written or re-pointed it: `cp` over
-        the checkout file, a symlink swap, or a redirect. So an unmapped tool, any command that
-        is not a read or safe command (except `cd`/`pushd`/`popd`/`pwd`, which write nothing)
-        and any output redirect taint the filesystem. That taint never resets, because the
-        filesystem survives codex's fresh-shell reset. grok's `grep` tool is read-only, so it
-        does not taint the filesystem, but it still forfeits the lazy pass. The real flow reads
-        `SKILL.md` and the adapter before any script, and the live grok run still passes.
-      - An exec holding an active expansion counts as untrusted, and it taints both the shell and
-        the filesystem. The rule is an allowlist: the only side-effect-free expansion is a plain
-        `$NAME` or `${NAME}` that is not followed by a subscript. Any other `$` and any backtick
-        is active, because it can run or assign inside a command that would otherwise rate as
-        safe. That covers `$(`, zsh `$[…]` math, `${NAME::=v}`, the subscript `$NAME[HOME=7]`
-        (zsh evaluates it as math) and special parameters.
-      - A relative shell path also needs the codex exec's cwd to be the root. An absolute path
-        does not.
+      **Amended 2026-10-01 (operator decision): only a file-read tool proves a read.** Shell
+      reads (`cat`, `head`, `sed`, …) above no longer count. What zsh does with a command line
+      cannot be bounded from its text: fourteen fresh review rounds kept finding commands that ran
+      code or assigned variables through syntax rated read-only (math-evaluated subscripts, glob
+      qualifiers, assigning expansions, `printf %d`, `[ -v 'x[N=5]' ]`, …). So:
+      - **Codex has no file-read tool**, and its verdict is always
+        `UNVERIFIED V-11.1 codex has no file-read tool` (or a shape error). The live codex run was
+        already `UNVERIFIED`.
+      - **agy `view_file` and grok `read_file` are the only reads credited.** A path names the
+        file only if, lexically normalised, it equals `<root>/h-mad/<file>`, or `<link>/<file>`
+        for a host loader link passed as `--link`. The smoke verifies every link with
+        `readlink -f` before the run, and the live grok run read through the codex link. Nothing
+        is resolved on the scoring machine, and no symlink is followed, so a log scores the same
+        anywhere. `--home` only expands `~` in `--link` values.
+        - A file tool expands neither `~` nor variables; such a spelling is a relative path under
+          the root and cannot match.
+        - `..` is refused, because through a symlinked component it leaves the directory it
+          lexically names.
+        - For `view_file`, only `FilePath`/`AbsolutePath` are path parameters, and every one
+          present must name the file.
+      - **Every credited read needs an untouched filesystem.** Nothing that may have written or
+        re-pointed the file can have been *issued* before the read *completed*. Hosts run tools in
+        parallel, so a write issued after the read but finished first is still in time. **Every
+        shell command counts as a possible write**, because which ones write cannot be bounded
+        from command text: process substitution behind a redirect, or glued to `cd;`, was the last
+        of many. Unmapped tools, and grok row types or agy event kinds not seen in real logs,
+        count as possible writes too. Only file-tool reads and grok's read-only `grep` search are
+        exempt, and the taint never resets. In practice the skill and adapter must be read
+        through the file tool before the host's first shell command, which is what the adapter
+        instructions ask.
+      - **Shell commands still decide the ordering and the declaration.** A script or dispatch
+        before the adapter read FAILs. `bash`/`zsh -c` is followed only when every argument before
+        `-c` is an option. The declaration is judged from text only where text is unambiguous. A
+        script's exact prefix token `HMAD_HOST=<value>` counts: another value FAILs, and at least
+        one must name this host. Every other occurrence of `HMAD_HOST` in shell text (`env`,
+        `export`, `+=`, `read`, even a grep for it) makes the declaration `UNVERIFIED`. `python3 -` and `python3 -c` make an `h_mad_*.py` name a plain argument.
+      - **Event shape is checked.** Each violation is `UNVERIFIED`:
+        - a grok `toolCallId` reused across `tool_call`s;
+        - a non-tool agy step on a tool step's index;
+        - a grok `tool_call_update` carrying `rawInput`, or a call with more than one terminal
+          (`completed`/`failed`) update (real logs end each call with exactly one);
+        - an agy tool step with no index, or with an index reused by a different step.
 
-      **A shell read is credited only as the exec's sole command.** The heading check reads the
-      exec's whole output, so `cat <file> >/dev/null; cat <decoy>` or `head -n 0 <file>; echo
-      '<heading>'` would otherwise prove the wrong thing. That gap predates the 2026-10-01 change:
-      HEAD passed those logs too. Apart from head/tail `-n N` and sed's print-only flags, the read
-      command must have exactly one operand, and it must name the file. Any other option counts
-      as an operand and so fails that limit: an option can take a path-like argument that is not
-      read (`nl -s <path>`) or change what is printed (`head -c 0`). With two operands, head/tail `-n` and a sed script
-      print only part of each file, or of the joined stream, so the heading may come from the
-      other one.
+        An agy tool step with no `ACTIVE` row (real logs always pair `ACTIVE` then `DONE`) has no
+        known issue time, so it counts as issued at the start of the log.
 
-      A variable, glob, brace or `=cmd` in a shell path keeps its special character, so it can
-      never equal the plain target path. A `(` glued to a word is a zsh modifier or glob
-      qualifier that rewrites the word. It splits off as a second command, so the read is never
-      the exec's sole command, and its text classifies unknown and taints.
+        An orphan grok `tool_call_update`, of any status, is unmapped.
+      - **Lazy exception.** A call need not read the adapter when every event is a file-read tool
+        call or an agy step of type `agent_response`, `user_input`, `checkpoint` or
+        `system_message`. Its verdict is `PASS V-11.1 lazy (no script ran)`, and it still
+        requires the skill load below.
+      - **Residuals:**
+        - a partial read (grok `offset`/`limit`, agy line ranges) whose output holds the heading
+          counts. This is the original V-11.1 residual: it proves the file was opened, not that
+          every line was read;
+        - the session's starting environment (a login profile sourced before the first event)
+          is outside the log and is trusted;
+        - a relative file-tool path is taken to be workspace-relative to `--root`.
 
-      **A tainted shell earns no read credit at all, absolute paths included.** An earlier command
-      could have changed cwd, `HOME` or a variable, or redefined the reading command itself (a
-      `cat()` function, `PATH`), so even `cat <root>/h-mad/SKILL.md` proves nothing there. A shell
-      is untainted while two conditions hold: the codex exec's cwd is the root, and every earlier
-      command in that shell classified as a read or a safe command.
-      - Anything else taints what follows. That includes any spelling of `cd`, a bare assignment
-        such as `HOME=…`, `printf` (`-v` assigns, and zsh evaluates `%d` arguments as math that
-        can assign), a function definition and `export PATH=…`.
-      - Each codex exec is a fresh shell, so the taint resets per exec. agy and grok shells may
-        persist, so the taint lasts for the rest of the log.
-      - A read whose own command carries a prefix assignment (`X=… cat …`) is not credited,
-        because expansion order is shell-specific.
-      - This is an allowlist, because every way to change shell state cannot be enumerated. A
-        legitimate `cd <root> && cat h-mad/…` is therefore not credited, and neither is
-        `$HOME/…` without `--home`. Both are conservative.
-
-      File-tool reads (agy `view_file`, grok `read_file`) do not run through a shell. Their
-      relative paths resolve against the root, and they never expand `~` or a variable, so those
-      spellings never count there.
-
-      Nothing is resolved on the scoring machine, and no symlink is followed. The session's
-      starting environment (a login profile sourced before the first command) is outside the log
-      and is trusted. These rules apply
-      to both reads, the adapter and `SKILL.md`, and to the full and lazy passes alike.
-      **Lazy exception (operator decision 2026-10-01, after the live smoke).** A call need not
-      read the adapter when every event in its log is a call to the host's **file-read tool**
-      (agy `view_file`, grok `read_file`) or an agy step of type `agent_response`, `user_input`
-      or `checkpoint`. Such a call's verdict is the distinct token
-      `PASS V-11.1 lazy (no script ran)`, and it still requires the skill load below.
-      **Any shell command forfeits the exception.** A shell classifier is a denylist: two
-      fresh-context review passes found 14 ways to execute or write through commands it rated
-      safe. So a log with a shell command, or with a tool or step type the classifier does not
-      map, and no adapter read is `FAIL … no adapter read`. A grok `tool_call_update` with no
-      `tool_call`, whatever its status, counts as unmapped. An agy tool step with no `step_index`, or two different steps
-      sharing one index, is `UNVERIFIED` (a shape error). **Codex can never qualify**, because
-      every codex event is a shell exec. The adapter carries paths, hooks, claims and the
-      install-check quirk. A pure status read uses none of them, but bootstrap and every script
-      do. The rule is rehearsed by the `*-L*` cases in `rehearsal/cases.json`.
+      Rehearsed by `rehearsal/cases.json`; the history is in the live-smoke addendum.
     - **Skill load.** For codex and agy: an observed successful content read of h-mad's
       `SKILL.md`, by the same predicate; none observed → `FAIL`. For grok: `h-mad` listed in some
       `available_commands` event's `commands` (a list of plain strings, F11) is a

@@ -5,7 +5,7 @@
     "host": "codex",
     "log": "codex-R1.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R2",
@@ -13,7 +13,7 @@
     "host": "codex",
     "log": "codex-R2.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R3",
@@ -21,7 +21,7 @@
     "host": "codex",
     "log": "codex-R3.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no adapter read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R4",
@@ -29,7 +29,7 @@
     "host": "codex",
     "log": "codex-R4.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R6-test",
@@ -37,7 +37,7 @@
     "host": "codex",
     "log": "codex-R6-test.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R6-echo",
@@ -45,7 +45,7 @@
     "host": "codex",
     "log": "codex-R6-echo.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R6-grep",
@@ -53,7 +53,7 @@
     "host": "codex",
     "log": "codex-R6-grep.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R6-ls",
@@ -61,7 +61,7 @@
     "host": "codex",
     "log": "codex-R6-ls.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R7-sed",
@@ -69,7 +69,7 @@
     "host": "codex",
     "log": "codex-R7-sed.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R7-grep",
@@ -77,7 +77,7 @@
     "host": "codex",
     "log": "codex-R7-grep.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R8",
@@ -85,7 +85,7 @@
     "host": "codex",
     "log": "codex-R8.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R9",
@@ -93,7 +93,7 @@
     "host": "codex",
     "log": "codex-R9.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R10",
@@ -101,7 +101,7 @@
     "host": "codex",
     "log": "codex-R10.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R11",
@@ -109,7 +109,7 @@
     "host": "codex",
     "log": "codex-R11.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R12-absent",
@@ -117,7 +117,7 @@
     "host": "codex",
     "log": "codex-R12-absent.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=codex"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R12-wrong",
@@ -125,7 +125,7 @@
     "host": "codex",
     "log": "codex-R12-wrong.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=codex"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R13-error",
@@ -133,7 +133,7 @@
     "host": "codex",
     "log": "codex-R13-error.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R13-empty",
@@ -141,7 +141,7 @@
     "host": "codex",
     "log": "codex-R13-empty.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R13-skill-error",
@@ -149,7 +149,7 @@
     "host": "codex",
     "log": "codex-R13-skill-error.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R14-a",
@@ -157,7 +157,7 @@
     "host": "codex",
     "log": "codex-R14-a.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R14-b",
@@ -165,7 +165,7 @@
     "host": "codex",
     "log": "codex-R14-b.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R14-c",
@@ -173,7 +173,7 @@
     "host": "codex",
     "log": "codex-R14-c.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R14-d",
@@ -181,7 +181,7 @@
     "host": "codex",
     "log": "codex-R14-d.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R14-e",
@@ -189,7 +189,7 @@
     "host": "codex",
     "log": "codex-R14-e.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R14-f",
@@ -197,7 +197,7 @@
     "host": "codex",
     "log": "codex-R14-f.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R14-g",
@@ -205,7 +205,7 @@
     "host": "codex",
     "log": "codex-R14-g.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R14-h",
@@ -213,7 +213,7 @@
     "host": "codex",
     "log": "codex-R14-h.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-R15",
@@ -293,7 +293,8 @@
     "host": "agy",
     "log": "agy-R7-sed.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A shell sed/grep before the reads may write (every shell command taints since 2026-10-01), so the later file-tool reads do not count."
   },
   {
     "id": "agy-R7-grep",
@@ -301,7 +302,8 @@
     "host": "agy",
     "log": "agy-R7-grep.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A shell sed/grep before the reads may write (every shell command taints since 2026-10-01), so the later file-tool reads do not count."
   },
   {
     "id": "agy-R8",
@@ -325,7 +327,7 @@
     "host": "agy",
     "log": "agy-R10.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "FAIL V-11.1 no adapter read"
   },
   {
     "id": "agy-R11",
@@ -349,7 +351,7 @@
     "host": "agy",
     "log": "agy-R12-wrong.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=agy"
+    "expected": "FAIL V-11.1 a script call declared another HMAD_HOST"
   },
   {
     "id": "agy-R13-error",
@@ -365,7 +367,7 @@
     "host": "agy",
     "log": "agy-R13-empty.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "FAIL V-11.1 no adapter read"
   },
   {
     "id": "agy-R13-skill-error",
@@ -373,7 +375,7 @@
     "host": "agy",
     "log": "agy-R13-skill-error.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read"
+    "expected": "FAIL V-11.1 no adapter read"
   },
   {
     "id": "agy-R14-a",
@@ -517,7 +519,8 @@
     "host": "grok",
     "log": "grok-R7-sed.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A shell sed/grep before the reads may write (every shell command taints since 2026-10-01), so the later file-tool reads do not count."
   },
   {
     "id": "grok-R7-grep",
@@ -525,7 +528,8 @@
     "host": "grok",
     "log": "grok-R7-grep.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A shell sed/grep before the reads may write (every shell command taints since 2026-10-01), so the later file-tool reads do not count."
   },
   {
     "id": "grok-R8",
@@ -549,7 +553,7 @@
     "host": "grok",
     "log": "grok-R10.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "FAIL V-11.1 no adapter read"
   },
   {
     "id": "grok-R11",
@@ -573,7 +577,7 @@
     "host": "grok",
     "log": "grok-R12-wrong.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=grok"
+    "expected": "FAIL V-11.1 a script call declared another HMAD_HOST"
   },
   {
     "id": "grok-R13-error",
@@ -589,7 +593,7 @@
     "host": "grok",
     "log": "grok-R13-empty.log",
     "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read"
+    "expected": "FAIL V-11.1 no adapter read"
   },
   {
     "id": "grok-R13-skill-error",
@@ -597,7 +601,7 @@
     "host": "grok",
     "log": "grok-R13-skill-error.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 no observed SKILL.md read"
+    "expected": "FAIL V-11.1 no adapter read"
   },
   {
     "id": "grok-R14-a",
@@ -745,7 +749,7 @@
     "host": "codex",
     "log": "../../../../../h-mad/tests/fixtures/codex-text-8-exec.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no adapter read"
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool"
   },
   {
     "id": "codex-output-injection",
@@ -753,7 +757,7 @@
     "host": "codex",
     "log": "codex-output-injection.log",
     "root": ".",
-    "expected": "PASS V-11.1",
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool",
     "note": "Design residual: codex output that reproduces a whole event is read as an event."
   },
   {
@@ -816,7 +820,7 @@
     "host": "codex",
     "log": "codex-L1-lazy.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no adapter read",
+    "expected": "UNVERIFIED V-11.1 codex has no file-read tool",
     "note": "No lazy pass on codex: it has no file-read tool, every event is a shell exec."
   },
   {
@@ -928,78 +932,6 @@
     "note": "Only view_file's FilePath/AbsolutePath name the file read; a path in another parameter is not a read of it."
   },
   {
-    "id": "codex-S3-reassigned-skill-root",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S3-reassigned-skill-root.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A read whose own command carries a prefix assignment (here HMAD_SKILL_ROOT=) is not credited: expansion order is shell-specific."
-  },
-  {
-    "id": "codex-S4-cd-then-relative",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S4-cd-then-relative.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "After a cd in the same exec, relative h-mad/SKILL.md is another directory's file. The adapter read in a later exec is a fresh shell at root and counts."
-  },
-  {
-    "id": "codex-S5-foreign-cwd",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S5-foreign-cwd.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A codex exec whose cwd is not the checkout root reads its relative paths elsewhere."
-  },
-  {
-    "id": "codex-S6-builtin-cd",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S6-builtin-cd.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`builtin cd` changes cwd without a command named cd; any non-read command taints later relative paths."
-  },
-  {
-    "id": "codex-S7-brace-cd",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S7-brace-cd.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A brace group hides the cd; the allowlist still taints."
-  },
-  {
-    "id": "codex-S8-append-skill-root",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S8-append-skill-root.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`+=` assigns HMAD_SKILL_ROOT without `HMAD_SKILL_ROOT=`; any non-expansion mention untrusts it."
-  },
-  {
-    "id": "codex-S9-printf-v-skill-root",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S9-printf-v-skill-root.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`printf -v` assigns HMAD_SKILL_ROOT; any non-expansion mention untrusts it."
-  },
-  {
-    "id": "codex-S10-cd-earlier-exec",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S10-cd-earlier-exec.log",
-    "root": ".",
-    "expected": "PASS V-11.1",
-    "note": "Positive control: each codex exec is a fresh shell, so a cd in an earlier exec does not taint a later one."
-  },
-  {
     "id": "agy-S11-persistent-cd",
     "mode": "v111",
     "host": "agy",
@@ -1014,80 +946,8 @@
     "host": "agy",
     "log": "agy-S12-no-cd-control.log",
     "root": ".",
-    "expected": "PASS V-11.1",
-    "note": "Positive twin of agy-S11 without the cd: the relative shell read counts."
-  },
-  {
-    "id": "codex-S13-bare-home",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S13-bare-home.log",
-    "root": ".",
     "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A bare `HOME=` rebinds what `~` means; a bare assignment taints."
-  },
-  {
-    "id": "codex-S14-export-home",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S14-export-home.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`export HOME=` rebinds `~`; a non-read command taints."
-  },
-  {
-    "id": "codex-S15-printf-v-home",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S15-printf-v-home.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`printf -v HOME` rebinds `~` through a safe command; printf -v taints."
-  },
-  {
-    "id": "codex-S16-quote-split-skill-root",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S16-quote-split-skill-root.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`HMAD_SKILL''_ROOT=` assigns it with the name split; $HMAD_SKILL_ROOT counts only in an untainted shell."
-  },
-  {
-    "id": "codex-S17-indirect-skill-root",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S17-indirect-skill-root.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`${n}_ROOT=` assigns it indirectly; $HMAD_SKILL_ROOT counts only in an untainted shell."
-  },
-  {
-    "id": "codex-S18-var-dotdot",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S18-var-dotdot.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A variable inside an absolute path (<root>/h-mad/$X/../SKILL.md) expands in the shell; only plain path characters are credited."
-  },
-  {
-    "id": "codex-S19-zsh-qual",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S19-zsh-qual.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A glued zsh modifier (path(:s/a/b/)) rewrites the path; a `(` glued to a word voids credit and taints."
-  },
-  {
-    "id": "codex-S20-zsh-qual2",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S20-zsh-qual2.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A glued zsh modifier (path(:s/a/b/)) rewrites the path; a `(` glued to a word voids credit and taints."
+    "note": "Its SKILL.md read is a shell `cat`: a shell command never supplies read credit (operator decision 2026-10-01); only view_file does."
   },
   {
     "id": "agy-S21-qualifier-runs-cd",
@@ -1097,51 +957,6 @@
     "root": ".",
     "expected": "FAIL V-11.1 no observed SKILL.md read",
     "note": "A zsh glob qualifier (e:...:) runs code in the current shell and can cd; in a persistent agy shell a glued `(` taints later relative reads. Twin of agy-S11/S12."
-  },
-  {
-    "id": "codex-S22-other-command-prints-heading",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S22-other-command-prints-heading.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A read is credited only as the exec's sole command: here `echo` could print the heading the check sees."
-  },
-  {
-    "id": "codex-S23-real-read-discarded",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S23-real-read-discarded.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A redirect discards the real read; a decoy in the same exec printed the heading. Sole command, no redirect."
-  },
-  {
-    "id": "codex-S24-nl-s-not-an-operand",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S24-nl-s-not-an-operand.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`nl -s <path>` takes the path as a separator, not a file; read options that take an argument are refused."
-  },
-  {
-    "id": "codex-S25-head-c0",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S25-head-c0.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`head -c 0` prints nothing of the real file; only `-n N` is allowed for head/tail."
-  },
-  {
-    "id": "codex-S26-empty-read-then-echo",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S26-empty-read-then-echo.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "The read prints nothing; a second command prints the heading. A read is credited only as the exec's sole command."
   },
   {
     "id": "agy-S27-printf-v-persists",
@@ -1173,33 +988,6 @@
     "root": ".",
     "expected": "FAIL V-11.1 no observed SKILL.md read",
     "note": "A sole read whose path holds a variable ($X from the environment) names whatever $X expands to; only plain path characters are credited."
-  },
-  {
-    "id": "codex-S30-head1",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S30-head1.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "Real zsh output: with two operands, head/tail -n and a sed print script print only part of each file (or the joined stream), so the heading came from the decoy. One operand only."
-  },
-  {
-    "id": "codex-S31-sedlast",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S31-sedlast.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "Real zsh output: with two operands, head/tail -n and a sed print script print only part of each file (or the joined stream), so the heading came from the decoy. One operand only."
-  },
-  {
-    "id": "codex-S32-tail1",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-S32-tail1.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "Real zsh output: with two operands, head/tail -n and a sed print script print only part of each file (or the joined stream), so the heading came from the decoy. One operand only."
   },
   {
     "id": "agy-S33-alias",
@@ -1251,63 +1039,6 @@
     ]
   },
   {
-    "id": "codex-G1-tilde-link",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G1-tilde-link.log",
-    "root": ".",
-    "expected": "PASS V-11.1",
-    "note": "Positive: `~/<verified link>/SKILL.md` counts, resolved as text with the logged HOME, never by this machine's filesystem.",
-    "home": "/home/smoke",
-    "links": [
-      "~/.agents/skills/h-mad"
-    ]
-  },
-  {
-    "id": "codex-G2-home-var-link",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G2-home-var-link.log",
-    "root": ".",
-    "expected": "PASS V-11.1",
-    "note": "Positive: `$HOME/` is the `~/` spelling when the logged HOME is given.",
-    "home": "/home/smoke",
-    "links": [
-      "~/.agents/skills/h-mad"
-    ]
-  },
-  {
-    "id": "codex-G3-link-replanted-earlier-exec",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G3-link-replanted-earlier-exec.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "An earlier exec re-pointed the loader link; the filesystem survives the fresh shell, so a link read after any unproven command does not count.",
-    "home": "/home/smoke",
-    "links": [
-      "~/.agents/skills/h-mad"
-    ]
-  },
-  {
-    "id": "codex-G4-dotdot",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G4-dotdot.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`..` is refused: through a symlinked component it leaves the directory it lexically names."
-  },
-  {
-    "id": "codex-G5-abs-through-local-link",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G5-abs-through-local-link.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "No --link given: an absolute path through a link that exists on the scoring machine no longer counts. The verdict never asks this machine's filesystem."
-  },
-  {
     "id": "agy-G6-tool-abs-link",
     "mode": "v111",
     "host": "agy",
@@ -1334,42 +1065,6 @@
     "note": "An unmapped tool (write_to_file) may re-point the loader link; a later link read does not count. Full-pass path: the lazy rule is not what fails it."
   },
   {
-    "id": "codex-G8-skill-root-after-fs-change",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G8-skill-root-after-fs-change.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "$HMAD_SKILL_ROOT's target is not in the log; after an exec that may have changed the filesystem, a read through it in a fresh shell does not count."
-  },
-  {
-    "id": "codex-G9-skill-root-control",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G9-skill-root-control.log",
-    "root": ".",
-    "expected": "PASS V-11.1",
-    "note": "Positive twin of G8 without the earlier exec: $HMAD_SKILL_ROOT/SKILL.md in an untouched shell and filesystem counts."
-  },
-  {
-    "id": "codex-G10-cp-over-then-read",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G10-cp-over-then-read.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "An earlier exec may have written the checkout file itself (cp over it); a later read of <root>/h-mad/SKILL.md proves nothing. Every credited read needs an untouched filesystem."
-  },
-  {
-    "id": "codex-G11-redirect-write-then-read",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G11-redirect-write-then-read.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "`echo x > h-mad/SKILL.md` writes through a safe command; simple_tokens drops the redirect, so any `>` taints what follows."
-  },
-  {
     "id": "grok-G12-grep-tool-then-reads",
     "mode": "v111",
     "host": "grok",
@@ -1386,15 +1081,6 @@
     "root": ".",
     "expected": "FAIL V-11.1 no adapter read",
     "note": "grok's grep tool is read-only for the filesystem taint, but the lazy pass admits only file-read tool calls, so it still forfeits it."
-  },
-  {
-    "id": "codex-G13-backtick-hides-write",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-G13-backtick-hides-write.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "A backtick inside a safe `echo` runs a hidden cp over the file; an active expansion makes the exec untrusted and taints the filesystem."
   },
   {
     "id": "agy-G14-assigning-expansion",
@@ -1441,12 +1127,12 @@
     "host": "agy",
     "log": "agy-G17-math-control.log",
     "root": ".",
-    "expected": "PASS V-11.1",
+    "expected": "FAIL V-11.1 no observed SKILL.md read",
     "home": "/home/smoke",
     "links": [
       "~/.gemini/config/skills/h-mad"
     ],
-    "note": "Positive twin of G15/G16 without the assignment: the link read counts."
+    "note": "Its SKILL.md read is a shell `cat`: a shell command never supplies read credit (operator decision 2026-10-01); only view_file does."
   },
   {
     "id": "agy-G18-subscript-math",
@@ -1460,15 +1146,6 @@
       "~/.gemini/config/skills/h-mad"
     ],
     "note": "zsh evaluates a subscript as math: `echo $PWD[HOME=7]` assigns HOME. Only $NAME/${NAME} with no subscript is a plain expansion."
-  },
-  {
-    "id": "codex-F1-script-before-dash-c",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-F1-script-before-dash-c.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 no adapter read",
-    "note": "`bash /dev/stdin -c '…'` runs stdin, not the -c text; -c counts only when every argument before it is an option."
   },
   {
     "id": "grok-F2-reused-tool-call-id",
@@ -1507,33 +1184,6 @@
     "note": "Positive: a view_file with a non-path string parameter still counts; only FilePath/AbsolutePath are path parameters."
   },
   {
-    "id": "codex-F6-rg-hostname-bin",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-F6-rg-hostname-bin.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read",
-    "note": "`rg --hostname-bin` runs a program; rg is not a safe command."
-  },
-  {
-    "id": "codex-F7-gnu-sed-late-w",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-F7-gnu-sed-late-w.log",
-    "root": ".",
-    "expected": "FAIL V-11.1 a script ran before the adapter was read",
-    "note": "GNU sed takes -e after a file operand; a late `w` script writes. sed_safe checks every argument."
-  },
-  {
-    "id": "codex-F8-gnu-sed-late-e",
-    "mode": "v111",
-    "host": "codex",
-    "log": "codex-F8-gnu-sed-late-e.log",
-    "root": ".",
-    "expected": "UNVERIFIED V-11.1 unclassified command before the adapter read",
-    "note": "GNU sed takes -e after a file operand; a late `e` script runs a command. sed_safe checks every argument."
-  },
-  {
     "id": "agy-F9-test-v-subscript",
     "mode": "v111",
     "host": "agy",
@@ -1543,30 +1193,424 @@
     "note": "`[ -v 'x[HMAD_SKILL_ROOT=5]' ]` assigns through zsh subscript math with no `$`; test/[ are not safe."
   },
   {
-    "id": "codex-F10-duplicate-hmad-host",
+    "id": "agy-P1-redirect-write",
     "mode": "v111",
-    "host": "codex",
-    "log": "codex-F10-duplicate-hmad-host.log",
+    "host": "agy",
+    "log": "agy-P1-redirect-write.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=codex",
-    "note": "`HMAD_HOST=codex HMAD_HOST=agy` -- the last assignment wins; every HMAD_HOST assignment must name the host."
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A shell redirect may write the file a later view_file reads: the filesystem taint voids the read."
   },
   {
-    "id": "codex-F11-python-stdin-script-arg",
+    "id": "agy-P2-dollar-paren",
     "mode": "v111",
-    "host": "codex",
-    "log": "codex-F11-python-stdin-script-arg.log",
+    "host": "agy",
+    "log": "agy-P2-dollar-paren.log",
     "root": ".",
-    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=codex",
-    "note": "`python3 - h_mad_x.py` runs stdin; a script name after `-` or `-c` is only an argument."
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "`$(...)` runs a hidden command that may write: filesystem taint."
   },
   {
-    "id": "codex-F12-gnu-sed-e-makes-files",
+    "id": "agy-P3-brace-assign-path",
     "mode": "v111",
-    "host": "codex",
-    "log": "codex-F12-gnu-sed-e-makes-files.log",
+    "host": "agy",
+    "log": "agy-P3-brace-assign-path.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "`${PATH::=...}` re-points PATH, so a later `safe` command may run a writing binary: filesystem taint."
+  },
+  {
+    "id": "agy-P4-subscript-assign",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P4-subscript-assign.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "zsh subscript math assigns (PATH): filesystem taint."
+  },
+  {
+    "id": "agy-P5-backtick",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P5-backtick.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A backtick runs a hidden command: filesystem taint."
+  },
+  {
+    "id": "agy-P6-cp-command",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P6-cp-command.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A non-read/safe command may write: filesystem taint."
+  },
+  {
+    "id": "agy-P7-cd-writes-nothing",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P7-cd-writes-nothing.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "Every shell command taints, cd included: process substitution glued to `cd /tmp;<(...)` showed an exemption cannot be bounded."
+  },
+  {
+    "id": "agy-P8-bare-path-assign",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P8-bare-path-assign.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A bare PATH= makes a later `safe` command run another binary: filesystem taint."
+  },
+  {
+    "id": "agy-P9-sed-late-w",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P9-sed-late-w.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "GNU sed runs a -e w after a file operand: sed_safe checks every argument, so this taints."
+  },
+  {
+    "id": "agy-P10-dotdot-tool-path",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P10-dotdot-tool-path.log",
     "root": ".",
     "expected": "FAIL V-11.1 no observed SKILL.md read",
-    "note": "With any -e, GNU sed reads `1,999p` as a second file, so the read has two operands and is refused."
+    "note": "`..` is refused even in a file-tool path: through a symlinked component it leaves the directory it names."
+  },
+  {
+    "id": "agy-P11-duplicate-hmad-host",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P11-duplicate-hmad-host.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script call declared another HMAD_HOST",
+    "note": "The last HMAD_HOST assignment wins; every one must name the host."
+  },
+  {
+    "id": "agy-P12-python-stdin",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P12-python-stdin.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration",
+    "note": "`python3 -` runs stdin; the h_mad name is only an argument, not a script run. Its HMAD_HOST is not an exact script-prefix declaration, so the declaration cannot be judged."
+  },
+  {
+    "id": "agy-P13-bash-script-then-dash-c",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-P13-bash-script-then-dash-c.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration",
+    "note": "`bash <script> -c` runs <script>; the -c text is not followed. Its HMAD_HOST is not an exact script-prefix declaration, so the declaration cannot be judged."
+  },
+  {
+    "id": "agy-V2-partial",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-V2-partial.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "Documented residual (original V-11.1): a partial read whose output holds the heading counts; it proves the file was opened, not every line read."
+  },
+  {
+    "id": "grok-V1-partial",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-V1-partial.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "Documented residual (original V-11.1): a partial read_file (offset/limit) whose output holds the heading counts."
+  },
+  {
+    "id": "grok-V1b-lazy-partial",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-V1b-lazy-partial.log",
+    "root": ".",
+    "expected": "PASS V-11.1 lazy (no script ran)",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "Documented residual: a partial read counts in the lazy pass too."
+  },
+  {
+    "id": "agy-V4-ooo",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-V4-ooo.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "A write issued after the read but completed before its result is still in time: a read counts only if no tainting event was issued before it completed."
+  },
+  {
+    "id": "grok-V3-ooo",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-V3-ooo.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "grok: a write issued while the read is outstanding voids it (ordering by completion, not issue)."
+  },
+  {
+    "id": "agy-V6-bashenv",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-V6-bashenv.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "BASH_ENV= prefix runs a file when bash starts: any prefix assignment other than HMAD_HOST taints."
+  },
+  {
+    "id": "agy-V6b-path-prefix",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-V6b-path-prefix.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "PATH= prefix changes which binary a safe command runs: taints."
+  },
+  {
+    "id": "agy-V6c-abs-cat",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-V6c-abs-cat.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "/tmp/evil/cat is not cat: a path-qualified command taints."
+  },
+  {
+    "id": "agy-V10-cd-abs",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-V10-cd-abs.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "/tmp/x/cd is not cd: a path-qualified command taints, even a nowrite name."
+  },
+  {
+    "id": "agy-V7-mixed-decl",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-V7-mixed-decl.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script call declared another HMAD_HOST",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "A script run declaring another HMAD_HOST FAILs, even if another run declared this host."
+  },
+  {
+    "id": "agy-V8-unknown-event",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-V8-unknown-event.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "An agy event kind not seen in real logs (init/step_update/result) is unmapped."
+  },
+  {
+    "id": "grok-V5-update-rawinput",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-V5-update-rawinput.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 grok input shape unobserved",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "A grok update carrying rawInput could re-target the call: shape error."
+  },
+  {
+    "id": "grok-V8-unknown-row",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-V8-unknown-row.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "A grok row type not seen in real logs is unmapped."
+  },
+  {
+    "id": "grok-V9-two-updates",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-V9-two-updates.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 grok input shape unobserved",
+    "home": "/home/smoke",
+    "links": [
+      "~/.gemini/config/skills/h-mad",
+      "~/.agents/skills/h-mad"
+    ],
+    "note": "Real grok logs end each call with exactly one completed/failed update; a second terminal update is a shape error."
+  },
+  {
+    "id": "agy-WA0",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-WA0.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "Adapter read refused (a cp ran first), then a script: reported as no adapter read."
+  },
+  {
+    "id": "agy-WA1",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-WA1.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "`cat < <(cp ...)` hides a write behind a redirect: every shell command taints."
+  },
+  {
+    "id": "agy-WA2",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-WA2.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "`cd /tmp;<(cp ...)` glues a write to cd: every shell command taints."
+  },
+  {
+    "id": "agy-WA3",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-WA3.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "`pwd&&<(cp ...)` glues a write to pwd: every shell command taints."
+  },
+  {
+    "id": "agy-WB1",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-WB1.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration",
+    "note": "`env HMAD_HOST=codex python3 ...` declares another host: any HMAD_HOST= naming another host FAILs. Its HMAD_HOST is not an exact script-prefix declaration, so the declaration cannot be judged."
+  },
+  {
+    "id": "agy-WB2",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-WB2.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration",
+    "note": "`export HMAD_HOST=codex; python3 ...` declares another host: FAILs. Its HMAD_HOST is not an exact script-prefix declaration, so the declaration cannot be judged."
+  },
+  {
+    "id": "grok-X-A-quote-suffix",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-X-A-quote-suffix.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 a script call declared another HMAD_HOST",
+    "note": "`HMAD_HOST=grok\"agy\"` is HMAD_HOST=grokagy to the shell: not an exact declaration of this host."
+  },
+  {
+    "id": "grok-X-B-plus-eq",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-X-B-plus-eq.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration",
+    "note": "`HMAD_HOST+=agy` appends: HMAD_HOST outside an exact declaration cannot be judged."
+  },
+  {
+    "id": "grok-X-B2-read-export",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-X-B2-read-export.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration",
+    "note": "`read`/`export HMAD_HOST`: outside an exact declaration, cannot be judged."
+  },
+  {
+    "id": "grok-X-C-grep-false-fail",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-X-C-grep-false-fail.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration",
+    "note": "A shell grep mentioning HMAD_HOST= is not a declaration; it is UNVERIFIED rather than a false FAIL."
+  },
+  {
+    "id": "grok-X-E-type-list",
+    "mode": "v111",
+    "host": "grok",
+    "log": "grok-X-E-type-list.log",
+    "root": ".",
+    "expected": "PASS V-11.1",
+    "note": "A non-string row type is unmapped, not a crash."
+  },
+  {
+    "id": "agy-X-G-agy-done-only",
+    "mode": "v111",
+    "host": "agy",
+    "log": "agy-X-G-agy-done-only.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "A tool step with no ACTIVE row has no known issue time; it is taken as issued at the start, so the write voids the reads."
   }
 ]

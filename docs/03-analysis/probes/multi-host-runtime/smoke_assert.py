@@ -23,18 +23,10 @@ ASSIGN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*", re.S)
 REDIRECT = re.compile(r"[<>&|]*[<>][<>&|]*")
 PUNCT = set(";&|<>()\n")
 SEPARATOR = set(";&|()\n")
+# Row kinds observed in real logs; any other row could stand for an action, so it is unmapped.
+GROK_ROWS = {"available_commands", "thought", "text", "usage", "tool_call", "tool_call_update", "end"}
+AGY_EVENTS = {"init", "step_update", "result"}
 CODEX_LINE = re.compile(r"^\S+ -lc .* in \S+$")
-# The only side-effect-free expansion is a plain parameter: $NAME or ${NAME}, not followed by a
-# subscript (zsh evaluates $NAME[HOME=7] as math that assigns). Any other `$` (`$(`, `$[`,
-# `${op`, `$NAME[`, special parameters) and any backtick can run or assign: an allowlist.
-PLAIN_PARAM = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})(?![A-Za-z0-9_\[])")
-
-
-def active_expansion(text: str) -> bool:
-    rest = PLAIN_PARAM.sub("", text)
-    return "$" in rest or "`" in rest
-
-
 
 class ShapeError(Exception):
     pass
@@ -47,7 +39,8 @@ class Event:
     success: bool
     output: str | None
     output_bad: bool = False
-    cwd: str | None = None
+    issued: int = 0  # row position the call was made at
+    completed: int | None = None  # row position its result arrived at
 
 
 @dataclass
@@ -85,13 +78,23 @@ def ndjson(path: Path) -> list[dict]:
 
 def grok_events(rows: list[dict]) -> tuple[list[Event], bool]:
     updates: dict[str, dict] = {}
+    terminal: set = set()
     listed = False
     for row in rows:
         if row.get("type") == "available_commands":
             commands = row.get("commands")
             listed |= isinstance(commands, list) and "h-mad" in [c for c in commands if isinstance(c, str)]
-        if row.get("type") == "tool_call_update" and row.get("status") == "completed":
-            updates[row.get("toolCallId")] = row
+        if row.get("type") == "tool_call_update":
+            if "rawInput" in row:
+                raise ShapeError("grok input shape unobserved")  # an update may not re-target the call
+            key = row.get("toolCallId")
+            if key in terminal:
+                # Real logs end every call with exactly one completed/failed update.
+                raise ShapeError("grok input shape unobserved")
+            if row.get("status") in ("completed", "failed"):
+                terminal.add(key)
+            if row.get("status") == "completed":
+                updates[key] = row
     events = []
     ids = [row.get("toolCallId") for row in rows if row.get("type") == "tool_call"]
     if len(ids) != len(set(ids)):
@@ -100,17 +103,21 @@ def grok_events(rows: list[dict]) -> tuple[list[Event], bool]:
     if any(row.get("toolCallId") not in called for row in rows if row.get("type") == "tool_call_update"):
         # A completed update with no tool_call is an action the log does not show the input of.
         events.append(Event("other", "orphan tool_call_update", True, None))
+    position = {id(row): n for n, row in enumerate(rows)}
     for row in rows:
+        if not isinstance(row.get("type"), str) or row.get("type") not in GROK_ROWS:
+            events.append(Event("other", str(row.get("type")), True, None, issued=position[id(row)]))
+            continue
         if row.get("type") != "tool_call":
             continue
         tool = row.get("toolName")
         if tool == "grep":
             # grok's search tool: read-only, so it does not touch the filesystem, but it is not a
             # file read either, so it still forfeits the lazy pass.
-            events.append(Event("search", str(tool), True, None))
+            events.append(Event("search", str(tool), True, None, issued=position[id(row)]))
             continue
         if tool not in ("run_terminal_command", "read_file"):
-            events.append(Event("other", str(tool), True, None))
+            events.append(Event("other", str(tool), True, None, issued=position[id(row)]))
             continue
         raw = row.get("rawInput")
         value = raw.get("command" if tool == "run_terminal_command" else "target_file") if isinstance(raw, dict) else None
@@ -120,35 +127,42 @@ def grok_events(rows: list[dict]) -> tuple[list[Event], bool]:
         raw_output = update.get("rawOutput") if update else None
         output = "\n".join(strings(raw_output)) if raw_output is not None else None
         events.append(Event("shell" if tool == "run_terminal_command" else "read", value,
-                            update is not None, output, update is not None and not isinstance(output, str)))
+                            update is not None, output, update is not None and not isinstance(output, str),
+                            issued=position[id(row)], completed=position[id(update)] if update else None))
     return events, listed
 
 
 def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
-    done: dict[object, dict] = {}
+    done: dict[object, tuple[int, dict]] = {}
+    active: set = set()
     tool_steps: set = set()
     other_steps: set = set()
-    for row in rows:
+    for n, row in enumerate(rows):
         step = row.get("step_update")
         if row.get("event") != "step_update" or not isinstance(step, dict):
             continue
         (tool_steps if step.get("step_type") == "tool" else other_steps).add(step.get("step_index"))
         if step.get("state") == "DONE":
-            done[step.get("step_index")] = step
+            done[step.get("step_index")] = (n, step)
+        elif step.get("state") == "ACTIVE":
+            active.add(step.get("step_index"))
     if tool_steps & other_steps:
         # Another step type on a tool step's index could supply (or hide) its output.
         raise ShapeError("agy input shape unobserved")
     events = []
     seen: dict[object, str] = {}
-    for row in rows:
+    for n, row in enumerate(rows):
         step = row.get("step_update")
+        if not isinstance(row.get("event"), str) or row.get("event") not in AGY_EVENTS:
+            events.append(Event("other", str(row.get("event")), True, None, issued=n))
+            continue
         if row.get("event") != "step_update" or not isinstance(step, dict):
             continue
         if step.get("step_type") != "tool":
             # Step types observed in real agy logs; any other could act, so it is unmapped.
             # system_message is a harness notice (no tool, no parameters), seen in the live smoke.
             if step.get("step_type") not in ("agent_response", "user_input", "checkpoint", "system_message"):
-                events.append(Event("other", str(step.get("step_type")), True, None))
+                events.append(Event("other", str(step.get("step_type")), True, None, issued=n))
             continue
         index = step.get("step_index")
         if index is None:
@@ -163,22 +177,23 @@ def agy_events(rows: list[dict]) -> tuple[list[Event], bool]:
         seen[index] = identity
         tool = step.get("tool_name")
         if tool not in ("run_command", "view_file"):
-            events.append(Event("other", str(tool), True, None))
+            events.append(Event("other", str(tool), True, None, issued=n))
             continue
-        info = step.get("tool_info")
         params = info.get("parameters") if isinstance(info, dict) else None
         # view_file names the file read in FilePath (or AbsolutePath); any other parameter is not it.
         value = (params.get("CommandLine") if isinstance(params, dict) and tool == "run_command" else
                  [params[k] for k in ("FilePath", "AbsolutePath") if isinstance(params, dict) and isinstance(params.get(k), str)])
         if tool == "run_command" and not isinstance(value, str) or tool == "view_file" and not isinstance(params, dict):
             raise ShapeError("agy input shape unobserved")
-        finish = done.get(index)
+        at, finish = done.get(index, (None, None))
         end_info = finish.get("tool_info") if finish else None
         output = end_info.get("output") if isinstance(end_info, dict) else None
-        cwd = params.get("Cwd") if tool == "run_command" and isinstance(params.get("Cwd"), str) else None
+        # Real agy logs pair ACTIVE then DONE; a step with no ACTIVE row has no known issue time, so
+        # it is taken as issued at the start of the log (the conservative direction).
         events.append(Event("shell" if tool == "run_command" else "read", value, finish is not None,
                             output if isinstance(output, str) else None,
-                            finish is not None and not isinstance(output, str), cwd=cwd))
+                            finish is not None and not isinstance(output, str),
+                            issued=n if index in active else -1, completed=at))
     return events, False
 
 
@@ -192,8 +207,7 @@ def codex_events(path: Path) -> tuple[list[Event], bool]:
         if not body or not CODEX_LINE.match(body[0]):
             raise ShapeError("codex input shape unobserved")
         success = len(body) > 1 and body[1].startswith(" succeeded in")
-        cwd = body[0].rsplit(" in ", 1)[-1]
-        events.append(Event("shell", body[0], success, "\n".join(body[2:]) if success else None, cwd=cwd))
+        events.append(Event("shell", body[0], success, "\n".join(body[2:]) if success else None))
     return events, False
 
 
@@ -201,7 +215,7 @@ def codex_events(path: Path) -> tuple[list[Event], bool]:
 class Places:
     """Where the file may legitimately be read from, as text: the verdict never asks this machine.
 
-    root is the checkout; home is the logged session's HOME (None: `~` and $HOME never count);
+    root is the checkout; home is the logged session's HOME, used only to expand `~` in links;
     links are host loader links the caller verified point at <root>/h-mad (the smoke checks
     readlink -f before the run). Every comparison is lexical, so a log scores the same anywhere.
     """
@@ -217,51 +231,27 @@ class Places:
         return cls(norm(str(root)), home, tuple(norm(expand(l)) for l in links if not l.startswith("~") or home))
 
 
-def lexical(value: str, places: Places, relative_ok: bool = True) -> str | None:
+def lexical(value: str, places: Places) -> str | None:
     """value as a normalised absolute path, or None when text alone cannot fix what it names."""
-    for prefix in ("$HOME/", "${HOME}/"):
-        if value.startswith(prefix):
-            value = "~/" + value[len(prefix):]
-    if value.startswith("~"):
-        if places.home is None or not value.startswith("~/"):
-            return None
-        value = places.home + value[1:]
     if ".." in value.split("/"):
         return None  # through a symlinked component, `..` leaves the directory it lexically names
-    if not value.startswith("/") and not relative_ok:
-        return None  # the shell's cwd is not known to be the root
     return posixpath.normpath(value if value.startswith("/") else f"{places.root}/{value}")
 
 
-def names_file(value: str, host: str, skill: bool, places: Places, shell_ok: bool, in_shell: bool,
-               fs_ok: bool, at_root: bool = True) -> bool:
+def names_file(value: str, host: str, skill: bool, places: Places, fs_ok: bool) -> bool:
     """True when value names this checkout's file, decided from text alone.
 
-    It must be <root>/h-mad/<file>, or <link>/<file> for a verified loader link. A suffix match
-    is not enough: /tmp/x/h-mad/SKILL.md is a decoy. In a shell nothing counts unless shell_ok:
-    an earlier command could have changed cwd, HOME, a variable, PATH or the reading command
-    itself; a relative path also needs at_root. Nothing counts at all unless fs_ok: a read
-    proves the file's content only if nothing earlier in the whole log could have written or
-    re-pointed it (cp over it, a symlink swap, a redirect), and the filesystem survives a codex
-    exec's fresh shell. File tools do not expand `~` or variables, so those spellings never
-    count there; their relative paths are workspace-relative and count.
+    It must be <root>/h-mad/<file>, or <link>/<file> for a verified loader link; a suffix match
+    is a decoy. Only file-read tools call this: they never expand `~` or variables, so such a
+    spelling is a relative path under the root and cannot match. Relative paths are
+    workspace-relative. Nothing counts unless fs_ok: an earlier event may have written or
+    re-pointed the file.
     """
     filename = "SKILL.md" if skill else f"references/{host}-runtime.md"
     if not fs_ok:
-        return False  # an earlier event may have written or re-pointed the file
-    if in_shell and not shell_ok:
-        return False  # a tainted shell may have moved cwd, HOME, a variable, PATH or `cat` itself
-    if value in (f"$HMAD_SKILL_ROOT/{filename}", f"${{HMAD_SKILL_ROOT}}/{filename}"):
-        return in_shell
-    # No character allowlist is needed: the comparison is textual, so a variable, glob, brace or
-    # `=cmd` keeps its special character and can never equal the plain target path.
-    spelled = re.sub(r"^\$(\{HOME\}|HOME)/", "~/", value)
-    if spelled.startswith("~") and not in_shell:
         return False
-    path = lexical(value, places, at_root or not in_shell)
-    if path is None:
-        return False
-    return path in {posixpath.normpath(f"{places.root}/h-mad/{filename}")} | {
+    path = lexical(value, places)
+    return path is not None and path in {posixpath.normpath(f"{places.root}/h-mad/{filename}")} | {
         posixpath.normpath(f"{link}/{filename}") for link in places.links}
 
 
@@ -317,45 +307,12 @@ def sed_safe(args: list[str]) -> bool:
     return bool(scripts) and all(re.fullmatch(r"(\d+|\$)?(,(\d+|\$))?p", s) for s in scripts)
 
 
-def read_operands(command: Command) -> list[str] | None:
-    """The files a read command prints, or None when an option makes that uncertain.
-
-    Exactly one operand is allowed, after head/tail `-n N` and sed's print-only flags. Any other
-    option lands among the operands and fails that limit: an option can take a path-like argument
-    that is not read (nl -s <path>) or change what is printed (head -c 0). With two operands,
-    head/tail -n and a sed script print only part of each file (or of the joined stream), so the
-    heading may come from the other.
-    """
-    args, ops, i = command.tokens[1:], [], 0
-    if command.name not in ("cat", "nl", "head", "tail", "sed"):
-        return None
-    # With any -e, GNU sed reads every non-option argument as a file (`sed -n 1p -e 2p f` reads 1p).
-    script = command.name != "sed" or "-e" in args or "--expression" in args
-    while i < len(args):
-        item = args[i]
-        if command.name in ("head", "tail") and item == "-n" and i + 1 < len(args) and re.fullmatch(r"\+?\d+", args[i + 1]):
-            i += 2
-        elif command.name in ("head", "tail") and re.fullmatch(r"-n?\+?\d+", item):
-            i += 1
-        elif command.name == "sed" and item in ("-e", "--expression"):
-            script, i = True, i + 2
-        elif command.name == "sed" and item in ("-n", "--quiet", "--silent", "-E", "-r"):
-            i += 1
-        elif not script:
-            script, i = True, i + 1
-        else:
-            ops.append(item)
-            i += 1
-    return ops if len(ops) == 1 else None
-
-
 def classify(tokens: list[str], depth: int = 0) -> list[Command]:
     assignments = []
     while tokens and ASSIGN.fullmatch(tokens[0]):
         assignments.append(tokens.pop(0))
     if not tokens:
-        # A bare assignment runs nothing but rebinds a variable (HOME, PWD ...); keep it visible.
-        return [Command("assign", [], assignments)] if assignments else []
+        return []
     name = Path(tokens[0]).name
     args = tokens[1:]
     if any(t.startswith("\0") for t in tokens):
@@ -398,14 +355,23 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
     # test/[ are not safe: zsh math-evaluates a subscript in `-v 'x[NAME=5]'`, which assigns.
     safe = {"cat", "head", "tail", "nl", "sed", "grep", "ls", "echo", "wc", "stat"}
     if name in safe and (name != "sed" or sed_safe(args)):
-        return [Command("read" if name in {"cat", "head", "tail", "nl", "sed"} else "safe",
-                        tokens, assignments, name)]
+        return [Command("safe", tokens, assignments, name)]
     return [Command("unknown", tokens, assignments, name)]
 
 
 def needle(root: Path, host: str, skill: bool) -> str:
     path = root / "h-mad" / ("SKILL.md" if skill else f"references/{host}-runtime.md")
     return next((line for line in path.read_text().splitlines() if line.startswith("# ")), "")
+
+
+def taints(event: Event) -> bool:
+    """Whether an event may have written or re-pointed a file.
+
+    Every shell command may: which ones write cannot be bounded from command text (process
+    substitution behind a redirect, a hidden command glued to `;`, ...), so the rule does not try
+    (operator decision 2026-10-01). Only file reads and grok's read-only search are exempt.
+    """
+    return event.tool not in ("read", "search")
 
 
 def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple[str, ...] = ()) -> tuple[str, int]:
@@ -416,43 +382,46 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
         if adapter in (root / "h-mad/SKILL.md").read_text() or skill in (root / f"h-mad/references/{host}-runtime.md").read_text():
             return "UNREADABLE V-11.1 reason=needle_not_unique", 2
         if host == "codex":
-            events, listed = codex_events(log)
+            codex_events(log)  # a malformed log is still reported as such
+            # Every codex event is a shell exec and codex has no file-read tool, so a codex log can
+            # never prove a read, nor the order of one (operator decision 2026-10-01).
+            return "UNVERIFIED V-11.1 codex has no file-read tool", 0
         else:
             rows = ndjson(log)
             events, listed = grok_events(rows) if host == "grok" else agy_events(rows)
         read_adapter = read_skill = declared = script_before_adapter = adapter_seen = False
         # The lazy pass (operator decision 2026-10-01) needs proof that nothing but reads ran.
-        # Only the host's file-read tool can give that proof: any shell command forfeits it,
-        # because a shell classifier is a denylist and a denylist leaks.
         shelled = unmapped = False
-        # A shell path that depends on shell state (relative, `~`, $HMAD_SKILL_ROOT) names this
-        # checkout only while the shell is known untouched: an allowlist, because every way to
-        # change cwd, HOME or a variable cannot be enumerated. Any command that is not a read or
-        # a safe command (a bare assignment included) and `printf -v` taint what follows. Each codex exec is a
-        # fresh shell; agy and grok shells may persist, so their taint does too.
-        tainted = False
-        # The filesystem outlives every shell, codex execs included: anything not proven
-        # read-only (an unmapped tool, a non-read/safe command) may have re-pointed a loader link,
-        # so a read through a link counts only before the first such event. Never reset.
-        fs_tainted = False
+        # HMAD_HOST is judged from text only where text is unambiguous: every occurrence in the
+        # shell text must be a script's exact `HMAD_HOST=<host>` prefix. Anything else (another
+        # value, `+=`, export, read, a quoted suffix, even a grep for it) cannot be judged.
+        exact_declarations = 0
+        other_host = False
+        host_mentions = sum(e.value.count("HMAD_HOST") for e in events if e.tool == "shell")
+        # A read counts only if nothing that may write was ISSUED before the read COMPLETED: hosts
+        # run tools in parallel, so a write issued after the read but finished first is still in
+        # time to change what the read returns. The filesystem outlives every shell; never reset.
+        writes = [e.issued for e in events if taints(e)]
         places = Places.build(root, home, links)
         for event in events:
             if event.tool == "other":
-                unmapped = fs_tainted = True
+                unmapped = True
                 continue
             if event.tool == "search":
                 unmapped = True
                 continue
             if event.tool == "read":
                 paths = [event.value] if isinstance(event.value, str) else event.value
+                done_at = event.completed if event.completed is not None else event.issued
+                fs_ok = not any(w < done_at for w in writes)
                 for is_skill, heading in ((False, adapter), (True, skill)):
                     # Mention (for the read-before-script ordering) needs no clean filesystem; credit does.
-                    if any(names_file(p, host, is_skill, places, True, False, True) for p in paths):
+                    if any(names_file(p, host, is_skill, places, True) for p in paths):
                         if not is_skill:
                             if script_before_adapter and not read_adapter:
                                 return "FAIL V-11.1 a script ran before the adapter was read", 0
                             adapter_seen = True
-                        if event.success and paths and all(names_file(p, host, is_skill, places, True, False, not fs_tainted)
+                        if event.success and paths and all(names_file(p, host, is_skill, places, fs_ok)
                                                            for p in paths):
                             if event.output_bad:
                                 return f"UNVERIFIED V-11.1 {host} output shape unobserved", 0
@@ -462,77 +431,29 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
                                 else:
                                     read_adapter = True
                 continue
+            # A shell command never supplies read credit (operator decision 2026-10-01): what zsh
+            # does with a command line cannot be bounded from its text. It still counts for the
+            # filesystem taint (above), the script/dispatch ordering and the HMAD_HOST declaration.
             shelled = True
-            at_root = event.cwd is None or posixpath.normpath(event.cwd) == places.root
-            if host == "codex":
-                tainted = False
-            # The heading check reads the exec's whole output, so a read is credited only when it
-            # is the exec's sole command: otherwise another command could have printed the heading.
-            # A zsh modifier glued to a path (`f(:s/a/b/)`) splits off as a second command, so it
-            # is never sole either; its text never classifies read/safe, so it also taints.
-            every = [c for part in simple_tokens(event.value) for c in classify(part.copy())]
-            # simple_tokens drops redirects, so `echo x > f` would classify safe; an output
-            # redirect anywhere in the exec writes, so it taints what follows.
-            redirects = ">" in event.value
-            # A command hidden in an expansion is invisible to classify, so it taints the shell and
-            # filesystem from here on. A read in the same exec needs no extra rule: an expansion in
-            # its path never equals the plain target, and a split-off $( makes it non-sole.
-            active = active_expansion(event.value)
-            if active:
-                tainted = fs_tainted = True
-            sole = len(every) == 1
             for tokens in simple_tokens(event.value):
-                commands = classify(tokens.copy())
-                for command in commands:
-                    # A read whose own command carries a prefix assignment is not credited: whether
-                    # its paths expand before or after the assignment is shell-specific. The prefix
-                    # lasts one command, so it does not taint later ones; a bare one is kind "assign".
-                    relative_ok = not tainted and not command.assignments
-                    fs_ok = not fs_tainted
-                    # printf is not safe: -v assigns, and zsh evaluates %d arguments as math (HOME=7).
-                    if command.kind not in ("read", "safe"):
-                        tainted = True
-                        # cd/pushd/popd/pwd move or report the cwd but write nothing (a write
-                        # through them is a redirect, tainted below); anything else may write.
-                        if command.name not in ("cd", "pushd", "popd", "pwd"):
-                            fs_tainted = True
+                for command in classify(tokens.copy()):
                     mentioned = bool(MENTION.search(" ".join(command.tokens)))
                     if not read_adapter:
                         if command.kind in ("script", "dispatch"):
                             if adapter_seen:
-                                return "FAIL V-11.1 a script ran before the adapter was read", 0
+                                return "FAIL V-11.1 no adapter read", 0  # seen but not credited
                             script_before_adapter = True
                         if command.kind == "unknown" and mentioned:
                             return "UNVERIFIED V-11.1 unclassified command before the adapter read", 0
-                    host_values = [a.split("=", 1)[1] for a in command.assignments if a.startswith("HMAD_HOST=")]
-                    # The last assignment wins, so every one must name this host.
-                    if command.kind == "script" and host_values and all(v == host for v in host_values):
-                        declared = True
-                    if command.kind == "read":
-                        operands = read_operands(command) if sole else None
-                        for is_skill, heading in ((False, adapter), (True, skill)):
-                            if any(names_file(t, host, is_skill, places, relative_ok, True, True, at_root)
-                                   for t in command.tokens[1:]):
-                                if not is_skill:
-                                    if script_before_adapter and not read_adapter:
-                                        return "FAIL V-11.1 a script ran before the adapter was read", 0
-                                    adapter_seen = True
-                                if event.success and operands is not None and any(names_file(
-                                        o, host, is_skill, places, relative_ok, True, fs_ok, at_root) for o in operands):
-                                    if event.output_bad:
-                                        return f"UNVERIFIED V-11.1 {host} output shape unobserved", 0
-                                    if event.output is not None and heading in event.output:
-                                        if is_skill:
-                                            read_skill = True
-                                        else:
-                                            read_adapter = True
-            if redirects:
-                tainted = fs_tainted = True
+                    if command.kind == "script":
+                        values = [a.split("=", 1)[1] for a in command.assignments if a.startswith("HMAD_HOST=")]
+                        exact_declarations += len(values)
+                        other_host |= any(v != host for v in values)
+                        declared |= host in values
         if not read_adapter:
             # A read-only call need not load the adapter, provided every event is a file-read tool
             # call: no shell command and no tool or step the classifier does not map. Anything
-            # unproven needed the adapter: FAIL. Codex has no file-read tool (every event is a
-            # shell exec), so `shelled` keeps it from ever showing itself read-only.
+            # unproven needed the adapter: FAIL.
             if script_before_adapter or shelled or unmapped:
                 return "FAIL V-11.1 no adapter read", 0
             if host == "grok" and not listed:
@@ -543,6 +464,10 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
             return "PASS V-11.1 lazy (no script ran)", 0
         if host == "grok" and not listed:
             return "FAIL V-11.1 grok did not list h-mad", 0
+        if other_host:
+            return "FAIL V-11.1 a script call declared another HMAD_HOST", 0
+        if host_mentions != exact_declarations:
+            return "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration", 0
         if not declared:
             return f"FAIL V-11.1 no script call declared HMAD_HOST={host}", 0
         if not read_skill:

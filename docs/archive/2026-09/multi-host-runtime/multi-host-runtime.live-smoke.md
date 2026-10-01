@@ -228,3 +228,53 @@ Two more things the re-score surfaced:
 - The smoke script's V-11.1 assertion in plan §"The smoke script" and the matching design block
   compared `= "PASS V-11.1"` exactly. Both now accept the lazy token too, so a lazy pass is no
   longer reported as a stop.
+
+## Addendum 2026-10-01 (later): only a file-read tool proves a read
+
+**Operator decision.** Shell reads no longer earn V-11.1 credit. The rule history above, from
+the lazy-pass shell rules to the plain-parameter allowlist, is superseded where it concerns
+crediting a shell read. Fourteen review rounds, three of them from fresh-context reviewers, each
+found three or four new ways for a command rated read-only to run code or assign through zsh.
+An allowlist over shell text could not be shown complete; removing shell credit removes the
+problem at its source.
+
+- **Codex** has no file-read tool, so its verdict is always
+  `UNVERIFIED V-11.1 codex has no file-read tool` (or a shape error). Its live run was already
+  `UNVERIFIED`.
+- **agy `view_file` and grok `read_file`** are the only credited reads. They still require the
+  lexical path match against `<root>/h-mad/<file>` or a verified `--link`, an untouched
+  filesystem, and the event-shape checks. Shell commands still feed the filesystem taint, the
+  script-before-adapter ordering and the `HMAD_HOST` declaration.
+- **Removed as dead code:** the shell-read credit path, the sole-read and one-operand rules, the
+  shell-state taint, the cwd plumbing, and `lexical()`'s `~`/`$HOME` expansion. The 41 codex
+  shell-decoy cases went with them.
+- **New pins:** thirteen agy cases (`P1`–`P13`) re-pin the filesystem taint, `dotdot` and the
+  script-detection guards, which the codex cases used to pin. Rehearsal n=150, and the
+  cache-proof mutation sweep kills 36/36 guards.
+- **Live verdicts are unchanged:** grok PASS, codex UNVERIFIED, agy FAIL.
+
+A fresh review of the file-tool-only rule found writes and shapes the taint still missed. A read
+is now ordered by *completion* (a write issued while it was outstanding voids it). Prefix
+assignments other than `HMAD_HOST` and path-qualified commands taint. Unknown grok rows and agy
+events, a grok update carrying `rawInput`, and a second terminal update are all refused. A script
+run declaring another `HMAD_HOST` FAILs. A partial read still counts, as the original documented
+residual. Cases `V1`–`V10` cover these (n=164), the cache-proof sweep kills 42/42 guards, and the
+live verdicts are unchanged.
+
+A further fresh review found that `taints()` was still trying to tell which shell commands write.
+`cat < <(cp …)` and `cd /tmp;<(cp …)` slipped through. Every shell command now counts as a
+possible write: a file-tool read counts only if it completes before the host's first shell
+command. The live grok run did exactly that, and it still passes. The write classifier (the
+expansion allowlist, the `cd` exemption, prefix and path checks) is deleted. Any `HMAD_HOST=`
+naming another host, in any spelling, FAILs. The design cases `R7-sed`/`R7-grep` (a shell
+`sed`/`grep` before the reads) now FAIL, which is the accepted cost. n=170, and the cache-proof
+sweep kills 32/32.
+
+The next fresh review found that the `HMAD_HOST` declaration was still read with a regex over
+shell text: `HMAD_HOST=grok"agy"`, `HMAD_HOST+=agy` and `read`/`export` fooled it. Now only a
+script's exact prefix token counts; any other value of that token FAILs, and any other occurrence
+of `HMAD_HOST` makes the declaration `UNVERIFIED`. An agy step with no `ACTIVE` row now counts as
+issued at the start of the log. 38 agy fixtures were normalised to real `ACTIVE`+`DONE` pairs. A
+non-string row type no longer crashes the checker. n=176, the cache-proof sweep kills 35/35 (the
+harness now counts a crashing mutant as killed), and the live verdicts are unchanged.
+
