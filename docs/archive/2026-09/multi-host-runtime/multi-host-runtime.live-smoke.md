@@ -318,5 +318,60 @@ over the 23 new guards caught every mutant:
   kills.
 
 The sweep's first harness crashed on load and showed every mutant as killed. A control mutant
-(the unmodified source) now runs first and must pass. The live verdicts are unchanged: grok PASS,
-codex UNVERIFIED, agy FAIL.
+(the unmodified source) now runs first and must pass. **Correction (round 19):** this round's
+commit said the live verdicts were unchanged, but nobody had re-scored the live grok log. It was
+not in the repository. Re-scored, the plain-list rule made it `UNVERIFIED`. See below.
+
+Review round 19 (a fresh-context critic, 2026-10-01) found four more fail-open classes, all of
+the same kind: `classify` counted a declared run that never ran.
+- python options: `-V`, `-h`, `-bV`, an invalid option.
+- shell options before `-c`: `bash -n`, `-D`, `-r`, `zsh -nc`, `sh -n`, an invalid option.
+- empty or doubled separators the shell rejects at parse time: `;;`, a leading `;`, `; ;`.
+- a script path never bound to h-mad: `python3 nowhere/h_mad_x.py`, `-m h_mad_x`,
+  `python3.99`, a zsh `=x/…` operand.
+
+It also found two crashes and wrong verdicts. An apostrophe in a comment made shlex raise, which
+turned a read-based FAIL into `UNVERIFIED unparseable command`. A grok output nested 2000 deep
+overflowed `strings()`.
+
+While checking this round, the retained live grok log was found in an earlier session's
+scratchpad. Scored at `99679c5f` it gave `UNVERIFIED declaration not in a plain command list`,
+because its 13 shell events include `python3 -c '…'`, `git … &&` and `$(cd -P …)`. Its declaring
+call, `HMAD_HOST=grok python3 <root>/h-mad/scripts/h_mad_state_validate.py …`, was already in
+canonical form. The operator decided:
+- the declaration counts only from one canonical event (see the spec);
+- other events are no longer judged;
+- their effect on the environment is an accepted residual.
+
+The live grok log is now committed as `rehearsal/live-grok-2026-10-01.log` and scores `PASS`
+again. Its case pins `--home` to this machine, as the live agy case does. Other changes:
+- `strings()` is iterative.
+- An event shlex cannot split counts as one unknown command, which taints and keeps a read-based
+  FAIL.
+- `plain()` is removed.
+
+A self-review then found one more inside the template itself: zsh expands a word beginning
+with `=` and aborts the whole line when no such command exists (`… --status =zz` gives `zz not
+found`, so nothing runs). No word in the template may now begin with `=`.
+
+The full suite then caught a dependence on the interpreter. pytest runs the rehearsal under
+Python 3.11, whose JSON decoder recurses, so the 2000-deep fixture raised `RecursionError` inside
+`json.loads`, while 3.14 decoded it. A row nested deeper than 200 levels is now `unparseable line
+N` on every interpreter: `depth()` is iterative, and the decoder's `RecursionError` maps to the
+same message.
+
+Cases `R19-*` (36) and the live grok case bring n=256, and the rehearsal passes under both 3.14
+and 3.11. The round-18 expectations of `UNVERIFIED … plain command list` are now `UNVERIFIED …
+not in the canonical form`. `R18-H1-control` (two commands in one event) goes from PASS to
+UNVERIFIED by design.
+
+The cache-proof sweep, with an unmutated control, was run under both interpreters over 28 guard
+mutants:
+- 25 were killed by a wrong verdict on both.
+- 2 (the id-type checks) were killed only by a crash.
+- The `RecursionError` catch was killed by a crash under 3.11. It has nothing to catch under
+  3.14.
+
+Two guards the sweep showed to be redundant, a leading-`=` check and a script-name check, were
+removed. Live verdicts: grok PASS and agy FAIL, both re-scored from
+committed logs; codex is UNVERIFIED for any log.

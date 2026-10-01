@@ -1619,7 +1619,7 @@
     "host": "agy",
     "log": "R18-H1-control.log",
     "root": ".",
-    "expected": "PASS V-11.1"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R18-H1-control-neg",
@@ -1635,7 +1635,7 @@
     "host": "agy",
     "log": "R18-H1a-comment.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R18-H1b-heredoc",
@@ -1643,7 +1643,7 @@
     "host": "agy",
     "log": "R18-H1b-heredoc.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R18-H1c-false-and",
@@ -1651,7 +1651,7 @@
     "host": "agy",
     "log": "R18-H1c-false-and.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R18-H1d-python-X",
@@ -1675,7 +1675,7 @@
     "host": "grok",
     "log": "R18-H1f-grok-comment.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R18-H2-control",
@@ -1691,7 +1691,7 @@
     "host": "agy",
     "log": "R18-H2a-quoted-export.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R18-H2b-function-override",
@@ -1699,7 +1699,7 @@
     "host": "agy",
     "log": "R18-H2b-function-override.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R18-H2c-var-built-name",
@@ -1707,7 +1707,7 @@
     "host": "agy",
     "log": "R18-H2c-var-built-name.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R18-H2d-quoted-name-prefix",
@@ -1715,7 +1715,7 @@
     "host": "agy",
     "log": "R18-H2d-quoted-name-prefix.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "grok-R18-H3a-control",
@@ -1902,7 +1902,7 @@
     "host": "agy",
     "log": "R18-G15-other-assignment.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "agy-R18-G16-keyword",
@@ -1910,7 +1910,7 @@
     "host": "agy",
     "log": "R18-G16-keyword.log",
     "root": ".",
-    "expected": "UNVERIFIED V-11.1 declaration not in a plain command list"
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
   },
   {
     "id": "grok-R18-G2-cr-whitespace",
@@ -1959,5 +1959,310 @@
     "log": "R18-S4-python-long-option.log",
     "root": ".",
     "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R19-C2-py-b-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-C2-py-b-control.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "grok-R19-F1-grok-V",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R19-F1-grok-V.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F1a-py-V",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F1a-py-V.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F1b-py-h",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F1b-py-h.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F1c-py-VV",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F1c-py-VV.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F1d-py-badopt",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F1d-py-badopt.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "grok-R19-F2-grok-n",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R19-F2-grok-n.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F2a-bash-n",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F2a-bash-n.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F2b-zsh-nc",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F2b-zsh-nc.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F2c-bash-D",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F2c-bash-D.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F2d-bash-r",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F2d-bash-r.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F2e-zsh-r",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F2e-zsh-r.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F2f-bash-badopt",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F2f-bash-badopt.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F3-module",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F3-module.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F4-zsh-eq",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F4-zsh-eq.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F5-sh-n",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F5-sh-n.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F6-decoy",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F6-decoy.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F7-tail-f",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F7-tail-f.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F8a-dsemi",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F8a-dsemi.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F8b-lead-semi",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F8b-lead-semi.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F8d-semi-semi-mid",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F8d-semi-semi-mid.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-F9-py-missing",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-F9-py-missing.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-M1a-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-M1a-control.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "agy-R19-M1a-noread-apostrophe",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-M1a-noread-apostrophe.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "agy-R19-M1b-control",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-M1b-control.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "agy-R19-M1b-noskill-apostrophe",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-M1b-noskill-apostrophe.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "grok-R19-X2-grok-deep2000",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R19-X2-grok-deep2000.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unparseable line 3"
+  },
+  {
+    "id": "agy-R19-ctrl",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-ctrl.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R19-residual-prior-event-function",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-residual-prior-event-function.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R19-K1-link-bound",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-K1-link-bound.log",
+    "root": ".",
+    "links": [
+      "/fake/link/h-mad"
+    ],
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R19-K1b-link-not-passed",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-K1-link-bound.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-K2-missing-script",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-K2-missing-script.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "agy-R19-K3-not-completed",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-K3-not-completed.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "grok-live-2026-10-01",
+    "mode": "v111",
+    "host": "grok",
+    "log": "live-grok-2026-10-01.log",
+    "root": ".",
+    "home": "/Users/kimhawk",
+    "links": [
+      "~/.agents/skills/h-mad",
+      "~/.gemini/config/skills/h-mad",
+      "~/.claude/skills/h-mad"
+    ],
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R19-K8-noncanonical-noskill",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-K8-noncanonical-noskill.log",
+    "root": ".",
+    "expected": "FAIL V-11.1 no observed SKILL.md read"
+  },
+  {
+    "id": "agy-R19-K11-zsh-equals-arg",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R19-K11-zsh-equals-arg.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 declaration not in the canonical form"
+  },
+  {
+    "id": "grok-R19-X2-grok-deep500",
+    "mode": "v111",
+    "host": "grok",
+    "log": "R19-X2-grok-deep500.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 unparseable line 3"
   }
 ]

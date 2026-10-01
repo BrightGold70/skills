@@ -776,25 +776,36 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         one must name this host. Every other occurrence of `HMAD_HOST` in shell text (`env`,
         `export`, `+=`, `read`, even a grep for it) makes the declaration `UNVERIFIED`. `python3 -` and `python3 -c` make an `h_mad_*.py` name a plain argument.
 
-        **Amended 2026-10-01 (operator decision, review round 18): the declaration is judged
-        only from a plain command list.** Text that never runs still parsed as a run: a comment,
-        a heredoc body, the right side of `false &&`, `python3 -X <opt>`, `bash -o -c`. Text that
-        changes the environment without spelling `HMAD_HOST` slipped past the mention count: a
-        quoted name (`HMA""D_HOST`), a function wrapping `python3`, a name built from an
-        expansion (`${n}_HOST`). So the declaration is judged only when **every** shell event in
-        the log is plain, in a positive grammar:
-        - it contains only `A–Z a–z 0–9 _ . / = : , + -`, spaces, tabs, `;` and newlines, so it
-          has no quote, `$`, backtick, redirect, comment, heredoc, `&`, `|`, parenthesis or brace;
-        - each command is a script, a dispatch or a safe read (as classified above), so a keyword,
-          `export`, `alias` or any other command is not plain;
-        - its only prefix assignment is an exact `HMAD_HOST=<lowercase word>`.
+        **Amended 2026-10-01 (operator decision, review round 19): a declaration counts only
+        from one canonical event.** Rounds 18 and 19 found command lines that `classify` read as a
+        declared run but that never ran the script:
+        - text that never runs: a comment, a heredoc body, `false && …`;
+        - interpreter options: `python3 -V`/`-h`/`-X`, `bash -n`/`-D`/`-r`/`-o -c`;
+        - lines the shell rejects before running anything: `;;`, a leading `;`;
+        - a script path that is not h-mad's.
 
-        A log with any other shell event gives `UNVERIFIED V-11.1 declaration not in a plain
-        command list`. A FAIL decided outside the declaration stays a FAIL: another host named
-        (`FAIL … declared another HMAD_HOST`), or, for codex and agy, no skill read. A mention
-        mismatch still gives the older `UNVERIFIED … HMAD_HOST used outside an exact
-        declaration`. So `HMAD_HOST=ag"y"`, which zsh does turn into `agy`, is now `UNVERIFIED`.
-        That is the accepted cost.
+        Round 18's interim rule, that every shell event must be plain, also made the retained
+        live grok run `UNVERIFIED`, since real hosts run pipes, heredocs and `$(…)`. So the
+        declaration now counts only from a shell event whose **entire text** is
+
+            HMAD_HOST=<host> python3 <script> <args>
+
+        That means single spaces, no interpreter option, no wrapper, no second command, and only
+        the characters `A–Z a–z 0–9 _ . / = : , + -` in `<script>` and `<args>`, with no word
+        beginning with `=` (zsh expands `=name` and aborts the line when it finds no such command). `<script>` is
+        bound the way reads are: lexically it must be `<root>/h-mad/scripts/h_mad_*.py`, or
+        `<link>/scripts/h_mad_*.py` for a `--link`, and the file must exist in the checkout. The
+        event must also have completed: a grok `completed` update, or an agy `DONE` row.
+        - A script call that declares this host in any other form gives
+          `UNVERIFIED V-11.1 declaration not in the canonical form`. For codex and agy, a missing
+          skill read is still `FAIL`.
+        - Another host named in any script's prefix still FAILs.
+        - Any other `HMAD_HOST` mention still gives `UNVERIFIED … HMAD_HOST used outside an exact
+          declaration`.
+        - **Residual:** what other shell events did to the environment, or to how `python3`
+          resolves, is trusted like the starting environment. Examples are a function, alias or
+          export in a persistent shell. Rehearsal case `R19-residual-prior-event-function` pins
+          this, and the mention count still catches a literal `HMAD_HOST` in them.
       - **Event shape is checked.** Each violation is `UNVERIFIED`:
         - a grok `toolCallId` reused across `tool_call`s, or one that is not a string;
         - a grok `tool_call_update` that comes before the `tool_call` it updates (one that never
@@ -810,7 +821,8 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         - an agy tool step with no index, or with an index reused by a different step.
 
         A log row that is not UTF-8, is not JSON, repeats a key in any object, or holds an integer
-        past Python's digit limit gives `UNVERIFIED V-11.1 unparseable line N`; for codex it gives
+        past Python's digit limit, or nests deeper than 200 levels (so the verdict does not depend on
+        how deep the interpreter's decoder can recurse) gives `UNVERIFIED V-11.1 unparseable line N`; for codex it gives
         `codex input shape unobserved`. Rows are split on `\n` only, since JSON may carry U+2028,
         U+2029 or U+0085 raw.
 

@@ -52,13 +52,17 @@ class Command:
 
 
 def strings(value: object) -> list[str]:
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, dict):
-        return [s for v in value.values() for s in strings(v)]
-    if isinstance(value, list):
-        return [s for v in value for s in strings(v)]
-    return []
+    """Every string inside value, in order. Iterative: a deeply nested output must not overflow."""
+    found, stack = [], [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            found.append(item)
+        elif isinstance(item, dict):
+            stack.extend(reversed(list(item.values())))
+        elif isinstance(item, list):
+            stack.extend(reversed(item))
+    return found
 
 
 def unique_keys(pairs: list[tuple[str, object]]) -> dict:
@@ -84,6 +88,21 @@ def log_lines(path: Path) -> list[str]:
     return lines
 
 
+# Real rows nest a handful of levels. A fixed cap makes a deep row score the same on every Python:
+# 3.11's decoder raises RecursionError near 1000 levels, where 3.14's decodes it.
+MAX_DEPTH = 200
+
+
+def depth(value: object) -> int:
+    deepest, stack = 0, [(value, 1)]
+    while stack:
+        item, level = stack.pop()
+        if isinstance(item, (dict, list)):
+            deepest = max(deepest, level)
+            stack.extend((v, level + 1) for v in (item.values() if isinstance(item, dict) else item))
+    return deepest
+
+
 def ndjson(path: Path) -> list[dict]:
     rows = []
     for number, line in enumerate(log_lines(path), 1):
@@ -91,9 +110,11 @@ def ndjson(path: Path) -> list[dict]:
             continue
         try:
             row = json.loads(line, object_pairs_hook=unique_keys)
-        except ValueError:  # JSONDecodeError, a duplicate key, or an int past the digit limit
+        except (ValueError, RecursionError):
+            # JSONDecodeError, a duplicate key, an int past the digit limit, or nesting deeper than
+            # this interpreter's decoder recurses (older Pythons decode arrays recursively).
             raise ShapeError(f"unparseable line {number}") from None
-        if not isinstance(row, dict):
+        if not isinstance(row, dict) or depth(row) > MAX_DEPTH:
             raise ShapeError(f"unparseable line {number}")
         rows.append(row)
     return rows
@@ -432,29 +453,35 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
     return [Command("unknown", tokens, assignments, name)]
 
 
-PLAIN_TEXT = re.compile(r"[A-Za-z0-9_./=:,+ \t;\n-]*")
-DECLARATION = re.compile(r"HMAD_HOST=[a-z]+")
+# No word may begin with `=`: zsh expands `=name` to the path of command `name`, and aborts the
+# whole line when there is none, so the script never runs.
+WORD = r"[A-Za-z0-9_./:,+-][A-Za-z0-9_./=:,+-]*"
+CANONICAL = re.compile(rf"HMAD_HOST=([a-z]+) python3 ({WORD})((?: {WORD})*)")
 
 
-def plain(text: str) -> bool:
-    """Whether a shell event's text is a plain list the HMAD_HOST declaration can be judged from.
+def canonical(text: str, places: Places) -> str | None:
+    """The host a canonical declaring event names, or None.
 
-    A positive grammar, not a denylist (operator decision, review round 18): plain words only,
-    joined by `;` or newlines, so no quote, expansion, redirect, comment, heredoc, `&&`/`||`,
-    subshell or brace can change what runs or with what environment. Every command must be a
-    script, a dispatch or a safe read, and its only prefix assignment an exact `HMAD_HOST=<word>`.
-    A keyword, `export` or a function is not a classified command, so it is not plain either. A
-    bare `HMAD_HOST=<word>` with no command is plain here, and caught by the mention count.
+    Judging what an arbitrary command line runs never converged (review rounds 1-19), so a
+    declaration counts only from one fixed template (operator decision, review round 19): the
+    whole event is `HMAD_HOST=<host> python3 <script> <args>`, with single spaces, no interpreter
+    option, no wrapper, no second command, and only plain characters, so nothing in it can stop
+    the script running or change its environment. <script> is bound the way reads are: lexically
+    <root>/h-mad/scripts/h_mad_*.py or <link>/scripts/h_mad_*.py, and present in the checkout.
     """
-    if not PLAIN_TEXT.fullmatch(text):
-        return False
-    for tokens in simple_tokens(text):
-        if any(ASSIGN.fullmatch(t) and not DECLARATION.fullmatch(t)
-               for t in tokens[:next((i for i, t in enumerate(tokens) if not ASSIGN.fullmatch(t)), len(tokens))]):
-            return False
-        if any(c.kind not in ("script", "dispatch", "safe") for c in classify(tokens.copy())):
-            return False
-    return True
+    match = CANONICAL.fullmatch(text)
+    if not match:
+        return None
+    # The h_mad_*.py name is already required by classify(), which supplies `declared`; a leading
+    # `=` or `-` cannot pass either, since lexically it is never a bound path.
+    path = match[2]
+    name = posixpath.basename(path)
+    where = lexical(path, places)
+    bound = {posixpath.normpath(f"{places.root}/h-mad/scripts/{name}")} | {
+        posixpath.normpath(f"{link}/scripts/{name}") for link in places.links}
+    if where not in bound or not Path(places.root, "h-mad", "scripts", name).is_file():
+        return None
+    return match[1]
 
 
 def needle(root: Path, host: str, skill: bool) -> str:
@@ -495,6 +522,7 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
         # value, `+=`, export, read, a quoted suffix, even a grep for it) cannot be judged.
         exact_declarations = 0
         other_host = False
+        canonical_hosts: set[str] = set()
         host_mentions = sum(e.value.count("HMAD_HOST") for e in events if e.tool == "shell")
         # A read counts only if nothing that may write was ISSUED before the read COMPLETED: hosts
         # run tools in parallel, so a write issued after the read but finished first is still in
@@ -533,21 +561,29 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
             # does with a command line cannot be bounded from its text. It still counts for the
             # filesystem taint (above), the script/dispatch ordering and the HMAD_HOST declaration.
             shelled = True
-            for tokens in simple_tokens(event.value):
-                for command in classify(tokens.copy()):
-                    mentioned = bool(MENTION.search(" ".join(command.tokens)))
-                    if not read_adapter:
-                        if command.kind in ("script", "dispatch"):
-                            if adapter_seen:
-                                return "FAIL V-11.1 no adapter read", 0  # seen but not credited
-                            script_before_adapter = True
-                        if command.kind == "unknown" and mentioned:
-                            return "UNVERIFIED V-11.1 unclassified command before the adapter read", 0
-                    if command.kind == "script":
-                        values = [a.split("=", 1)[1] for a in command.assignments if a.startswith("HMAD_HOST=")]
-                        exact_declarations += len(values)
-                        other_host |= any(v != host for v in values)
-                        declared |= host in values
+            named = canonical(event.value, places) if isinstance(event.value, str) else None
+            if named is not None and event.success:
+                canonical_hosts.add(named)
+            try:
+                commands = [c for tokens in simple_tokens(event.value) for c in classify(tokens.copy())]
+            except ValueError:
+                # Text shlex cannot split (an apostrophe in a comment, say) is one unknown command:
+                # it still taints and still counts for the ordering, so a read-based FAIL stands.
+                commands = [Command("unknown", [event.value], [], "")]
+            for command in commands:
+                mentioned = bool(MENTION.search(" ".join(command.tokens)))
+                if not read_adapter:
+                    if command.kind in ("script", "dispatch"):
+                        if adapter_seen:
+                            return "FAIL V-11.1 no adapter read", 0  # seen but not credited
+                        script_before_adapter = True
+                    if command.kind == "unknown" and mentioned:
+                        return "UNVERIFIED V-11.1 unclassified command before the adapter read", 0
+                if command.kind == "script":
+                    values = [a.split("=", 1)[1] for a in command.assignments if a.startswith("HMAD_HOST=")]
+                    exact_declarations += len(values)
+                    other_host |= any(v != host for v in values)
+                    declared |= host in values
         if not read_adapter:
             # A read-only call need not load the adapter, provided every event is a file-read tool
             # call: no shell command and no tool or step the classifier does not map. Anything
@@ -566,14 +602,15 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
             return "FAIL V-11.1 a script call declared another HMAD_HOST", 0
         if host_mentions != exact_declarations:
             return "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration", 0
-        # Any shell event, in any position, could have set the environment a later script ran
-        # with (a function, an export, a name built from an expansion), so the declaration is
-        # judged only when every shell event is plain (operator decision, review round 18). A
-        # missing skill read is still a FAIL: a non-plain list only leaves the declaration unjudged.
-        if not all(plain(e.value) for e in events if e.tool == "shell" and isinstance(e.value, str)):
+        # The declaration counts only from a completed canonical event (operator decision, review
+        # round 19). What other events did to the environment or to how `python3` resolves (a
+        # function, alias or export in a persistent shell) is an accepted residual, like the
+        # starting environment. A script call that declared this host in any other form cannot
+        # be judged; a missing skill read is still a FAIL.
+        if declared and host not in canonical_hosts:
             if not read_skill and host != "grok":
                 return "FAIL V-11.1 no observed SKILL.md read", 0
-            return "UNVERIFIED V-11.1 declaration not in a plain command list", 0
+            return "UNVERIFIED V-11.1 declaration not in the canonical form", 0
         if not declared:
             return f"FAIL V-11.1 no script call declared HMAD_HOST={host}", 0
         if not read_skill:
