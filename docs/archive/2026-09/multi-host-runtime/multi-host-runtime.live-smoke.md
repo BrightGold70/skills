@@ -432,3 +432,28 @@ a different reason. The sweep, under both interpreters with an unmutated control
 These are kept as deliberate overlapping layers. Twice now, a check removed as "redundant" was
 only redundant because of a premise that was wrong. Live verdicts are unchanged: grok PASS, agy
 FAIL.
+
+Review round 22 (a fresh-context tracer, scoped to round 21's changes, 2026-10-02) found **no
+fail-open**. Its 18,278-argv differential fuzz, run on each interpreter, confirmed that the
+in-order python option scan matches python3's grammar. It found two MEDs:
+- **F2, my regression from round 21.** The outer `bash -c` prefix was counted on the wrapper's
+  *first* command, so `HMAD_HOST=agy bash -c "cd X && python3 <script>"` lost its declaration
+  and went `UNVERIFIED`, although live it runs the script with the host set. It now counts on
+  the first *script* command. At `7e542e85`, F2, its `set -e`, `zsh -c` and depth-2 variants
+  gave `UNVERIFIED`; they are now `PASS`.
+- **F1, existing since earlier rounds.** A quoted or escaped `HMAD_"HOST"=` name counts as a
+  declaration and can balance a stray mention. A per-level fix was written and backed out,
+  because a real assignment inside a `bash -c "…"` string sits behind a quote at the outer
+  level. F1 is recorded as a residual (see the spec), since it hides only another event's
+  environment effect, which is trusted. `R22-F1-*` pins the current `PASS`.
+
+Cases `R22-*` (12) bring n=298 under 3.14 and 3.11. The sweep, with an unmutated control and run
+under both interpreters:
+- kills the new first-script rule;
+- leaves the documented name-check / same-event layers surviving by design;
+- otherwise matches round 21.
+
+**The loop is closed** under the operator's stop rule (no HIGH in a scoped round). Rounds 18–22
+each found real defects. Three of them were introduced by my own previous fix, where a check was
+removed or narrowed as "redundant". The round-22 F2 fix itself has had no fresh review. Live
+verdicts are unchanged: grok PASS, agy FAIL.

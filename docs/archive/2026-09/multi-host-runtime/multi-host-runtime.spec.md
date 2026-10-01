@@ -811,9 +811,18 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
           skill read is still `FAIL`.
         - Another host named in any script's prefix still FAILs.
         - Any other `HMAD_HOST` mention still gives `UNVERIFIED … HMAD_HOST used outside an exact
-          declaration`. A prefix assignment counts once where it is written: the outer one in
-          `HMAD_HOST=x bash -c "A; B"` reaches both A and B, but is one mention and one
-          declaration (review round 21).
+          declaration`. A prefix assignment counts once where it is written. The outer one in
+          `HMAD_HOST=x bash -c "A; B"` reaches both A and B, but it is one mention, and one
+          declaration only when the wrapper runs a script. It counts on the first script command
+          in the wrapper, so `HMAD_HOST=x bash -c "cd X && python3 <script>"` declares (review
+          round 22). A wrapper that runs no script leaves the mention unbalanced.
+        - **Residual (review round 22):** the mention count compares the raw text with
+          `shlex`-dequoted tokens. So a quoted or escaped name (`HMAD_"HOST"=x`, which the shell
+          runs as a command and which fails) counts as a declaration, and can balance a stray
+          mention such as `export HMAD_HOST=…` in another event. A completed canonical
+          declaring event is still required, and other events' environment effects are already
+          trusted. A per-level, quote-aware count was tried and wrongly rejected a real
+          assignment inside a `bash -c "…"` string.
         - **Residual:** what other shell events did to the environment, or to how `python3`
           resolves, or to the shell's working directory, is trusted like the starting
           environment. Examples are a function, alias, export or `cd` in a persistent shell. Rehearsal case `R19-residual-prior-event-function` pins

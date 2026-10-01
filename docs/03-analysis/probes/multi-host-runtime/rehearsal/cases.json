@@ -2507,5 +2507,101 @@
     "log": "R21-M2-dashm-before-reads.log",
     "root": ".",
     "expected": "FAIL V-11.1 no adapter read"
+  },
+  {
+    "id": "agy-R22-D1-depth2-cd",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-D1-depth2-cd.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R22-D2-depth2-ok",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-D2-depth2-ok.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R22-D3-depth2-stray",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-D3-depth2-stray.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R22-F1-quote-balance",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-F1-quote-balance.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R22-F1c-bashc-quote",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-F1c-bashc-quote.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R22-F2-bashc-cd",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-F2-bashc-cd.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R22-F2-ctrl-noscript",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-F2-ctrl-noscript.log",
+    "root": ".",
+    "expected": "UNVERIFIED V-11.1 HMAD_HOST used outside an exact declaration"
+  },
+  {
+    "id": "agy-R22-F2-ctrl",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-F2-ctrl.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R22-F2b-bashc-set",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-F2b-bashc-set.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R22-M3-bm-module",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-M3-bm-module.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R22-Z1-zsh-cd",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-Z1-zsh-cd.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
+  },
+  {
+    "id": "agy-R22-Z2-sh-assign-first",
+    "mode": "v111",
+    "host": "agy",
+    "log": "R22-Z2-sh-assign-first.log",
+    "root": ".",
+    "expected": "PASS V-11.1"
   }
 ]

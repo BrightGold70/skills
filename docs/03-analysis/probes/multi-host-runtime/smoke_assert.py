@@ -414,9 +414,12 @@ def classify(tokens: list[str], depth: int = 0) -> list[Command]:
                 if depth >= 2 or i + 1 >= len(args):
                     return [Command("unknown", tokens, assignments, name)]
                 inner = [c for part in simple_tokens(args[i + 1]) for c in classify(part, depth + 1)]
-                for n, command in enumerate(inner):
+                first = next((c for c in inner if c.kind == "script"), None)
+                for command in inner:
                     own = command.assignments if command.counted is None else command.counted
-                    command.counted = (assignments if n == 0 else []) + own
+                    # Counted on the first script it reaches; reaching none, it counts nowhere and
+                    # stays an unbalanced mention (review round 22: `cd X && python3 <script>`).
+                    command.counted = (assignments if command is first else []) + own
                     command.assignments = assignments + command.assignments
                 return inner
     if PYTHON.fullmatch(name):
