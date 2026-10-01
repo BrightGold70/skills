@@ -9,6 +9,10 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-01 · pattern · [0.5] · `h-mad,smoke,mhr,handoff:2026-10-01-backlog-cleared` — A pre-push smoke script whose recover() reverts PRE..HEAD must not run post-merge; run its assertion part only, no revert, and record it as a post-merge variant
+- 2026-10-01 · gotcha · [0.7] · `h-mad,mutation,anchors,handoff:2026-10-01-backlog-cleared` — h-mad has TWO mutation-spec dirs (tests/mutation-specs/ and tests/specs/); --check-anchors on one glob is blind to drift in the other — sweep both after editing anchored code
+- 2026-10-01 · gotcha · [0.7] · `git,stash,handoff:2026-10-01-backlog-cleared` — git stash on a clean tree stashes nothing; the next stash pop applies a FOREIGN stash. To measure old code use git show <rev>:path > tmp, never stash/pop
+- 2026-10-01 · gotcha · [0.7] · `h-mad,tdd-gate,canonicalise,handoff:2026-10-01-backlog-cleared` — Canonicaliser walking path parts must skip '.': a kept '.' lets the next '..' strip only itself, so tests/./../src/x.py resolves under tests/ and a TDD gate exempts a production write
 - 2026-09-30 · gotcha · [0.5] · `h-mad,codex,pytest,handoff:2026-09-30-phase5-tasks-5-6` — Never run the full suite while a codex dispatch is writing tests in the same tree — timing-bound tests and half-written helpers contaminate both readings
 - 2026-09-30 · gotcha · [0.5] · `h-mad,mutation-harness,handoff:2026-09-30-phase5-tasks-5-6` — Committing during a mutation-harness run yields MUTATION: TREE_MOVED even for docs-only commits; re-score after the commit, never read inner=ALL_CAUGHT as the verdict
 - 2026-09-30 · gotcha · [0.5] · `h-mad,mutation,tdd,handoff:2026-09-30-phase5-tasks-5-6` — An h-mad task can be declared GREEN with its planned mutation rows never written; census impl-plan row names vs mutation-specs/*.json at every GREEN — T2 shipped 0/7 and CX-CANON then survived
