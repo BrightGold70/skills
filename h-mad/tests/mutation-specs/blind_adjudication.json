@@ -1,0 +1,50 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_blind_adjudication.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "BA-LEAKTAG",
+      "_mechanism": "the control tag rides along in every payload row: the readers are no longer blind",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "        row = {\"item\": item}",
+      "replace": "        row = {\"item\": item, \"tag\": tag_of[oid]}",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_payload_has_no_tag_and_no_original_ids"
+    },
+    {
+      "name": "BA-KEEPID",
+      "_mechanism": "the original id survives in the payload, and an id can name its lane or its tag",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "    strip = {\"id\", \"tag\", *(args.strip or [])}",
+      "replace": "    strip = {\"tag\", *(args.strip or [])}",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_payload_has_no_tag_and_no_original_ids"
+    },
+    {
+      "name": "BA-NEGVALID",
+      "_mechanism": "a negative control called upheld no longer fails the set: VALID despite an over-calling reader",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "    neg_ok = tally[\"negative\"][0] == tally[\"negative\"][1]",
+      "replace": "    neg_ok = True",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_a_negative_called_upheld_fails_the_controls"
+    },
+    {
+      "name": "BA-MISSREJECT",
+      "_mechanism": "a key item the reader skipped is scored as rejected instead of failing closed",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "            problems.append(f\"no verdict for {item}\")",
+      "replace": "            verdict[item] = \"rejected\"",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_missing_verdict_is_incomplete"
+    }
+  ]
+}
