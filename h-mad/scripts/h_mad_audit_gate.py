@@ -193,6 +193,111 @@ def _is_acknowledged(payload: str, acknowledged: set[str]) -> bool:
     return False
 
 
+def _indent(line: str) -> int:
+    expanded = line.expandtabs(4)
+    return len(expanded) - len(expanded.lstrip())
+
+
+def _flat_findings(lines: list[str]) -> list[tuple[str, str | None]]:
+    """The pre-nesting rule: every non-`None` bullet is a finding, and a `class:`
+    line classifies the most recent one. A `- None` sentinel bullet ends the
+    previous bullet's span: a `class:` line after it classifies nothing (review
+    m1 -- otherwise it downgraded the PREVIOUS finding, the fail-open direction)."""
+    findings: list[tuple[str, str | None]] = []
+    target: int | None = None
+    for line in lines:
+        payload = _payload(line)
+        if _bullet_remainder(line.strip()) is not None:
+            if payload and not _is_none_sentinel(payload):
+                findings.append((payload, None))
+                target = len(findings) - 1
+            else:
+                target = None
+            continue
+        cls = _class_of(line)
+        if cls is not None and target is not None:
+            findings[target] = (findings[target][0], cls)
+    return findings
+
+
+def _bullet_groups(content: list[str]) -> list[dict]:
+    """Split a section into groups, one per top-level bullet, each holding its
+    nested bullets and continuation lines. Concatenated, the groups' lines are the
+    section's lines from the first bullet on, so flat-scoring every group equals
+    flat-scoring the section. A non-bullet, non-`class:` line shallower than the
+    parent's content column (prose, a `1.` item) closes the group to further
+    children, so a bullet after it starts a group of its own."""
+    groups: list[dict] = []
+    cur: dict | None = None
+    for line in content:
+        payload = _payload(line)
+        if _bullet_remainder(line.strip()) is not None:
+            ind = _indent(line)
+            real = bool(payload) and not _is_none_sentinel(payload)
+            if (cur is not None and cur["parent"] is not None and not cur["closed"]
+                    and ind >= cur["indent"] + 2):
+                cur["lines"].append(line)
+                cur["children"] += int(real)
+                cur["none_child"] |= not real
+                continue
+            cur = {"lines": [line], "indent": ind, "parent": payload if real else None,
+                   "children": 0, "none_child": False, "closed": False, "classes": []}
+            groups.append(cur)
+            continue
+        if cur is None:
+            continue
+        cur["lines"].append(line)
+        cls = _class_of(line)
+        if cls is not None:
+            # (class, indent, late): late = after a child bullet or after the group
+            # closed, where the flat rule would have given it to someone else.
+            late = cur["children"] > 0 or cur["none_child"] or cur["closed"]
+            cur["classes"].append((cls, _indent(line), late))
+        elif _indent(line) < cur["indent"] + 2:
+            cur["closed"] = True
+    return groups
+
+
+def _collapses(group: dict, acknowledged: set[str]) -> bool:
+    """May this group score as its parent alone? Only when unambiguous: it has a
+    real parent and real children; the parent is not a label (`Build defects:`,
+    whose children ARE the findings -- see below); no `- None` child; at most one
+    `class:` line, at the parent's depth, and only `build` once a child has been
+    seen; and the parent is not acknowledged -- an acked parent would otherwise
+    clear the children with it."""
+    parent = group["parent"]
+    if parent is None or group["children"] == 0:
+        return False
+    label = _ACK_STRIP.sub("", parent).strip()
+    if label.endswith(":") and len(label.split()) <= 6:
+        # A short `Label:` heads a list whose children ARE the findings. A long
+        # sentence ending in a colon is a finding introducing its evidence (the
+        # measured teammate shape: "... Measured with <cmd> in a scratch dir:").
+        # Misreading a long label costs a lower count, never a PASS: the parent
+        # still counts, and an acked parent never collapses.
+        return False
+    # The class split is decision-relevant (SKILL.md sends measurement-only musts
+    # to the sidecar instead of another cycle), so collapsing may never move a
+    # class toward `measurement`. A `- None` child would have ended the parent's
+    # span under the flat rule (review m1). A class line deeper than the parent's
+    # content column, or written after a child or after the group closed, is one
+    # the flat rule gives to someone else: it may only say `build`, which is what
+    # the flat rule scores the parent anyway.
+    if group["none_child"]:
+        return False
+    classes = group["classes"]
+    if len(classes) > 1:
+        return False
+    for cls, ind, late in classes:
+        if ind > group["indent"] + 2 or (late and cls != "build"):
+            return False
+    # An acknowledged CHILD is a finding the sidecar speaks to on its own (and a
+    # build-class one is `ack_refused`); folding it into an unacked parent would
+    # hide that, so such a group scores flat too.
+    flat = _flat_findings(group["lines"])
+    return not any(_is_acknowledged(p, acknowledged) for p, _c in flat)
+
+
 def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
     """Findings in one blocking section — the count alone (see `_section_detail`)."""
     return _section_detail(content, acknowledged)["count"]
@@ -233,23 +338,31 @@ def _section_detail(content: list[str], acknowledged: set[str], *,
 
     # Group into (payload, class) per bullet; continuation lines classify the
     # bullet they follow. Lines before any bullet are prose (off-template).
+    #
+    # NESTED bullets. A bullet is nested exactly when markdown renders it nested:
+    # its indent reaches its parent's content column (parent indent + the 2-wide
+    # marker). Teammate reports nest evidence under each finding, and scoring every
+    # nested bullet as a finding measured must=27 against 3 real ones. But a nested
+    # bullet is not ALWAYS evidence, and collapsing it into its parent inherits the
+    # parent's ack and class -- which let an acked parent clear an unacked nested
+    # defect, and a child-level `class:` line rewrite a parent tagged `build`, both
+    # turning a FAIL into a PASS (fresh review, 2026-10-02). So a group collapses
+    # to its parent ONLY when nothing about it is ambiguous; every other group is
+    # scored by `_flat_findings`, the pre-nesting rule, unchanged. Per group the
+    # collapsed count is >0 exactly when the flat count is, and an acked parent is
+    # always scored flat, so no verdict can move toward PASS.
     findings: list[tuple[str, str | None]] = []
-    target: int | None = None          # index of the bullet a `class:` line classifies
-    for line, payload in zip(content, payloads):
-        if _bullet_remainder(line.strip()) is not None:
-            if payload and not _is_none_sentinel(payload):
-                findings.append((payload, None))
-                target = len(findings) - 1
-            else:
-                # A `- None` sentinel bullet ends the previous bullet's span: a
-                # `class:` line after it classifies nothing (review m1 — otherwise
-                # it downgraded the PREVIOUS finding, the fail-open direction).
-                target = None
-            continue
-        cls = _class_of(line)
-        if cls is not None and target is not None:
-            text_, _old = findings[target]
-            findings[target] = (text_, cls)
+    for group in _bullet_groups(content):
+        if _collapses(group, acknowledged):
+            classes = group["classes"]
+            cls = classes[0][0] if classes else None
+            # Never more measurement than the flat rule: an early `measurement` on
+            # the parent does not reach its children, which flat-score as build.
+            if cls == "measurement" and any(c != "measurement" for _p, c in _flat_findings(group["lines"])):
+                cls = "build"
+            findings.append((group["parent"], cls))
+        else:
+            findings.extend(_flat_findings(group["lines"]))
 
     if not findings:
         # Non-None content with no countable bullet → at least one off-template finding.

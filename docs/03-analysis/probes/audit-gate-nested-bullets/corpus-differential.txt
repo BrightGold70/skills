@@ -1,0 +1,13 @@
+# old = git show 9e1d21c4:h-mad/scripts/h_mad_audit_gate.py ; new = working tree (nested-bullet group collapse, two fresh reviews applied). Each report scored with its own ## Acknowledged-not-fixed sidecar.
+# run: git show 9e1d21c4:h-mad/scripts/h_mad_audit_gate.py > /tmp/old_gate.py && python3 docs/03-analysis/probes/audit-gate-nested-bullets/corpus_differential.py /tmp/old_gate.py
+CHANGED nested=True docs/archive/2026-08/audit-cycle-verb/audit-cycle-verb.impl-plan.audit.v10.p2.md: FAIL must=4 should=4 -> FAIL must=4 should=1
+CHANGED nested=True docs/archive/2026-08/audit-cycle-verb/audit-cycle-verb.plan.audit.v13.p2.md: FAIL must=6 should=0 -> FAIL must=2 should=0
+CHANGED nested=True docs/archive/2026-08/audit-cycle-verb/audit-cycle-verb.plan.audit.v3.p1.md: FAIL must=4 should=0 -> FAIL must=2 should=0
+CHANGED nested=True docs/archive/2026-09/codex-tdd-gate-defects/codex-tdd-gate-defects.design.audit.v1.teammate.md: FAIL must=27 should=37 -> FAIL must=3 should=23
+CHANGED nested=True docs/archive/2026-09/codex-tdd-gate-defects/codex-tdd-gate-defects.impl-plan.audit.v2.teammate.md: FAIL must=1 should=11 -> FAIL must=1 should=3
+CHANGED nested=True docs/archive/2026-09/codex-tdd-gate-defects/codex-tdd-gate-defects.plan.audit.v1.teammate.md: FAIL must=41 should=21 -> FAIL must=6 should=10
+CHANGED nested=True docs/archive/2026-09/doc-block-exec/doc-block-exec.design.audit.v5.p1.md: FAIL must=5 should=0 -> FAIL must=3 should=0
+CHANGED nested=True docs/archive/2026-09/grok-codex-fallback/grok-codex-fallback.impl-plan.audit.v1.teammate.md: FAIL must=10 should=4 -> FAIL must=1 should=2
+CHANGED nested=True docs/archive/2026-09/multi-host-runtime/multi-host-runtime.design.audit.v1.teammate.md: FAIL must=8 should=19 -> FAIL must=8 should=16
+CHANGED nested=True docs/archive/2026-09/multi-host-runtime/multi-host-runtime.plan.audit.v1.teammate.md: FAIL must=8 should=19 -> FAIL must=4 should=11
+DIFF: scored=1047 with_ack_sidecar=3 changed=10 changed_without_nested_bullets=0 verdict_flips=0 newly_measurement_only_musts=0

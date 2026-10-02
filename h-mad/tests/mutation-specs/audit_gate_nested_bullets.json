@@ -1,0 +1,75 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "NB-OFF",
+      "_mechanism": "no group ever collapses: nested evidence counts as findings again (must=27 vs 3)",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    return not any(_is_acknowledged(p, acknowledged) for p, _c in flat)",
+      "replace": "    return False",
+      "test": "tests/test_h_mad_audit_gate.py::test_nested_evidence_bullets_are_not_findings"
+    },
+    {
+      "name": "NB-ONE",
+      "_mechanism": "one space past the parent counts as nesting: a stray-space sibling is swallowed",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "                    and ind >= cur[\"indent\"] + 2):",
+      "replace": "                    and ind >= cur[\"indent\"] + 1):",
+      "test": "tests/test_h_mad_audit_gate.py::test_a_stray_space_on_a_top_level_bullet_does_not_swallow_its_siblings"
+    },
+    {
+      "name": "NB-LABEL",
+      "_mechanism": "a short Label: parent collapses its children, which are the findings",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if label.endswith(\":\") and len(label.split()) <= 6:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_audit_gate.py::test_children_of_a_label_bullet_are_the_findings"
+    },
+    {
+      "name": "NB-CLOSE",
+      "_mechanism": "prose or a numbered item at parent depth no longer ends the nesting (review MED)",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "            cur[\"closed\"] = True",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_audit_gate.py::test_prose_or_a_numbered_item_ends_the_nesting"
+    },
+    {
+      "name": "NB-MEAS",
+      "_mechanism": "an early measurement parent collapses its build children into measurement-only musts (review 3)",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "            if cls == \"measurement\" and any(c != \"measurement\" for _p, c in _flat_findings(group[\"lines\"])):",
+      "replace": "            if False:",
+      "test": "tests/test_h_mad_audit_gate.py::test_an_early_measurement_parent_does_not_make_its_children_measurement"
+    },
+    {
+      "name": "NB-ACK",
+      "_mechanism": "an acked parent collapses and clears its unacked children (review 1 HIGH)",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    return not any(_is_acknowledged(p, acknowledged) for p, _c in flat)",
+      "replace": "    return not any(_is_acknowledged(p, acknowledged) for p, _c in flat[1:])",
+      "test": "tests/test_h_mad_audit_gate.py::test_an_acked_parent_does_not_clear_an_unacked_nested_defect"
+    },
+    {
+      "name": "NB-ACKCHILD",
+      "_mechanism": "an acked build child folds into an unacked parent and loses its ack refusal",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    return not any(_is_acknowledged(p, acknowledged) for p, _c in flat)",
+      "replace": "    return not any(_is_acknowledged(p, acknowledged) for p, _c in flat[:1])",
+      "test": "tests/test_h_mad_audit_gate.py::test_an_acked_build_child_keeps_its_ack_refusal"
+    }
+  ],
+  "_note": "Guards with no row, kept deliberately as second layers: the none_child guard, the depth/late half of the class check, and the one-class-line check. Each blocks a class downgrade that NB-MEAS's rule ('a collapse never yields more measurement than the flat rule') already blocks: a late, second or deep class line always leaves some flat finding untagged, so flat has a build and the collapse is forced to build. A mutant of one of these layers alone therefore survives by design (measured 2026-10-02: NB-LATE, NB-MULTI and NB-DEPTH survived once NB-MEAS landed). Do not delete them as redundant: the overlap is the point."
+}

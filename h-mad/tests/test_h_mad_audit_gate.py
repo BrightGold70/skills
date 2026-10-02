@@ -1091,3 +1091,161 @@ def test_build_class_SHOULD_fix_still_clears_via_the_ack_sidecar() -> None:
     r = classify_detail(_report(["None"], should=["- [s] transport nit", "  class: build"],
                                 ack=["- [s] deferred to 5d"]), acknowledged={"[s] deferred to 5d"})
     assert r["verdict"] == "PASS" and r["should_count"] == 0 and r["ack_refused"] == 0
+
+
+# --- nested sub-bullets are continuation, not findings ---------------------------
+#
+# A teammate report nests evidence under each finding. The gate used to strip the
+# indent before asking "is this a bullet?", so every nested `- ` opened a finding
+# AND moved the `class:` target onto it: measured on
+# `codex-tdd-gate-defects.design.audit.v1.teammate.md`, `GATE: FAIL must=27
+# should=37 untagged=49` against 3 and 12 real findings, and the counts feed the
+# round cap. A bullet is nested exactly when markdown renders it nested: its
+# indent reaches the parent bullet's content column (parent indent + 2). The
+# shallowest-indent rule fails OPEN instead: one top-level finding indented by a
+# stray space would turn every later top-level finding into its continuation.
+
+
+def test_nested_evidence_bullets_are_not_findings() -> None:
+    r = classify_detail(_report([
+        "- first finding — why",
+        "  - evidence a",
+        "  - evidence b",
+        "  class: build",
+        "- second finding — why",
+        "  class: measurement",
+        "  - evidence c",
+        "- third finding — why",
+        "    - deeper evidence",
+        "  class: build",
+    ]))
+    assert r["must_count"] == 3
+    # The measurement parent's untagged evidence child flat-scores build, so the
+    # collapse may not be measurement (see the third-review tests): all build.
+    assert r["must_build"] == 3 and r["must_measurement"] == 0
+    assert r["must_untagged"] == 0
+
+
+def test_class_line_after_nested_bullets_classifies_the_parent() -> None:
+    """The second effect: the target moved onto the last nested bullet, so the
+    parent scored untagged even though the reviewer classified it. A late
+    `class: build` lands on the parent; a late `measurement` does not (see the
+    second-review tests below), so a measurement parent states it first."""
+    r = classify_detail(_report(["- finding", "  - nested evidence", "  class: build"]))
+    assert r["must_count"] == 1 and r["must_build"] == 1 and r["must_untagged"] == 0
+    r = classify_detail(_report(["- finding", "  class: measurement", "  - nested evidence",
+                                 "    class: measurement"]))
+    assert r["must_count"] == 2 and r["must_measurement"] == 2  # child-depth class: flat
+
+
+def test_a_fully_indented_section_scores_as_before() -> None:
+    r = classify_detail(_report(["  - one", "  - two", "  - three"]))
+    assert r["must_count"] == 3
+
+
+def test_a_stray_space_on_a_top_level_bullet_does_not_swallow_its_siblings() -> None:
+    """Fail-closed direction: one space of indent is not nesting (CommonMark needs
+    the parent's content column), so all three findings still count."""
+    r = classify_detail(_report([" - one", "- two", "- three"]))
+    assert r["must_count"] == 3
+    # ...and on a LATER sibling: one space past the parent is below its content column.
+    r = classify_detail(_report(["- one", " - two", "- three"]))
+    assert r["must_count"] == 3
+
+
+def test_a_shallower_bullet_after_an_indented_one_is_a_new_finding() -> None:
+    r = classify_detail(_report(["  - one", "- two"]))
+    assert r["must_count"] == 2
+
+
+def test_nested_none_neither_clears_the_parent_nor_lets_a_later_class_downgrade_it() -> None:
+    """A nested `- None` is not a child, so the group scores flat, where review m1
+    holds: a `class:` line after a `None` bullet classifies nothing (stays build)."""
+    r = classify_detail(_report(["- finding", "  - None", "  class: measurement"]))
+    assert r["must_count"] == 1 and r["must_build"] == 1
+
+
+# Fresh review 2026-10-02: collapsing a nested group must never inherit an ack or
+# a child's class from it. Each case below went FAIL -> PASS on the first draft.
+
+def test_an_acked_parent_does_not_clear_an_unacked_nested_defect() -> None:
+    r = classify_detail(_report(["- A acked parent", "  - B distinct unacked defect"]),
+                        acknowledged={"A acked parent"})
+    assert r["verdict"] == "FAIL" and r["must_count"] == 1
+
+
+def test_a_key_acked_label_parent_does_not_clear_its_children() -> None:
+    r = classify_detail(_report(["- [build] Build defects:", "  - A real", "  - B real"]),
+                        acknowledged={"[build] earlier note"})
+    assert r["verdict"] == "FAIL" and r["must_count"] == 2
+
+
+def test_a_child_depth_class_line_does_not_reclassify_the_parent() -> None:
+    lines = ["- A build defect", "  class: build", "  - evidence line", "    class: measurement"]
+    r = classify_detail(_report(lines))
+    assert r["must_build"] >= 1
+    r = classify_detail(_report(lines), acknowledged={"A build defect"})
+    assert r["verdict"] == "FAIL" and r["ack_refused"] == 1
+
+
+def test_an_acked_label_parent_with_classed_children_still_fails() -> None:
+    r = classify_detail(_report(["- Defects:", "  - A", "    class: build", "  - B",
+                                 "    class: measurement"]), acknowledged={"Defects:"})
+    assert r["verdict"] == "FAIL" and r["must_count"] >= 1
+
+
+def test_children_of_a_label_bullet_are_the_findings() -> None:
+    r = classify_detail(_report(["- **Build defects:**", "  - A", "  - B"]))
+    assert r["must_count"] == 3
+
+
+def test_prose_or_a_numbered_item_ends_the_nesting() -> None:
+    assert classify_detail(_report(["- A", "Also:", "  - B separate"]))["must_count"] == 2
+    assert classify_detail(_report(["- A", "1. B numbered", "   - B evidence"]))["must_count"] == 2
+
+
+def test_a_lone_class_line_at_child_depth_does_not_reclassify_the_parent() -> None:
+    r = classify_detail(_report(["- A", "  - evidence", "    class: measurement"]))
+    assert r["must_build"] >= 1
+
+
+def test_two_class_lines_in_a_group_do_not_let_the_first_win_for_the_parent() -> None:
+    r = classify_detail(_report(["- A", "  class: measurement", "  - B", "  class: build"]))
+    assert r["must_build"] >= 1
+
+
+# Second fresh review 2026-10-02: the class split is decision-relevant (SKILL.md
+# sends measurement-only musts to the sidecar), so a collapse may never move a
+# class toward measurement.
+
+def test_a_measurement_class_after_a_child_does_not_downgrade_the_parent() -> None:
+    for tail in (["  class: measurement"], ["class: measurement"], ["Also:", "  class: measurement"]):
+        r = classify_detail(_report(["- P", "  - child", *tail]))
+        assert r["must_build"] >= 1, tail
+
+
+def test_a_none_child_keeps_review_m1() -> None:
+    r = classify_detail(_report(["- P", "  - child", "  - None", "  class: measurement"]))
+    assert r["must_build"] >= 1
+
+
+def test_a_three_space_class_line_is_child_depth() -> None:
+    r = classify_detail(_report(["- P", "  - child", "   class: measurement"]))
+    assert r["must_build"] >= 1
+
+
+def test_a_late_build_class_still_collapses_the_teammate_shape() -> None:
+    r = classify_detail(_report(["- P — why", "  - evidence a", "  - evidence b", "  class: build"]))
+    assert r["must_count"] == 1 and r["must_build"] == 1 and r["must_untagged"] == 0
+
+
+def test_an_early_measurement_parent_does_not_make_its_children_measurement() -> None:
+    """Flat, the children score build; a collapse must not yield measurement-only musts."""
+    r = classify_detail(_report(["- P", "  class: measurement", "  - real defect child"]))
+    assert r["must_build"] >= 1
+
+
+def test_an_acked_build_child_keeps_its_ack_refusal() -> None:
+    r = classify_detail(_report(["- P", "  - [k] child", "  class: build"]), acknowledged={"[k] child"})
+    old_shape = classify_detail(_report(["- P", "- [k] child", "  class: build"]), acknowledged={"[k] child"})
+    assert r["ack_refused"] == old_shape["ack_refused"] == 1
