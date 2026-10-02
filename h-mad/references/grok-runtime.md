@@ -74,7 +74,8 @@ Phase 5 halts with `step5:grok_tdd_hook_unverified` until a real grok refusal of
 a production write has been observed. At rebased base `52a78ca8`, the gate refuses
 with `permissionDecision: "deny"` and exit 0, falling back to `exit 2`; grok honors
 both refusal forms. The gate still reads `tool_input.file_path`, not grok's
-`toolInput` payload. A handler reaching the 5 s limit also fails open. Running `pytest` in RED and GREEN
+`toolInput` payload; in step 5 a `toolInput`-only write therefore has no identified
+target and is refused ("could not identify the write target"), so that gap fails closed. A handler reaching the 5 s limit fails open. Running `pytest` in RED and GREEN
 does not prove that the host hook blocked a production write. Verify the refusal
 through the live smoke before claiming mechanical enforcement.
 

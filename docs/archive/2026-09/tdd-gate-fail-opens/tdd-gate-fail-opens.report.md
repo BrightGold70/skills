@@ -181,6 +181,27 @@ mixed-names cell are still absent from it.
     CX-RUN-INNER, CX-RUN-TIMEOUT, CX-HDR-BARE, CX-ROOT-ENTER, CG-ROOT-CONJ, CG-ROOT-000, RD-UTF8,
     and the four DIFF-TI rows.
 
+**Bookkeeping closed, 2026-10-02 (at `9e1d21c4`, files under
+`docs/03-analysis/probes/tdd-gate-fail-opens/`):**
+- `reading-fixed.txt` now carries 80 `MANUAL:` rows. R-4 was re-taken with the plan §R-4 script
+  verbatim on **codex-cli 0.159.0** (the unfixed rows were 0.158.0): 74 of 74 cases give the same
+  exit code and the same write outcome, so the trim grammar AC-4.6 pins has not drifted. R-5 was
+  re-taken live on Claude Code 2.1.287: Write, Edit and NotebookEdit each refuse a leaf symlink and
+  leave the target unchanged. NotebookEdit is new in the tool set since 2.1.284; MultiEdit is still
+  absent. The comparator keys only `REPRO` lines, and its output is byte-identical to
+  `compare-fixed.txt` after the append.
+- T0 absent-line control: `control4-absent-line.txt`. A reading with the
+  `REPRO: agent-cli-reachable=` line deleted exits 1 with no `COMPARE:` token in both argument
+  orders.
+- T7 re-check: `t7-recheck-2026-10-02.md` (34 gate sentences across the three adapters: 27
+  accurate, 6 unverifiable host behaviour, 1 stale). The stale one, `grok-runtime.md` "A handler
+  reaching the 5 s limit **also** fails open", implied the `toolInput` gap fails open; the gate
+  refuses that write in step 5. The sentence is rewritten, with no judge-kind token added under
+  `## The TDD gate`.
+- Census: `t8-census-2026-10-02.txt`. Every spec is `ALL_CAUGHT`: target_identity 11,
+  claude_gate_judge_wiring 45, codex_gate_judge_wiring 39, tdd_judge_scoring 10,
+  resume_decision_git_dir 6, tdd_gate_differential 4. `ANCHORS_OK` 1269/1269 over 125 specs.
+
 Skill candidates filed on main in `198f2908` (`docs/skill-candidates.md`, "HemaSuite #10 handover
 triage"):
 - **(a)** An agy report that says `Evidence: 0 files opened` is scored zero-evidence even when its

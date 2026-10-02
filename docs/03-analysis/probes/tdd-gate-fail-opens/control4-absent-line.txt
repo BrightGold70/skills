@@ -1,0 +1,7 @@
+# T0 absent-line control — 9e1d21c4 — copy of reading-unfixed.txt with the REPRO: agent-cli-reachable= line deleted (path shown as reading-absent.txt)
+$ compare_readings.py reading-unfixed.txt reading-absent.txt
+reading error: reading-absent.txt: invalid agent-cli-reachable line: []
+rc=1
+$ compare_readings.py reading-absent.txt reading-unfixed.txt
+reading error: reading-absent.txt: invalid agent-cli-reachable line: []
+rc=1

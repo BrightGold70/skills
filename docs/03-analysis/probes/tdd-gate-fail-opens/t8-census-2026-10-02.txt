@@ -1,0 +1,9 @@
+# T8 mutation census re-run — 9e1d21c4 — 2026-10-02
+# Supersedes the counts in t8-census.txt (taken at f61bb908) for the rows added since; adds tdd_gate_differential.
+target_identity: MUTATION: ALL_CAUGHT mutations=11 caught=11 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/11
+claude_gate_judge_wiring: MUTATION: ALL_CAUGHT mutations=45 caught=45 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/45
+codex_gate_judge_wiring: MUTATION: ALL_CAUGHT mutations=39 caught=39 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=6/13 timeout_kills=0 untargeted=0/39
+tdd_judge_scoring: MUTATION: ALL_CAUGHT mutations=10 caught=10 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=3/5 timeout_kills=0 untargeted=0/10
+resume_decision_git_dir: MUTATION: ALL_CAUGHT mutations=6 caught=6 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=7/7 timeout_kills=0 untargeted=0/6
+tdd_gate_differential: MUTATION: ALL_CAUGHT mutations=4 caught=4 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=1/1 timeout_kills=0 untargeted=0/4
+ANCHORS: ANCHORS_OK specs=125 mutations=1269 ok=1269 drifted=0 unreadable=0 skipped=0 unclassifiable=0
