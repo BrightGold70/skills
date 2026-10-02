@@ -38,7 +38,7 @@ def corpus(tmp_path):
 
 
 def build(corpus, out, seed="7", disputed=DISPUTED, positives=POSITIVES,
-          negatives=NEGATIVES, extra=()):
+          negatives=NEGATIVES, extra=("--keep", "text")):
     return run(
         "build", "--corpus", str(corpus),
         "--disputed", ",".join(disputed),
@@ -90,7 +90,7 @@ def test_round_trip_key_covers_every_selected_row(corpus, tmp_path):
 
 def test_payload_has_no_tag_and_no_original_ids(corpus, tmp_path):
     out = tmp_path / "out"
-    r = build(corpus, out, extra=("--strip", "lane"))
+    r = build(corpus, out)
     assert r.returncode == 0, r.stderr
     raw = (out / "payload.jsonl").read_text()
     for p in read_payload(out):
@@ -105,15 +105,109 @@ def test_payload_has_no_tag_and_no_original_ids(corpus, tmp_path):
         assert tag not in raw
 
 
-def test_strip_is_repeatable_and_unstripped_fields_stay(corpus, tmp_path):
+def test_keep_is_an_allowlist_and_repeatable(corpus, tmp_path):
     out = tmp_path / "out"
-    r = build(corpus, out, extra=("--strip", "lane", "--strip", "text"))
-    assert r.returncode == 0, r.stderr
+    assert build(corpus, out).returncode == 0
     for p in read_payload(out):
-        assert set(p) == {"item"}
+        assert set(p) == {"item", "text"}
     out2 = tmp_path / "out2"
-    assert build(corpus, out2).returncode == 0
-    assert all("lane" in p for p in read_payload(out2))
+    r = build(corpus, out2, extra=("--keep", "text", "--keep", "lane"))
+    assert r.returncode == 0, r.stderr
+    for p in read_payload(out2):
+        assert set(p) == {"item", "text", "lane"}
+
+
+def test_unlisted_label_field_never_reaches_payload(tmp_path):
+    """H1: a corpus field the builder never heard of must not leak by default."""
+    path = tmp_path / "corpus.jsonl"
+    rows = [{"id": oid, "text": f"t{i}",
+             "label": "TP" if oid in POSITIVES else ("FP" if oid in NEGATIVES else "DQ")}
+            for i, oid in enumerate(ALL_IDS)]
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    out = tmp_path / "out"
+    r = build(path, out)
+    assert r.returncode == 0, r.stderr
+    raw = (out / "payload.jsonl").read_text()
+    for p in read_payload(out):
+        assert "label" not in p
+    for leak in ('"TP"', '"FP"', '"DQ"', "label"):
+        assert leak not in raw
+
+
+def test_build_without_keep_is_refused(corpus, tmp_path):
+    out = tmp_path / "out"
+    r = build(corpus, out, extra=())
+    assert r.returncode != 0
+    assert "--keep" in (r.stderr + r.stdout)
+    assert not (out / "payload.jsonl").exists()
+
+
+def test_strip_is_retired_and_points_at_keep(corpus, tmp_path):
+    out = tmp_path / "out"
+    r = build(corpus, out, extra=("--keep", "text", "--strip", "lane"))
+    assert r.returncode != 0
+    assert "--keep" in (r.stderr + r.stdout)
+    assert not (out / "payload.jsonl").exists()
+
+
+@pytest.mark.parametrize("field", ["id", "tag", "item"])
+def test_reserved_field_in_keep_is_refused(corpus, tmp_path, field):
+    out = tmp_path / "out"
+    r = build(corpus, out, extra=("--keep", "text", "--keep", field))
+    assert r.returncode != 0
+    assert field in (r.stderr + r.stdout)
+    assert not (out / "payload.jsonl").exists()
+
+
+def test_corpus_item_field_cannot_overwrite_assigned_item(tmp_path):
+    """M4: a corpus row carrying 'item' must never replace the assigned id."""
+    path = tmp_path / "corpus.jsonl"
+    rows = [{"id": oid, "text": f"t{i}", "item": f"FORGED-{oid}"}
+            for i, oid in enumerate(ALL_IDS)]
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    out = tmp_path / "out"
+    r = build(path, out, extra=("--keep", "text", "--keep", "item"))
+    assert r.returncode != 0
+    assert not (out / "payload.jsonl").exists()
+    # with item NOT kept the corpus field is simply never copied
+    out2 = tmp_path / "out2"
+    assert build(path, out2).returncode == 0
+    assert "FORGED" not in (out2 / "payload.jsonl").read_text()
+    key = read_key(out2)
+    assert sorted(p["item"] for p in read_payload(out2)) == sorted(key)
+
+
+def test_kept_field_missing_from_a_selected_row_is_refused(tmp_path):
+    """The schema difference itself would tell a reader which row is which."""
+    path = tmp_path / "corpus.jsonl"
+    rows = []
+    for i, oid in enumerate(ALL_IDS + ["zq-unused"]):
+        row = {"id": oid, "text": f"t{i}", "note": f"n{i}"}
+        if oid in ("zq-p1", "zq-unused"):
+            del row["note"]
+        rows.append(row)
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    out = tmp_path / "out"
+    r = build(path, out, extra=("--keep", "text", "--keep", "note"))
+    assert r.returncode != 0
+    assert "REFUSED" in r.stderr and "Traceback" not in r.stderr
+    assert "note" in r.stderr
+    assert "zq-p1" in r.stderr
+    assert not (out / "payload.jsonl").exists()
+    # an UNSELECTED row lacking the field does not matter
+    out2 = tmp_path / "out2"
+    assert build(path, out2).returncode == 0
+
+
+def test_duplicate_corpus_id_is_refused(corpus, tmp_path):
+    with corpus.open("a") as fh:
+        fh.write(json.dumps({"id": "zq-n1", "text": "second copy"}) + "\n")
+    out = tmp_path / "out"
+    r = build(corpus, out)
+    assert r.returncode != 0
+    assert "REFUSED" in r.stderr and "duplicate" in r.stderr
+    assert "zq-n1" in r.stderr
+    assert not (out / "payload.jsonl").exists()
 
 
 def _order(out):
@@ -261,3 +355,66 @@ def test_help_documents_verdict_vocabulary():
     r = run("score", "--help")
     assert r.returncode == 0
     assert "upheld" in r.stdout and "rejected" in r.stdout
+
+
+def _score_key(tmp_path, key_obj, verdict_rows):
+    kp = tmp_path / "key.json"
+    kp.write_text(json.dumps(key_obj))
+    vp = tmp_path / "v.jsonl"
+    vp.write_text("".join(json.dumps(r) + "\n" for r in verdict_rows))
+    return run("score", "--key", str(kp), "--verdicts", str(vp))
+
+
+def _assert_incomplete(r):
+    assert r.returncode != 0
+    assert "Traceback" not in r.stderr
+    assert "ADJUDICATION: VALID" not in r.stdout
+    tokens = [l for l in r.stdout.splitlines() if l.startswith("ADJUDICATION:")]
+    assert len(tokens) == 1, r.stdout + r.stderr
+    assert tokens[0].startswith("ADJUDICATION: INCOMPLETE reason="), tokens
+
+
+def test_empty_key_is_incomplete(tmp_path):
+    _assert_incomplete(_score_key(tmp_path, {}, []))
+
+
+def test_key_with_only_disputed_items_is_incomplete(tmp_path):
+    key = {"item-001": {"orig_id": "a", "tag": "disputed"},
+           "item-002": {"orig_id": "b", "tag": "disputed"}}
+    rows = [{"item": "item-001", "verdict": "upheld"},
+            {"item": "item-002", "verdict": "rejected"}]
+    _assert_incomplete(_score_key(tmp_path, key, rows))
+
+
+@pytest.mark.parametrize("missing", ["positive", "negative"])
+def test_key_missing_one_control_class_is_incomplete(tmp_path, missing):
+    key = {"item-001": {"orig_id": "a", "tag": "disputed"},
+           "item-002": {"orig_id": "b", "tag": "positive"},
+           "item-003": {"orig_id": "c", "tag": "negative"}}
+    key = {k: v for k, v in key.items() if v["tag"] != missing}
+    good = {"disputed": "upheld", "positive": "upheld", "negative": "rejected"}
+    rows = [{"item": k, "verdict": good[v["tag"]]} for k, v in key.items()]
+    r = _score_key(tmp_path, key, rows)
+    _assert_incomplete(r)
+    assert missing in r.stdout
+
+
+@pytest.mark.parametrize("key_obj", [
+    [],
+    "item-001",
+    {"item-001": "junk"},
+    {"item-001": {"orig_id": "a"}},
+    {"item-001": {"orig_id": "a", "tag": "bogus"}},
+    {"item-001": {"tag": "positive"}},
+])
+def test_malformed_key_is_incomplete_with_token(tmp_path, key_obj):
+    rows = [{"item": "item-001", "verdict": "upheld"}]
+    _assert_incomplete(_score_key(tmp_path, key_obj, rows))
+
+
+def test_unhashable_verdict_item_is_incomplete_with_token(tmp_path):
+    key = {"item-001": {"orig_id": "a", "tag": "positive"},
+           "item-002": {"orig_id": "b", "tag": "negative"}}
+    rows = [{"item": ["item-001"], "verdict": "upheld"},
+            {"item": "item-002", "verdict": "rejected"}]
+    _assert_incomplete(_score_key(tmp_path, key, rows))

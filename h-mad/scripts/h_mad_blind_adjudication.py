@@ -9,9 +9,18 @@ exonerate the METHOD; positives recovered show the reader can see a real
 call; only then does the disputed tally mean anything.
 
     build  --corpus C.jsonl --disputed a,b --positives p,q --negatives n,m
-           --seed N --out DIR [--strip FIELD ...]
-        -> DIR/payload.jsonl  (shuffled, re-keyed item-001.., no id, no tag)
+           --seed N --out DIR --keep FIELD [--keep FIELD ...]
+        -> DIR/payload.jsonl  (shuffled, re-keyed item-001.., ONLY item + kept)
         -> DIR/key.json       {item: {orig_id, tag}}
+
+    Blinding is an ALLOWLIST: a payload row carries `item` plus exactly the
+    --keep fields (e.g. `text`), nothing else, so a field nobody thought to
+    strip (`label`, `lane`, `verdict`...) can never reach a reader. Build
+    refuses when no --keep is given, when --keep names a reserved field
+    (id, tag, item), when a selected row lacks a kept field (the schema
+    difference would itself mark the row), or when a corpus id repeats.
+    The old --strip (denylist) is retired: passing it is refused with a
+    pointer to --keep.
 
     score  --key DIR/key.json --verdicts V.jsonl
         verdict rows: {"item": "item-001", "verdict": "upheld" | "rejected"}
@@ -33,6 +42,7 @@ from pathlib import Path
 
 TAGS = ("disputed", "positive", "negative")
 VERDICTS = ("upheld", "rejected")
+RESERVED = ("id", "tag", "item")
 
 
 def _ids(raw: str) -> list[str]:
@@ -57,6 +67,17 @@ def _load_jsonl(path: Path) -> list[dict]:
 
 
 def cmd_build(args: argparse.Namespace) -> int:
+    if args.strip:
+        return _refuse("--strip is retired: blinding is an allowlist now, "
+                       "name the fields readers may see with --keep FIELD")
+    keep = list(dict.fromkeys(args.keep or []))
+    if not keep:
+        return _refuse("no --keep given: name every field readers may see "
+                       "(e.g. --keep text); nothing else reaches the payload")
+    reserved = [f for f in keep if f in RESERVED]
+    if reserved:
+        return _refuse(f"--keep may not name reserved field(s) {', '.join(reserved)} "
+                       f"({'/'.join(RESERVED)} are never shown to readers)")
     lists = {
         "disputed": _ids(args.disputed),
         "positive": _ids(args.positives),
@@ -83,21 +104,27 @@ def cmd_build(args: argparse.Namespace) -> int:
     by_id: dict[str, dict] = {}
     for row in corpus:
         if "id" in row:
-            by_id[str(row["id"])] = row
+            oid = str(row["id"])
+            if oid in by_id:
+                return _refuse(f"duplicate corpus id {oid!r}")
+            by_id[oid] = row
     missing = [oid for oid in tag_of if oid not in by_id]
     if missing:
         return _refuse(f"ids not in corpus: {', '.join(missing)}")
+    gaps = [f"{oid} lacks {f!r}" for oid in tag_of for f in keep if f not in by_id[oid]]
+    if gaps:
+        return _refuse("kept field missing from selected row(s) -- the schema "
+                       f"difference would mark them: {'; '.join(gaps)}")
 
     order = [oid for tag in TAGS for oid in lists[tag]]
     random.Random(args.seed).shuffle(order)
 
-    strip = {"id", "tag", *(args.strip or [])}
     width = max(3, len(str(len(order))))
     payload, key = [], {}
     for n, oid in enumerate(order, 1):
         item = f"item-{n:0{width}d}"
         row = {"item": item}
-        row.update({k: v for k, v in by_id[oid].items() if k not in strip})
+        row.update({k: by_id[oid][k] for k in keep})
         payload.append(row)
         key[item] = {"orig_id": oid, "tag": tag_of[oid]}
 
@@ -112,6 +139,20 @@ def cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def _key_problem(key: object) -> str:
+    """'' when key is {item: {orig_id: str, tag: TAGS}}, else what is wrong."""
+    if not isinstance(key, dict):
+        return f"key is {type(key).__name__}, not an object"
+    for item, entry in key.items():
+        if not isinstance(entry, dict):
+            return f"entry {item!r} is {type(entry).__name__}, not an object"
+        if not isinstance(entry.get("orig_id"), str):
+            return f"entry {item!r} has no string orig_id"
+        if entry.get("tag") not in TAGS:
+            return f"entry {item!r} tag {entry.get('tag')!r} not in {'|'.join(TAGS)}"
+    return ""
+
+
 def cmd_score(args: argparse.Namespace) -> int:
     try:
         key = json.loads(Path(args.key).read_text(encoding="utf-8"))
@@ -120,11 +161,16 @@ def cmd_score(args: argparse.Namespace) -> int:
         print(f"ADJUDICATION: INCOMPLETE reason=unreadable: {exc}")
         return 1
 
+    bad_key = _key_problem(key)
+    if bad_key:
+        print(f"ADJUDICATION: INCOMPLETE reason=malformed_key: {bad_key}")
+        return 1
+
     problems: list[str] = []
     verdict: dict[str, str] = {}
     for row in rows:
         item, v = row.get("item"), row.get("verdict")
-        if item not in key:
+        if not isinstance(item, str) or item not in key:
             problems.append(f"verdict for unknown item {item!r}")
         elif v not in VERDICTS:
             problems.append(f"item {item}: verdict {v!r} not in {'|'.join(VERDICTS)}")
@@ -139,9 +185,6 @@ def cmd_score(args: argparse.Namespace) -> int:
     tally = {t: [0, 0] for t in TAGS}
     for item, entry in key.items():
         tag = entry["tag"]
-        if tag not in tally:
-            problems.append(f"key item {item}: unknown tag {tag!r}")
-            continue
         tally[tag][1] += 1
         v = verdict.get(item)
         if tag == "negative":
@@ -156,7 +199,11 @@ def cmd_score(args: argparse.Namespace) -> int:
     for p in problems:
         print(f"  problem: {p}")
     if problems:
-        print("ADJUDICATION: INCOMPLETE")
+        print(f"ADJUDICATION: INCOMPLETE reason={problems[0]}")
+        return 1
+    absent = [t for t in ("positive", "negative") if tally[t][1] == 0]
+    if absent:
+        print(f"ADJUDICATION: INCOMPLETE reason=no_{'_or_'.join(absent)}_controls in key")
         return 1
     pos_ok = tally["positive"][0] == tally["positive"][1]
     neg_ok = tally["negative"][0] == tally["negative"][1]
@@ -179,8 +226,11 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--negatives", required=True, help="comma-separated known negatives (mandatory)")
     b.add_argument("--seed", required=True, type=int, help="shuffle seed")
     b.add_argument("--out", required=True, help="output directory")
-    b.add_argument("--strip", action="append", default=[],
-                   help="extra field to drop from payload rows (repeatable); 'id' and 'tag' always go")
+    b.add_argument("--keep", action="append", default=[], metavar="FIELD",
+                   help="field readers may see (repeatable, at least one); payload rows "
+                        "carry ONLY item + these. Reserved: id, tag, item")
+    b.add_argument("--strip", action="append", default=[], metavar="FIELD",
+                   help="RETIRED: refused; blinding is an allowlist, use --keep")
     b.set_defaults(func=cmd_build)
 
     s = sub.add_parser(
@@ -192,8 +242,10 @@ def main(argv: list[str] | None = None) -> int:
             "  V = rejected the reader says the call does not stand\n"
             "A positive is recovered when upheld; a negative is clean when rejected.\n"
             "VALID needs every positive recovered AND every negative clean.\n"
-            "A key item with no verdict, a verdict for an unknown item, or any\n"
-            "other verdict word -> ADJUDICATION: INCOMPLETE (fail closed)."
+            "A key item with no verdict, a verdict for an unknown item, any\n"
+            "other verdict word, a malformed key, or a key with zero positive\n"
+            "or zero negative controls -> ADJUDICATION: INCOMPLETE reason=...\n"
+            "(fail closed)."
         ))
     s.add_argument("--key", required=True, help="key.json from build")
     s.add_argument("--verdicts", required=True, help="reader verdicts JSONL")

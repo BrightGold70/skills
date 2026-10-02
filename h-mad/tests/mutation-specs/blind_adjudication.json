@@ -24,11 +24,51 @@
     },
     {
       "name": "BA-KEEPID",
-      "_mechanism": "the original id survives in the payload, and an id can name its lane or its tag",
+      "_mechanism": "'id' drops out of the reserved set: --keep id ships the original id, which can name its lane or its tag",
       "file": "scripts/h_mad_blind_adjudication.py",
-      "find": "    strip = {\"id\", \"tag\", *(args.strip or [])}",
-      "replace": "    strip = {\"tag\", *(args.strip or [])}",
-      "test": "tests/test_h_mad_blind_adjudication.py::test_payload_has_no_tag_and_no_original_ids"
+      "find": "RESERVED = (\"id\", \"tag\", \"item\")",
+      "replace": "RESERVED = (\"tag\", \"item\")",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_reserved_field_in_keep_is_refused"
+    },
+    {
+      "name": "BA-ITEMCOLLIDE",
+      "_mechanism": "'item' drops out of the reserved set: a corpus 'item' field overwrites the assigned item id",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "RESERVED = (\"id\", \"tag\", \"item\")",
+      "replace": "RESERVED = (\"id\", \"tag\")",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_corpus_item_field_cannot_overwrite_assigned_item"
+    },
+    {
+      "name": "BA-ALLOWBYPASS",
+      "_mechanism": "the allowlist reverts to a denylist: an unlisted 'label' field rides into the payload",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "        row.update({k: by_id[oid][k] for k in keep})",
+      "replace": "        row.update({k: v for k, v in by_id[oid].items() if k not in (\"id\", \"tag\")})",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_unlisted_label_field_never_reaches_payload"
+    },
+    {
+      "name": "BA-NOKEEPOK",
+      "_mechanism": "build with no --keep proceeds instead of refusing",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "    if not keep:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_build_without_keep_is_refused"
+    },
+    {
+      "name": "BA-SCHEMAGAP",
+      "_mechanism": "a selected row lacking a kept field is not refused with a named reason",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "    if gaps:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_kept_field_missing_from_a_selected_row_is_refused"
+    },
+    {
+      "name": "BA-DUPLAST",
+      "_mechanism": "a duplicate corpus id silently last-wins instead of refusing",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "                return _refuse(f\"duplicate corpus id {oid!r}\")",
+      "replace": "                pass",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_duplicate_corpus_id_is_refused"
     },
     {
       "name": "BA-NEGVALID",
@@ -45,6 +85,22 @@
       "find": "            problems.append(f\"no verdict for {item}\")",
       "replace": "            verdict[item] = \"rejected\"",
       "test": "tests/test_h_mad_blind_adjudication.py::test_missing_verdict_is_incomplete"
+    },
+    {
+      "name": "BA-CONTROLSTOTAL",
+      "_mechanism": "a key with zero positive or zero negative controls scores VALID: 0/0 counts as all recovered",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "    if absent:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_empty_key_is_incomplete"
+    },
+    {
+      "name": "BA-MALFORMEDKEY",
+      "_mechanism": "the key is not validated before indexing: a malformed key tracebacks with no ADJUDICATION token",
+      "file": "scripts/h_mad_blind_adjudication.py",
+      "find": "    bad_key = _key_problem(key)",
+      "replace": "    bad_key = \"\"",
+      "test": "tests/test_h_mad_blind_adjudication.py::test_malformed_key_is_incomplete_with_token"
     }
   ]
 }
