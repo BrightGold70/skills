@@ -813,9 +813,12 @@ Every entry has ≥ 1 hit in every skill it declares and 0 hits in every skill i
         - Any other `HMAD_HOST` mention still gives `UNVERIFIED … HMAD_HOST used outside an exact
           declaration`. A prefix assignment counts once where it is written. The outer one in
           `HMAD_HOST=x bash -c "A; B"` reaches both A and B, but it is one mention, and one
-          declaration only when the wrapper runs a script. It counts on the first script command
-          in the wrapper, so `HMAD_HOST=x bash -c "cd X && python3 <script>"` declares (review
-          round 22). A wrapper that runs no script leaves the mention unbalanced.
+          declaration only when the wrapper *names* a script command. It counts on the first script
+          command in the wrapper, so `HMAD_HOST=x bash -c "cd X && python3 <script>"` declares (review
+          round 22). A wrapper that names no script leaves the mention unbalanced. "Names", not
+          "runs": the count is textual, so `bash -c "exit 0; python3 <script>"` and `bash -n -c …`
+          also balance (review round 23 L1); a completed canonical declaring event is still
+          required, so this credits nothing on its own.
         - **Residual (review round 22):** the mention count compares the raw text with
           `shlex`-dequoted tokens. So a quoted or escaped name (`HMAD_"HOST"=x`, which the shell
           runs as a command and which fails) counts as a declaration, and can balance a stray
