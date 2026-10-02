@@ -457,3 +457,45 @@ under both interpreters:
 each found real defects. Three of them were introduced by my own previous fix, where a check was
 removed or narrowed as "redundant". The round-22 F2 fix itself has had no fresh review. Live
 verdicts are unchanged: grok PASS, agy FAIL.
+
+## Addendum 2026-10-02: review round 23 and an agy re-run
+
+**Round 23** (fresh context, F2 only; `docs/03-analysis/probes/multi-host-runtime/review-r23/REPORT.md`):
+0 HIGH, 0 MED, 3 LOW. L1 was a spec wording fix ("names" a script, not "runs"), applied in the
+spec's round-22 bullet. L2 is the accepted environment residual. L3 (compliant wrappers such as
+`bash -euo pipefail -c …` and `/usr/bin/env python3 …` stay `UNVERIFIED`) predates F2 and is
+unchanged by it.
+
+**agy re-run.** The post-merge script ran again, unchanged except that it now verifies all three
+loader links and passes `--home` and the three `--link`s to `v111`. The prompt is the pinned
+prompt, with no coaching. Run: agy 1.2.14, HEAD `76e5d9b2`, rc 0, 125 s. V-11.3 PASS (tree and
+state file unchanged) and V-11.2 PASS. **V-11.1 FAIL `no adapter read`.**
+
+That token names the wrong cause. Unlike the 2026-10-01 run, which viewed only `SKILL.md`, this
+run issued `view_file` on **both** `SKILL.md` and `references/agy-runtime.md`, and both completed.
+But an agy log reports a `view_file`'s output only as a summary (`"169 lines, 11821 bytes"`),
+never the text. `v111` credits a read only when the output holds the file's first `# ` heading.
+**So no agy read can ever be credited, and V-11.1 cannot pass on agy in any run.**
+
+A counterfactual separates the two causes. In a copy of the log, each `view_file` output was
+replaced with the file's real H1, and the copy was re-scored. It still FAILs, as
+`no script call declared HMAD_HOST=agy`. agy ran
+`python3 ~/.gemini/config/skills/h-mad/scripts/h_mad_resume_decision.py --help` with no prefix,
+against the prompt's "Declare HMAD_HOST=<H> inline on every h-mad script call". It also ran 12
+shell commands, `cat` of a script among them, while calling its status read "without running shell
+commands".
+
+Both logs are pinned in the rehearsal, which is now n=300 and passes under 3.14 and 3.11:
+`live-agy-2026-10-02` → `FAIL V-11.1 no adapter read`, and `live-agy-2026-10-02-counterfactual` →
+`FAIL V-11.1 no script call declared HMAD_HOST=agy`.
+
+**Open (operator decision): how should V-11.1 treat agy reads?** The verdict direction is
+right, but the stated reason is not, and the measurement is structurally blind on this host. The
+options:
+- (a) Accept agy's summary output as read credit when the path matches and the step completed.
+  This needs a decision, because it drops the "returned text holds the H1" proof for agy.
+- (b) Keep refusing credit, but say why: emit `UNVERIFIED V-11.1 agy read output carries no text`
+  when a completed adapter `view_file` was seen, instead of `FAIL … no adapter read`.
+- (c) Leave it as is and rely on this addendum.
+
+Today's run would FAIL under (a) as well, on the declaration.

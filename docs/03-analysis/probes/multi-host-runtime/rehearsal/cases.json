@@ -2603,5 +2603,35 @@
     "log": "R22-Z2-sh-assign-first.log",
     "root": ".",
     "expected": "PASS V-11.1"
+  },
+  {
+    "id": "live-agy-2026-10-02",
+    "mode": "v111",
+    "host": "agy",
+    "log": "live-agy-2026-10-02.log",
+    "root": ".",
+    "home": "/Users/kimhawk",
+    "links": [
+      "~/.agents/skills/h-mad",
+      "~/.gemini/config/skills/h-mad",
+      "~/.claude/skills/h-mad"
+    ],
+    "expected": "FAIL V-11.1 no adapter read",
+    "note": "Post-merge re-run (agy 1.2.14, HEAD 76e5d9b2). agy DID view_file the adapter and SKILL.md, but agy logs report a view_file's output only as 'N lines, M bytes', never text, so no agy read can carry the heading the credit requires. The FAIL token names the wrong cause; see the counterfactual case."
+  },
+  {
+    "id": "live-agy-2026-10-02-counterfactual",
+    "mode": "v111",
+    "host": "agy",
+    "log": "live-agy-2026-10-02-counterfactual-read-text.log",
+    "root": ".",
+    "home": "/Users/kimhawk",
+    "links": [
+      "~/.agents/skills/h-mad",
+      "~/.gemini/config/skills/h-mad",
+      "~/.claude/skills/h-mad"
+    ],
+    "expected": "FAIL V-11.1 no script call declared HMAD_HOST=agy",
+    "note": "The 2026-10-02 live log with each DONE view_file output replaced by the file's real H1. With the reads credited it still FAILs: agy ran `python3 ~/.gemini/config/skills/h-mad/scripts/h_mad_resume_decision.py --help` with no HMAD_HOST prefix, against the prompt."
   }
 ]
