@@ -481,7 +481,7 @@ A counterfactual separates the two causes. In a copy of the log, each `view_file
 replaced with the file's real H1, and the copy was re-scored. It still FAILs, as
 `no script call declared HMAD_HOST=agy`. agy ran
 `python3 ~/.gemini/config/skills/h-mad/scripts/h_mad_resume_decision.py --help` with no prefix,
-against the prompt's "Declare HMAD_HOST=<H> inline on every h-mad script call". It also ran 12
+against the prompt's "Declare HMAD_HOST=<H> inline on every h-mad script call". It also ran 10
 shell commands, `cat` of a script among them, while calling its status read "without running shell
 commands".
 
