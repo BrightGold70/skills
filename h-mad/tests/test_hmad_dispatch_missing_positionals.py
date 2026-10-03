@@ -60,7 +60,8 @@ def _run(argv, tmp_path, extra=None):
 CASES = [
     (["send"], "send"),
     (["send", "codex"], "send"),
-    (["send", "--help"], "send"),
+    # `send --help` used to land here by accident. `--help` is now answered by the
+    # dispatcher before any verb runs: test_hmad_dispatch_verb_help.py.
     (["clear"], "clear"),
     (["interrupt"], "interrupt"),
     (["wait"], "wait"),
@@ -89,14 +90,14 @@ def test_missing_positional_reports_usage(argv, verb, tmp_path):
 
 
 def _verbs():
-    """The verb list, read from the wrapper's own top-level help.
+    """The verb list, read from the wrapper's own `_HMAD_VERBS` (what its help prints).
 
     Derived rather than hardcoded so a NEW verb with this defect is caught by
     the sweep below without anyone remembering to extend this file.
     """
     src = WRAPPER.read_text(encoding="utf-8")
-    m = re.search(r'^\s*echo "verbs: (.+)"\s*$', src, re.M)
-    assert m, "could not find the top-level `verbs:` help line in the wrapper"
+    m = re.search(r'^_HMAD_VERBS="(.+)"\s*$', src, re.M)
+    assert m, "could not find the `_HMAD_VERBS=` verb list in the wrapper"
     return m.group(1).split()
 
 

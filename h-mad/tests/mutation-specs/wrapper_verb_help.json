@@ -1,0 +1,24 @@
+{
+  "_why": "2026-10-03. Only `run` had a help arm, so `<verb> --help` handed `--help` to the verb as its first argument, and the verbs whose first positional is free-form ACTED on it: `worktree-comment --help` ran `orca worktree set --worktree active --comment --help`, overwriting the active worktree's comment. The dispatcher now answers -h/--help for every listed verb before any verb runs. Each row removes one half of that.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_hmad_dispatch_verb_help.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "help-reaches-the-verb-again",
+      "_mechanism": "The guard's flag pattern never matches, so `--help` falls through to the verb as its argument and `worktree-comment` clobbers the active comment again.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  case \"${1:-}\" in\n    -h|--help)\n      case \" $_HMAD_VERBS \" in",
+      "replace": "  case \"${1:-}\" in\n    --never-matches)\n      case \" $_HMAD_VERBS \" in",
+      "test": "tests/test_hmad_dispatch_verb_help.py::test_help_runs_nothing[worktree-comment---help]"
+    },
+    {
+      "name": "a-verb-drops-out-of-the-list",
+      "_mechanism": "A verb missing from `_HMAD_VERBS` bypasses the guard while main still routes it, which is how a newly added verb would reopen the defect.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "_HMAD_VERBS=\"env resolve ",
+      "replace": "_HMAD_VERBS=\"resolve ",
+      "test": "tests/test_hmad_dispatch_verb_help.py::test_the_verb_list_matches_the_dispatcher"
+    }
+  ]
+}

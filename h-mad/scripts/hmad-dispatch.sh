@@ -4353,8 +4353,26 @@ _cmd_run() {  # --timeout <s> -- <cmd...>
   return "$rc"
 }
 
+# Every verb `main` routes, in help order. The help line and the --help guard both
+# read it; tests/test_hmad_dispatch_verb_help.py pins it to main's case arms.
+_HMAD_VERBS="env resolve verify launch pin pin-agents resolved-model send ask exec clear interrupt read wait alive notify progress exec-pane audit-cycle run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
+
 main() {
   local verb="${1:-}"; shift || true
+  # `<verb> -h|--help` must change nothing. Most verbs have no help arm and took
+  # `--help` as their first argument -- `worktree-comment --help` overwrote the
+  # active worktree's comment with it. Only the FIRST argument is checked, so
+  # `run --timeout 5 -- cmd --help` still hands `--help` to the wrapped command.
+  case "${1:-}" in
+    -h|--help)
+      case " $_HMAD_VERBS " in
+        *" $verb "*)
+          if [ "$verb" = run ]; then _cmd_run_usage; return 0; fi
+          echo "hmad-dispatch $verb: no per-verb help; nothing was run."
+          echo "verbs: hmad-dispatch --help   arguments: h-mad/references/agent-substrate.md"
+          return 0 ;;
+      esac ;;
+  esac
   case "$verb" in
     env)    _cmd_env "$@" ;;
     resolve) _cmd_resolve "$@" ;;
@@ -4398,11 +4416,11 @@ main() {
     automation-list) _cmd_automation_list "$@" ;;
     automation-remove) _cmd_automation_remove "$@" ;;
     -h|--help)
-      # Top-level help lists the verbs; each verb documents itself with `<verb> --help`
-      # where it takes options (`run` does). A BARE invocation stays `unknown verb ''`
+      # Top-level help lists the verbs; `<verb> --help` is answered above, before any
+      # verb runs (`run` prints its own usage). A BARE invocation stays `unknown verb ''`
       # at exit 2 — the shim tests pin that as the location-independence probe.
       echo "usage: hmad-dispatch <verb> [options]"
-      echo "verbs: env resolve verify launch pin pin-agents resolved-model send ask exec clear interrupt read wait alive notify progress exec-pane audit-cycle run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
+      echo "verbs: $_HMAD_VERBS"
       echo "help:  hmad-dispatch run --help"
       return 0 ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
