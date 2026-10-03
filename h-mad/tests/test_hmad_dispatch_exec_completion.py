@@ -54,9 +54,12 @@ def _run_exec(args: str, tmp_path: Path) -> tuple[int, float]:
     """Call `_exec_run` with `args`; return (rc, wall-clock seconds)."""
     body = _function("_exec_run")
     helper = _function("_exec_completed")
+    # `_exec_run` checks each option's value is present before reading it.
+    need_val = _function("_need_val")
     assert body, "could not extract _exec_run"
     assert helper, "could not extract _exec_completed"
-    script = f"{helper}\n{body}\n_exec_run {args}\n"
+    assert need_val, "could not extract _need_val"
+    script = f"{need_val}\n{helper}\n{body}\n_exec_run {args}\n"
     start = time.monotonic()
     proc = subprocess.run(["bash", "-c", script], cwd=str(tmp_path),
                           capture_output=True, text=True)

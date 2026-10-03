@@ -1,0 +1,32 @@
+{
+  "_why": "2026-10-03. An option arm that copies $2 and shifts 2 died on `$2: unbound variable` when the option was the last token (`hmad-dispatch worktree-ps --limit`), and the arms reading `${2:-}` failed at `shift 2` instead, which `set -e` turned into a silent exit 1. `_need_val` now runs before every such arm reads $2. Each row removes one half of that: the check stops checking, or an arm stops calling it.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_hmad_dispatch_missing_option_values.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "the-value-check-always-passes",
+      "_mechanism": "`_need_val` returns 0 whatever the count, so every guarded arm falls through to the unguarded read and the original crash returns at all 68 sites at once while the structural sweep still sees the call.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  [ \"$3\" -ge 2 ] && return 0",
+      "replace": "  return 0",
+      "test": "tests/test_hmad_dispatch_missing_option_values.py::test_missing_option_value_is_reported[worktree-ps --limit]"
+    },
+    {
+      "name": "one-arm-drops-its-guard",
+      "_mechanism": "A single arm reads $2 unguarded again, which is how the defect would come back: a new option copied from an older arm. Only the derived sweep can see it without an invocation that reaches that arm.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "--limit) _need_val worktree-ps --limit $# || return $?; ",
+      "replace": "--limit) ",
+      "test": "tests/test_hmad_dispatch_missing_option_values.py::test_every_value_arm_checks_its_value_is_present"
+    },
+    {
+      "name": "the-shift-arm-keeps-its-silent-exit",
+      "_mechanism": "The `${2:-}` arms looked safe and were not: removing the guard from `run --timeout` restores the exit 1 with no message, which no `unbound variable` check can see.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "--timeout) _need_val run --timeout $# || return $?; ",
+      "replace": "--timeout) ",
+      "test": "tests/test_hmad_dispatch_missing_option_values.py::test_missing_option_value_is_reported[run --timeout]"
+    }
+  ]
+}

@@ -40,6 +40,19 @@ _need_arg() {
   return 2
 }
 
+# $1 verb, $2 option, $3 the caller's $#.
+#
+# Third member of the family: an option arm that copies $2 and then runs
+# `shift 2` dies on `$2: unbound variable` when the option is the last token
+# (`hmad-dispatch worktree-ps --limit`), and an arm reading `${2:-}` instead
+# fails at the shift, which under `set -e` aborts with no message at all. Call
+# it before the arm reads $2, passing $# so it sees the caller's argument count.
+_need_val() {
+  [ "$3" -ge 2 ] && return 0
+  echo "hmad-dispatch: $1: option '$2' requires a value" >&2
+  return 2
+}
+
 _detect_substrate() {
   # Precedence: HMAD_SUBSTRATE override > session marker > binary presence > default cmux.
   if [ "${HMAD_SUBSTRATE:-}" = "cmux" ] || [ "${HMAD_SUBSTRATE:-}" = "orca" ]; then
@@ -1077,7 +1090,7 @@ _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
   case "$agent" in codex|agy) ;; *) echo "hmad-dispatch: unknown agent '$agent' (codex|agy)" >&2; return 2 ;; esac
   local wt="active" focus="" cmd
   while [ $# -gt 0 ]; do case "$1" in
-    --worktree) wt="$2"; shift 2 ;; --focus) focus="--focus"; shift ;; *) _unknown_opt launch "$1"; return $? ;; esac; done
+    --worktree) _need_val launch --worktree $# || return $?; wt="$2"; shift 2 ;; --focus) focus="--focus"; shift ;; *) _unknown_opt launch "$1"; return $? ;; esac; done
   case "$agent" in
     codex) cmd="${HMAD_ORCA_CODEX_LAUNCH_CMD:-codex}" ;;
     agy)   cmd="${HMAD_ORCA_AGY_LAUNCH_CMD:-agy --dangerously-skip-permissions}" ;;
@@ -1293,7 +1306,7 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
   _need "${1:-}" task_id || return $?
   local task="$1"; shift
   local timeout=600
-  while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) _unknown_opt await "$1"; return $? ;; esac; done
+  while [ $# -gt 0 ]; do case "$1" in --timeout) _need_val await --timeout $# || return $?; timeout="$2"; shift 2 ;; *) _unknown_opt await "$1"; return $? ;; esac; done
   # J19: a report parked by an earlier await (which had to ack it off the queue
   # to advance) is served from the cache. Checked FIRST — the queue no longer has
   # it, so going to the runtime for it would time out on work that is finished.
@@ -1487,7 +1500,7 @@ _cmd_gate_wait() {  # <gate_id> [--timeout <s>] [--interval <s>]
   local gate="$1"; shift
   local timeout=600 interval="${HMAD_GATE_POLL_INTERVAL:-5}"
   while [ $# -gt 0 ]; do case "$1" in
-    --timeout) timeout="$2"; shift 2 ;; --interval) interval="$2"; shift 2 ;;
+    --timeout) _need_val gate-wait --timeout $# || return $?; timeout="$2"; shift 2 ;; --interval) _need_val gate-wait --interval $# || return $?; interval="$2"; shift 2 ;;
     *) _unknown_opt gate-wait "$1"; return $? ;; esac; done
   local elapsed=0 res tick="$interval"
   [ "$tick" -lt 1 ] && tick=1
@@ -1581,10 +1594,10 @@ _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file 
   local name="$1"; shift
   local agent="" base="" pf="" repo="" proj="" setup="run"
   while [ $# -gt 0 ]; do case "$1" in
-    --agent) agent="$2"; shift 2 ;; --base) base="$2"; shift 2 ;;
-    --prompt-file) pf="$2"; shift 2 ;;
-    --repo) repo="$2"; shift 2 ;; --project) proj="$2"; shift 2 ;;
-    --setup) setup="$2"; shift 2 ;;
+    --agent) _need_val worktree-create --agent $# || return $?; agent="$2"; shift 2 ;; --base) _need_val worktree-create --base $# || return $?; base="$2"; shift 2 ;;
+    --prompt-file) _need_val worktree-create --prompt-file $# || return $?; pf="$2"; shift 2 ;;
+    --repo) _need_val worktree-create --repo $# || return $?; repo="$2"; shift 2 ;; --project) _need_val worktree-create --project $# || return $?; proj="$2"; shift 2 ;;
+    --setup) _need_val worktree-create --setup $# || return $?; setup="$2"; shift 2 ;;
     *) _unknown_opt worktree-create "$1"; return $? ;; esac; done
   local args=(worktree create --name "$name")
   [ -n "$agent" ] && args+=(--agent "$agent")
@@ -1631,7 +1644,7 @@ _cmd_worktree_current() {  # (no args)
 _cmd_worktree_ps() {  # [--limit <n>]
   _require_orca worktree-ps || return $?
   local args=(worktree ps)
-  while [ $# -gt 0 ]; do case "$1" in --limit) args+=(--limit "$2"); shift 2 ;; *) _unknown_opt worktree-ps "$1"; return $? ;; esac; done
+  while [ $# -gt 0 ]; do case "$1" in --limit) _need_val worktree-ps --limit $# || return $?; args+=(--limit "$2"); shift 2 ;; *) _unknown_opt worktree-ps "$1"; return $? ;; esac; done
   args+=(--json)
   _orca_json '.result | tojson' "${args[@]}"
 }
@@ -1645,7 +1658,7 @@ _cmd_worktree_ps() {  # [--limit <n>]
 _cmd_worktree_list() {  # [--limit <n>]
   _require_orca worktree-list || return $?
   local args=(worktree list)
-  while [ $# -gt 0 ]; do case "$1" in --limit) args+=(--limit "$2"); shift 2 ;; *) _unknown_opt worktree-list "$1"; return $? ;; esac; done
+  while [ $# -gt 0 ]; do case "$1" in --limit) _need_val worktree-list --limit $# || return $?; args+=(--limit "$2"); shift 2 ;; *) _unknown_opt worktree-list "$1"; return $? ;; esac; done
   args+=(--json)
   _orca_json '.result | tojson' "${args[@]}"
 }
@@ -1741,7 +1754,7 @@ _cmd_worktree_rm() {  # <selector> [--force] [--base <ref>]
   local force="" base=""
   while [ $# -gt 0 ]; do case "$1" in
     --force) force=1; shift ;;
-    --base) base="$2"; shift 2 ;;
+    --base) _need_val worktree-rm --base $# || return $?; base="$2"; shift 2 ;;
     *) _unknown_opt worktree-rm "$1"; return $? ;;
   esac; done
   # What actually gets forwarded. J17: this used to be the caller's string
@@ -1793,7 +1806,7 @@ _cmd_file_diff() {   # <path> [--staged] [--worktree <sel>]
   local args=(file diff "$path")
   while [ $# -gt 0 ]; do case "$1" in
     --staged) args+=(--staged); shift ;;
-    --worktree) args+=(--worktree "$2"); shift 2 ;;
+    --worktree) _need_val file-diff --worktree $# || return $?; args+=(--worktree "$2"); shift 2 ;;
     *) _unknown_opt file-diff "$1"; return $? ;; esac; done
   args+=(--json)
   _orca_json '.result | tojson' "${args[@]}"
@@ -1803,8 +1816,8 @@ _cmd_file_open_changed() {   # [--mode edit|diff|both] [--worktree <sel>]
   _require_orca file-open-changed || return $?
   local args=(file open-changed)
   while [ $# -gt 0 ]; do case "$1" in
-    --mode) args+=(--mode "$2"); shift 2 ;;
-    --worktree) args+=(--worktree "$2"); shift 2 ;;
+    --mode) _need_val file-open-changed --mode $# || return $?; args+=(--mode "$2"); shift 2 ;;
+    --worktree) _need_val file-open-changed --worktree $# || return $?; args+=(--worktree "$2"); shift 2 ;;
     *) _unknown_opt file-open-changed "$1"; return $? ;; esac; done
   args+=(--json)
   _orca_json '.result | tojson' "${args[@]}"
@@ -1814,10 +1827,10 @@ _cmd_automation_create() {   # --name <n> --trigger <t> --prompt-file <p> [--pro
   _require_orca automation-create || return $?
   local name="" trig="" pf="" prov="" pre="" repo="" ws="" proj=""
   while [ $# -gt 0 ]; do case "$1" in
-    --name) name="$2"; shift 2 ;;      --trigger) trig="$2"; shift 2 ;;
-    --prompt-file) pf="$2"; shift 2 ;; --provider) prov="$2"; shift 2 ;;
-    --precheck) pre="$2"; shift 2 ;;   --repo) repo="$2"; shift 2 ;;
-    --workspace) ws="$2"; shift 2 ;;   --project) proj="$2"; shift 2 ;;
+    --name) _need_val automation-create --name $# || return $?; name="$2"; shift 2 ;;      --trigger) _need_val automation-create --trigger $# || return $?; trig="$2"; shift 2 ;;
+    --prompt-file) _need_val automation-create --prompt-file $# || return $?; pf="$2"; shift 2 ;; --provider) _need_val automation-create --provider $# || return $?; prov="$2"; shift 2 ;;
+    --precheck) _need_val automation-create --precheck $# || return $?; pre="$2"; shift 2 ;;   --repo) _need_val automation-create --repo $# || return $?; repo="$2"; shift 2 ;;
+    --workspace) _need_val automation-create --workspace $# || return $?; ws="$2"; shift 2 ;;   --project) _need_val automation-create --project $# || return $?; proj="$2"; shift 2 ;;
     *) _unknown_opt automation-create "$1"; return $? ;; esac; done
   _need "$name" name || return $?; _need "$trig" trigger || return $?; _need "$pf" prompt-file || return $?
   [ -f "$pf" ] || { echo "hmad-dispatch: prompt file not found: $pf" >&2; return 2; }
@@ -2335,8 +2348,8 @@ _cmd_ask() {  # <agent> <promptfile> [--timeout <s>] [--out <file>]
   local agent="$1" promptfile="$2"; shift 2
   local timeout="" out=""
   while [ $# -gt 0 ]; do case "$1" in
-    --timeout) timeout="$2"; shift 2 ;;
-    --out) out="$2"; shift 2 ;;
+    --timeout) _need_val ask --timeout $# || return $?; timeout="$2"; shift 2 ;;
+    --out) _need_val ask --out $# || return $?; out="$2"; shift 2 ;;
     *) _unknown_opt ask "$1"; return $? ;;
   esac; done
   # 1. Dispatch. send refuses without a fresh preflight receipt, so fail fast --
@@ -2557,9 +2570,9 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] [--complete-l
   local complete_log="" complete_marker="" complete_after=0
   while true; do
     case "${1:-}" in
-      --complete-log) complete_log="${2:-}"; shift 2 ;;
-      --complete-after) complete_after="${2:-0}"; shift 2 ;;
-      --complete-marker) complete_marker="${2:-}"; shift 2 ;;
+      --complete-log) _need_val exec --complete-log $# || return $?; complete_log="${2:-}"; shift 2 ;;
+      --complete-after) _need_val exec --complete-after $# || return $?; complete_after="${2:-0}"; shift 2 ;;
+      --complete-marker) _need_val exec --complete-marker $# || return $?; complete_marker="${2:-}"; shift 2 ;;
       *) break ;;
     esac
   done
@@ -2830,8 +2843,8 @@ _cmd_progress() {  # <logfile> [--lines <n>] [--pid <pid>]
   local log="$1"; shift
   local n=25 pid="" stale="${HMAD_PROGRESS_STALE_SEC:-}"
   while [ $# -gt 0 ]; do case "$1" in
-    --lines) n="$2"; shift 2 ;;
-    --pid) pid="$2"; shift 2 ;;
+    --lines) _need_val progress --lines $# || return $?; n="$2"; shift 2 ;;
+    --pid) _need_val progress --pid $# || return $?; pid="$2"; shift 2 ;;
     *) _unknown_opt progress "$1"; return $? ;;
   esac; done
   # Default the stale threshold to 2x the heartbeat, so a beat that lands on
@@ -2991,13 +3004,13 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   local cd_dir="" model="" out="" timeout="" sandbox="" effort="" log=""
   [ "$agent" = codex ] && sandbox="workspace-write"   # codex default; agy has none
   while [ $# -gt 0 ]; do case "$1" in
-    --cd) cd_dir="$2"; shift 2 ;;
-    --model) model="$2"; shift 2 ;;
-    --out) out="$2"; shift 2 ;;
-    --log) log="$2"; shift 2 ;;             # stream live transcript here for `tail -f`
-    --timeout) timeout="$2"; shift 2 ;;
-    --sandbox) sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox; grok: passed verbatim
-    --effort) effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort; grok: --reasoning-effort
+    --cd) _need_val exec --cd $# || return $?; cd_dir="$2"; shift 2 ;;
+    --model) _need_val exec --model $# || return $?; model="$2"; shift 2 ;;
+    --out) _need_val exec --out $# || return $?; out="$2"; shift 2 ;;
+    --log) _need_val exec --log $# || return $?; log="$2"; shift 2 ;;             # stream live transcript here for `tail -f`
+    --timeout) _need_val exec --timeout $# || return $?; timeout="$2"; shift 2 ;;
+    --sandbox) _need_val exec --sandbox $# || return $?; sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox; grok: passed verbatim
+    --effort) _need_val exec --effort $# || return $?; effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort; grok: --reasoning-effort
     *) _unknown_opt exec "$1"; return $? ;;
   esac; done
 
@@ -3433,15 +3446,15 @@ _cmd_audit_cycle() {
   here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
 
   while [ $# -gt 0 ]; do case "$1" in
-    --feature) feature="$2"; shift 2 ;;
-    --phase) phase="$2"; shift 2 ;;
-    --cycle) cycle="$2"; shift 2 ;;
-    --passes) passes="$2"; shift 2 ;;
-    --surfaces) surfaces="$2"; shift 2 ;;
-    --project-root) root="$2"; shift 2 ;;
-    --ack-file) ack_file="$2"; shift 2 ;;
-    --report-grace) report_grace="$2"; shift 2 ;;
-    --timeout) timeout="$2"; shift 2 ;;
+    --feature) _need_val audit-cycle --feature $# || return $?; feature="$2"; shift 2 ;;
+    --phase) _need_val audit-cycle --phase $# || return $?; phase="$2"; shift 2 ;;
+    --cycle) _need_val audit-cycle --cycle $# || return $?; cycle="$2"; shift 2 ;;
+    --passes) _need_val audit-cycle --passes $# || return $?; passes="$2"; shift 2 ;;
+    --surfaces) _need_val audit-cycle --surfaces $# || return $?; surfaces="$2"; shift 2 ;;
+    --project-root) _need_val audit-cycle --project-root $# || return $?; root="$2"; shift 2 ;;
+    --ack-file) _need_val audit-cycle --ack-file $# || return $?; ack_file="$2"; shift 2 ;;
+    --report-grace) _need_val audit-cycle --report-grace $# || return $?; report_grace="$2"; shift 2 ;;
+    --timeout) _need_val audit-cycle --timeout $# || return $?; timeout="$2"; shift 2 ;;
     # The gate flags. SKILL.md §"Drive the gate through `h_mad_audit_cycle.py`"
     # says to pass these ON THE DRIVER, and until 2026-09-08 this verb — the only
     # supported entry point — rejected all four at `_unknown_opt` and forwarded
@@ -3451,10 +3464,10 @@ _cmd_audit_cycle() {
     # `--round-cap` and `--exit-check` had nothing to count at the moment the cap
     # was supposed to bind. Five gates shipped, tested, and unreachable from the
     # path that runs.
-    --gated) gated+=("$2"); shift 2 ;;
-    --legs) legs+=("$2"); shift 2 ;;
-    --project-tests) project_tests="$2"; shift 2 ;;
-    --suite-cmd) suite_cmd="$2"; shift 2 ;;
+    --gated) _need_val audit-cycle --gated $# || return $?; gated+=("$2"); shift 2 ;;
+    --legs) _need_val audit-cycle --legs $# || return $?; legs+=("$2"); shift 2 ;;
+    --project-tests) _need_val audit-cycle --project-tests $# || return $?; project_tests="$2"; shift 2 ;;
+    --suite-cmd) _need_val audit-cycle --suite-cmd $# || return $?; suite_cmd="$2"; shift 2 ;;
     *) _unknown_opt audit-cycle "$1"; return $? ;;
   esac; done
 
@@ -3830,13 +3843,13 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
   local reuse_wait="${HMAD_PANE_REUSE_WAIT_SEC:-8}"
   while [ $# -gt 0 ]; do case "$1" in
     # --- passthrough to `exec` ---
-    --cd) cd_dir="$2"; shift 2 ;;
-    --model) model="$2"; shift 2 ;;
-    --out) out="$2"; shift 2 ;;
-    --log) log="$2"; shift 2 ;;
-    --timeout) timeout="$2"; shift 2 ;;
-    --sandbox) sandbox="$2"; shift 2 ;;
-    --effort) effort="$2"; shift 2 ;;
+    --cd) _need_val exec-pane --cd $# || return $?; cd_dir="$2"; shift 2 ;;
+    --model) _need_val exec-pane --model $# || return $?; model="$2"; shift 2 ;;
+    --out) _need_val exec-pane --out $# || return $?; out="$2"; shift 2 ;;
+    --log) _need_val exec-pane --log $# || return $?; log="$2"; shift 2 ;;
+    --timeout) _need_val exec-pane --timeout $# || return $?; timeout="$2"; shift 2 ;;
+    --sandbox) _need_val exec-pane --sandbox $# || return $?; sandbox="$2"; shift 2 ;;
+    --effort) _need_val exec-pane --effort $# || return $?; effort="$2"; shift 2 ;;
     # --- pane placement ---
     # `--split` with no value means THIS terminal, which is the only unambiguous
     # reading of "the same surface": ORCA_TERMINAL_HANDLE is set by Orca for the
@@ -3861,13 +3874,13 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
       ;;
     --new-tab) new_tab=1; shift ;;
     --no-reuse) reuse=0; shift ;;
-    --reuse-wait) reuse_wait="$2"; shift 2 ;;
-    --title) title="$2"; shift 2 ;;
-    --direction) direction="$2"; shift 2 ;;
-    --poll) poll="$2"; shift 2 ;;
+    --reuse-wait) _need_val exec-pane --reuse-wait $# || return $?; reuse_wait="$2"; shift 2 ;;
+    --title) _need_val exec-pane --title $# || return $?; title="$2"; shift 2 ;;
+    --direction) _need_val exec-pane --direction $# || return $?; direction="$2"; shift 2 ;;
+    --poll) _need_val exec-pane --poll $# || return $?; poll="$2"; shift 2 ;;
     --focus) focus=1; shift ;;
     --wait) do_wait=1; shift ;;
-    --wait-timeout) wait_timeout="$2"; shift 2 ;;
+    --wait-timeout) _need_val exec-pane --wait-timeout $# || return $?; wait_timeout="$2"; shift 2 ;;
     *) _unknown_opt exec-pane "$1"; return $? ;;
   esac; done
 
@@ -4108,8 +4121,8 @@ _cmd_read() {
   shift
   local lines=50 cursor=""
   while [ $# -gt 0 ]; do case "$1" in
-    --lines) lines="$2"; shift 2 ;;
-    --cursor) cursor="$2"; shift 2 ;;
+    --lines) _need_val read --lines $# || return $?; lines="$2"; shift 2 ;;
+    --cursor) _need_val read --cursor $# || return $?; cursor="$2"; shift 2 ;;
     --from-start) cursor="0"; lines="4000"; shift ;;
     *) _unknown_opt read "$1"; return $? ;; esac; done
   local sub target; sub="$(_detect_substrate)" || return 1
@@ -4209,7 +4222,7 @@ _cmd_wait() {
   shift
   local timeout=300 until_re="" not_while_re=""
   while [ $# -gt 0 ]; do case "$1" in
-    --timeout) timeout="$2"; shift 2 ;;
+    --timeout) _need_val wait --timeout $# || return $?; timeout="$2"; shift 2 ;;
     # Positive-evidence gate: don't call a stable frame done until it matches.
     # For a 5d/5e GREEN that is the verdict line AND a full-suite result, e.g.
     #   --until-regex 'STATUS:.*(DONE|BLOCKED|NEEDS_CONTEXT)' --until-regex '[0-9]{3,4} passed'
@@ -4217,7 +4230,7 @@ _cmd_wait() {
     --until-regex) until_re="${until_re:+$until_re
 }$2"; shift 2 ;;
     # Known-busy marker: while it shows, a stable frame is not done.
-    --not-while-regex) not_while_re="${not_while_re:+$not_while_re|}$2"; shift 2 ;;
+    --not-while-regex) _need_val wait --not-while-regex $# || return $?; not_while_re="${not_while_re:+$not_while_re|}$2"; shift 2 ;;
     *) _unknown_opt wait "$1"; return $? ;;
   esac; done
   # Multiple --until-regex are ALL required; passed newline-joined, ANDed per
@@ -4320,7 +4333,7 @@ _cmd_run() {  # --timeout <s> -- <cmd...>
       # exit 2 with `unknown option '--help'`, which is the operator asking a
       # question and being told their request was malformed.
       -h|--help) _cmd_run_usage; return 0 ;;
-      --timeout) secs="${2:-}"; shift 2 ;;
+      --timeout) _need_val run --timeout $# || return $?; secs="${2:-}"; shift 2 ;;
       --) shift; break ;;
       *) _unknown_opt run "$1"; return 2 ;;
     esac

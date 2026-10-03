@@ -8,7 +8,7 @@
       "name": "the-wrapper-rejects-gated-again",
       "_mechanism": "`--gated` falls through to `_unknown_opt`, so no cycle can ever write a gate stamp. `audit_cycles` stays at 0 forever and `--round-cap`/`--exit-check` remain uncomputable — the precise state measured across seven live cycles.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "    --gated) gated+=(\"$2\"); shift 2 ;;",
+      "find": "    --gated) _need_val audit-cycle --gated $# || return $?; gated+=(\"$2\"); shift 2 ;;",
       "replace": "",
       "test": "tests/test_h_mad_audit_cycle.py::test_the_wrapper_accepts_every_gate_flag[--gated-d.md]"
     },
@@ -16,7 +16,7 @@
       "name": "the-wrapper-rejects-project-tests-again",
       "_mechanism": "No `SUITE:` line, so a red project suite cannot block an exit. The suite gate (#91) shipped and becomes unreachable.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "    --project-tests) project_tests=\"$2\"; shift 2 ;;",
+      "find": "    --project-tests) _need_val audit-cycle --project-tests $# || return $?; project_tests=\"$2\"; shift 2 ;;",
       "replace": "",
       "test": "tests/test_h_mad_audit_cycle.py::test_the_wrapper_accepts_every_gate_flag[--project-tests-.]"
     },
