@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills
 **Handover-From:** HemaSuite · feature/203-guideline-web-evidence-admission · session 4cb9f363-9ba0-40fa-90db-59cce2d5a6df
+**Taken-Over-By:** skills · main · session e2cf5063-1fbc-4ae5-a3bc-3dcec97372d1 · 2026-10-03
 **Supersedes:** none — first on this branch for this topic
 
 ## Session Summary
