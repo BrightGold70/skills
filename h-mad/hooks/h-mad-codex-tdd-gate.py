@@ -251,6 +251,24 @@ def _relative_target(root: Path, raw: str, cwd: Any = None) -> Identity | None:
     return resolved
 
 
+def _tmp_report_target(raw: str, cwd: Any) -> bool:
+    """An out-of-root write the gate admits: under /tmp and not Python.
+
+    `/tmp` is where the orchestrator stages `<REPORT_FILE_PATH>` and the root this
+    gate already trusts for `h_mad_assemble_tdd.py --report-file`. A `.py` in any
+    case spelling stays refused, so codex cannot write production code into
+    another checkout that happens to live under /tmp.
+    """
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        base = Path(cwd).expanduser() if isinstance(cwd, str) and cwd else Path.cwd()
+        path = base / path
+    resolved = path.resolve()
+    if Path(_load_identity().fold_py_suffix(resolved.name)).suffix == ".py":
+        return False
+    return _path_within(str(resolved), Path("/tmp"))  # M:G-TMP
+
+
 def _is_production_python(relative: str) -> bool:
     path = Path(_load_identity().fold_py_suffix(relative))
     name = path.name
@@ -473,6 +491,8 @@ def _main_guarded() -> int:
     for raw in targets:  # M:G5
         resolved = _relative_target(root, raw, payload.get("cwd"))
         if resolved is None:
+            if _tmp_report_target(raw, payload.get("cwd")):
+                continue
             if phase5_status in {"active", "unknown"}:
                 return _deny("H-MAD Phase 5 write target is outside or unreadable; refusing fail-closed.")
             continue

@@ -1,0 +1,51 @@
+{
+  "_why": "2026-10-03. During Phase 5 the codex gate refused every write outside the project root, including the /tmp report path it already trusts for `h_mad_assemble_tdd.py --report-file`, so codex wrote its reports into the repo's tests/. `_tmp_report_target` admits an out-of-root write only under /tmp and never a .py. Each row removes one of those limits or the admission itself.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_codex_gate_tmp_reports.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "tmp-reports-refused-again",
+      "_mechanism": "The admission never fires, which is the defect: the contracted /tmp report path is unwritable and codex falls back to tests/.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    return _path_within(str(resolved), Path(\"/tmp\"))  # M:G-TMP",
+      "replace": "    return False  # M:G-TMP",
+      "test": "tests/test_h_mad_codex_gate_tmp_reports.py::test_a_report_under_tmp_is_allowed[report.md]"
+    },
+    {
+      "name": "python-under-tmp-admitted",
+      "_mechanism": "The .py exclusion goes, so codex could write production code into a checkout that lives under /tmp without that checkout's failing-test gate.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if Path(_load_identity().fold_py_suffix(resolved.name)).suffix == \".py\":\n        return False",
+      "replace": "    if False:\n        return False",
+      "test": "tests/test_h_mad_codex_gate_tmp_reports.py::test_python_under_tmp_is_still_refused[prod.PY]"
+    },
+    {
+      "name": "any-out-of-root-path-admitted",
+      "_mechanism": "The /tmp boundary widens to the whole filesystem, so every non-Python write outside the root passes, $TMPDIR and home included.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    return _path_within(str(resolved), Path(\"/tmp\"))  # M:G-TMP",
+      "replace": "    return _path_within(str(resolved), Path(\"/\"))  # M:G-TMP",
+      "test": "tests/test_h_mad_codex_gate_tmp_reports.py::test_tmpdir_outside_tmp_is_still_refused"
+    },
+    {
+      "name": "the-name-check-reads-the-link-not-its-target",
+      "_mechanism": "Lexical normalisation instead of resolution: the .py check then reads a link's own name, so `notes.md -> prod.py` under /tmp writes Python through the link. The /tmp boundary itself still holds, because `_path_within` resolves on its own.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    resolved = path.resolve()\n    if Path(_load_identity()",
+      "replace": "    resolved = Path(os.path.normpath(str(path)))\n    if Path(_load_identity()",
+      "test": "tests/test_h_mad_codex_gate_tmp_reports.py::test_a_report_named_link_to_python_under_tmp_is_refused"
+    }
+  ]
+}
