@@ -23,6 +23,23 @@ _unknown_opt() {  # $1 verb, $2 token
   return 2
 }
 
+# $1 verb, $2 the argument spelling for the usage line.
+#
+# Sibling of _unknown_opt: that one catches a flag the verb does not know, this
+# one catches a required positional the caller OMITTED. Both are malformed
+# requests, so both exit 2 (invariants.base.md §"Audit-gate signal discipline").
+#
+# Without this, the function dies on `$1: unbound variable` under `set -u`, which
+# names a line number inside the wrapper instead of the argument the operator
+# left out. `run --help` was fixed for `run` alone (#143); seven other verbs kept
+# the crash, and it is NOT a --help bug -- a bare `hmad-dispatch send` fails the
+# same way, because --help merely lands in $1 and leaves $2 unset.
+_need_arg() {
+  echo "hmad-dispatch: $1: missing required argument" >&2
+  echo "usage: hmad-dispatch $1 $2" >&2
+  return 2
+}
+
 _detect_substrate() {
   # Precedence: HMAD_SUBSTRATE override > session marker > binary presence > default cmux.
   if [ "${HMAD_SUBSTRATE:-}" = "cmux" ] || [ "${HMAD_SUBSTRATE:-}" = "orca" ]; then
@@ -2253,7 +2270,10 @@ _verdict_after_boundary() {  # $1 = transcript, $2 = boundary, $3 = echo_expecte
 # inlining unconditionally put the documented dispatch step in direct conflict
 # with it at exactly the sizes that occur in practice.
 _cmd_send() {
-  local agent="$1" promptfile="$2"
+  local agent="${1:-}" promptfile="${2:-}"
+  if [ -z "$agent" ] || [ -z "$promptfile" ]; then
+    _need_arg send "<codex|agy> <promptfile>"; return $?
+  fi
   local max="${HMAD_SEND_INLINE_MAX:-8192}"
 
   if [ ! -f "$promptfile" ]; then
@@ -4055,14 +4075,20 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
   return "$rc"
 }
 
-_cmd_clear() { _send_text "$1" "/clear"; }
+_cmd_clear() {   # <agent>
+  local agent="${1:-}"
+  if [ -z "$agent" ]; then _need_arg clear "<codex|agy>"; return $?; fi
+  _send_text "$agent" "/clear"
+}
 
 # Cancel a running/wedged agent turn by sending Ctrl-C (0x03). A bare Enter is
 # NOT a safe nudge — for a TUI REPL like Antigravity it submits a blank turn and
 # starts junk generation. Ctrl-C interrupts generation (and, sent twice, exits the
 # REPL to the shell, which freezes the scrollback for a clean full-buffer read).
 _cmd_interrupt() {   # <agent>
-  local agent="$1" sub target; sub="$(_detect_substrate)" || return 1
+  local agent="${1:-}" sub target
+  if [ -z "$agent" ]; then _need_arg interrupt "<codex|agy>"; return $?; fi
+  sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
     cmux) cmux send-key --surface "$target" C-c ;;
@@ -4075,7 +4101,11 @@ _cmd_read() {
   # absolute cursor offset (orca only) so a report longer than the retained
   # viewport can be recovered; --from-start is shorthand for --cursor 0 with a
   # large limit, for capturing a full sentinel-framed report the tail truncated.
-  local agent="$1"; shift
+  local agent="${1:-}"
+  if [ -z "$agent" ]; then
+    _need_arg read "<codex|agy> [--lines <n>] [--cursor <n>] [--from-start]"; return $?
+  fi
+  shift
   local lines=50 cursor=""
   while [ $# -gt 0 ]; do case "$1" in
     --lines) lines="$2"; shift 2 ;;
@@ -4172,7 +4202,11 @@ _wait_stable() {   # $1 substrate, $2 target, $3 timeout, [$4 until-regex] [$5 n
 }
 
 _cmd_wait() {
-  local agent="$1"; shift
+  local agent="${1:-}"
+  if [ -z "$agent" ]; then
+    _need_arg wait "<codex|agy> [--timeout <s>] [--until <re>] [--not-while <re>]"; return $?
+  fi
+  shift
   local timeout=300 until_re="" not_while_re=""
   while [ $# -gt 0 ]; do case "$1" in
     --timeout) timeout="$2"; shift 2 ;;
@@ -4206,7 +4240,9 @@ _cmd_wait() {
 }
 
 _cmd_alive() {
-  local agent="$1" sub target tree; sub="$(_detect_substrate)" || return 1
+  local agent="${1:-}" sub target tree
+  if [ -z "$agent" ]; then _need_arg alive "<codex|agy>"; return $?; fi
+  sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
     # Capture, then match with a here-string -- NOT `cmux tree --all | grep -q`.
@@ -4233,7 +4269,9 @@ _cmd_alive() {
 }
 
 _cmd_notify() {
-  local title="$1" body="$2" sub; sub="$(_detect_substrate)" || sub="cmux"
+  local title="${1:-}" body="${2:-}" sub
+  if [ -z "$title" ] || [ -z "$body" ]; then _need_arg notify "<title> <body>"; return $?; fi
+  sub="$(_detect_substrate)" || sub="cmux"
   case "$sub" in
     cmux) cmux notify --title "$title" --body "$body" || true ;;
     orca) command -v osascript >/dev/null 2>&1 \
