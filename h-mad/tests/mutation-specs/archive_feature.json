@@ -1,8 +1,19 @@
 {
   "_why": "Skill-candidates row 'a closure check that the archive is COMPLETE': 7c's `mv … ${FEATURE}* … || true` moved 6 of 641 doc-block-exec files, missed probes dirs and matched sibling prefixes. `h_mad_archive_feature.py` replaces it; these rows prove each rule has a test that bites.",
   "root": "../..",
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_archive_feature.py", "-q"],
-  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_archive_feature.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
   "mutations": [
     {
       "name": "the-prefix-glob-is-back",
@@ -71,10 +82,26 @@
       "name": "reader-match-loses-its-path-boundary",
       "_mechanism": "`probes/foo-bar/` reads as a reader of `probes/foo/`, and foo's probes are wrongly kept.",
       "file": "scripts/h_mad_archive_feature.py",
-      "find": "    pattern = needle.replace(\".\", \"\\\\.\") + \"([/\\\"'[:space:]]|$)\"\n",
-      "replace": "    pattern = needle.replace(\".\", \"\\\\.\")\n",
+      "find": "    for pattern, scope in ((needle.replace(\".\", \"\\\\.\") + boundary, \".\"),\n",
+      "replace": "    for pattern, scope in ((needle.replace(\".\", \"\\\\.\"), \".\"),\n",
       "test": "tests/test_h_mad_archive_feature.py::test_a_sibling_probe_naming_its_own_dir_does_not_keep_ours",
       "symbol": "probe_readers"
+    },
+    {
+      "name": "relative-probe-readers-are-ignored",
+      "_mechanism": "Without the relative search, a sibling probe that replays `../../<feature>/run.log` is not a reader, so the probes dir is archived and the sibling breaks (grok-codex-fallback, 2026-10-04).",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "                           (\"\\\\.\\\\./\" + feature.replace(\".\", \"\\\\.\") + boundary, PROBES)):  # M:AF-RELATIVE",
+      "replace": "                           ):  # M:AF-RELATIVE",
+      "test": "tests/test_h_mad_archive_feature.py::test_a_sibling_probe_reading_ours_by_relative_path_keeps_it"
+    },
+    {
+      "name": "relative-match-loses-its-path-boundary",
+      "_mechanism": "`../foo-bar/` contains `../foo`; without the boundary a prefix sibling's own reference keeps an unrelated feature's probes live forever.",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "                           (\"\\\\.\\\\./\" + feature.replace(\".\", \"\\\\.\") + boundary, PROBES)):  # M:AF-RELATIVE",
+      "replace": "                           (\"\\\\.\\\\./\" + feature.replace(\".\", \"\\\\.\"), PROBES)):  # M:AF-RELATIVE",
+      "test": "tests/test_h_mad_archive_feature.py::test_a_relative_path_to_a_prefix_sibling_does_not_keep_ours"
     }
   ]
 }

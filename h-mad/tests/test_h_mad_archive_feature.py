@@ -192,3 +192,34 @@ def test_a_sibling_probe_naming_its_own_dir_does_not_keep_ours(tmp_path: Path) -
 
     assert "KEPT:" not in proc.stdout, proc.stdout
     assert _token(proc.stdout) == f"ARCHIVE: COMPLETE moved={len(FEATURE_FILES)}", proc.stdout
+
+
+def test_a_sibling_probe_reading_ours_by_relative_path_keeps_it(tmp_path: Path) -> None:
+    """Calibrated on this repo, 2026-10-04: `probes/multi-host-runtime/rehearsal/cases.json`
+    replays `../../grok-codex-fallback/*.log`. It never spells `probes/grok-codex-fallback`,
+    so archiving grok-codex-fallback reported COMPLETE and broke two live-smoke tests."""
+    repo = _repo(tmp_path)
+    cases = repo / "docs/03-analysis/probes/other/rehearsal/cases.json"
+    cases.parent.mkdir(parents=True)
+    cases.write_text('[{"log": "../../foo/reading.md"}]\n', encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "a relative reader")
+
+    proc = _run(repo, "--apply")
+
+    assert "KEPT: docs/03-analysis/probes/foo — read by docs/03-analysis/probes/other/rehearsal/cases.json" in proc.stdout, proc.stdout
+    assert (repo / "docs/03-analysis/probes/foo/reading.md").exists()
+
+
+def test_a_relative_path_to_a_prefix_sibling_does_not_keep_ours(tmp_path: Path) -> None:
+    """`../foo-bar/` names foo-bar, not foo: the relative match keeps its path boundary."""
+    repo = _repo(tmp_path)
+    cases = repo / "docs/03-analysis/probes/other/cases.json"
+    cases.parent.mkdir(parents=True)
+    cases.write_text('[{"log": "../foo-bar/out.txt"}]\n', encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "a relative sibling reference")
+
+    proc = _run(repo, "--apply")
+
+    assert "KEPT:" not in proc.stdout, proc.stdout

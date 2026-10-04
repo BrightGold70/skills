@@ -131,10 +131,9 @@ def test_corpus_old_fields_unperturbed(monkeypatch: pytest.MonkeyPatch) -> None:
         timeout=60.0,
         check=True,
     )
-    paths = [
-        path for path in listed.stdout.splitlines()
-        if "/archive/" not in f"/{path}"
-    ]
+    # Archived plans stay in the corpus: a closed feature's plan moves to
+    # docs/archive/, so a live-only corpus empties whenever archiving is complete.
+    paths = listed.stdout.splitlines()
     assert paths, "the checked-in implementation-plan corpus must be nonempty"
 
     corpus = []

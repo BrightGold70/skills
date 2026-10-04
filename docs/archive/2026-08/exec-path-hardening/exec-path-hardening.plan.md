@@ -77,16 +77,16 @@ composer needs, so resolution and composition share one runtime call rather than
 
 **The `--log` contract is decided: codex appends, matching agy.** FR-5 requires one stated
 contract, so this plan states it rather than deferring. codex's `> "$log"` becomes `>> "$log"`.
-Three reasons, in order: (a) the `:1898` comment justifies appending the boundary on both
-backends *by reasoning from surviving caller content* — append is what makes the code match
-its own stated rationale, and truncation would mean correcting the comment to admit the
+Three reasons, in order: (a) the J23 boundary-append comment justifies appending the boundary
+on both backends *by reasoning from surviving caller content* — append is what makes the code
+match its own stated rationale, and truncation would mean correcting the comment to admit the
 recovery channel is destroyed on the backend that needs it most; (b) agy already appends and
-its caller-log recovery is a shipped, tested behaviour (AC-5.3), so append unifies the
-backends instead of documenting a split; (c) boundary recovery slices after the **last**
-occurrence, so accumulated prior-dispatch content in the log cannot produce a stale verdict —
-the mechanism that makes append safe is already in place and already tested. The cost is an
-ever-growing file when a caller reuses one `--log` path across cycles, which is the caller's
-choice and is visible to them.
+its caller-log recovery is a shipped, tested behaviour (AC-5.3), so append unifies the backends
+instead of documenting a split; (c) boundary recovery slices after the **last** occurrence, so
+accumulated prior-dispatch content in the log cannot produce a stale verdict — the mechanism
+that makes append safe is already in place and already tested. The cost is an ever-growing file
+when a caller reuses one `--log` path across cycles, which is the caller's choice and is
+visible to them.
 
 **Append becomes a rule applied by two surfaces, so it needs a cross-surface equivalence
 test.** The base invariant requires one authoritative implementation *or* a test asserting
@@ -263,7 +263,7 @@ where no round trip is wanted.
 | Exit notification call | `h-mad/scripts/hmad-dispatch.sh` (`_cmd_exec` → `_cmd_notify`) | FR-3 |
 | `HMAD_EXEC_HEARTBEAT_SEC` env knob (default 120, `0` disables) | `h-mad/scripts/hmad-dispatch.sh`; documented in `h-mad/SKILL.md` §"Exit-code dispatch for 5d/5e" | FR-2 |
 | codex `--log` append contract in code | `h-mad/scripts/hmad-dispatch.sh` (`_cmd_exec` codex branch, both timeout and no-timeout redirects) | FR-5 |
-| codex `--log` append contract in prose (the `:1898` comment + recovery section) | `h-mad/scripts/hmad-dispatch.sh`, `h-mad/SKILL.md` §"A missing report on the `exec` path" | FR-5 |
+| codex `--log` append contract in prose (the J23 boundary-append comment + recovery section) | `h-mad/scripts/hmad-dispatch.sh`, `h-mad/SKILL.md` §"A missing report on the `exec` path" | FR-5 |
 | Non-interference + checkpoint/heartbeat/notify/resolver test set | `h-mad/tests/test_hmad_dispatch_exec.py` | FR-1–FR-4, FR-6 |
 | Mutation spec for every new guard | `h-mad/tests/` (JSON spec consumed by `h_mad_mutation_harness.py`) | FR-4 |
 | Orca-CLI invocation capture in the exec tests (**partly exists — see A6**) | `h-mad/tests/test_hmad_dispatch_exec.py` — add `"orca"` to the `_bindir` list (today the exec tests stub only `codex`/`agy`) and set `HMAD_STUB_CAPTURE` | FR-1, FR-2, FR-6 |

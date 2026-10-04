@@ -2135,8 +2135,8 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-2.5 | `test_tail_sig_timeout_default_when_env_unset` | RED: FAIL | also kills muts `timeout-default-dropped`, `harness-ambient-timeout-not-scrubbed` |
 | AC-2.6 | `test_tail_sig_times_out` | RED: FAIL | also kills mut `time-bound-removed` |
 | AC-2.7 | `test_tail_no_timeout_binary_invocation` | RED: PASS | procedure AC-2.8 on this same node: insert `timeout 2 orca …`, observe RED, remove |
-| AC-2.9 | `test_tail_sig_rejects_ok_false_envelope` | RED: FAIL | also kills mut `envelope-ok-false-accepted` |
-| AC-2.10 | `test_tail_sig_rejects_non_array_tail` | RED: FAIL | also kills mut `non-array-tail-accepted` |
+| AC-2.9 | `test_tail_sig_rejects_ok_false_envelope` | RED: FAIL | also kills mut `envelope-ok-false-accepted`; implements spec AC-4.4 |
+| AC-2.10 | `test_tail_sig_rejects_non_array_tail` | RED: FAIL | also kills mut `non-array-tail-accepted`; implements spec AC-4.4 |
 | AC-2.11 | `test_tail_matcher_regex_is_accepted_by_grep` | RED: FAIL | — |
 | AC-2.12 | `test_tail_matcher_corpus_decides_prose_vs_banner` | RED: FAIL | also kills muts `tail-re-unanchored`, `tail-re-unanchored-agy` |
 | AC-3.1 | `test_tail_pass_resolves_single_vendor_banner` | RED: FAIL | also kills mut `marker-content-changed` |

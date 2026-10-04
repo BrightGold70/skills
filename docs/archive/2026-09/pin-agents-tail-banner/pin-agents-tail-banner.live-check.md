@@ -94,3 +94,39 @@ class: bare `>` matches the negatives `> OpenAI Codex` and `> Antigravity CLI 1.
 Corpus 36 negatives / 15 positives — the three real strings added as positives. Suite 335;
 mutations 49/49 ALL_CAUGHT with all 49 anchors resolving. The "what follows the signature"
 rule that separates banner from prose is unchanged; only the decoration rules moved.
+
+---
+
+## RE-RUN 2026-09-02 on the MERGED skill (`main` @ `bf1c851`) — PASS
+
+The two runs above were on `feature/pin-agents-tail-banner`. `~/.claude/skills/h-mad ->
+/Users/kimhawk/orca/skills/h-mad`, so until the merge the *installed* skill still carried the
+old grammar. This run re-proves the check against what is actually installed.
+
+Same protocol. Isolated `HMAD_ORCA_PIN_FILE` under a `mktemp -d`; no ambient
+`HMAD_ORCA_{CODEX,AGY,COORDINATOR}_TERMINAL` (`env | grep HMAD` empty before the run).
+
+    seed (--force)   codex=term_DUMMY-CODEX-0000, agy=term_DUMMY-AGY-0000   PRESENT: 2 lines
+    clear            pin-agents --clear                                     ABSENT:  0 lines
+    env              codex -> term_f483657a-92e4-46a0-ac3a-d440034232f9
+                     agy   -> term_a3b4c1dd-f30b-48da-87d9-69bda517844d
+                     PREFLIGHT: PASS
+    stderr           [H-MAD] codex: bound term_f483657a-92e4-46a0-ac3a-d440034232f9
+                     by tail evidence
+
+Both agents resolved to their correct panes, no cross-assignment. The tail-evidence marker is
+emitted for `codex` only, which is the expected shape and not a partial pass: Codex has no title
+identity by construction, so it is the agent the tail pass exists for; `agy` is resolved by the
+earlier passes and never reaches it.
+
+Seeding needs `--force` — plain `pin` refuses a handle absent from `orca terminal list`
+("refusing to pin … — no such terminal"). The earlier runs' "dummy handles" wording omits this.
+
+No repo mutation: `.h-mad/orca-pins.env` byte-identical before and after
+(`9b12035ecdca4c090129cc53595267431bd5b8aa7b4f0720570f1457df5e831a`, mtime `1788221362`
+unchanged); `git status --short` shows only the pre-existing untracked handoff doc and the 55
+deliberate `.done` markers. The isolated directory held `env.out`, `env.err` and
+`.h-mad/preflight.receipt` — the receipt landing there rather than in the repo is itself the
+proof that `_receipt_file()` follows `dirname(_pin_file)` — and was removed, confirmed gone.
+
+Alongside this, on the same merge result: full suite **2736 passed / 0 failed** (381s, run alone).

@@ -49,13 +49,19 @@ def probe_readers(repo: Path, feature: str) -> list[str]:
     """
     needle = f"{PROBES}/{feature}"
     # Anchored on a path boundary: `probes/foo-bar/` contains `probes/foo`.
-    pattern = needle.replace(".", "\\.") + "([/\"'[:space:]]|$)"
-    out = subprocess.run(["git", "-C", str(repo), "grep", "-l", "-E", "-e", pattern, "--",
-                          ".", f":(exclude){needle}", ":(exclude)docs/archive", ":(exclude,glob)**/*.md"],
-                         capture_output=True, text=True)
-    if out.returncode not in (0, 1):
-        raise RuntimeError(out.stderr.strip() or "git grep failed")
-    return out.stdout.split()
+    boundary = "([/\"'[:space:]]|$)"
+    excludes = [f":(exclude){needle}", ":(exclude)docs/archive", ":(exclude,glob)**/*.md"]
+    readers: set[str] = set()
+    # A sibling probe may reach ours relatively (`../../foo/run.log`) without ever
+    # spelling `probes/foo`; only the probes tree is searched for that form.
+    for pattern, scope in ((needle.replace(".", "\\.") + boundary, "."),
+                           ("\\.\\./" + feature.replace(".", "\\.") + boundary, PROBES)):  # M:AF-RELATIVE
+        out = subprocess.run(["git", "-C", str(repo), "grep", "-l", "-E", "-e", pattern, "--",
+                              scope, *excludes], capture_output=True, text=True)
+        if out.returncode not in (0, 1):
+            raise RuntimeError(out.stderr.strip() or "git grep failed")
+        readers.update(out.stdout.split())
+    return sorted(readers)
 
 
 def feature_files(repo: Path, feature: str, keep_probes: bool = False) -> list[tuple[Path, Path]]:

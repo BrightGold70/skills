@@ -318,7 +318,7 @@ file — a re-opening test passes with the guard removed.
 | orca stub | `h-mad/tests/stubs/orca` | modify | Optional stateful comment round-trip (FR-1, FR-2) |
 | exec tests | `h-mad/tests/test_hmad_dispatch_exec.py` | modify | Stub `orca`, capture argv, new assertions |
 | mutation spec | `h-mad/tests/` | new | Guard mutations (FR-4) |
-| `:1898` boundary comment | `h-mad/scripts/hmad-dispatch.sh` | modify | Its stated rationale assumes surviving caller `--log` content; append makes that true (FR-5) |
+| J23 boundary-append comment | `h-mad/scripts/hmad-dispatch.sh` | modify | Its stated rationale assumes surviving caller `--log` content; append makes that true (FR-5) |
 | Skill docs | `h-mad/SKILL.md` | modify | `HMAD_EXEC_HEARTBEAT_SEC` knob; `--log` append contract in §"A missing report on the `exec` path" |
 
 ## Implementation Order
@@ -411,7 +411,7 @@ so invocation counting needs wiring, not machinery.
 | notify | exactly one invocation, after exit, body has `rc=<n>` | AC-3.1–3.2 |
 | notify stubbed failing non-zero | `rc` and stdout unchanged; pins `_cmd_notify`'s unconditional `return 0` | **AC-3.3** |
 | recursion guard: `HMAD_EXEC_HEARTBEAT_SEC` shorter than the stamp timeout | dispatch terminates; stamp calls emit no nested heartbeat; no unbounded recursion | AC-2.5 |
-| `SKILL.md` + `:1898` comment vs code | all three state the same `--log` contract (append) | **AC-5.4** |
+| `SKILL.md` + the J23 boundary-append comment vs code | all three state the same `--log` contract (append) | **AC-5.4** |
 | stdout byte-compare, surfaces on vs off — clean and rc-3 paths | byte-identical, incl. recovered verdict + `tree delta:` | AC-4.1, AC-4.2 |
 | all surfaces stubbed failing × {0, crash, 124, 3} | agent rc returned in every case | AC-4.3 |
 | codex + agy `--log` with pre-existing content | preserved verbatim, transcript appended (one parameterised test) | AC-5.1–5.2 |
