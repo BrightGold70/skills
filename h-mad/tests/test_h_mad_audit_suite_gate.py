@@ -15,9 +15,10 @@ nothing), so "a red suite blocks the exit" written as prose is an instruction an
 orchestrator can skip — which is what 91 cycles already demonstrated.
 
 **A red suite blocks the EXIT, not each cycle.** Blocking every cycle makes an
-audit hostage to an unrelated flaky test, and `docs/skill-candidates.md:1277`
-records two pytest runs over one working tree producing 6 and 3 failures in
-different sets, and 0 when the file ran alone.
+audit hostage to an unrelated flaky test, and `docs/skill-candidates.md` row
+`concurrent-suite-runs-manufacture-phantom-failures` records two pytest runs
+over one working tree producing 6 and 3 failures in different sets, and 0 when
+the file ran alone.
 """
 
 from __future__ import annotations

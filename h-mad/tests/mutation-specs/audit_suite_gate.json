@@ -65,7 +65,7 @@
     },
     {
       "name": "the-red-suite-hostages-the-cycle-verdict",
-      "_mechanism": "The rejected design: every audit cycle becomes hostage to an unrelated flaky test, and skill-candidates.md:1277 records the same tree giving 6, 3 and 0 failures across runs.",
+      "_mechanism": "The rejected design: every audit cycle becomes hostage to an unrelated flaky test, and skill-candidates.md row 'concurrent-suite-runs-manufacture-phantom-failures' records the same tree giving 6, 3 and 0 failures across runs.",
       "file": "scripts/h_mad_audit_gate.py",
       "find": "    stamped = \"\"\n    if args.gated and verdict == \"PASS\":",
       "replace": "    if suite == \"FAIL\":\n        verdict = \"FAIL\"\n    stamped = \"\"\n    if args.gated and verdict == \"PASS\":",

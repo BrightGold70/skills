@@ -512,8 +512,9 @@ def _digest(path: Path) -> str:
 #
 # A red suite BLOCKS THE EXIT, not each cycle. Blocking every cycle makes an audit
 # hostage to an unrelated flaky test, and this repo has the receipt:
-# `docs/skill-candidates.md:1277` records two pytest runs over one working tree
-# producing 6 and 3 failures in DIFFERENT sets, and 0 when the file ran alone. So
+# `docs/skill-candidates.md` row `concurrent-suite-runs-manufacture-phantom-failures`
+# records two pytest runs over one working tree producing 6 and 3 failures in
+# DIFFERENT sets, and 0 when the file ran alone. So
 # the per-cycle `GATE:` verdict is untouched and the streak is what refuses.
 SUITE_UNMEASURED = None
 

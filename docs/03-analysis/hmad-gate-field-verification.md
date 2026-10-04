@@ -90,8 +90,8 @@ not vacuous.
 
 1. **The suite did not flake.** `2936 passed` on two independent runs over one tree. This was the
    pre-registered outcome that would have falsified #91's *premise* rather than its code:
-   `docs/skill-candidates.md:1277` records this repo producing 6, 3 and 0 failures across runs over a
-   single working tree. One clean pair is a data point against that history, not a refutation of it.
+   `docs/skill-candidates.md` row `concurrent-suite-runs-manufacture-phantom-failures` records this
+   repo producing 6, 3 and 0 failures across runs over a single working tree. One clean pair is a data point against that history, not a refutation of it.
 2. **The emission order is four lines, not three.** Actual: `SUITE:` → `GATE:` → `GATE-CLASS:` →
    `GATE-LEGS:`. `SUITE:` printing FIRST is real and was undocumented; `SKILL.md`'s registry entry
    described a three-line sequence. Harmless — nothing anchors on it, and `GATE_RE` matches by line —
