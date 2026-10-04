@@ -71,14 +71,17 @@ test('history skips repeats and keeps the last HISTORY readings', () => {
 
 test('spark and short render compactly', () => {
   const r = (tokens: number) => ({ tokens, window: 1_000_000, percent: Math.round(tokens / 10_000) })
-  // Scaled to the history's own range, so a session hovering near one level still shows its trend.
-  expect(spark([r(0), r(1_000_000)])).toBe('⣀⣿')
-  expect(spark([r(330_000), r(350_000), r(370_000), r(394_000)])).toBe('⣀⣤⣶⣿')
-  // A flat history is a flat low line, not a full-height block.
-  expect(spark([r(394_000), r(394_000)])).toBe('⣀⣀')
-  // Braille dots leave gaps, so the spark never fuses with the filled bar on the row below it
-  // the way lower-block glyphs (▁…█) did, which read as one stretched slab.
-  expect(spark([r(1), r(500_000), r(999_000)])).not.toMatch(/[▁▂▃▄▅▆▇█]/)
+  // One solid block per reading, its height that reading's share of the window in eighths.
+  expect(spark([r(0), r(1_000_000)])).toBe('▁█')
+  expect(spark([r(330_000), r(350_000), r(370_000), r(394_000)])).toBe('▃▃▃▄')
+  // A flat history is flat at its own level.
+  expect(spark([r(394_000), r(394_000)])).toBe('▄▄')
+  // A new reading never redraws the earlier ones: each column keeps its height, so growth reads
+  // as steps. Rescaling to the history's own range reshaped every column on every turn.
+  const grown = [r(100_000), r(250_000), r(400_000), r(650_000), r(900_000)]
+  for (let n = 1; n < grown.length; n++) {
+    expect(spark(grown.slice(0, n + 1)).startsWith(spark(grown.slice(0, n)))).toBe(true)
+  }
   expect(short(162_000)).toBe('162k')
   expect(short(1_000_000)).toBe('1M')
   expect(short(950)).toBe('950')
@@ -170,6 +173,39 @@ test('the drawn bar fills the screen width at any size', async ($, on) => {
     expect(cells.length).toBe(columns - 1)
     await ui.unmount()
   }
+})
+
+test('the spark sits on the last row, never directly above the bar', async ($, on) => {
+  // Block glyphs fill to the bottom of their cell, so on the row above the bar they fuse with
+  // its filled cells into one stretched slab. On the legend row nothing is drawn beneath them.
+  let tokens = 10_000
+  on('session.usage', () => ({
+    value: {
+      startedAt: 0,
+      context: { tokens, window: 200_000, percent: Math.round(tokens / 2_000), breakdown: { categories: ROWS } as unknown as SessionContextBreakdown },
+      rateLimits: [],
+    },
+  }))
+  on('session.start', ($, e) => e)
+  on('session.measure', () => ({ changed: [] }))
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  tokens = 190_000
+  await $.session.measure({ context: { tokens, window: 200_000 }, rateLimits: [] } as never)
+  const ui = await $.ui.mount({
+    plugin: 'token-weather',
+    surface: 'terminal',
+    component: 'AbovePrompt',
+    props: BAND_PROPS,
+    viewport: { columns: 100, rows: 30 },
+  })
+  const text = (node: unknown): string =>
+    typeof node === 'string' ? node : ((node as { children?: unknown[] }).children ?? []).map(text).join('')
+  const tree = (await ui.drawn()) as { children: unknown[] }
+  const rows = tree.children.map(text)
+  expect(rows.length).toBe(3)
+  expect(rows[0]).not.toMatch(/[▁▂▃▄▅▆▇█]/)
+  expect(rows[2]).toMatch(/▁█/)
+  await ui.unmount()
 })
 
 test('after a measurement the band draws each element in its /context colour', async ($, on) => {

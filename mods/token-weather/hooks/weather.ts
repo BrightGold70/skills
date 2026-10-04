@@ -93,9 +93,10 @@ export function barCells(segments: readonly Segment[], window: number, width: nu
 
 export const HISTORY = 12
 
-// Braille, filled from the bottom up. Block elements (▁…█) sat flush on the bar's filled row
-// below and fused with it into one stretched slab; braille dots keep their gaps.
-const LEVELS = ['⣀', '⣤', '⣶', '⣿']
+// Lower blocks: one solid glyph per reading, eight steps high, so each step reads as a single
+// line. They fill to the bottom of the cell, so the band draws them on its last row: directly
+// above the bar they fused with its filled cells into one stretched slab.
+const LEVELS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
 
 export type Forecast = { upTo: number; icon: string; word: string; color: string }
 
@@ -127,16 +128,13 @@ export function push(history: readonly Reading[], r: Reading): Reading[] {
 }
 
 /**
- * One glyph per reading, scaled to the history's own low and high, so the trend shows even
- * while every reading sits near one level (the percentage beside it gives the absolute).
- * A flat history is a flat low line.
+ * One glyph per reading, its height that reading's share of the window in eighths. Fixed to the
+ * window, so a new reading never redraws the earlier ones and growth reads as steps; scaling to
+ * the history's own range reshaped every column on every turn.
  */
 export function spark(history: readonly Reading[]): string {
-  const tokens = history.map(r => r.tokens)
-  const low = Math.min(...tokens)
-  const range = Math.max(...tokens) - low
-  return tokens
-    .map(t => LEVELS[range > 0 ? Math.min(LEVELS.length - 1, Math.floor(((t - low) / range) * LEVELS.length)) : 0])
+  return history
+    .map(r => LEVELS[r.window > 0 ? Math.max(0, Math.min(LEVELS.length - 1, Math.floor((r.tokens / r.window) * LEVELS.length))) : 0])
     .join('')
 }
 
