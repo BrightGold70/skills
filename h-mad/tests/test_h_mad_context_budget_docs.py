@@ -268,9 +268,15 @@ def test_never_list_carries_the_rule():
 
 
 def test_helper_script_is_listed():
+    """Its OWN list entry, in the Helper scripts section.
+
+    A bare substring over everything after the heading passed with the entry
+    renamed: the `h_mad_host.py` entry mentions this script in its prose, and the
+    first full-corpus `--sweep` reported `drop-helper-from-list` SURVIVED.
+    """
     text = SKILL_MD.read_text()
-    helpers = text.split("## Helper scripts", 1)[1]
-    assert "h_mad_context_budget.py" in helpers
+    helpers = text.split("## Helper scripts", 1)[1].split("\n## ", 1)[0]
+    assert "\n- `h_mad_context_budget.py` — " in helpers
 
 
 class TestRunCeilingDocumented:

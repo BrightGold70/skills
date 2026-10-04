@@ -350,8 +350,10 @@ def test_docs_say_wiring_is_only_confirmable_live():
 
 def test_helper_registry_lists_it():
     text = SKILL_MD.read_text()
-    registry = text.split("## Helper scripts", 1)[1]
-    assert "h_mad_hook_wiring.py" in registry
+    # Its own list entry inside the section: a substring over the whole tail passes
+    # on any later mention (the context-budget registry test had exactly that hole).
+    registry = text.split("## Helper scripts", 1)[1].split("\n## ", 1)[0]
+    assert "\n- `h_mad_hook_wiring.py` — " in registry
 
 
 def test_bootstrap_obliges_the_wiring_check_to_be_run():
