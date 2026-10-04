@@ -1736,6 +1736,50 @@ def _print_skipped_precheck_entries(result: dict) -> None:
         print(f"  skipped: {entry['path']}: {entry['reason']}")
 
 
+# Verdicts that measured the guards. Anything else measured nothing.
+_MEASURED = ("ALL_CAUGHT", "SURVIVED")
+# Verdicts that make every later spec meaningless too: the tree is held or moving.
+_STOP = ("BUSY", "TREE_MOVED")
+
+
+def _sweep(spec_paths: list[Path]) -> int:
+    """Run every spec, one harness process each, and summarise the corpus.
+
+    Completing a hand-rolled loop over the corpus once found 2 SURVIVED and 1
+    REFUSED that had been invisible while only 11 of 92 specs had been swept. Each
+    spec runs as its own process so its tree lock, restore and output are exactly
+    a single run's. BUSY or TREE_MOVED stops the sweep: every later spec would
+    answer the same, and a corpus of non-measurements reads like a result.
+    Exit 0 only when every spec produced a verdict; read the summary token.
+    """
+    if not spec_paths:
+        print("SWEEP: NOTHING_SWEPT specs=0")
+        return 2
+    counts = {"all_caught": 0, "survived": 0, "unmeasured": 0}
+    stopped = None
+    for spec_path in spec_paths:
+        proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), str(spec_path)],
+                              capture_output=True, text=True)
+        line = next((l for l in proc.stdout.splitlines() if l.startswith("MUTATION: ")),
+                    "MUTATION: UNREADABLE (no verdict line)")
+        print(f"SWEEP: {spec_path} {line[len('MUTATION: '):]}", flush=True)
+        verdict = line.split()[1]
+        if verdict in _STOP:
+            stopped = (verdict, spec_path)
+            break
+        key = verdict.lower() if verdict in _MEASURED else "unmeasured"
+        counts[key] += 1
+    swept = sum(counts.values())
+    fields = " ".join(f"{k}={v}" for k, v in counts.items())
+    if stopped:
+        print(f"SWEEP: INCOMPLETE specs={swept}/{len(spec_paths)} {fields} "
+              f"stopped={stopped[0]} at={stopped[1]}")
+        return 2
+    head = "ALL_CAUGHT" if counts["all_caught"] == swept and swept else "NOT_ALL_CAUGHT"
+    print(f"SWEEP: {head} specs={swept} {fields}")
+    return 0 if swept and not counts["unmeasured"] else 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="H-MAD Phase-5e mutation harness")
     parser.add_argument(
@@ -1743,7 +1787,13 @@ def main(argv: list[str] | None = None) -> int:
         help="JSON mutation spec (exactly one to run; several with --check-anchors, "
              "or none to sweep every committed spec in the repository)",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--sweep", action="store_true",
+        help="run every given spec (or every committed spec when none is given), "
+             "one process each, and print a corpus summary",
+    )
+    mode.add_argument(
         "--check-anchors", action="store_true",
         help="check every mutation's anchor still matches exactly once; "
              "applies nothing and runs no tests",
@@ -1759,13 +1809,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ANCHORS: ANCHORS_UNREADABLE — {exc}")
             print("[H-MAD] anchors ANCHORS_UNREADABLE")
             return 2
+    if args.sweep:
+        try:
+            specs = args.spec or _committed_specs(Path.cwd())
+        except SpecError as exc:
+            print(f"SWEEP: INCOMPLETE specs=0 — {exc}")
+            return 2
+        return _sweep(specs)
     if not args.spec:
         parser.error("a mutation run takes exactly one spec")
     if len(args.spec) != 1:
         # The run applies mutations and restores them; widening it to N specs
         # silently would multiply that blast radius for a flag that was only
         # ever meant to widen the read-only sweep.
-        parser.error("a mutation run takes exactly one spec; use --check-anchors to sweep several")
+        parser.error("a mutation run takes exactly one spec; use --check-anchors or --sweep for several")
     args.spec = args.spec[0]
 
     label = args.spec.name.split(".")[0] or "unknown"

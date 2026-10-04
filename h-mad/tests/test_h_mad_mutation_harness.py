@@ -3608,3 +3608,87 @@ def test_a_mutation_run_without_a_spec_is_a_usage_error(tmp_path: Path) -> None:
 
     assert proc.returncode != 0
     assert "spec" in proc.stderr, proc.stderr
+
+
+def _sweep(*args: str | Path, cwd: Path | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(HARNESS), "--sweep", *map(str, args)],
+                          capture_output=True, text=True, cwd=str(cwd) if cwd else None)
+
+
+def test_sweep_reports_every_spec_and_a_corpus_summary(tmp_path: Path) -> None:
+    """Skill-candidates row 'a corpus-wide mutation sweep verb': completing a
+    hand-rolled loop over the corpus found 2 SURVIVED and 1 REFUSED that had been
+    invisible while only 11 of 92 specs had ever been swept."""
+    caught = _project(tmp_path / "a", [_kills_the_guard()])
+    survived = _project(tmp_path / "b", [_untested_line()])
+
+    proc = _sweep(caught, survived)
+
+    lines = [l for l in proc.stdout.splitlines() if l.startswith("SWEEP:")]
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert any(str(caught) in l and "ALL_CAUGHT" in l for l in lines), lines
+    assert any(str(survived) in l and "SURVIVED" in l for l in lines), lines
+    assert lines[-1].startswith("SWEEP: NOT_ALL_CAUGHT specs=2 all_caught=1 survived=1"), lines
+
+
+def test_sweep_all_caught_summary(tmp_path: Path) -> None:
+    proc = _sweep(_project(tmp_path / "a", [_kills_the_guard()]))
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.splitlines()[-1].startswith("SWEEP: ALL_CAUGHT specs=1"), proc.stdout
+
+
+def test_sweep_stops_when_another_run_holds_the_tree(tmp_path: Path) -> None:
+    """A held tree answers BUSY for every spec; carrying on would print a corpus
+    of non-measurements that reads like a result."""
+    first = _project(tmp_path / "a", [_kills_the_guard()])
+    second = _project(tmp_path / "b", [_kills_the_guard()])
+    lock = tmp_path / "a" / ".h-mad" / "mutation.lock"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(json.dumps({"pid": os.getpid(), "spec": "x", "started": 0}), encoding="utf-8")
+
+    proc = _sweep(first, second)
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "BUSY" in proc.stdout
+    assert str(second) not in proc.stdout, "the sweep must stop at the busy tree"
+    assert proc.stdout.splitlines()[-1].startswith("SWEEP: INCOMPLETE"), proc.stdout
+
+
+def test_sweep_counts_a_spec_that_measured_nothing(tmp_path: Path) -> None:
+    good = _project(tmp_path / "a", [_kills_the_guard()])
+    drifted = _project(tmp_path / "b", [_drifted_anchor()])
+
+    proc = _sweep(good, drifted)
+
+    assert proc.returncode == 2, proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("SWEEP: NOT_ALL_CAUGHT specs=2 all_caught=1"), proc.stdout
+    assert "unmeasured=1" in proc.stdout.splitlines()[-1], proc.stdout
+
+
+def test_sweep_with_no_spec_discovers_committed_specs(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+
+    proc = _sweep(cwd=repo)
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.splitlines()[-1].startswith("SWEEP: ALL_CAUGHT specs=1"), proc.stdout
+
+
+def test_sweep_and_check_anchors_are_exclusive(tmp_path: Path) -> None:
+    proc = subprocess.run([sys.executable, str(HARNESS), "--sweep", "--check-anchors"],
+                          capture_output=True, text=True, cwd=str(tmp_path))
+
+    assert proc.returncode != 0
+    assert "not allowed" in proc.stderr or "exclusive" in proc.stderr, proc.stderr
+
+
+def test_sweep_over_a_repo_with_no_specs_says_nothing_swept(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {})
+
+    proc = _sweep(cwd=repo)
+
+    assert proc.returncode == 2, proc.stdout
+    assert proc.stdout.splitlines()[-1] == "SWEEP: NOTHING_SWEPT specs=0", proc.stdout

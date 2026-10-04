@@ -2126,6 +2126,7 @@ stands and was not re-done. Census unchanged at `candidates=212 OPEN=47 yes=28 m
   to run concurrently with another harness process in the same worktree (see the tree-lock row
   above — false anchor drift was self-inflicted three times on 2026-09-14 for exactly that reason).
   — **RE-PROBED 2026-10-03: PARTIAL** — the tree lock landed (`006f813b`); `main()` still refuses more than one spec for a run — only `--check-anchors` sweeps.
+  — **LANDED 2026-10-04** — `h_mad_mutation_harness.py --sweep [SPEC…]` (every committed spec when none is given) runs each spec as its own process under its own tree lock, prints one `SWEEP: <spec> <verdict>` line each and a corpus summary (`ALL_CAUGHT|NOT_ALL_CAUGHT … unmeasured=U`, `NOTHING_SWEPT`, or `INCOMPLETE` when BUSY/TREE_MOVED stops it). Exit 0 only when every spec measured something. Spec `harness_sweep.json` ALL_CAUGHT 5/5. A full-corpus run has not been made yet.
 
 ## 2026-09-14 — bkit-hooks-warning-and-upgrade (second session, same day)
 

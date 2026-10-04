@@ -1,0 +1,53 @@
+{
+  "_why": "Skill-candidates row 'a corpus-wide mutation sweep verb (`--sweep`)': a hand-rolled loop had covered 11 of 92 specs, and completing it found 2 SURVIVED and 1 REFUSED. `--sweep` runs every spec and summarises; these rows prove the tests bite if it keeps going past a held tree, counts a non-measurement as caught, or certifies an empty corpus.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_mutation_harness.py", "-q", "-k", "sweep"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "a-busy-tree-does-not-stop-the-sweep",
+      "_mechanism": "Every later spec answers BUSY too, and the corpus summary is built from non-measurements.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if verdict in _STOP:\n            stopped = (verdict, spec_path)\n            break\n",
+      "replace": "        if False:\n            stopped = (verdict, spec_path)\n            break\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_stops_when_another_run_holds_the_tree",
+      "symbol": "_sweep"
+    },
+    {
+      "name": "an-unmeasured-spec-counts-as-caught",
+      "_mechanism": "A REFUSED spec (drifted anchor) is folded into all_caught and the corpus reads ALL_CAUGHT.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        key = verdict.lower() if verdict in _MEASURED else \"unmeasured\"\n",
+      "replace": "        key = verdict.lower() if verdict in _MEASURED else \"all_caught\"\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_counts_a_spec_that_measured_nothing",
+      "symbol": "_sweep"
+    },
+    {
+      "name": "an-unmeasured-spec-exits-0",
+      "_mechanism": "The summary says unmeasured=1 but the exit says success, so a script reading $? is fooled.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return 0 if swept and not counts[\"unmeasured\"] else 2\n",
+      "replace": "    return 0\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_counts_a_spec_that_measured_nothing",
+      "symbol": "_sweep"
+    },
+    {
+      "name": "survivors-read-as-all-caught",
+      "_mechanism": "A SURVIVED spec, the finding the sweep exists to surface, is hidden in the headline.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    head = \"ALL_CAUGHT\" if counts[\"all_caught\"] == swept and swept else \"NOT_ALL_CAUGHT\"\n",
+      "replace": "    head = \"ALL_CAUGHT\" if counts[\"unmeasured\"] == 0 and swept else \"NOT_ALL_CAUGHT\"\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_reports_every_spec_and_a_corpus_summary",
+      "symbol": "_sweep"
+    },
+    {
+      "name": "an-empty-corpus-is-certified",
+      "_mechanism": "Discovery that found nothing prints a summary instead of saying nothing was swept.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if not spec_paths:\n        print(\"SWEEP: NOTHING_SWEPT specs=0\")\n        return 2\n",
+      "replace": "    if not spec_paths:\n        print(\"SWEEP: ALL_CAUGHT specs=0\")\n        return 0\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_over_a_repo_with_no_specs_says_nothing_swept",
+      "symbol": "_sweep"
+    }
+  ]
+}
