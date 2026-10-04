@@ -235,6 +235,12 @@
   step they blamed. Re-run the MEASUREMENT as well as the claim — a brief's conclusion can be right
   while its method is wrong.
 
+- **A contract to RECOGNISE something needs a real instance of it, captured from the running
+  system, before any gate scores it clean** — a banner, a log line, a response shape.
+  `pin-agents-tail-banner` passed 2663 tests, 49 mutations and 53 audit cycles while its matcher
+  hit 0 of 5 real agent banners: all 12 corpus positives were written by hand. The fixture corpus must include at
+  least one captured sample with its capture command cited; an idealised fixture is not a sample.
+
 ## Behavioural premises carry their command
 - A premise about **behaviour** — "X currently does Y", "this guard fires when Z", "the suite
   collects N", "the parser rejects W" — MUST carry the exact command that produced it, inline and
