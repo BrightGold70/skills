@@ -93,10 +93,12 @@ export function barCells(segments: readonly Segment[], window: number, width: nu
 
 export const HISTORY = 12
 
-// Lower blocks: one solid glyph per reading, eight steps high, so each step reads as a single
-// line. They fill to the bottom of the cell, so the band draws them on its last row: directly
-// above the bar they fused with its filled cells into one stretched slab.
-const LEVELS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
+// One braille dot per reading, in the cell's left column, bottom to top: each reading is one
+// dot then a gap, so the columns stay distinct. The spark sits directly above the bar: lower
+// blocks (▁…█) fill to the bottom of their cell and fused with its filled cells into one
+// stretched slab, filled braille (⣀⣤⣶⣿) read as stacked dot rows, and a dot pair per cell
+// (⣀⠤⠒⠉) was spaced evenly across cells, so three readings read as one column of six dots.
+const LEVELS = ['⡀', '⠄', '⠂', '⠁']
 
 export type Forecast = { upTo: number; icon: string; word: string; color: string }
 
@@ -128,7 +130,7 @@ export function push(history: readonly Reading[], r: Reading): Reading[] {
 }
 
 /**
- * One glyph per reading, its height that reading's share of the window in eighths. Fixed to the
+ * One glyph per reading, its height that reading's share of the window in quarters. Fixed to the
  * window, so a new reading never redraws the earlier ones and growth reads as steps; scaling to
  * the history's own range reshaped every column on every turn.
  */

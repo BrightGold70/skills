@@ -58,6 +58,7 @@ export const register: Register = on => {
       <Text>{`  ${now.percent}% of context`}</Text>,
       <Text dimColor>{`  ${short(now.tokens)} / ${short(now.window)}`}</Text>,
     ]
+    if (wide) forecastRow.push(<Text dimColor>{`  ${spark(history)}`}</Text>)
     if (wide && grew !== null && grew > 0) {
       forecastRow.push(<Text dimColor>{`  +${short(grew)} last turn`}</Text>)
     }
@@ -65,9 +66,7 @@ export const register: Register = on => {
     const stored = await read($, segments)
     const parts = stored.filter(s => !isBuffer(s))
     const reserve = stored.filter(isBuffer)
-    // The trend: block glyphs, so never on the row directly above the bar (see LEVELS).
-    const trend = wide ? <Text dimColor>{`  ${spark(history)}`}</Text> : null
-    if (parts.length === 0) return <Box>{trend ? [...forecastRow, trend] : forecastRow}</Box>
+    if (parts.length === 0) return <Box>{forecastRow}</Box>
 
     // The bar spans the band's width (one cell short, so it never wraps), laid
     // out as /context lays it out: each element's share of the window in its
@@ -103,7 +102,6 @@ export const register: Register = on => {
     const legend = shown.map(p => (
       <Text color={p.color}>{`■ ${p.name} ${short(p.tokens)}  `}</Text>
     ))
-    if (trend) legend.push(trend)
 
     return (
       <Box flexDirection="column">
