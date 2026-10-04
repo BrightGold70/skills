@@ -1357,6 +1357,7 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   — **RE-CHECKED 2026-09-07 08:30 (scout): still open.** `h-mad/scripts/h_mad_version_history.py` exists
   (11.0K) and has no `--verify` mode and no verify function; it remains a writer only.
   — **RE-PROBED 2026-10-03: OPEN** — `h_mad_version_history.py` has no verify mode (args: path/--version/--text/--dry-run).
+  — **CALIBRATED 2026-10-04, not built** — prototype over 110 committed spec/plan/design/impl-plan docs that passed audit: the LATEST entry's backticked spans miss the body 54 of 408 times (13 %), all entries 577 of 4403. Sampled misses are legitimate: removed items (`successor_pin`), audit filenames, the verification command an entry ran (`grep 'return 3|exit 3'`), line pins, renamed signatures. A span-in-body check would fail clean documents, so the mechanical form the row proposes does not survive calibration. What would: restrict to entries that CLAIM a propagation (`back-propagated`, `propagated to`, `now carries`) and to spans those clauses name — which needs the four recorded cases as positives to calibrate against. Stays open.
 
 ## 2026-09-02 — phase5b-gated-task1-green (scout)
 
