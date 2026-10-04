@@ -2122,6 +2122,7 @@ stands and was not re-done. Census unchanged at `candidates=212 OPEN=47 yes=28 m
   The four here were all distinguishable by reading the message the test dies on, which is a
   mechanical string check, not a judgement.
   — **RE-PROBED 2026-10-03: PARTIAL** — `crash_visible=` landed (`43c0cc6`) and four hollow specs were fixed by hand (`32789ad9`); tier 2 still counts every crash as caught and never refuses `mutant_does_not_execute`.
+  — **INSTRUMENT ADDED 2026-10-04, refusal not wired** — `--sweep` now forwards every crash/timeout kill as `  kill: <spec> :: <mutation> :: crash: <Exception> in <file>`, which is the corpus-wide reading the refusal needs calibrating against (row `calibrate a new detector against artifacts that already passed`). The 2026-09-14 hollow four were fixed by hand, so the current corpus's crash kills are unmeasured; wiring `REFUSED reason=mutant_does_not_execute` on message signatures (`NameError: name … is not defined`, `unexpected keyword argument`, `no such group`) before reading them would risk refusing a crash that IS the property violation, which tier 2's own comment warns about. Next: one detail sweep, triage each `kill:` line, then wire.
 - **a corpus-wide mutation sweep verb (`--sweep`)**: the harness scores one spec per invocation, so
   "what does the whole corpus report?" is a hand-rolled shell loop nobody runs. It had covered 11
   of 92 specs; completing it on 2026-09-14 found 25 crash kills (12 of them an artifact), 2 SURVIVED

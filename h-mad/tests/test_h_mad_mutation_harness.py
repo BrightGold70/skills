@@ -3692,3 +3692,17 @@ def test_sweep_over_a_repo_with_no_specs_says_nothing_swept(tmp_path: Path) -> N
 
     assert proc.returncode == 2, proc.stdout
     assert proc.stdout.splitlines()[-1] == "SWEEP: NOTHING_SWEPT specs=0", proc.stdout
+
+
+def test_sweep_forwards_each_crash_kill_with_its_mutation(tmp_path: Path) -> None:
+    """A crash kill may be hollow (the mutant never reached the property), and telling
+    which needs the exception per mutation across the corpus. A sweep that kept only the
+    token line threw exactly that away."""
+    spec = _crash_project(tmp_path, [
+        {"name": "unbind the printed name", "file": "guard.py",
+         "find": 'print("OVER")', "replace": "print(OVER)", "test": CRASH_PIN},
+    ])
+
+    proc = _sweep(spec)
+
+    assert f"  kill: {spec} :: unbind the printed name :: crash: NameError in guard.py" in proc.stdout, proc.stdout

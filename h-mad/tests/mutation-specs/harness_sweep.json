@@ -1,8 +1,21 @@
 {
   "_why": "Skill-candidates row 'a corpus-wide mutation sweep verb (`--sweep`)': a hand-rolled loop had covered 11 of 92 specs, and completing it found 2 SURVIVED and 1 REFUSED. `--sweep` runs every spec and summarises; these rows prove the tests bite if it keeps going past a held tree, counts a non-measurement as caught, or certifies an empty corpus.",
   "root": "../..",
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_mutation_harness.py", "-q", "-k", "sweep"],
-  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_mutation_harness.py",
+    "-q",
+    "-k",
+    "sweep"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
   "mutations": [
     {
       "name": "a-busy-tree-does-not-stop-the-sweep",
@@ -47,6 +60,15 @@
       "find": "    if not spec_paths:\n        print(\"SWEEP: NOTHING_SWEPT specs=0\")\n        return 2\n",
       "replace": "    if not spec_paths:\n        print(\"SWEEP: ALL_CAUGHT specs=0\")\n        return 0\n",
       "test": "tests/test_h_mad_mutation_harness.py::test_sweep_over_a_repo_with_no_specs_says_nothing_swept",
+      "symbol": "_sweep"
+    },
+    {
+      "name": "kill-details-are-dropped",
+      "_mechanism": "The sweep keeps only token lines, so the per-mutation crash exceptions a hollow-kill review needs are lost.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                if m and name:\n",
+      "replace": "                if False:\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_forwards_each_crash_kill_with_its_mutation",
       "symbol": "_sweep"
     }
   ]

@@ -1763,6 +1763,17 @@ def _sweep(spec_paths: list[Path]) -> int:
         line = next((l for l in proc.stdout.splitlines() if l.startswith("MUTATION: ")),
                     "MUTATION: UNREADABLE (no verdict line)")
         print(f"SWEEP: {spec_path} {line[len('MUTATION: '):]}", flush=True)
+        # Forward every crash/timeout kill with its mutation: a crash kill may be
+        # HOLLOW (the mutant died before reaching the property), and judging that
+        # needs each exception across the corpus, which the token line drops.
+        name = None
+        for child in proc.stdout.splitlines():
+            if child.startswith("  caught: "):
+                name = child[len("  caught: "):].strip()
+            for kind in ("crash", "timeout"):
+                m = re.search(r"\((%s: [^)]*)\)" % kind, child)
+                if m and name:
+                    print(f"  kill: {spec_path} :: {name} :: {m.group(1)}", flush=True)
         verdict = line.split()[1]
         if verdict in _STOP:
             stopped = (verdict, spec_path)
