@@ -551,6 +551,29 @@ about this number somewhere I did not edit?"
   gave eleven members in its must and ten in its should, and neither count included a member the
   author's own walk found.
 
+## CALIBRATION — a new detector runs over artifacts that already passed before it is wired
+
+A detector is a claim that its hits are defects. Until it has been run over a corpus whose
+artifacts already passed review, that claim is untested, and a gate built on it fails clean work.
+Measured: five `h_mad_precheck_doc.py` detectors filed as hard fired 104, 49 and 48 times on the
+design and plan that had just passed 83 and 74 audit cycles, and every hit was correct usage.
+
+1. **Run it over the committed corpus first** — every artifact of that kind that already passed,
+   archived ones included. Count hits per artifact.
+2. **Triage every hit on a known-good artifact.** Each one is one of three things: a real defect the
+   reviews missed (record it — that is the detector earning its place), a shape the detector
+   misreads (fix the detector), or correct usage the rule cannot tell apart (demote that finding to
+   advisory). Never wire a detector whose known-good hits are untriaged.
+3. **Pin the noise floor with a test**, so a later edit that makes the detector noisier fails
+   instead of shipping: `test_noise_floor_on_documents_that_survived_eighty_cycles` is the model.
+
+Two detectors built on 2026-10-04 show why step 2 is not a formality. `h_mad_ac_census.py`'s first
+cut flagged 9 of 29 specs: four were tag shapes it misparsed (`AC-2.1 (layout):`,
+`AC-3.3 [OD-1]:`), which also undercounted; the other five ordered ACs by topic, so document order
+became advisory, and the one finding left over the whole corpus was a real stale claim. `h_mad_archive_feature.py --check` would have
+archived a probes directory that a live test reads; the corpus run found it, and the detector now
+keeps such a directory instead of breaking its reader.
+
 ## What this costs, and why it is worth stating in the sheet
 
 The sheets are being caught — by fresh-context authors, by the second-family gating leg, and by
