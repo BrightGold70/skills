@@ -1522,6 +1522,7 @@ individually re-verified this pass; that is stated rather than left implied.
   nothing. The row itself says the right home is a rule in the handoff/h-mad docs rather than a new
   skill, so this is one sentence of debt, not a build.
   — **RE-PROBED 2026-10-03: OPEN** — nothing runs `git cat-file -t` on an inherited sha; `UNKNOWNSHA` (`h_mad_precheck_doc.py`) covers phase docs only. Lesson only in `docs/learnings.md`.
+  — **LANDED 2026-10-04** — as the rule the row asked for: handoff TAKEOVER step 2 (premise verification, which READ Step 3.5 runs too) now says a cited sha must answer `commit` to `git cat-file -t` before it is trusted, with this row's two UUIDs as the example. Pinned by `test_handoff_takeover_mode.py::TestACitedShaIsAPremise`.
 - **calibrate a new detector against artifacts that already passed, before wiring it**: every `h_mad_precheck_doc.py` detector written as a hard finding fired 104 / 49 / 48 times on the design and plan that had just passed 83 and 74 audit cycles, and every hit was correct usage — recurrence: 5 detectors in one session — candidate: yes — the reusable shape is: pick a real corpus with labelled defects, assert a noise floor on known-good artifacts, and demote anything that fires on them. Currently recorded only in one script's docstring plus a memory.
   — **RE-CHECKED 2026-09-07 08:30 (scout): MECHANISM landed for ONE detector, the reusable shape still
   owed.** `h-mad/tests/test_h_mad_precheck_doc.py` carries `test_noise_floor_on_documents_that_survived_eighty_cycles`

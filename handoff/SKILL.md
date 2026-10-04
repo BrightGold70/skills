@@ -868,6 +868,8 @@ A stale claim is takeable by plain `--claim` — reach for `--force` only agains
 
 **2. Verify the premises before adopting them.** A brief is a claim about the world made by a session that has stopped. Its reproduce commands are the cheap part — run them. Any premise that no longer holds becomes a divergence line, not a todo. A confident brief is not evidence.
 
+A sha the brief cites is a premise too: `git cat-file -t <sha>` must answer `commit` before you treat it as one. Two backlog items once cited `cfc79129` and `45db0187` as commits; both were session UUIDs that resolve in no repo, and both sat unreproduced for weeks because nobody asked git. A sha that does not resolve is a divergence line, never a starting point.
+
 **3. Restore the todos with their OWNER, not the branch you are sitting on.** Use READ Step 4's
 sink ladder and all of its rules (the `[<repo>@<branch>]` prefix, the dedupe, the named sink) —
 from READ continue into Step 4; from TAKEOVER restore only the brief's items.

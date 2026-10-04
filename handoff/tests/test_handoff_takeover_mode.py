@@ -284,3 +284,21 @@ class TestTheTodoPrefixNamesTheOwnerNotTheCourier:
     def test_a_location_path_is_not_a_prefix(self) -> None:
         """The sibling half: cited source paths live in the body, never the prefix."""
         assert "where the FILES are, not whose the work is" in FLAT
+
+
+class TestACitedShaIsAPremise:
+    """A brief's sha is checked before it is trusted.
+
+    Two backlog items cited `cfc79129` and `45db0187` as commits; both were session
+    UUIDs that resolve in no repo, and both sat unreproduced for weeks because nobody
+    asked git. `git cat-file -t` settles it in one command, so premise verification
+    must name it (skill-candidates row "verify a backlog reference resolves as a
+    commit before trusting it").
+    """
+
+    def test_premise_step_names_the_cat_file_check(self) -> None:
+        step = FLAT.split("**2. Verify the premises before adopting them.**", 1)
+        assert len(step) == 2, "TAKEOVER premise step not found"
+        body = step[1].split("**3.", 1)[0]
+        assert "git cat-file -t" in body, body[:400]
+        assert "commit" in body
