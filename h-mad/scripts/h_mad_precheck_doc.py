@@ -493,7 +493,14 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
         `token` is the bare pin/slot for the `ALLOWED:` echo, which is a grammar
         the operator pastes back into `--allow` / `--allow-historical`; `detail`
         is the prose for the finding line. They differ deliberately.
+
+        `kind` is checked against `HARD_KINDS` because that constant reads as the
+        policy: while nothing consulted it, dropping a kind from it was a silent
+        no-op that looked like a policy change, and a typo'd kind still emitted.
+        A programming error, so it raises rather than scoring.
         """
+        if kind not in HARD_KINDS:
+            raise ValueError(f"hard() kind {kind!r} is not in HARD_KINDS {HARD_KINDS}")
         if in_vh(lineno):
             allowed.append(f"{kind} {token} L{lineno} (in `## Version History`)")
         else:

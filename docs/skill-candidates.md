@@ -1958,6 +1958,7 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   typo'd kind still emits. That is exactly the hazard the row names — an authoritative-looking
   constant surviving the very refactor that rewrote its neighbours.
   — **RE-PROBED 2026-10-03: PARTIAL** — the tests import `HARD_KINDS`; the script defines it (`h_mad_precheck_doc.py:129`) and `hard()` still never checks `kind` against it.
+  — **LANDED 2026-10-04** — `hard()` now raises `ValueError` for any `kind` not in `HARD_KINDS`, so the constant drives the script and a typo'd kind cannot emit. Test `test_hard_refuses_a_kind_HARD_KINDS_does_not_list`; spec `h-mad/tests/mutation-specs/precheck_hard_kinds_enforced.json` ALL_CAUGHT (guard removed; guard checking a literal copy).
 - **structure the 6a-prime archreview reports before any code-phase instrument is built**: measured
   across the 28 archreviews in HemaSuite (analysis:
   `docs/03-analysis/hmad-code-phase-ledger-not-warranted.md`) — median **2,114 B**, `Major` appears

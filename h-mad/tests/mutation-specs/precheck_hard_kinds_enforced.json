@@ -1,0 +1,26 @@
+{
+  "_why": "`HARD_KINDS` was declared and read by no executable line for the life of the constant (skill-candidates row '`HARD_KINDS` is defined and read by nothing'): dropping a kind from it was a silent no-op that looked like a policy change, and a typo'd kind at a `hard()` call site still emitted. `hard()` now refuses any kind the constant does not list. These rows prove a test bites if that check is removed or weakened.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_precheck_doc.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "hard-never-consults-HARD_KINDS",
+      "_mechanism": "The constant goes inert again: removing PLACEHOLDER from it leaves the scan failing the document exactly as before.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "        if kind not in HARD_KINDS:\n            raise ValueError(",
+      "replace": "        if False:\n            raise ValueError(",
+      "test": "tests/test_h_mad_precheck_doc.py::test_hard_refuses_a_kind_HARD_KINDS_does_not_list",
+      "symbol": "scan.hard"
+    },
+    {
+      "name": "hard-checks-a-copy-not-the-constant",
+      "_mechanism": "A literal tuple beside the constant: the check runs, but edits to HARD_KINDS are again a no-op.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "        if kind not in HARD_KINDS:\n            raise ValueError(",
+      "replace": "        if kind not in (\"PLACEHOLDER\", \"LINEPIN\", \"PINDRIFT\", \"UNKNOWNSHA\"):\n            raise ValueError(",
+      "test": "tests/test_h_mad_precheck_doc.py::test_hard_refuses_a_kind_HARD_KINDS_does_not_list",
+      "symbol": "scan.hard"
+    }
+  ]
+}

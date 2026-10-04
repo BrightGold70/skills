@@ -31,7 +31,8 @@ from h_mad_precheck_doc import HARD_KINDS  # noqa: E402
 # out as their own literal. That duplication is what made a mutation of the constant
 # look like a behavioural change; it survived, correctly, because the constant is
 # inert. Importing it here gives the name one consumer, so the two sets cannot drift
-# from each other again. It still does not drive the script — see the filed row.
+# from each other again. Since 2026-10-04 it also drives the script: `hard()` refuses
+# any kind it does not list.
 
 
 def run(*args, cwd=None):
@@ -1214,3 +1215,20 @@ def test_norm_pin_never_rewrites_the_path():
     assert _norm_pin("a/b.py:2-9") == "a/b.py:2-9"
     assert _norm_pin("a/b.py:Loader") == "a/b.py:Loader"  # not a line tail
     assert _norm_pin("a/b.py") == "a/b.py"                # no tail at all
+
+
+def test_hard_refuses_a_kind_HARD_KINDS_does_not_list(tmp_path, monkeypatch):
+    """`HARD_KINDS` is the policy, so `hard()` must consult it.
+
+    For the life of the constant no executable line read it: dropping a kind from
+    it was a silent no-op that looked like a policy change, and a typo'd kind at a
+    `hard()` call site still emitted. Removing PLACEHOLDER from the constant must
+    now make the scan refuse rather than quietly keep failing the document.
+    """
+    import h_mad_precheck_doc as pd
+    doc = write(tmp_path, "x.impl-plan.md", "TBD: pick the exception.\n")
+    findings, _, _ = pd.scan(doc, "impl-plan", REPO)
+    assert [k for k, _, _ in findings] == ["PLACEHOLDER"]
+    monkeypatch.setattr(pd, "HARD_KINDS", tuple(k for k in HARD_KINDS if k != "PLACEHOLDER"))
+    with pytest.raises(ValueError, match="PLACEHOLDER"):
+        pd.scan(doc, "impl-plan", REPO)
