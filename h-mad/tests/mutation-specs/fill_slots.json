@@ -1,0 +1,60 @@
+{
+  "_why": "Skill-candidates row 'audit-prompt preflight false-HALTs on a gated document that QUOTES a slot token', fixed as a class: all three assemblers filled slots one `str.replace` at a time and scanned the FILLED text for residue, so a document quoting a slot token was rewritten and/or halted. `fill_slots` fills in one pass and returns the template residue; these rows prove each site's test bites.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_assemble_audit.py", "tests/test_h_mad_assemble_tdd.py", "tests/test_h_mad_archreview_cycle.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "slots-are-filled-one-at-a-time-again",
+      "_mechanism": "A quoted token inside an already-inserted document is rewritten by a later slot.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    return rx.sub(lambda m: slots[m.group(0)], text), rx.sub(\"\", text)\n",
+      "replace": "    filled = text\n    for s, v in slots.items():\n        filled = filled.replace(s, v)\n    return filled, rx.sub(\"\", text)\n",
+      "test": "tests/test_h_mad_assemble_audit.py::TestAGatedDocMayQuoteASlotToken::test_the_quoted_tokens_reach_the_prompt_verbatim",
+      "symbol": "fill_slots"
+    },
+    {
+      "name": "the-residue-is-the-filled-text",
+      "_mechanism": "Every residual scan reads inserted documents again, and a quoted token halts the audit assembly.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    return rx.sub(lambda m: slots[m.group(0)], text), rx.sub(\"\", text)\n",
+      "replace": "    filled = rx.sub(lambda m: slots[m.group(0)], text)\n    return filled, filled\n",
+      "test": "tests/test_h_mad_assemble_audit.py::TestAGatedDocMayQuoteASlotToken::test_a_quoted_token_in_the_target_doc_does_not_halt",
+      "symbol": "fill_slots"
+    },
+    {
+      "name": "preflight-ignores-the-template-residue",
+      "_mechanism": "assemble passes the residue, preflight scans the whole prompt anyway.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    slot_text = text if slot_text is None else slot_text\n",
+      "replace": "    slot_text = text\n",
+      "test": "tests/test_h_mad_assemble_audit.py::TestAGatedDocMayQuoteASlotToken::test_a_quoted_token_in_the_target_doc_does_not_halt",
+      "symbol": "preflight"
+    },
+    {
+      "name": "tdd-scans-the-filled-prompt",
+      "_mechanism": "A task naming `<INLINE_X>` halts residual_slots on its own prose.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    residual = sorted(set(RESIDUAL.findall(residue)))\n",
+      "replace": "    residual = sorted(set(RESIDUAL.findall(filled)))\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_a_task_that_quotes_a_slot_token_reaches_the_prompt_verbatim"
+    },
+    {
+      "name": "archreview-scans-the-filled-prompt",
+      "_mechanism": "A design naming a slot reads as a live placeholder and staging is refused UNSUBSTITUTED.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    left = sorted(set(_PLACEHOLDER.findall(residue)))\n",
+      "replace": "    left = sorted(set(_PLACEHOLDER.findall(body)))\n",
+      "test": "tests/test_h_mad_archreview_cycle.py::test_a_design_that_quotes_a_slot_token_is_staged_verbatim"
+    },
+    {
+      "name": "a-real-unfilled-slot-is-not-found",
+      "_mechanism": "The check moved to the template; dropping it would ship a live placeholder.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    if residual := [ln for ln in slot_text.splitlines() if \"<INLINE_\" in ln]:\n",
+      "replace": "    if residual := []:\n",
+      "test": "tests/test_h_mad_assemble_audit.py::TestAGatedDocMayQuoteASlotToken::test_a_template_slot_left_unfilled_still_halts",
+      "symbol": "preflight"
+    }
+  ]
+}

@@ -809,3 +809,46 @@ class TestAgentToolSizeTier:
 
     def test_a_prompt_at_the_measured_kill_size_trips_the_tier(self):
         assert aa.size_notes(740 * 1024, self.SAMPLE), "740 KB is the measured kill size"
+
+
+class TestAGatedDocMayQuoteASlotToken:
+    """Skill-candidates row "audit-prompt preflight false-HALTs on a gated document that
+    QUOTES a slot token": multi-host-runtime's impl-plan named the `<INLINE_*>` scan and
+    the assembler HALTed `unfilled_slot`, so the document was reworded to satisfy the
+    tool (`dcb4a71e`). The residual check belongs to the TEMPLATE. Filling slots one
+    `str.replace` at a time also rewrote a quoted token INSIDE the inlined document."""
+
+    QUOTES = "\nThe scan looks for `<INLINE_*>`, `<AUDIT_SENTINEL>` and `<REPORT_FILE_PATH>`.\n"
+
+    def test_a_quoted_token_in_the_target_doc_does_not_halt(self, tmp_path):
+        root = _project(tmp_path)
+        impl = root / "docs/01-plan/features/demo.impl-plan.md"
+        impl.write_text(impl.read_text() + self.QUOTES)
+
+        text, problems = _assemble(root, "impl-plan")
+
+        assert not [p for p in problems if p.startswith("unfilled_slot")], problems
+
+    def test_the_quoted_tokens_reach_the_prompt_verbatim(self, tmp_path):
+        root = _project(tmp_path)
+        impl = root / "docs/01-plan/features/demo.impl-plan.md"
+        impl.write_text(impl.read_text() + self.QUOTES)
+
+        text, _ = _assemble(root, "impl-plan", sentinel="AUDIT-demo-x-v1",
+                            report_file="/tmp/demo.report.md")
+
+        assert self.QUOTES.strip() in text, "the inlined document was rewritten by slot filling"
+
+    def test_a_template_slot_left_unfilled_still_halts(self, tmp_path):
+        """The check moved; it did not go away."""
+        root = _project(tmp_path)
+        template = tmp_path / "t.md"
+        template.write_text((SKILL_DIR / "audit-prompt.template.md").read_text()
+                            + "\n<INLINE_NOT_A_SLOT>\n")
+
+        _, problems = assemble(feature="demo", phase="impl-plan", project_root=root,
+                               docs_dir=root / "docs/01-plan/features",
+                               sentinel="AUDIT-demo-x-v1", report_file="/tmp/r.md",
+                               template=template)
+
+        assert any(p.startswith("unfilled_slot") and "INLINE_NOT_A_SLOT" in p for p in problems), problems

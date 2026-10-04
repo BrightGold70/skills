@@ -554,10 +554,13 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
     # prompt reaches a reviewer and reads as real, which is the worse outcome.
     absent = [slot for slot, _ in pairs if slot not in body]
 
-    for slot, value in pairs:
-        body = body.replace(slot, value)
+    # One pass via the shared filler: the design is inlined first, and a design that
+    # QUOTES a slot token was rewritten by the later replacements and then read as a
+    # live placeholder by the scan below.
+    from h_mad_assemble_audit import fill_slots
+    body, residue = fill_slots(body, dict(pairs))
 
-    left = sorted(set(_PLACEHOLDER.findall(body)))
+    left = sorted(set(_PLACEHOLDER.findall(residue)))
     if left:
         _emit(f"UNSUBSTITUTED slots={','.join(left)}")
         print("  a prompt shipped with a live placeholder asks the reviewer to "

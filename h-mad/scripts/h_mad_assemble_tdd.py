@@ -61,6 +61,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # parser is how `h_mad_do_preconditions.py` and the audit gate drifted into
 # disagreeing verdicts on the same file (#39).
 from h_mad_wire_pin_gate import _TASK_RE, _parse_tasks  # noqa: E402
+from h_mad_assemble_audit import fill_slots  # noqa: E402
 
 TOKEN = "ASSEMBLE-TDD"
 TEMPLATE = SKILL_DIR / "references" / "codex-implementer-prompt.md"
@@ -407,17 +408,19 @@ def assemble(
                 f"**Mutation rows (5e):** list {rows}, in your final message. Do not "
                 "run the mutation harness; the orchestrator scores the rows.")
 
-    filled = (
-        template_text
-        .replace("<INLINE_MODULE_NAME>", module)
-        .replace("<INLINE_FEATURE_SLUG>", feature)
-        .replace("<INLINE_FEATURE>", feature)
-        .replace("<INLINE_TASK_FROM_IMPL_PLAN>", "\n".join(lines))
-        .replace("<INLINE_REPO_ROOT>", str(project_root))
-        .replace("<REPORT_FILE_PATH>", report_file)
-    )
+    # One pass via the shared filler: the task text is inserted from the impl-plan,
+    # and a task that QUOTES a slot token was rewritten by the later `.replace`s and
+    # halted `residual_slots` on its own prose.
+    filled, residue = fill_slots(template_text, {
+        "<INLINE_MODULE_NAME>": module,
+        "<INLINE_FEATURE_SLUG>": feature,
+        "<INLINE_FEATURE>": feature,
+        "<INLINE_TASK_FROM_IMPL_PLAN>": "\n".join(lines),
+        "<INLINE_REPO_ROOT>": str(project_root),
+        "<REPORT_FILE_PATH>": report_file,
+    })
 
-    residual = sorted(set(RESIDUAL.findall(filled)))
+    residual = sorted(set(RESIDUAL.findall(residue)))
     if residual:
         raise Halt("residual_slots", ", ".join(residual))
 

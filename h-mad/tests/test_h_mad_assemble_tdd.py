@@ -1057,3 +1057,19 @@ def test_cli_mutation_spec_reaches_the_green_prompt(plan: Path, tmp_path: Path) 
     assert proc.returncode == 0, proc.stdout + proc.stderr
     text = prompt.read_text(encoding="utf-8")
     assert str(spec) in text and "--check-anchors" in text, "the CLI flag never reached the prompt"
+
+
+def test_a_task_that_quotes_a_slot_token_reaches_the_prompt_verbatim(tmp_path: Path) -> None:
+    """Slot filling ran one `.replace` at a time AFTER the task text was inserted, so a
+    task quoting `<REPORT_FILE_PATH>` was rewritten, and one naming `<INLINE_X>` halted
+    `residual_slots`. Same class as the audit assembler's (skill-candidates row
+    "audit-prompt preflight false-HALTs on a gated document that QUOTES a slot token")."""
+    quote = "The prompt slots are `<INLINE_REPO_ROOT>`, `<REPORT_FILE_PATH>` and `<INLINE_X>`."
+    target = tmp_path / "feature.impl-plan.md"
+    target.write_text(PLAN.replace("More task detail that must not be truncated.",
+                                   "More task detail that must not be truncated.\n" + quote),
+                      encoding="utf-8")
+
+    filled, _ = call(target, tmp_path)
+
+    assert quote in filled

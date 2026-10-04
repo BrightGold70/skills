@@ -135,17 +135,40 @@ def _braces_outside_fences(text: str) -> list[str]:
     return leaked
 
 
-def preflight(text: str, inlined: dict[str, str]) -> list[str]:
-    """Return the reasons this prompt must not be dispatched (empty == clean)."""
+def fill_slots(text: str, slots: dict[str, str]) -> tuple[str, str]:
+    """Fill every slot in ONE pass; return `(filled, residue)`.
+
+    `residue` is `text` with the filled slots removed — the only place an unfilled
+    slot can still be. One pass matters because a slot's VALUE is often a whole
+    document, and a document may quote a slot token in prose: filling slot by slot
+    with `str.replace` rewrote a token the already-inserted document quoted, and a
+    residual scan over the filled text read that quote as an unfilled slot. All
+    three assemblers (audit, TDD, archreview) fill through this.
+    """
+    if not slots:
+        return text, text
+    rx = re.compile("|".join(re.escape(s) for s in sorted(slots, key=len, reverse=True)))
+    return rx.sub(lambda m: slots[m.group(0)], text), rx.sub("", text)
+
+
+def preflight(text: str, inlined: dict[str, str], slot_text: str | None = None) -> list[str]:
+    """Return the reasons this prompt must not be dispatched (empty == clean).
+
+    `slot_text` is where an unfilled slot can live: the template, with the slots that
+    were filled removed. `assemble` passes it so a gated document that QUOTES a token
+    (`<INLINE_*>` named in prose) is not an unfilled slot — that false HALT got a
+    document reworded to satisfy the tool (`dcb4a71e`). Defaults to `text`.
+    """
     problems = []
-    if residual := [ln for ln in text.splitlines() if "<INLINE_" in ln]:
+    slot_text = text if slot_text is None else slot_text
+    if residual := [ln for ln in slot_text.splitlines() if "<INLINE_" in ln]:
         problems.append(f"unfilled_slot: {residual[0].strip()[:80]!r}"
                         + (f" (+{len(residual) - 1} more)" if len(residual) > 1 else ""))
     if leaked := _braces_outside_fences(text):
         problems.append(f"unresolved_conditional: {leaked[0].strip()[:80]!r}"
                         + (f" (+{len(leaked) - 1} more)" if len(leaked) > 1 else ""))
     for token in ("<AUDIT_SENTINEL>", "<REPORT_FILE_PATH>"):
-        if token in text:
+        if token in slot_text:
             problems.append(f"unfilled_slot: {token}")
     # Duplication. Derive each needle from the inlined file's own first line: the
     # project invariants heading is project-authored (HemaSuite's is
@@ -445,8 +468,7 @@ def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
     if phase == "impl-plan":
         slots["<INLINE_PAIRED_DESIGN>"] = doc_text("design")
 
-    for slot, value in slots.items():
-        text = text.replace(slot, value)
+    text, template_residue = fill_slots(text, slots)
 
     # After slot fill, so the head copy arrives pre-filled and preflight's
     # unfilled-slot check stays honest. The framing block sits after both
@@ -455,7 +477,8 @@ def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
     text, contract_problems = prepend_output_contract(
         text, sentinel=sentinel, report_file=report_file)
 
-    return text, contract_problems + preflight(text, {"base": base_md, "project": project_md})
+    return text, contract_problems + preflight(
+        text, {"base": base_md, "project": project_md}, slot_text=template_residue)
 
 
 def main(argv: list[str] | None = None) -> int:

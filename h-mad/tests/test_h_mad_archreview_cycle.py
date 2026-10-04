@@ -1331,3 +1331,15 @@ class TestTheFallbackNamesWhyTheReportFileLost:
                  "--log", str(_log(tmp_path, 6)),
                  "--review", str(_review(tmp_path, "ASSESSMENT: WITH_FIXES\n")))
         assert "channel=last-message" in r.stdout, r.stdout
+
+
+def test_a_design_that_quotes_a_slot_token_is_staged_verbatim(tmp_path):
+    """The audited design is inlined first and the later slots were then replaced across
+    the whole body, so a design quoting `<INLINE_PHASE_5_SUMMARY>` was rewritten and the
+    UNSUBSTITUTED scan read the design's own prose as a live placeholder."""
+    quote = "The template's slots are `<INLINE_PHASE_5_SUMMARY>` and `<INLINE_REPORT_FILE>`."
+    proc, prompt = TestTheStagedPromptMustBeDeliverable()._stage(
+        tmp_path, "design body\n" + quote + "\n", report_file="/tmp/r.md")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert quote in prompt.read_text(encoding="utf-8")
