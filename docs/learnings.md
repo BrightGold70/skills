@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-04 · gotcha · [0.5] · `claude-code,agents,subagent,handoff:2026-10-04-row-t-archive-probe-reviewer` — Claude Code agent definitions hot-load mid-session: a new ~/.claude/agents/*.md was 'not found' on first dispatch and listed a few turns later. Retry before concluding it needs a new session.
+- 2026-10-04 · pattern · [0.5] · `testing,corpus,archive,handoff:2026-10-04-row-t-archive-probe-reviewer` — A test that passes only because cleanup was incomplete: a corpus drawn from live, non-archived docs empties once archiving completes. Point corpus tests at a set that only grows (include docs/archive).
+- 2026-10-04 · gotcha · [0.7] · `h-mad,archive,probes,handoff:2026-10-04-row-t-archive-probe-reviewer` — Archive census missed a probe reader: a sibling probe read ../../<feature>/*.log by relative path, never spelling probes/<feature>. Grep for ../<feature> too; run the full suite after moving docs.
 - 2026-10-04 · gotcha · [0.7] · `zsh,shell,pytest,handoff:2026-10-04-backlog-burn-full-sweep` — zsh does not word-split an unquoted $VAR: 'pytest $FILES' silently ran 'no tests'. Use xargs or ${=VAR}.
 - 2026-10-04 · gotcha · [0.7] · `h-mad,tdd-gate,codex,handoff:2026-10-04-backlog-burn-full-sweep` — Codex TDD gate gates shell (exec_command/shell/Bash) during ANY feature's Phase 5, project-wide; 'Bash is never gated' holds only for the Claude gate (Write|Edit matcher).
 - 2026-10-04 · gotcha · [0.7] · `bash,mutation-harness,host-bound,handoff:2026-10-04-backlog-burn-full-sweep` — macOS /bin/bash 3.2 compgen -e lists non-identifier env names (CLAUDE-HYPHEN); bash 4+ does not. A mutation swapping env -0 for compgen -e is equivalent on 3.2-only hosts.

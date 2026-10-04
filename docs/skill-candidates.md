@@ -2346,3 +2346,7 @@ above, all unverified here.
 - **clean-worktree control for a worktree-only failure**: a suite failure seen only in `.claude/worktrees/<x>` was settled by `git worktree add --detach <tmp> HEAD` and re-running the one test there — a clean control that separates "my diff" from "the checkout path". Done by hand once; a tiny `h_mad_clean_control.py <test-node>` (create, run, remove, print `CONTROL: SAME|DIFFERS`) would make it routine — recurrence: 1 — candidate: maybe
 - **fan-out backlog re-probe with file-backed results**: reconciling 50 open rows ran as 5 read-only agents of 10 rows each, and 4 of 5 final replies arrived as bare "Done." — only results written to scratchpad files survived. `skill_candidates_census.py --list-open` could emit per-batch probe prompts that name the output file, so the next reconcile is one command plus a merge — recurrence: 1 — candidate: maybe
 
+
+## 2026-10-04 — row-t-archive-probe-reviewer
+
+- **`h_mad_doc_consumers.py --run`**: execute the consumer tests instead of printing a `RUN:` line. That line was copied by hand 6 times this session. Once it was skipped before a full suite, which then spent 15 minutes surfacing 25 failures that the consumer run reproduces in seconds (a SKILL.md paragraph in the wrong section tripped `test_h_mad_context_budget_docs.py`'s 160-line guard). Small: the `RUN:` list already exists; add a flag that subprocesses it and returns its exit code — recurrence: 6 — candidate: maybe
