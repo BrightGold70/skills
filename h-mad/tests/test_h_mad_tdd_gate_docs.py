@@ -118,3 +118,13 @@ def test_locators_fail_loudly(locator):
         assert doctored != text
         with pytest.raises(AssertionError):
             _hook_block(doctored)
+
+
+def test_skill_states_the_docs_first_component_rule():
+    text = SKILL.read_text(encoding="utf-8")
+    anchor = "Test files, docs, config, and shell are never gated; only production `.py`."
+    assert text.count(anchor) == 1, "expected one gate-scope line in SKILL.md"
+    paragraph = text.split(anchor, 1)[1].split("\n\n", 1)[0]
+    for token in ("FIRST component", "relative to the project root", "`docs`",
+                  "`src/docs/foo.py`", "Both gates"):
+        assert token in paragraph, f"gate-scope line must state {token!r}"

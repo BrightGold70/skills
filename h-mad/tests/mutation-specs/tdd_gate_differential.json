@@ -45,6 +45,38 @@
       "find": "    spelled_target = os.path.join(base, target)\n",
       "replace": "    spelled_target = os.path.normpath(os.path.join(base, target))\n",
       "test": "tests/test_h_mad_tdd_gate_differential.py::test_mapped_prefix_cell_names_the_kernels_test[MX-6]"
+    },
+    {
+      "name": "DIFF-DOCS-CX-OFF",
+      "_mechanism": "docs/ first-component exemption disabled in the Codex gate: the committed probe under docs/ must be admitted, so the gates must disagree.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if path.parts[:1] == (\"docs\",):  # M:G-DOCS",
+      "replace": "    if False:  # M:G-DOCS",
+      "test": "tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[docs/03-analysis/probes/x/m17_reach_probe.py]"
+    },
+    {
+      "name": "DIFF-DOCS-CL-OFF",
+      "_mechanism": "docs/ first-component exemption disabled in the Claude gate: the committed probe under docs/ must be admitted.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  case \"$DIR_SUBJECT\" in /docs/*) _allow ;; esac  # M:H-DOCS",
+      "replace": "  :  # M:H-DOCS",
+      "test": "tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[docs/03-analysis/probes/x/m17_reach_probe.py]"
+    },
+    {
+      "name": "DIFF-DOCS-CX-ANYPART",
+      "_mechanism": "Codex gate widened from the FIRST component to any part named docs: a real package src/docs/ must stay gated.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if path.parts[:1] == (\"docs\",):  # M:G-DOCS",
+      "replace": "    if \"docs\" in path.parts:  # M:G-DOCS",
+      "test": "tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[src/docs/foo.py]"
+    },
+    {
+      "name": "DIFF-DOCS-CL-ANYPART",
+      "_mechanism": "Claude gate widened from the FIRST component to any directory named docs: a real package src/docs/ must stay gated.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  case \"$DIR_SUBJECT\" in /docs/*) _allow ;; esac  # M:H-DOCS",
+      "replace": "  case \"$DIR_SUBJECT\" in */docs/*) _allow ;; esac  # M:H-DOCS",
+      "test": "tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[src/docs/foo.py]"
     }
   ]
 }

@@ -532,7 +532,12 @@ now enforced mechanically, not left to discipline:
   verification still carry the test-first obligation. A false availability or
   fallback declaration remains visible in the state record.
 
-Test files, docs, config, and shell are never gated; only production `.py`. The
+Test files, docs, config, and shell are never gated; only production `.py`. A
+`.py` counts as docs, and is not gated, only when the FIRST component of its
+resolved path relative to the project root is `docs` (e.g. a committed probe at
+`docs/03-analysis/probes/<feature>/x.py`); `src/docs/foo.py` and a top-level
+`docs.py` stay gated, and a `docs/` spelling that symlinks out of `docs/` is
+judged by its target. Both gates apply this same rule. The
 gate stands down outside `step5` and disarms at 5g (`phase = null`).
 
 ### Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot

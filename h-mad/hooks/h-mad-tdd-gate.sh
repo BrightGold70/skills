@@ -262,6 +262,14 @@ done
 [ "$ALL_TEST_NAMES" = yes ] && _allow
 if [ "$IN_ROOT" = yes ]; then
   DIR_SUBJECT="/${TARGET_PATH#"$R"/}"; if _dir_match "$DIR_SUBJECT"; then _allow; fi  # M:H19
+  # docs/ first-component rule (same rule as the Codex gate's _is_production_python):
+  # TARGET_PATH is kernel-canonical, so DIR_SUBJECT is the root-relative path. A file
+  # under the root's own docs/ tree (committed probes, readings scripts) is not
+  # production. Only the FIRST component counts: src/docs/foo.py and a top-level
+  # docs.py stay gated. Out-of-root targets never take this exemption. Residual:
+  # anything the project places under its root docs/ is ungated, including an
+  # importable package it chose to put there.
+  case "$DIR_SUBJECT" in /docs/*) _allow ;; esac  # M:H-DOCS
 elif _dir_match "$TARGET_PATH" && _dir_match "$RAW_TARGET"; then  # M:H20
   _allow
 fi

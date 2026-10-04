@@ -280,6 +280,15 @@ def _is_production_python(relative: str) -> bool:
         return False
     if name.startswith("test_") or name.endswith("_test.py") or name.startswith("conftest"):
         return False
+    # docs/ first-component rule (same rule as the Claude gate's M:H-DOCS case):
+    # `relative` is the kernel-canonical path relative to the project root, so a .py
+    # under the root's own docs/ tree (committed probes, readings scripts) is not
+    # production. Only the FIRST component counts: src/docs/foo.py and a top-level
+    # docs.py stay gated. Residual: anything the project places under its root
+    # docs/ is ungated, including an importable package it chose to put there; a
+    # docs/ spelling whose symlinks resolve outside docs/ is judged by its target.
+    if path.parts[:1] == ("docs",):  # M:G-DOCS
+        return False
     return "tests" not in path.parts and "fixtures" not in path.parts
 
 

@@ -42,6 +42,16 @@ EXPECTATIONS = (
     ("notes.md", "allow", ""),
     ("tests/test_x.py", "allow", ""),
     ("sub/test_x.PY", "allow", ""),
+    # docs/ first-component rule: an executable probe committed under the project's
+    # docs/ tree is not production (both gates); a package NAMED docs anywhere else,
+    # a top-level docs.py, an ordinary package module, and a docs/ path whose kernel
+    # target lies outside docs/ all stay gated.
+    ("docs/03-analysis/probes/x/m17_reach_probe.py", "allow", ""),
+    ("src/docs/foo.py", "deny", "no-test-resolved"),
+    ("pkg/mod.py", "deny", "no-test-resolved"),
+    ("docs.py", "deny", "no-test-resolved"),
+    ("DOCS-link-file", "deny", "no-test-resolved"),
+    ("DOCS-link-dir", "deny", "no-test-resolved"),
 )
 
 # Cells under a prefix the name map CAN map (shared/<x>.py -> shared/tests/test_<x>.py).
@@ -128,7 +138,15 @@ def _fixture(base: Path, cell: str) -> tuple[Path, Path, Path | None]:
         (root / "src/loopa.py").symlink_to("loopb.py")
         (root / "src/loopb.py").symlink_to("loopa.py")
         relative, prefix = "src/loopa.py", root / "src"
-    elif cell in ("notes.md", "tests/test_x.py", "sub/test_x.PY"):
+    elif cell == "DOCS-link-file":
+        (root / "docs/alias.py").symlink_to("../src/prod.py")
+        relative = "docs/alias.py"
+    elif cell == "DOCS-link-dir":
+        (root / "docs/sub").symlink_to("../src", target_is_directory=True)
+        relative = "docs/sub/prod.py"
+    elif cell in ("notes.md", "tests/test_x.py", "sub/test_x.PY",
+                  "docs/03-analysis/probes/x/m17_reach_probe.py", "src/docs/foo.py",
+                  "pkg/mod.py", "docs.py"):
         relative = cell
     elif cell.startswith(("MX-", "AC-1.")):
         return root, _mapped_fixture(root, cell), None
