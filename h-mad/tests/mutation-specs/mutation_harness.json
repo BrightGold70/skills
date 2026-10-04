@@ -308,8 +308,9 @@
       "name": "classify-jsonc-retry-drop",
       "file": "scripts/h_mad_mutation_harness.py",
       "find": "        try:\n            relaxed = json.loads(_strip_jsonc(Path(path).read_text(encoding=\"utf-8\")))\n        except (OSError, json.JSONDecodeError):\n            return \"unclassifiable\", f\"not valid JSON: {exc}\"\n",
-      "replace": "        if True:\n        try:\n            relaxed = json.loads(_strip_jsonc(Path(path).read_text(encoding=\"utf-8\")))\n        except (OSError, json.JSONDecodeError):\n            return \"unclassifiable\", f\"not valid JSON: {exc}\"\n",
-      "failure_test": "test_jsonc_config_is_not_a_spec"
+      "replace": "        return \"unclassifiable\", f\"not valid JSON: {exc}\"\n",
+      "failure_test": "test_jsonc_config_is_not_a_spec",
+      "_mechanism": "Drop the JSONC retry: a comment-carrying config is unclassifiable again and refuses every sweep. FIXED 2026-10-04: the replacement used to open with `if True:` and an unindented `try:`, so the mutant never parsed and scored as a kill by IndentationError (found by the first full --sweep that forwarded kill lines)."
     },
     {
       "name": "an-assertion-footer-counts-as-a-crash-again",

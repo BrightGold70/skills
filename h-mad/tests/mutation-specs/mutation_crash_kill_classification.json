@@ -25,11 +25,11 @@
     },
     {
       "name": "the-attribution-check-is-dropped",
-      "_mechanism": "The over-firing direction. Any traceback anywhere in the run's output is credited to the mutated file, so an ordinary assertion failure -- whose pytest footer attributes it to the TEST file -- is reported as `(crash: AssertionError in <target>)` and inflates crash_kills. A gate reading the count would then see crash kills everywhere and the number would mean nothing.",
+      "_mechanism": "The over-firing direction. Any traceback anywhere in the run's output is credited to the mutated file, so an ordinary assertion failure -- whose pytest footer attributes it to the TEST file -- is reported as `(crash: AssertionError in <target>)` and inflates crash_kills. A gate reading the count would then see crash kills everywhere and the number would mean nothing. RETARGETED 2026-10-04: the full sweep reported this row SURVIVED. An ordinary assertion kill's footer yields no frames, so `if files:` and `if target in files:` agree on it; the test that discriminates is the other-file traceback one.",
       "file": "scripts/h_mad_mutation_harness.py",
       "find": "        if target in files:",
       "replace": "        if files:",
-      "test": "tests/test_h_mad_mutation_harness.py::test_an_ordinary_assertion_kill_is_not_counted_as_a_crash"
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_traceback_from_another_file_is_not_attributed_here"
     },
     {
       "name": "the-structured-scan-becomes-a-bare-word-search",
