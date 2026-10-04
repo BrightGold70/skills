@@ -1422,6 +1422,7 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   — **RE-CHECKED 2026-09-07 08:30 (scout): still open.** `h-mad/scripts/h_mad_ac_census.py` does not exist
   and no `ACS: OK` token appears anywhere under `h-mad/`.
   — **RE-PROBED 2026-10-03: OPEN** — no `h_mad_ac_census.py`; the precheck COUNT detector is advisory and its noun list has no ACs. The prose rule is in `measurement-discipline.md` (`1c45944a`).
+  — **LANDED 2026-10-04** — `h-mad/scripts/h_mad_ac_census.py <spec> [<paired doc> …]` prints `ACS: OK|DRIFT count=N frs=K`; DRIFT = a stale `All N ACs` claim, a numbering gap or duplicate, or a lettered AC without its base. Calibrated on the committed corpus before wiring (row `calibrate a new detector against artifacts that already passed`): document order fired on 4 audited specs that order by topic, so it is `ORDER (advisory):` only; tagged ACs (`AC-2.1 (layout):`, `AC-3.3 [OD-1]:`) were being missed and are now parsed. Result over 29 specs plus paired docs: one DRIFT, and it is real (`fanout-integrity-and-defects.plan.md` says 34, spec has 35). Consumed the way `--verify-stamp` is: SKILL.md §Precheck tells the orchestrator to run it before a plan/impl-plan audit. Spec `ac_census.json` ALL_CAUGHT 7/7.
 - **a doc edit and its version-history bump are not atomic**: an edit heredoc's `assert` failed
   while the two following `h_mad_version_history.py` calls ran anyway, so two documents briefly
   carried `v1.15`/`v1.9` entries describing changes that had not landed. The helper refused

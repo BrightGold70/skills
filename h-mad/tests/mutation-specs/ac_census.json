@@ -1,0 +1,71 @@
+{
+  "_why": "Skill-candidates row 'an AC count in a paired doc goes stale every time an AC is inserted': three stale 'All N ACs' claims in one feature were each caught by an auditor, not a check. `h_mad_ac_census.py` re-derives the count, checks numbering, and keeps document order advisory because calibration showed audited specs order by topic. These rows prove each rule has a test that bites.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_ac_census.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "a-stale-claim-is-accepted",
+      "_mechanism": "The row's defect: 'All 4 ACs' over a five-AC spec reads OK.",
+      "file": "scripts/h_mad_ac_census.py",
+      "find": "                if int(m[1]) != count:\n",
+      "replace": "                if False:\n",
+      "test": "tests/test_h_mad_ac_census.py::test_drift_names_the_doc_line_and_both_numbers",
+      "symbol": "claim_findings"
+    },
+    {
+      "name": "gaps-are-not-checked",
+      "_mechanism": "A missing AC-2.2 between AC-2.1 and AC-2.3 passes.",
+      "file": "scripts/h_mad_ac_census.py",
+      "find": "        for missing in sorted(set(range(1, max(nums) + 1)) - nums):\n",
+      "replace": "        for missing in []:\n",
+      "test": "tests/test_h_mad_ac_census.py::test_a_gap_in_numbering_is_drift",
+      "symbol": "numbering_findings"
+    },
+    {
+      "name": "duplicates-are-not-checked",
+      "_mechanism": "Two AC-2.1 lines count as two ACs and the claim check is fooled.",
+      "file": "scripts/h_mad_ac_census.py",
+      "find": "        if name in seen:\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_ac_census.py::test_a_duplicate_ac_is_drift",
+      "symbol": "numbering_findings"
+    },
+    {
+      "name": "an-orphan-letter-passes",
+      "_mechanism": "The row's own case: AC-3.8b with no AC-3.8 reads OK.",
+      "file": "scripts/h_mad_ac_census.py",
+      "find": "        if letter and n not in bases.get(fr, set()):\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_ac_census.py::test_a_lettered_ac_without_its_base_is_drift",
+      "symbol": "numbering_findings"
+    },
+    {
+      "name": "order-moves-the-verdict",
+      "_mechanism": "Calibration ignored: four audited specs that order ACs by topic all report DRIFT.",
+      "file": "scripts/h_mad_ac_census.py",
+      "find": "        findings = numbering_findings(acs) + claim_findings(len(acs), docs) if acs else []\n",
+      "replace": "        findings = numbering_findings(acs) + claim_findings(len(acs), docs) + order_advisories(acs) if acs else []\n",
+      "test": "tests/test_h_mad_ac_census.py::test_document_order_is_advisory_not_drift",
+      "symbol": "main"
+    },
+    {
+      "name": "a-tagged-ac-is-missed",
+      "_mechanism": "`AC-2.1 (layout):` is not parsed, so the count is low and a gap is invented.",
+      "file": "scripts/h_mad_ac_census.py",
+      "find": "(?: (?:\\([^)]*\\)|\\[[^\\]]*\\]))?[:.]\")",
+      "replace": "[:.]\")",
+      "test": "tests/test_h_mad_ac_census.py::test_a_tagged_ac_is_still_counted",
+      "symbol": "<module>"
+    },
+    {
+      "name": "no-acs-reads-as-ok",
+      "_mechanism": "A spec in an unrecognised shape certifies 'All 0 ACs' as consistent.",
+      "file": "scripts/h_mad_ac_census.py",
+      "find": "        print(\"ACS: NONE count=0\")\n",
+      "replace": "        print(\"ACS: OK count=0 frs=0\")\n",
+      "test": "tests/test_h_mad_ac_census.py::test_a_spec_with_no_acs_is_none_not_ok",
+      "symbol": "main"
+    }
+  ]
+}
