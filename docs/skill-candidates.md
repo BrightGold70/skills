@@ -1165,6 +1165,7 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   and prose only — no reader. `worktree-ps` appears in exactly one file (`h-mad/scripts/hmad-dispatch.sh`)
   and nothing joins the two.
   — **RE-PROBED 2026-10-03: OPEN** — nothing reads `.h-mad/telemetry.jsonl` except its writer and tests, and no pre-merge step joins it with `worktree-ps`.
+  — **LANDED 2026-10-04** — `h-mad/scripts/h_mad_live_runs.py` lists Orca worktrees and names every lane whose `docs/.bkit-memory.json` holds a claim with a live heartbeat (`owner_is_live`, the rule `--claim` uses). Not telemetry: measured, `.h-mad/telemetry.jsonl` records only COMPLETED features, so it cannot show a run in flight. Unreadable state or failed discovery prints `UNKNOWN`, never `NONE`. The advisory pre-commit hook prints it when a commit stages a file under a SKILL.md directory; it never blocks. Fixtures are written by the real `h_mad_state_write.py`. Specs `live_runs.json` ALL_CAUGHT 5/5, `doc_consumers.json` re-anchored plus two hook rows (ALL_CAUGHT 7/7). Live today: `NONE checked=4`.
 - **section-bounded slicing for doc-rule tests**: `test_h_mad_context_budget_docs.py` sliced a fixed
   `s[i:i + 4000]` window from a heading to scope its assertions, and that window silently stopped
   covering the end of its own section the moment a paragraph was added — the pin failed for the wrong

@@ -1,0 +1,53 @@
+{
+  "_why": "Skill-candidates row 'check for a live run before merging a shared skill change': a skill change lands in every session at once, and `3219bdd` invalidated a mid-cycle decision in another lane. `h_mad_live_runs.py` names live lanes; these rows prove each rule has a test that bites.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_live_runs.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "stale-claims-count-as-live",
+      "_mechanism": "A claim abandoned hours ago is reported as a running lane, so the warning cries wolf.",
+      "file": "scripts/h_mad_live_runs.py",
+      "find": "            and owner_is_live(r.get(\"owner_heartbeat_ts\"))]\n",
+      "replace": "            ]\n",
+      "test": "tests/test_h_mad_live_runs.py::test_stale_and_released_claims_are_not_live",
+      "symbol": "live_claims"
+    },
+    {
+      "name": "an-unreadable-state-reads-as-none",
+      "_mechanism": "A state file that could not be parsed is skipped, and 'could not check' prints NONE.",
+      "file": "scripts/h_mad_live_runs.py",
+      "find": "        except ValueError as exc:\n            unreadable.append((lane, exc))\n",
+      "replace": "        except ValueError as exc:\n            pass\n",
+      "test": "tests/test_h_mad_live_runs.py::test_an_unreadable_state_file_is_unknown_not_none",
+      "symbol": "main"
+    },
+    {
+      "name": "failed-discovery-reads-as-none",
+      "_mechanism": "No worktree list becomes an empty one, and nothing checked prints NONE.",
+      "file": "scripts/h_mad_live_runs.py",
+      "find": "    except (OSError, subprocess.SubprocessError, ValueError):\n        return None\n",
+      "replace": "    except (OSError, subprocess.SubprocessError, ValueError):\n        return []\n",
+      "test": "tests/test_h_mad_live_runs.py::test_failed_discovery_is_unknown_not_none",
+      "symbol": "orca_lanes"
+    },
+    {
+      "name": "every-commit-warns",
+      "_mechanism": "The warning fires on commits that touch no skill, so it is learned to be ignored.",
+      "file": "scripts/h_mad_live_runs.py",
+      "find": "            if (parent / \"SKILL.md\").is_file():\n                return True\n    return False\n",
+      "replace": "            if (parent / \"SKILL.md\").is_file():\n                return True\n    return True\n",
+      "test": "tests/test_h_mad_live_runs.py::test_if_staged_skill_is_silent_when_no_skill_file_is_staged",
+      "symbol": "staged_skill_change"
+    },
+    {
+      "name": "a-staged-skill-change-is-ignored",
+      "_mechanism": "The one commit the warning exists for prints nothing.",
+      "file": "scripts/h_mad_live_runs.py",
+      "find": "            if (parent / \"SKILL.md\").is_file():\n                return True\n    return False\n",
+      "replace": "            if False:\n                return True\n    return False\n",
+      "test": "tests/test_h_mad_live_runs.py::test_if_staged_skill_warns_when_a_skill_file_is_staged",
+      "symbol": "staged_skill_change"
+    }
+  ]
+}

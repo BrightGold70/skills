@@ -15,6 +15,7 @@
 # Install:     h-mad/git-hooks/install.sh [--repo <dir>]
 # Bypass once: git commit --no-verify
 # Override:    HMAD_DOC_CONSUMERS=<path to h_mad_doc_consumers.py>
+#              HMAD_LIVE_RUNS=<path to h_mad_live_runs.py>
 
 SCRIPT=${HMAD_DOC_CONSUMERS:-}
 if [ -z "$SCRIPT" ]; then
@@ -23,9 +24,20 @@ if [ -z "$SCRIPT" ]; then
 fi
 [ -f "$SCRIPT" ] || exit 0
 
-OUT=$(python3 "$SCRIPT" --staged 2>&1) || exit 0
+OUT=$(python3 "$SCRIPT" --staged 2>&1)
 case "$OUT" in
     *"RUN: "*)
         printf '[pre-commit] tests that read the documents you are committing:\n%s\n' "$OUT" >&2 ;;
 esac
+
+# Second advisory: h-mad runs live in other lanes, when this commit touches a skill.
+# A skill here is symlinked into every session, so the change lands mid-cycle there.
+LIVE=${HMAD_LIVE_RUNS:-"$(dirname -- "$SCRIPT")/h_mad_live_runs.py"}
+if [ -f "$LIVE" ]; then
+    OUT=$(python3 "$LIVE" --if-staged-skill 2>&1)
+    case "$OUT" in
+        ""|*"LIVE-RUNS: NONE"*) ;;
+        *) printf '[pre-commit] h-mad runs live elsewhere:\n%s\n' "$OUT" >&2 ;;
+    esac
+fi
 exit 0

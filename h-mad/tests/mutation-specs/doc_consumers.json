@@ -1,8 +1,19 @@
 {
   "_why": "Skill-candidates row 'name the tests that PARSE a document you are about to edit': a doc-derived test lives beside its consumer, so a targeted slice misses it and the push goes red in the full suite. `h_mad_doc_consumers.py` names those tests and the advisory pre-commit hook prints them. These rows prove the tests bite if matching loses its directory rule, test files are treated as documents, a failed git call reads as 'nobody reads this', or the hook starts blocking commits.",
   "root": "../..",
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_doc_consumers.py", "-q"],
-  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_doc_consumers.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
   "mutations": [
     {
       "name": "basename-alone-is-a-consumer",
@@ -44,9 +55,25 @@
       "name": "hook-blocks-the-commit",
       "_mechanism": "An advisory turns into a gate: every commit touching a read document is refused.",
       "file": "git-hooks/pre-commit",
-      "find": "        printf '[pre-commit] tests that read the documents you are committing:\\n%s\\n' \"$OUT\" >&2 ;;\nesac\nexit 0\n",
-      "replace": "        printf '[pre-commit] tests that read the documents you are committing:\\n%s\\n' \"$OUT\" >&2; exit 1 ;;\nesac\nexit 0\n",
+      "find": "        printf '[pre-commit] tests that read the documents you are committing:\\n%s\\n' \"$OUT\" >&2 ;;\n",
+      "replace": "        printf '[pre-commit] tests that read the documents you are committing:\\n%s\\n' \"$OUT\" >&2; exit 1 ;;\n",
       "test": "tests/test_h_mad_doc_consumers.py::test_pre_commit_hook_prints_consumers_and_never_blocks"
+    },
+    {
+      "name": "live-run-warning-blocks-the-commit",
+      "_mechanism": "The live-run advisory turns into a gate: a commit is refused because another lane is mid-cycle, a judgement the row says must stay the operator's.",
+      "file": "git-hooks/pre-commit",
+      "find": "        *) printf '[pre-commit] h-mad runs live elsewhere:\\n%s\\n' \"$OUT\" >&2 ;;\n",
+      "replace": "        *) printf '[pre-commit] h-mad runs live elsewhere:\\n%s\\n' \"$OUT\" >&2; exit 1 ;;\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_pre_commit_hook_warns_of_live_runs_and_never_blocks"
+    },
+    {
+      "name": "live-run-warning-is-never-printed",
+      "_mechanism": "The sender-side warning the row asks for is silently dropped.",
+      "file": "git-hooks/pre-commit",
+      "find": "        \"\"|*\"LIVE-RUNS: NONE\"*) ;;\n",
+      "replace": "        *) ;;\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_pre_commit_hook_warns_of_live_runs_and_never_blocks"
     }
   ]
 }

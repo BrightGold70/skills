@@ -115,3 +115,41 @@ def test_pre_commit_hook_prints_consumers_and_never_blocks(tmp_path: Path) -> No
 def test_installer_ships_the_pre_commit_hook() -> None:
     install = (HMAD / "git-hooks" / "install.sh").read_text(encoding="utf-8")
     assert "HOOKS=(pre-push pre-commit)" in install
+
+
+def test_pre_commit_hook_warns_of_live_runs_and_never_blocks(tmp_path: Path) -> None:
+    """The live-run warning (skill-candidates row "check for a live run before merging a
+    shared skill change") rides the same advisory hook."""
+    repo = _repo(tmp_path)
+    hooks = repo / ".git" / "hooks"
+    shutil.copy(HOOK, hooks / "pre-commit")
+    (hooks / "pre-commit").chmod(0o755)
+    stub = tmp_path / "live_runs_stub.py"
+    stub.write_text('print("LIVE-RUNS: 1 checked=3")\nprint("  live: /lanes/x · batch-18 · owner sess-abc")\n',
+                    encoding="utf-8")
+    (repo / "skill-a" / "SKILL.md").write_text("# a, edited\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+
+    proc = subprocess.run(["git", "-C", str(repo), "commit", "-m", "edit"], env={
+        **ENV, "HMAD_DOC_CONSUMERS": str(SCRIPT), "HMAD_LIVE_RUNS": str(stub)},
+        capture_output=True, text=True)
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "live: /lanes/x · batch-18" in proc.stderr, proc.stderr
+
+
+def test_pre_commit_hook_is_quiet_when_nothing_is_live(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    hooks = repo / ".git" / "hooks"
+    shutil.copy(HOOK, hooks / "pre-commit")
+    (hooks / "pre-commit").chmod(0o755)
+    stub = tmp_path / "live_runs_stub.py"
+    stub.write_text('print("LIVE-RUNS: NONE checked=3")\n', encoding="utf-8")
+    (repo / "notes.md").write_text("x\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+
+    proc = subprocess.run(["git", "-C", str(repo), "commit", "-m", "edit"], env={
+        **ENV, "HMAD_DOC_CONSUMERS": str(SCRIPT), "HMAD_LIVE_RUNS": str(stub)},
+        capture_output=True, text=True)
+
+    assert "LIVE-RUNS" not in proc.stderr, proc.stderr
