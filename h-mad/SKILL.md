@@ -46,12 +46,12 @@ Before any feature-level operation, check:
    `python3 ~/.claude/skills/h-mad/scripts/h_mad_hook_wiring.py` and read the `WIRING:`
    token. This one never halts — see §"Wired, not just installed" — but it is not
    optional to *run*: an unwired gate is silent in exactly the way a passing one is.
-3. Are the **agents registered**? The five teammate definitions this skill dispatches
-   (§"Teammate authors", §"Teammate audit leg") live in `agents/` inside this checkout and are
-   reached through user-scope symlinks:
+3. Are the **agents registered**? The six teammate definitions this skill dispatches
+   (§"Teammate authors", §"Teammate audit leg", §"Teammate change review") live in `agents/` inside
+   this checkout and are reached through user-scope symlinks:
 
    ```bash
-   for n in spec-author plan-author design-author implplan-author doc-auditor; do
+   for n in spec-author plan-author design-author implplan-author doc-auditor change-reviewer; do
      ln -sfn "<checkout>/h-mad/agents/$n.md" "$HOME/.claude/agents/$n.md"
    done
    ```
@@ -199,10 +199,10 @@ Run from current project root (`pwd` at invocation):
      echo "[h-mad] cannot resolve the skill checkout — agents NOT registered"
    else
      mkdir -p ~/.claude/agents
-     for n in spec-author plan-author design-author implplan-author doc-auditor; do
+     for n in spec-author plan-author design-author implplan-author doc-auditor change-reviewer; do
        ln -sfn "$SK/agents/$n.md" ~/.claude/agents/"$n".md
      done
-     for n in spec-author plan-author design-author implplan-author doc-auditor; do
+     for n in spec-author plan-author design-author implplan-author doc-auditor change-reviewer; do
        [ -r ~/.claude/agents/"$n".md ] || echo "DANGLING: $n — registration FAILED"
      done
    fi
@@ -2985,6 +2985,26 @@ to measure and the pass is scored normally, so **the guard only arms when you gi
 supply one for every agy leg. A leg dropped for being sometimes-hollow takes its sometimes-real
 findings with it; a leg whose hollow passes cannot certify keeps them.
 
+## Teammate change review — a reviewer that keeps its own report
+
+A fresh-context review of a CHANGE by a subagent **goes to `change-reviewer`**. It applies to an
+adversarial round, a second look at a batch, or a review of a fix before merge. Never use a
+reviewer type without a Write tool for this. It cannot write the report file it is handed, and its
+final reply is cut at about 4 KB. Five consecutive multi-host-runtime rounds (R18–R22) lost their
+reports to that truncation and were relayed in ≤3 KB `SendMessage` chunks, reassembled by hand.
+`change-reviewer` owns exactly one file, its report, and answers with a `DONE` line carrying the
+report's sha256. Gate it through `h_mad_done_gate.py` before reading the report, exactly as
+§"Teammate authors" rule 6 requires for the authors and `doc-auditor`:
+
+```
+Agent(subagent_type: "change-reviewer", prompt:
+  "SUBJECT=<base>..<head> — <what the change claims to do>
+   RUBRIC=<correctness | a named invariant | adversarial inputs>
+   REPORT=/tmp/review_<topic>_r<N>.md
+   PROJECT_ROOT=<PROJECT_ROOT>
+   This pass is GATING.")
+```
+
 ## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)
 
 - `h_mad_extract_verdict.py` — read the last `STATUS:`/`VERDICT:`/`ASSESSMENT:` line off a scrape, validated against its contract; exit 2 (printing nothing) when absent, empty, or off-contract, so silence can never read as approval
@@ -3232,6 +3252,7 @@ is the one returned.
 - `references/orchestration-mode.md` — Orca structured orchestration and Phase-5 worktree fanout protocol
 - `agents/{spec,plan,design,implplan}-author.md` — the four phase-document authors (§"Teammate authors")
 - `agents/doc-auditor.md` — the teammate audit leg (§"Teammate audit leg")
+- `agents/change-reviewer.md` — fresh-context review of a CHANGE that writes its own report (§"Teammate change review")
 - `references/codex-implementer-prompt.md` — Phase 5d/5e Codex dispatch template
 - `references/agy-spec-reviewer-prompt.md` — Phase 5e-review agy dispatch template
 - `references/agy-architectural-reviewer-prompt.md` — Phase 6a-prime agy dispatch template

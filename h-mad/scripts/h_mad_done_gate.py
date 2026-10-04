@@ -58,7 +58,7 @@ import re
 import sys
 from pathlib import Path
 
-# `<ROLE>: DONE ` — the four authors and the auditor all emit this shape. Anchored
+# `<ROLE>: DONE ` — the four authors, the auditor and the change reviewer emit this shape. Anchored
 # at the start of the line so a DONE quoted mid-sentence in a report body cannot be
 # mistaken for the contract line.
 DONE_RE = re.compile(r"^(?P<role>[A-Z][A-Z-]*): DONE\b(?P<rest>.*)$")
@@ -129,7 +129,7 @@ def digest(path: Path) -> tuple[str, int]:
 
 def run(message: str, repo: Path, expect_path: str | None) -> tuple[str, int]:
     try:
-        _role, rest = find_done_line(message)  # role is not gated: any of the five may answer
+        _role, rest = find_done_line(message)  # role is not gated: any agent may answer
     except ValueError as exc:
         return f"DONEGATE: FAIL reason={exc}", 1
 

@@ -40,7 +40,7 @@ AGENTS = SKILL_DIR / "agents"
 SKILL = SKILL_DIR / "SKILL.md"
 
 AUTHORS = ["spec-author", "plan-author", "design-author", "implplan-author"]
-ALL_AGENTS = AUTHORS + ["doc-auditor"]
+ALL_AGENTS = AUTHORS + ["doc-auditor", "change-reviewer"]
 
 
 def _norm(path: Path) -> str:
@@ -101,10 +101,10 @@ def test_the_digest_matches_the_command_the_agent_files_name(tmp_path: Path) -> 
 
 
 def test_every_role_token_is_accepted(tmp_path: Path) -> None:
-    """Five agents emit this line; a gate anchored on one role silently skips four."""
+    """Six agents emit this line; a gate anchored on one role silently skips five."""
     sha, lines = _doc(tmp_path)
     for role in ("SPEC-AUTHOR", "PLAN-AUTHOR", "DESIGN-AUTHOR",
-                 "IMPLPLAN-AUTHOR", "DOC-AUDITOR"):
+                 "IMPLPLAN-AUTHOR", "DOC-AUDITOR", "CHANGE-REVIEWER"):
         r = _run(tmp_path, "--done-line", _done(sha, lines, role=role))
         assert r.returncode == 0, (role, r.stdout)
 
@@ -365,6 +365,8 @@ def test_the_auditor_hashes_its_report_and_has_no_none_variant() -> None:
                         "sha256=<64 hex>"),
     ("doc-auditor", "DOC-AUDITOR: DONE must=N should=N nit=N path=<REPORT> lines=N "
                     "sha256=<64 hex>"),
+    ("change-reviewer", "CHANGE-REVIEWER: DONE must=N should=N nit=N path=<REPORT> lines=N "
+                        "sha256=<64 hex>"),
 ])
 def test_the_done_template_carries_the_three_fields(name: str, done: str) -> None:
     """The TEMPLATE, not the prose around it — an author copies the template."""
