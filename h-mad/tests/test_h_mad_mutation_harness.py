@@ -3527,3 +3527,84 @@ def test_the_live_run_refuses_a_migrated_anchor(tmp_path: Path) -> None:
     assert any("migrated" in r for r in result["refused"]), result["refused"]
     assert any("first" in r and "inserted" in r for r in result["refused"]), result["refused"]
     assert (tmp_path / "target.py").read_text(encoding="utf-8") == before
+
+
+def _git_repo_with_specs(repo: Path, specs: dict[str, list[dict]]) -> None:
+    """A git repo whose committed specs live in several directories."""
+    repo.mkdir(parents=True, exist_ok=True)
+    for rel, mutations in specs.items():
+        spec = _project(repo / rel, mutations)
+        # `_project` writes an absolute root; a committed spec is root-relative.
+        data = json.loads(spec.read_text(encoding="utf-8"))
+        data["root"] = "."
+        spec.write_text(json.dumps(data), encoding="utf-8")
+    (repo / "notes.json").write_text('{"not": "a spec"}', encoding="utf-8")
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "specs"]):
+        subprocess.run(["git", "-C", str(repo), *cmd], check=True, env=env,
+                       capture_output=True)
+
+
+def test_check_anchors_with_no_spec_sweeps_every_committed_spec_directory(
+    tmp_path: Path,
+) -> None:
+    """The habitual one-directory sweep said ANCHORS_OK while a second directory
+    had drifted (skill-candidates row "`--check-anchors` should sweep every spec
+    directory by default"). With no spec argument the sweep discovers committed
+    specs the way the pre-push hook does, so the second directory is reached."""
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {
+        "h-mad/tests/mutation-specs": [_kills_the_guard()],
+        "h-mad/tests/specs": [_drifted_anchor()],
+    })
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors"],
+        capture_output=True, text=True, cwd=str(repo / "h-mad"),
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ANCHORS_DRIFTED" in proc.stdout, proc.stdout
+    assert "specs=2" in proc.stdout, proc.stdout
+    assert "anchor that no longer matches" in proc.stdout, proc.stdout
+    assert "notes.json" not in proc.stdout, "a non-spec JSON is noise, not a finding"
+
+
+def test_check_anchors_with_no_spec_ignores_untracked_specs(tmp_path: Path) -> None:
+    """COMMITTED is the property, as in the suite guard and the pre-push hook."""
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+    _project(repo / "scratch", [_drifted_anchor()])
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors"],
+        capture_output=True, text=True, cwd=str(repo),
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ANCHORS_OK" in proc.stdout and "specs=1" in proc.stdout, proc.stdout
+
+
+def test_check_anchors_with_no_spec_outside_git_refuses_rather_than_passing(
+    tmp_path: Path,
+) -> None:
+    """Discovery that could not run must not read as a clean sweep."""
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors"],
+        capture_output=True, text=True, cwd=str(tmp_path),
+        env={**os.environ, "GIT_CEILING_DIRECTORIES": str(tmp_path.parent)},
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ANCHORS_OK" not in proc.stdout, proc.stdout
+    assert "could not discover" in proc.stdout + proc.stderr, proc.stdout + proc.stderr
+
+
+def test_a_mutation_run_without_a_spec_is_a_usage_error(tmp_path: Path) -> None:
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS)], capture_output=True, text=True, cwd=str(tmp_path),
+    )
+
+    assert proc.returncode != 0
+    assert "spec" in proc.stderr, proc.stderr

@@ -988,7 +988,7 @@ def _sibling_specs(spec_path: Path) -> dict:
     The residue is real and is the price of the scoping: between a drift landing
     and the next suite or push, a single run in directory A can report
     ALL_CAUGHT while a spec in directory B is drifted. Run `--check-anchors`
-    over every spec directory if you need that window closed sooner.
+    with no spec (every committed spec) if you need that window closed sooner.
     """
     spec_path = Path(spec_path).resolve()
     spec_paths = []
@@ -1555,6 +1555,34 @@ def _run_spec_holding_the_tree(
     return result
 
 
+def _committed_specs(cwd: Path) -> list[Path]:
+    """Every committed spec in the repository containing `cwd`.
+
+    The no-argument `--check-anchors` sweep. Discovery matches the pre-push hook
+    and the suite's tree-wide guard: `git ls-files '*.json'`, then the classifier
+    decides what is a spec. A habitual one-directory sweep said ANCHORS_OK while
+    `h-mad/tests/specs/` had drifted; this cannot miss a directory because it
+    never names one. Non-specs are dropped here so the sweep prints findings,
+    not every `package.json`; unclassifiable files are kept so they still refuse.
+
+    Raises `SpecError` when git cannot answer: "could not discover" must never
+    reach the sweep as an empty list, which would read as nothing to check.
+    """
+    top = subprocess.run(["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+                         capture_output=True, text=True)
+    if top.returncode != 0:
+        raise SpecError(f"could not discover committed specs: {top.stderr.strip()}")
+    repo = Path(top.stdout.strip())
+    listed = subprocess.run(
+        ["git", "-C", str(repo), "-c", "core.quotePath=false", "ls-files", "-z", "--", "*.json"],
+        capture_output=True, text=True,
+    )
+    if listed.returncode != 0:
+        raise SpecError(f"could not discover committed specs: {listed.stderr.strip()}")
+    paths = sorted(repo / rel for rel in listed.stdout.split("\0") if rel)
+    return [p for p in paths if classify_spec_file(p)[0] != "not-a-spec"]
+
+
 def _check_anchors(spec_paths: list[Path]) -> int:
     """Print an anchor sweep over every spec. 0 iff every anchor still matches once."""
     specs = ok = drifted = unreadable = mutations = skipped = unclassifiable = 0
@@ -1711,8 +1739,9 @@ def _print_skipped_precheck_entries(result: dict) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="H-MAD Phase-5e mutation harness")
     parser.add_argument(
-        "spec", type=Path, nargs="+",
-        help="JSON mutation spec (exactly one to run; several with --check-anchors)",
+        "spec", type=Path, nargs="*",
+        help="JSON mutation spec (exactly one to run; several with --check-anchors, "
+             "or none to sweep every committed spec in the repository)",
     )
     parser.add_argument(
         "--check-anchors", action="store_true",
@@ -1722,7 +1751,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.check_anchors:
-        return _check_anchors(args.spec)
+        if args.spec:
+            return _check_anchors(args.spec)
+        try:
+            return _check_anchors(_committed_specs(Path.cwd()))
+        except SpecError as exc:
+            print(f"ANCHORS: ANCHORS_UNREADABLE — {exc}")
+            print("[H-MAD] anchors ANCHORS_UNREADABLE")
+            return 2
+    if not args.spec:
+        parser.error("a mutation run takes exactly one spec")
     if len(args.spec) != 1:
         # The run applies mutations and restores them; widening it to N specs
         # silently would multiply that blast radius for a flag that was only

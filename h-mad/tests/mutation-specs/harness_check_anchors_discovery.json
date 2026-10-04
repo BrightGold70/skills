@@ -1,0 +1,44 @@
+{
+  "_why": "Skill-candidates row '`--check-anchors` should sweep every spec directory by default': a habitual one-directory sweep said ANCHORS_OK while `h-mad/tests/specs/` had drifted. A no-argument `--check-anchors` now discovers every committed spec through `git ls-files` and the classifier. These rows prove the tests bite if discovery narrows back to one directory, admits untracked files, or turns a failed discovery into an empty (vacuous) sweep.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_mutation_harness.py", "-q", "-k", "no_spec or without_a_spec or exactly_one"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "discovery-narrows-to-one-directory",
+      "_mechanism": "The defect the row records, restored: only `mutation-specs/` is swept and a drifted `specs/` spec is invisible.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    paths = sorted(repo / rel for rel in listed.stdout.split(\"\\0\") if rel)\n",
+      "replace": "    paths = sorted(repo / rel for rel in listed.stdout.split(\"\\0\") if rel and \"/mutation-specs/\" in \"/\" + rel)\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_sweeps_every_committed_spec_directory",
+      "symbol": "_committed_specs"
+    },
+    {
+      "name": "discovery-failure-becomes-an-empty-sweep",
+      "_mechanism": "Fail-open: git cannot answer, the sweep gets [] and reports NOTHING_SWEPT instead of saying discovery failed.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if top.returncode != 0:\n        raise SpecError(f\"could not discover committed specs: {top.stderr.strip()}\")\n",
+      "replace": "    if top.returncode != 0:\n        return []\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_outside_git_refuses_rather_than_passing",
+      "symbol": "_committed_specs"
+    },
+    {
+      "name": "discovery-walks-the-filesystem-not-the-index",
+      "_mechanism": "An untracked scratch spec joins the sweep, so a committed-only property reads someone's local file.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    paths = sorted(repo / rel for rel in listed.stdout.split(\"\\0\") if rel)\n",
+      "replace": "    paths = sorted(repo.rglob(\"*.json\"))\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_ignores_untracked_specs",
+      "symbol": "_committed_specs"
+    },
+    {
+      "name": "non-specs-are-swept-as-noise",
+      "_mechanism": "Every tracked JSON prints a SKIPPED line, burying the findings the sweep exists to show.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return [p for p in paths if classify_spec_file(p)[0] != \"not-a-spec\"]\n",
+      "replace": "    return paths\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_sweeps_every_committed_spec_directory",
+      "symbol": "_committed_specs"
+    }
+  ]
+}
