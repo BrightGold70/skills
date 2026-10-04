@@ -1677,14 +1677,7 @@ individually re-verified this pass; that is stated rather than left implied.
   `audit-prompt.template.md` + `doc-auditor` 7a. The row asked for the EXECUTION half — "the documents
   publish these screens with their commands, so a freeze-certification step can execute them" — and
   no step does; every round still runs them by hand or skips them.
-  — **RE-PROBED 2026-09-14: PARTIAL, and the shipped half answers the question a better way than the
-  row proposed.** `h_mad_phase7_integrate.py:32` argues that when the base is strictly behind,
-  `git merge --no-ff` yields a tree byte-identical to the feature tip, so comparing `<base>^{tree}`
-  to `<branch>^{tree}` PROVES the existing green run covers the merge — implemented at `:283`
-  (`identity = behind == 0`) and re-checked against the real trees after an apply (`:404`). Missing:
-  when the trees are NOT identical, nothing runs the suite on the merged result, which is precisely
-  this row's measured case.
-  — **RE-PROBED 2026-10-03: OPEN** — nothing collects and runs the published `expect 0` screens at a freeze sha. The 2026-09-14 PARTIAL note under this row is about the merged-tree suite and belongs to `run the full project suite on the MERGED tree`.
+  — **RE-PROBED 2026-10-03: OPEN** — nothing collects and runs the published `expect 0` screens at a freeze sha. The 2026-09-14 PARTIAL note that sat under this row is about the merged-tree suite; moved 2026-10-04 to `run the full project suite on the MERGED tree`.
 - **merge tooling that lives under the audited roots only AFTER the last gating pass is collected**: any `h-mad/` commit moves the phase documents' trip-wires and `.py` censuses; the class-gate merge had to wait for r19's three codex legs to land, and the documents are deliberately not re-stamped afterwards. A merge-order check could read the feature's phase + open gating cycle. — recurrence: 2 (this session; `af19d53` at r16) — candidate: maybe
   — **RE-PROBED 2026-10-03: OPEN** — no merge-order check reads other features' open gating cycles; the 7f blocker list has no such reason.
 - **value-grep every shared string across ALL FOUR documents after any REOPEN, not only at first collection**: wave 2's divergence prose became false when the design was reopened after the impl-plan finished; the impl-plan then asserted the opposite of its sibling at three body sites. Collection-time greps ran; reopen-time greps did not. — recurrence: 2 (r18 matrix 85→86, r19 killer name) — candidate: yes
@@ -1693,9 +1686,17 @@ individually re-verified this pass; that is stated rather than left implied.
   reopen, not only at first collection", carrying this row's own wave-2 divergence case as the
   measured example. The row asked for a habit, not a verb, so the rule closes it.
 - **run the full project suite on the MERGED tree, not only on the feature branch**: `test_size_warning_fires_before_the_cliff_not_only_past_it` passed in the worktree and failed on merged main because the template it measures grew ~1 KB and is head-duplicated. — recurrence: 1 (measured) — candidate: maybe
+  — **RE-PROBED 2026-09-14 (moved here 2026-10-04 from the `expect 0` screen row): PARTIAL, and the shipped half answers the question a better way than the
+  row proposed.** `h_mad_phase7_integrate.py:32` argues that when the base is strictly behind,
+  `git merge --no-ff` yields a tree byte-identical to the feature tip, so comparing `<base>^{tree}`
+  to `<branch>^{tree}` PROVES the existing green run covers the merge — implemented at `:283`
+  (`identity = behind == 0`) and re-checked against the real trees after an apply (`:404`). Missing:
+  when the trees are NOT identical, nothing runs the suite on the merged result, which is precisely
+  this row's measured case.
   — **RE-PROBED 2026-10-03: PARTIAL** — `0fa825c9` proves identity (`h_mad_phase7_integrate.py`, `behind == 0`); when `identity=n` it only prints 'Re-run the suite before 7e' — nothing runs it or blocks 7e.
 - **`${s}:path` not `$s:path` in any per-commit zsh loop**: `$s:h-mad/SKILL.md` parses as the `:h` dirname modifier, so every `git show` read a bogus path and printed 0 — a clean-looking false result that nearly shipped as a finding. — recurrence: 1 (caught) — candidate: maybe
   — **RE-PROBED 2026-10-03: PARTIAL** — recorded as a learning (`a9e69987`) and cited for H4 in SKILL.md; no rule in `measurement-discipline.md`, no lint. Closable as lesson-only.
+  — **DECLINED 2026-10-04 (triage: useful, not codable)** — lesson-only: the trap lives in ad-hoc interactive loops, not in files any lint reads; the learning (`a9e69987`) and SKILL.md's H4 citation are the durable form.
 
 ## 2026-09-07 — doc-block-exec task4-5e-gates (scout)
 
@@ -2181,6 +2182,7 @@ Rows re-read for relevance to this session's work (the crash-kill/`--sweep` pair
   Exhaustion also priced the cut-off: 33 `DIFFERENT` calls, and only **2** at rank > 70 — so the
   screen's narrowing was sound, and the tail was worth reading exactly once.
   — **RE-PROBED 2026-10-03: PARTIAL** — the rank-ordered-bands recipe exists only in `docs/learnings.md`; no rule or tool. Closable as learning-only.
+  — **DECLINED 2026-10-04 (triage: useful, not codable)** — lesson-only: a reading method (rank, calibrate, read in blind bands, check the gradient), not a mechanical step; `docs/learnings.md` holds it.
 
 ## 2026-09-14 — blind-spots-closed-and-a-retraction
 
