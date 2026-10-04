@@ -1,0 +1,91 @@
+{
+  "_why": "2026-10-04, row T of HemaSuite's anemia-jmj triage. During Phase 5 the codex gate refused every shell command outside its test/read-only/control allowlist anywhere in the project, so a manuscript run unrelated to the feature needed the feature's state paused and restored. The operator may now list argv prefixes in `.h-mad/phase5-shell-allow`. Each row removes one limit on that admission, or the admission itself, or the guard that keeps codex from writing the file.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_codex_gate_shell_allowance.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "allowance-never-consulted",
+      "_mechanism": "The admission never fires, which is the defect: a declared manuscript run is still refused during an unrelated Phase 5.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if not _operator_allowed(command, allowance):  # M:SA-WIRE",
+      "replace": "        if True:  # M:SA-WIRE",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_a_declared_prefix_is_admitted[hpw manuscript run]"
+    },
+    {
+      "name": "lexical-subset-dropped",
+      "_mechanism": "Without the lexical subset, `&&`, `>` and the like reach shlex as ordinary tokens after a declared prefix, so a declared prefix carries any second command.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if SIMPLE_SHELL_COMMAND.fullmatch(command) is None:  # M:SA-LEXICAL",
+      "replace": "    if False:  # M:SA-LEXICAL",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_a_declared_prefix_cannot_carry_another_command[hpw manuscript run && touch prod.py]"
+    },
+    {
+      "name": "executable-not-resolved",
+      "_mechanism": "A declared name is admitted even when nothing on PATH answers to it, so the decision no longer depends on what would actually run.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if not argv or shutil.which(argv[0]) is None:  # M:SA-RESOLVE",
+      "replace": "    if not argv:  # M:SA-RESOLVE",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_an_executable_that_does_not_resolve_is_refused"
+    },
+    {
+      "name": "prefix-reduced-to-executable",
+      "_mechanism": "Matching only the executable turns `hpw manuscript run` into `hpw *`, admitting every subcommand of a declared tool.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    return any(argv[:len(prefix)] == prefix for prefix in prefixes)  # M:SA-PREFIX",
+      "replace": "    return any(argv[:1] == prefix[:1] for prefix in prefixes)  # M:SA-PREFIX",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_an_undeclared_command_is_refused[hpw manuscript delete paper]"
+    },
+    {
+      "name": "malformed-line-skipped",
+      "_mechanism": "A line that cannot be parsed is skipped instead of refusing, so a half-broken allowance silently admits whatever its parsable lines say.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "            return f\"{SHELL_ALLOW_FILE}:{number} cannot be parsed ({exc})\"  # M:SA-PARSE",
+      "replace": "            continue  # M:SA-PARSE",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_a_malformed_allowance_refuses_and_names_it"
+    },
+    {
+      "name": "unreadable-read-as-empty",
+      "_mechanism": "An allowance that cannot be read is treated as declaring nothing, so 'I could not read it' and 'it lists nothing' take the same branch.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        return f\"{SHELL_ALLOW_FILE} is unreadable ({exc})\"",
+      "replace": "        return []",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_an_allowance_that_is_not_a_regular_file_refuses_and_names_it"
+    },
+    {
+      "name": "codex-may-write-the-allowance",
+      "_mechanism": "Without the write guard a worker writes `.h-mad/phase5-shell-allow` (a non-Python write inside the root) and grants itself any command.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if phase5_status in {\"active\", \"unknown\"} and _is_shell_allowance(root, resolved):  # M:SA-GUARD",
+      "replace": "        if phase5_status in {\"active\", \"unknown\"} and False:  # M:SA-GUARD",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_codex_cannot_write_the_allowance_during_phase5[.h-mad/phase5-shell-allow]"
+    },
+    {
+      "name": "guard-is-case-sensitive",
+      "_mechanism": "On a case-insensitive filesystem `.H-MAD/Phase5-Shell-Allow` is the same file the gate reads, so a case-sensitive comparison lets a respelling through.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if candidate.relative_to(root).as_posix().casefold() == SHELL_ALLOW_FILE:  # M:SA-FOLD",
+      "replace": "        if candidate.relative_to(root).as_posix() == SHELL_ALLOW_FILE:  # M:SA-FOLD",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_codex_cannot_write_the_allowance_during_phase5[.H-MAD/Phase5-Shell-Allow]"
+    },
+    {
+      "name": "guard-outlives-phase5",
+      "_mechanism": "The guard fires with no feature at step5, so the operator's own codex session cannot maintain the file between features.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        if phase5_status in {\"active\", \"unknown\"} and _is_shell_allowance(root, resolved):  # M:SA-GUARD",
+      "replace": "        if _is_shell_allowance(root, resolved):  # M:SA-GUARD",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_outside_phase5_the_allowance_is_writable"
+    }
+  ]
+}

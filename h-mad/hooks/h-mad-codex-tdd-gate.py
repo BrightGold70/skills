@@ -62,6 +62,10 @@ SAFE_HMAD_SCRIPT_OPTIONS = {
     },
 }
 TEMP_OUTPUT_OPTIONS = {"--log", "--out", "--prompt", "--report-file"}
+# Operator-declared argv prefixes admitted through Bash during step5, for work
+# unrelated to the feature (a manuscript run). Codex may not write this file
+# while step5 is active, or a worker could grant itself any command.
+SHELL_ALLOW_FILE = ".h-mad/phase5-shell-allow"
 TRUSTED_BIN_DIRS = {
     Path("/bin"),
     Path("/usr/bin"),
@@ -375,6 +379,47 @@ def _safe_shell_command(command: str, root: Path | None = None, cwd: object = No
     return _safe_argv(argv, root, cwd)
 
 
+def _shell_allowance(root: Path) -> list[list[str]] | str:
+    """The operator's declared prefixes, or why they cannot be trusted."""
+    try:
+        text = _read_regular_text(root / SHELL_ALLOW_FILE)
+    except FileNotFoundError:
+        return []
+    except (OSError, UnicodeDecodeError) as exc:
+        return f"{SHELL_ALLOW_FILE} is unreadable ({exc})"
+    prefixes = []
+    for number, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            tokens = shlex.split(line)
+        except ValueError as exc:
+            return f"{SHELL_ALLOW_FILE}:{number} cannot be parsed ({exc})"  # M:SA-PARSE
+        prefixes.append(tokens)
+    return prefixes
+
+
+def _operator_allowed(command: str, prefixes: list[list[str]]) -> bool:
+    if SIMPLE_SHELL_COMMAND.fullmatch(command) is None:  # M:SA-LEXICAL
+        return False
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return False
+    if not argv or shutil.which(argv[0]) is None:  # M:SA-RESOLVE
+        return False
+    return any(argv[:len(prefix)] == prefix for prefix in prefixes)  # M:SA-PREFIX
+
+
+def _is_shell_allowance(root: Path, resolved: Identity) -> bool:
+    parent = Path(resolved.target).parent
+    for candidate in (Path(resolved.target), *(parent / name for name in resolved.names)):
+        if candidate.relative_to(root).as_posix().casefold() == SHELL_ALLOW_FILE:  # M:SA-FOLD
+            return True
+    return False
+
+
 def _safe_argv(argv: list[str], root: Path | None, cwd: object) -> bool:
     if not argv:
         return False
@@ -479,11 +524,16 @@ def _main_guarded() -> int:
     if command and phase5_status == "unknown":
         return _deny("H-MAD state is unreadable; refusing shell execution fail-closed.")
     if command and phase5_status == "active" and not _safe_shell_command(command, root, payload.get("cwd")):
-        return _deny(
-            "H-MAD Phase 5 permits only explicit test, read-only, and H-MAD control commands "
-            "through Bash. Use apply_patch for writes so the Codex TDD gate can verify a "
-            "failing test first."
-        )
+        allowance = _shell_allowance(root)
+        if isinstance(allowance, str):
+            return _deny(f"H-MAD Phase 5 shell allowance {allowance}; refusing fail-closed.")
+        if not _operator_allowed(command, allowance):  # M:SA-WIRE
+            return _deny(
+                "H-MAD Phase 5 permits only explicit test, read-only, and H-MAD control commands "
+                "through Bash. Use apply_patch for writes so the Codex TDD gate can verify a "
+                f"failing test first. The operator may admit unrelated work by listing its "
+                f"command prefix in {SHELL_ALLOW_FILE}."
+            )
 
     if tool in {"Write", "Edit", "apply_patch"} and not targets and phase5_status in {"active", "unknown"}:
         return _deny("H-MAD Phase 5 could not identify this write target; refusing fail-closed.")
@@ -500,6 +550,8 @@ def _main_guarded() -> int:
             if phase5_status in {"active", "unknown"}:
                 return _deny(f"H-MAD Phase 5 target is unresolvable ({resolved.component}); refusing fail-closed. kind=judge-error")
             continue
+        if phase5_status in {"active", "unknown"} and _is_shell_allowance(root, resolved):  # M:SA-GUARD
+            return _deny(f"H-MAD Phase 5 forbids codex writing {SHELL_ALLOW_FILE}; only the operator declares allowances.")
         production = []
         for name in resolved.names:
             absolute = Path(resolved.target).parent / name
