@@ -3,7 +3,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { added, barCells, barWidth, forecast, freeTokens, isBuffer, push, bufferText, freeText, segmentText, share, short, spark, toReading, toSegments } from './weather'
+import { added, barCells, barWidth, forecast, freeTokens, isBuffer, push, bufferText, freeText, segmentText, share, short, toReading, toSegments } from './weather'
 
 // Held by the host, so the history survives a hot reload of this file.
 // A theme key, so the track follows dark and light themes; it is no element's /context colour.
@@ -58,7 +58,6 @@ export const register: Register = on => {
       <Text>{`  ${now.percent}% of context`}</Text>,
       <Text dimColor>{`  ${short(now.tokens)} / ${short(now.window)}`}</Text>,
     ]
-    if (wide) forecastRow.push(<Text dimColor>{`  ${spark(history)}`}</Text>)
     if (wide && grew !== null && grew > 0) {
       forecastRow.push(<Text dimColor>{`  +${short(grew)} last turn`}</Text>)
     }

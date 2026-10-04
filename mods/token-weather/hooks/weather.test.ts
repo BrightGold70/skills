@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { ContextCategory, SessionContextBreakdown } from 'claude-code'
 
-import { HISTORY, added, barCells, barWidth, forecast, freeTokens, push, segmentText, freeText, bufferText, share, short, spark, toReading, toSegments } from './weather'
+import { HISTORY, added, barCells, barWidth, forecast, freeTokens, push, segmentText, freeText, bufferText, share, short, toReading, toSegments } from './weather'
 
 const BAND_PROPS = {
   hasSurvey: false,
@@ -69,24 +69,7 @@ test('history skips repeats and keeps the last HISTORY readings', () => {
   expect(added([r(3)])).toBeNull()
 })
 
-test('spark and short render compactly', () => {
-  const r = (tokens: number) => ({ tokens, window: 1_000_000, percent: Math.round(tokens / 10_000) })
-  // One braille dot per reading, set at that reading's share of the window in quarters.
-  const levels = spark([r(0), r(250_000), r(500_000), r(1_000_000)])
-  expect(levels).toBe('⡀⠄⠂⠁')
-  // Each is a single dot in the cell's left column (dots 1, 2, 3, 7), so the right half stays
-  // empty and every reading is one dot then a gap. Two dots per cell (⣀⠤⠒⠉) sat at an even
-  // spacing across cells, and three readings read as one column of six dots.
-  for (const g of levels) expect([0x01, 0x02, 0x04, 0x40]).toContain(g.codePointAt(0)! - 0x2800)
-  expect(spark([r(200_000), r(350_000), r(394_000), r(520_000)])).toBe('⡀⠄⠄⠂')
-  // A flat history is flat at its own level.
-  expect(spark([r(394_000), r(394_000)])).toBe('⠄⠄')
-  // A new reading never redraws the earlier ones: each column keeps its height, so growth reads
-  // as steps. Rescaling to the history's own range reshaped every column on every turn.
-  const grown = [r(100_000), r(250_000), r(400_000), r(650_000), r(900_000)]
-  for (let n = 1; n < grown.length; n++) {
-    expect(spark(grown.slice(0, n + 1)).startsWith(spark(grown.slice(0, n)))).toBe(true)
-  }
+test('short renders compactly', () => {
   expect(short(162_000)).toBe('162k')
   expect(short(1_000_000)).toBe('1M')
   expect(short(950)).toBe('950')
@@ -180,10 +163,9 @@ test('the drawn bar fills the screen width at any size', async ($, on) => {
   }
 })
 
-test('the spark sits on the forecast row and never fuses with the bar below it', async ($, on) => {
-  // The forecast row is directly above the bar, every cell of which is filled. Lower-block
-  // glyphs (▁…█) fill to the bottom of their cell and fused with it into one stretched slab;
-  // a single braille dot row leaves a gap.
+test('the forecast row carries no sparkline, only the last turn\'s growth', async ($, on) => {
+  // The sparkline was removed: the forecast row is the icon, the fill, the token counts and
+  // what the last turn added.
   let tokens = 10_000
   on('session.usage', () => ({
     value: {
@@ -209,9 +191,8 @@ test('the spark sits on the forecast row and never fuses with the bar below it',
   const tree = (await ui.drawn()) as { children: unknown[] }
   const rows = tree.children.map(text)
   expect(rows.length).toBe(3)
-  expect(rows[0]).toMatch(/⡀⠁/)
-  expect(rows.join('')).not.toMatch(/[▁▂▃▄▅▆▇█]/)
-  expect(rows[2]).not.toMatch(/[⡀⠄⠂⠁]/)
+  expect(rows[0]).not.toMatch(/[\u2800-\u28FF▁▂▃▄▅▆▇█]/)
+  expect(rows[0]).toMatch(/\+180k last turn/)
   await ui.unmount()
 })
 

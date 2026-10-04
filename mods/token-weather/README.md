@@ -1,7 +1,7 @@
 # token-weather
 
 A Claude Code mod: a live forecast of the context window, drawn above the prompt —
-fill percentage, a sparkline of recent turns, and a bar of what fills the window in
+fill percentage, what the last turn added, and a bar of what fills the window in
 `/context`'s colours.
 
 ## Install on a Mac
