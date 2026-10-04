@@ -3706,3 +3706,21 @@ def test_sweep_forwards_each_crash_kill_with_its_mutation(tmp_path: Path) -> Non
     proc = _sweep(spec)
 
     assert f"  kill: {spec} :: unbind the printed name :: crash: NameError in guard.py" in proc.stdout, proc.stdout
+
+
+def test_an_untargeted_mutation_that_stops_the_file_parsing_is_refused_not_caught(
+    tmp_path: Path
+) -> None:
+    """Tier 1 applied only on the TARGETED path. An untargeted mutant that does not
+    parse turned the whole suite red and scored as a kill — found by the first
+    `--sweep` that forwarded kills: `audit_effort.json :: empty-log-renders-as-zeros`
+    was `caught` with `crash: IndentationError`."""
+    spec = _crash_project(tmp_path, [
+        {"name": "stop the file parsing", "file": "guard.py",
+         "find": "LIMIT = 5", "replace": "LIMIT ="},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "REFUSED", result
+    assert result["caught"] == 0, result
+    assert "did not parse" in result["refused"][0], result["refused"]

@@ -43,7 +43,7 @@
       "name": "empty-log-renders-as-zeros",
       "file": "scripts/h_mad_audit_cycle.py",
       "find": "        return {\"readable\": False, \"shape\": \"empty\"}",
-      "replace": "    if not text.strip():\n        return {\"readable\": True, \"tools\": 0, \"ok\": 0, \"failed\": 0, \"thinking\": 0}"
+      "replace": "        return {\"readable\": True, \"tools\": 0, \"ok\": 0, \"failed\": 0, \"thinking\": 0}"
     },
     {
       "name": "delivery-floor-off-by-one",

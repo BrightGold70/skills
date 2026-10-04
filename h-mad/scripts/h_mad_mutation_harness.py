@@ -1507,6 +1507,18 @@ def _run_spec_holding_the_tree(
                     # knowing which test should have bitten.
                     if self_matching(mutation["find"], mutation.get("replace", "")):
                         result["mechanism"][mutation["name"]] = SELF_MATCHING_NOTE
+                elif (crash := crash_kill(suite_output, mutation["file"])) in DID_NOT_PARSE:
+                    # Tier 1 on the UNTARGETED path too. It used to apply only when a
+                    # test was named, so a mutant that did not parse turned the whole
+                    # suite red and scored as a kill: the first `--sweep` that
+                    # forwarded kills showed `audit_effort.json` caught on an
+                    # `IndentationError`.
+                    result["refused"].append(
+                        f"{mutation['name']}: the suite went red on a {crash} in "
+                        f"{Path(mutation['file']).name} — the mutated file did not parse, "
+                        f"so it cannot have exercised the guard; this measured NOTHING "
+                        f"rather than the property"
+                    )
                 else:
                     result["caught"] += 1
                     killers = _failing_tests(suite_output)
@@ -1514,7 +1526,6 @@ def _run_spec_holding_the_tree(
                         "killed by " + ", ".join(killers[:3]) if killers
                         else "killed, but the runner's output named no test (unparsed)"
                     )
-                    crash = crash_kill(suite_output, mutation["file"])
                     if crash:
                         result["crash_kills"] += 1
                         mechanism += f" (crash: {crash} in {Path(mutation['file']).name})"
