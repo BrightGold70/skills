@@ -1,0 +1,31 @@
+#!/bin/sh
+# pre-commit — name the tests that parse a document you are committing. ADVISORY.
+#
+# A doc-derived test lives beside its consumer, never beside the document, so a
+# targeted test slice after editing `h-mad/SKILL.md` misses the guard in
+# `tests/test_h_mad_context_budget_docs.py` that parses one of its sections.
+# Twice that shipped a push that was red in the full suite. This prints, on
+# stderr, every test file whose source reads a staged non-code file, plus one
+# pytest line to run them.
+#
+# It never blocks: exit 0 on every path, including a missing script. It names
+# tests; deciding what to run is yours, and the full suite before pushing is
+# still the rule.
+#
+# Install:     h-mad/git-hooks/install.sh [--repo <dir>]
+# Bypass once: git commit --no-verify
+# Override:    HMAD_DOC_CONSUMERS=<path to h_mad_doc_consumers.py>
+
+SCRIPT=${HMAD_DOC_CONSUMERS:-}
+if [ -z "$SCRIPT" ]; then
+    SELF=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$0" 2>/dev/null) || exit 0
+    SCRIPT="$(dirname -- "$SELF")/../scripts/h_mad_doc_consumers.py"
+fi
+[ -f "$SCRIPT" ] || exit 0
+
+OUT=$(python3 "$SCRIPT" --staged 2>&1) || exit 0
+case "$OUT" in
+    *"RUN: "*)
+        printf '[pre-commit] tests that read the documents you are committing:\n%s\n' "$OUT" >&2 ;;
+esac
+exit 0

@@ -1,0 +1,52 @@
+{
+  "_why": "Skill-candidates row 'name the tests that PARSE a document you are about to edit': a doc-derived test lives beside its consumer, so a targeted slice misses it and the push goes red in the full suite. `h_mad_doc_consumers.py` names those tests and the advisory pre-commit hook prints them. These rows prove the tests bite if matching loses its directory rule, test files are treated as documents, a failed git call reads as 'nobody reads this', or the hook starts blocking commits.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_doc_consumers.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "basename-alone-is-a-consumer",
+      "_mechanism": "Every test naming any SKILL.md reads every SKILL.md: the RUN line fills with unrelated files and stops being trusted.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "        if not top or Path(rel).parts[0] == top or top in text:\n",
+      "replace": "        if True:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_names_the_sibling_reader_and_the_cross_skill_reader",
+      "symbol": "consumers"
+    },
+    {
+      "name": "only-same-directory-readers-count",
+      "_mechanism": "The cross-skill reader, the case the row records, is dropped.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "        if not top or Path(rel).parts[0] == top or top in text:\n",
+      "replace": "        if not top or Path(rel).parts[0] == top:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_names_the_sibling_reader_and_the_cross_skill_reader",
+      "symbol": "consumers"
+    },
+    {
+      "name": "test-files-count-as-documents",
+      "_mechanism": "A staged test file is reported as a document, burying the real ones.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    return not rel.endswith(\".py\") and \"tests\" not in parts[:-1]\n",
+      "replace": "    return \"tests\" not in parts[:-1] or True\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_staged_documents_are_used_and_code_is_skipped",
+      "symbol": "_is_document"
+    },
+    {
+      "name": "git-failure-reads-as-no-consumers",
+      "_mechanism": "Fail-open: outside git the script says nothing reads the document instead of UNKNOWN.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "        print(f\"CONSUMERS: UNKNOWN — {exc}\")\n",
+      "replace": "        print(\"CONSUMERS: x.md n=0\")\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_outside_git_says_unknown_not_zero",
+      "symbol": "main"
+    },
+    {
+      "name": "hook-blocks-the-commit",
+      "_mechanism": "An advisory turns into a gate: every commit touching a read document is refused.",
+      "file": "git-hooks/pre-commit",
+      "find": "        printf '[pre-commit] tests that read the documents you are committing:\\n%s\\n' \"$OUT\" >&2 ;;\nesac\nexit 0\n",
+      "replace": "        printf '[pre-commit] tests that read the documents you are committing:\\n%s\\n' \"$OUT\" >&2; exit 1 ;;\nesac\nexit 0\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_pre_commit_hook_prints_consumers_and_never_blocks"
+    }
+  ]
+}

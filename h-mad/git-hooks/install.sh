@@ -18,10 +18,11 @@
 #
 # Hooks installed:
 #   pre-push — blocks a push when any H-MAD mutation anchor has drifted.
+#   pre-commit — ADVISORY: names the tests that parse a staged document; never blocks.
 
 set -euo pipefail
 
-HOOKS=(pre-push)
+HOOKS=(pre-push pre-commit)
 
 SRC_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
