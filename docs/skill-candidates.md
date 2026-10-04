@@ -218,6 +218,13 @@ same question as "should an existing skill change?". Read the *reason* on every 
 before concluding a row is inert — one row sat inert for a day while naming its own insertion point.
 
 
+
+**Reconcile of 2026-10-03/04 — every open row re-probed against HEAD, and only one had shipped.** Five
+read-only agents probed all 50 open rows with evidence (commit sha, path:line, or the empty probe
+command); each row now carries a dated `RE-PROBED 2026-10-03` note naming what remains. Result:
+1 LANDED (`positive pane ID via terminal read`), 15 PARTIAL, 34 OPEN — census OPEN 50 to 49. None of
+the four fixes shipped on 2026-10-04 (`25855d08`, `a1bd6a84`, `2a0cc74d`, `ffd72e4e`) closes a row
+here; they came from handoff carry-forward, not from this file. Re-run the census for live numbers.
 ## 2026-07-20 — orca-adaptation-tiers
 
 - **agy/codex poll-until-idle dispatch**: assemble prompt -> hmad-dispatch send -> background poll on idle marker ("? for shortcuts" present, "esc to cancel" absent) + schema token -> parse verdict — recurrence: 12+ (every audit/TDD/arch-review this session) — candidate: **LANDED** 2026-07-24 — `hmad-dispatch ask` (send + wait-idle + full-buffer read; extraction stays a separate `h_mad_extract_verdict.py` call). Live-dogfooded against agy
@@ -2303,3 +2310,10 @@ above, all unverified here.
   — **RE-PROBED 2026-10-03: OPEN** — the ≤3 KB SendMessage chunk protocol is uncodified and there is no Write-capable code-reviewer agent.
 - **dual-interpreter mutation sweep with control**: ad-hoc `sweep.py` (one module per mutant, `sys.modules` registration, unmutated CONTROL first, run under both `python3` and pytest's `/opt/anaconda3` python, combo mutants for layered guards) rebuilt and re-anchored each round; `h_mad_mutation_harness.py` lacks the control/dual-interpreter/combo parts — recurrence: 5 — candidate: maybe (extend the existing harness)
   — **RE-PROBED 2026-10-03: PARTIAL** — the control exists (`BASELINE_NOT_GREEN`, `de48a873`; bytecode purge); a second-interpreter run and multi-pair combo mutants do not.
+
+## 2026-10-04 — upstream-sync-gate-fixes
+
+- **tripwire runtime stub for "this changed nothing" tests**: proving that `<verb> --help` ran nothing needed an `orca`/`cmux` stub that appends its argv to a file and exits 1, because the shared stubs in `h-mad/tests/stubs/` answer silently and their silence cannot distinguish "not called" from "called and ignored". Written inline in `test_hmad_dispatch_verb_help.py`; a shared `tripwire_bin(tmp_path)` helper beside `_bindir` would let any no-side-effect assertion reuse it — recurrence: 1 — candidate: maybe
+- **clean-worktree control for a worktree-only failure**: a suite failure seen only in `.claude/worktrees/<x>` was settled by `git worktree add --detach <tmp> HEAD` and re-running the one test there — a clean control that separates "my diff" from "the checkout path". Done by hand once; a tiny `h_mad_clean_control.py <test-node>` (create, run, remove, print `CONTROL: SAME|DIFFERS`) would make it routine — recurrence: 1 — candidate: maybe
+- **fan-out backlog re-probe with file-backed results**: reconciling 50 open rows ran as 5 read-only agents of 10 rows each, and 4 of 5 final replies arrived as bare "Done." — only results written to scratchpad files survived. `skill_candidates_census.py --list-open` could emit per-batch probe prompts that name the output file, so the next reconcile is one command plus a merge — recurrence: 1 — candidate: maybe
+
