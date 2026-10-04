@@ -534,15 +534,20 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_doc_shape_check.py \
 ### 7c — Archive
 
 ```bash
-YYYYMM=$(date +%Y-%m)
-FEATURE="<feature-slug>"
-mkdir -p docs/archive/$YYYYMM/$FEATURE
-
-# Move all feature artifacts (|| true silences mv errors for missing files)
-mv docs/01-plan/features/${FEATURE}* docs/archive/$YYYYMM/$FEATURE/ 2>/dev/null || true
-mv docs/02-design/features/${FEATURE}* docs/archive/$YYYYMM/$FEATURE/ 2>/dev/null || true
-mv docs/03-analysis/${FEATURE}* docs/archive/$YYYYMM/$FEATURE/ 2>/dev/null || true
-mv docs/04-report/features/${FEATURE}* docs/archive/$YYYYMM/$FEATURE/ 2>/dev/null || true
+python3 ~/.claude/skills/h-mad/scripts/h_mad_archive_feature.py --feature <feature-slug>          # dry run: MOVE: lines
+python3 ~/.claude/skills/h-mad/scripts/h_mad_archive_feature.py --feature <feature-slug> --apply  # move, then re-check
 ```
+
+Read the `ARCHIVE:` token. `COMPLETE moved=N` → continue. `INCOMPLETE` (with `LEFT:` or
+`COLLISION:` lines) or `NOTHING` → halt `step7:archive_incomplete` and resolve each line; a
+`COLLISION` is an archive file that already holds the name and is never overwritten.
+
+It replaces four `mv docs/…/${FEATURE}* … 2>/dev/null || true` lines, which for doc-block-exec moved
+6 of 641 files and left the originals live — a merged feature's impl-plan kept gating live code
+until an unrelated commit turned the suite red. That glob also never reached
+`docs/03-analysis/probes/<feature>/`, and `${FEATURE}*` took every sibling sharing the prefix. The
+script matches `<feature>.*` and `<feature>-brainstorm*` exactly, moves tracked files with `git mv`,
+and KEEPS a probes dir that non-markdown tracked code reads (`KEPT:` line), because that dir is live
+code. `--check` re-verifies an archive at any time without moving anything.
 
 After archive: commit (7d), then **7f integrate**, then push (7e) — see SKILL.md §"Closure (autonomous)" for 7f and `references/phase-table.md` for the 7d/7e commands. (This pointer used to name "SKILL.md §Phase 7 sub-steps 7d–7e", a section that does not exist: 7d and 7e are defined in the phase table.)

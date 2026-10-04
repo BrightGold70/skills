@@ -1,0 +1,80 @@
+{
+  "_why": "Skill-candidates row 'a closure check that the archive is COMPLETE': 7c's `mv … ${FEATURE}* … || true` moved 6 of 641 doc-block-exec files, missed probes dirs and matched sibling prefixes. `h_mad_archive_feature.py` replaces it; these rows prove each rule has a test that bites.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_archive_feature.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "the-prefix-glob-is-back",
+      "_mechanism": "`foo` takes `foo-bar.plan.md`, a different feature's document.",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "            if p.is_file() and (p.name.startswith(f\"{feature}.\")\n",
+      "replace": "            if p.is_file() and (p.name.startswith(f\"{feature}\")\n",
+      "test": "tests/test_h_mad_archive_feature.py::test_a_sibling_sharing_the_prefix_is_never_taken",
+      "symbol": "feature_files"
+    },
+    {
+      "name": "probes-are-not-archived",
+      "_mechanism": "The doc-block-exec leftover: the probes dir stays live after closure.",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "    if probes.is_dir() and not keep_probes:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_archive_feature.py::test_apply_moves_every_feature_file_and_reports_complete",
+      "symbol": "feature_files"
+    },
+    {
+      "name": "tracked-files-are-plain-renamed",
+      "_mechanism": "History does not follow: the commit records a delete and an unrelated add.",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "        if src in tracked:\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_archive_feature.py::test_tracked_files_move_with_git_so_history_follows",
+      "symbol": "main"
+    },
+    {
+      "name": "an-archive-file-is-overwritten",
+      "_mechanism": "A collision clobbers the archived copy instead of stopping.",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "        if target.exists():\n            collisions.append(src)\n            continue\n",
+      "replace": "        if target.exists():\n            target.unlink()\n",
+      "test": "tests/test_h_mad_archive_feature.py::test_an_existing_archive_file_is_never_overwritten",
+      "symbol": "main"
+    },
+    {
+      "name": "the-default-moves-files",
+      "_mechanism": "A dry run applies.",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "    if not args.apply:\n        print(f\"ARCHIVE: PLAN would_move={len(live)}\")\n",
+      "replace": "    if False:\n        print(f\"ARCHIVE: PLAN would_move={len(live)}\")\n",
+      "test": "tests/test_h_mad_archive_feature.py::test_default_is_a_dry_run",
+      "symbol": "main"
+    },
+    {
+      "name": "a-typo-certifies-complete",
+      "_mechanism": "A name matching nothing reports COMPLETE moved=0.",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "    if not live and not dest.is_dir():\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_archive_feature.py::test_a_feature_name_matching_nothing_is_not_complete",
+      "symbol": "main"
+    },
+    {
+      "name": "live-probe-readers-are-ignored",
+      "_mechanism": "A probes dir read by a live test is archived and the test breaks.",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "    live = feature_files(repo, args.feature, keep_probes=bool(readers))\n",
+      "replace": "    live = feature_files(repo, args.feature, keep_probes=False)\n",
+      "test": "tests/test_h_mad_archive_feature.py::test_a_probes_dir_that_live_code_reads_is_kept_not_moved",
+      "symbol": "main"
+    },
+    {
+      "name": "reader-match-loses-its-path-boundary",
+      "_mechanism": "`probes/foo-bar/` reads as a reader of `probes/foo/`, and foo's probes are wrongly kept.",
+      "file": "scripts/h_mad_archive_feature.py",
+      "find": "    pattern = needle.replace(\".\", \"\\\\.\") + \"([/\\\"'[:space:]]|$)\"\n",
+      "replace": "    pattern = needle.replace(\".\", \"\\\\.\")\n",
+      "test": "tests/test_h_mad_archive_feature.py::test_a_sibling_probe_naming_its_own_dir_does_not_keep_ours",
+      "symbol": "probe_readers"
+    }
+  ]
+}
