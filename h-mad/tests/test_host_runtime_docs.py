@@ -609,3 +609,21 @@ def test_live_smoke_v111_rehearsal_passes() -> None:
     result = subprocess.run([sys.executable, str(script), "rehearse"], capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
     assert "PASS V-11.1 lazy (no script ran)" in result.stdout
+
+
+def test_live_smoke_v111_rehearsal_passes_from_a_checkout_at_another_path(tmp_path) -> None:
+    # The committed logs carry absolute paths under the checkout they were recorded in. The
+    # rehearsal once matched them against wherever it ran, so it failed in every linked worktree
+    # and would fail in a clone at any other path. Replay it from an unrelated directory.
+    import shutil
+    clone = tmp_path / "elsewhere" / "skills"
+    # h-mad/tests too: one replay case reads a codex log fixture from it.
+    shutil.copytree(REPO_ROOT / "h-mad", clone / "h-mad", ignore=shutil.ignore_patterns("__pycache__"))
+    # The whole probes tree: two replay cases read logs from a sibling probe directory.
+    probes = "docs/03-analysis/probes"
+    shutil.copytree(REPO_ROOT / probes, clone / probes)
+    script = clone / probes / "multi-host-runtime" / "smoke_assert.py"
+    result = subprocess.run([sys.executable, str(script), "rehearse"],
+                            capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+    assert "REHEARSAL: PASS" in result.stdout

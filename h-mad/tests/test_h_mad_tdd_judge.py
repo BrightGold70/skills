@@ -854,6 +854,16 @@ def test_escaping_venv_denies_before_any_run(tmp_path):
     assert not marker.exists()
 
 
+# The two `*-with-subtest` cases need pytest's `subtests` fixture in the interpreter the judge
+# runs (sys.executable here): built in from pytest 9, a plugin before that. Without it pytest
+# errors on the missing fixture and the judge rightly says `pytest-error`, so the expectation
+# depends on the machine, not on the judge. Skip with the reason instead of failing.
+_HAS_SUBTESTS = int(pytest.__version__.split(".")[0]) >= 9 or bool(
+    __import__("importlib.util").util.find_spec("pytest_subtests"))
+_NEEDS_SUBTESTS = pytest.mark.skipif(
+    not _HAS_SUBTESTS, reason=f"pytest {pytest.__version__} has no `subtests` fixture (pytest>=9 or pytest-subtests)")
+
+
 # Scoring through the W4 summary connection: 17 items.
 @pytest.mark.parametrize("case,body,decision,kind", [
     ("red", "def test_red():\n    assert False\n", "ALLOW", "red-measured"),
@@ -862,10 +872,12 @@ def test_escaping_venv_denies_before_any_run(tmp_path):
     ("skipped-only", "import pytest\n@pytest.mark.skip\ndef test_skipped():\n    assert False\n",
      "DENY", "no-tests-ran"),
     ("import-error", "import not_a_module_xyz\n", "DENY", "pytest-error"),
-    ("red-with-subtest", "def test_red(subtests):\n    with subtests.test('a'):\n"
-     "        assert True\n        assert False\n", "ALLOW", "red-measured"),
-    ("green-with-subtest", "def test_green(subtests):\n    with subtests.test('a'):\n"
-     "        assert True\n        assert True\n", "DENY", "test-passing"),
+    pytest.param("red-with-subtest", "def test_red(subtests):\n    with subtests.test('a'):\n"
+                 "        assert True\n        assert False\n", "ALLOW", "red-measured",
+                 marks=_NEEDS_SUBTESTS),
+    pytest.param("green-with-subtest", "def test_green(subtests):\n    with subtests.test('a'):\n"
+                 "        assert True\n        assert True\n", "DENY", "test-passing",
+                 marks=_NEEDS_SUBTESTS),
 ], ids=["red", "green", "empty", "skipped-only", "import-error",
         "red-with-subtest", "green-with-subtest"])
 def test_scoring_kinds(tmp_path, case, body, decision, kind):

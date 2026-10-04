@@ -15,6 +15,10 @@ from pathlib import Path
 
 
 HERE = Path(__file__).resolve().parent
+# Where the committed rehearsal logs were recorded. Their paths are absolute text under this
+# root, so rehearse() matches against it rather than against wherever this checkout sits --
+# a worktree, or a clone at another path on another machine.
+REHEARSAL_ROOT = Path("/Users/kimhawk/orca/skills")
 SCRIPT = re.compile(r"h_mad_[a-z0-9_]+\.py$")
 MODULE = re.compile(r"h_mad_[a-z0-9_]+$")
 PYTHON = re.compile(r"python(3(\.\d+)?)?$")
@@ -297,23 +301,28 @@ def codex_events(path: Path) -> tuple[list[Event], bool]:
 class Places:
     """Where the file may legitimately be read from, as text: the verdict never asks this machine.
 
-    root is the checkout; home is the logged session's HOME, used only to expand `~` in links;
+    root is the checkout the log was recorded in; checkout is the one on this disk, which holds
+    the scripts a call may name (the same directory except when a committed log is replayed
+    elsewhere); home is the logged session's HOME, used only to expand `~` in links;
     links are host loader links the caller verified point at <root>/h-mad (the smoke checks
     readlink -f before the run). Every comparison is lexical, so a log scores the same anywhere.
     """
     root: str
     home: str | None = None
     links: tuple[str, ...] = ()
+    checkout: str = ""
 
     @classmethod
-    def build(cls, root: Path, home: str | None = None, links: tuple[str, ...] = ()) -> "Places":
+    def build(cls, root: Path, home: str | None = None, links: tuple[str, ...] = (),
+              checkout: Path | None = None) -> "Places":
         norm = lambda v: posixpath.normpath(os.path.abspath(v))
         home = norm(home) if home else None
         expand = lambda v: (home + v[1:]) if home and (v == "~" or v.startswith("~/")) else v
         # A relative link would resolve against the scorer's cwd, so the same log could score
         # differently on another machine: only absolute links, or `~/` ones with a home, count.
         return cls(norm(str(root)), home, tuple(norm(expand(l)) for l in links
-                                                if l.startswith("/") or home and (l == "~" or l.startswith("~/"))))
+                                                if l.startswith("/") or home and (l == "~" or l.startswith("~/"))),
+                   norm(str(checkout if checkout is not None else root)))
 
 
 def lexical(value: str, places: Places) -> str | None:
@@ -503,7 +512,7 @@ def canonical(text: str, places: Places) -> str | None:
     where = lexical(path, places)
     bound = {posixpath.normpath(f"{places.root}/h-mad/scripts/{name}")} | {
         posixpath.normpath(f"{link}/scripts/{name}") for link in places.links}
-    if where not in bound or not Path(places.root, "h-mad", "scripts", name).is_file():
+    if where not in bound or not Path(places.checkout, "h-mad", "scripts", name).is_file():
         return None
     return match[1]
 
@@ -523,7 +532,8 @@ def taints(event: Event) -> bool:
     return event.tool not in ("read", "search")
 
 
-def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple[str, ...] = ()) -> tuple[str, int]:
+def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple[str, ...] = (),
+         recorded_root: Path | None = None) -> tuple[str, int]:
     try:
         adapter, skill = needle(root, host, False), needle(root, host, True)
         if not adapter or not skill:
@@ -552,7 +562,7 @@ def v111(host: str, log: Path, root: Path, home: str | None = None, links: tuple
         # run tools in parallel, so a write issued after the read but finished first is still in
         # time to change what the read returns. The filesystem outlives every shell; never reset.
         writes = [e.issued for e in events if taints(e)]
-        places = Places.build(root, home, links)
+        places = Places.build(recorded_root if recorded_root is not None else root, home, links, checkout=root)
         for event in events:
             if event.tool == "other":
                 unmapped = True
@@ -678,7 +688,7 @@ def rehearse() -> int:
     for case in cases:
         if case["mode"] == "v111":
             actual, _ = v111(case["host"], HERE / "rehearsal" / case["log"], HERE.parents[3] / case["root"],
-                             case.get("home"), tuple(case.get("links", ())))
+                             case.get("home"), tuple(case.get("links", ())), REHEARSAL_ROOT / case["root"])
         else:
             actual, _ = v112(HERE / "rehearsal" / case["out"], json.dumps(case["record"]), case["feature"])
         print(f"{case['id']}: {actual}")
