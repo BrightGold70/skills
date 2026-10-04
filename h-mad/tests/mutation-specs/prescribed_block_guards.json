@@ -1,0 +1,235 @@
+{
+  "_why": "Skill-candidates row 'run prescribed test-helper blocks against the live module's guards before RED' (2026-09-02). pin-agents-tail-banner prescribed a helper that tripped its target module's own self-source guard; 53 audit cycles passed it. The checker attributes each python block to one existing test module, selects guards by what they do (read their own file, directly or through a name bound to its path or content), runs them with the module's own reads redirected to a scratch copy, and keeps 'could not check' apart from 'checked clean'. Most rows are fail-open or false-FAIL shapes a fresh-context review found in rounds 1 and 2. Each row breaks one property.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_prescribed_block_guards.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "mutation-replace-text-is-checked",
+      "_mechanism": "A mutation row's `replace` text is meant to trip the guard; checking it reports a collision the plan intends. Pinned node: test_a_mutation_replace_block_is_skipped.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "_MUTATION_PROSE = re.compile(r\"`(?:replace|find)`\")  # M:PBG-MUTATION-SKIP",
+      "replace": "_MUTATION_PROSE = re.compile(r\"(?!x)x\")  # M:PBG-MUTATION-SKIP",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_mutation_replace_block_is_skipped"
+    },
+    {
+      "name": "prose-leaks-across-blocks",
+      "_mechanism": "Without the reset at a fence's open, a path named above an earlier block attributes every later one. Pinned node: test_attribution_comes_only_from_prose_since_the_previous_fence.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "            prose = []  # M:PBG-PROSE-RESET",
+      "replace": "            pass  # M:PBG-PROSE-RESET",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_attribution_comes_only_from_prose_since_the_previous_fence"
+    },
+    {
+      "name": "heading-does-not-reset-prose",
+      "_mechanism": "A heading starts a new task; without the reset, a path in the previous task's prose attributes this task's block. Pinned node: test_a_heading_resets_the_attribution_prose.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "            prose = [line]  # M:PBG-HEADING-RESET",
+      "replace": "            prose.append(line)  # M:PBG-HEADING-RESET",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_heading_resets_the_attribution_prose"
+    },
+    {
+      "name": "indented-fence-is-invisible",
+      "_mechanism": "A python fence indented inside a list item is not an opener to the shared scanner; unhandled, it is counted nowhere (pin-agents :555, :949). Pinned node: test_a_list_indented_python_fence_is_checked.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "            if match and is_py(match[\"info\"]):  # M:PBG-INDENTED",
+      "replace": "            if False:  # M:PBG-INDENTED",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_list_indented_python_fence_is_checked"
+    },
+    {
+      "name": "new-module-resolved-by-suffix",
+      "_mechanism": "A prose that announces a NEW module must not be resolved onto a same-named file in another sub-project: a false FAIL. Pinned node: test_a_new_module_is_not_resolved_onto_another_projects_file_by_suffix.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "    if not suffix:  # M:PBG-NEW-NO-SUFFIX",
+      "replace": "    if False:  # M:PBG-NEW-NO-SUFFIX",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_new_module_is_not_resolved_onto_another_projects_file_by_suffix"
+    },
+    {
+      "name": "ambiguous-suffix-takes-the-first-hit",
+      "_mechanism": "Two files ending with the token is no match; taking the first checks a block against a module chosen by traversal order. Pinned node: test_an_ambiguous_bare_basename_is_refused.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "    return hits[0] if len(hits) == 1 else None  # M:PBG-UNIQUE-SUFFIX",
+      "replace": "    return hits[0] if hits else None  # M:PBG-UNIQUE-SUFFIX",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_an_ambiguous_bare_basename_is_refused"
+    },
+    {
+      "name": "self-named-by-any-test-path",
+      "_mechanism": "Round 1's rule: any test path in the first comment self-names the block, so a comment that leads with a production path and merely mentions a test file attributes production code to it: a false FAIL. Pinned node: test_a_first_comment_that_leads_with_a_production_path_is_not_self_named.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "    paths = _PY_PATH.findall(first) if first.startswith(\"#\") else []  # M:PBG-SELF-NAMED-LEADS",
+      "replace": "    paths = _TEST_PATH.findall(first) if first.startswith(\"#\") else []  # M:PBG-SELF-NAMED-LEADS",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_first_comment_that_leads_with_a_production_path_is_not_self_named"
+    },
+    {
+      "name": "self-named-block-is-ignored",
+      "_mechanism": "A block whose first comment names its own module (pin-agents :1456, doc-block-exec :4201) is skipped when the prose above names nothing. Pinned node: test_a_block_whose_first_comment_names_its_module_is_attributed_to_it.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "        resolved = _resolve(paths[0], root, index_cache, suffix)  # M:PBG-SELF-NAMED",
+      "replace": "        resolved = None  # M:PBG-SELF-NAMED",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_block_whose_first_comment_names_its_module_is_attributed_to_it"
+    },
+    {
+      "name": "production-block-checked-against-the-test-file",
+      "_mechanism": "Ignoring **Production file** attributes the template's production block to the test file named beside it: a false FAIL. Pinned node: test_a_template_production_block_is_not_checked_against_the_test_module.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "    production = _PRODUCTION_LINE.search(prose)  # M:PBG-PRODUCTION",
+      "replace": "    production = None  # M:PBG-PRODUCTION",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_template_production_block_is_not_checked_against_the_test_module"
+    },
+    {
+      "name": "production-rule-swallows-helper-blocks",
+      "_mechanism": "The Production-file rule applies to the **Code structure** block only; firing on any block under the task header skips a test-helper block and a real collision PASSes. Pinned node: test_a_helper_block_in_a_task_with_a_production_header_is_still_checked.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "    if production and labels and labels[-1].strip() == \"Code structure\":  # M:PBG-CODE-STRUCTURE",
+      "replace": "    if production and labels:  # M:PBG-CODE-STRUCTURE",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_helper_block_in_a_task_with_a_production_header_is_still_checked"
+    },
+    {
+      "name": "production-test-module-is-skipped",
+      "_mechanism": "When the production file IS a test module (a harness change), its block belongs there; skipping it lost preflight-signal-discipline's real collision. Pinned node: test_a_template_block_whose_production_file_is_a_test_module_is_checked.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "        if not _TEST_PATH.fullmatch(token):  # M:PBG-PRODUCTION-TARGET",
+      "replace": "        if True:  # M:PBG-PRODUCTION-TARGET",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_template_block_whose_production_file_is_a_test_module_is_checked"
+    },
+    {
+      "name": "an-unresolved-path-is-ignored",
+      "_mechanism": "Dropping a path that resolves to nothing attributes a block meant for a NEW module to the existing module named beside it. Pinned node: test_prose_naming_a_module_that_does_not_exist_yet_is_not_attributed.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "            return None  # M:PBG-UNRESOLVED-REFUSES",
+      "replace": "            continue  # M:PBG-UNRESOLVED-REFUSES",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_prose_naming_a_module_that_does_not_exist_yet_is_not_attributed"
+    },
+    {
+      "name": "dir-slash-own-name-not-a-path",
+      "_mechanism": "`TESTS / \"<own name>\"` is the module's own file; missing it selects no guard and PASSes. Pinned node: test_more_ways_of_reading_its_own_file_are_selected[parent_dir].",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "                and node.right.value == self.basename):  # M:PBG-DIR-SLASH-NAME",
+      "replace": "                and False):  # M:PBG-DIR-SLASH-NAME",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_more_ways_of_reading_its_own_file_are_selected[parent_dir]"
+    },
+    {
+      "name": "path-names-not-followed",
+      "_mechanism": "A name bound to the module's own PATH (`SELF = Path(__file__).resolve()`) then read is never selected. Pinned node: test_more_ways_of_reading_its_own_file_are_selected[self_path].",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "        if self._named(node, self.paths):  # M:PBG-PATH-NAMES",
+      "replace": "        if False:  # M:PBG-PATH-NAMES",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_more_ways_of_reading_its_own_file_are_selected[self_path]"
+    },
+    {
+      "name": "path-open-not-a-read",
+      "_mechanism": "`Path(__file__).open()` reads the file; missing the method selects no guard. Pinned node: test_more_ways_of_reading_its_own_file_are_selected[path_open].",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "                    and func.attr in {\"read_text\", \"read_bytes\", \"open\"}  # M:PBG-READ-METHODS",
+      "replace": "                    and func.attr in {\"read_text\", \"read_bytes\"}  # M:PBG-READ-METHODS",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_more_ways_of_reading_its_own_file_are_selected[path_open]"
+    },
+    {
+      "name": "open-reads-are-not-selected",
+      "_mechanism": "A guard reading its file through `open(__file__)` is never selected. Pinned node: test_a_guard_reading_its_file_through_open_is_selected.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "            if (isinstance(func, ast.Name) and func.id == \"open\" and node.args  # M:PBG-OPEN",
+      "replace": "            if (isinstance(func, ast.Name) and func.id == \"never\" and node.args  # M:PBG-OPEN",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_guard_reading_its_file_through_open_is_selected"
+    },
+    {
+      "name": "constant-readers-are-not-followed",
+      "_mechanism": "A guard reading a constant that holds its source is never selected; round 1's fail-open PASS. Pinned node: test_a_guard_reading_its_file_indirectly_still_sees_the_block[module_constant].",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "                        elif self.reads(node.value):  # M:PBG-READERS",
+      "replace": "                        elif False:  # M:PBG-READERS",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_guard_reading_its_file_indirectly_still_sees_the_block[module_constant]"
+    },
+    {
+      "name": "helper-readers-are-not-followed",
+      "_mechanism": "A guard calling a helper that reads its source is never selected; round 1's fail-open PASS. Pinned node: test_a_guard_reading_its_file_indirectly_still_sees_the_block[helper].",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "                        self.readers.add(node.name)  # M:PBG-READERS-HELPER",
+      "replace": "                        pass  # M:PBG-READERS-HELPER",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_guard_reading_its_file_indirectly_still_sees_the_block[helper]"
+    },
+    {
+      "name": "guards-selected-by-name",
+      "_mechanism": "The row's own proposal: select `*_guard` tests. Only one of the repo's three self-source guards carries that name, and the fixture's carries none. Pinned node: test_a_banned_literal_in_a_prescribed_block_is_a_collision.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "            if own.reads(node):  # M:PBG-SELECT-BY-BEHAVIOUR",
+      "replace": "            if node.name.endswith(\"_guard\"):  # M:PBG-SELECT-BY-BEHAVIOUR",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_banned_literal_in_a_prescribed_block_is_a_collision"
+    },
+    {
+      "name": "block-always-wrapped",
+      "_mechanism": "Wrapping a block that parses in place hides it from a guard that `ast.parse`s its own source; round 1's second fail-open PASS. Pinned node: test_a_guard_that_parses_its_own_source_sees_the_block_as_code.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "        ast.parse(joined)  # M:PBG-AS-CODE",
+      "replace": "        raise SyntaxError  # M:PBG-AS-CODE",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_guard_that_parses_its_own_source_sees_the_block_as_code"
+    },
+    {
+      "name": "unwrappable-block-is-dropped",
+      "_mechanism": "A block carrying both triple-quote forms cannot be a raw literal; dropping it instead of commenting it in checks an empty append. Pinned node: test_a_block_carrying_triple_quotes_is_still_checked.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "    return module_text + \"\\n\\n\" + \"\".join(f\"# {ln}\\n\" for ln in block.splitlines()), True  # M:PBG-WRAP-FALLBACK",
+      "replace": "    return module_text, True  # M:PBG-WRAP-FALLBACK",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_block_carrying_triple_quotes_is_still_checked"
+    },
+    {
+      "name": "reads-are-not-redirected",
+      "_mechanism": "Without the redirect every guard reads the live module, never the copy carrying the block, so nothing ever collides. Pinned node: test_a_banned_literal_in_a_prescribed_block_is_a_collision.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "    _redirect(path, Path(source))  # M:PBG-REDIRECT",
+      "replace": "    pass  # M:PBG-REDIRECT",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_banned_literal_in_a_prescribed_block_is_a_collision"
+    },
+    {
+      "name": "timeout-reads-as-pass",
+      "_mechanism": "A child that never finished checked nothing; scoring it all-pass prints PASS. Pinned node: test_a_child_that_times_out_is_unrunnable_not_pass.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "            return {\"import_error\": f\"guards did not finish in {_CHILD_SECONDS}s\"}  # M:PBG-TIMEOUT",
+      "replace": "            return {\"results\": {n: {\"status\": \"pass\"} for n in names}}  # M:PBG-TIMEOUT",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_child_that_times_out_is_unrunnable_not_pass"
+    },
+    {
+      "name": "fixture-guard-is-run-bare",
+      "_mechanism": "A guard that takes fixtures is called with none; it raises TypeError and is filed baseline-red, hiding that it was never runnable. Pinned node: test_a_self_source_guard_that_takes_a_fixture_is_unrunnable.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "                    if extra:  # M:PBG-FIXTURE",
+      "replace": "                    if False:  # M:PBG-FIXTURE",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_self_source_guard_that_takes_a_fixture_is_unrunnable"
+    },
+    {
+      "name": "baseline-red-blamed-on-the-block",
+      "_mechanism": "A guard already red on the live module is run against the copy and its failure is reported as the block's collision. Pinned node: test_a_guard_already_red_on_the_live_module_is_not_blamed_on_the_block.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "                        if base[\"results\"].get(name, {}).get(\"status\") == \"pass\":  # M:PBG-BASELINE",
+      "replace": "                        if True:  # M:PBG-BASELINE",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_guard_already_red_on_the_live_module_is_not_blamed_on_the_block"
+    },
+    {
+      "name": "missing-result-reads-as-pass",
+      "_mechanism": "A guard absent from the child's result was never run; defaulting it to pass prints PASS. Pinned node: test_a_guard_missing_from_the_childs_result_is_unrunnable_not_pass.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "                outcome = result[\"results\"].get(name)  # M:PBG-MISSING-RESULT",
+      "replace": "                outcome = result[\"results\"].get(name, {\"status\": \"pass\"})  # M:PBG-MISSING-RESULT",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_guard_missing_from_the_childs_result_is_unrunnable_not_pass"
+    },
+    {
+      "name": "could-not-check-reads-as-pass",
+      "_mechanism": "A module that cannot import checked nothing; without INCOMPLETE it prints PASS. Pinned node: test_a_module_that_cannot_import_is_incomplete_not_pass.",
+      "file": "scripts/h_mad_prescribed_block_guards.py",
+      "find": "    elif unrunnable or baseline_red:  # M:PBG-INCOMPLETE",
+      "replace": "    elif False:  # M:PBG-INCOMPLETE",
+      "test": "tests/test_h_mad_prescribed_block_guards.py::test_a_module_that_cannot_import_is_incomplete_not_pass"
+    }
+  ]
+}
