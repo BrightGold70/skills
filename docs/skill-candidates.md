@@ -1344,6 +1344,7 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   set against rows classified `RED: FAIL` — `grep -rln 'RED: FAIL|red_fail|unmodified tree' h-mad/scripts/`
   is empty. The 5d/5e gate still reads the classification, never the tree.
   — **RE-PROBED 2026-10-03: OPEN** — no gate runs the RED suite on the unmodified tree and diffs it against the rows classified FAIL; only a checklist line in `references/codex-implementer-prompt.md`.
+  — **DECLINED 2026-10-04 (triage: not useful — calibrated, not built)** — `RED: FAIL`/`RED: PASS` classifications exist in exactly ONE document in the repo: `git grep -c -E 'RED: (FAIL|PASS)'` over every impl-plan and design returns only `pin-agents-tail-banner.impl-plan.md` (60), and no template or reference prescribes them. The general hazard — a node green before the feature exists — is already visible at 5d: `h_mad_assemble_tdd.py` refuses a RED dispatch without explicit `--expect-fail` and `--expect-pass` counts (`:296-301`), so a node passing at RED changes a count that the orchestrator has to state. Reopen if a second plan adopts the per-row RED classification.
 
 - **grep the body for a version-history entry's claim**: four times this session a `## Version
   History` entry announced a back-propagation the body never received (design live check v1.13, plan
@@ -1367,6 +1368,7 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   = 0 — the assembler still cuts §Task N alone and appends no contract table, and no precheck detector
   refuses an AC body that names no node.
   — **RE-PROBED 2026-10-03: OPEN** — `h_mad_assemble_tdd.py` carries no contract table and no audit refuses an AC body without a node.
+  — **DECLINED 2026-10-04 (triage: not useful — calibrated, not built)** — measured over every tracked impl-plan with `task_body`: **147 of 162** task bodies name a `test_*` node, and all 15 that do not are tasks that author no tests (docs, probes, baselines, smoke runs, mutation census). The defect needs node names kept in a separate contract table, a layout used by exactly one plan (`pin-agents-tail-banner`; its 37 `**Node:**` lines were the hand fix). A detector would have 0 hits on the corpus. Reopen if a plan again separates node names from task bodies.
 - **run prescribed test-helper blocks against the live module's guards before RED**: the impl-plan prescribed `tempfile.mkdtemp(` inside `test_hmad_dispatch.py`, whose own guard asserts that literal is absent; 53 audit cycles could not see it because the block was never executed in situ. Mechanical: extract every prescribed python block whose `file` is an existing test module, append it to a scratch copy, run the module's `*_guard` tests — recurrence: 1 — candidate: yes
   — **RE-CHECKED 2026-09-07 08:30 (scout): still open.** Nothing extracts a prescribed python block and
   runs it against the target module's `*_guard` tests. `h_mad_doc_block_exec.py` executes tagged SHELL
@@ -1612,6 +1614,7 @@ individually re-verified this pass; that is stated rather than left implied.
   pass of THIS reconciliation grepped `h-mad/bin/hmad-dispatch.sh` (wrong path — the script is under
   `scripts/`) and got a clean zero, which would have read as "landed, nothing to see".
   — **RE-PROBED 2026-10-03: OPEN** — the dispatch table has no `probe)` arm; `h_mad_response_probe.py` measures response shape, not liveness.
+  — **LANDED 2026-10-04** — `hmad-dispatch probe <codex|agy> [--timeout <s>]` (orca; default 120 s). One pair of random operands is both the question and the expected answer (`M:PROBE-ONE-EXPRESSION`). It polls `_orca_identity`'s `last=` (the line `env` prints) and never reads the pane. The answer must appear as a whole token. Outcomes are `ALIVE` 0 · `NO_ANSWER` 1 · `UNREADABLE` 2, the last kept apart so an unmeasured agent is never filed as dead. Non-orca substrates refuse before sending anything. Tests: `test_hmad_dispatch_probe.py` (12) uses a fake `orca` that computes the product from the text it is sent, so an expected value that drifts from the question can never read ALIVE. Spec `dispatch_probe.json` ALL_CAUGHT 4/4. Documented in `references/agent-substrate.md`. Not yet run against a live pane.
 - **`collect-report` must name the file it actually waited for, or accept `<report-basename>.done`**: measured 2026-09-05, a complete 13.7K gating report returned `COLLECT: MISSING` because the doc-auditor wrote its marker as `..._teammate.report.done` instead of `..._teammate.report.md.done`. The agy leg on the same cycle wrote the correct form, so it fires per-instance and unpredictably. The error names the REPORT path while waiting on the MARKER path, so it points at the wrong object; and `COLLECT: MISSING` is indistinguishable from "the auditor produced nothing", which is already recorded in a committed Version History entry for `plan c83`. `candidate: yes`
   — **LANDED 2026-09-07 (scout)** — `h-mad/scripts/h_mad_collect_report.py:37-44`. The marker is
   `<report>.done`, and `:42-44` adds the near-miss form the doc-auditor emitted (`a.report.md` ->
@@ -1673,6 +1676,7 @@ individually re-verified this pass; that is stated rather than left implied.
   predicate — `git diff --name-only <base> <freeze> -- h-mad handoff` must be empty, plus each doc's
   `_SCANNED`-style corpora — is run by hand every round; no script or verb takes a candidate sha.
   — **RE-PROBED 2026-10-03: OPEN** — rule only (`SKILL.md:1655`, `measurement-discipline.md:178`); no script takes a candidate sha and runs the documents' own closure predicates.
+  — **DECLINED 2026-10-04 (triage: useful, not codable — calibrated, same basis as the deferred `expect 0` row)** — freeze-candidate naming is concentrated in one arc: `git grep -l -i freeze -- 'docs/archive/*.md'` counts 55 documents for `doc-block-exec` and 1–3 for each of three others. The census lines the predicate would run are untagged prose spread across six features, and running them would mean extracting shell from free text. The tagged form already has an executor, `h_mad_doc_block_exec.py`. The rule stands as written (`measurement-discipline.md` §FREEZE). Reopen when a second long freeze arc publishes TAGGED census blocks; then this is two `doc_block_exec` runs and a diff.
 
 ## 2026-09-06 — doc-block-exec-5b-exit-and-hmad-class-gate
 

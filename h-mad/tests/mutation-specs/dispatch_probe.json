@@ -1,0 +1,40 @@
+{
+  "_why": "Skill-candidates row `hmad-dispatch probe <agent>` (2026-09-05): `read agy` sat on a spinner for 20+ minutes while `env` already showed the right answer, and a hand-rolled probe matched a transposed literal that would have filed a live agent dead. The verb derives question and answer from one pair of operands, matches a whole token, and keeps 'listing unreadable' apart from 'no answer'. Each row breaks one of those.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_hmad_dispatch_probe.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "expected-drifts-from-the-question",
+      "_mechanism": "The expected answer is computed apart from the question (here off by one), the transposed-literal defect: a live agent answering correctly is never matched.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  local expected=$(( a * b ))  # M:PROBE-ONE-EXPRESSION",
+      "replace": "  local expected=$(( a * b + 1 ))  # M:PROBE-ONE-EXPRESSION",
+      "test": "tests/test_hmad_dispatch_probe.py::test_a_live_agent_is_alive_with_the_true_product"
+    },
+    {
+      "name": "substring-match-calls-a-wrong-answer-alive",
+      "_mechanism": "Without the digit boundary, `3409970` matches `340997`, so a wrong answer reads as ALIVE.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if printf '%s' \"$last\" | grep -qE \"(^|[^0-9])${expected}([^0-9]|\\$)\"; then  # M:PROBE-TOKEN",
+      "replace": "      if printf '%s' \"$last\" | grep -qF \"${expected}\"; then  # M:PROBE-TOKEN",
+      "test": "tests/test_hmad_dispatch_probe.py::test_the_answer_must_be_a_whole_token"
+    },
+    {
+      "name": "unreadable-is-filed-as-dead",
+      "_mechanism": "A listing that never answered is reported NO_ANSWER, so an unmeasured agent is filed as dead.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ -z \"$read_any\" ]; then  # M:PROBE-UNREADABLE",
+      "replace": "  if false; then  # M:PROBE-UNREADABLE",
+      "test": "tests/test_hmad_dispatch_probe.py::test_an_unreadable_listing_is_not_filed_as_dead"
+    },
+    {
+      "name": "operands-are-fixed",
+      "_mechanism": "A fixed question lets a stale `last=` from an earlier probe read as a fresh answer.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  local a=$(( RANDOM % 9000 + 1000 )) b=$(( RANDOM % 900 + 100 ))",
+      "replace": "  local a=8317 b=41",
+      "test": "tests/test_hmad_dispatch_probe.py::test_each_probe_asks_a_fresh_question"
+    }
+  ]
+}

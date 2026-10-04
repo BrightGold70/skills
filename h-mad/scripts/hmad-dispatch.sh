@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: alive | ask | audit-cycle | automation-create | automation-list | automation-remove | automation-run | await | clear | collect-report | dispatch | env | exec | exec-pane | file-diff | file-open-changed | gate-create | gate-resolve | gate-wait | interrupt | launch | notify | pin | pin-agents | progress | read | report-wait | resolve | resolved-model | run | run-ensure | send | task-create | verify | wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
+# Verbs: alive | ask | audit-cycle | automation-create | automation-list | automation-remove | automation-run | await | clear | collect-report | dispatch | env | exec | exec-pane | file-diff | file-open-changed | gate-create | gate-resolve | gate-wait | interrupt | launch | notify | pin | pin-agents | probe | progress | read | report-wait | resolve | resolved-model | run | run-ensure | send | task-create | verify | wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -2368,6 +2368,54 @@ _cmd_ask() {  # <agent> <promptfile> [--timeout <s>] [--out <file>]
   fi
 }
 
+_cmd_probe() {  # <agent> [--timeout <s>]
+  # Is the agent behind a pin answering? Measured 2026-09-05: `read agy` sat on a
+  # spinner for 20+ minutes while `env` already showed `last="340997"`, the right
+  # answer to `8317 * 41`; a watcher grepping the pane loops forever. A hand-rolled
+  # probe then matched a transposed literal and would have filed a live agent dead.
+  # So ONE pair of operands is both the question and the expected answer, and the
+  # reply is read from the TUI-independent identity line `env` prints, never the pane.
+  #   ALIVE (0) answer seen as a whole token · NO_ANSWER (1) read, never answered ·
+  #   UNREADABLE (2) the listing never answered — liveness NOT measured, not "dead".
+  _need "${1:-}" agent || return $?
+  local agent="$1"; shift
+  local timeout=120
+  while [ $# -gt 0 ]; do case "$1" in
+    --timeout) _need_val probe --timeout $# || return $?; timeout="$2"; shift 2 ;;
+    *) _unknown_opt probe "$1"; return $? ;;
+  esac; done
+  case "$timeout" in
+    ''|*[!0-9]*|0) echo "hmad-dispatch: probe: --timeout must be a positive integer; nothing was sent." >&2; return 2 ;;
+  esac
+  _require_orca probe || return 2
+  local target; target="$(_resolve_target "$agent")" || return 2
+  local a=$(( RANDOM % 9000 + 1000 )) b=$(( RANDOM % 900 + 100 ))
+  local expected=$(( a * b ))  # M:PROBE-ONE-EXPRESSION
+  local pf; pf="$(mktemp -t hmad_probe.XXXXXX)" || return 2
+  printf 'Liveness probe from h-mad. Reply with only the value of %s * %s, as digits.\n' "$a" "$b" > "$pf"
+  local rc=0; _cmd_send "$agent" "$pf" >&2 || rc=$?
+  rm -f "$pf"
+  [ "$rc" -eq 0 ] || return "$rc"
+  local start=$SECONDS id="" last="" read_any=""
+  while :; do
+    if id="$(_orca_identity "$target" 2>/dev/null)"; then
+      read_any=1; last="${id#*last=}"
+      if printf '%s' "$last" | grep -qE "(^|[^0-9])${expected}([^0-9]|\$)"; then  # M:PROBE-TOKEN
+        echo "PROBE: ALIVE agent=$agent answer=$expected elapsed=$((SECONDS - start))s"
+        return 0
+      fi
+    fi
+    [ $((SECONDS - start)) -ge "$timeout" ] && break
+    sleep 1
+  done
+  if [ -z "$read_any" ]; then  # M:PROBE-UNREADABLE
+    echo "PROBE: UNREADABLE agent=$agent — worktree ps never answered in ${timeout}s; liveness not measured"
+    return 2
+  fi
+  echo "PROBE: NO_ANSWER agent=$agent expected=$expected after ${timeout}s last=$last"
+  return 1
+}
+
 _exec_comment_compose() {
   local current="$1" stamp="$2"
   [ -n "$current" ] || { printf '%s' "$stamp"; return 0; }
@@ -4355,7 +4403,7 @@ _cmd_run() {  # --timeout <s> -- <cmd...>
 
 # Every verb `main` routes, in help order. The help line and the --help guard both
 # read it; tests/test_hmad_dispatch_verb_help.py pins it to main's case arms.
-_HMAD_VERBS="env resolve verify launch pin pin-agents resolved-model send ask exec clear interrupt read wait alive notify progress exec-pane audit-cycle run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
+_HMAD_VERBS="env resolve verify launch pin pin-agents resolved-model send ask probe exec clear interrupt read wait alive notify progress exec-pane audit-cycle run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
 
 main() {
   local verb="${1:-}"; shift || true
@@ -4383,6 +4431,7 @@ main() {
     resolved-model) _cmd_resolved_model "$@" ;;
     send)   _cmd_send "$@" ;;
     ask)    _cmd_ask "$@" ;;
+    probe)  _cmd_probe "$@" ;;
     exec)   _cmd_exec "$@" ;;
     clear)  _cmd_clear "$@" ;;
     interrupt) _cmd_interrupt "$@" ;;
