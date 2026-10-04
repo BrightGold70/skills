@@ -18,7 +18,7 @@
   "mutations": [
     {
       "name": "scrub-enumerates-compgen",
-      "_mechanism": "Enumerate names from `compgen -e` again. Non-identifier CLAUDE names are invisible to it and reach the grok child.",
+      "_mechanism": "Enumerate names from `compgen -e` again. Non-identifier CLAUDE names are invisible to it and reach the grok child. HOST-BOUND, measured 2026-10-04: on a host whose ambient bash is macOS /bin/bash 3.2, `compgen -e` DOES list `CLAUDE-HYPHEN`/`KEEP-HYPHEN` (probe: `env 'CLAUDE-HYPHEN=x' /bin/bash -c 'compgen -e'`), so this mutant is equivalent there and reports SURVIVED. It discriminates only under bash 4+, where D3 was found.",
       "file": "scripts/hmad-dispatch.sh",
       "find": "  done < <(env -0)",
       "replace": "  done < <(compgen -e | tr '\\n' '\\0')",
