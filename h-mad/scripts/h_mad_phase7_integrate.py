@@ -19,7 +19,7 @@ repair that the next reader cannot undo is not mechanical.
 **Verdicts** (read the token, never `$?` — every verdict exits 0):
 
     INTEGRATE: PLANNED route=merge base=<b> branch=<f> ahead=<n> identity=<y/n>
-    INTEGRATE: MERGED base=<b> branch=<f> commit=<sha> identity=<y/n>
+    INTEGRATE: MERGED base=<b> branch=<f> commit=<sha> identity=<y/n> suite=<covered|unrun|PASS rc=0|FAIL rc=N>
     INTEGRATE: KEPT route=<pr|keep> base=<b> branch=<f>
     INTEGRATE: BLOCKED reason=<r>
     INTEGRATE: UNREADABLE reason=<r>                                    exit 2
@@ -44,6 +44,7 @@ before 7e. After an `--apply` the claim is re-checked against the real trees
 from __future__ import annotations
 
 import argparse
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -348,6 +349,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--apply", action="store_true",
                     help="perform the merge. Without it this plans and verifies only.")
     ap.add_argument("--message", help="merge commit subject")
+    ap.add_argument("--suite", metavar="CMD",
+                    help="with --apply: when the merged tree is NEW (identity=n), run "
+                         "this suite command on it and report suite=PASS|FAIL")
     args = ap.parse_args(argv)
 
     repo = args.repo_root
@@ -406,11 +410,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         _emit(f"UNREADABLE reason=merge_failed:{exc.kind}")
         return 2
+    # A NEW merged tree has no run covering it: a test passed on the branch and
+    # failed on merged main because the base had moved. Printing "re-run the suite"
+    # left that to memory, so `--suite` runs it here and the token carries the result.
+    # The field is appended, never inserted: consumers read this line left to right.
+    if matched:
+        suite = "suite=covered"
+    elif not args.suite:
+        suite = "suite=unrun"
+    else:
+        try:
+            rc = subprocess.run(shlex.split(args.suite), cwd=str(repo)).returncode
+            suite = f"suite={'PASS' if rc == 0 else 'FAIL'} rc={rc}"
+        except (OSError, ValueError) as exc:
+            suite = f"suite=FAIL rc={exc.__class__.__name__}"
     _emit(f"MERGED base={base} branch={branch} commit={sha} "
-          f"identity={'y' if matched else 'n'}")
-    if not matched:
+          f"identity={'y' if matched else 'n'} {suite}")
+    if suite == "suite=unrun":
         print("  identity=n — the merged tree differs from the branch tip, so no "
-              "existing run covers it. Re-run the suite before 7e.")
+              "existing run covers it. Re-run the suite before 7e (or pass --suite).")
+    elif suite.startswith("suite=FAIL"):
+        print("  the suite is red on the merged tree: do not push (7e). The merge is "
+              "local; fix forward on the base, or reset it to undo the merge.")
     return 0
 
 

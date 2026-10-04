@@ -1,0 +1,44 @@
+{
+  "_why": "Skill-candidates row 'run the full project suite on the MERGED tree': a test passed on the branch and failed on merged main because the base had moved. 7f only printed 're-run the suite'. `--suite` now runs it on a NEW merged tree and the MERGED token carries the result; these rows prove each state has a test that bites.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_phase7_integrate.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "a-red-merged-suite-reads-pass",
+      "_mechanism": "The suite's exit code is ignored, so a red merged tree is pushed as PASS.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "            suite = f\"suite={'PASS' if rc == 0 else 'FAIL'} rc={rc}\"\n",
+      "replace": "            suite = f\"suite=PASS rc={rc}\"\n",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestTheMergedTreeIsTested::test_a_red_suite_on_the_merged_tree_is_reported_fail",
+      "symbol": "main"
+    },
+    {
+      "name": "no-suite-reads-covered",
+      "_mechanism": "A new merged tree with no command given claims coverage it does not have.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    elif not args.suite:\n        suite = \"suite=unrun\"\n",
+      "replace": "    elif not args.suite:\n        suite = \"suite=covered\"\n",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestTheMergedTreeIsTested::test_no_suite_given_says_unrun",
+      "symbol": "main"
+    },
+    {
+      "name": "an-identical-tree-re-runs-the-suite",
+      "_mechanism": "identity=y re-runs eight minutes of suite the existing run already covers by proof.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    if matched:\n        suite = \"suite=covered\"\n",
+      "replace": "    if False:\n        suite = \"suite=covered\"\n",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestTheMergedTreeIsTested::test_an_identical_tree_is_covered_and_runs_nothing",
+      "symbol": "main"
+    },
+    {
+      "name": "the-suite-runs-outside-the-merged-tree",
+      "_mechanism": "The command runs in the caller's cwd, not the repo, so it tests whatever tree the caller happens to be in.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "            rc = subprocess.run(shlex.split(args.suite), cwd=str(repo)).returncode\n",
+      "replace": "            rc = subprocess.run(shlex.split(args.suite)).returncode\n",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestTheMergedTreeIsTested::test_a_new_merged_tree_runs_the_suite_and_reports_pass",
+      "symbol": "main"
+    }
+  ]
+}

@@ -23,7 +23,7 @@
 - **7c** — Inline archive (`references/inline-protocols.md §Phase 7 §Archive`) → moves feature docs to `docs/archive/<YYYY-MM>/<feature>/`.
 - **7d** — `git add -A -- ':/' ':(top,exclude)*.done' && git add -u -- ':/' && git commit -m "feat(<feature>): closure — report + archive"`.
 - **7f** — `h_mad_phase7_integrate.py` — merge the feature branch onto its base (or record `pr`/`keep`). Read the `INTEGRATE:` token, never `$?`. Plans by default; `--apply` merges. Runs AFTER 7d, because 7c's archive leaves tracked deletions that 7f's own dirty-tree gate would block on. Reports removable worktrees, removes none. The pathspec excludes the untracked audit markers, which a bare `-A` would commit (see SKILL.md §5g for why gitignoring them instead would break the `tree delta` count).
-- **7e** — `git push origin <base>`. Emit `[H-MAD] <feature> phase7 complete`.
+- **7e** — `git push origin <base>`, only when 7f's `MERGED` token reads `identity=y` or `suite=PASS` (a `suite=FAIL` or `suite=unrun` merged tree is untested). Emit `[H-MAD] <feature> phase7 complete`.
 
 ## Cycle caps
 

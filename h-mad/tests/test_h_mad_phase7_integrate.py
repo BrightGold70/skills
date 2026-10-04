@@ -386,3 +386,47 @@ class TestDocumented:
                 assert it.TRACKED_SWEEP in command, (
                     f"{name}: no `git add -u` follow-up, so a TRACKED `.done` "
                     f"file's real modification is suppressed forever: {command[:120]}")
+
+
+def _moved_base(repo: Path) -> str:
+    branch = feature(repo)
+    git(repo, "checkout", "-q", "main")
+    (repo / "b.txt").write_text("moved\n", encoding="utf-8")
+    git(repo, "add", "b.txt")
+    git(repo, "commit", "-qm", "main moves")
+    git(repo, "checkout", "-q", branch)
+    return branch
+
+
+class TestTheMergedTreeIsTested:
+    """Skill-candidates row "run the full project suite on the MERGED tree": when the
+    base moved, the merged tree is new and no existing run covers it — measured, a test
+    passed in the worktree and failed on merged main. 7f only PRINTED "re-run the suite";
+    `--suite` runs it there and the verdict carries the result."""
+
+    def test_a_new_merged_tree_runs_the_suite_and_reports_pass(self, repo: Path) -> None:
+        _moved_base(repo)
+        result = run("--repo-root", str(repo), "--feature", "d", "--apply",
+                     "--suite", f"{sys.executable} -c 'import os; assert os.path.exists(\"b.txt\")'")
+        assert token(result.stdout).endswith("identity=n suite=PASS rc=0"), result.stdout
+
+    def test_a_red_suite_on_the_merged_tree_is_reported_fail(self, repo: Path) -> None:
+        _moved_base(repo)
+        result = run("--repo-root", str(repo), "--feature", "d", "--apply",
+                     "--suite", f"{sys.executable} -c 'raise SystemExit(3)'")
+        assert result.returncode == 0, "a verdict, not an operational error"
+        assert token(result.stdout).endswith("identity=n suite=FAIL rc=3"), result.stdout
+        assert "do not push" in result.stdout
+
+    def test_no_suite_given_says_unrun(self, repo: Path) -> None:
+        _moved_base(repo)
+        result = run("--repo-root", str(repo), "--feature", "d", "--apply")
+        assert token(result.stdout).endswith("identity=n suite=unrun"), result.stdout
+
+    def test_an_identical_tree_is_covered_and_runs_nothing(self, repo: Path) -> None:
+        feature(repo)
+        marker = repo.parent / "ran"
+        result = run("--repo-root", str(repo), "--feature", "d", "--apply",
+                     "--suite", f"touch {marker}")
+        assert token(result.stdout).endswith("identity=y suite=covered"), result.stdout
+        assert not marker.exists(), "identity=y: the run you have covers it; nothing re-runs"
