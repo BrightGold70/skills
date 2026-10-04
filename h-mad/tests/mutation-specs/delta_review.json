@@ -16,8 +16,8 @@
       "name": "removed-lines-are-reviewed-too",
       "_mechanism": "A claim the revision DELETED is reported as one the revision makes, so the reviewer re-runs commands about text that is already gone and the real added claims are diluted.",
       "file": "scripts/h_mad_delta_review.py",
-      "find": "        if line.startswith(\"+\") and not line.startswith(\"+++\"):",
-      "replace": "        if not line.startswith(\"+++\") and not line.startswith(\"---\"):",
+      "find": "        elif line.startswith(\"+\") and files:",
+      "replace": "        elif (line.startswith(\"+\") or line.startswith(\"-\")) and not line.startswith(\"---\") and files:",
       "test": "tests/test_h_mad_delta_review.py::TestExtraction::test_only_ADDED_lines_are_reviewed"
     },
     {
@@ -48,8 +48,8 @@
       "name": "a-revision-git-cannot-read-is-reported-CLEAN",
       "_mechanism": "The exact shape this repo keeps paying for: 'I could not measure it' spelled the same way as 'I measured it and it is fine'. A typo'd rev then certifies a delta nobody reviewed.",
       "file": "scripts/h_mad_delta_review.py",
-      "find": "    if lines is None:\n        print(f\"DELTA: UNREADABLE reason=git:{args.rev}\")",
-      "replace": "    if lines is None:\n        print(\"DELTA: CLEAN claims=0 executed=0 unverified=0\")\n        return 0\n    if False:\n        print(f\"DELTA: UNREADABLE reason=git:{args.rev}\")",
+      "find": "    if files is None:\n        print(f\"DELTA: UNREADABLE reason=git:{args.rev}\")",
+      "replace": "    if files is None:\n        print(\"DELTA: CLEAN claims=0 executed=0 unverified=0\")\n        return 0\n    if False:\n        print(f\"DELTA: UNREADABLE reason=git:{args.rev}\")",
       "test": "tests/test_h_mad_delta_review.py::TestSignalDiscipline::test_an_unknown_rev_is_UNREADABLE_at_exit_2"
     }
   ]

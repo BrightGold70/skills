@@ -1,0 +1,55 @@
+{
+  "_why": "Skill-candidates row 'a data fixture floods the delta self-review': `--rev 4fd01b3` reported claims=19, all from a 152-line JSONL fixture the commit added. A new file whose every added line is a JSON object or array is now skipped and named (19 -> 2 on that commit). These rows prove each scope limit has a test that bites.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_delta_review.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "data-files-are-reviewed-again",
+      "_mechanism": "The flood returns: every quoted command in a corpus is reported as the revision's claim.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "    return new and bool(rows) and all(_is_json_row(l) for l in rows)\n",
+      "replace": "    return False\n",
+      "test": "tests/test_h_mad_delta_review.py::TestDataFixturesAreNotClaims::test_a_new_jsonl_corpus_is_skipped_and_named",
+      "symbol": "is_data_file"
+    },
+    {
+      "name": "one-json-row-makes-a-data-file",
+      "_mechanism": "A file with prose claims beside its rows is skipped whole, hiding the prose.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "    return new and bool(rows) and all(_is_json_row(l) for l in rows)\n",
+      "replace": "    return new and bool(rows) and any(_is_json_row(l) for l in rows)\n",
+      "test": "tests/test_h_mad_delta_review.py::TestDataFixturesAreNotClaims::test_a_new_file_with_one_prose_line_is_reviewed",
+      "symbol": "is_data_file"
+    },
+    {
+      "name": "existing-corpora-are-skipped-too",
+      "_mechanism": "Rows appended to a file that already existed are skipped, widening past the row's scope.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "    return new and bool(rows) and all(_is_json_row(l) for l in rows)\n",
+      "replace": "    return bool(rows) and all(_is_json_row(l) for l in rows)\n",
+      "test": "tests/test_h_mad_delta_review.py::TestDataFixturesAreNotClaims::test_rows_appended_to_an_existing_corpus_are_still_reviewed",
+      "symbol": "is_data_file"
+    },
+    {
+      "name": "any-json-value-is-a-row",
+      "_mechanism": "A line that is a bare JSON string counts as a record, so a file of quoted prose is skipped as a corpus.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "        return isinstance(json.loads(line), (dict, list))\n",
+      "replace": "        json.loads(line)\n        return True\n",
+      "test": "tests/test_h_mad_delta_review.py::TestDataFixturesAreNotClaims::test_a_file_of_bare_quoted_lines_is_prose_not_a_corpus",
+      "symbol": "_is_json_row"
+    }
+  ]
+}

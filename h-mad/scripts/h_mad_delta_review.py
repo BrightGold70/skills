@@ -30,6 +30,7 @@ Stdlib only, like every other h-mad script.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shlex
 import subprocess
@@ -99,12 +100,15 @@ def is_executable(command: str) -> bool:
     return verb in _ALLOWED
 
 
-def added_lines(repo: Path, rev: str, paths: list[str]) -> list[str] | None:
-    """The lines this revision ADDS, or None if git could not answer.
+def _is_json_row(line: str) -> bool:
+    try:
+        return isinstance(json.loads(line), (dict, list))
+    except ValueError:
+        return False
 
-    Added only: a claim the revision REMOVED is not a claim the revision makes, and
-    reviewing it wastes the reader on text that is already gone.
-    """
+
+def added_by_file(repo: Path, rev: str, paths: list[str]) -> list[tuple[str, bool, list[str]]] | None:
+    """(path, file is new in this revision, added lines) per file, or None if git could not answer."""
     cmd = ["git", "-C", str(repo), "show", "--unified=0", "--format=", rev]
     if paths:
         cmd += ["--", *paths]
@@ -114,11 +118,41 @@ def added_lines(repo: Path, rev: str, paths: list[str]) -> list[str] | None:
         return None
     if run.returncode != 0:
         return None
-    out = []
+    files: list[tuple[str, bool, list[str]]] = []
+    new = False
     for line in run.stdout.splitlines():
-        if line.startswith("+") and not line.startswith("+++"):
-            out.append(line[1:])
-    return out
+        if line.startswith("diff --git "):
+            new = False
+        elif line.startswith("new file mode"):
+            new = True
+        elif line.startswith("+++ "):
+            files.append((line[6:] if line.startswith("+++ b/") else line[4:], new, []))
+        elif line.startswith("+") and files:
+            files[-1][2].append(line[1:])
+    return files
+
+
+def is_data_file(new: bool, lines: list[str]) -> bool:
+    """A corpus the revision ADDS: every non-blank added line is a JSON object or array.
+
+    Its backticked spans are quoted evidence, not claims this revision makes —
+    `--rev 4fd01b3` reported claims=19, all from one 152-line JSONL fixture. Scoped
+    narrowly on purpose: a file that already existed, or one with a single prose
+    line, is reviewed; so is an authored multi-line JSON (a mutation spec), whose
+    individual lines do not parse.
+    """
+    rows = [l for l in lines if l.strip()]
+    return new and bool(rows) and all(_is_json_row(l) for l in rows)
+
+
+def added_lines(repo: Path, rev: str, paths: list[str]) -> list[str] | None:
+    """The lines this revision ADDS, or None if git could not answer.
+
+    Added only: a claim the revision REMOVED is not a claim the revision makes, and
+    reviewing it wastes the reader on text that is already gone.
+    """
+    files = added_by_file(repo, rev, paths)
+    return None if files is None else [l for _, _, lines in files for l in lines]
 
 
 def claims(lines: list[str]) -> list[dict]:
@@ -147,13 +181,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=int, default=30)
     args = parser.parse_args(argv)
 
-    lines = added_lines(args.repo, args.rev, args.path)
-    if lines is None:
+    files = added_by_file(args.repo, args.rev, args.path)
+    if files is None:
         print(f"DELTA: UNREADABLE reason=git:{args.rev}")
         print("  git could not answer for that revision, so nothing was reviewed — "
               "a cannot-judge, never a clean delta.")
         return 2
 
+    lines = []
+    for path, new, added in files:
+        if is_data_file(new, added):
+            print(f"  skipped data: {path} ({len(added)} lines)")
+        else:
+            lines += added
     found = claims(lines)
     if not found:
         print("DELTA: CLEAN claims=0 executed=0 unverified=0")

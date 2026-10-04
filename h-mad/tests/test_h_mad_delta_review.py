@@ -196,3 +196,68 @@ class TestSignalToNoise:
                 "and `grep -c x d.md` is 1.\n")
         line = token(run("--repo", str(repo), "--rev", "HEAD").stdout)
         assert "claims=1" in line, line
+
+
+class TestDataFixturesAreNotClaims:
+    """Skill-candidates row "a data fixture floods the delta self-review": `--rev 4fd01b3`
+    returned claims=19 and every one came from a 152-line JSONL fixture the commit added —
+    backticked fragments of other people's findings, command-shaped and still data."""
+
+    CORPUS = "\n".join(
+        '{"finding": "ran `grep -n foo%d bar.md` and it said 3"}' % i for i in range(5)) + "\n"
+
+    def test_a_new_jsonl_corpus_is_skipped_and_named(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        _commit(repo, "seed.md", "seed\n")
+        (repo / "corpus.jsonl").write_text(self.CORPUS, encoding="utf-8")
+        _commit(repo, "doc.md", "claim: `wc -l doc.md` is 1\n")
+
+        out = run("--repo", str(repo), "--rev", "HEAD")
+
+        assert token(out.stdout).startswith("DELTA: CLAIMS claims=1 "), out.stdout
+        assert "skipped data: corpus.jsonl (5 lines)" in out.stdout, out.stdout
+        assert "grep -n foo" not in out.stdout
+
+    def test_a_new_file_with_one_prose_line_is_reviewed(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path)
+        _commit(repo, "seed.md", "seed\n")
+        _commit(repo, "mixed.jsonl", self.CORPUS + "prose says `wc -l mixed.jsonl` is 6\n")
+
+        out = run("--repo", str(repo), "--rev", "HEAD")
+
+        assert "skipped data" not in out.stdout, out.stdout
+        assert "claims=6" in token(out.stdout), out.stdout
+
+    def test_rows_appended_to_an_existing_corpus_are_still_reviewed(self, tmp_path: Path) -> None:
+        """Only a file the revision ADDS is skipped, as the row scoped it."""
+        repo = _repo(tmp_path)
+        _commit(repo, "corpus.jsonl", '{"seed": 1}\n')
+        _commit(repo, "corpus.jsonl", '{"seed": 1}\n' + self.CORPUS)
+
+        out = run("--repo", str(repo), "--rev", "HEAD")
+
+        assert "skipped data" not in out.stdout, out.stdout
+        assert "claims=5" in token(out.stdout), out.stdout
+
+    def test_an_authored_multiline_json_is_reviewed(self, tmp_path: Path) -> None:
+        """A mutation spec is JSON written by the author: its `_mechanism` prose is a claim."""
+        repo = _repo(tmp_path)
+        _commit(repo, "seed.md", "seed\n")
+        _commit(repo, "spec.json", '{\n  "_why": "proved by `wc -l spec.json`",\n  "mutations": []\n}\n')
+
+        out = run("--repo", str(repo), "--rev", "HEAD")
+
+        assert "skipped data" not in out.stdout, out.stdout
+        assert "claims=1" in token(out.stdout), out.stdout
+
+    def test_a_file_of_bare_quoted_lines_is_prose_not_a_corpus(self, tmp_path: Path) -> None:
+        """Every line parses as JSON (a string), but a corpus is RECORDS. Quoted lines are
+        how prose quotes a command, so they stay claims."""
+        repo = _repo(tmp_path)
+        _commit(repo, "seed.md", "seed\n")
+        _commit(repo, "quotes.txt", '"we ran `wc -l quotes.txt` and got 2"\n"and `wc -c quotes.txt`"\n')
+
+        out = run("--repo", str(repo), "--rev", "HEAD")
+
+        assert "skipped data" not in out.stdout, out.stdout
+        assert "claims=2" in token(out.stdout), out.stdout

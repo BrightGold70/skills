@@ -1890,6 +1890,7 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   does not hold. Severity is the ordinary one for this family: an alert that is 19/19 noise on a
   commit that adds a corpus gets ignored on the commit where it matters.
   — **RE-PROBED 2026-10-03: OPEN** — `h_mad_delta_review.py` `added_lines()` keeps every `+` line; no fixture/JSON filter.
+  — **LANDED 2026-10-04** — `h_mad_delta_review.py` skips a file the revision ADDS whose every non-blank added line is a JSON object or array, printing `skipped data: <path> (N lines)`; the `DELTA:` token is unchanged. Narrow on purpose: an existing file, a file with one prose line, an authored multi-line JSON (mutation spec) and a file of bare quoted strings are all still reviewed. On this row's own commit `4fd01b3`: claims 19 -> 2, the two authored `origins tagged` spans. Spec `delta_review_data_files.json` ALL_CAUGHT 4/4; `delta_review.json` re-anchored to the refactor (ALL_CAUGHT 6/6).
 - **a wrapped bold row name is not a row, and COVERAGE cannot see it**: `ROW` is
   `^- \*\*(.+?)\*\*`, so a row whose bolded name wraps before its closing `**` is not matched — it is
   not counted, not censused, and never appears in any open/terminal bucket. Hit while filing the row
