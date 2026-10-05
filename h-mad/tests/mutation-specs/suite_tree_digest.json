@@ -25,7 +25,7 @@
     {
       "name": "the-session-never-reports",
       "_mechanism": "The digest is taken and compared but the line is never printed: the pass count above it still describes bytes that no longer exist, silently.",
-      "file": "tests/conftest.py",
+      "file": "tests/tree_lock_plugin.py",
       "find": "    if moved:\n        shown",
       "replace": "    if False:\n        shown",
       "test": "tests/test_h_mad_suite_tree_digest.py::test_new_untracked_file_mid_session_is_reported"
@@ -45,6 +45,54 @@
       "find": "            paths = moved_paths(digest_before, tree_digest(root))",
       "replace": "            paths = []",
       "test": "tests/test_h_mad_suite_tree_digest.py::test_harness_tree_moved_on_dirty_edit_not_only_head"
+    },
+    {
+      "name": "hmad-bookkeeping-moves-the-tree",
+      "_mechanism": "Review S5: HemaSuite tracks `.h-mad/telemetry.jsonl`; a live lane's telemetry row during a multi-minute run would void a verdict about code it never touched.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "_HMAD_CHURN = (\"telemetry.jsonl\", \"pass-logs\")",
+      "replace": "_HMAD_CHURN = ()",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_hmad_operational_writes_are_quiet_when_not_ignored"
+    },
+    {
+      "name": "done-markers-move-the-tree",
+      "_mechanism": "Review S5: HemaSuite does not ignore `*.done`; an audit-completion marker written by a live lane is bookkeeping, not a change to measured code.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if rel.endswith(\".done\"):\n        return True",
+      "replace": "    if False:\n        return True",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_hmad_operational_writes_are_quiet_when_not_ignored"
+    },
+    {
+      "name": "run-suite-drops-tree-moved",
+      "_mechanism": "Review S7: the gate certified a cycle's suite as PASS while the session itself had said the tree moved under it.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if moved:\n        result[\"tree_moved\"] = moved.group(1)",
+      "replace": "    if False:\n        result[\"tree_moved\"] = moved.group(1)",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_audit_gate_carries_tree_moved_into_its_suite_line"
+    },
+    {
+      "name": "the-suite-line-drops-tree-moved",
+      "_mechanism": "Review S7: the measured fact reached the outcome but not the SUITE line the cycle driver prints, which is the line that certifies the cycle.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    moved = f\" tree_moved={outcome['tree_moved']}\" if outcome.get(\"tree_moved\") else \"\"",
+      "replace": "    moved = \"\"",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_audit_cycle_carries_tree_moved_into_its_suite_line"
+    },
+    {
+      "name": "the-whole-hmad-dir-is-skipped",
+      "_mechanism": "R2-S1: skipping every .h-mad/ entry hides an edit to a TRACKED file the suite reads (invariants.md, wires.jsonl), so the session prints no TREE_MOVED for bytes it measured.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if \".h-mad\" not in parts:\n        return False",
+      "replace": "    if \".h-mad\" not in parts:\n        return False\n    return True",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_tracked_hmad_file_edited_mid_session_is_reported"
+    },
+    {
+      "name": "a-colored-tree-moved-line-is-dropped",
+      "_mechanism": "R2-N3: under --color=yes the plugin's yellow line starts with an SGR escape and a `^SUITE:` match misses it, so the gate certifies the cycle without tree_moved.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    moved = _TREE_MOVED_LINE.search(_SGR_RE.sub(\"\", tail))",
+      "replace": "    moved = _TREE_MOVED_LINE.search(tail)",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_audit_gate_reads_a_colored_tree_moved_line"
     }
   ]
 }

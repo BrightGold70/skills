@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -197,3 +198,215 @@ def test_wire_registry_reads_busy_exit_as_unreadable_not_broken(tmp_path: Path) 
               "node_id": "h-mad/tests/test_probe.py::test_probe"}
     with pytest.raises(registry.RegistryError, match="SUITE: BUSY"):
         registry.run_pins([record], root)
+
+
+# --- every pytest entry point over the repo takes the lock (review M1) ---------
+#
+# The lock lived in `pytest_sessionstart` of `h-mad/tests/conftest.py`, which
+# fires only when that conftest is an INITIAL conftest. `pytest handoff/tests`,
+# a single `handoff/scripts` file and `pytest .` never loaded it up front, so
+# they measured a held tree in silence. The root conftest now registers the lock
+# for every session under this rootdir, against the live `pytest.ini` testpaths.
+
+
+@pytest.mark.parametrize("args", [
+    ("handoff/tests",),
+    ("handoff/scripts/test_script_probe.py",),
+    (".",),
+    ("h-mad",),
+], ids=["handoff-tests", "one-handoff-scripts-file", "dot", "h-mad-dir"])
+def test_every_entry_point_under_the_rootdir_exits_SUITE_BUSY(
+        tmp_path: Path, args: tuple[str, ...]) -> None:
+    root = make_tree(tmp_path)
+    write_holder(root, os.getpid())
+    proc = run_session(root, tmp_path / "bt", None, *args)
+    assert proc.returncode == busy_exit(), proc.stdout + proc.stderr
+    assert f"SUITE: BUSY holder={os.getpid()} " in proc.stdout, proc.stdout
+
+
+def test_bare_pytest_over_the_declared_testpaths_exits_SUITE_BUSY(tmp_path: Path) -> None:
+    root = make_tree(tmp_path)
+    write_holder(root, os.getpid())
+    proc = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                           "--basetemp", str(tmp_path / "bt")], cwd=root, env=session_env(),
+                          capture_output=True, text=True, timeout=180)
+    assert proc.returncode == busy_exit(), proc.stdout + proc.stderr
+
+
+def test_every_entry_point_takes_the_lock_exactly_once(tmp_path: Path) -> None:
+    """Both conftests load in this run; a second registration would find the
+    lock held by its own process and refuse the session it belongs to."""
+    root = make_tree(tmp_path)
+    proc = run_session(root, tmp_path / "bt", None,
+                       "h-mad/tests/test_probe.py", "handoff/tests", "handoff/scripts")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "3 passed" in proc.stdout, proc.stdout
+    assert not _lock_path(root).exists()
+
+
+def test_install_path_through_a_symlink_still_takes_the_lock(tmp_path: Path) -> None:
+    """`pytest ~/.claude/skills/h-mad/tests/` sees no pytest.ini and no root
+    conftest above it; the h-mad conftest registers the lock itself."""
+    root = make_tree(tmp_path)
+    install = tmp_path / "install"
+    install.mkdir()
+    (install / "h-mad").symlink_to(root / "h-mad")
+    write_holder(root, os.getpid())
+    proc = run_session(root, tmp_path / "bt", None,
+                       str(install / "h-mad" / "tests" / "test_probe.py"), cwd=install)
+    assert proc.returncode == busy_exit(), proc.stdout + proc.stderr
+
+
+# --- review S1-S3, N2, N4 -------------------------------------------------------
+
+
+def test_dead_holder_token_naming_the_dead_holder_does_not_exempt(tmp_path: Path) -> None:
+    """A SIGKILLed harness leaves its inner pytest holding a token whose pid IS
+    the lock's holder. Dead, so it exempts nothing: the session takes the lock."""
+    root = make_tree(tmp_path)
+    pid = dead_pid()
+    lock = write_holder(root, pid)
+    proc = run_session(root, tmp_path / "bt", session_env(**{HOLDER_ENV: f"{lock}:{pid}"}))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not lock.exists(), "the session ran exempt instead of taking the dead holder's lock"
+
+
+def test_an_unwritable_lock_runs_unlocked_and_says_so(tmp_path: Path) -> None:
+    root = make_tree(tmp_path)
+    (root / ".h-mad").write_text("a file where the lock directory goes\n", encoding="utf-8")
+    proc = run_session(root, tmp_path / "bt")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "SUITE: LOCK_UNAVAILABLE " in proc.stdout, proc.stdout
+    assert "1 passed" in proc.stdout
+
+
+def test_sigterm_releases_the_lock(tmp_path: Path) -> None:
+    import signal
+
+    root = make_tree(tmp_path)
+    release = tmp_path / "release"
+    proc = start_blocking_session(root, tmp_path / "bt", release)
+    proc.send_signal(signal.SIGTERM)
+    proc.communicate(timeout=60)
+    release.write_text("go", encoding="utf-8")
+    assert proc.returncode == -signal.SIGTERM, proc.returncode
+    assert not _lock_path(root).exists(), "a SIGTERMed session left its lock behind"
+
+
+def test_a_recycled_pid_holder_is_stale(tmp_path: Path) -> None:
+    """A live pid that STARTED after the lock was written is not the holder."""
+    root = make_tree(tmp_path)
+    stranger = subprocess.Popen(["sleep", "60"])
+    try:
+        time.sleep(1.5)
+        lock = _lock_path(root)
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(json.dumps({"pid": stranger.pid, "spec": "pytest-session",
+                                    "started": time.time() - 3600}), encoding="utf-8")
+        proc = run_session(root, tmp_path / "bt")
+    finally:
+        stranger.kill()
+        stranger.wait()
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "1 passed" in proc.stdout
+
+
+def test_a_live_holder_that_predates_its_lock_still_blocks(tmp_path: Path) -> None:
+    """The other direction: the recycled-pid rule must not steal a real holder."""
+    root = make_tree(tmp_path)
+    holder = subprocess.Popen(["sleep", "60"])
+    try:
+        time.sleep(1.5)
+        lock = _lock_path(root)
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(json.dumps({"pid": holder.pid, "spec": "pytest-session",
+                                    "started": time.time()}), encoding="utf-8")
+        proc = run_session(root, tmp_path / "bt")
+    finally:
+        holder.kill()
+        holder.wait()
+    assert proc.returncode == busy_exit(), proc.stdout + proc.stderr
+
+
+def test_an_empty_lock_says_retry_before_delete(tmp_path: Path) -> None:
+    """Between O_EXCL create and payload write a live lock reads empty."""
+    root = make_tree(tmp_path)
+    lock = _lock_path(root)
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text("", encoding="utf-8")
+    proc = run_session(root, tmp_path / "bt")
+    assert proc.returncode == busy_exit(), proc.stdout + proc.stderr
+    assert "retry in a second" in proc.stdout, proc.stdout
+
+
+def test_audit_gate_names_the_holder_of_a_busy_suite(tmp_path: Path) -> None:
+    from test_h_mad_audit_suite_gate import CLEAN, fake_suite, run
+
+    audit = tmp_path / "f.plan.audit.v1.codex.md"
+    audit.write_text(CLEAN, encoding="utf-8")
+    sh = fake_suite(tmp_path, "busy.sh",
+                    'echo "SUITE: BUSY holder=4242 age=9s what=pytest-session lock=/x"; exit 75')
+    out = run(str(audit), "--project-tests", str(tmp_path), "--suite-cmd", str(sh)).stdout
+    assert "SUITE: UNREADABLE reason=suite_busy" in out, out
+    assert "holder=4242" in out, out
+
+
+def test_audit_cycle_names_the_holder_of_a_busy_suite(capsys, tmp_path: Path) -> None:
+    """Review N4: the cycle driver dropped the `holder` that `run_suite` returns."""
+    from test_h_mad_audit_cycle import _two_leg_reports, audit_cycle, run_collect_cycle
+    from test_h_mad_audit_suite_gate import fake_suite
+
+    sh = fake_suite(tmp_path, "busy.sh",
+                    'echo "SUITE: BUSY holder=4242 age=9s what=pytest-session lock=/x"; exit 75')
+    rc, out, _ = run_collect_cycle(
+        audit_cycle(), tmp_path=tmp_path, capsys=capsys, report_paths=_two_leg_reports(tmp_path),
+        extra_args=["--project-tests", str(tmp_path), "--suite-cmd", str(sh)])
+    assert "SUITE: UNREADABLE reason=suite_busy" in out, out
+    assert "holder=4242" in out, out
+
+
+# --- round 2 ------------------------------------------------------------------
+
+
+BOTH = """\
+import json, os, pathlib
+
+def test_both(tmp_path_factory):
+    stem = os.environ.get("HMAD_AUDIT_STEM_DIR")
+    base = pathlib.Path(tmp_path_factory.getbasetemp()).resolve()
+    assert stem and base in pathlib.Path(stem).resolve().parents, (stem, base)
+    lock = pathlib.Path(__file__).resolve().parents[2] / ".h-mad" / "mutation.lock"
+    assert json.loads(lock.read_text())["pid"] == os.getpid()
+"""
+
+
+def test_h_mad_conftest_takes_the_lock_and_exports_the_stem_dir(tmp_path: Path) -> None:
+    """R2-M1: both `pytest_configure` jobs must run. Two module-level definitions
+    merged without conflict and the second rebound the name, dropping the first.
+    Run through the install path, where `h-mad/tests/conftest.py` is the ONLY
+    conftest, so neither job can be covered by the root one."""
+    root = make_tree(tmp_path)
+    (root / "h-mad" / "tests" / "test_both.py").write_text(BOTH, encoding="utf-8")
+    install = tmp_path / "install"
+    install.mkdir()
+    (install / "h-mad").symlink_to(root / "h-mad")
+    proc = run_session(root, tmp_path / "bt", None,
+                       str(install / "h-mad" / "tests" / "test_both.py"), cwd=install)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "1 passed" in proc.stdout, proc.stdout
+
+
+def test_a_session_started_with_sigterm_ignored_still_ignores_it(tmp_path: Path) -> None:
+    """R2-N2: `trap '' TERM` before pytest must still mean what it says."""
+    import signal
+
+    root = make_tree(tmp_path)
+    release = tmp_path / "release"
+    proc = start_blocking_session(
+        root, tmp_path / "bt", release,
+        preexec_fn=lambda: signal.signal(signal.SIGTERM, signal.SIG_IGN))
+    proc.send_signal(signal.SIGTERM)
+    time.sleep(1)
+    out = finish(proc, release)
+    assert proc.returncode == 0, (proc.returncode, out)
+    assert not _lock_path(root).exists()

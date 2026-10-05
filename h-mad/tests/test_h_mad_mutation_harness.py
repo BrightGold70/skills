@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
@@ -3645,7 +3646,10 @@ def test_sweep_stops_when_another_run_holds_the_tree(tmp_path: Path) -> None:
     second = _project(tmp_path / "b", [_kills_the_guard()])
     lock = tmp_path / "a" / ".h-mad" / "mutation.lock"
     lock.parent.mkdir(parents=True)
-    lock.write_text(json.dumps({"pid": os.getpid(), "spec": "x", "started": 0}), encoding="utf-8")
+    # A REAL start time: a live pid that began after its lock's `started` is a
+    # recycled pid and is stale-taken (`_holder_alive`), and `0` is 1970.
+    lock.write_text(json.dumps({"pid": os.getpid(), "spec": "x", "started": time.time()}),
+                    encoding="utf-8")
 
     proc = _sweep(first, second)
 

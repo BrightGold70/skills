@@ -155,8 +155,8 @@
     {
       "name": "d2-audit-cycle-log-path-reused",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
-      "replace": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}\"  # M:STEM-FRESH",
+      "find": "  stem=\"${stem_dir}/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
+      "replace": "  stem=\"${stem_dir}/audit_${feature}_${phase}_cycle${cycle}\"  # M:STEM-FRESH",
       "test": "tests/test_hmad_dispatch_audit_cycle_grok.py::test_audit_cycle_never_reuses_a_stale_grok_log_path"
     }
   ]

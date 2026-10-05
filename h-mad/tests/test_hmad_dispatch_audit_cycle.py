@@ -71,6 +71,12 @@ def read_jsonl(path):
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
+def audit_stem_dir() -> Path:
+    """Where `audit-cycle` stages its stems in this session: conftest points
+    HMAD_AUDIT_STEM_DIR at the session's basetemp, never the shared `/tmp`."""
+    return Path(os.environ["HMAD_AUDIT_STEM_DIR"])
+
+
 def load_mutation_spec(path):
     assert path.exists(), f"{path.name} mutation spec must exist"
     try:
@@ -280,7 +286,7 @@ def dispatch_count(capture):
     return sum(1 for line in capture.read_text(encoding="utf-8").splitlines() if line.startswith("agy "))
 
 
-def run_audit_cycle(tmp_path, args, *, env=None, capture=None):
+def run_audit_cycle(tmp_path, args, *, env=None, capture=None, cwd=None):
     b = _bindir(tmp_path, ["agy"])
     e = {
         "_BINDIR": b,
@@ -289,7 +295,7 @@ def run_audit_cycle(tmp_path, args, *, env=None, capture=None):
     }
     if env:
         e.update(env)
-    return run(args, env=e, capture=capture)
+    return run(args, env=e, capture=capture, cwd=cwd)
 
 
 def traced_bindir(tmp_path, trace):
@@ -907,7 +913,7 @@ def test_verb_invalid_passes(tmp_path):
         "HMAD_AUDIT_CYCLE_SCRIPT_DIR": str(script_dir),
     }
     capture = tmp_path / "agy.calls"
-    stale_report = Path("/tmp/audit_cycle-red_plan_cycle7_p1.report.md")
+    stale_report = audit_stem_dir() / "audit_cycle-red_plan_cycle7_p1.report.md"
     stale_report.write_text("stale real cycle report\n", encoding="utf-8")
     try:
         invalid_phase = dispatch_args(root=root, phase="unknown", passes="1")
@@ -950,7 +956,7 @@ def test_verb_forwards_grace_and_timeout_on_a_fresh_stem(tmp_path):
     root = project_with_docs(tmp_path)
     script_dir, assemble_calls, cycle_calls = install_audit_cycle_stubs(tmp_path)
     feature = "cycle-clear"
-    old = Path(f"/tmp/audit_{feature}_plan_cycle3_p1")
+    old = audit_stem_dir() / f"audit_{feature}_plan_cycle3_p1"
     stale = [Path(str(old) + suffix) for suffix in (".report.md", ".report.md.done", ".out.txt", ".log")]
     for path in stale:
         path.write_text("stale channel\n", encoding="utf-8")
@@ -974,7 +980,7 @@ def test_verb_forwards_grace_and_timeout_on_a_fresh_stem(tmp_path):
         assert "--grace" in cycle_argv and cycle_argv[cycle_argv.index("--grace") + 1] == "13"
         assemble_argv = read_jsonl(assemble_calls)[0]
         assemble_out = assemble_argv[assemble_argv.index("--out") + 1]
-        assert re.fullmatch(re.escape(f"/tmp/audit_{feature}_plan_cycle3") + FRESH_STEM + r"_p1\.txt",
+        assert re.fullmatch(re.escape(f"{audit_stem_dir()}/audit_{feature}_plan_cycle3") + FRESH_STEM + r"_p1\.txt",
                             assemble_out), assemble_out
         agy_argv = capture.read_text(encoding="utf-8")
         assert "--print-timeout 41s" in agy_argv, "--timeout must reach per-pass exec"
@@ -982,8 +988,6 @@ def test_verb_forwards_grace_and_timeout_on_a_fresh_stem(tmp_path):
         assert '"event":"result"' in log.read_text(encoding="utf-8")
     finally:
         for path in stale:
-            path.unlink(missing_ok=True)
-        for path in Path("/tmp").glob(f"audit_{feature}_plan_cycle3_run*"):
             path.unlink(missing_ok=True)
 
 
@@ -1054,7 +1058,7 @@ def test_verb_passes_one(tmp_path):
     assert dispatch_count(capture) == 1, "one-pass verified cycle must dispatch exactly one pass"
     cycle_argv = read_jsonl(cycle_calls)[0]
     assert any(
-        re.match(r"1:/tmp/audit_cycle-red_plan_cycle7" + FRESH_STEM + r"_p1\.report\.md:", arg)
+        re.match("1:" + re.escape(f"{audit_stem_dir()}/audit_cycle-red_plan_cycle7") + FRESH_STEM + r"_p1\.report\.md:", arg)
         for arg in cycle_argv
     ), cycle_argv
 
@@ -1310,7 +1314,7 @@ def test_verb_nonzero_exec_rc_is_forwarded_but_not_fatal(tmp_path):
     rows = read_jsonl(trace)
     cycle_rows = [row for row in rows if row["kind"] == "cycle"]
     assert len(cycle_rows) == 1, "non-zero _cmd_exec rc must still reach the helper verdict path"
-    stem = re.escape("/tmp/audit_cycle-red_plan_cycle7") + FRESH_STEM
+    stem = re.escape(f"{audit_stem_dir()}/audit_cycle-red_plan_cycle7") + FRESH_STEM
     assert len(cycle_rows[0]["pass_specs"]) == 1
     assert re.fullmatch(
         rf"1:(?P<s>{stem})_p1\.report\.md:(?P=s)_p1\.out\.txt:17:(?P=s)_p1\.log",

@@ -1,0 +1,91 @@
+{
+  "_why": "Test-flake root cause 2026-10-05: a session fixture unlinked every /tmp/audit_*_run* file that appeared during the session, and /tmp is shared by every pytest session on the machine, other worktrees included, so one session deleted a concurrent session's live stems (`sed: /tmp/audit_handed-..._p2.asm.txt: No such file or directory`, random audit-cycle failures, BASELINE_NOT_GREEN under concurrent mutation runs). audit-cycle now stages under $HMAD_AUDIT_STEM_DIR (default /tmp, validated absolute, existing, colon-free), the conftest points it at the session's basetemp, and nothing sweeps /tmp. Each row breaks one of those properties.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_stem_dir.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "stem-dir-ignores-the-variable",
+      "_mechanism": "The verb never reads HMAD_AUDIT_STEM_DIR, so every test session stages in the shared /tmp again.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  local stem_dir=\"${HMAD_AUDIT_STEM_DIR:-/tmp}\"  # M:STEM-DIR",
+      "replace": "  local stem_dir=\"/tmp\"  # M:STEM-DIR",
+      "test": "tests/test_h_mad_audit_stem_dir.py::test_verb_stages_its_stem_under_hmad_audit_stem_dir"
+    },
+    {
+      "name": "stem-dir-default-moves",
+      "_mechanism": "Production callers set nothing; a changed default moves every live audit's staged files away from /tmp, where the recipes and humans look.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  local stem_dir=\"${HMAD_AUDIT_STEM_DIR:-/tmp}\"  # M:STEM-DIR",
+      "replace": "  local stem_dir=\"${HMAD_AUDIT_STEM_DIR:-${TMPDIR%/}}\"  # M:STEM-DIR",
+      "test": "tests/test_h_mad_audit_stem_dir.py::test_verb_stem_dir_defaults_to_tmp"
+    },
+    {
+      "name": "stem-ignores-the-dir",
+      "_mechanism": "The directory is validated but the stem is still minted under /tmp.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  stem=\"${stem_dir}/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
+      "replace": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
+      "test": "tests/test_h_mad_audit_stem_dir.py::test_verb_stages_its_stem_under_hmad_audit_stem_dir"
+    },
+    {
+      "name": "stem-dir-relative-accepted",
+      "_mechanism": "A relative directory resolves against the verb's cwd, and the assembler refuses the relative report path as an assemble HALT instead of a usage error.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  case \"$stem_dir\" in /*) ;; *) stem_dir=\"\" ;; esac  # M:STEM-DIR-ABS",
+      "replace": "  :  # M:STEM-DIR-ABS",
+      "test": "tests/test_h_mad_audit_stem_dir.py::test_verb_refuses_an_unusable_stem_dir"
+    },
+    {
+      "name": "stem-dir-colon-accepted",
+      "_mechanism": "A ':' in the directory splits the --pass i:<report>:<out>:<rc>:<log> payload at the wrong place.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  case \"$stem_dir\" in *:*) stem_dir=\"\" ;; esac  # M:STEM-DIR-COLON",
+      "replace": "  :  # M:STEM-DIR-COLON",
+      "test": "tests/test_h_mad_audit_stem_dir.py::test_verb_refuses_an_unusable_stem_dir"
+    },
+    {
+      "name": "stem-dir-missing-accepted",
+      "_mechanism": "A missing directory fails later at the first redirect, as exit 4, after the verb has started work.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  [ -n \"$stem_dir\" ] && [ -d \"$stem_dir\" ] || {  # M:STEM-DIR-EXISTS",
+      "replace": "  [ -n \"$stem_dir\" ] || {  # M:STEM-DIR-EXISTS",
+      "test": "tests/test_h_mad_audit_stem_dir.py::test_verb_refuses_an_unusable_stem_dir"
+    },
+    {
+      "name": "session-exports-no-stem-dir",
+      "_mechanism": "The session never points the verb at its basetemp, so its stems land in the shared /tmp.",
+      "file": "tests/conftest.py",
+      "find": "    os.environ[\"HMAD_AUDIT_STEM_DIR\"] = str(stem_dir)  # M:CONFTEST-STEM-DIR\n",
+      "replace": "    pass  # M:CONFTEST-STEM-DIR\n",
+      "test": "tests/test_h_mad_audit_stem_dir.py::test_session_exports_a_private_stem_dir_under_its_basetemp"
+    },
+    {
+      "name": "session-sweeps-what-appeared-in-tmp",
+      "_mechanism": "The removed defect: a session-end set-difference sweep of /tmp deletes a concurrent session's stem. Narrowed to the names the RED test stages so the mutant run cannot touch a real session's files.",
+      "file": "tests/conftest.py",
+      "find": "    os.environ[\"HMAD_AUDIT_STEM_DIR\"] = str(stem_dir)  # M:CONFTEST-STEM-DIR\n",
+      "replace": "    os.environ[\"HMAD_AUDIT_STEM_DIR\"] = str(stem_dir)  # M:CONFTEST-STEM-DIR\n\n\ndef _swept():\n    return set(Path(\"/tmp\").glob(\"audit_demo_plan_cycle*_run20261005T000000Z-*_p1.asm.txt\"))\n\n\n@pytest.fixture(scope=\"session\", autouse=True)\ndef _sweep_what_appeared_in_tmp():\n    before = _swept()\n    yield\n    for path in _swept() - before:\n        path.unlink(missing_ok=True)\n",
+      "test": "tests/test_h_mad_audit_stem_dir.py::test_session_teardown_spares_a_foreign_sessions_stem_file"
+    },
+    {
+      "name": "divergence-filter-reads-paths-as-regex",
+      "_mechanism": "Review should-fix: report paths reached `grep -v -e` as basic regexes; a stem dir holding `[` made grep error, the filter printed nothing, foreign counted 0 and the prompt_divergence HALT could never fire.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "                 | grep -F -v -e \"${report[1]}\" -e \"${report[$i]}\" \\",
+      "replace": "                 | grep -v -e \"${report[1]}\" -e \"${report[$i]}\" \\",
+      "test": "tests/test_h_mad_audit_stem_dir.py::test_divergence_halt_survives_a_regex_metacharacter_stem_dir"
+    }
+  ]
+}

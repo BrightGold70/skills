@@ -17,7 +17,6 @@ So the protection belongs here rather than in any single test — snapshot the r
 file before the session and restore it after if anything moved it, loudly.
 """
 import os
-import re
 import subprocess
 from pathlib import Path
 
@@ -140,28 +139,28 @@ def _hermetic_host_skill_roots(monkeypatch, tmp_path):
     monkeypatch.setenv("HMAD_AGY_SKILLS_DIR", str(tmp_path / "absent-agy-skills"))
 
 
-# `audit-cycle` mints a fresh `/tmp/audit_<feature>_<phase>_cycle<N>_run<ts>-<pid>`
-# stem per invocation (claim once, never re-hand a report path), so the verb tests
-# no longer overwrite one fixed set of /tmp files: each run leaves new ones, about
-# 900 per full suite. Remove the ones THIS session created, and only for the
-# synthetic feature names the tests use -- /tmp is shared with live audit runs.
-_TEST_RUN_FILE = re.compile(
-    r"^audit_(cycle-red|cycle-status|cycle-clear|cycle-docs-.+?|size_status=unverified"
-    r"|surf\d+|grok-stale-.+?|handed-.+?|demo)_(plan|design|impl-plan)_cycle[^_]+"
-    r"_run\d{8}T\d{6}Z-\d+_p\d+\."
-)
-
-
-def _test_run_files() -> set[Path]:
-    return {p for p in Path("/tmp").glob("audit_*_run*") if _TEST_RUN_FILE.match(p.name)}
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _remove_fresh_stem_files_this_run_created():
-    before = _test_run_files()
-    yield
-    for path in _test_run_files() - before:
-        path.unlink(missing_ok=True)
+# `audit-cycle` mints a fresh `audit_<feature>_<phase>_cycle<N>_run<ts>-<pid>` stem
+# per invocation (claim once, never re-hand a report path), about 900 per full
+# suite, under `$HMAD_AUDIT_STEM_DIR` (default `/tmp`). The session points it at a
+# directory under its own basetemp, so its stems never reach `/tmp` and pytest's
+# basetemp retention removes them. Nothing here sweeps `/tmp`: it is shared by
+# every pytest session on the machine, other worktrees of this repo included, and
+# a "delete what appeared during my session" sweep deleted a concurrent session's
+# live stems. `trylast` so the tmpdir plugin's factory exists; set before any test
+# module is imported, so a module-level `{**os.environ}` carries it too.
+#
+# This is the ONLY `pytest_configure` in this file, and it has two jobs. A second
+# module-level definition rebinds the name and pytest sees only the last one, so
+# a merge that added another one dropped the stem-dir export without a conflict
+# (review R2-M1). `test_h_mad_conftest_takes_the_lock_and_exports_the_stem_dir`
+# fails if either job goes missing. Job 1, the tree lock: see the plugin
+# section below. Job 2, the stem dir, stays last because `audit_stem_dir.json`
+# appends a top-level definition right after its line.
+@pytest.hookimpl(trylast=True)
+def pytest_configure(config):
+    _register_tree_lock_plugin(config)
+    stem_dir = config._tmp_path_factory.mktemp("audit-stems", numbered=False)
+    os.environ["HMAD_AUDIT_STEM_DIR"] = str(stem_dir)  # M:CONFTEST-STEM-DIR
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -197,96 +196,24 @@ def _reap_processes_leaked_by_this_run(tmp_path_factory, request):
 
 # --- one measured run per working tree, and a report when the tree moved ------
 #
-# Rows 1391/2361: two pytest runs over one tree produced 6 and 3 failures in
-# DIFFERENT sets, and 0 when the file ran alone; two full suites produced 11
-# phantom failures in a file that passes 40/40 alone; a mutation harness ran
-# under a full suite and was harmless only by luck. "Never run two suites" was
-# prose, so the session now takes the SAME lock the mutation harness takes
-# (`tree_lock`, one per git toplevel) and a second session refuses with
-# `SUITE: BUSY` and exit `SUITE_BUSY_EXIT`. The harness's own inner pytest is
-# exempt through the holder token it exports, or every spec run would refuse
-# itself. Separate worktrees are separate toplevels and never contend.
-#
-# Row 745: the session digests the non-ignored tree at start and end and prints
-# `SUITE: TREE_MOVED paths=… n=K` when the two differ — the pass count above it
-# describes bytes that no longer exist. It reports; it never refuses an edit.
-#
-# Hooks rather than a fixture: the refusal must land before collection, and the
-# end digest after every session fixture's teardown.
-import contextlib
+# The lock and the tree digest live in `tree_lock_plugin.py`. The repository's
+# root conftest registers it for every pytest invocation under the rootdir; this
+# registration covers the install-path run (`pytest ~/.claude/skills/h-mad/tests/`),
+# which has no root conftest above it. Registering twice is a no-op by name.
+# Called from this file's single `pytest_configure` above, never a hook itself.
 import importlib.util
 import sys
-import time
-
-_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-_SUITE: dict = {}
 
 
-def _script(name: str):
-    """Load a sibling script by path, under a private name, without touching sys.path.
-
-    None when it is not there: a conftest copied on its own into a scratch
-    directory (the leak-reaper end-to-end test does that) has no tree to lock.
-    """
-    path = _SCRIPTS / f"{name}.py"
-    if not path.is_file():
-        return None
-    spec = importlib.util.spec_from_file_location(f"_suite_conftest_{name}", path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def _say(config, line: str) -> None:
-    reporter = config.pluginmanager.get_plugin("terminalreporter")
-    if reporter is not None:
-        reporter.write_line(line)
-    else:
-        print(line, flush=True)
-
-
-def pytest_sessionstart(session):
-    harness, gate = _script("h_mad_mutation_harness"), _script("h_mad_audit_gate")
-    if harness is None or gate is None:
-        return
-    _SUITE["harness"] = harness
-    if not harness.held_by_an_enclosing_run(REPO_ROOT):
-        stack = contextlib.ExitStack()
-        try:
-            stack.enter_context(harness.tree_lock(REPO_ROOT, "pytest-session"))
-        except harness.TreeBusy as busy:
-            holder = busy.holder
-            pid = holder.get("pid")
-            started = holder.get("started")
-            age = (f"{time.time() - started:.0f}s" if isinstance(started, (int, float))
-                   else "unknown")
-            line = (f"SUITE: BUSY holder={pid if isinstance(pid, int) else 'unparseable'} "
-                    f"age={age} what={holder.get('spec') or 'unknown'} lock={holder.get('lock')}")
-            _say(session.config, line)
-            _say(session.config, "  another pytest session or mutation run holds this "
-                 "working tree; a second run over it measures a tree being rewritten. "
-                 "Nothing was measured — wait for the holder. Delete the lock file only "
-                 "if you are certain no run is in flight.")
-            pytest.exit(line, returncode=gate.SUITE_BUSY_EXIT)
-        _SUITE["lock"] = stack
-    _SUITE["digest"] = harness.tree_digest(REPO_ROOT)
-
-
-@pytest.hookimpl(trylast=True)
-def pytest_sessionfinish(session):
-    harness = _SUITE.get("harness")
-    if harness is not None and "digest" in _SUITE:
-        _SUITE["moved"] = harness.moved_paths(_SUITE.pop("digest"),
-                                              harness.tree_digest(REPO_ROOT))
-    stack = _SUITE.pop("lock", None)
-    if stack is not None:
-        stack.close()
-
-
-def pytest_terminal_summary(terminalreporter):
-    moved = _SUITE.pop("moved", None)
-    if moved:
-        shown = ",".join(moved[:10]) + (",…" if len(moved) > 10 else "")
-        terminalreporter.write_line(f"SUITE: TREE_MOVED paths={shown} n={len(moved)}",
-                                    yellow=True)
+def _register_tree_lock_plugin(config):
+    name = "_h_mad_tree_lock_plugin"
+    plugin = sys.modules.get(name)
+    if plugin is None:
+        path = Path(__file__).resolve().parent / "tree_lock_plugin.py"
+        if not path.is_file():
+            return
+        spec = importlib.util.spec_from_file_location(name, path)
+        plugin = importlib.util.module_from_spec(spec)
+        sys.modules[name] = plugin
+        spec.loader.exec_module(plugin)
+    plugin.register(config)

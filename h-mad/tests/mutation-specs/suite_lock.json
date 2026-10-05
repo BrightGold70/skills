@@ -17,7 +17,7 @@
     {
       "name": "a-busy-session-runs-anyway",
       "_mechanism": "The refusal printed and then fell through: the second session measures a tree another run is rewriting, which is the 6-and-3-failures-in-different-sets case this lock exists to stop.",
-      "file": "tests/conftest.py",
+      "file": "tests/tree_lock_plugin.py",
       "find": "            pytest.exit(line, returncode=gate.SUITE_BUSY_EXIT)",
       "replace": "            pass",
       "test": "tests/test_h_mad_suite_lock.py::test_second_pytest_session_on_same_toplevel_exits_SUITE_BUSY"
@@ -25,7 +25,7 @@
     {
       "name": "the-session-never-asks-for-the-lock",
       "_mechanism": "The feature removed wholesale: every session treats itself as an enclosing run's child, so nothing is ever refused and an unparseable lock is silently ignored.",
-      "file": "tests/conftest.py",
+      "file": "tests/tree_lock_plugin.py",
       "find": "    if not harness.held_by_an_enclosing_run(REPO_ROOT):",
       "replace": "    if False:",
       "test": "tests/test_h_mad_suite_lock.py::test_unparseable_lock_blocks_and_names_the_file"
@@ -61,6 +61,94 @@
       "find": "    if busy:\n        raise RegistryError(f\"pytest refused",
       "replace": "    if False:\n        raise RegistryError(f\"pytest refused",
       "test": "tests/test_h_mad_suite_lock.py::test_wire_registry_reads_busy_exit_as_unreadable_not_broken"
+    },
+    {
+      "name": "the-plugin-never-registers",
+      "_mechanism": "Review M1's shape: the lock code exists but no session runs it, so `pytest handoff/tests` measures a held tree in silence.",
+      "file": "tests/tree_lock_plugin.py",
+      "find": "    if not config.pluginmanager.has_plugin(PLUGIN_NAME):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_suite_lock.py::test_every_entry_point_under_the_rootdir_exits_SUITE_BUSY[handoff-tests]"
+    },
+    {
+      "name": "the-install-path-registers-nothing",
+      "_mechanism": "`pytest ~/.claude/skills/h-mad/tests/` has no root conftest above it; without the h-mad conftest's own registration an installed skill's suite never takes the lock.",
+      "file": "tests/conftest.py",
+      "find": "    plugin.register(config)",
+      "replace": "    pass",
+      "test": "tests/test_h_mad_suite_lock.py::test_install_path_through_a_symlink_still_takes_the_lock"
+    },
+    {
+      "name": "a-dead-holders-token-still-exempts",
+      "_mechanism": "Review S1: a SIGKILLed harness's orphaned inner pytest carries a token whose pid IS the lock's holder; without the liveness half it runs exempt while a third run stale-takes the lock, and two measured runs overlap.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return _read_holder(path).get(\"pid\") == pid and _process_alive(pid)",
+      "replace": "    return _read_holder(path).get(\"pid\") == pid",
+      "test": "tests/test_h_mad_suite_lock.py::test_dead_holder_token_naming_the_dead_holder_does_not_exempt"
+    },
+    {
+      "name": "an-unwritable-lock-is-an-internal-error",
+      "_mechanism": "Review S2: a read-only checkout, or `.h-mad` existing as a file, turns every session in the tree into an INTERNALERROR with no remedy line.",
+      "file": "tests/tree_lock_plugin.py",
+      "find": "        except OSError as exc:\n            # A read-only checkout",
+      "replace": "        except ZeroDivisionError as exc:\n            # A read-only checkout",
+      "test": "tests/test_h_mad_suite_lock.py::test_an_unwritable_lock_runs_unlocked_and_says_so"
+    },
+    {
+      "name": "sigterm-leaves-the-lock",
+      "_mechanism": "Review S3: SIGTERM is how a backgrounded suite is stopped; without the handler its lock outlives it and only a stale-take, trusting the pid alone, recovers it.",
+      "file": "tests/tree_lock_plugin.py",
+      "find": "                _SUITE[\"sigterm\"] = signal.signal(signal.SIGTERM, _on_sigterm)",
+      "replace": "                pass",
+      "test": "tests/test_h_mad_suite_lock.py::test_sigterm_releases_the_lock"
+    },
+    {
+      "name": "a-recycled-pid-holds-the-tree",
+      "_mechanism": "Review S3: a lock left by a killed run names a pid the OS has since given to an unrelated process; trusting the pid alone makes every run in the tree read BUSY until that stranger exits.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return not (isinstance(started, (int, float)) and began is not None and began > started + 2)",
+      "replace": "    return True",
+      "test": "tests/test_h_mad_suite_lock.py::test_a_recycled_pid_holder_is_stale"
+    },
+    {
+      "name": "an-empty-lock-invites-deleting-a-live-one",
+      "_mechanism": "Review N2: between O_EXCL create and payload write a live lock reads empty; telling the reader to delete it without retrying first can break a real holder.",
+      "file": "tests/tree_lock_plugin.py",
+      "find": "\"holder caught mid-write: retry in a second before anything else, and \"",
+      "replace": "\"holder caught mid-write, and \"",
+      "test": "tests/test_h_mad_suite_lock.py::test_an_empty_lock_says_retry_before_delete"
+    },
+    {
+      "name": "the-busy-holder-is-dropped",
+      "_mechanism": "Review N4: `run_suite` returns the holder and the printed line dropped it, so the operator could not see who held the tree.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        return line + (f\"\\n  {outcome['holder']}\" if outcome.get(\"holder\") else \"\")",
+      "replace": "        return line",
+      "test": "tests/test_h_mad_suite_lock.py::test_audit_cycle_names_the_holder_of_a_busy_suite"
+    },
+    {
+      "name": "the-shared-configure-drops-the-lock",
+      "_mechanism": "R2-M1's shape, one direction: the single pytest_configure keeps the stem-dir job and loses the tree-lock registration, so an install-path run measures a held tree.",
+      "file": "tests/conftest.py",
+      "find": "    _register_tree_lock_plugin(config)\n    stem_dir",
+      "replace": "    stem_dir",
+      "test": "tests/test_h_mad_suite_lock.py::test_h_mad_conftest_takes_the_lock_and_exports_the_stem_dir"
+    },
+    {
+      "name": "the-shared-configure-drops-the-stem-dir",
+      "_mechanism": "R2-M1 as it happened: a second pytest_configure rebound the name and the stem-dir export vanished without a merge conflict, sending ~900 stems back to the shared /tmp.",
+      "file": "tests/conftest.py",
+      "find": "    _register_tree_lock_plugin(config)\n    stem_dir",
+      "replace": "    _register_tree_lock_plugin(config)\n    return\n    stem_dir",
+      "test": "tests/test_h_mad_suite_lock.py::test_h_mad_conftest_takes_the_lock_and_exports_the_stem_dir"
+    },
+    {
+      "name": "an-ignored-sigterm-is-overridden",
+      "_mechanism": "R2-N2: a session started under `trap '' TERM` gets a handler that re-kills with SIG_DFL, so the caller's explicit ignore stops meaning anything.",
+      "file": "tests/tree_lock_plugin.py",
+      "find": "                if signal.getsignal(signal.SIGTERM) is not signal.SIG_IGN:",
+      "replace": "                if True:",
+      "test": "tests/test_h_mad_suite_lock.py::test_a_session_started_with_sigterm_ignored_still_ignores_it"
     }
   ]
 }

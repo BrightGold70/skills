@@ -36,6 +36,7 @@ from test_h_mad_assemble_audit import SCRIPT, _project  # noqa: E402
 from test_hmad_dispatch import _bindir, run  # noqa: E402
 from test_hmad_dispatch_audit_cycle import (  # noqa: E402
     assert_registered_verb,
+    audit_stem_dir,
     dispatch_args,
     install_audit_cycle_stubs,
     project_with_docs,
@@ -573,7 +574,8 @@ def _verb_feature(tmp_path):
 
 
 def _cleanup(feature, cycle="7"):
-    for path in Path("/tmp").glob(f"audit_{feature}_plan_cycle{cycle}_*"):
+    # The session's private stem directory, never the shared /tmp.
+    for path in audit_stem_dir().glob(f"audit_{feature}_plan_cycle{cycle}_*"):
         path.unlink(missing_ok=True)
 
 
@@ -591,7 +593,7 @@ def test_verb_mints_a_fresh_run_stem(tmp_path):
         assert_registered_verb(r)
         reports = [a[a.index("--report-file") + 1] for a in read_jsonl(assemble_calls)]
         outs = [a[a.index("--out") + 1] for a in read_jsonl(assemble_calls)]
-        stem = re.escape(f"/tmp/audit_{feature}_plan_cycle7") + RUN_STEM
+        stem = re.escape(f"{audit_stem_dir()}/audit_{feature}_plan_cycle7") + RUN_STEM
         for i, (report, out) in enumerate(zip(reports, outs), start=1):
             assert re.fullmatch(stem + rf"_p{i}\.report\.md", report), report
             assert re.fullmatch(stem + rf"_p{i}\.txt", out), out
@@ -652,7 +654,7 @@ def test_two_verb_runs_against_the_real_assembler_use_different_stems(tmp_path):
             )
             assert r.returncode == 0, r.stderr
             assert "assemble_halt" not in r.stdout, r.stdout
-        asm = sorted(Path("/tmp").glob(f"audit_demo_plan_cycle{cycle}_run*_p1.asm.txt"))
+        asm = sorted(audit_stem_dir().glob(f"audit_demo_plan_cycle{cycle}_run*_p1.asm.txt"))
         assert len(asm) == 2, asm
         for a in asm:
             assert re.fullmatch(rf"audit_demo_plan_cycle{cycle}{RUN_STEM}_p1\.asm\.txt", a.name)

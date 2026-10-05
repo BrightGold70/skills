@@ -160,6 +160,9 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+# Loaded by path, without sys.path, into EVERY pytest session over this repo
+# (h-mad/tests/tree_lock_plugin.py): standard-library imports only. A sibling
+# import here would turn every session into an INTERNALERROR.
 
 
 class SpecError(Exception):
@@ -1078,7 +1081,27 @@ def _git_head(root: Path) -> str | None:
 # scoring run and pytest rewrites its cache. In this repo `.gitignore` already
 # hides them, but a repo that does not ignore them would report every run as
 # moved, so they are excluded by name as well.
+#
+# h-mad's own CHURN is skipped for the same reason (review S5). That covers
+# `*.done` audit-completion markers, `telemetry.jsonl` rows, `pass-logs/` and
+# any UNTRACKED file under `.h-mad/`. HemaSuite tracks `.h-mad/telemetry.jsonl`
+# and does not ignore `*.done`, and a live lane writing either during a
+# multi-minute run changes nothing the run measures. TRACKED `.h-mad/` files
+# that tests read (`invariants.md`, `wires.jsonl`) are NOT skipped: skipping
+# the whole directory hid an edit to them (review R2-S1).
 _DIGEST_SKIP_PARTS = ("__pycache__", ".pytest_cache")
+_HMAD_CHURN = ("telemetry.jsonl", "pass-logs")
+
+
+def _hmad_churn(code: str, rel: str) -> bool:
+    """Is this `git status` entry h-mad bookkeeping rather than measured bytes?"""
+    if rel.endswith(".done"):
+        return True
+    parts = Path(rel).parts
+    if ".h-mad" not in parts:
+        return False
+    inside = parts[parts.index(".h-mad") + 1:]
+    return code == "??" or (bool(inside) and inside[0] in _HMAD_CHURN)
 
 
 def tree_digest(root: Path) -> dict[str, str] | None:
@@ -1116,6 +1139,8 @@ def tree_digest(root: Path) -> dict[str, str] | None:
     for entry in status.stdout.decode("utf-8", "surrogateescape").split("\0"):
         rel = entry[3:]
         if not rel or any(part in _DIGEST_SKIP_PARTS for part in Path(rel).parts):
+            continue
+        if _hmad_churn(entry[:2], rel):
             continue
         path = toplevel / rel
         if path == lock:
@@ -1180,6 +1205,33 @@ def _read_holder(path: Path) -> dict:
 HOLDER_ENV = "H_MAD_TREE_LOCK_HELD"
 
 
+def _process_start(pid: int) -> float | None:
+    """When `pid` started, to the second, or None when `ps` cannot say."""
+    try:
+        r = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True,
+                           text=True, timeout=10, env=dict(os.environ, LC_ALL="C"))
+        return time.mktime(time.strptime(" ".join(r.stdout.split()), "%a %b %d %H:%M:%S %Y"))
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def _holder_alive(holder: dict) -> bool:
+    """Is the process that WROTE this lock still running?
+
+    `_process_alive` answers for the pid, and a pid is recycled: on macOS the pid
+    space is about 99999, so a lock left by a SIGKILLed run can name an unrelated
+    process that started later, and every run in the tree would read BUSY until it
+    exits (review S3). A pid whose process began more than 2 s after the lock was
+    written is not the writer. When the start time cannot be read, the pid alone
+    decides — the old rule, never a steal on a guess.
+    """
+    pid = holder["pid"]
+    if not _process_alive(pid):
+        return False
+    started, began = holder.get("started"), _process_start(pid)
+    return not (isinstance(started, (int, float)) and began is not None and began > started + 2)
+
+
 def held_by_an_enclosing_run(root: Path) -> bool:
     """True when this process runs INSIDE the run that holds `root`'s tree lock.
 
@@ -1223,7 +1275,7 @@ def tree_lock(root: Path, spec_path: Path):
         except FileExistsError:
             holder = _read_holder(path)
             pid = holder.get("pid")
-            if holder.get("unparseable") or not isinstance(pid, int) or _process_alive(pid):
+            if holder.get("unparseable") or not isinstance(pid, int) or _holder_alive(holder):
                 holder["lock"] = str(path)
                 raise TreeBusy(holder)
             # Stale. Clear it and retry ONCE through the loop rather than

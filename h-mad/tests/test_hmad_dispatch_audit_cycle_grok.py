@@ -9,6 +9,7 @@ import pytest
 
 from test_hmad_dispatch_audit_cycle import (
     _dispatch_artifacts_by_pass,
+    audit_stem_dir,
     dispatch_args,
     project_with_docs,
     read_jsonl,
@@ -75,7 +76,7 @@ def test_audit_cycle_never_reuses_a_stale_grok_log_path(tmp_path):
     a fresh stem per run, so the stale log at the old path is simply not reused."""
     feature = f"grok-stale-{tmp_path.name}"
     root = project_with_docs(tmp_path, feature=feature)
-    stale = Path(f"/tmp/audit_{feature}_plan_cycle7_p1.log")
+    stale = audit_stem_dir() / f"audit_{feature}_plan_cycle7_p1.log"
     old_pass = (
         '{"type":"tool_call","toolCallId":"read-1"}\n'
         '{"type":"tool_call_update","toolCallId":"read-1","status":"completed"}\n'

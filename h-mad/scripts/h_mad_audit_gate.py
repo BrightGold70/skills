@@ -11,6 +11,9 @@ import re
 import sys
 from pathlib import Path
 from typing import NamedTuple
+# Loaded by path, without sys.path, into EVERY pytest session over this repo
+# (h-mad/tests/tree_lock_plugin.py): standard-library imports only. A sibling
+# import here would turn every session into an INTERNALERROR.
 
 # Suffix of the sidecar a passing gate writes beside the audit file. Kept next to
 # the audit rather than in orchestrator state because the pairing IS the claim:
@@ -525,6 +528,20 @@ SUITE_UNMEASURED = None
 # reads it as cannot-judge — never as a failure, never as a pass.
 SUITE_BUSY_EXIT = 75
 _SUITE_BUSY_LINE = re.compile(r"^SUITE: BUSY .*$", re.MULTILINE)
+# Printed by the same session at its end when the tree moved under it (row 745).
+# Report-only, so it never changes a verdict; it rides on the SUITE line instead,
+# because that line is what certifies a cycle's suite (review S7).
+_TREE_MOVED_LINE = re.compile(r"^SUITE: TREE_MOVED paths=(\S+) n=\d+", re.MULTILINE)
+
+
+def suite_line(verdict: str, outcome: dict) -> str:
+    """The `SUITE:` line for a measured outcome, carrying `tree_moved=` when present."""
+    if verdict == "UNREADABLE":
+        line = f"SUITE: UNREADABLE reason={outcome['reason']}"
+        # The holder on its own indented line, so `SUITE:` stays one token.
+        return line + (f"\n  {outcome['holder']}" if outcome.get("holder") else "")
+    moved = f" tree_moved={outcome['tree_moved']}" if outcome.get("tree_moved") else ""
+    return f"SUITE: {verdict} passed={outcome['passed']} failed={outcome['failed']}{moved}"
 
 
 def suite_busy_line(returncode: int | None, output: str) -> str | None:
@@ -573,7 +590,11 @@ def run_suite(test_root: Path, command: list[str] | None = None,
         # broken) — the third answer is the honest one.
         return {"verdict": "UNREADABLE", "reason": "no_tests_ran", "rc": run.returncode}
     verdict = "PASS" if failed == 0 and passed > 0 else "FAIL"
-    return {"verdict": verdict, "passed": passed, "failed": failed, "rc": run.returncode}
+    result = {"verdict": verdict, "passed": passed, "failed": failed, "rc": run.returncode}
+    moved = _TREE_MOVED_LINE.search(_SGR_RE.sub("", tail))  # colored under --color=yes
+    if moved:
+        result["tree_moved"] = moved.group(1)
+    return result
 
 
 class SuiteSummary(NamedTuple):
@@ -1035,10 +1056,7 @@ def main(argv: list[str] | None = None) -> int:
         command = args.suite_cmd.split() if args.suite_cmd else None
         outcome = run_suite(args.project_tests, command)
         suite = outcome["verdict"]
-        if suite == "UNREADABLE":
-            print(f"SUITE: UNREADABLE reason={outcome['reason']}")
-        else:
-            print(f"SUITE: {suite} passed={outcome['passed']} failed={outcome['failed']}")
+        print(suite_line(suite, outcome))
 
     # Declared ABOVE `stamped` deliberately: `audit_suite_gate.json` anchors the
     # red-suite-hostage row on `stamped = ""` immediately followed by the `if`,

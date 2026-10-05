@@ -203,16 +203,16 @@
       "name": "verb-reuses-one-stem-per-cycle",
       "_mechanism": "A fixed per-cycle stem: the second run of a cycle is handed the first run's paths, which the real assembler refuses.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
-      "replace": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}\"  # M:STEM-FRESH",
+      "find": "  stem=\"${stem_dir}/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
+      "replace": "  stem=\"${stem_dir}/audit_${feature}_${phase}_cycle${cycle}\"  # M:STEM-FRESH",
       "test": "tests/test_h_mad_report_path_handed.py::test_two_verb_runs_against_the_real_assembler_use_different_stems"
     },
     {
       "name": "verb-stem-drops-the-pid",
       "_mechanism": "Two runs within one clock second share a stem without the pid.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
-      "replace": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)\"  # M:STEM-FRESH",
+      "find": "  stem=\"${stem_dir}/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
+      "replace": "  stem=\"${stem_dir}/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)\"  # M:STEM-FRESH",
       "test": "tests/test_h_mad_report_path_handed.py::test_verb_stems_differ_within_one_clock_second"
     }
   ]

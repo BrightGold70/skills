@@ -1195,15 +1195,11 @@ def main(argv: list[str] | None = None) -> int:
     # it could not reach the stamps the loop already wrote.
     suite_result = None
     if args.project_tests is not None:
-        from h_mad_audit_gate import run_suite
+        from h_mad_audit_gate import run_suite, suite_line
         outcome = run_suite(args.project_tests,
                             args.suite_cmd.split() if args.suite_cmd else None)
         suite_result = outcome["verdict"]
-        if suite_result == "UNREADABLE":
-            print(f"SUITE: UNREADABLE reason={outcome['reason']}")
-        else:
-            print(f"SUITE: {suite_result} passed={outcome['passed']} "
-                  f"failed={outcome['failed']}")
+        print(suite_line(suite_result, outcome))
 
     if pass_specs:
         try:

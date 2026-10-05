@@ -3583,13 +3583,25 @@ _cmd_audit_cycle() {
   fi
 
   local stem i arc size_status halt_pass div foreign
+  # The directory the stems live in: `/tmp` unless HMAD_AUDIT_STEM_DIR names
+  # another. The test suite points it at its own basetemp, because `/tmp` is
+  # shared by every pytest session on the machine (other worktrees included) and
+  # a session that tidied its stems out of `/tmp` deleted a concurrent session's.
+  # Absolute (the assembler refuses a relative report path), existing, and free
+  # of `:` (the `--pass i:<report>:<out>:<rc>:<log>` payload splits on it).
+  local stem_dir="${HMAD_AUDIT_STEM_DIR:-/tmp}"  # M:STEM-DIR
+  case "$stem_dir" in /*) ;; *) stem_dir="" ;; esac  # M:STEM-DIR-ABS
+  case "$stem_dir" in *:*) stem_dir="" ;; esac  # M:STEM-DIR-COLON
+  [ -n "$stem_dir" ] && [ -d "$stem_dir" ] || {  # M:STEM-DIR-EXISTS
+    echo "hmad-dispatch: audit-cycle: HMAD_AUDIT_STEM_DIR must be an existing absolute directory without ':' (got '${HMAD_AUDIT_STEM_DIR-}')" >&2
+    return 2; }
   # Every invocation gets a FRESH stem, so no path is ever handed twice. The
   # assembler claims each report path once and never releases it (#49o: two
   # live, slow legs read as dead were handed their own paths again). A fixed
   # `${stem}_p${i}` reused across runs of one cycle handed a straggler's path to
   # a new leg, and the `rm -f` that cleared the channel deleted its work. With a
   # fresh stem there is nothing to clear.
-  stem="/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$"  # M:STEM-FRESH
+  stem="${stem_dir}/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$"  # M:STEM-FRESH
   i=1
   while [ "$i" -le "$passes" ]; do
     prompt[$i]="${stem}_p${i}.txt"
@@ -3659,8 +3671,10 @@ _cmd_audit_cycle() {
   while [ "$i" -le "$passes" ]; do
     div="$( { diff "${prompt[1]}" "${prompt[$i]}" || true; } | grep '^[<>]' || true)"
     # grep -c exits 1 on no match while still printing 0, hence the `|| true`.
+    # -F: the report paths are LITERALS. As regexes, a stem dir holding `[` made
+    # grep error out, the filter printed nothing, and this HALT could never fire.
     foreign="$(printf '%s\n' "$div" \
-                 | grep -v -e "${report[1]}" -e "${report[$i]}" \
+                 | grep -F -v -e "${report[1]}" -e "${report[$i]}" \
                  | grep -c '^[<>]' || true)"
     if [ -z "$div" ] || [ "$foreign" -ne 0 ]; then
       python3 "$here/h_mad_audit_cycle.py" \

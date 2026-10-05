@@ -64,16 +64,23 @@ def make_tree(base: Path, name: str = "repo") -> Path:
     root = base / name
     (root / "h-mad" / "tests").mkdir(parents=True)
     (root / "h-mad" / "scripts").mkdir(parents=True)
-    for part, files in (("tests", ("conftest.py", "leak_reaper.py")),
+    for part, files in (("tests", ("conftest.py", "leak_reaper.py", "tree_lock_plugin.py")),
                         ("scripts", ("h_mad_mutation_harness.py", "h_mad_audit_gate.py"))):
         for file in files:
-            shutil.copy(LIVE / "h-mad" / part / file, root / "h-mad" / part / file)
-    # The live ignore rules, so "quiet on ignored writes" is measured against the
-    # file the real suite runs under rather than against one written for the test.
+            if (LIVE / "h-mad" / part / file).is_file():
+                shutil.copy(LIVE / "h-mad" / part / file, root / "h-mad" / part / file)
+    # The live ignore rules, the live root conftest and the live pytest.ini (its
+    # exact `testpaths`), so every entry point is measured against the files the
+    # real suite runs under rather than against ones written for the test.
     shutil.copy(LIVE / ".gitignore", root / ".gitignore")
-    (root / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    shutil.copy(LIVE / "pytest.ini", root / "pytest.ini")
+    if (LIVE / "conftest.py").is_file():
+        shutil.copy(LIVE / "conftest.py", root / "conftest.py")
     (root / "notes.txt").write_text("tracked\n", encoding="utf-8")
     (root / "h-mad" / "tests" / "test_probe.py").write_text(PROBE, encoding="utf-8")
+    for probe in ("handoff/tests/test_handoff_probe.py", "handoff/scripts/test_script_probe.py"):
+        (root / probe).parent.mkdir(parents=True, exist_ok=True)
+        (root / probe).write_text(PROBE, encoding="utf-8")
     git(root, "init", "-q")
     git(root, "config", "user.email", "t@t")
     git(root, "config", "user.name", "t")
@@ -91,23 +98,25 @@ def session_env(*, keep_holder: bool = False, **extra: str) -> dict[str, str]:
     return env
 
 
-def session_argv(root: Path, basetemp: Path) -> list[str]:
+def session_argv(root: Path, basetemp: Path, *args: str) -> list[str]:
     return [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
-            "--basetemp", str(basetemp), "h-mad/tests/test_probe.py"]
+            "--basetemp", str(basetemp), *(args or ("h-mad/tests/test_probe.py",))]
 
 
-def run_session(root: Path, basetemp: Path, env: dict[str, str] | None = None
-                ) -> subprocess.CompletedProcess:
-    return subprocess.run(session_argv(root, basetemp), cwd=root,
+def run_session(root: Path, basetemp: Path, env: dict[str, str] | None = None,
+                *args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(session_argv(root, basetemp, *args), cwd=cwd or root,
                           env=env if env is not None else session_env(),
                           capture_output=True, text=True, timeout=180)
 
 
-def start_blocking_session(root: Path, basetemp: Path, release: Path) -> subprocess.Popen:
+def start_blocking_session(root: Path, basetemp: Path, release: Path,
+                           preexec_fn=None) -> subprocess.Popen:
     """A session that holds the tree until `release` exists. Returns once it holds it."""
     proc = subprocess.Popen(session_argv(root, basetemp), cwd=root,
                             env=session_env(PROBE_WAIT_FOR=str(release)),
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                            preexec_fn=preexec_fn)
     lock = _lock_path(root)
     deadline = time.time() + 60
     while time.time() < deadline:
@@ -134,7 +143,7 @@ def write_holder(root: Path, pid, spec: str = "pytest-session") -> Path:
     lock = _lock_path(root)
     lock.parent.mkdir(parents=True, exist_ok=True)
     lock.write_text(json.dumps({"pid": pid, "spec": spec, "root": str(root),
-                                "started": time.time() - 7}), encoding="utf-8")
+                                "started": time.time()}), encoding="utf-8")
     return lock
 
 
