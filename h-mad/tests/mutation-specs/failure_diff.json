@@ -1,0 +1,370 @@
+{
+  "root": "../..",
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_failure_diff.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "control-is-the-subject-restated",
+      "_mechanism": "The control is detached at HEAD instead of the base: both sides run the same tree, every failure reads BOTH, and a change's own failure is reported as pre-existing (HemaSuite 2026-09-16: two readings through one instrument agree).",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "str(control), base_sha)",
+      "replace": "str(control), \"HEAD\")",
+      "test": "tests/test_h_mad_failure_diff.py::test_run_names_a_failure_only_the_subject_has"
+    },
+    {
+      "name": "a-fail-in-any-run-is-deterministic",
+      "_mechanism": "The subject's always-failing set becomes its ever-failing set, so a flake that failed once is attributed to the change as NEW.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    s_always = set.intersection(*(set(run) for run in subject_runs))",
+      "replace": "    s_always = set.union(*(set(run) for run in subject_runs))",
+      "test": "tests/test_h_mad_failure_diff.py::test_repeat_flaky_test_is_FLAKY_never_attributed"
+    },
+    {
+      "name": "repeat-is-ignored",
+      "_mechanism": "Only one run per side happens whatever --repeat says: a flake is read once and lands in an attributed set.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    for index in range(1, args.repeat + 1):",
+      "replace": "    for index in range(1, 2):",
+      "test": "tests/test_h_mad_failure_diff.py::test_repeat_flaky_test_is_FLAKY_never_attributed"
+    },
+    {
+      "name": "a-flake-hides-a-new-failure",
+      "_mechanism": "FLAKY outranks NEW: a real new failure beside a pre-existing flake reads as merely flaky.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if subject_only:\n        verdict = \"NEW\"",
+      "replace": "    if subject_only and not flaky:\n        verdict = \"NEW\"",
+      "test": "tests/test_h_mad_failure_diff.py::test_flaky_on_both_sides_beside_a_real_new_failure"
+    },
+    {
+      "name": "control-left-behind",
+      "_mechanism": "The throwaway worktree is never removed: every invocation leaks a registered worktree and a checkout beside the subject.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        removed = _remove_control(subject, control, admin[0] if admin else None)",
+      "replace": "        removed = True",
+      "test": "tests/test_h_mad_failure_diff.py::test_crashed_run_is_UNREADABLE_and_control_removed"
+    },
+    {
+      "name": "cleanup-prunes-the-whole-repo",
+      "_mechanism": "Cleanup ends with a repo-wide `git worktree prune`, which also drops the registration of another session's worktree whose directory is absent at that moment.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    shutil.rmtree(control, ignore_errors=True)\n    listed =",
+      "replace": "    shutil.rmtree(control, ignore_errors=True)\n    _git(subject, \"worktree\", \"prune\")\n    listed =",
+      "test": "tests/test_h_mad_failure_diff.py::test_removal_touches_only_its_own_worktree_entry"
+    },
+    {
+      "name": "sigterm-skips-cleanup",
+      "_mechanism": "SIGTERM is not turned into an exception, so the process dies at the default action with no finally: the control worktree and its registration are left behind.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        signal.signal(sig, _on_signal)",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_failure_diff.py::test_sigterm_mid_run_removes_the_control"
+    },
+    {
+      "name": "busy-session-not-named",
+      "_mechanism": "A session refused by the tree lock is not recognised as SUITE: BUSY; it falls through to a generic exit reason and the caller cannot tell 'wait for the holder' from a broken run.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        if suite_busy_line(rc, text):",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_suite_busy_on_subject_is_UNREADABLE_not_a_result"
+    },
+    {
+      "name": "crash-not-named",
+      "_mechanism": "A run killed by a signal is not called crashed.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        if rc < 0:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_crashed_run_is_UNREADABLE_and_control_removed"
+    },
+    {
+      "name": "interrupted-collection-scored",
+      "_mechanism": "An Interrupted collection is scored: its ERROR <file> line becomes a failure id and the comparison reads FIXED_ONLY instead of cannot-judge.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if _INTERRUPTED_RE.search(tail_text):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_interrupted_or_collection_error_is_UNREADABLE"
+    },
+    {
+      "name": "odd-exit-scored",
+      "_mechanism": "Exit codes other than 0/1 are not refused by name; a usage error is reported by whatever the output happens to lack.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if rc is not None and rc not in (0, 1):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_usage_error_is_UNREADABLE_by_its_exit"
+    },
+    {
+      "name": "no-summary-reads-as-no-failures",
+      "_mechanism": "A log cut off before its summary yields an empty failure set: a killed run reads as 'no failures'.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if summary is None:\n        raise Unreadable(\"no-summary\")",
+      "replace": "    if summary is None:\n        return {}, None",
+      "test": "tests/test_h_mad_failure_diff.py::test_no_summary_line_is_UNREADABLE_not_SAME"
+    },
+    {
+      "name": "partial-set-accepted",
+      "_mechanism": "FAILED lines that disagree with the summary count are accepted: an incomplete set is diffed as if it were whole.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if len(failed) != summary.failed or len(errors) != summary.errors:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_failed_lines_disagree_with_summary_count"
+    },
+    {
+      "name": "exit-code-ignored",
+      "_mechanism": "A session that exits 1 with no failure listed reads as clean.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if rc is not None and (rc == 1) != bool(failed or errors):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_exit_code_disagreeing_with_summary_is_UNREADABLE"
+    },
+    {
+      "name": "captured-output-read-as-failures",
+      "_mechanism": "The whole log is scanned, so a FAILED line a test printed in its captured output is taken as one of this run's failures.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    for line in tail if starts else []:",
+      "replace": "    for line in lines:",
+      "test": "tests/test_h_mad_failure_diff.py::test_failed_text_in_captured_output_is_not_a_failure"
+    },
+    {
+      "name": "greedy-parametrize-id",
+      "_mechanism": "The bracket group is greedy and swallows a ' - message' that holds brackets into the node id, so the id never matches the control's.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "(?:\\[.*?\\])?)(?: - .*)?$\")",
+      "replace": "(?:\\[.*\\])?)(?: - .*)?$\")",
+      "test": "tests/test_h_mad_failure_diff.py::test_parametrized_ids_with_brackets_and_spaces"
+    },
+    {
+      "name": "disjoint-roots-diffed",
+      "_mechanism": "Two readings collected from different roots share no id and are diffed anyway: every failure reads NEW.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if sets[\"run\"] and sets[\"control\"] and not set(sets[\"run\"]) & set(sets[\"control\"]):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_disjoint_id_sets_refused_as_root_mismatch"
+    },
+    {
+      "name": "id-list-control-refused",
+      "_mechanism": "A stored baseline_failures.txt id list is parsed as a pytest log and refused as no-summary.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "(\"control\", args.control, True)",
+      "replace": "(\"control\", args.control, False)",
+      "test": "tests/test_h_mad_failure_diff.py::test_id_list_control_file"
+    },
+    {
+      "name": "M1-exit-first-read-as-complete",
+      "_mechanism": "A `-x`/`--maxfail` run's FAILED set is a prefix; read as whole it reports SAME while the new failure behind the first one was never reached.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if _STOPPED_RE.search(tail_text):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_exit_first_selection_is_UNREADABLE_stopped_early"
+    },
+    {
+      "name": "M1-stopped-log-read-as-complete",
+      "_mechanism": "Same hole in logs mode: a stored -x log is diffed as a complete set.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if _STOPPED_RE.search(tail_text):",
+      "replace": "    if _STOPPED_RE.search(tail_text) and rc is not None:",
+      "test": "tests/test_h_mad_failure_diff.py::test_stopped_early_log_is_UNREADABLE"
+    },
+    {
+      "name": "M2-handler-raises-into-cleanup",
+      "_mechanism": "The signal handler raises asynchronously, so a SIGTERM during cleanup aborts the removal: the control leaks and a traceback is the last line.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    _STATE[\"stop\"] = signum\n",
+      "replace": "    raise KeyboardInterrupt\n",
+      "test": "tests/test_h_mad_failure_diff.py::test_signal_during_cleanup_still_removes_control_and_ends_on_token"
+    },
+    {
+      "name": "M3-pythonpath-not-rebased",
+      "_mechanism": "An absolute PYTHONPATH into the subject reaches the control unchanged: the control imports the subject's code and the two readings agree.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "                entry = os.path.join(ctl, os.path.relpath(real, top))",
+      "replace": "                pass",
+      "test": "tests/test_h_mad_failure_diff.py::test_absolute_pythonpath_into_subject_is_rewritten_for_control"
+    },
+    {
+      "name": "M3-subject-on-control-path-ignored",
+      "_mechanism": "A .pth (editable-install shape) puts the subject on the control's sys.path and the run goes ahead, measuring the subject twice.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if leaked:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_control_importing_subject_code_is_UNREADABLE"
+    },
+    {
+      "name": "M4-errors-dropped",
+      "_mechanism": "Per-test ERROR ids are dropped from the set: a change that breaks a fixture reads SAME.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    return {node: \"+\".join(sorted(kind)) for node, kind in kinds.items()}, summary",
+      "replace": "    return {node: \"+\".join(sorted(kind)) for node, kind in kinds.items() if \"FAILED\" in kind}, summary",
+      "test": "tests/test_h_mad_failure_diff.py::test_setup_error_only_on_subject_is_SUBJECT_ONLY"
+    },
+    {
+      "name": "S1-sides-run-in-parallel",
+      "_mechanism": "The control's pytest starts while the subject's is running: two sessions race on the shared /tmp sweep and manufacture failures.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "            try:\n                reason, rc, output = _run_one(argv, root, envs[side], args.timeout, log)\n",
+      "replace": "            try:\n                if side == \"subject\":\n                    import threading\n                    box = {}\n                    other = threading.Thread(target=lambda: box.update(r=_run_one(\n                        argv, control, envs[\"control\"], args.timeout, logs / f\"control-{index}.log\")))\n                    other.start()\n                    reason, rc, output = _run_one(argv, root, envs[side], args.timeout, log)\n                else:\n                    other.join()\n                    reason, rc, output = box[\"r\"]\n",
+      "test": "tests/test_h_mad_failure_diff.py::test_sides_run_serially_never_overlapping"
+    },
+    {
+      "name": "S2-kind-change-ignored",
+      "_mechanism": "A test that FAILED on the base and ERRORs on the subject reads BOTH: the change's new breakage is filed as pre-existing.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    changed = {node: pair for node, pair in changed.items() if all(pair) and pair[0] != pair[1]}",
+      "replace": "    changed = {}",
+      "test": "tests/test_h_mad_failure_diff.py::test_failure_turned_into_setup_error_is_attributed_to_subject"
+    },
+    {
+      "name": "S3-no-subject-repo-reads-SAME",
+      "_mechanism": "A subject that is not a repository returns a pass exit with no token.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        return _unreadable(\"no-subject-repo\", \"subject\")",
+      "replace": "        return EXIT[\"SAME\"]",
+      "test": "tests/test_h_mad_failure_diff.py::test_subject_not_a_repo_is_UNREADABLE"
+    },
+    {
+      "name": "S3-worktree-add-failure-reads-SAME",
+      "_mechanism": "A control worktree that failed to create returns a pass exit with no token.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        return _unreadable(\"worktree-add-failed\", \"control\", tail=added.stderr)",
+      "replace": "        return EXIT[\"SAME\"]",
+      "test": "tests/test_h_mad_failure_diff.py::test_worktree_add_failure_is_UNREADABLE"
+    },
+    {
+      "name": "S3-timeout-not-named",
+      "_mechanism": "A hung run is killed and then read as a crash, not as a timeout.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        reason = \"timeout\"",
+      "replace": "        reason = None",
+      "test": "tests/test_h_mad_failure_diff.py::test_timeout_is_UNREADABLE_and_kills_the_process_group"
+    },
+    {
+      "name": "S3-leaked-control-not-reported",
+      "_mechanism": "A control that could not be removed leaves the comparison token as the last line.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if not removed:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_failure_diff.py::test_control_that_cannot_be_removed_is_UNREADABLE"
+    },
+    {
+      "name": "S6-only-the-direct-child-killed",
+      "_mechanism": "Only pytest itself is killed; what it started keeps running against a deleted control.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        os.killpg(proc.pid, signal.SIGKILL)",
+      "replace": "        proc.kill()",
+      "test": "tests/test_h_mad_failure_diff.py::test_timeout_is_UNREADABLE_and_kills_the_process_group"
+    },
+    {
+      "name": "S4-output-not-flushed",
+      "_mechanism": "Output is block-buffered: a caller killed mid-run never saw the CONTROL: path it would need to clean up.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    sys.stdout.reconfigure(line_buffering=True)",
+      "replace": "    pass",
+      "test": "tests/test_h_mad_failure_diff.py::test_control_path_is_printed_before_the_run_ends"
+    },
+    {
+      "name": "S5-run-log-not-kept",
+      "_mechanism": "The run's output is discarded, so an attributed id cannot be investigated without a rerun.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    log.write_text(output or \"\", encoding=\"utf-8\")",
+      "replace": "    pass",
+      "test": "tests/test_h_mad_failure_diff.py::test_each_run_log_is_kept_and_named"
+    },
+    {
+      "name": "N2-banner-searched-in-captured-output",
+      "_mechanism": "The Interrupted: banner is searched over the whole log, so one a test printed reads as a collection error.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if _INTERRUPTED_RE.search(tail_text):",
+      "replace": "    if _INTERRUPTED_RE.search(text):",
+      "test": "tests/test_h_mad_failure_diff.py::test_interrupted_text_in_captured_output_is_not_a_collection_error"
+    },
+    {
+      "name": "N3-all-skipped-misnamed",
+      "_mechanism": "An all-skipped selection is reported as no-tests-ran.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        raise Unreadable(\"all-skipped\" if \"skipped\" in summary.phrases else \"no-tests-ran\")",
+      "replace": "        raise Unreadable(\"no-tests-ran\")",
+      "test": "tests/test_h_mad_failure_diff.py::test_all_skipped_selection_reads_all_skipped"
+    },
+    {
+      "name": "N4-help-hides-the-root",
+      "_mechanism": "--help does not say the selection is relative to the toplevel, so a subdirectory-relative selection fails as a usage error.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "relative to the subject's toplevel (pytest runs there)\")",
+      "replace": "(pytest runs there)\")",
+      "test": "tests/test_h_mad_failure_diff.py::test_help_says_selection_is_relative_to_toplevel"
+    },
+    {
+      "name": "R2-M1-in-tree-venv-refused",
+      "_mechanism": "The interpreter's own prefix is not exempt: an in-tree .venv's site-packages reads as the subject's code and every in-tree-venv repo is refused.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "                and not any(_under(real, prefix) for prefix in prefixes):",
+      "replace": "                and True:",
+      "test": "tests/test_h_mad_failure_diff.py::test_in_tree_venv_interpreter_is_not_refused"
+    },
+    {
+      "name": "R2-S1-pep660-finder-unseen",
+      "_mechanism": "A PEP 660 editable finder maps the package to the subject with no sys.path entry: the control imports the subject and both sides agree.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    leaked += [path for path, text in found[\"hooks\"] if any(name in text for name in names)]",
+      "replace": "    pass",
+      "test": "tests/test_h_mad_failure_diff.py::test_pep660_editable_finder_into_subject_is_UNREADABLE"
+    },
+    {
+      "name": "R2-S2-kind-flip-attributed",
+      "_mechanism": "A failure whose kind flips across a side's runs is compared as a kind change and attributed NEW instead of FLAKY.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    flaky |= unstable",
+      "replace": "    pass",
+      "test": "tests/test_h_mad_failure_diff.py::test_kind_that_flips_across_a_sides_runs_is_FLAKY_not_NEW"
+    },
+    {
+      "name": "R2-N1-log-dir-misnamed",
+      "_mechanism": "An uncreatable --log-dir is reported as a control-dir failure.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        return _unreadable(\"log-dir\", \"both\")",
+      "replace": "        return _unreadable(\"control-dir\", \"control\")",
+      "test": "tests/test_h_mad_failure_diff.py::test_uncreatable_log_dir_is_named_log_dir"
+    },
+    {
+      "name": "R2-N2-spawn-race-ignored",
+      "_mechanism": "A signal between Popen and tracking the child is recorded but pytest is not killed; the run waits it out.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if _STATE[\"stop\"] is not None:   # a signal between Popen and the line above\n        _kill_group(proc)",
+      "replace": "    if False:\n        _kill_group(proc)",
+      "test": "tests/test_h_mad_failure_diff.py::test_signal_between_spawn_and_tracking_still_kills_pytest"
+    },
+    {
+      "name": "R2-N3-reconfigure-unguarded",
+      "_mechanism": "main() calls reconfigure on any stdout, so an in-process caller with a StringIO stdout crashes.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if hasattr(sys.stdout, \"reconfigure\"):",
+      "replace": "    if True:",
+      "test": "tests/test_h_mad_failure_diff.py::test_main_in_process_with_a_plain_stdout"
+    },
+    {
+      "name": "R2-probe-failure-read-as-clean",
+      "_mechanism": "An unreadable import probe is taken as 'imports nothing from the subject' and the run goes ahead.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        return _unreadable(\"probe-failed\", \"control\", tail=str(exc))",
+      "replace": "        leaked = []",
+      "test": "tests/test_h_mad_failure_diff.py::test_unreadable_import_probe_is_UNREADABLE"
+    },
+    {
+      "name": "R3-prefix-exemption-swallows-the-subject",
+      "_mechanism": "An interpreter prefix that CONTAINS the subject (a repo under a conda env or venv directory) is still exempt, so every subject path on sys.path, an editable .pth included, is exempt and the run reads a false SAME.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "                if not _under(top, os.path.realpath(p))]",
+      "replace": "                if True]",
+      "test": "tests/test_h_mad_failure_diff.py::test_subject_inside_the_interpreter_prefix_is_still_checked"
+    }
+  ]
+}
