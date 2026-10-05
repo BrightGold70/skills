@@ -9,6 +9,10 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-05 · gotcha · [0.7] · `zsh,shell,verification,handoff:2026-10-05-backlog-burn-to-five` — zsh does not word-split unquoted $VAR: 'for s in $S' ran one bogus arg and reported 'no tests ran'. Wrap such loops in bash -c
+- 2026-10-05 · gotcha · [0.9] · `pytest,conftest,suite-lock,handoff:2026-10-05-backlog-burn-to-five` — pytest_sessionstart in a non-initial conftest never fires; a lock in h-mad/tests/conftest.py skipped handoff/ runs. Put session-wide hooks in a repo-root conftest or a -p plugin
+- 2026-10-05 · gotcha · [0.9] · `pytest,conftest,flake,tmp-race,handoff:2026-10-05-backlog-burn-to-five` — Before/after glob set-difference cleanup over shared /tmp deletes concurrent sessions' files; caused load-only flakes. Give each test session a private dir (HMAD_AUDIT_STEM_DIR) instead
+- 2026-10-05 · pattern · [0.7] · `h-mad,expect-screens,fail-closed,handoff:2026-10-05-backlog-burn-to-five` — A lexical bash analyser can't be made complete by text-keyed exemptions: each one (grep no-match, env-prefix, ||exit, conditions, braced remedy, [[/(() hid a failure. Converge on zero exceptions + a remedy needing no ||
 - 2026-10-05 · gotcha · [0.7] · `h-mad,skill-md,tests,handoff:2026-10-05-prescribed-blocks-claim-once` — host-parity test flags the token 'Path(' in h-mad/SKILL.md as an unregistered host construct; describe Python forms in prose there, keep exact forms in script docstrings
 - 2026-10-05 · solution · [0.7] · `graft,mcp,claude-code,handoff:2026-10-05-prescribed-blocks-claim-once` — graft MCP needs absolute /opt/homebrew/bin/graft AND env PATH incl. /opt/homebrew/bin (node shebang); in 'claude mcp add' put the server name before -e, which is variadic
 - 2026-10-05 · gotcha · [0.7] · `h-mad,mutation,tests,handoff:2026-10-05-prescribed-blocks-claim-once` — Self-source guard selection: name filters miss them and 'names __file__' catches sibling lookups (24 false collisions); select tests that READ their own file, directly or via a module-level name
