@@ -619,7 +619,7 @@ Hand work over without this and the receiver inherits a feature still owned by a
 
 Two cases that are not yours to fix silently:
 
-- **The claim is held by a different, dead session** (the oracle returned something other than `owned_elsewhere`, but `owner_session_id` is not you). Releasing it is the right move *and* you must say so in the brief, with the session id and heartbeat you just read. Never `--claim --force` on the receiver's behalf — taking ownership is their decision, and a `--force` they did not choose hides that a claim was ever contested.
+- **The claim is held by a different, dead session** (the oracle returned something other than `owned_elsewhere`, but `owner_session_id` is not you). The oracle read the heartbeat alone, which has called working lanes dead; run `h_mad_lane_liveness.py <lane> --feature <feature>` first, and treat a `LIVENESS: LIVE` or `UNKNOWN` line as a live owner. An `UNKNOWN` that will not clear (a Claude transcript lost to retention, say) is the operator's call, not yours: ask, and release only on their word, quoting it in the brief. On `QUIET`, releasing it is the right move *and* you must say so in the brief, with the session id, heartbeat and `LIVENESS:` line you just read. Never `--claim --force` on the receiver's behalf — taking ownership is their decision, and a `--force` they did not choose hides that a claim was ever contested.
 - **The claim is held by a live session** (`owned_elsewhere`). The work is not yours to hand over. Stop and surface it.
 
 ### Step 3: Write the brief into the RECEIVER's store

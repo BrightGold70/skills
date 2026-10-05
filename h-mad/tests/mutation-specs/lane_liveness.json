@@ -1,0 +1,243 @@
+{
+  "_why": "Skill-candidates row 1406 'gate-on-two-independent-clocks': the heartbeat alone misread a working lane as dead four times. liveness_evidence reads four clocks; LIVE on any fresh one, QUIET only when all are readable and cold, UNKNOWN otherwise. Each row reverts one arm of that disjunction or one consumer and names the test that bites.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_lane_liveness.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "ps-match-ignored",
+      "_mechanism": "A process running under the owner's session id proves nothing, so case 3 (idle between turns, transcript frozen) reads QUIET.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    fresh = ([\"ps\"] if seen else []) + [\n",
+      "replace": "    fresh = [] + [\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_ps_argv_match_is_LIVE_with_frozen_transcript",
+      "symbol": "liveness_evidence"
+    },
+    {
+      "name": "transcript-clock-ignored",
+      "_mechanism": "Only the other clocks can prove life: cases 2 and 4 (transcript seconds old, heartbeat cold) read QUIET.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "        if seconds is not None and seconds <= window\n",
+      "replace": "        if clock != \"transcript\" and seconds is not None and seconds <= window\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_cold_heartbeat_fresh_transcript_is_LIVE",
+      "symbol": "liveness_evidence"
+    },
+    {
+      "name": "commit-clock-ignored",
+      "_mechanism": "A lane shipping commits with a cold heartbeat (case 1) reads QUIET.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "        if seconds is not None and seconds <= window\n",
+      "replace": "        if clock != \"commit\" and seconds is not None and seconds <= window\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_cold_heartbeat_recent_commit_is_LIVE",
+      "symbol": "liveness_evidence"
+    },
+    {
+      "name": "heartbeat-clock-ignored",
+      "_mechanism": "A freshly beaten claim is not LIVE on its own heartbeat.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "        if seconds is not None and seconds <= window\n",
+      "replace": "        if clock != \"heartbeat\" and seconds is not None and seconds <= window\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_a_fresh_heartbeat_alone_is_LIVE",
+      "symbol": "liveness_evidence"
+    },
+    {
+      "name": "window-boundary-exclusive",
+      "_mechanism": "Age exactly at the window reads stale, disagreeing with owner_is_live's inclusive boundary.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "        if seconds is not None and seconds <= window\n",
+      "replace": "        if seconds is not None and seconds < window\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_age_exactly_at_the_window_is_fresh",
+      "symbol": "liveness_evidence"
+    },
+    {
+      "name": "unreadable-clock-reads-quiet",
+      "_mechanism": "A partial read falls through to QUIET: 'could not check' reads as 'dead'.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    if unreadable:\n        return f\"LIVENESS: UNKNOWN",
+      "replace": "    if False:\n        return f\"LIVENESS: UNKNOWN",
+      "test": "tests/test_h_mad_lane_liveness.py::test_unreadable_clock_is_UNKNOWN_never_QUIET",
+      "symbol": "liveness_evidence"
+    },
+    {
+      "name": "all-cold-reads-unknown",
+      "_mechanism": "Every clock readable and cold still reports UNKNOWN, so a dead lane can never be called QUIET.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    if unreadable:\n        return f\"LIVENESS: UNKNOWN",
+      "replace": "    if True:\n        return f\"LIVENESS: UNKNOWN",
+      "test": "tests/test_h_mad_lane_liveness.py::test_all_clocks_cold_is_QUIET",
+      "symbol": "liveness_evidence"
+    },
+    {
+      "name": "failed-ps-not-unreadable",
+      "_mechanism": "ps failing is ignored, so a reading that could not have seen the live process says QUIET.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    if owner and commands is None:\n        unreadable.append(\"ps\")\n",
+      "replace": "    if False:\n        unreadable.append(\"ps\")\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_unreadable_clock_is_UNKNOWN_never_QUIET",
+      "symbol": "liveness_evidence"
+    },
+    {
+      "name": "ps-prefix-match",
+      "_mechanism": "A longer id that merely starts with the owner's matches, so another session's process proves this one alive.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "               + re.escape(session_id) + r\"(?![\\w-])\")\n",
+      "replace": "               + re.escape(session_id))\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_ps_needs_the_whole_session_id",
+      "symbol": "_argv_names"
+    },
+    {
+      "name": "live-runs-heartbeat-only",
+      "_mechanism": "The consumer goes back to the heartbeat alone: a lane working with a cold heartbeat reads 'no run here'.",
+      "file": "scripts/h_mad_live_runs.py",
+      "find": "            if not claim[3].startswith(\"LIVENESS: QUIET\")]\n",
+      "replace": "            if h_mad_state_ownership.owner_is_live(claim[2])]\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_live_runs_reports_lane_live_on_transcript_clock",
+      "symbol": "live_claims"
+    },
+    {
+      "name": "live-runs-unjudged-reads-none",
+      "_mechanism": "A cold claim with an unreadable clock is dropped, and 'could not judge' prints NONE.",
+      "file": "scripts/h_mad_live_runs.py",
+      "find": "    if unreadable or unjudged:\n",
+      "replace": "    if unreadable:\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_live_runs_cold_claim_with_an_unreadable_clock_is_unknown_not_none",
+      "symbol": "main"
+    },
+    {
+      "name": "refusal-omits-evidence",
+      "_mechanism": "The --claim refusal that names force shows only the heartbeat, so forcing is decided on one clock.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        raise StateWriteError(f\"{exc} {liveness_evidence(prior, lane, now)}\") from None\n",
+      "replace": "        raise StateWriteError(f\"{exc}\") from None\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_claim_refusal_prints_the_liveness_evidence",
+      "symbol": "claim"
+    },
+    {
+      "name": "bare-mention-is-a-process",
+      "_mechanism": "SF1: any argv naming the id counts, so the checker's own shell, a grep or a tail of the transcript reads a dead owner LIVE.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    pattern = (r\"(?<![\\w-])(?:--resume|--session-id|-r)(?:=|\\s+)\"\n",
+      "replace": "    pattern = (r\"(?<![\\w-])\"\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_ps_ignores_argv_that_only_mentions_the_id",
+      "symbol": "_argv_names"
+    },
+    {
+      "name": "merges-refresh-the-commit-clock",
+      "_mechanism": "SF2: merging main into the lane branch reads as the owner working.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "\"log\", \"-1\", \"--no-merges\",\n",
+      "replace": "\"log\", \"-1\",\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_commit_reader_ignores_merge_commits",
+      "symbol": "read_commit_ts"
+    },
+    {
+      "name": "nested-lane-reads-repo-head",
+      "_mechanism": "SF2: a lane nested in a busy repo inherits every commit anywhere in it.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "\"--format=%ct\", \"--\", \".\"],\n",
+      "replace": "\"--format=%ct\"],\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_commit_reader_reads_only_commits_inside_a_nested_lane",
+      "symbol": "read_commit_ts"
+    },
+    {
+      "name": "claim-scopes-commits-to-docs",
+      "_mechanism": "SF2: the --claim reading is scoped to docs/, so only state-file commits count.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "    lane = state_path.parent.parent if state_path.parent.name == \"docs\" else state_path.parent\n",
+      "replace": "    lane = state_path.parent\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_claim_reads_the_commit_clock_at_the_lane_root",
+      "symbol": "claim"
+    },
+    {
+      "name": "minted-owner-needs-a-transcript",
+      "_mechanism": "SF3: a Codex/agy owner can never have a transcript, so its crashed claim is UNKNOWN forever.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    elif ages[\"transcript\"] is None and not minted:\n",
+      "replace": "    elif ages[\"transcript\"] is None:\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_a_minted_owner_has_no_transcript_clock_and_can_read_QUIET",
+      "symbol": "liveness_evidence"
+    },
+    {
+      "name": "any-minted-file-is-this-owner",
+      "_mechanism": "SF3: any minted id in the git dir drops the transcript clock, even another session's.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "            if path.read_text(encoding=\"utf-8\").strip() == session_id:\n",
+      "replace": "            if path.read_text(encoding=\"utf-8\").strip():\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_minted_reader_finds_the_owner_in_the_lane_git_dir",
+      "symbol": "read_minted_owner"
+    },
+    {
+      "name": "subagent-transcripts-ignored",
+      "_mechanism": "SF4: an owner waiting on a long subagent writes only the subagent transcript, and reads QUIET while working.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "                  for pattern in (f\"*/{session_id}.jsonl\", f\"*/{session_id}/subagents/*.jsonl\")\n",
+      "replace": "                  for pattern in (f\"*/{session_id}.jsonl\",)\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_transcript_reader_counts_subagent_transcripts",
+      "symbol": "read_transcript_mtime"
+    },
+    {
+      "name": "clocks-off-switch-ignored",
+      "_mechanism": "SF5: the switch is read but ignored, so tests read the host's real ps, git and ~/.claude.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    return bool(os.environ.get(CLOCKS_OFF_ENV))\n",
+      "replace": "    return False\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_the_clocks_off_switch_reads_no_host_clock",
+      "symbol": "_clocks_off"
+    },
+    {
+      "name": "conftest-leaves-clocks-on",
+      "_mechanism": "SF5: the suite no longer sets the switch, so every claim refusal reads the host.",
+      "file": "tests/conftest.py",
+      "find": "os.environ[\"H_MAD_LIVENESS_CLOCKS_OFF\"] = \"1\"\n",
+      "replace": "",
+      "test": "tests/test_h_mad_lane_liveness.py::test_the_suite_runs_with_host_clocks_off"
+    },
+    {
+      "name": "stale-takeover-is-silent",
+      "_mechanism": "SF6: a plain --claim of a stale-looking claim (incident 2) prints nothing.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "    if prior:\n        print(f\"STATE-WRITE: TAKEOVER",
+      "replace": "    if False:\n        print(f\"STATE-WRITE: TAKEOVER",
+      "test": "tests/test_h_mad_lane_liveness.py::test_a_stale_takeover_prints_the_liveness_reading",
+      "symbol": "claim"
+    },
+    {
+      "name": "clocks-read-under-the-store-lock",
+      "_mechanism": "Nit 3: a hung ps holds the store lock against the owner's own --beat.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if held_by and held_by != session_id:\n            prior.update(record)\n",
+      "replace": "        if held_by and held_by != session_id:\n            prior.update(record)\n            liveness_evidence(record, Path(state_file).parent, now)\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_liveness_is_read_outside_the_store_lock",
+      "symbol": "claim.apply"
+    },
+    {
+      "name": "no-claim-reads-unknown",
+      "_mechanism": "Nit 2: a lane with nothing claimed reads UNKNOWN, so UNKNOWN stops meaning 'could not read'.",
+      "file": "scripts/h_mad_lane_liveness.py",
+      "find": "            print(f\"LIVENESS: NONE reason=no-claim lane={args.lane}\")\n",
+      "replace": "            print(f\"LIVENESS: UNKNOWN reason=no-claim lane={args.lane}\")\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_cli_a_lane_with_no_claim_is_NONE_not_UNKNOWN",
+      "symbol": "main"
+    },
+    {
+      "name": "unjudged-gets-no-hold-advice",
+      "_mechanism": "Nit 4: a claim that could not be judged may be a live run, but gets no advice to hold.",
+      "file": "scripts/h_mad_live_runs.py",
+      "find": "    if live or unjudged:\n        print(\"  a skill change lands",
+      "replace": "    if live:\n        print(\"  a skill change lands",
+      "test": "tests/test_h_mad_lane_liveness.py::test_live_runs_unjudged_claim_gets_the_hold_advice",
+      "symbol": "main"
+    }
+  ]
+}

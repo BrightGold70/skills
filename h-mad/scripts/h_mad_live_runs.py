@@ -12,13 +12,17 @@ Usage:
   h_mad_live_runs.py [--path DIR ...] [--if-staged-skill]
 
 Lanes are the Orca worktrees (`hmad-dispatch worktree-ps`), or the `--path` dirs
-given. A lane is live when its `docs/.bkit-memory.json` holds a feature whose claim
-heartbeat is still within the ownership window — the same `owner_is_live` rule
-`--claim` uses, so this and the claim logic cannot disagree.
+given. A lane is live when its `docs/.bkit-memory.json` holds a claim that
+`liveness_evidence` reads as LIVE: ANY of four clocks — heartbeat, owner transcript
+mtime, newest lane commit, `ps` argv naming the owner — inside the ownership window.
+The heartbeat alone (`owner_is_live`) read working lanes as dead four times; a cold
+heartbeat is no longer "no run here". A claim whose clocks are cold but one could
+not be read is `unjudged`, which makes the whole reading UNKNOWN, never NONE.
 
 Prints `LIVE-RUNS: <K> checked=<N>` with one `live:` line each, `LIVE-RUNS: NONE
-checked=<N>`, or `LIVE-RUNS: UNKNOWN …` when lanes could not be listed or a state
-file could not be read: "could not check" must never read as "none live". Exit 0.
+checked=<N>`, or `LIVE-RUNS: UNKNOWN …` when lanes could not be listed, a state
+file could not be read or a claim could not be judged: "could not check" must never
+read as "none live". Exit 0.
 
 `--if-staged-skill` prints nothing unless a file staged in the current repo sits under
 a directory holding a SKILL.md; the advisory pre-commit hook calls it that way.
@@ -32,7 +36,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from h_mad_state_ownership import owner_is_live  # noqa: E402
+import h_mad_state_ownership  # noqa: E402
 
 STATE = Path("docs") / ".bkit-memory.json"
 
@@ -50,8 +54,12 @@ def orca_lanes() -> list[Path] | None:
     return [Path(w["path"]) for w in data["worktrees"] if w.get("path")]
 
 
-def live_claims(lane: Path) -> list[tuple[str, str, str]]:
-    """(feature, owner, heartbeat) per live claim; raises ValueError if unreadable."""
+def live_claims(lane: Path) -> list[tuple[str, str, str, str]]:
+    """(feature, owner, heartbeat, LIVENESS line) per claim not read QUIET.
+
+    LIVE and UNKNOWN readings are both returned; the caller splits them. Raises
+    ValueError if the state file is unreadable.
+    """
     path = lane / STATE
     if not path.exists():
         return []
@@ -60,10 +68,12 @@ def live_claims(lane: Path) -> list[tuple[str, str, str]]:
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise ValueError(str(exc)) from exc
     records = (data.get("orchestrator_state") or {}) if isinstance(data, dict) else {}
-    return [(feature, str(r["owner_session_id"]), str(r.get("owner_heartbeat_ts")))
-            for feature, r in sorted(records.items())
-            if isinstance(r, dict) and r.get("owner_session_id")
-            and owner_is_live(r.get("owner_heartbeat_ts"))]
+    claims = [(feature, str(r["owner_session_id"]), str(r.get("owner_heartbeat_ts")),
+               h_mad_state_ownership.liveness_evidence(r, lane))
+              for feature, r in sorted(records.items())
+              if isinstance(r, dict) and r.get("owner_session_id")]
+    return [claim for claim in claims
+            if not claim[3].startswith("LIVENESS: QUIET")]
 
 
 def staged_skill_change(cwd: Path) -> bool:
@@ -97,23 +107,27 @@ def main(argv: list[str] | None = None) -> int:
               "pass --path to check specific lanes")
         return 0
 
-    live, unreadable = [], []
+    live, unjudged, unreadable = [], [], []
     for lane in lanes:
         try:
-            live += [(lane, *claim) for claim in live_claims(lane)]
+            for claim in live_claims(lane):
+                (live if claim[3].startswith("LIVENESS: LIVE") else unjudged).append((lane, *claim))
         except ValueError as exc:
             unreadable.append((lane, exc))
-    if unreadable:
-        print(f"LIVE-RUNS: UNKNOWN live={len(live)} unreadable={len(unreadable)} checked={len(lanes)}")
+    if unreadable or unjudged:
+        print(f"LIVE-RUNS: UNKNOWN live={len(live)} unreadable={len(unreadable)} "
+              f"unjudged={len(unjudged)} checked={len(lanes)}")
     elif live:
         print(f"LIVE-RUNS: {len(live)} checked={len(lanes)}")
     else:
         print(f"LIVE-RUNS: NONE checked={len(lanes)}")
-    for lane, feature, owner, beat in live:
-        print(f"  live: {lane} · {feature} · owner {owner[:8]} · heartbeat {beat}")
+    for lane, feature, owner, beat, evidence in live:
+        print(f"  live: {lane} · {feature} · owner {owner[:8]} · heartbeat {beat} · {evidence}")
+    for lane, feature, owner, beat, evidence in unjudged:
+        print(f"  unjudged: {lane} · {feature} · owner {owner[:8]} · heartbeat {beat} · {evidence}")
     for lane, exc in unreadable:
         print(f"  unreadable: {lane / STATE} — {exc}")
-    if live:
+    if live or unjudged:
         print("  a skill change lands in those sessions immediately; decide whether to hold it.")
     return 0
 

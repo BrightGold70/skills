@@ -50,7 +50,7 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from h_mad_state_ownership import owner_is_live  # noqa: E402
+from h_mad_state_ownership import liveness_evidence, owner_is_live  # noqa: E402
 from h_mad_state_validate import classify, undeclared_keys  # noqa: E402
 
 
@@ -332,12 +332,15 @@ def claim(
             raise StateWriteError(f"no such feature: {feature}")
         record = records[feature]
         held_by = record.get("owner_session_id")
+        if held_by and held_by != session_id:
+            prior.update(record)
         if (
             held_by
             and held_by != session_id
             and not force
             and owner_is_live(record.get("owner_heartbeat_ts"), now)
         ):
+            refused.append(True)
             raise StateWriteError(
                 f"{feature!r} is owned by session {held_by!r} "
                 f"(last seen {record.get('owner_heartbeat_ts')}, still live). "
@@ -349,7 +352,24 @@ def claim(
             "owner_heartbeat_ts": now or _utc_now(),
         }
 
-    return _mutate(state_file, feature, apply)
+    prior: dict = {}
+    refused: list = []
+    state_path = Path(state_file)
+    lane = state_path.parent.parent if state_path.parent.name == "docs" else state_path.parent
+    # Every clock, not the heartbeat alone, is what an operator reads before
+    # forcing or taking over (row 1406) — read after the store lock is released,
+    # so a hung `ps` never holds the lock against the owner's own --beat.
+    try:
+        taken = _mutate(state_file, feature, apply)
+    except StateWriteError as exc:
+        if not refused:
+            raise
+        raise StateWriteError(f"{exc} {liveness_evidence(prior, lane, now)}") from None
+    if prior:
+        print(f"STATE-WRITE: TAKEOVER feature={feature} "
+              f"from={str(prior.get('owner_session_id'))[:8]} "
+              f"{liveness_evidence(prior, lane, now)}", file=sys.stderr)
+    return taken
 
 
 def release(

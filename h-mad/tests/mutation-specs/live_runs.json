@@ -8,7 +8,7 @@
       "name": "stale-claims-count-as-live",
       "_mechanism": "A claim abandoned hours ago is reported as a running lane, so the warning cries wolf.",
       "file": "scripts/h_mad_live_runs.py",
-      "find": "            and owner_is_live(r.get(\"owner_heartbeat_ts\"))]\n",
+      "find": "            if not claim[3].startswith(\"LIVENESS: QUIET\")]\n",
       "replace": "            ]\n",
       "test": "tests/test_h_mad_live_runs.py::test_stale_and_released_claims_are_not_live",
       "symbol": "live_claims"

@@ -16,11 +16,18 @@ wrong, because they never assert where the file is NOT.
 So the protection belongs here rather than in any single test — snapshot the real
 file before the session and restore it after if anything moved it, loudly.
 """
+import os
 import re
 import subprocess
 from pathlib import Path
 
 import pytest
+
+# No test reads the host's real `ps`, `git` lane history or `~/.claude` transcripts
+# through `h_mad_state_ownership`'s liveness readers (row 1406 review, SF5). Set at
+# import, before any test module builds an `env={**os.environ, ...}`, so CLI
+# subprocesses inherit it too. Tests of the readers themselves unset it.
+os.environ["H_MAD_LIVENESS_CLOCKS_OFF"] = "1"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

@@ -62,13 +62,27 @@ def test_a_fresh_claim_in_another_lane_is_named(tmp_path: Path) -> None:
     assert f"live: {lane} · batch-18 · owner sess-abc" in proc.stdout, proc.stdout
 
 
-def test_stale_and_released_claims_are_not_live(tmp_path: Path) -> None:
+def test_stale_and_released_claims_are_not_live(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Stale means EVERY clock is cold (row 1406), not the heartbeat alone.
+
+    The other three clocks are injected cold: a cold heartbeat with an unreadable
+    transcript or commit is UNKNOWN, which `test_h_mad_lane_liveness.py` pins.
+    """
+    sys.path.insert(0, str(SCRIPTS))
+    import h_mad_live_runs
+    import h_mad_state_ownership as ownership
+    from datetime import datetime, timezone
+    cold = datetime.now(timezone.utc).timestamp() - 3 * 60 * 60
+    monkeypatch.setattr(ownership, "read_transcript_mtime", lambda session: cold)
+    monkeypatch.setattr(ownership, "read_commit_ts", lambda lane: cold)
+    monkeypatch.setattr(ownership, "read_ps_commands", lambda: [])
     stale = _project(tmp_path / "a", "old", "sess-1", age_hours=3)
     unowned = _project(tmp_path / "b", "never-claimed", None)
 
-    proc = _run("--path", stale, "--path", unowned)
+    h_mad_live_runs.main(["--path", str(stale), "--path", str(unowned)])
 
-    assert _token(proc.stdout) == "LIVE-RUNS: NONE checked=2", proc.stdout
+    out = capsys.readouterr().out
+    assert _token(out) == "LIVE-RUNS: NONE checked=2", out
 
 
 def test_an_unreadable_state_file_is_unknown_not_none(tmp_path: Path) -> None:
