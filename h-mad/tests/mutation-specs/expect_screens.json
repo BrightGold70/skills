@@ -260,7 +260,7 @@
       "_mechanism": "Review R2-M1(a): `<<` is searched over the whole code span again, quoted text included, so `'<<EOF'` opens a heredoc.",
       "file": "scripts/h_mad_expect_screens.py",
       "find": "            info.op = info.code.rstrip().endswith((\"|\", \"&&\", \"|&\"))  # M:CONT-OP-CODE",
-      "replace": "            info.op = info.code.rstrip().endswith((\"|\", \"&&\", \"|&\"))  # M:CONT-OP-CODE\n            pending.extend((m.group(3), m.group(1) == \"-\", i) for m in HEREDOC.finditer(info.code) if \"'\" in info.code)",
+      "replace": "            info.op = info.code.rstrip().endswith((\"|\", \"&&\", \"|&\"))  # M:CONT-OP-CODE\n            pending.extend((m.group(3), m.group(1) == \"-\", i, bool(m.group(2)), m.start()) for m in HEREDOC.finditer(info.code) if \"'\" in info.code)",
       "test": "tests/test_h_mad_expect_screens.py::test_a_heredoc_marker_inside_quotes_does_not_hide_later_screens"
     },
     {
@@ -345,146 +345,146 @@
     },
     {
       "name": "and-list-not-refused",
-      "_mechanism": "Review R4: an `&&` list is not recognised; `cd nosuchdir && …` reads PASS.",
+      "_mechanism": "Review R4: an `&&` list is not recognised; `cd nosuchdir && …` reads PASS. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
-      "replace": "                pass  # M:REFUSE-AND",
+      "find": "        return \"&&\", 2  # M:REFUSE-AND",
+      "replace": "        return None, 2  # M:REFUSE-AND",
       "test": "tests/test_h_mad_expect_screens.py::test_a_failed_cd_in_an_and_list_is_refused"
     },
     {
       "name": "or-list-not-refused",
-      "_mechanism": "Review R4: an `||` list is not recognised; its first member's failure is hidden.",
+      "_mechanism": "Review R4: an `||` list is not recognised; its first member's failure is hidden. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
-      "replace": "                pass  # M:REFUSE-OR: no `||` is exempt",
+      "find": "        return \"||\", 2  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "        return None, 2  # M:REFUSE-OR: no `||` is exempt",
       "test": "tests/test_h_mad_expect_screens.py::test_an_or_list_that_is_not_a_declared_or_true_is_refused"
     },
     {
       "name": "background-job-not-refused",
-      "_mechanism": "Review R4 (r): a `&` job is not recognised; its status never reaches the trap.",
+      "_mechanism": "Review R4 (r): a `&` job is not recognised; its status never reaches the trap. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"&\", k))  # M:REFUSE-JOB",
-      "replace": "                pass  # M:REFUSE-JOB",
+      "find": "    return (None if redirect else \"&\"), 1  # M:REFUSE-JOB",
+      "replace": "    return None, 1  # M:REFUSE-JOB",
       "test": "tests/test_h_mad_expect_screens.py::test_a_background_job_before_a_screen_is_refused"
     },
     {
       "name": "redirection-is-a-job",
-      "_mechanism": "The `&` of `2>&1` / `&>` is taken for a background job, refusing ordinary redirections.",
+      "_mechanism": "The `&` of `2>&1` / `&>` is taken for a background job, refusing ordinary redirections. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                  and text[k - 1:k] not in (\">\", \"<\", \"|\", \"&\")):  # M:REDIRECT-NOT-JOB",
-      "replace": "                  and True):  # M:REDIRECT-NOT-JOB",
+      "find": "    return (None if redirect else \"&\"), 1  # M:REFUSE-JOB",
+      "replace": "    return \"&\", 1  # M:REFUSE-JOB",
       "test": "tests/test_h_mad_expect_screens.py::test_redirections_are_not_jobs"
     },
     {
       "name": "quoted-substitution-skipped",
-      "_mechanism": "`\"$(… && …)\"` is scanned as quoted text, so a list whose status `echo` discards goes unrefused.",
+      "_mechanism": "R10: the lexer reads `\"$(…)\"` as one double-quoted string, so `it's` inside the nested quotes opens a quote in BOTH readers and they agree to exclude the list.",
       "file": "scripts/h_mad_expect_screens.py",
       "find": "            elif quote == '\"' and text.startswith(\"$(\", k) and not text.startswith(\"$((\", k):",
       "replace": "            elif False:",
-      "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_inside_a_non_assignment_substitution_is_refused"
+      "test": "tests/test_h_mad_expect_screens.py::test_a_nested_double_quote_does_not_fool_both_readers"
     },
     {
       "name": "and-chain-carve-out-removed",
-      "_mechanism": "The one-`&&`-chain carve-out is gone; a recorded `X=$(a && b)` is refused instead of read.",
+      "_mechanism": "The one-`&&`-chain carve-out is gone; a recorded `X=$(a && b)` is refused instead of read. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "        info.lists = [(kind, pos) for kind, pos in found if not (chain and inside(pos))]",
-      "replace": "        info.lists = list(found)",
+      "find": "        if info.chain and _one_chain(text, info.chain, code):  # M:CHAIN-APPLIED",
+      "replace": "        if False:  # M:CHAIN-APPLIED",
       "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_inside_an_assignment_substitution_is_still_recorded"
     },
     {
       "name": "carve-out-accepts-any-list",
-      "_mechanism": "Review R5 Must-A (x3): any list inside a whole `NAME=$(…)` is exempt, so `$(git diff … & wait)` reads PASS (an `||` is also caught by the `ors` check).",
+      "_mechanism": "Review R5 Must-A (x3): any list inside a whole `NAME=$(…)` is exempt, so `$(git diff … & wait)` reads PASS (an `||` is also caught by the `ors` check). (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "        chain = (whole and all(kind == \"&&\" for kind, pos in found if inside(pos))",
-      "replace": "        chain = (whole and True",
+      "find": "    return all(kind == \"&&\" and opened < pos < closed for kind, pos in code)  # M:BACKSTOP-CHAIN",
+      "replace": "    return all(opened < pos < closed for kind, pos in code)  # M:BACKSTOP-CHAIN",
       "test": "tests/test_h_mad_expect_screens.py::test_a_background_job_inside_an_assignment_substitution_is_refused"
     },
     {
       "name": "carve-out-ignores-semicolons",
-      "_mechanism": "Review R5 Must-A (x2): `$(a && b; c)` passes as one `&&` chain though it ends on c's status.",
+      "_mechanism": "Review R5 Must-A (x2): `$(a && b; c)` passes as one `&&` chain though it ends on c's status. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                 and not any(inside(p) for p in ors + semis))  # M:AND-CHAIN-ONLY",
-      "replace": "                 and True)  # M:AND-CHAIN-ONLY",
+      "find": "    return all(kind == \"&&\" and opened < pos < closed for kind, pos in code)  # M:BACKSTOP-CHAIN",
+      "replace": "    return all(kind in (\"&&\", \";\") and opened < pos < closed for kind, pos in code)  # M:BACKSTOP-CHAIN",
       "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_then_more_inside_an_assignment_substitution_is_refused"
     },
     {
       "name": "list-in-condition-exempt",
-      "_mechanism": "Review R6 reverts R5 (o2): an `&&` on an `if`/`while` line is exempt again.",
+      "_mechanism": "Review R6 reverts R5 (o2): an `&&` on an `if`/`while` line is exempt again. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
-      "replace": "                found.append((\"&&\", k)) if not text.lstrip().startswith((\"if \", \"while \", \"until \")) else None  # M:REFUSE-AND",
+      "find": "        return \"&&\", 2  # M:REFUSE-AND",
+      "replace": "        return (\"&&\" if not text.lstrip().startswith((\"if \", \"while \", \"until \")) else None), 2  # M:REFUSE-AND",
       "test": "tests/test_h_mad_expect_screens.py::test_a_list_inside_a_condition_is_refused"
     },
     {
       "name": "list-after-a-condition-exempt",
-      "_mechanism": "Review R6 (C2): the `&&` after an `if (true) then …; fi` goes unrefused, as it did while the condition state leaked.",
+      "_mechanism": "Review R6 (C2): the `&&` after an `if (true) then …; fi` goes unrefused, as it did while the condition state leaked. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
-      "replace": "                found.append((\"&&\", k)) if i == 0 else None  # M:REFUSE-AND",
+      "find": "        hits.extend((i, kind) for kind, _ in code if kind != \";\")  # M:BACKSTOP-HITS",
+      "replace": "        hits.extend((i, kind) for kind, _ in code if kind != \";\" and i == 0)  # M:BACKSTOP-HITS",
       "test": "tests/test_h_mad_expect_screens.py::test_a_list_after_a_subshell_condition_if_is_refused"
     },
     {
       "name": "braced-status-one-reaccepted",
-      "_mechanism": "Review R8 (V1): the braced `| { grep P || [ $? = 1 ]; }` is exempt again; at the end of a top-level pipeline bash runs no ERR trap and git's 128 reads PASS.",
+      "_mechanism": "Review R8 (V1): the braced `| { grep P || [ $? = 1 ]; }` is exempt again; at the end of a top-level pipeline bash runs no ERR trap and git's 128 reads PASS. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
-      "replace": "                found.append((\"||\", k)) if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*;[ \\t]*\\}\", text[k + 2:]) else None  # M:REFUSE-OR: no `||` is exempt",
+      "find": "        return \"||\", 2  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "        return (\"||\" if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*;[ \\t]*\\}\", text[k + 2:]) else None), 2  # M:REFUSE-OR: no `||` is exempt",
       "test": "tests/test_h_mad_expect_screens.py::test_the_braced_status_one_form_at_the_end_of_a_top_level_pipeline_is_refused"
     },
     {
       "name": "any-status-check-accepted",
-      "_mechanism": "Any `|| [ … ]` is exempt again, the exact status-1 form and its look-alikes included.",
+      "_mechanism": "Any `|| [ … ]` is exempt again, the exact status-1 form and its look-alikes included. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
-      "replace": "                found.append((\"||\", k)) if not re.match(r\"[ \\t]*\\[\", text[k + 2:]) else None  # M:REFUSE-OR: no `||` is exempt",
+      "find": "        return \"||\", 2  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "        return (\"||\" if not re.match(r\"[ \\t]*\\[\", text[k + 2:]) else None), 2  # M:REFUSE-OR: no `||` is exempt",
       "test": "tests/test_h_mad_expect_screens.py::test_no_status_check_after_or_is_declared"
     },
     {
       "name": "or-true-reaccepted",
-      "_mechanism": "`|| true` / `|| :` are exempt again and mask every status.",
+      "_mechanism": "`|| true` / `|| :` are exempt again and mask every status. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
-      "replace": "                found.append((\"||\", k)) if not re.match(r\"[ \\t]*(?:true|:)\", text[k + 2:]) else None  # M:REFUSE-OR: no `||` is exempt",
+      "find": "        return \"||\", 2  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "        return (\"||\" if not re.match(r\"[ \\t]*(?:true|:)\", text[k + 2:]) else None), 2  # M:REFUSE-OR: no `||` is exempt",
       "test": "tests/test_h_mad_expect_screens.py::test_or_true_and_or_colon_are_refused"
     },
     {
       "name": "braced-remedy-reaccepted-in-substitution",
-      "_mechanism": "The braced status-1 form is exempt again inside a substitution, so the remedy reads failed_command or PASS instead of being refused.",
+      "_mechanism": "The braced status-1 form is exempt again inside a substitution, so the remedy reads failed_command or PASS instead of being refused. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
-      "replace": "                found.append((\"||\", k)) if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\]\", text[k + 2:]) else None  # M:REFUSE-OR: no `||` is exempt",
+      "find": "        return \"||\", 2  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "        return (\"||\" if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\]\", text[k + 2:]) else None), 2  # M:REFUSE-OR: no `||` is exempt",
       "test": "tests/test_h_mad_expect_screens.py::test_the_braced_status_one_form_is_refused_with_a_clean_base"
     },
     {
       "name": "bracket-exemption-reintroduced",
-      "_mechanism": "Review R9 (E1): an `&&` after `[[` is exempt again, so `echo [[ ; … && …` reads PASS.",
+      "_mechanism": "Review R9 (E1): an `&&` after `[[` is exempt again, so `echo [[ ; … && …` reads PASS. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
-      "replace": "                found.append((\"&&\", k)) if \"[[\" not in text[:k] else None  # M:REFUSE-AND",
+      "find": "        return \"&&\", 2  # M:REFUSE-AND",
+      "replace": "        return (\"&&\" if \"[[\" not in text[:k] else None), 2  # M:REFUSE-AND",
       "test": "tests/test_h_mad_expect_screens.py::test_a_bracket_argument_does_not_switch_off_list_detection"
     },
     {
       "name": "arithmetic-exemption-reintroduced",
-      "_mechanism": "Review R9 (E2): an `&&` after `((` is exempt again, so `((cmd) && …)` reads PASS.",
+      "_mechanism": "Review R9 (E2): an `&&` after `((` is exempt again, so `((cmd) && …)` reads PASS. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
-      "replace": "                found.append((\"&&\", k)) if not arith else None  # M:REFUSE-AND",
+      "find": "        return \"&&\", 2  # M:REFUSE-AND",
+      "replace": "        return (\"&&\" if \"((\" not in text[:k] else None), 2  # M:REFUSE-AND",
       "test": "tests/test_h_mad_expect_screens.py::test_a_nested_subshell_does_not_switch_off_list_detection"
     },
     {
       "name": "test-bracket-list-exempt",
-      "_mechanism": "Review R9: `[[ a && b ]]` is exempt again (the over-refusal undone, and with it E1's hole).",
+      "_mechanism": "Review R9: `[[ a && b ]]` is exempt again (the over-refusal undone, and with it E1's hole). (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
-      "replace": "                found.append((\"&&\", k)) if not text.lstrip().startswith(\"[[\") else None  # M:REFUSE-AND",
+      "find": "        return \"&&\", 2  # M:REFUSE-AND",
+      "replace": "        return (\"&&\" if not text.lstrip().startswith(\"[[\") else None), 2  # M:REFUSE-AND",
       "test": "tests/test_h_mad_expect_screens.py::test_lists_inside_test_and_arithmetic_brackets_are_refused"
     },
     {
       "name": "job-after-redirect-missed",
-      "_mechanism": "Review R9: a line with a redirection `>&` hides its trailing `&` job.",
+      "_mechanism": "Review R9: a line with a redirection `>&` hides its trailing `&` job. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                  and text[k - 1:k] not in (\">\", \"<\", \"|\", \"&\")):  # M:REDIRECT-NOT-JOB",
-      "replace": "                  and \">&\" not in text and text[k - 1:k] not in (\">\", \"<\", \"|\", \"&\")):  # M:REDIRECT-NOT-JOB",
+      "find": "    return (None if redirect else \"&\"), 1  # M:REFUSE-JOB",
+      "replace": "    return (None if redirect or \">&\" in text else \"&\"), 1  # M:REFUSE-JOB",
       "test": "tests/test_h_mad_expect_screens.py::test_a_job_after_a_redirection_is_refused"
     },
     {
@@ -582,6 +582,126 @@
       "find": "    if failed or unreadable:  # M:VERDICT",
       "replace": "    if failed:  # M:VERDICT",
       "test": "tests/test_h_mad_expect_screens.py::test_a_block_that_dies_inside_the_screen_is_unreadable_not_pass"
+    },
+    {
+      "name": "backstop-not-applied",
+      "_mechanism": "R10: only the lexer's lists refuse; a list in an unquoted heredoc body's `$(…)` reads PASS (H1).",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    found = backstop(lexed)  # M:BACKSTOP-APPLIED",
+      "replace": "    found = []  # M:BACKSTOP-APPLIED",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_list_inside_an_unquoted_heredoc_substitution_is_refused"
+    },
+    {
+      "name": "backstop-escape-keeps-prev",
+      "_mechanism": "R10: the escaped `|` of `\\|&` counts as the previous character, so the job reads as bash 4's `|&` (K2).",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                prev, k = None, k + 2  # M:BACKSTOP-ESCAPE: an escaped character is no operator",
+      "replace": "                prev, k = text[k + 1:k + 2], k + 2  # M:BACKSTOP-ESCAPE: an escaped character is no operator",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_escaped_pipe_before_a_job_does_not_hide_it"
+    },
+    {
+      "name": "backstop-every-ampersand-a-redirect",
+      "_mechanism": "R10: the backstop exempts every `&` as a redirect, so `\\&&` hides its job (K1).",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                or (prev == \">\" and nxt != \"\" and nxt in \"0123456789-\"))  # M:BACKSTOP-REDIRECT",
+      "replace": "                or True or (prev == \">\" and nxt != \"\" and nxt in \"0123456789-\"))  # M:BACKSTOP-REDIRECT",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_escaped_ampersand_before_a_job_does_not_hide_it"
+    },
+    {
+      "name": "backstop-drops-lexer-agreement",
+      "_mechanism": "R10: a position the backstop alone calls single-quoted is excluded; its misread of `\"$(echo \"it's\")\"` hides the list the lexer lost after ` #` in `${…}`.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        lexer_says = info.squote  # M:BACKSTOP-AGREE-LEXER",
+      "replace": "        lexer_says = range(10 ** 6)  # M:BACKSTOP-AGREE-LEXER",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_span_only_the_backstop_reads_as_quoted_is_not_excluded"
+    },
+    {
+      "name": "backstop-drops-own-agreement",
+      "_mechanism": "R10: a position the lexer alone calls single-quoted is excluded; the quote it lost after ` #` in `${…}` hides the next line's list.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                            and any(a < pos < b for a, b in spans))  # M:BACKSTOP-AGREE-OWN",
+      "replace": "                            and True)  # M:BACKSTOP-AGREE-OWN",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_quote_both_readers_lose_does_not_hide_a_list"
+    },
+    {
+      "name": "backstop-trusts-lexer-heredocs",
+      "_mechanism": "R10: every lexer heredoc body is skipped or read quote-blind, even one the backstop reads as quoted text.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        if info.heredoc in confirmed:  # M:BACKSTOP-BODY",
+      "replace": "        if info.body is not None:  # M:BACKSTOP-BODY",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_heredoc_the_backstop_reads_as_quoted_text_is_not_skipped"
+    },
+    {
+      "name": "backstop-skips-unquoted-bodies",
+      "_mechanism": "R10: an unquoted heredoc body is skipped like a quoted one, so its `$(…)` list is unseen (H1).",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            if not info.literal:  # M:BACKSTOP-LITERAL-BODY",
+      "replace": "            if False:  # M:BACKSTOP-LITERAL-BODY",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_list_inside_an_unquoted_heredoc_substitution_is_refused"
+    },
+    {
+      "name": "backstop-reads-quoted-bodies",
+      "_mechanism": "R10: a quoted-delimiter body is counted, so data there refuses.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            if not info.literal:  # M:BACKSTOP-LITERAL-BODY",
+      "replace": "            if True:  # M:BACKSTOP-LITERAL-BODY",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_quoted_delimiter_heredoc_body_is_not_refused"
+    },
+    {
+      "name": "backstop-comment-in-braces",
+      "_mechanism": "R10: the backstop opens a comment at ` #` inside `${…}` like the lexer, so both lose the quote after it.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            elif ch == \"#\" and not braces and prev in (\" \", \"\\t\"):  # M:BACKSTOP-COMMENT",
+      "replace": "            elif ch == \"#\" and prev in (\" \", \"\\t\"):  # M:BACKSTOP-COMMENT",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_quote_both_readers_lose_does_not_hide_a_list"
+    },
+    {
+      "name": "backstop-comment-after-escape",
+      "_mechanism": "R10: an escaped blank starts a comment, so the `<<E` after `\\ #` is unseen by both readers.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            elif ch == \"#\" and not braces and prev in (\" \", \"\\t\"):  # M:BACKSTOP-COMMENT",
+      "replace": "            elif ch == \"#\" and not braces and prev in (\" \", \"\\t\", None):  # M:BACKSTOP-COMMENT",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_escaped_blank_does_not_start_a_comment_that_hides_a_heredoc"
+    },
+    {
+      "name": "backstop-unread-heredoc-allowed",
+      "_mechanism": "R10: a `<<` the lexer did not read as a heredoc is not refused.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                    found.append((\"<<\", k))  # M:BACKSTOP-UNREAD-HEREDOC",
+      "replace": "                    pass  # M:BACKSTOP-UNREAD-HEREDOC",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_escaped_heredoc_delimiter_does_not_hide_a_later_list"
+    },
+    {
+      "name": "backstop-every-heredoc-a-shift",
+      "_mechanism": "R10: every `<<` reads as an arithmetic shift.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            elif text.startswith(\"<<\", k) and k < shift_until:",
+      "replace": "            elif text.startswith(\"<<\", k):",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_escaped_heredoc_delimiter_does_not_hide_a_later_list"
+    },
+    {
+      "name": "heredoc-delimiter-prefix",
+      "_mechanism": "R10: `<<'true'x` opens a heredoc named `true`; bash's is `truex`.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                     r\"(?![^ \\t;&|<>()])\")  # M:HEREDOC-WORD-END",
+      "replace": "                     r\"\")  # M:HEREDOC-WORD-END",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_quoted_delimiter_with_a_suffix_is_not_a_shorter_heredoc"
+    },
+    {
+      "name": "lexer-records-no-squote",
+      "_mechanism": "R10: the lexer records no single-quoted position, so quoted data refuses.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                info.squote.add(k)  # M:LEX-SQUOTE",
+      "replace": "                pass  # M:LEX-SQUOTE",
+      "test": "tests/test_h_mad_expect_screens.py::test_single_quoted_data_is_not_refused"
+    },
+    {
+      "name": "carve-out-ignores-the-tail",
+      "_mechanism": "R10: an `&&` after the lexer's closing paren still counts as the chain, so `)#&& …` (one word to bash) hides a list.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    return all(kind == \"&&\" and opened < pos < closed for kind, pos in code)  # M:BACKSTOP-CHAIN",
+      "replace": "    return all(kind == \"&&\" and opened < pos for kind, pos in code)  # M:BACKSTOP-CHAIN",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_hash_after_the_carve_out_does_not_hide_a_list"
     }
   ]
 }

@@ -709,10 +709,12 @@ echo 0   # expect 0
 
 
 def test_a_heredoc_marker_inside_quotes_does_not_hide_later_screens(tmp_path):
-    """R2-M1(a): `'<<EOF'` in a quoted grep pattern turned every later line into a heredoc body."""
+    """R2-M1(a): `'<<EOF'` in a quoted grep pattern turned every later line into a heredoc body.
+    (The blank after `EOF` keeps the delimiter a whole word, so a heredoc read in quotes
+    would still match since round 10.)"""
     root, _, new = _repo(tmp_path)
     doc = _doc(tmp_path, PASSING_BLOCK + f"""{FENCE}bash
-N=$(awk '/<<EOF/{{n++}} END{{print n+0}}' a.txt)
+N=$(awk '/<<EOF /{{n++}} END{{print n+0}}' a.txt)
 grep -c BAD a.txt   # expect 0
 {FENCE}
 """)
@@ -1406,3 +1408,138 @@ def test_the_output_discloses_conditions_and_negation(tmp_path):
     result = run(tmp_path, [_doc(tmp_path, CORE)], root, old)
     coverage = result.stdout.splitlines()[-1]
     assert "if/while/until condition" in coverage and "!-negated" in coverage, coverage
+
+
+# --- review round 10 of aa2b968a: the raw-text backstop -----------------------------
+#
+# Each lexer exemption keyed on text opened a hole the next round found. Round 10 found
+# three more (H1, P1, K1/K2), all PASS over git's unrecorded 128. The backstop is a second
+# reader of the raw text that refuses every `&&`, `||` and non-redirect `&` independently of
+# the lexer; it skips only quoted-delimiter heredoc bodies, and a single-quoted span only
+# where the lexer AND its own per-line scan both read the position as single-quoted.
+
+
+def _refused(tmp_path, body, kind, line, name="doc.md"):
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new, body, name)
+    screen = body.count("\n") + 2
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:{screen} expect=0 got=UNREADABLE:unsupported_construct={kind}@{doc}:{line} "
+        "FAIL"], result.stdout
+
+
+def test_a_list_inside_an_unquoted_heredoc_substitution_is_refused(tmp_path):
+    """R10 (H1): an unquoted heredoc body runs its `$(…)` in the parent shell, so a list there
+    hides git's 128 -- the lexer skips body lines whole."""
+    _refused(tmp_path, f"cat > note.txt <<NOTE\n$({ERRORED} && echo listed)\nNOTE\n" + SCREEN_LIST,
+             "&&", 3)
+
+
+def test_a_hash_inside_a_parameter_expansion_does_not_hide_a_list(tmp_path):
+    """R10 (P1): ` #` inside `${…}` is not a comment; the lexer cut the line there."""
+    _refused(tmp_path, f"X=${{PWD// #/}}; {ERRORED} && echo ok\n" + SCREEN_LIST, "&&", 2)
+
+
+def test_an_escaped_ampersand_before_a_job_does_not_hide_it(tmp_path):
+    """R10 (K1): `\\&&` is a literal `&` then a background `&`; the lexer read the raw `&`
+    before it and excluded the job as a redirect."""
+    _refused(tmp_path, f"{ERRORED} \\&& wait\n" + SCREEN_LIST, "&", 2)
+
+
+def test_an_escaped_pipe_before_a_job_does_not_hide_it(tmp_path):
+    """R10 (K2): `\\|&` is a literal `|` then a background `&`, not bash 4's `|&`."""
+    _refused(tmp_path, f"{ERRORED} \\|& wait\n" + SCREEN_LIST, "&", 2)
+
+
+def test_a_job_hidden_inside_the_assignment_chain_carve_out_is_refused(tmp_path):
+    """R10: the lexer's misread `\\&&` left only `&&` in `X=$(…)`, so the one-chain carve-out
+    applied -- yet bash backgrounds `git … && echo &` and the substitution ends on `true`. The
+    backstop sees the job, so the carve-out is void and the line's first list is refused."""
+    _refused(tmp_path, f"X=$({ERRORED} && echo \\&& true)\n" + SCREEN_LIST, "&&", 2)
+
+
+def test_an_escaped_heredoc_delimiter_does_not_hide_a_later_list(tmp_path):
+    """R10: the lexer does not recognise `<<\\NOTE`, read the body's apostrophe as a quote and
+    carried it over the list. A `<<` the lexer did not read as a heredoc refuses."""
+    _refused(tmp_path, f"cat > note.txt <<\\NOTE\nit's\nNOTE\n{ERRORED} && echo ok\necho \\'\n"
+             + SCREEN_LIST, "<<", 2)
+
+
+def test_a_span_only_the_backstop_reads_as_quoted_is_not_excluded(tmp_path):
+    """R10: the backstop's per-line scan misreads `"$(echo "it's")"` and spans the list with
+    `it's … 'z'`; the lexer, cut short by ` #` inside `${…}`, saw no quote there. One
+    reader alone never excludes."""
+    _refused(tmp_path, f"X=${{PWD// #/}}; echo \"$(echo \"it's\")\"; {ERRORED} && echo ok; "
+             "echo 'z'\n" + SCREEN_LIST, "&&", 2)
+
+
+def test_single_quoted_data_is_not_refused(tmp_path):
+    """R10: a list in a single-quoted string both readers agree on is data, not code."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old,
+                       "printf '%s\\n' 'a && b || c & d' > data.txt\necho 0   # expect 0")
+    assert _screens(result.stdout) == [f"screen: {doc}:3 expect=0 got=0 PASS"], result.stdout
+
+
+def test_a_quoted_delimiter_heredoc_body_is_not_refused(tmp_path):
+    """R10: a quoted-delimiter body expands nothing, so its text is data."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old,
+                       "cat > data.txt <<'NOTE'\na && b || c & d\nNOTE\necho 0   # expect 0")
+    assert _screens(result.stdout) == [f"screen: {doc}:5 expect=0 got=0 PASS"], result.stdout
+
+
+def test_an_unquoted_heredoc_body_is_over_refused(tmp_path):
+    """R10: the accepted cost. An unquoted body is read raw, so prose `&` there refuses."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old,
+                       "cat > data.txt <<NOTE\nTom & Jerry\nNOTE\necho 0   # expect 0")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:5 expect=0 got=UNREADABLE:unsupported_construct=&@{doc}:3 FAIL"], \
+        result.stdout
+
+
+def test_a_quoted_delimiter_with_a_suffix_is_not_a_shorter_heredoc(tmp_path):
+    """R10: bash's delimiter for `<<'true'x` is `truex`. Read as `true`, the lexer ran the body
+    past bash's terminator, the backstop skipped it as data, and the terminator `true` ran
+    clean. Now the delimiter must end the word, and the unread `<<` refuses."""
+    _refused(tmp_path, f"cat > note.txt <<'true'x\ndata\ntruex\n{ERRORED} && echo ok\ntrue\n"
+             + SCREEN_LIST, "<<", 2)
+
+
+def test_a_quote_both_readers_lose_does_not_hide_a_list(tmp_path):
+    """R10: the lexer cut ` #` inside `${…}` and lost the `'` after it; reset at every line, the
+    first backstop lost it too, so both read line 3's `a'` as an OPENING quote and agreed that
+    the list was data. The backstop now carries quotes across lines and has no comment in
+    `${…}`, so its reading differs from the lexer's exactly where the lexer is wrong."""
+    _refused(tmp_path, f"X=${{PWD// #/}}'\na'; {ERRORED} && echo ok; echo 'y'\necho \\'\n"
+             + SCREEN_LIST, "&&", 3)
+
+
+def test_an_escaped_blank_does_not_start_a_comment_that_hides_a_heredoc(tmp_path):
+    """R10: `\\ #` is an escaped blank then a word -- bash reads the `<<E` after it. The lexer
+    cut there and never saw the heredoc, so the body's apostrophe opened a quote in it."""
+    _refused(tmp_path, f"echo \\ #<<E\nit's\nE\n{ERRORED} && echo ok; echo \\'\n" + SCREEN_LIST,
+             "<<", 2)
+
+
+def test_a_heredoc_the_backstop_reads_as_quoted_text_is_not_skipped(tmp_path):
+    """R10: bash reads `<<'true'` inside a single-quoted string; the lexer, which lost that
+    quote, read a heredoc and skipped its body, and the "terminator" `true` ran clean. The backstop skips a body only when it, too, is in
+    code at the `<<`."""
+    _refused(tmp_path, f"X=${{PWD// #/}}'\n<<'true'\n'; {ERRORED} && echo ok; echo \\'\ntrue\n"
+             + SCREEN_LIST, "&&", 4)
+
+
+def test_a_hash_after_the_carve_out_does_not_hide_a_list(tmp_path):
+    """R10: the lexer reads `)#` as a comment, so `X=$(… && …)` looked whole and its carve-out
+    applied -- but bash reads `)#` as one word, and the `&&` after it is a list."""
+    _refused(tmp_path, f"X=$(true && echo y)#&& {ERRORED} && echo ok\n" + SCREEN_LIST, "&&", 2)
+
+
+def test_a_nested_double_quote_does_not_fool_both_readers(tmp_path):
+    """R10: the backstop has no model of `"$(…)"` and reads `it's` as an opening quote. The
+    lexer does, so the two disagree and nothing is excluded. Without the lexer's model they
+    would agree on a span that bash reads as code."""
+    _refused(tmp_path, f"echo \"$(echo \"it's\")\"; {ERRORED} && echo ok; echo 'z'\n" + SCREEN_LIST,
+             "&&", 2)

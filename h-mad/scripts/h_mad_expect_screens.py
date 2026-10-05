@@ -73,9 +73,20 @@ even the braced `git … | { grep P || [ $? = 1 ]; } > f` read PASS, because bas
 is an `&&`/`||` inside `[[ ]]` or `(( ))` exempt: keyed on text, `echo [[ ; …`
 and `((cmd) && …)` switched list detection off (round 9, E1/E2), so the
 over-refusal of `[[ a && b ]]` is accepted -- write separate `[ ]` statements.
+Round 10 found three more lexer misreads, each a PASS over git's 128 (a list in an
+unquoted heredoc body's `$(…)`, ` #` inside `${…}` read as a comment, `\\&&` read
+as a redirect), so lists are no longer found by the lexer at all. `backstop` reads
+the RAW text on its own smaller model and refuses every `&&`, `||`, job `&` and
+unread `<<`; the lexer only supplies the readings it may agree with. A misread must
+fool both to hide a list. It excludes only a quoted-delimiter heredoc body both read
+as one and a position both read as single-quoted, so it OVER-refuses: `&`, `&&`
+or `||` in double-quoted text, in a comment or in an unquoted heredoc body, a `<<`
+the lexer did not read as a heredoc (an arithmetic shift outside a plain
+`$((…))`, `<<\\EOF`), and `>&$fd`. Single-quote such text, or write it to a file
+outside the block.
 Not refused, because each is recorded or is no list:
-  - the `&` of a redirection (`2>&1`, `>&2`, `&>`): a trailing `&` job after one
-    is still refused;
+  - the `&` of a redirection (`2>&1`, `>&2`, `>&-`, `<&0`, `&>`, `&>>`): a trailing
+    `&` job after one is still refused;
   - the whole value of a one-line `NAME=$(…)` whose body is ONE `&&` chain, with
     no `;`, `||`, `&` or newline: only then is the substitution's status the
     failing member's, which the assignment carries to the trap (probe on bash
@@ -160,8 +171,15 @@ from h_mad_doc_block_exec import (  # noqa: E402
 SCREEN = re.compile(r"#[ \t]*expect[ \t]+(-?\d+)[ \t]*(?:$|[,;(]|--|—)")
 RAW_SCREEN = re.compile(r"(?:^|[ \t;&|()<>])" + SCREEN.pattern)
 ASSIGN_SUBST = re.compile(r"[ \t]*[A-Za-z_][A-Za-z0-9_]*=\$\((?!\()")
-HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
+# The delimiter must end the word: bash's delimiter for `<<'E'x` is `Ex`, and reading it as `E`
+# would end the body early or late -- a body the backstop skips as data. No match reads as code.
+HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2"
+                     r"(?![^ \t;&|<>()])")  # M:HEREDOC-WORD-END
 INTEGER = re.compile(r"-?\d+")
+# A `$((…))` with no parens, quotes, backticks or escapes inside cannot hold a subshell or a
+# heredoc, so its `<<` is a shift. A bare `((…))` gets no such pass: `((cmd) <<E` is two
+# subshells and a heredoc (review round 9, E2).
+PURE_ARITH = re.compile(r"\$\(\([^()'\"`\\]*\)\)")
 GIT_REDIRECTS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
                  "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE")
 COVERAGE = ("coverage: only statements ending in a '# expect <N>' comment inside a bash/sh "
@@ -205,7 +223,11 @@ class Line:
     heredoc_end: int | None = None   # on an opener: its last terminator's index
     backslash: bool = False
     op: bool = False
-    lists: list = field(default_factory=list)  # untracked `&&` / `||` / `&` on this line
+    literal: bool = False            # a body line of a quoted-delimiter heredoc: pure data
+    heredoc: tuple | None = None     # on a body line: (opener index, `<<` position)
+    openers: set = field(default_factory=set)  # `<<` positions the lexer read as heredocs
+    chain: tuple | None = None       # a whole one-line `NAME=$(…)`: its paren positions
+    squote: set = field(default_factory=set)  # positions the lexer read as single-quoted
 
 
 def lex(texts: list[str]) -> list[Line]:
@@ -215,21 +237,21 @@ def lex(texts: list[str]) -> list[Line]:
     for i, info in enumerate(lines):
         text = info.text
         if current is not None:
-            delim, tabs, opener = current
-            info.body = opener
+            delim, tabs, opener, literal, at = current
+            info.body, info.literal, info.heredoc = opener, literal, (opener, at)
             if (text.lstrip("\t") if tabs else text) == delim:
                 lines[opener].heredoc_end = i
                 current = pending.pop(0) if pending else None
             continue  # M:HEREDOC-BODY: a body line has no code and no comment
         info.quoted = quote is not None
-        cut, k, arith, parens, ticks, found = len(text), 0, 0, [], [], []
-        ors, semis = [], []
+        cut, k, arith, parens, ticks = len(text), 0, 0, [], []
         assign = None if info.quoted else ASSIGN_SUBST.match(text)
         assign_open = assign.end() - 1 if assign else None
         assign_close = None
         while k < len(text):
             ch = text[k]
             if quote == "'":
+                info.squote.add(k)  # M:LEX-SQUOTE
                 quote = None if ch == "'" else quote
             elif quote == '"' and text.startswith("$(", k) and not text.startswith("$((", k):
                 parens.append((k + 1, '"'))  # M:DQUOTE-SUBST: `"$(…)"` holds code, not text
@@ -256,18 +278,6 @@ def lex(texts: list[str]) -> list[Line]:
             elif arith and text.startswith("))", k):
                 arith -= 1
                 k += 1
-            elif text.startswith("&&", k):  # refused inside `[[ ]]` and `(( ))` too: no exemption
-                found.append(("&&", k))  # M:REFUSE-AND
-                k += 1
-            elif text.startswith("||", k):
-                ors.append(k)
-                found.append(("||", k))  # M:REFUSE-OR: no `||` is exempt
-                k += 1
-            elif ch == ";" and not text.startswith(";;", k):
-                semis.append(k)
-            elif (ch == "&" and text[k + 1:k + 2] not in (">", "&")
-                  and text[k - 1:k] not in (">", "<", "|", "&")):  # M:REDIRECT-NOT-JOB
-                found.append(("&", k))  # M:REFUSE-JOB
             elif ch == "(":
                 parens.append((k, None))
             elif ch == ")" and parens:
@@ -281,7 +291,9 @@ def lex(texts: list[str]) -> list[Line]:
                   and not text.startswith("<<<", k) and text[k - 1:k] != "<"):
                 match = HEREDOC.match(text, k)  # only unquoted code reaches here
                 if match:
-                    pending.append((match.group(3), match.group(1) == "-", i))
+                    pending.append((match.group(3), match.group(1) == "-", i,
+                                    bool(match.group(2)), k))
+                    info.openers.add(k)
                     k = match.end()
                     continue
             elif ch == "#" and (k == 0 or text[k - 1] in " \t;&|()<>"):  # M:COMMENT-UNQUOTED
@@ -289,26 +301,150 @@ def lex(texts: list[str]) -> list[Line]:
                 break
             k += 1
         info.code, info.comment = text[:cut], text[cut:]
-        # The one carve-out: the whole value of a one-line `NAME=$(…)` whose body is ONE `&&`
-        # chain -- no `;`, `||`, `&` or newline. Only then is the substitution's status the
-        # failing member's, which the assignment carries to the trap (probe:
-        # `X=$(grep x /nonexistent && echo y)` -> rc=2; review round 5: `B=$(… nosuchref &&
-        # echo extra)` -> failed_command). `a || b`, `a && b; c` and `a & wait` end on another
-        # command's status, so they are refused like any other list.
-        whole = assign_close is not None and assign_close == len(info.code.rstrip()) - 1
-        inside = lambda pos: whole and assign_open < pos < assign_close  # noqa: E731
-        chain = (whole and all(kind == "&&" for kind, pos in found if inside(pos))
-                 and not any(inside(p) for p in ors + semis))  # M:AND-CHAIN-ONLY
-        info.lists = [(kind, pos) for kind, pos in found if not (chain and inside(pos))]
+        # A one-line `NAME=$(…)` whose code ends at its closing paren: `backstop` decides whether
+        # its body is the one `&&` chain the assignment carries to the trap.
+        if assign_close is not None and assign_close == len(info.code.rstrip()) - 1:
+            info.chain = (assign_open, assign_close)  # M:AND-CHAIN-ONLY
         if quote is None:
             info.backslash = (not info.comment
                               and (len(text) - len(text.rstrip("\\"))) % 2 == 1)
             info.op = info.code.rstrip().endswith(("|", "&&", "|&"))  # M:CONT-OP-CODE
             if current is None and pending:
                 current = pending.pop(0)
-    for _, _, opener in ([current] if current else []) + pending:
+    for _, _, opener, _, _ in ([current] if current else []) + pending:
         lines[opener].heredoc_end = len(lines) - 1
     return lines
+
+
+def _raw_op(text: str, k: int, prev: str | None) -> tuple[str | None, int]:
+    """(kind, width) of the operator at k: `&&`, `||`, a job `&`, `;`, or (None, 1).
+
+    No `&&` or `||` is exempt by its text -- not in `[[ ]]` or `(( ))`, not in a condition,
+    not `|| true` or `|| [ $? = 1 ]`: each such exemption had a hole (rounds 6-9).
+    """
+    if text.startswith("&&", k):
+        return "&&", 2  # M:REFUSE-AND
+    if text.startswith("||", k):
+        return "||", 2  # M:REFUSE-OR: no `||` is exempt
+    if text.startswith(";;", k):
+        return None, 2
+    if text[k] == ";":
+        return ";", 1
+    if text[k] != "&":
+        return None, 1
+    nxt = text[k + 1:k + 2]
+    redirect = (nxt == ">" or prev in ("<", "|")  # `&>`, `&>>`, `<&`, `|&`
+                or (prev == ">" and nxt != "" and nxt in "0123456789-"))  # M:BACKSTOP-REDIRECT
+    return (None if redirect else "&"), 1  # M:REFUSE-JOB
+
+
+def _one_chain(text: str, parens: tuple[int, int], code: list[tuple[str, int]]) -> bool:
+    """The `NAME=$(a && b)` carve-out: the substitution's status is the failing member's, which
+    the assignment carries to the trap (`X=$(grep x /nonexistent && echo y)` traps rc=2). It
+    holds only when every operator on the line is an `&&` between the lexer's parens: `a || b`,
+    `a && b; c` and `a & wait` end on another command's status, and an operator after the
+    paren -- the lexer reads `)#&& …` as a comment, bash as a word and a list -- is outside."""
+    opened, closed = parens
+    return all(kind == "&&" and opened < pos < closed for kind, pos in code)  # M:BACKSTOP-CHAIN
+
+
+def _quote_blind(text: str) -> list[tuple[str, int]]:
+    """Every operator in a line read with no quote state at all: an unquoted heredoc body."""
+    found, prev, k = [], " ", 0
+    while k < len(text):
+        kind, width = _raw_op(text, k, prev)
+        if kind:
+            found.append((kind, k))
+        prev, k = text[k + width - 1], k + width
+    return found
+
+
+def backstop(lexed: list[Line]) -> list[tuple[int, str]]:
+    """(index, kind) of every `&&`, `||`, job `&` and unread `<<` in the RAW text.
+
+    The module's only list detector. `lex` found lists until round 10, and every exemption
+    it keyed on text opened a hole the next review found (a heredoc body's `$(…)`, ` #` in
+    `${…}`, `\\&&`). This reader has its own, smaller model, and excludes text only where
+    `lex` agrees, so a misread must fool BOTH to hide a list:
+      - quotes (`'…'`, `"…"`, `$'…'`) and backslash escapes outside `'…'`, carried across
+        lines -- so `\\&&` is a literal `&` then a job, and `\\|&` is not bash 4's `|&`;
+      - a comment only at a blank-preceded `#` in code outside `${…}`: a strict subset of
+        bash's rule, so the comment never hides a quote bash sees. Operators in a comment
+        are still counted (prose `&` there over-refuses);
+      - a heredoc only where the lexer read one AND this reader is in code at its `<<`. A
+        quoted-delimiter body is skipped; an unquoted body is counted with no quote state,
+        since its quotes are text. A `<<` the lexer did not read as a heredoc refuses.
+    Nothing is excluded except a position BOTH readers call single-quoted; double-quoted
+    text is counted, because `"$(a && b)"` is code. The one `NAME=$(a && b)` carve-out
+    survives only where the lexer applied it AND this reader finds nothing else on the line.
+    """
+    hits, quote, opened, confirmed = [], None, 0, set()
+    for i, info in enumerate(lexed):
+        text = info.text
+        if info.heredoc in confirmed:  # M:BACKSTOP-BODY
+            if not info.literal:  # M:BACKSTOP-LITERAL-BODY
+                hits.extend((i, kind) for kind, _ in _quote_blind(text) if kind != ";")
+            continue
+        found, spans, braces, comment, prev, k, shift_until = [], [], 0, False, " ", 0, -1
+        opened = -1 if quote == "'" else opened
+        while k < len(text):
+            ch = text[k]
+            if ch == "\\" and quote != "'" and not comment:
+                prev, k = None, k + 2  # M:BACKSTOP-ESCAPE: an escaped character is no operator
+                continue
+            if comment or quote is not None:
+                if comment or ch != quote[-1]:
+                    kind, width = _raw_op(text, k, prev)
+                    if kind:
+                        found.append((kind, k))
+                    prev, k = text[k + width - 1], k + width
+                    continue
+                if quote == "'":
+                    spans.append((opened, k))
+                quote = None
+            elif text.startswith("$'", k):
+                quote, prev, k = "$'", None, k + 2
+                continue
+            elif ch == "'" or ch == '"':
+                quote, opened = ch, k
+            elif text.startswith("${", k):
+                braces += 1
+            elif text.startswith("$((", k) and PURE_ARITH.match(text, k):
+                shift_until = PURE_ARITH.match(text, k).end()
+            elif ch == "}" and braces:
+                braces -= 1
+            elif ch == "#" and not braces and prev in (" ", "\t"):  # M:BACKSTOP-COMMENT
+                comment = True
+            elif text.startswith("<<<", k):
+                prev, k = "<", k + 3
+                continue
+            elif text.startswith("<<", k) and k < shift_until:
+                prev, k = "<", k + 2  # M:BACKSTOP-SHIFT
+                continue
+            elif text.startswith("<<", k):
+                if k in info.openers:
+                    confirmed.add((i, k))
+                else:
+                    found.append(("<<", k))  # M:BACKSTOP-UNREAD-HEREDOC
+                prev, k = "<", k + 2
+                continue
+            else:
+                kind, width = _raw_op(text, k, prev)
+                if kind:
+                    found.append((kind, k))
+                prev, k = text[k + width - 1], k + width
+                continue
+            prev, k = ch, k + 1
+        if quote == "'":
+            spans.append((opened, len(text)))
+        lexer_says = info.squote  # M:BACKSTOP-AGREE-LEXER
+        data = lambda pos: (pos in lexer_says  # noqa: E731
+                            and any(a < pos < b for a, b in spans))  # M:BACKSTOP-AGREE-OWN
+        code = [(kind, pos) for kind, pos in found if not data(pos)]
+        if info.chain and _one_chain(text, info.chain, code):  # M:CHAIN-APPLIED
+            code = []
+        hits.extend((i, kind) for kind, _ in code if kind != ";")  # M:BACKSTOP-HITS
+    return hits
 
 
 def statement_start(lines: list[Line], end: int, floor: int) -> int:
@@ -496,9 +632,10 @@ def _refuse_untracked(batch, spans, lexed, doc, lines_at) -> None:
 
     bash runs no ERR trap for a non-final member of an `&&`/`||` list or for a background
     job, so their failures cannot be recorded. This module refuses them rather than adding
-    another tracking mechanism.
+    another tracking mechanism. `backstop` finds them: `lex` keeps no list detection of its own,
+    since every hit it made the backstop makes too (round 10).
     """
-    found = [(k, kind) for k, line in enumerate(lexed) for kind, _ in line.lists]
+    found = backstop(lexed)  # M:BACKSTOP-APPLIED
     for (_, end, _, _), s in zip(spans, batch):
         first = next(((k, kind) for k, kind in found if k <= end), None)
         if first is not None:  # M:REFUSE-APPLIED

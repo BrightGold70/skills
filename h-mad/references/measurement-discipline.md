@@ -218,7 +218,7 @@ being got wrong: the four documents being byte-identical is **not** the predicat
 - **No `&&`, `||` or `&` at or before a screen.** bash runs no ERR trap for a non-final member of an
   `&&`/`||` list, or for a background job. So `git diff nosuchref > f && echo done` and
   `git diff nosuchref > f &` both hide git's 128, and the executor refuses them:
-  `UNREADABLE:unsupported_construct=<&&|"||"|&>@<doc>:<line>`. This also covers lists inside a group,
+  `UNREADABLE:unsupported_construct=<&&|"||"|&|<<>@<doc>:<line>`. This also covers lists inside a group,
   a subshell, a function body, a substitution and an `if`/`while`/`until` condition. Every `||`
   is refused, with no declared form, because each exception tried had a hole:
   - `|| true` and `|| :` mask every status;
@@ -229,10 +229,19 @@ being got wrong: the four documents being byte-identical is **not** the predicat
     ERR trap for a pipeline that ends in such a group (round 8);
   - an `&&`/`||` inside `[[ ]]` or `(( ))`: keyed on text, `echo [[ ; …` and `((cmd) && …)`
     switched list detection off (round 9). `[[ a && b ]]` is refused too; write separate `[ ]`
-    statements.
+    statements;
+  - a list in an unquoted heredoc body's `$(…)`, a ` #` inside `${…}` read as a comment, and a
+    job behind `\&&` or `\|&` each read PASS over git's 128 (round 10). The lexer is not patched
+    for them. Instead a second reader of the raw text refuses every `&&`, `||`, job `&` and every
+    `<<` the lexer did not read as a heredoc, on its own smaller model, so a misread must fool
+    both readers. It skips only a quoted-delimiter heredoc body and text both readers call
+    single-quoted. So it over-refuses these operators in double quotes, in comments and in
+    unquoted heredoc bodies, and it also refuses `<<\EOF`, a shift outside a plain `$((…))`,
+    and `>&$fd`. Single-quote such text, or keep it out of the screen's block.
 
   The only forms not refused are:
-  - the `&` of a redirection (`2>&1`, `>&2`, `&>`). A trailing `&` job after one is still refused;
+  - the `&` of a redirection (`2>&1`, `>&2`, `>&-`, `<&0`, `&>`, `&>>`). A trailing `&` job
+    after one is still refused;
   - the whole value of a one-line `NAME=$(…)` whose body is one `&&` chain, with no `;`, `||`, `&`
     or newline. Only then does the assignment carry the failing member's status;
     `X=$(a || b)`, `X=$(a && b; c)` and `X=$(a & wait)` are refused.
