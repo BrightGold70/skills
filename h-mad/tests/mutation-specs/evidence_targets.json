@@ -1,0 +1,365 @@
+{
+  "_why": "Skill-candidates row `the evidence gate counts tool CALLS, not their TARGETS` (LANDED 2026-10-05): the EVIDENCE/CODEXEVIDENCE lines and the audit-cycle Effort block carry paths=/code=/other=/unmeasured= beside tools= when a project root is given (absent, never zero, without one); agy run_command lines and codex exec blocks are shell-split and only EXISTING paths count; codex MCP calls (no arguments printed) are unmeasured; the split is code (under root, not docs/) vs other; the figures never change a verdict; the audit-cycle driver threads the root, records the figures in the effort sidecar, and COPIES the pass log to <root>/.h-mad/pass-logs/<collected>.log with its sha256, a copy failure being advisory. Each row breaks one of those properties.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_review_evidence.py",
+    "tests/test_h_mad_review_evidence_scan_grok.py",
+    "tests/test_h_mad_audit_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "command-line-is-one-path",
+      "_mechanism": "A shell command line is tried as ONE path instead of being split into words, so every run_command reads as zero targets -- agy's only read channel in the calibration corpus goes blind.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        if key in _SHELL_TEXT_KEYS:  # M:TGT-SHELLKEY",
+      "replace": "        if False:  # M:TGT-SHELLKEY",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_run_command_tokens_split_on_pipes_and_redirects"
+    },
+    {
+      "name": "agy-cwd-ignored",
+      "_mechanism": "init.cwd is dropped, so relative tokens resolve against the root instead of where the leg actually ran.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "            cwd = init[\"cwd\"]  # M:TGT-AGYCWD",
+      "replace": "            cwd = cwd  # M:TGT-AGYCWD",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_relative_tokens_resolve_against_the_logs_cwd"
+    },
+    {
+      "name": "agy-reads-outcomes-not-starts",
+      "_mechanism": "Only DONE steps are read, so a call whose start carried parameters but whose outcome never arrived vanishes instead of being counted.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "                and step.get(\"state\") == \"ACTIVE\"):  # M:TGT-ACTIVE",
+      "replace": "                and step.get(\"state\") == \"DONE\"):  # M:TGT-ACTIVE",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_a_tool_call_without_visible_parameters_is_unmeasured"
+    },
+    {
+      "name": "agy-hidden-call-is-zero",
+      "_mechanism": "An agy call with no visible parameters is silently a zero-target call instead of unmeasured.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "            unmeasured += 1  # M:TGT-AGYHIDDEN",
+      "replace": "            unmeasured += 0  # M:TGT-AGYHIDDEN",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_a_tool_call_without_visible_parameters_is_unmeasured"
+    },
+    {
+      "name": "grok-hidden-call-is-zero",
+      "_mechanism": "A grok tool_call without rawInput is silently a zero-target call instead of unmeasured.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "            unmeasured += 1  # M:TGT-GROKHIDDEN",
+      "replace": "            unmeasured += 0  # M:TGT-GROKHIDDEN",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_scan_grok_measures_visible_targets_and_counts_hidden_ones"
+    },
+    {
+      "name": "codex-mcp-is-zero",
+      "_mechanism": "Calibration finding 3: codex MCP calls print no arguments. Counting them as nothing reports a leg that ran 22 ctx_execute calls as having touched nothing.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "    unmeasured = len(_CODEX_MCP_RE.findall(log_text))  # M:TGT-MCP",
+      "replace": "    unmeasured = 0  # M:TGT-MCP",
+      "test": "tests/test_h_mad_review_evidence.py::TestCodexTargets::test_codex_mcp_calls_are_unmeasured_not_zero"
+    },
+    {
+      "name": "codex-orphan-exec-dropped",
+      "_mechanism": "An exec block with no parseable command is dropped instead of counted unmeasured.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "            unmeasured += 1  # M:TGT-EXECORPHAN",
+      "replace": "            unmeasured += 0  # M:TGT-EXECORPHAN",
+      "test": "tests/test_h_mad_review_evidence.py::TestCodexTargets::test_an_exec_block_without_a_parseable_command_is_unmeasured"
+    },
+    {
+      "name": "codex-exec-cwd-ignored",
+      "_mechanism": "The exec block's own ` in <cwd>` is ignored, so its relative tokens resolve against the header workdir.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        candidates.extend((word, tail) for word in words)  # M:TGT-EXECCWD",
+      "replace": "        candidates.extend((word, root) for word in words)  # M:TGT-EXECCWD",
+      "test": "tests/test_h_mad_review_evidence.py::TestCodexTargets::test_an_exec_block_resolves_against_its_own_cwd"
+    },
+    {
+      "name": "codex-shell-wrapper-not-unwrapped",
+      "_mechanism": "`/bin/zsh -lc '<cmd>'` is not unwrapped, so the real command is one unsplit word and its targets are lost.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "            words = _shell_tokens(words[2])  # `/bin/zsh -lc '<the real command>'`",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_review_evidence.py::TestCodexTargets::test_a_codex_exec_block_is_measured"
+    },
+    {
+      "name": "missing-root-measured",
+      "_mechanism": "A root that is not a directory is measured anyway, so every target lands in `other` and a not-measured reads as a measurement.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "    if root is None or not Path(root).is_dir():  # M:TGT-NOROOT",
+      "replace": "    if root is None:  # M:TGT-NOROOT",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_no_root_means_not_measured_never_zero"
+    },
+    {
+      "name": "relative-token-uses-process-cwd",
+      "_mechanism": "Relative tokens resolve against the scanner's own working directory instead of the leg's.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "                path = Path(cwd) / path  # M:TGT-RELCWD",
+      "replace": "                path = path  # M:TGT-RELCWD",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_relative_tokens_resolve_against_the_logs_cwd"
+    },
+    {
+      "name": "nonexistent-tokens-counted",
+      "_mechanism": "Every word of every command is a target: grep patterns and flags inflate the count.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "            if not (path.is_file() or path.is_dir()):  # M:TGT-EXISTS",
+      "replace": "            if False:  # M:TGT-EXISTS",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_nonexistent_path_tokens_are_ignored"
+    },
+    {
+      "name": "root-itself-counted",
+      "_mechanism": "`ls .` counts the project root as a code target.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        if not base.is_relative_to(path):  # M:TGT-ROOTSELF",
+      "replace": "        if True:  # M:TGT-ROOTSELF",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_the_root_itself_is_not_a_target"
+    },
+    {
+      "name": "spellings-not-normalised",
+      "_mechanism": "Two spellings of one file (`src/../src/a.py`) count as two distinct targets.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "            path = path.resolve()  # M:TGT-DEDUP: one spelling per target",
+      "replace": "            path = path.absolute()  # M:TGT-DEDUP: one spelling per target",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_duplicate_targets_count_once"
+    },
+    {
+      "name": "docs-counted-as-code",
+      "_mechanism": "Files under the root's docs/ tree are counted as code, erasing the split.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "               and path.relative_to(base).parts[0] != \"docs\")  # M:TGT-DOCS",
+      "replace": "               and path.relative_to(base).parts[0] != \"nodocs\")  # M:TGT-DOCS",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_code_other_split_counts_docs_and_outside_root_as_other"
+    },
+    {
+      "name": "not-measured-prints-zeros",
+      "_mechanism": "With no root the line prints `paths=0 ...`: a not-measured rendered as a measured zero.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        return \"\"  # M:TGT-FMTABSENT",
+      "replace": "        return \" paths=0 code=0 other=0 unmeasured=0\"  # M:TGT-FMTABSENT",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_cli_without_a_root_prints_no_target_fields"
+    },
+    {
+      "name": "evidence-line-drops-targets",
+      "_mechanism": "The agy EVIDENCE line does not carry the figures.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "    print(line + format_targets(counts))",
+      "replace": "    print(line)",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_cli_prints_targets_on_the_evidence_line"
+    },
+    {
+      "name": "code-zero-becomes-a-gate",
+      "_mechanism": "The advisory counter creeps into the verdict: a pass that opened no code file is judged NONE.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "    verdict = \"PASS\" if counts[\"ok\"] >= 1 else \"NONE\"",
+      "replace": "    verdict = \"PASS\" if counts[\"ok\"] >= 1 and counts.get(\"targets\", {}).get(\"code\", 1) else \"NONE\"",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_code_zero_keeps_the_verdict_and_the_exit_code"
+    },
+    {
+      "name": "codex-line-drops-targets",
+      "_mechanism": "The CODEXEVIDENCE line does not carry the figures.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "                      f\"agrees={'yes' if codex['agrees'] else 'no'}\" + format_targets(codex))",
+      "replace": "                      f\"agrees={'yes' if codex['agrees'] else 'no'}\")",
+      "test": "tests/test_h_mad_review_evidence.py::TestCodexTargets::test_cli_prints_codex_targets_and_still_refuses_the_leg"
+    },
+    {
+      "name": "grok-line-drops-targets",
+      "_mechanism": "The grok EVIDENCE line does not carry the figures.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "            print(line + format_targets(grok))",
+      "replace": "            print(line)",
+      "test": "tests/test_h_mad_review_evidence_scan_grok.py::test_cli_grok_line_carries_targets_with_a_root"
+    },
+    {
+      "name": "effort-codex-keeps-agy-zeros",
+      "_mechanism": "A codex log's Effort targets are the agy instrument's false zeros instead of the codex instrument's figures.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "            counts[\"targets\"] = scan_codex_text(text, root=project_root)[\"targets\"]  # M:TGT-CODEXEFFORT",
+      "replace": "            pass  # M:TGT-CODEXEFFORT",
+      "test": "tests/test_h_mad_audit_cycle.py::test_measure_effort_measures_a_codex_logs_targets_not_agy_zeros"
+    },
+    {
+      "name": "effort-grok-drops-targets",
+      "_mechanism": "A grok pass's Effort carries no targets though they were measured.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                measured[\"targets\"] = grok[\"targets\"]",
+      "replace": "                pass",
+      "test": "tests/test_h_mad_audit_cycle.py::test_measure_effort_carries_a_grok_streams_targets"
+    },
+    {
+      "name": "unparseable-log-keeps-a-zero",
+      "_mechanism": "A stray --log that is no transcript keeps the agy instrument's zero targets: a measurement of a file the instrument cannot read.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        counts.pop(\"targets\", None)  # M:TGT-UNPARSEABLE",
+      "replace": "        pass  # M:TGT-UNPARSEABLE",
+      "test": "tests/test_h_mad_audit_cycle.py::test_an_unparseable_log_carries_no_targets"
+    },
+    {
+      "name": "effort-render-drops-targets",
+      "_mechanism": "The Effort block does not show the figures beside tools=.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        line += format_targets(effort)  # M:TGT-RENDER",
+      "replace": "        line += \"\"  # M:TGT-RENDER",
+      "test": "tests/test_h_mad_audit_cycle.py::test_effort_render_shows_targets_beside_tools"
+    },
+    {
+      "name": "effort-render-codex-drops-targets",
+      "_mechanism": "A codex pass's Effort line hides its measured exec targets and unmeasured MCP calls.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                         + (\" targets:\" + format_targets(effort) if \"targets\" in effort else \"\"))",
+      "replace": "                         )",
+      "test": "tests/test_h_mad_audit_cycle.py::test_effort_render_shows_targets_beside_tools"
+    },
+    {
+      "name": "driver-measures-without-root",
+      "_mechanism": "The driver never threads the project root, so no pass ever carries targets.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                        effort=measure_effort(spec.log_path, args.project_root),",
+      "replace": "                        effort=measure_effort(spec.log_path),",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_sidecar_records_targets_and_a_retained_log_copy"
+    },
+    {
+      "name": "driver-never-retains",
+      "_mechanism": "The driver never copies the pass log: the gate's verdict stays unauditable after /tmp is gone.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                retention = (retain_pass_log(spec.log_path, args.project_root, collected_path)",
+      "replace": "                retention = ({}",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_sidecar_records_targets_and_a_retained_log_copy"
+    },
+    {
+      "name": "sidecar-drops-retention",
+      "_mechanism": "The sidecar does not record where the log was retained or its hash.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "               \"collected\": collected_path.name, **effort, **(retention or {})}",
+      "replace": "               \"collected\": collected_path.name, **effort}",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_sidecar_records_targets_and_a_retained_log_copy"
+    },
+    {
+      "name": "retention-moves-the-log",
+      "_mechanism": "Retention MOVES the log, so the /tmp consumers that still read the original lose it.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        staging.write_bytes(data)",
+      "replace": "        staging.write_bytes(data); Path(log_path).unlink()",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_sidecar_records_targets_and_a_retained_log_copy"
+    },
+    {
+      "name": "sha-is-not-of-the-copy",
+      "_mechanism": "The recorded sha256 does not match the retained bytes, so the copy cannot be verified.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    return {\"log_retained\": str(dest), \"log_sha256\": hashlib.sha256(data).hexdigest()}",
+      "replace": "    return {\"log_retained\": str(dest), \"log_sha256\": hashlib.sha256(data[:-1]).hexdigest()}",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_sidecar_records_targets_and_a_retained_log_copy"
+    },
+    {
+      "name": "retention-failure-loses-the-verdict",
+      "_mechanism": "A retention OSError escapes the loop, whose only handler is OperationalError, and the cycle loses a completed pass's verdict over a log copy.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    except OSError as exc:  # M:TGT-RETAINOSERR",
+      "replace": "    except FileNotFoundError as exc:  # M:TGT-RETAINOSERR",
+      "test": "tests/test_h_mad_audit_cycle.py::test_an_unwritable_retention_dir_keeps_the_verdict"
+    },
+    {
+      "name": "codex-hook-lines-glued-to-cwd",
+      "_mechanism": "Review M1: interleaved `hook:` lines run on into the cwd, every relative token resolves under a directory that does not exist, and a visible read counts as a silent zero.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "            if not lines[j].startswith(\"hook: \"):  # M:TGT-HOOKLINE",
+      "replace": "            if True:  # M:TGT-HOOKLINE",
+      "test": "tests/test_h_mad_review_evidence.py::TestCodexTargets::test_hook_lines_inside_an_exec_block_do_not_corrupt_the_cwd"
+    },
+    {
+      "name": "codex-multiline-cwd-accepted",
+      "_mechanism": "Review M1, general case: any foreign line after ` in <cwd>` becomes part of the cwd and the block is a silent zero instead of unmeasured.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        if not (sep and tail.startswith(\"/\") and \"\\n\" not in tail):  # M:TGT-EXECPARSE",
+      "replace": "        if not (sep and tail.startswith(\"/\")):  # M:TGT-EXECPARSE",
+      "test": "tests/test_h_mad_review_evidence.py::TestCodexTargets::test_foreign_lines_after_the_cwd_make_the_block_unmeasured"
+    },
+    {
+      "name": "codex-back-to-back-exec-unmeasured",
+      "_mechanism": "Review S5: the first of two back-to-back exec headers is counted unmeasured although its command is fully visible.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        head, sep, tail = \"\\n\".join(body).rpartition(\" in \")",
+      "replace": "        head, sep, tail = (\"\\n\".join(body) if j < len(lines) and lines[j] != \"exec\" else \"\").rpartition(\" in \")",
+      "test": "tests/test_h_mad_review_evidence.py::TestCodexTargets::test_back_to_back_exec_headers_are_both_measured"
+    },
+    {
+      "name": "root-ancestors-counted",
+      "_mechanism": "Review S3: `ls .. /` counts filesystem roots as targets, so paths= rises on a pass that read nothing.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        if not base.is_relative_to(path):  # M:TGT-ROOTSELF",
+      "replace": "        if path != base:  # M:TGT-ROOTSELF",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_ancestors_of_the_root_are_not_targets"
+    },
+    {
+      "name": "unbalanced-quote-kept-on-token",
+      "_mechanism": "Review N2: the whitespace fallback keeps the quote character, so `cat 'src/a.py` measures nothing.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        return [word.strip(\"'\\\"\") for word in text.split()]  # M:TGT-QUOTEFALLBACK",
+      "replace": "        return text.split()  # M:TGT-QUOTEFALLBACK",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_an_unbalanced_quote_still_yields_its_path"
+    },
+    {
+      "name": "relative-agy-cwd-trusted",
+      "_mechanism": "Review N3: a relative or empty init.cwd resolves against the scanner's own cwd.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "                and Path(init[\"cwd\"]).is_absolute()):  # M:TGT-AGYCWDABS",
+      "replace": "                and True):  # M:TGT-AGYCWDABS",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_a_relative_init_cwd_is_treated_as_absent"
+    },
+    {
+      "name": "bad-root-silent",
+      "_mechanism": "Review N4: a typo'd --project-root is indistinguishable from none, because the note never reaches stderr.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "              \"measured\", file=sys.stderr)  # M:TGT-ROOTWARN",
+      "replace": "              \"measured\", file=sys.stdout)  # M:TGT-ROOTWARN",
+      "test": "tests/test_h_mad_review_evidence.py::TestDistinctTargets::test_cli_warns_on_a_root_that_is_not_a_directory"
+    },
+    {
+      "name": "pass-logs-not-self-ignored",
+      "_mechanism": "Review S2: the retention dir carries no ignore file, so in a project that does not ignore it (HemaSuite) `git add .h-mad` commits full transcripts.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "            ignore.write_text(\"*\\n\", encoding=\"utf-8\")  # M:TGT-SELFIGNORE",
+      "replace": "            pass  # M:TGT-SELFIGNORE",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_retention_dir_ignores_itself_in_git"
+    },
+    {
+      "name": "retention-writes-in-place",
+      "_mechanism": "Review S6: the copy is written over the destination directly, so a part-way failure tears it and destroys the earlier good copy.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        staging.write_bytes(data)",
+      "replace": "        dest.write_bytes(data); staging.write_bytes(data)",
+      "test": "tests/test_h_mad_audit_cycle.py::test_a_failed_copy_keeps_the_earlier_good_copy"
+    },
+    {
+      "name": "retention-staging-left-behind",
+      "_mechanism": "Review S6: a failed copy leaves its staging file in pass-logs.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "            staging.unlink()",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_audit_cycle.py::test_a_failed_copy_keeps_the_earlier_good_copy"
+    },
+    {
+      "name": "log-retained-relative",
+      "_mechanism": "Review N6: with a relative --project-root the sidecar records a relative path that points nowhere from another cwd.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    dest = Path(project_root).resolve() / PASS_LOG_DIR",
+      "replace": "    dest = Path(project_root) / PASS_LOG_DIR",
+      "test": "tests/test_h_mad_audit_cycle.py::test_log_retained_is_absolute_for_a_relative_root"
+    },
+    {
+      "name": "codex-effort-label-dropped",
+      "_mechanism": "Review N5: measured codex targets print straight after `not measured (...)`, contradicting it.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                         + (\" targets:\" + format_targets(effort) if \"targets\" in effort else \"\"))",
+      "replace": "                         + (format_targets(effort) if \"targets\" in effort else \"\"))",
+      "test": "tests/test_h_mad_audit_cycle.py::test_effort_render_shows_targets_beside_tools"
+    }
+  ]
+}

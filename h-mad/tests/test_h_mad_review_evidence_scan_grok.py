@@ -176,3 +176,55 @@ def test_scan_survives_an_unhashable_event_value():
     except TypeError:
         pytest.fail("scan() raised TypeError on an unhashable event value")
     assert actual == expected, "scan must skip an unhashable event value and preserve F0 counts"
+
+
+# --- distinct targets on a grok stream (skill-candidates row 1937) ---------------
+#
+# Grok's `tool_call` carries its arguments as `rawInput` (the fixture's `read_file`
+# has `target_file`), so its targets ARE visible and are measured. A grok stream has
+# no cwd of its own, so relative tokens resolve against the project root.
+
+def _grok_targets_stream(root):
+    import json as _json
+    events = [
+        {"type": "tool_call", "toolCallId": "c1", "toolName": "read_file",
+         "rawInput": {"target_file": str(root / "src" / "a.py")}},
+        {"type": "tool_call_update", "toolCallId": "c1", "status": "completed"},
+        {"type": "tool_call", "toolCallId": "c2", "toolName": "run_terminal_command",
+         "rawInput": {"command": "cat docs/plan.md | wc -l"}},
+        {"type": "tool_call_update", "toolCallId": "c2", "status": "completed"},
+        {"type": "tool_call", "toolCallId": "c3", "toolName": "mystery"},
+        {"type": "end", "stopReason": "end_turn"},
+    ]
+    return "".join(_json.dumps(e) + "\n" for e in events)
+
+
+def _grok_root(tmp_path):
+    root = tmp_path / "proj"
+    (root / "src").mkdir(parents=True)
+    (root / "docs").mkdir()
+    (root / "src" / "a.py").write_text("a\n", encoding="utf-8")
+    (root / "docs" / "plan.md").write_text("p\n", encoding="utf-8")
+    return root
+
+
+def test_scan_grok_measures_visible_targets_and_counts_hidden_ones(tmp_path):
+    root = _grok_root(tmp_path)
+    got = ev.scan_grok(_grok_targets_stream(root), root=root)["targets"]
+    assert got == {"paths": 2, "code": 1, "other": 1, "unmeasured": 1}, got
+
+
+def test_cli_grok_line_carries_targets_with_a_root(tmp_path):
+    root = _grok_root(tmp_path)
+    log = tmp_path / "grok.ndjson"
+    log.write_text(_grok_targets_stream(root), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS / "h_mad_review_evidence.py"), str(log),
+         "--project-root", str(root)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == (
+        "EVIDENCE: PASS tools=3 ok=2 unresolved=1 thinking=0 format=grok "
+        "stop_reason=end_turn paths=2 code=1 other=1 unmeasured=1\n"
+    ), result.stdout

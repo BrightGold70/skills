@@ -2299,6 +2299,212 @@ def test_the_cycle_writes_an_effort_sidecar_beside_the_collected_report(
     assert "p1 tools=1 ok=1" in out
 
 
+# --- distinct targets and pass-log retention (skill-candidates row 1937) ---
+#
+# The Effort block and the sidecar carry WHAT a pass touched (distinct existing paths,
+# code vs other, unmeasured), not only how many calls it made; and the transcript the
+# figures were computed from is COPIED to `<root>/.h-mad/pass-logs/` with its sha256,
+# so the evidence verdict can be re-audited after /tmp is gone. Both advisory.
+
+
+def _agy_reading(root: Path, *commands: str) -> str:
+    events = [{"event": "init", "init": {"cwd": str(root)}}]
+    for command in commands:
+        step = {"step_type": "tool", "tool_name": "run_command",
+                "tool_info": {"name": "run_command", "parameters": {"CommandLine": command}}}
+        events += [{"event": "step_update", "step_update": {**step, "state": "ACTIVE"}},
+                   {"event": "step_update", "step_update": {**step, "state": "DONE"}}]
+    return "".join(json.dumps(e) + "\n" for e in events)
+
+
+# Above the 2-call delivery floor, so the cycle can certify a clean on these logs.
+_THREE_READS = ("cat src/mod.py", "cat docs/d.md", "ls src")
+
+
+def _tree(root: Path) -> Path:
+    (root / "src").mkdir(parents=True, exist_ok=True)
+    (root / "src" / "mod.py").write_text("x = 1\n", encoding="utf-8")
+    (root / "docs").mkdir(exist_ok=True)
+    (root / "docs" / "d.md").write_text("d\n", encoding="utf-8")
+    return root
+
+
+def test_measure_effort_carries_targets_given_the_project_root(tmp_path: Path) -> None:
+    ac = audit_cycle()
+    root = _tree(tmp_path / "proj")
+    log = tmp_path / "p1.log"
+    log.write_text(_agy_reading(root, "cat src/mod.py docs/d.md"), encoding="utf-8")
+    effort = ac.measure_effort(log, root)
+    assert effort["targets"] == {"paths": 2, "code": 1, "other": 1, "unmeasured": 0}, effort
+    assert "targets" not in ac.measure_effort(log), "no root must mean not measured, not zero"
+
+
+def test_measure_effort_measures_a_codex_logs_targets_not_agy_zeros(tmp_path: Path) -> None:
+    ac = audit_cycle()
+    root = _tree(tmp_path / "proj")
+    log = tmp_path / "p2.log"
+    log.write_text("\n".join([
+        "OpenAI Codex v0.160.0", f"workdir: {root}", "user", "prompt",
+        "exec", f"/bin/zsh -lc 'cat src/mod.py' in {root}", " succeeded in 2ms:", "x = 1",
+        "mcp: context-mode/ctx_execute started", "mcp: context-mode/ctx_execute (completed)",
+        "tokens used", "10", "",
+    ]), encoding="utf-8")
+    effort = ac.measure_effort(log, root)
+    assert effort["shape"] == "codex-text", effort
+    assert effort["targets"] == {"paths": 1, "code": 1, "other": 0, "unmeasured": 1}, effort
+
+
+def test_measure_effort_carries_a_grok_streams_targets(tmp_path: Path) -> None:
+    ac = audit_cycle()
+    root = _tree(tmp_path / "proj")
+    log = tmp_path / "grok.ndjson"
+    log.write_text("".join(json.dumps(e) + "\n" for e in (
+        {"type": "tool_call", "toolCallId": "c1", "rawInput": {"target_file": "src/mod.py"}},
+        {"type": "tool_call_update", "toolCallId": "c1", "status": "completed"},
+        {"type": "end", "stopReason": "end_turn"},
+    )), encoding="utf-8")
+    effort = ac.measure_effort(log, root)
+    assert effort["shape"] == "grok", effort
+    assert effort["targets"] == {"paths": 1, "code": 1, "other": 0, "unmeasured": 0}, effort
+
+
+def test_an_unparseable_log_carries_no_targets(tmp_path: Path) -> None:
+    ac = audit_cycle()
+    root = _tree(tmp_path / "proj")
+    log = tmp_path / "stray.log"
+    log.write_text("cat src/mod.py\nplain wrapper stdout\n", encoding="utf-8")
+    effort = ac.measure_effort(log, root)
+    assert effort["shape"] == "unparseable", effort
+    assert "targets" not in effort, effort
+
+
+def test_effort_render_shows_targets_beside_tools() -> None:
+    ac = audit_cycle()
+    targets = {"paths": 2, "code": 1, "other": 1, "unmeasured": 0}
+    parsed = {"readable": True, "shape": "parsed", "tools": 9, "ok": 9, "failed": 0,
+              "thinking": 50, "targets": targets}
+    codex = {"readable": True, "shape": "codex-text", "tools": 0, "ok": 0, "failed": 0,
+             "thinking": 0, "targets": {**targets, "unmeasured": 7}}
+    first, second = ac._effort_items([pass_result(index=1, effort=parsed),
+                                      pass_result(index=2, effort=codex)])
+    assert first == "p1 tools=9 ok=9 failed=0 thinking=50 paths=2 code=1 other=1 unmeasured=0", first
+    assert second.startswith("p2 not measured (codex-text log"), second
+    # Review N5: the figures ARE measured, so they are labelled apart from the
+    # "not measured" that refers to the agy effort counters.
+    assert second.endswith(" targets: paths=2 code=1 other=1 unmeasured=7"), second
+
+
+def test_the_retention_dir_ignores_itself_in_git(tmp_path: Path) -> None:
+    """Review S2: HemaSuite's .gitignore does not cover `.h-mad/pass-logs/` and it
+    tracks other `.h-mad/` files on purpose, so a `git add .h-mad` would commit full
+    transcripts. The directory carries its own `*` ignore, in any project."""
+    import subprocess
+    ac = audit_cycle()
+    root = _tree(tmp_path / "proj")
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    log = tmp_path / "p1.log"
+    log.write_text("x\n", encoding="utf-8")
+    got = ac.retain_pass_log(log, root, root / "docs" / "f.plan.audit.v1.p1.md")
+    assert got["log_retained"], got
+    ignored = subprocess.run(["git", "-C", str(root), "check-ignore", "-q", got["log_retained"]])
+    assert ignored.returncode == 0, "a retained transcript must be git-ignored in its project"
+
+
+def test_a_failed_copy_keeps_the_earlier_good_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review S6: `write_bytes` truncates before it writes, so a copy that failed part
+    way destroyed the good copy an earlier run left under the same name."""
+    import errno
+    ac = audit_cycle()
+    root = _tree(tmp_path / "proj")
+    collected = root / "docs" / "f.plan.audit.v1.p1.md"
+    log = tmp_path / "p1.log"
+    log.write_text("first run\n", encoding="utf-8")
+    good = ac.retain_pass_log(log, root, collected)
+    log.write_text("second run, longer transcript\n", encoding="utf-8")
+
+    def half_then_enospc(self, data):
+        with open(self, "wb") as f:
+            f.write(data[: len(data) // 2])
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_bytes", half_then_enospc)
+    bad = ac.retain_pass_log(log, root, collected)
+    assert bad["log_retained"] is None and bad["log_retained_reason"], bad
+    assert Path(good["log_retained"]).read_text(encoding="utf-8") == "first run\n"
+    leftovers = [p.name for p in Path(good["log_retained"]).parent.iterdir()
+                 if p.name not in (Path(good["log_retained"]).name, ".gitignore")]
+    assert leftovers == [], leftovers
+
+
+def test_log_retained_is_absolute_for_a_relative_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review N6: a sidecar read from another cwd must still point at the copy."""
+    ac = audit_cycle()
+    root = _tree(tmp_path / "proj")
+    log = tmp_path / "p1.log"
+    log.write_text("x\n", encoding="utf-8")
+    monkeypatch.chdir(root)
+    got = ac.retain_pass_log(log, Path("."), Path("docs/f.plan.audit.v1.p1.md"))
+    assert Path(got["log_retained"]).is_absolute(), got
+
+
+def _cycle_with_log(monkeypatch, root: Path, capsys, log_text: str):
+    ac = audit_cycle()
+    report = root / "dispatch" / "p1.report.md"
+    write_done_report(report, HOSTILE_PASS_REPORT)
+    install_audit_gate_stub(monkeypatch, root, {"hostile-feature.plan.audit.v1.p1.md": ("PASS", 0, 0)})
+    log = root.parent / f"{root.name}.p1.log"
+    log.write_text(log_text, encoding="utf-8")
+    monkeypatch.setattr(
+        sys.modules[__name__], "pass_arg",
+        lambda index, report_path, rc=0:
+            f"{index}:{report_path}:{report_path.with_suffix('.out')}:{rc}:{log}",
+    )
+    rc, out, err = run_collect_cycle(ac, tmp_path=root, capsys=capsys, report_paths=[report])
+    sidecar = root / "docs/01-plan/features/hostile-feature.plan.audit.v1.p1.md.effort.json"
+    return rc, out, err, log, sidecar
+
+
+def test_the_sidecar_records_targets_and_a_retained_log_copy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    import hashlib
+    root = _tree(tmp_path / "proj")
+    text = _agy_reading(root, *_THREE_READS)
+    rc, out, err, log, sidecar = _cycle_with_log(monkeypatch, root, capsys, text)
+    assert rc == 0, (out, err)
+    data = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert data["targets"] == {"paths": 3, "code": 2, "other": 1, "unmeasured": 0}, data
+    retained = root / ".h-mad" / "pass-logs" / "hostile-feature.plan.audit.v1.p1.md.log"
+    assert data["log_retained"] == str(retained), data
+    assert data["log_sha256"] == hashlib.sha256(retained.read_bytes()).hexdigest(), data
+    assert retained.read_text(encoding="utf-8") == text
+    assert log.read_text(encoding="utf-8") == text, "retention must COPY; /tmp consumers read the original"
+    assert "p1 tools=3 ok=3 failed=0 thinking=0 paths=3 code=2 other=1 unmeasured=0" in out, out
+
+
+def test_an_unwritable_retention_dir_keeps_the_verdict(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    good_root = _tree(tmp_path / "good")
+    _, good_out, _, _, _ = _cycle_with_log(
+        monkeypatch, good_root, capsys, _agy_reading(good_root, *_THREE_READS))
+    bad_root = _tree(tmp_path / "bad")
+    (bad_root / ".h-mad").write_text("a FILE where the retention dir must go\n", encoding="utf-8")
+    rc, out, err, _, sidecar = _cycle_with_log(
+        monkeypatch, bad_root, capsys, _agy_reading(bad_root, *_THREE_READS))
+    assert rc == 0, (out, err)
+    assert auditcycle_lines(out) == auditcycle_lines(good_out), (out, good_out)
+    assert auditcycle_lines(out)[0].startswith("AUDITCYCLE: PASS "), out
+    data = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert data["log_retained"] is None and data["log_sha256"] is None, data
+    assert data["log_retained_reason"], data
+    assert data["targets"]["code"] == 2, "the figures survive a retention failure"
+
+
 # --- the cycle driver feeds the suite and leg-set gates (#91, #11/H3) ---
 #
 # Both gates shipped and neither was reachable through the driver: `gate()` built its

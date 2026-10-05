@@ -38,14 +38,14 @@
     {
       "name": "wr6-cli-never-calls-scan-grok",
       "file": "scripts/h_mad_review_evidence.py",
-      "find": "grok = None if codex_banner_in_head(text) else scan_grok(text)",
+      "find": "grok = None if codex_banner_in_head(text) else scan_grok(text, root=root)",
       "replace": "grok = None",
       "test": "tests/test_h_mad_review_evidence_grok.py::test_cli_f0_prints_grok_evidence_pass"
     },
     {
       "name": "wr7-1-effort-never-calls-scan-grok",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "        grok = scan_grok(text)",
+      "find": "        grok = scan_grok(text, root=project_root)",
       "replace": "        grok = None",
       "test": "tests/test_h_mad_audit_cycle_grok.py::test_measure_effort_reads_f0_as_grok"
     },

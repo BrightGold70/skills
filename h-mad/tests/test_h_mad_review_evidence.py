@@ -488,3 +488,261 @@ def test_the_agy_path_is_untouched_by_the_codex_branch() -> None:
     counts = m.scan(agy)
     assert counts["agy_events"] >= 1
     assert m.scan_codex_text(agy) is None
+
+
+# --- distinct TARGETS beside the call count (skill-candidates row 1937) ----------
+#
+# `tools=41` is the same figure whether a pass opened the module under discussion or
+# spent every call in the documents. These tests pin the counter that reports WHAT the
+# calls touched: distinct existing paths, split into `code` (under the project root,
+# not under its docs/ tree) and `other` (docs/, or outside the root), plus
+# `unmeasured` for calls whose targets the transcript does not show. Advisory only:
+# the verdict and the exit code are pinned unchanged below.
+
+
+def _project(tmp_path):
+    root = tmp_path / "proj"
+    (root / "src").mkdir(parents=True)
+    (root / "docs").mkdir()
+    (root / "src" / "a.py").write_text("a\n", encoding="utf-8")
+    (root / "src" / "b.py").write_text("b\n", encoding="utf-8")
+    (root / "docs" / "plan.md").write_text("p\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_text("x\n", encoding="utf-8")
+    return root, outside
+
+
+def _init(cwd):
+    return json.dumps({"event": "init", "init": {"cwd": str(cwd)}})
+
+
+def _call(name, **params):
+    """One agy tool call as agy emits it: an ACTIVE step, then its DONE outcome."""
+    return [_tool(name, "ACTIVE", **params), _tool(name, "DONE", **params)]
+
+
+def _targets(text, root):
+    return ev.scan(text, root=root)["targets"]
+
+
+class TestDistinctTargets:
+    def test_run_command_tokens_split_on_pipes_and_redirects(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = "\n".join([_init(root), *_call(
+            "run_command",
+            CommandLine="cat src/a.py | grep foo > /dev/null && wc -l src/b.py<docs/plan.md")])
+        got = _targets(text, root)
+        assert got == {"paths": 3, "code": 2, "other": 1, "unmeasured": 0}, got
+
+    def test_nonexistent_path_tokens_are_ignored(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = "\n".join([_init(root), *_call(
+            "run_command", CommandLine="cat src/missing.py nothere 'src/a.py.bak'")])
+        got = _targets(text, root)
+        # A MEASURED zero: the call's text was visible and named nothing that exists.
+        assert got == {"paths": 0, "code": 0, "other": 0, "unmeasured": 0}, got
+
+    def test_duplicate_targets_count_once(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = "\n".join([
+            _init(root),
+            *_call("run_command", CommandLine="cat src/a.py"),
+            *_call("run_command", CommandLine="head ./src/a.py src/../src/a.py"),
+            *_call("view_file", AbsolutePath=str(root / "src" / "a.py")),
+        ])
+        got = _targets(text, root)
+        assert got == {"paths": 1, "code": 1, "other": 0, "unmeasured": 0}, got
+
+    def test_code_other_split_counts_docs_and_outside_root_as_other(self, tmp_path):
+        root, outside = _project(tmp_path)
+        text = "\n".join([
+            _init(root),
+            *_call("view_file", AbsolutePath=str(root / "docs" / "plan.md")),
+            *_call("view_file", AbsolutePath=str(outside / "x.txt")),
+            *_call("grep_search", SearchPath="src/a.py", Query="def x"),
+        ])
+        got = _targets(text, root)
+        assert got == {"paths": 3, "code": 1, "other": 2, "unmeasured": 0}, got
+
+    def test_the_root_itself_is_not_a_target(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = "\n".join([_init(root), *_call("run_command", CommandLine=f"ls . {root}")])
+        assert _targets(text, root)["paths"] == 0
+
+    def test_ancestors_of_the_root_are_not_targets(self, tmp_path):
+        """Review S3: `ls .. /` names filesystem roots, not anything the pass read;
+        like the root itself they are not targets."""
+        root, _ = _project(tmp_path)
+        text = "\n".join([_init(root), *_call("run_command", CommandLine="ls .. / src/a.py")])
+        got = _targets(text, root)
+        assert got == {"paths": 1, "code": 1, "other": 0, "unmeasured": 0}, got
+
+    def test_an_unbalanced_quote_still_yields_its_path(self, tmp_path):
+        """Review N2: the whitespace fallback kept the quote on the token."""
+        root, _ = _project(tmp_path)
+        text = "\n".join([_init(root), *_call("run_command", CommandLine="cat 'src/a.py")])
+        assert _targets(text, root)["code"] == 1
+
+    def test_a_relative_init_cwd_is_treated_as_absent(self, tmp_path):
+        """Review N3: a non-absolute cwd resolved against the SCANNER's cwd."""
+        root, _ = _project(tmp_path)
+        text = "\n".join([_init("not/absolute"), *_call("run_command", CommandLine="cat src/a.py")])
+        assert _targets(text, root)["code"] == 1
+
+    def test_cli_warns_on_a_root_that_is_not_a_directory(self, tmp_path):
+        """Review N4: a typo'd root was indistinguishable from no root."""
+        root, _ = _project(tmp_path)
+        log = _log(tmp_path, _init(root), *_call("run_command", CommandLine="cat src/a.py"))
+        r = _run(str(log), "--project-root", str(tmp_path / "typo"))
+        assert r.returncode == 0
+        assert "not a directory" in r.stderr, r.stderr
+        assert "paths=" not in _token(r.stdout)
+
+    def test_relative_tokens_resolve_against_the_logs_cwd(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = "\n".join([_init(root / "src"), *_call("run_command", CommandLine="cat a.py")])
+        got = _targets(text, root)
+        assert got == {"paths": 1, "code": 1, "other": 0, "unmeasured": 0}, got
+
+    def test_a_log_without_init_cwd_resolves_against_the_root(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = "\n".join([json.dumps({"event": "init"}),
+                          *_call("run_command", CommandLine="cat src/a.py")])
+        assert _targets(text, root)["code"] == 1
+
+    def test_a_tool_call_without_visible_parameters_is_unmeasured(self, tmp_path):
+        root, _ = _project(tmp_path)
+        bare = json.dumps({"event": "step_update", "step_update": {
+            "step_type": "tool", "tool_name": "view_file", "state": "ACTIVE"}})
+        text = "\n".join([_init(root), bare, *_call("run_command", CommandLine="cat src/a.py")])
+        got = _targets(text, root)
+        assert got == {"paths": 1, "code": 1, "other": 0, "unmeasured": 1}, got
+
+    def test_no_root_means_not_measured_never_zero(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = "\n".join([_init(root), *_call("run_command", CommandLine="cat src/a.py")])
+        assert "targets" not in ev.scan(text)
+        assert "targets" not in ev.scan(text, root=tmp_path / "no-such-root")
+
+    def test_cli_prints_targets_on_the_evidence_line(self, tmp_path):
+        root, _ = _project(tmp_path)
+        log = _log(tmp_path, _init(root),
+                   *_call("run_command", CommandLine="cat src/a.py docs/plan.md"))
+        r = _run(str(log), "--project-root", str(root))
+        assert r.returncode == 0, r.stderr
+        line = _token(r.stdout)
+        assert line.startswith("EVIDENCE: PASS tools=1 ok=1 failed=0"), line
+        assert line.endswith(" paths=2 code=1 other=1 unmeasured=0"), line
+
+    def test_cli_without_a_root_prints_no_target_fields(self, tmp_path):
+        root, _ = _project(tmp_path)
+        log = _log(tmp_path, _init(root), *_call("run_command", CommandLine="cat src/a.py"))
+        line = _token(_run(str(log)).stdout)
+        assert "paths=" not in line and "code=" not in line and "unmeasured=" not in line, line
+
+    def test_code_zero_keeps_the_verdict_and_the_exit_code(self, tmp_path):
+        """Advisory, never a gate: a pass that opened no code file is judged exactly
+        as it was before the counter existed."""
+        root, _ = _project(tmp_path)
+        log = _log(tmp_path, _init(root), *_call("run_command", CommandLine="cat docs/plan.md"))
+        before = _run(str(log))
+        after = _run(str(log), "--project-root", str(root))
+        assert "code=0" in after.stdout, after.stdout
+        assert after.returncode == before.returncode == 0
+        assert _token(after.stdout).startswith(_token(before.stdout) + " "), (
+            before.stdout, after.stdout)
+        assert _token(after.stdout).startswith("EVIDENCE: PASS ")
+
+
+def _codex(root, *blocks):
+    head = ["OpenAI Codex v0.160.0", "--------", f"workdir: {root}", "--------",
+            "user", "prompt"]
+    return "\n".join([*head, *blocks, "tokens used", "1,234", ""])
+
+
+class TestCodexTargets:
+    def test_a_codex_exec_block_is_measured(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = _codex(
+            root,
+            "exec", f"/bin/zsh -lc 'sed -n 1,5p src/a.py docs/plan.md' in {root}",
+            " succeeded in 3ms:", "a",
+            "exec", f"/bin/zsh -lc \"python3 - <<'PY'\nprint(1)\nPY\nwc -l src/b.py\" in {root}",
+            " failed in 10ms:", "boom",
+        )
+        got = ev.scan_codex_text(text, root=root)["targets"]
+        assert got == {"paths": 3, "code": 2, "other": 1, "unmeasured": 0}, got
+
+    def test_an_exec_block_resolves_against_its_own_cwd(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = _codex(root, "exec", f"/bin/zsh -lc 'cat a.py' in {root / 'src'}",
+                      " succeeded in 1ms:")
+        assert ev.scan_codex_text(text, root=root)["targets"]["code"] == 1
+
+    def test_codex_mcp_calls_are_unmeasured_not_zero(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = _codex(
+            root,
+            "mcp: context-mode/ctx_execute started", "mcp: context-mode/ctx_execute (completed)",
+            "mcp: context-mode/ctx_batch_execute started",
+            "mcp: context-mode/ctx_batch_execute (failed)",
+        )
+        got = ev.scan_codex_text(text, root=root)["targets"]
+        assert got == {"paths": 0, "code": 0, "other": 0, "unmeasured": 2}, got
+
+    def test_an_exec_block_without_a_parseable_command_is_unmeasured(self, tmp_path):
+        root, _ = _project(tmp_path)
+        text = _codex(root, "exec", "prose that names no cwd at all",
+                      "exec", f"/bin/zsh -lc 'cat src/b.py' in {root}", " succeeded in 1ms:")
+        got = ev.scan_codex_text(text, root=root)["targets"]
+        assert got == {"paths": 1, "code": 1, "other": 0, "unmeasured": 1}, got
+
+    def test_back_to_back_exec_headers_are_both_measured(self, tmp_path):
+        """Review S5: codex can print two `exec` headers before their outcomes
+        (design_cycle2_p2 lines 4585/4601). The first command is fully visible, so
+        it is measured, not counted unmeasured."""
+        root, _ = _project(tmp_path)
+        text = _codex(root, "exec", f"/bin/zsh -lc 'cat src/a.py' in {root}",
+                      "exec", f"/bin/zsh -lc 'cat src/b.py' in {root}", " succeeded in 1ms:")
+        got = ev.scan_codex_text(text, root=root)["targets"]
+        assert got == {"paths": 2, "code": 2, "other": 0, "unmeasured": 0}, got
+
+    def test_hook_lines_inside_an_exec_block_do_not_corrupt_the_cwd(self, tmp_path):
+        """Review M1: codex interleaves `hook:` lines between the command line and
+        its outcome (design_cycle2_p2 line 4601). They were glued onto the cwd, every
+        relative token resolved under a directory that does not exist, and a visible
+        read counted as a silent zero."""
+        root, _ = _project(tmp_path)
+        text = _codex(root, "exec", f"/bin/zsh -lc 'cat a.py' in {root / 'src'}",
+                      "hook: PostToolUse Completed", "hook: PostToolUse Completed",
+                      " succeeded in 5ms:")
+        got = ev.scan_codex_text(text, root=root)["targets"]
+        assert got == {"paths": 1, "code": 1, "other": 0, "unmeasured": 0}, got
+
+    def test_foreign_lines_after_the_cwd_make_the_block_unmeasured(self, tmp_path):
+        """Review M1, the general case: any other interleaved line (codex's own
+        timestamped ERROR lines) must make the block unmeasured, never a cwd that
+        silently resolves nothing."""
+        root, _ = _project(tmp_path)
+        text = _codex(root, "exec", f"/bin/zsh -lc 'cat src/a.py' in {root}",
+                      "2026-10-04T14:53:17.772193Z ERROR codex_core::tools::router: blocked",
+                      " failed in 5ms:")
+        got = ev.scan_codex_text(text, root=root)["targets"]
+        assert got == {"paths": 0, "code": 0, "other": 0, "unmeasured": 1}, got
+
+    def test_codex_without_a_root_has_no_targets(self, tmp_path):
+        root, _ = _project(tmp_path)
+        assert "targets" not in ev.scan_codex_text(_codex(root))
+
+    def test_cli_prints_codex_targets_and_still_refuses_the_leg(self, tmp_path):
+        root, _ = _project(tmp_path)
+        log = tmp_path / "codex.log"
+        log.write_text(_codex(root, "exec", f"/bin/zsh -lc 'cat src/a.py' in {root}",
+                              " succeeded in 1ms:",
+                              "mcp: context-mode/ctx_search started"), encoding="utf-8")
+        r = _run(str(log), "--project-root", str(root))
+        assert r.returncode == 2
+        assert ("CODEXEVIDENCE: tools=1 ok=1 failed=0 exec_lines=1 agrees=yes "
+                "paths=1 code=1 other=0 unmeasured=1\n") in r.stdout, r.stdout
+        assert r.stdout.endswith("EVIDENCE: UNREADABLE reason=unsupported_format\n"), r.stdout

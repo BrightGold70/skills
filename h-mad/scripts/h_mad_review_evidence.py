@@ -36,6 +36,7 @@ import argparse
 import json
 import math
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -81,7 +82,212 @@ def codex_banner_in_head(text: str) -> bool:
     return _CODEX_HEADER_RE.search(text[:CODEX_BANNER_HEAD]) is not None
 
 
-def scan_codex_text(log_text: str) -> dict | None:
+# --- distinct TARGETS, beside the call count (skill-candidates row 1937) ------
+#
+# `tools=41` is the same figure whether a pass opened the module under discussion or
+# spent every call re-reading documents. This reports WHAT the calls touched: the
+# distinct paths their arguments name that EXIST, split into `code` (under the project
+# root and not under its docs/ tree) and `other` (docs/, or outside the root), plus
+# `unmeasured` -- calls whose targets the transcript does not show. Advisory, never a
+# gate: nothing here changes a verdict or an exit code.
+#
+# Calibrated 2026-10-05 on 12 real pass logs (HemaSuite `preflight-command-aware`,
+# plan/design/impl-plan x cycles 1-2 x {agy NDJSON, codex text}):
+#   1. agy shows its targets only on `tool` steps: `tool_info.parameters`, where
+#      `run_command`.`CommandLine` is SHELL TEXT and the other tools carry path-valued
+#      params (`write_to_file`.`TargetFile`). Shell-splitting command lines, splitting
+#      again on shell operators, and keeping only tokens that resolve to an EXISTING
+#      path gave 0-18 distinct code files per pass -- a real signal, not noise.
+#   2. The split is code-vs-other, NOT docs-vs-code as the row first proposed: the
+#      docs/ count was 0 in all 12 passes, because the audit assembler INLINES the
+#      documents into the prompt, so a leg never opens them. A docs/-vs-code column
+#      would have been a constant.
+#   3. codex text transcripts print MCP calls as `mcp: <server>/<tool> started` with
+#      NO arguments (context-mode ctx_execute/ctx_batch_execute/...: 7-22 per pass).
+#      Those are counted `unmeasured`, never silently as zero targets. codex `exec`
+#      blocks DO print their command line and are measured.
+#
+# Tool NAMES are still not known here, for the reason the module docstring gives:
+# only parameter KEYS that carry shell text are named, and every other string
+# parameter is tried as a whole path. A content parameter (a file body, a search
+# string) does not resolve to an existing path, so it falls out on the existence test.
+#
+# KNOWN UNDERCOUNTS, both reading as measured zeros rather than `unmeasured`: a shell
+# `cd` inside one command line is not followed (relative tokens after it resolve
+# against the step's cwd), and a path quoted inside an inline script (`python3 -c
+# "...open('cli/_main.py')..."`) is one opaque word. The calibration corpus carries 4
+# such agy calls; the dominant case is `cd "$(git rev-parse ...)/x"`, whose target no
+# static reader can resolve. Read `code=` as a floor, never as an exact count.
+_SHELL_TEXT_KEYS = frozenset({"CommandLine", "command"})
+_SHELL_WRAPPER_FLAGS = frozenset({"-c", "-lc"})
+_CODEX_MCP_RE = re.compile(r"^mcp: \S+ started$", re.M)
+
+
+def _shell_tokens(text: str) -> list[str]:
+    """Words of a shell command, split on whitespace AND on `| & ; < > ( )`."""
+    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        return list(lexer)
+    except ValueError:  # unbalanced quote: fall back to whitespace words
+        return [word.strip("'\"") for word in text.split()]  # M:TGT-QUOTEFALLBACK
+
+
+def _param_candidates(params: dict, cwd: str) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for key, value in params.items():
+        if not isinstance(value, str):
+            continue
+        if key in _SHELL_TEXT_KEYS:  # M:TGT-SHELLKEY
+            out.extend((token, cwd) for token in _shell_tokens(value))
+        else:
+            out.append((value, cwd))
+    return out
+
+
+def _agy_candidates(log_text: str, root: str) -> tuple[list[tuple[str, str]], int]:
+    cwd, candidates, unmeasured = root, [], 0
+    for line in log_text.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except (RecursionError, TypeError, ValueError):
+            continue
+        if not isinstance(event, dict):
+            continue
+        init = event.get("init")
+        # A relative or empty cwd would resolve against the SCANNER's own cwd; it is
+        # treated as absent, so tokens fall back to the root.
+        if (isinstance(init, dict) and isinstance(init.get("cwd"), str)
+                and Path(init["cwd"]).is_absolute()):  # M:TGT-AGYCWDABS
+            cwd = init["cwd"]  # M:TGT-AGYCWD
+        step = event.get("step_update")
+        # ACTIVE, the start of each call: it carries the parameters, and one per call
+        # (DONE/ERROR repeat them). An ERRORed call still names what it tried.
+        if not (isinstance(step, dict) and step.get("step_type") == "tool"
+                and step.get("state") == "ACTIVE"):  # M:TGT-ACTIVE
+            continue
+        info = step.get("tool_info")
+        params = info.get("parameters") if isinstance(info, dict) else None
+        if not isinstance(params, dict):
+            unmeasured += 1  # M:TGT-AGYHIDDEN
+            continue
+        candidates.extend(_param_candidates(params, cwd))
+    return candidates, unmeasured
+
+
+def _grok_candidates(log_text: str, root: str) -> tuple[list[tuple[str, str]], int]:
+    # A grok stream carries no cwd of its own, so relative tokens resolve against the
+    # root. `rawInput` is grok's argument object (`read_file`.`target_file` in the
+    # committed fixture); `run_terminal_command`.`command` is assumed shell text by the
+    # same key rule as agy, and is not calibrated against a real grok run.
+    candidates, unmeasured = [], 0
+    for line in log_text.split("\n"):
+        try:
+            event = json.loads(line)
+        except (RecursionError, ValueError):
+            continue
+        if not isinstance(event, dict) or event.get("type") != "tool_call":
+            continue
+        if _json_deeper_than(event, bound=GROK_MAX_DEPTH):
+            continue
+        raw = event.get("rawInput")
+        if not isinstance(raw, dict):
+            unmeasured += 1  # M:TGT-GROKHIDDEN
+            continue
+        candidates.extend(_param_candidates(raw, root))
+    return candidates, unmeasured
+
+
+def _codex_candidates(log_text: str, root: str) -> tuple[list[tuple[str, str]], int]:
+    # An `exec` block is `exec`, then the command line(s) ending ` in <cwd>`, then
+    # (usually) the outcome line. The command and its cwd are what is measured, so a
+    # block is read up to its outcome OR the next `exec` -- codex prints two headers
+    # back to back when calls overlap, and the first command is still fully visible.
+    # codex interleaves `hook: ...` lines inside a block; they are not part of the
+    # command, and left in they ran on into the cwd and turned a visible read into a
+    # silent zero (review M1, design_cycle2_p2:4601). A block whose text does not end
+    # in a single-line ` in /<cwd>` is not a parseable call: unmeasured, not dropped.
+    # Every block names its own cwd, so `root` is not needed here.
+    unmeasured = len(_CODEX_MCP_RE.findall(log_text))  # M:TGT-MCP
+    candidates: list[tuple[str, str]] = []
+    lines = log_text.split("\n")
+    i = 0
+    while i < len(lines):
+        if lines[i] != "exec":
+            i += 1
+            continue
+        j, body = i + 1, []
+        while j < len(lines) and lines[j] != "exec" and not _CODEX_OUTCOME_RE.match(lines[j]):
+            if not lines[j].startswith("hook: "):  # M:TGT-HOOKLINE
+                body.append(lines[j])
+            j += 1
+        i = j
+        head, sep, tail = "\n".join(body).rpartition(" in ")
+        if not (sep and tail.startswith("/") and "\n" not in tail):  # M:TGT-EXECPARSE
+            unmeasured += 1  # M:TGT-EXECORPHAN
+            continue
+        words = _shell_tokens(head)
+        if len(words) >= 3 and words[1] in _SHELL_WRAPPER_FLAGS:
+            words = _shell_tokens(words[2])  # `/bin/zsh -lc '<the real command>'`
+        candidates.extend((word, tail) for word in words)  # M:TGT-EXECCWD
+    return candidates, unmeasured
+
+
+_CANDIDATES = {"agy": _agy_candidates, "grok": _grok_candidates, "codex": _codex_candidates}
+
+
+def measure_targets(log_text: str, root: Path | str | None, fmt: str) -> dict | None:
+    """Distinct existing targets one pass's tool calls named, for `fmt` in agy/grok/codex.
+
+    Returns None when there is no project root to measure against (or it is not a
+    directory): absent means "not measured", never zero. Otherwise
+    `{"paths", "code", "other", "unmeasured"}` with `paths == code + other`. A target
+    is an existing regular file or directory (so `/dev/null` is not one), counted once
+    however many calls or spellings reach it. The root and its ANCESTORS (`..`, `/`,
+    `~`) name no part of the tree and are not targets. `other` still carries delivery
+    mechanics -- the pass's own report file and its `.done` marker, interpreter
+    binaries -- so `code=` is the figure that answers "did it open the code".
+    Pure apart from the existence checks it is defined by.
+    """
+    if root is None or not Path(root).is_dir():  # M:TGT-NOROOT
+        return None
+    base = Path(root).resolve()
+    candidates, unmeasured = _CANDIDATES[fmt](log_text, str(base))
+    seen: set[Path] = set()
+    for token, cwd in candidates:
+        if not token:
+            continue
+        try:
+            path = Path(token).expanduser()
+            if not path.is_absolute():
+                path = Path(cwd) / path  # M:TGT-RELCWD
+            if not (path.is_file() or path.is_dir()):  # M:TGT-EXISTS
+                continue
+            path = path.resolve()  # M:TGT-DEDUP: one spelling per target
+        except (OSError, ValueError, RuntimeError):
+            continue
+        if not base.is_relative_to(path):  # M:TGT-ROOTSELF
+            seen.add(path)
+    code = sum(1 for path in seen
+               if path.is_relative_to(base)
+               and path.relative_to(base).parts[0] != "docs")  # M:TGT-DOCS
+    return {"paths": len(seen), "code": code, "other": len(seen) - code,
+            "unmeasured": unmeasured}
+
+
+def format_targets(counts: dict) -> str:
+    """The ` paths=N code=C other=O unmeasured=U` suffix, or "" when not measured."""
+    targets = counts.get("targets")
+    if not isinstance(targets, dict):
+        return ""  # M:TGT-FMTABSENT
+    return (f" paths={targets['paths']} code={targets['code']} "
+            f"other={targets['other']} unmeasured={targets['unmeasured']}")
+
+
+def scan_codex_text(log_text: str, root: Path | str | None = None) -> dict | None:
     """Measure tool activity in a codex TEXT transcript.
 
     Returns None when this is not a codex transcript at all -- the caller must not
@@ -95,7 +301,7 @@ def scan_codex_text(log_text: str) -> dict | None:
     ok = sum(1 for kind in outcomes if kind == "succeeded")
     failed = sum(1 for kind in outcomes if kind == "failed")
     exec_lines = len(_CODEX_EXEC_RE.findall(log_text))
-    return {
+    result = {
         "tools": len(outcomes),
         "ok": ok,
         "failed": failed,
@@ -105,6 +311,10 @@ def scan_codex_text(log_text: str) -> dict | None:
         "agrees": exec_lines == len(outcomes),
         "complete": complete,
     }
+    targets = measure_targets(log_text, root, "codex")
+    if targets is not None:
+        result["targets"] = targets
+    return result
 
 
 def _json_deeper_than(value: object, bound: int) -> bool:
@@ -120,7 +330,7 @@ def _json_deeper_than(value: object, bound: int) -> bool:
     return False
 
 
-def scan_grok(log_text: str) -> dict | None:
+def scan_grok(log_text: str, root: Path | str | None = None) -> dict | None:
     seen = False
     tools: set = set()
     ok: set = set()
@@ -156,11 +366,15 @@ def scan_grok(log_text: str) -> dict | None:
             stop_reason = reason if isinstance(reason, str) else None
     if not seen:
         return None
-    return {"tools": len(tools), "ok": len(ok), "unresolved": len(tools) - len(ok),
-            "thinking": thinking, "complete": complete, "stop_reason": stop_reason}
+    result = {"tools": len(tools), "ok": len(ok), "unresolved": len(tools) - len(ok),
+              "thinking": thinking, "complete": complete, "stop_reason": stop_reason}
+    targets = measure_targets(log_text, root, "grok")
+    if targets is not None:
+        result["targets"] = targets
+    return result
 
 
-def scan(log_text: str) -> dict:
+def scan(log_text: str, root: Path | str | None = None) -> dict:
     """Count tool events by outcome, and sum reasoning effort. Any tool name counts.
 
     `thinking` is reported for the same reason `status` is: triage, never a verdict.
@@ -239,14 +453,28 @@ def scan(log_text: str) -> dict:
         elif state == "ERROR":
             tools += 1
             failed += 1
-    return {"tools": tools, "ok": ok, "failed": failed,
-            "thinking": thinking, "status": status, "agy_events": agy_events}
+    result = {"tools": tools, "ok": ok, "failed": failed,
+              "thinking": thinking, "status": status, "agy_events": agy_events}
+    # With a project root, WHAT the calls touched rides beside how many there were
+    # (row 1937). Without one the key is absent -- not measured, never zero.
+    targets = measure_targets(log_text, root, "agy")
+    if targets is not None:
+        result["targets"] = targets
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("log", help="the dispatch's --log transcript (agy NDJSON or grok streaming-json)")
+    ap.add_argument("--project-root", type=Path, default=None,
+                    help="measure distinct targets against this root and print "
+                         "paths=/code=/other=/unmeasured= (advisory; absent when not given)")
     args = ap.parse_args(argv)
+    root = args.project_root
+    if root is not None and not root.is_dir():
+        # Not a zero and not silent: the fields are absent, and this says why.
+        print(f"WARNING: --project-root {root} is not a directory; targets not "
+              "measured", file=sys.stderr)  # M:TGT-ROOTWARN
 
     path = Path(args.log)
     try:
@@ -262,7 +490,7 @@ def main(argv: list[str] | None = None) -> int:
         print("EVIDENCE: UNREADABLE reason=empty_log")
         return 2
 
-    counts = scan(text)
+    counts = scan(text, root=root)
     if counts["agy_events"] == 0:
         # #27. Publish the codex figures on their OWN token, and leave the
         # `EVIDENCE:` line below byte-identical.
@@ -280,7 +508,7 @@ def main(argv: list[str] | None = None) -> int:
         # anyway -- its own output saying `The requested view_file tool is
         # unavailable in this session, so I could not inspect the worktree`. A
         # verdict over a tree the leg never read, and nothing could see it.
-        grok = None if codex_banner_in_head(text) else scan_grok(text)
+        grok = None if codex_banner_in_head(text) else scan_grok(text, root=root)
         if grok is not None:
             if not grok["complete"]:
                 print(f"ERROR: {path} is a grok stream with no `end` event (killed, still "
@@ -292,14 +520,14 @@ def main(argv: list[str] | None = None) -> int:
                     f"unresolved={grok['unresolved']} thinking={grok['thinking']} format=grok")
             if grok["stop_reason"]:
                 line += f" stop_reason={grok['stop_reason']}"
-            print(line)
+            print(line + format_targets(grok))
             return 0
-        codex = scan_codex_text(text)
+        codex = scan_codex_text(text, root=root)
         if codex is not None:
             if codex["complete"]:
                 print(f"CODEXEVIDENCE: tools={codex['tools']} ok={codex['ok']} "
                       f"failed={codex['failed']} exec_lines={codex['exec_lines']} "
-                      f"agrees={'yes' if codex['agrees'] else 'no'}")
+                      f"agrees={'yes' if codex['agrees'] else 'no'}" + format_targets(codex))
             else:
                 # No trailing token total: killed, still running, or copied
                 # mid-write. #24's lesson one level down -- "could not measure" and
@@ -321,7 +549,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     if counts["status"]:
         line += f" status={counts['status']}"
-    print(line)
+    # Appended LAST rather than between `tools=` and `ok=`: consumers and tests match
+    # the `tools=N ok=K failed=J` run as a prefix, and an advisory field must not
+    # move a gate's tokens.
+    print(line + format_targets(counts))
     return 0
 
 

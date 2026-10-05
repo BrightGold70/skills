@@ -1967,6 +1967,26 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   verdict cannot be checked after the fact, which is why the mechanism above had to be inferred from
   report text rather than from what the leg opened.
   — **RE-PROBED 2026-10-03: OPEN** — `h_mad_review_evidence.py` still prints only tools/ok/failed/thinking; no distinct-path count, and pass `--log`s are still deleted per cycle.
+  — **LANDED 2026-10-05** — `h_mad_review_evidence.measure_targets()` counts the distinct EXISTING
+  paths a pass's calls named and the evidence line, `CODEXEVIDENCE:` and grok lines print
+  `paths= code= other= unmeasured=` after the existing fields when `--project-root` is given
+  (absent, never zero, without one; verdicts and exit codes unchanged, pinned by a code=0 test).
+  `h_mad_audit_cycle` threads its root into `measure_effort()`, renders the figures beside `tools=`
+  in `Effort:`, records them in the `.effort.json` sidecar, and COPIES each pass log to
+  `<root>/.h-mad/pass-logs/<collected report>.log` with `log_sha256` (copy failure is advisory:
+  `log_retained: null` + reason). Mutation spec `evidence_targets.json`. Three calibration findings
+  over 12 real HemaSuite `preflight-command-aware` pass logs changed the design: (1) agy shows
+  targets only on ACTIVE `tool` steps' `tool_info.parameters` (`run_command`.`CommandLine` is shell
+  text; shell-split, keep existing paths: 0–18 code files per pass, a real signal); (2) the docs/
+  count was 0 in all 12 passes because the assembler INLINES the documents, so the split is
+  code-vs-other, not docs-vs-code as this row proposed; (3) codex text transcripts print MCP calls
+  (`mcp: <server>/<tool> started`) with NO arguments, 7–22 per pass, so they count as `unmeasured`
+  and only `exec` blocks are measured. **Remaining open half:** codex targets stay mostly
+  unmeasured until codex transcripts are captured as `--json`; `cd` inside a command and paths
+  quoted inside inline `-c` scripts are not followed (a known undercount: `code=` is a floor); and
+  `.h-mad/pass-logs/` is never pruned. HemaSuite's `.gitignore` does not cover the directory, so
+  the driver writes a `*` ignore file into it (review fix, follow-up commit).
+  — **Review residuals, recorded at merge 2026-10-05** — two fresh-context rounds: must=0 should=0 at `5aa4817d`; 12 hand-applied fix reverts all caught; the three re-anchored grok rows each caught by their own property assertion. Two nits stay open: no size cap on the scanned transcript, and heredoc bodies are tokenized for path candidates (paths only count when they exist, so this inflates nothing that is absent). Retained pass logs under `.h-mad/pass-logs/` have no rotation yet.
 - **`HARD_KINDS` is defined and read by nothing, while two tests spell the same set as literals**:
   `h_mad_precheck_doc.py:93` declares `HARD_KINDS = ("PLACEHOLDER", "LINEPIN", "PINDRIFT",
   "UNKNOWNSHA")` and no code path reads it — the verdict is `"FAIL" if findings else "PASS"`, so

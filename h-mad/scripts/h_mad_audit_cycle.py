@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import json
 import math
 import os
@@ -14,7 +15,7 @@ from collections import namedtuple
 from pathlib import Path
 
 from h_mad_extract_report import DISPATCH_BOUNDARY
-from h_mad_review_evidence import scan, scan_grok
+from h_mad_review_evidence import format_targets, scan, scan_codex_text, scan_grok
 from h_mad_review_evidence import _CODEX_HEADER_RE as _CODEX_BANNER
 
 
@@ -515,8 +516,13 @@ def _collect_unguarded(
     return "none", None
 
 
-def measure_effort(log_path: Path | None) -> dict | None:
+def measure_effort(log_path: Path | None, project_root: Path | None = None) -> dict | None:
     """Reasoning effort for one pass, or None when there is nothing to report.
+
+    With `project_root`, a measured log also carries `targets` -- the distinct paths
+    its calls named, split code/other, plus calls whose targets were not visible
+    (`h_mad_review_evidence.measure_targets`, row 1937). Without a root the key is
+    absent: not measured, never zero. Advisory: `combine()` never reads it.
 
     Returns `{"readable": False}` for a log that was named but could not be read.
     That is deliberately NOT a zero: `tools=0` is precisely what a hollow pass
@@ -538,7 +544,7 @@ def measure_effort(log_path: Path | None) -> dict | None:
         # instantly leaves behind, so there is nothing to go and find and the
         # remedy is to re-dispatch.
         return {"readable": False, "shape": "empty"}
-    counts = scan(text)
+    counts = scan(text, root=project_root)
     counts["readable"] = True
     # A file that was read, is not blank, and carries no NDJSON object at all is
     # not this pass's transcript — a stray `--log`, a shell wrapper's stdout, the
@@ -569,27 +575,80 @@ def measure_effort(log_path: Path | None) -> dict | None:
         # This is the "name the observation that differs" rule from
         # `invariants.base.md` §Test discrimination, applied to a log format.
         counts["shape"] = "codex-text"
+        # The agy instrument's targets over a codex log are a false zero; the codex
+        # instrument's own replace them (exec blocks measured, MCP calls unmeasured).
+        # Both instruments carry `targets` exactly when the root is measurable, and the
+        # banner matched above, so `scan_codex_text` cannot return None here.
+        if "targets" in counts:
+            counts["targets"] = scan_codex_text(text, root=project_root)["targets"]  # M:TGT-CODEXEFFORT
     else:
-        grok = scan_grok(text)
+        grok = scan_grok(text, root=project_root)
         if grok is not None and grok["complete"]:
-            return {"readable": True, "shape": "grok", "agy_events": 0,
-                    "tools": grok["tools"], "ok": grok["ok"],
-                    "unresolved": grok["unresolved"], "thinking": grok["thinking"],
-                    "stop_reason": grok["stop_reason"]}
+            measured = {"readable": True, "shape": "grok", "agy_events": 0,
+                        "tools": grok["tools"], "ok": grok["ok"],
+                        "unresolved": grok["unresolved"], "thinking": grok["thinking"],
+                        "stop_reason": grok["stop_reason"]}
+            if "targets" in grok:
+                measured["targets"] = grok["targets"]
+            return measured
         if grok is not None:
             return {"readable": True, "shape": "grok-truncated", "agy_events": 0}
         # Readable, non-empty, neither an agy transcript nor a codex one: a stray
         # `--log`, a wrapper's stdout, the wrong path. Still "find the right file",
         # and still blocking — unchanged from before this fix.
         counts["shape"] = "unparseable"
+        counts.pop("targets", None)  # M:TGT-UNPARSEABLE
     return counts
 
 
 EFFORT_SUFFIX = ".effort.json"
+PASS_LOG_DIR = Path(".h-mad") / "pass-logs"
+
+
+def retain_pass_log(log_path: Path | None, project_root: Path,
+                    collected_path: Path | None) -> dict:
+    """COPY one pass's transcript to `<root>/.h-mad/pass-logs/<collected>.log` (row 1937).
+
+    The evidence gate's own verdict could not be re-audited: the transcript it scored
+    lived in /tmp and was gone by the next cycle, so `tools=41` had to be taken on
+    trust and the mechanism behind HemaSuite #18's one-directional disagreement was
+    inferred from report text rather than from what the leg opened. Copy, never move
+    -- /tmp consumers still read the original. Returns the sidecar fields:
+    `log_retained` (path) and `log_sha256` (of the bytes written), or both None with
+    `log_retained_reason` when the copy failed. Advisory, like the sidecar itself: an
+    OSError here must never cost a pass its collected verdict. Returns {} when there
+    is no log or no collected report to name the copy after.
+    """
+    if log_path is None or collected_path is None:
+        return {}
+    # Absolute, so a sidecar read from another cwd still points at the copy.
+    dest = Path(project_root).resolve() / PASS_LOG_DIR / (Path(collected_path).name + ".log")  # M:TGT-RETAINABS
+    # Written beside `dest` and renamed over it: `write_bytes` truncates first, so a
+    # copy that failed part way (ENOSPC) would otherwise leave a torn file AND destroy
+    # the good copy an earlier run of the same cycle left under this name.
+    staging = dest.with_name(f"{dest.name}.{os.getpid()}.tmp")
+    try:
+        data = Path(log_path).read_bytes()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        # The directory ignores itself, in ANY project: HemaSuite tracks other
+        # `.h-mad/` files on purpose and does not ignore this one, so a `git add
+        # .h-mad` there would commit full prompt/response transcripts.
+        ignore = dest.parent / ".gitignore"
+        if not ignore.exists():
+            ignore.write_text("*\n", encoding="utf-8")  # M:TGT-SELFIGNORE
+        staging.write_bytes(data)
+        os.replace(staging, dest)  # M:TGT-ATOMIC
+    except OSError as exc:  # M:TGT-RETAINOSERR
+        with contextlib.suppress(OSError):
+            staging.unlink()
+        return {"log_retained": None, "log_sha256": None,
+                "log_retained_reason": f"{type(exc).__name__}: {exc}"}
+    return {"log_retained": str(dest), "log_sha256": hashlib.sha256(data).hexdigest()}
 
 
 def write_effort_sidecar(collected_path: Path | None, index: int,
-                         log_path: Path | None, effort: dict | None) -> Path | None:
+                         log_path: Path | None, effort: dict | None,
+                         retention: dict | None = None) -> Path | None:
     """Persist one pass's effort figures beside its COLLECTED report (#48).
 
     `tools=N`, `ok=`, `failed=`, `thinking=` used to exist only on this driver's
@@ -608,7 +667,7 @@ def write_effort_sidecar(collected_path: Path | None, index: int,
         return None
     sidecar = collected_path.with_name(collected_path.name + EFFORT_SUFFIX)
     payload = {"pass": index, "log": str(log_path) if log_path else None,
-               "collected": collected_path.name, **effort}
+               "collected": collected_path.name, **effort, **(retention or {})}
     try:
         sidecar.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n",
                            encoding="utf-8")
@@ -641,7 +700,8 @@ def _effort_items(results: list[PassResult]) -> list[str]:
             # figures are agy-transcript figures; a codex text log yields none, and
             # printing zeros invites the reader to conclude the pass read nothing.
             items.append(f"p{result.index} not measured (codex-text log; the effort "
-                         "counters read agy stream-json only)")
+                         "counters read agy stream-json only)"
+                         + (" targets:" + format_targets(effort) if "targets" in effort else ""))
             continue
         if effort.get("shape") == "grok-truncated":
             items.append(f"p{result.index} not measured (grok log truncated — no end event; "
@@ -653,6 +713,9 @@ def _effort_items(results: list[PassResult]) -> list[str]:
         else:
             line = (f"p{result.index} tools={effort['tools']} ok={effort['ok']} "
                     f"failed={effort['failed']} thinking={effort['thinking']}")
+        # Beside the call counts, before the prose suffix (row 1937). Rendered, never
+        # decided on: a pass that opened no code file is not refused for it.
+        line += format_targets(effort)  # M:TGT-RENDER
         if effort["ok"] <= DELIVERY_FLOOR:
             line += (f" low-evidence (<= the {DELIVERY_FLOOR} calls the report-file "
                      "contract itself costs, so possibly no reads)")
@@ -1190,12 +1253,14 @@ def main(argv: list[str] | None = None) -> int:
                         must=must,
                         should=should,
                         findings=findings,
-                        effort=measure_effort(spec.log_path),
+                        effort=measure_effort(spec.log_path, args.project_root),
                         rc=spec.rc,
                     )
                 )
+                retention = (retain_pass_log(spec.log_path, args.project_root, collected_path)
+                             if results[-1].effort is not None else {})
                 write_effort_sidecar(collected_path, spec.index, spec.log_path,
-                                     results[-1].effort)
+                                     results[-1].effort, retention)
             # Did this cycle actually WRITE a stamp? (#18 part 4, #26.)
             #
             # Absence was silent in BOTH directions: a cycle that gated a document
