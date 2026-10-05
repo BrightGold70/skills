@@ -61,7 +61,7 @@ The fix is structural:
 - **NS3, load-only flake:** open, unchanged. See Next Step 2.
 - **NS4, live codex probe:** deferred, unchanged. See Next Step 3.
 - **NS5, watch HemaSuite runs:** open, now also covering the backstop's refusals. See Next Step 4.
-- **Deferred backlog rows** (1269, 1351, 2166, 2314, 2345; the census reads OPEN=5): unchanged.
+- **Deferred backlog rows** (1269, 1351, 2166, 2314, 2345): unchanged. The census now reads OPEN=6, because this session's scout added one `maybe` row: prove a squash-merged branch is on main before `branch -D`.
 - **Deferred rows (1931, 1624, 1679, 1662, 1387, 1348, 2113, 2288):** unchanged since 2026-10-05.
 - **token-weather on the other Mac:** unchanged since 2026-10-04; user action.
 - **Other Mac setup:** unchanged; user action. Run `h-mad/git-hooks/install.sh`, `pip install pytest-subtests` and `git pull`, then re-run the h-mad bootstrap agent registration.
@@ -92,7 +92,7 @@ cd /Users/kimhawk/orca/skills
 git status --short --branch                       # expect: in sync with origin/main at 398a5aec or later
 python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors | tail -1   # ANCHORS_OK
 python3 -m pytest -q h-mad/tests/test_h_mad_expect_screens.py              # 115 passed
-python3 handoff/scripts/skill_candidates_census.py --list-open docs/skill-candidates.md | tail -1   # OPEN=5
+python3 handoff/scripts/skill_candidates_census.py --list-open docs/skill-candidates.md | tail -1   # OPEN=6
 ```
 
 **Related docs:**
