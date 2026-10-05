@@ -1,0 +1,460 @@
+{
+  "_why": "Skill-candidates row 'collect a worktree executor's evidence mechanically': executors ended on 'Done.' / 'No change.' with no evidence, so the orchestrator re-derived the tip, the tests and the mutation verdicts by hand. `h_mad_branch_evidence.py` derives them from the worktree. These rows prove each fail-closed refusal, each set derivation, the safe stop of a child, and the no-write guarantee are pinned by a named test (rows after `deletions-dropped-from-the-diff` close the 90a78d05 review).",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_branch_evidence.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "dirty-tree-reads-as-evidence",
+      "_mechanism": "A working tree with uncommitted edits is measured as if it were the sha.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if status:\n        incomplete.append(\"dirty\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_dirty_tree_is_INCOMPLETE",
+      "symbol": "collect"
+    },
+    {
+      "name": "no-commits-reads-as-evidence",
+      "_mechanism": "An executor that committed nothing gets a verdict about the base.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if ahead == 0:\n        incomplete.append(\"no-commits\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_no_commits_is_INCOMPLETE",
+      "symbol": "collect"
+    },
+    {
+      "name": "script-change-without-test-passes",
+      "_mechanism": "The TDD refusal is dropped: a changed script with no changed test reads COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if live[\"prod\"] and not live[\"test\"]:\n        incomplete.append(\"no-tests\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_prod_change_without_test_is_INCOMPLETE",
+      "symbol": "collect"
+    },
+    {
+      "name": "unspecced-script-passes",
+      "_mechanism": "A changed script no spec targets reads COMPLETE without the waiver being named.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if unspecced and not no_mutation:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_prod_change_without_spec_is_INCOMPLETE_unless_waived",
+      "symbol": "collect"
+    },
+    {
+      "name": "waiver-not-named-in-token",
+      "_mechanism": "--no-mutation turns into a silent COMPLETE indistinguishable from a measured one.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "\" waived=no-mutation\" if no_mutation else \"\"",
+      "replace": "\"\"",
+      "test": "tests/test_h_mad_branch_evidence.py::test_prod_change_without_spec_is_INCOMPLETE_unless_waived",
+      "symbol": "_verdict"
+    },
+    {
+      "name": "tests-naming-a-changed-script-are-not-run",
+      "_mechanism": "Only the changed test files run; an existing test of the changed script is skipped.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        named = sorted(tok for tok in tokens if _names(text, tok))\n",
+      "replace": "        named = []\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_changed_tests_are_the_pytest_set",
+      "symbol": "collect"
+    },
+    {
+      "name": "committed-spec-over-a-changed-script-is-not-run",
+      "_mechanism": "Only specs the branch added run; the existing spec over the changed script is skipped.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        if targets & code:\n            run_specs.add(rel)\n",
+      "replace": "        if False:\n            run_specs.add(rel)\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_changed_spec_is_run_and_its_verdict_forwarded",
+      "symbol": "collect"
+    },
+    {
+      "name": "survivor-reads-as-complete",
+      "_mechanism": "A spec that is not ALL_CAUGHT is printed but does not stop COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        elif word != \"ALL_CAUGHT\":\n            incomplete.append(reason)\n",
+      "replace": "        elif False:\n            incomplete.append(reason)\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_changed_spec_is_run_and_its_verdict_forwarded",
+      "symbol": "_execute"
+    },
+    {
+      "name": "survivor-names-not-forwarded",
+      "_mechanism": "SURVIVED is reported without naming the row, so the harness is re-run by hand to learn which.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        out.extend(ln for ln in proc.stdout.splitlines()\n",
+      "replace": "        out.extend(ln for ln in []\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_changed_spec_is_run_and_its_verdict_forwarded",
+      "symbol": "_execute"
+    },
+    {
+      "name": "busy-or-unreadable-child-stops-being-cannot-judge",
+      "_mechanism": "BUSY / UNREADABLE / TREE_MOVED are demoted to INCOMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        if word in CHILD_UNREADABLE or not word:\n",
+      "replace": "        if not word:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_child_busy_or_unreadable_never_COMPLETE",
+      "symbol": "_execute"
+    },
+    {
+      "name": "drifted-anchors-ignored",
+      "_mechanism": "ANCHORS_DRIFTED is printed but does not stop COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            if word == \"ANCHORS_DRIFTED\":\n                incomplete.append(\"anchors-drifted\")\n",
+      "replace": "            if word == \"ANCHORS_DRIFTED\":\n                pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_anchor_verdict_is_forwarded_and_never_clean",
+      "symbol": "_execute"
+    },
+    {
+      "name": "failing-tests-ignored",
+      "_mechanism": "TESTS: FAIL is printed but does not stop COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            incomplete.append(\"tests-failed\")\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_failing_tests_are_INCOMPLETE_and_name_the_failure",
+      "symbol": "_execute"
+    },
+    {
+      "name": "no-summary-reads-as-pass",
+      "_mechanism": "A pytest that printed no summary (a crash) reads as PASS on exit 0.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    elif summary is None:\n        reason = \"pytest-no-summary\"\n    elif proc.returncode == 0 and counts[\"passed\"] and not counts[\"failed\"] + counts[\"errors\"]:\n",
+      "replace": "    elif proc.returncode == 0:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_pytest_crash_is_UNREADABLE_never_clean",
+      "symbol": "_pytest"
+    },
+    {
+      "name": "missing-pytest-not-probed",
+      "_mechanism": "pytest not importable is reported as a test result instead of a named refusal.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    elif _child([sys.executable, \"-c\", \"import pytest\"], top, timeout).returncode != 0:\n",
+      "replace": "    elif False:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_missing_pytest_is_UNREADABLE",
+      "symbol": "_execute"
+    },
+    {
+      "name": "consumers-run-without-run",
+      "_mechanism": "The documents' consumer tests are named but never executed.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "\"--run\", \"--timeout\", f\"{timeout:g}\", *docs]",
+      "replace": "\"--timeout\", f\"{timeout:g}\", *docs]",
+      "test": "tests/test_h_mad_branch_evidence.py::test_doc_change_invokes_consumers_run",
+      "symbol": "_execute"
+    },
+    {
+      "name": "tree-move-not-detected",
+      "_mechanism": "A tree committed into or written during the run still reads COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        moved = _state(top) != (head, status)\n",
+      "replace": "        moved = False\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_tree_moved_during_collection_is_UNREADABLE",
+      "symbol": "collect"
+    },
+    {
+      "name": "children-write-bytecode",
+      "_mechanism": "Child runs drop __pycache__ into the worktree being measured.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    env = {**os.environ, \"PYTHONDONTWRITEBYTECODE\": \"1\", \"PYTEST_ADDOPTS\": addopts}\n",
+      "replace": "    env = {**os.environ, \"PYTEST_ADDOPTS\": addopts}\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_end_to_end_real_pytest_and_harness_on_a_tiny_repo",
+      "symbol": "_child"
+    },
+    {
+      "name": "pytest-writes-its-cache",
+      "_mechanism": "pytest's cache provider writes .pytest_cache into the worktree being measured.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "\" -p no:cacheprovider\").strip()",
+      "replace": "\"\").strip()",
+      "test": "tests/test_h_mad_branch_evidence.py::test_end_to_end_real_pytest_and_harness_on_a_tiny_repo",
+      "symbol": "_child"
+    },
+    {
+      "name": "branch-name-not-resolved",
+      "_mechanism": "A branch argument no longer finds the worktree that has it checked out.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        elif line in (f\"branch refs/heads/{target}\", f\"branch {target}\") and path:\n",
+      "replace": "        elif False:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_branch_name_resolves_to_its_worktree",
+      "symbol": "_resolve_worktree"
+    },
+    {
+      "name": "deletions-dropped-from-the-diff",
+      "_mechanism": "M1: a branch that only deletes a script selects nothing and reads COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "\"--name-status\", \"--no-renames\", \"-z\",",
+      "replace": "\"--name-status\", \"--no-renames\", \"--diff-filter=d\", \"-z\",",
+      "test": "tests/test_h_mad_branch_evidence.py::test_deleted_script_runs_the_tests_that_name_it",
+      "symbol": "collect"
+    },
+    {
+      "name": "deleted-guard-not-refused",
+      "_mechanism": "M1: deleting a test or a mutation spec reads COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if guards:\n        incomplete.append(\"deleted-guard\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_deleted_test_or_spec_is_INCOMPLETE",
+      "symbol": "collect"
+    },
+    {
+      "name": "conftest-change-selects-nothing",
+      "_mechanism": "M2: a conftest that breaks every test under it reads COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        under = [d for d in conftest_dirs if not d or rel.startswith(d + \"/\")]\n",
+      "replace": "        under = []\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_conftest_change_runs_every_test_under_it",
+      "symbol": "collect"
+    },
+    {
+      "name": "stop-kills-before-restore",
+      "_mechanism": "M3: SIGKILL first leaves the harness's mutant in the tree.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    _signal_group(proc.pid, signal.SIGTERM)\n",
+      "replace": "    _signal_group(proc.pid, signal.SIGKILL)\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_harness_timeout_restores_the_tree_and_kills_the_group",
+      "symbol": "_stop"
+    },
+    {
+      "name": "orphan-survives-the-stop",
+      "_mechanism": "M3: only the child is killed; its orphaned pytest keeps running in the tree.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    _signal_group(proc.pid, signal.SIGKILL)\n    proc.communicate()\n",
+      "replace": "    proc.kill()\n    proc.communicate(timeout=5)\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_harness_timeout_restores_the_tree_and_kills_the_group",
+      "symbol": "_stop"
+    },
+    {
+      "name": "stop-waits-on-the-orphans-pipe",
+      "_mechanism": "M3: a finished restore sits out the whole grace because an orphan holds the pipe.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        proc.wait(timeout=STOP_GRACE)\n",
+      "replace": "        proc.communicate(timeout=STOP_GRACE)\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_harness_timeout_restores_the_tree_and_kills_the_group",
+      "symbol": "_stop"
+    },
+    {
+      "name": "mutation-timeout-not-unreadable",
+      "_mechanism": "M3: a harness that timed out does not stop COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            unreadable.append(\"mutation-timeout\")\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_harness_timeout_restores_the_tree_and_kills_the_group",
+      "symbol": "_execute"
+    },
+    {
+      "name": "interrupt-does-not-stop-the-child",
+      "_mechanism": "M3: Ctrl-C leaves the harness running with its mutant on disk.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    except BaseException:  # TimeoutExpired, KeyboardInterrupt\n",
+      "replace": "    except subprocess.TimeoutExpired:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_interrupt_restores_the_tree_and_reports_UNREADABLE",
+      "symbol": "_child"
+    },
+    {
+      "name": "sigterm-kills-the-collector-silently",
+      "_mechanism": "M3: SIGTERM ends the collector with no verdict and the child unstopped.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    signal.signal(signal.SIGTERM, _interrupt)\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_interrupt_restores_the_tree_and_reports_UNREADABLE",
+      "symbol": "main"
+    },
+    {
+      "name": "tests-only-inside-a-tests-directory",
+      "_mechanism": "M4: handoff/scripts/test_*.py is classed prod and never run.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    return name.startswith(\"test_\") and name.endswith(\".py\")\n",
+      "replace": "    return name.startswith(\"test_\") and name.endswith(\".py\") and _in_tests(rel)\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_test_files_outside_a_tests_directory_are_tests",
+      "symbol": "_is_test"
+    },
+    {
+      "name": "waiver-skips-existing-specs",
+      "_mechanism": "S1: --no-mutation skips the specs that do exist.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "specs, sorted(run_specs), timeout,",
+      "replace": "specs, [] if no_mutation else sorted(run_specs), timeout,",
+      "test": "tests/test_h_mad_branch_evidence.py::test_no_mutation_waives_only_the_missing_spec",
+      "symbol": "collect"
+    },
+    {
+      "name": "document-spec-runs-its-whole-pass",
+      "_mechanism": "S2: a spec over a changed document runs every mutation instead of an anchor check.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        if targets & code:\n",
+      "replace": "        if targets & (code | prose):\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_spec_over_a_changed_document_is_anchor_checked_not_run",
+      "symbol": "collect"
+    },
+    {
+      "name": "suite-busy-not-named",
+      "_mechanism": "S3: SUITE: BUSY reads as an anonymous pytest-rc75 crash.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if returncode == SUITE_BUSY_EXIT and any(ln.startswith(\"SUITE: BUSY \") for ln in lines):\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_suite_busy_and_tree_moved_are_named",
+      "symbol": "_suite_signal"
+    },
+    {
+      "name": "suite-tree-moved-ignored",
+      "_mechanism": "S3: the suite lock's SUITE: TREE_MOVED is ignored and the run reads PASS.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if any(_TREE_MOVED_RE.fullmatch(ln.strip()) for ln in lines):\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_suite_busy_and_tree_moved_are_named",
+      "symbol": "_suite_signal"
+    },
+    {
+      "name": "ghost-directory-measures-the-enclosing-checkout",
+      "_mechanism": "S4: a leftover directory resolves to the parent checkout.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        if top.resolve() != Path(target).resolve():\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_directory_that_is_not_a_worktree_toplevel_is_UNREADABLE",
+      "symbol": "_resolve_worktree"
+    },
+    {
+      "name": "extensionless-script-is-a-document",
+      "_mechanism": "S5: a #! hook is held to doc consumers, not to test + spec.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if rel.endswith((\".py\", \".sh\")) or _content(top, rel, merge_base, deleted).startswith(b\"#!\"):\n",
+      "replace": "    if rel.endswith((\".py\", \".sh\")):\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_extensionless_script_is_code",
+      "symbol": "_classify"
+    },
+    {
+      "name": "all-skipped-reads-as-pass",
+      "_mechanism": "S6: a run that passed nothing (all skipped) reads PASS.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    elif proc.returncode == 0 and counts[\"passed\"] and not counts[\"failed\"] + counts[\"errors\"]:\n",
+      "replace": "    elif proc.returncode == 0 and not counts[\"failed\"] + counts[\"errors\"]:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_all_skipped_is_UNREADABLE_never_PASS",
+      "symbol": "_pytest"
+    },
+    {
+      "name": "pytest-timeout-reads-as-pass",
+      "_mechanism": "S6: a pytest that hung reads as a pass.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        return \"UNREADABLE reason=pytest-timeout\", \"u:pytest-timeout\", []\n",
+      "replace": "        return \"PASS files=0 passed=0\", None, []\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_pytest_timeout_is_UNREADABLE",
+      "symbol": "_pytest"
+    },
+    {
+      "name": "anchors-without-token-ignored",
+      "_mechanism": "S6: --check-anchors printing nothing reads as clean.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            unreadable.append(\"anchors-no-token\")\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_missing_anchors_token_is_UNREADABLE",
+      "symbol": "_execute"
+    },
+    {
+      "name": "consumer-unreadable-ignored",
+      "_mechanism": "S6/S7: CONSUMERS-RUN: UNREADABLE (unknown-docs, timeout) reads as clean.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "                unreadable.append(\"consumers-\" + (found.group(1) if found else \"unreadable\"))\n",
+      "replace": "                pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_consumer_run_token_is_forwarded_and_never_clean",
+      "symbol": "_execute"
+    },
+    {
+      "name": "consumer-busy-not-named",
+      "_mechanism": "S3/S7: a consumers run refused by the suite lock reads as an anonymous incomplete.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            elif suite := _suite_signal(",
+      "replace": "            elif suite := None and _suite_signal(",
+      "test": "tests/test_h_mad_branch_evidence.py::test_consumer_run_token_is_forwarded_and_never_clean",
+      "symbol": "_execute"
+    },
+    {
+      "name": "consumer-without-token-ignored",
+      "_mechanism": "S6/S7: a consumers run with no token reads as clean.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            out.append(\"CONSUMERS-RUN: UNREADABLE reason=no-token\")\n            unreadable.append(\"consumers-no-token\")\n",
+      "replace": "            out.append(\"CONSUMERS-RUN: UNREADABLE reason=no-token\")\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_consumer_run_token_is_forwarded_and_never_clean",
+      "symbol": "_execute"
+    },
+    {
+      "name": "stem-matched-as-a-substring",
+      "_mechanism": "N2: `tool` selects test_toolkit.py.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    return re.search(rf\"(?<![\\w-]){re.escape(token)}(?!\\w)\", text) is not None\n",
+      "replace": "    return token in text\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_changed_tests_are_the_pytest_set",
+      "symbol": "_names"
+    },
+    {
+      "name": "tree-moved-erases-other-reasons",
+      "_mechanism": "N3: tree-moved replaces the child's own unreadable reason.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        unreadable.insert(0, \"tree-moved\")\n",
+      "replace": "        unreadable[:] = [\"tree-moved\"]\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_tree_moved_during_collection_is_UNREADABLE",
+      "symbol": "collect"
+    },
+    {
+      "name": "busy-matched-as-a-substring",
+      "_mechanism": "N1: a real FAIL whose assertion quotes SUITE: BUSY reads wait-and-retry.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if returncode == SUITE_BUSY_EXIT and any(ln.startswith(\"SUITE: BUSY \") for ln in lines):\n",
+      "replace": "    if \"SUITE: BUSY\" in text:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_real_failure_quoting_the_suite_tokens_reads_FAIL",
+      "symbol": "_suite_signal"
+    },
+    {
+      "name": "busy-without-the-busy-exit",
+      "_mechanism": "N1: a captured line starting SUITE: BUSY, with no exit 75, reads busy.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if returncode == SUITE_BUSY_EXIT and any(ln.startswith(\"SUITE: BUSY \") for ln in lines):\n",
+      "replace": "    if any(ln.startswith(\"SUITE: BUSY \") for ln in lines):\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_real_failure_quoting_the_suite_tokens_reads_FAIL",
+      "symbol": "_suite_signal"
+    },
+    {
+      "name": "tree-moved-matched-as-a-substring",
+      "_mechanism": "N1: a quoted SUITE: TREE_MOVED turns a real FAIL into UNREADABLE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "_TREE_MOVED_RE.fullmatch(ln.strip())",
+      "replace": "\"SUITE: TREE_MOVED\" in ln",
+      "test": "tests/test_h_mad_branch_evidence.py::test_real_failure_quoting_the_suite_tokens_reads_FAIL",
+      "symbol": "_suite_signal"
+    },
+    {
+      "name": "conftest-outside-tests-is-a-script",
+      "_mechanism": "N2: the repo-root conftest is classed prod: needs a test and a spec, selects nothing.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if name == \"conftest.py\":\n        return \"support\"\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_repo_root_conftest_runs_every_test_in_testpaths",
+      "symbol": "_classify"
+    },
+    {
+      "name": "root-conftest-scope-is-its-own-dir",
+      "_mechanism": "N2: a root conftest's scope '.' matches no tracked path, so nothing runs.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "_testpaths(top) if parent == \".\" else [parent]",
+      "replace": "[parent]",
+      "test": "tests/test_h_mad_branch_evidence.py::test_repo_root_conftest_runs_every_test_in_testpaths",
+      "symbol": "collect"
+    },
+    {
+      "name": "testpaths-ignored",
+      "_mechanism": "N2: a root conftest selects tests outside the configured testpaths.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    return [p.rstrip(\"/\") for p in paths] or [\"\"]\n",
+      "replace": "    return [\"\"]\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_repo_root_conftest_runs_every_test_in_testpaths",
+      "symbol": "_testpaths"
+    }
+  ]
+}
