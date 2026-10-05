@@ -1,0 +1,199 @@
+{
+  "_why": "Skill-candidates row '`h_mad_doc_consumers.py --run`': the RUN: line was copied into pytest by hand in every session that used it, and once it was skipped a 15-minute suite surfaced 25 failures a consumer run reproduces in seconds. `--run` executes that line's own file list with the interpreter running the script and prints a CONSUMERS-RUN token. These rows prove the tests bite if the run drifts from the RUN line, falls back to a bare `python3`, reads a failure, a missing pytest, a missing summary, a git failure or a typo'd document as a pass, or leaks into the default output the pre-commit hook parses. Review of abb20c7c added rows for out-of-repo document paths, skipped-only and non-zero-exit runs, streaming, timeout, interrupt, the RUN-WITH interpreter line and non-UTF-8 child output.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_doc_consumers.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "run-drops-a-named-file",
+      "_mechanism": "A second derivation: the run executes fewer files than the RUN line names, so a consumer is printed and never run.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "        proc = subprocess.Popen([sys.executable, \"-m\", \"pytest\", \"-q\", *files],\n",
+      "replace": "        proc = subprocess.Popen([sys.executable, \"-m\", \"pytest\", \"-q\", *files[:1]],\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_executes_union_once_and_reports_PASS",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "run-collects-the-whole-repo",
+      "_mechanism": "The run ignores the RUN line and lets pytest collect everything, including tests that read no document.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "        proc = subprocess.Popen([sys.executable, \"-m\", \"pytest\", \"-q\", *files],\n",
+      "replace": "        proc = subprocess.Popen([sys.executable, \"-m\", \"pytest\", \"-q\"],\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_executes_union_once_and_reports_PASS",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "run-uses-bare-python3",
+      "_mechanism": "A bare `python3` from PATH runs the consumers; on a machine where it is an interpreter without pytest the run measures nothing.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "        proc = subprocess.Popen([sys.executable, \"-m\", \"pytest\", \"-q\", *files],\n",
+      "replace": "        proc = subprocess.Popen([\"python3\", \"-m\", \"pytest\", \"-q\", *files],\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_uses_sys_executable_not_bare_python3",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "failure-reads-as-pass",
+      "_mechanism": "A red consumer is no longer reported as FAIL with its ids: the exact skipped-check the row records.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    if failed:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_failure_exits_1_and_names_ids",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "failed-ids-are-not-named",
+      "_mechanism": "FAIL with no ids sends the operator back to a hand-run to find what broke.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "                print(f\"  {line.split(' - ', 1)[0]}\")\n",
+      "replace": "                pass\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_failure_exits_1_and_names_ids",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "pytest-missing-is-not-checked",
+      "_mechanism": "An interpreter without pytest is not named as such; the refusal degrades to a generic one the operator must diagnose.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    if importlib.util.find_spec(\"pytest\") is None:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_without_pytest_is_UNREADABLE_not_PASS",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "no-summary-reads-as-pass",
+      "_mechanism": "Fail-open: a run that died before pytest's summary, exit 0, is scored as passing.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    if summary is None:\n",
+      "replace": "    summary = summary or \"1 passed\"\n    if summary is None:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_without_a_summary_line_is_UNREADABLE_even_on_exit_0",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "no-consumers-is-not-NONE",
+      "_mechanism": "A document nobody reads prints PASS, a token that claims tests ran.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "            print(\"CONSUMERS-RUN: NONE\")\n",
+      "replace": "            print(\"CONSUMERS-RUN: PASS files=0 passed=0\")\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_with_no_consumers_is_NONE_exit0",
+      "symbol": "main"
+    },
+    {
+      "name": "git-failure-under-run-exits-0",
+      "_mechanism": "Fail-open: outside git `--run` exits 0, so a caller reading `$?` sees success though nothing ran.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "            print(\"CONSUMERS-RUN: UNREADABLE reason=unknown-docs\")\n            return 2\n",
+      "replace": "            print(\"CONSUMERS-RUN: UNREADABLE reason=unknown-docs\")\n            return 0\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_outside_git_is_UNREADABLE_not_PASS",
+      "symbol": "main"
+    },
+    {
+      "name": "missing-document-reads-as-NONE",
+      "_mechanism": "A typo'd or absent document reads as 'nothing reads it' and exits 0.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    if args.run and (not docs or missing):\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_with_no_or_missing_documents_is_UNREADABLE",
+      "symbol": "main"
+    },
+    {
+      "name": "default-mode-runs-too",
+      "_mechanism": "The flag leaks into the no-flag path the pre-commit hook parses: its output changes and the hook would run a suite on every commit.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    if args.run:\n        if not files:\n",
+      "replace": "    if True:\n        if not files:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_default_output_unchanged_without_flag",
+      "symbol": "main"
+    },
+    {
+      "name": "absolute-document-path-accepted",
+      "_mechanism": "Review M1: another checkout's copy of the document is accepted while the consumers run against this repo's, so an unedited copy PASSes.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    missing = [d for d in docs if Path(d).is_absolute()\n",
+      "replace": "    missing = [d for d in docs if False\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_refuses_a_document_path_outside_the_repo",
+      "symbol": "main"
+    },
+    {
+      "name": "dotdot-document-path-accepted",
+      "_mechanism": "Review M1: a relative path that leaves the repo names another copy of the document.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "               or os.path.normpath(d).split(os.sep)[0] == \"..\"\n",
+      "replace": "               or False\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_refuses_a_document_path_outside_the_repo",
+      "symbol": "main"
+    },
+    {
+      "name": "skipped-only-reads-as-pass",
+      "_mechanism": "Review S1: a consumer set that is all skipped measured nothing and prints PASS passed=0.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    if rc != 0 or not passed:\n",
+      "replace": "    if rc != 0:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_with_only_skipped_consumers_is_UNREADABLE_not_PASS",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "nonzero-exit-ignored",
+      "_mechanism": "Review S1: pytest exits non-zero with a passing summary and the run prints PASS.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    if rc != 0 or not passed:\n",
+      "replace": "    if not passed:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_nonzero_exit_with_passing_summary_is_UNREADABLE",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "progress-not-streamed",
+      "_mechanism": "Review S3: a multi-minute run is silent until it ends.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "            sys.stderr.write(line)  # progress as it happens; stdout stays the verdict\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_streams_pytest_output_to_stderr",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "timeout-not-named",
+      "_mechanism": "Review S3: a hung consumer killed by the timeout is reported as a generic missing summary, not as the timeout it was.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    if expired:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_times_out_as_UNREADABLE",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "interrupt-is-a-traceback",
+      "_mechanism": "Review S3: Ctrl-C produces a traceback and no token, and leaves the pytest child running.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    except KeyboardInterrupt:\n",
+      "replace": "    except ZeroDivisionError:\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_interrupted_is_UNREADABLE_not_a_traceback",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "interpreter-not-named",
+      "_mechanism": "Review S4: the RUN line says python3 but nothing records which interpreter produced the verdict.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    print(f\"RUN-WITH: {sys.executable} (Python {platform.python_version()})\", flush=True)\n",
+      "replace": "    pass\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_names_the_interpreter_it_executes",
+      "symbol": "run_consumers"
+    },
+    {
+      "name": "non-utf8-output-crashes",
+      "_mechanism": "Review nit: a non-UTF-8 byte from the child raises UnicodeDecodeError: a traceback and no token.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "                                text=True, errors=\"replace\")\n",
+      "replace": "                                text=True)\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_run_survives_non_utf8_child_output",
+      "symbol": "run_consumers"
+    }
+  ]
+}
