@@ -181,7 +181,16 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   grep -n -E 'git (grep|ls-files|diff --name-only)|pytest --collect-only|find ' <the four documents>
   ```
 - **Run every published `expect 0` screen at the sha before certifying a freeze.** A trip-wire the
-  documents publish is the cheapest possible check and the one that was skipped.
+  documents publish is the cheapest possible check and the one that was skipped. Run them with
+  the executor rather than by hand — it evaluates every comment-tagged screen in a throwaway
+  worktree AT the sha and refuses an unreadable reading instead of passing it:
+  ```bash
+  python3 ~/.claude/skills/h-mad/scripts/h_mad_expect_screens.py <the four documents> \
+    --at <candidate sha> --project-root <project root>
+  ```
+  Only `EXPECT: PASS` certifies. `EXPECT: NONE` (exit 3) means the documents tag no screen, not
+  that none moved; an expectation written in prose beside a command (`# the freeze: prints 8`) is
+  outside its coverage and is still run by hand.
 - **A tooling fix landed mid-arc is a measurement event for every document that measures the
   tooling.** Merge tooling only after the round's last gating pass is collected — merging while a
   round is open silently invalidates every stamped census, and the documents are not re-audited
