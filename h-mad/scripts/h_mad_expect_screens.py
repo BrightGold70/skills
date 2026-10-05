@@ -63,15 +63,16 @@ list, for a background `&` job, or for an `if`/`while`/`until` condition or a
 block with an `&&`, an `||` or a `&` at or before a screen -- at top level, in a
 `{ }` group, a `( )` subshell, a function body, or a `$(…)`/backtick -- makes
 that screen `UNREADABLE:unsupported_construct=<&&|"||"|&>@<doc>:<line>`, never
-PASS. Not refused, because each is recorded or is no list:
-  - an `||` whose right side cannot hide an undeclared failure: `|| [ $? = 1 ]`
-    (passes only status 1, the prescribed remedy below); `|| exit [N]` and
-    `|| return [N]` (they end with a non-zero status the trap or the marker
-    check sees); and `|| true` / `|| :`, which mask EVERY status and are
-    acceptable only where every non-zero status is intended;
-  - an `&&`/`||` inside an `if`/`elif`/`while`/`until` condition -- conditions
-    are left as written, as a residual: a condition is meant to branch on
-    failure, so `if git diff nosuchref …; then …; fi` is not seen;
+PASS. There are no guard or condition exceptions: `|| true`, `|| :`,
+`|| exit 0`, `|| return 0` and a list inside an `if`/`while`/`until` condition are
+all refused, because each can end with status 0 over a failure (review round 6:
+`go() { … nosuchref … || return 0; }`, `( … || exit 0 )` and `X=$(… || exit 0)`
+each read PASS when they were allowed). Not refused, because each is recorded or
+is no list:
+  - exactly `|| [ $? = 1 ]`, the ONE declared form: it passes status 1 (grep's
+    no-match) and turns every other status into a failing final member that
+    the trap records. Look-alikes (`|| [ $? = 0 ]`, `|| [ 1 ]`, `|| :`) are
+    refused;
   - an `&&` inside `[[ ]]` or `(( ))`, and the `&` in `2>&1` and `&>`;
   - the whole value of a one-line `NAME=$(…)` whose body is ONE `&&` chain, with
     no `;`, `||`, `&` or newline: only then is the substitution's status the
@@ -96,13 +97,13 @@ document's author:
     `… | { grep PAT || [ $? = 1 ]; }`. Under pipefail an upstream error still
     surfaces: with `BASE=nosuchref`,
     `$(git diff --name-only "$BASE" HEAD | { grep '\\.py$' || [ $? = 1 ]; })`
-    reads `failed_command=…:128`. Do NOT write `|| true` there: it masks every
-    status, git's 128 included, and certifies a freeze against a mistyped base;
+    reads `failed_command=…:128`. `|| true` is refused: it masks every status,
+    git's 128 included, and would certify a freeze against a mistyped base;
   - `xargs grep`: BSD xargs exits 1 when any batch's grep matches nothing (on
     HemaSuite, `git ls-files -z | xargs -0 grep -n … | grep -v …` has
     PIPESTATUS `0 1 0`): the same `|| [ $? = 1 ]` group around the xargs;
-  - `yes | head -1` (SIGPIPE, 141): `|| true` only where every status of that
-    statement is intended;
+  - `yes | head -1` (SIGPIPE, 141): restructure so no producer outlives its
+    reader before a screen (there is no declared form for it);
   - an untracked tool, missing from the throwaway worktree (a `.venv/bin/python`
     exits 127, because `.venv` is not in the commit): call a tracked tool, an
     absolute path, or a PATH lookup (`python3`) instead.
@@ -153,13 +154,9 @@ from h_mad_doc_block_exec import (  # noqa: E402
 SCREEN = re.compile(r"#[ \t]*expect[ \t]+(-?\d+)[ \t]*(?:$|[,;(]|--|—)")
 RAW_SCREEN = re.compile(r"(?:^|[ \t;&|()<>])" + SCREEN.pattern)
 ASSIGN_SUBST = re.compile(r"[ \t]*[A-Za-z_][A-Za-z0-9_]*=\$\((?!\()")
-# An `||` whose right side is one of these cannot hide a failure the author did not declare:
-DECLARED_OR = (
-    re.compile(r"[ \t]*(?:true|:)[ \t]*(?:$|[;)}#])"),  # M:OR-TRUE: masks EVERY status, by intent
-    re.compile(r"[ \t]*\[ \$\? (?:=|-eq) 1 \][ \t]*(?:$|[;)}#])"),  # M:OR-STATUS1: only status 1
-    re.compile(r"[ \t]*(?:exit|return)(?:[ \t]+\d+)?[ \t]*(?:$|[;)}#])"),  # M:OR-EXIT: still fails
-)
-KEYWORD = re.compile(r"(if|elif|while|until|then|do)(?=[ \t;]|$)")
+# The ONE `||` that is not refused: exactly `|| [ $? = 1 ]`, which passes status 1 (grep's
+# no-match) and turns every other status into a failing final member the trap records.
+STATUS1_OR = re.compile(r"[ \t]*\[ \$\? = 1 \][ \t]*(?:$|[;)}#])")  # M:OR-STATUS1
 HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
 INTEGER = re.compile(r"-?\d+")
 GIT_REDIRECTS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
@@ -206,17 +203,10 @@ class Line:
     lists: list = field(default_factory=list)  # untracked `&&` / `||` / `&` on this line
 
 
-def _at_command(text: str, k: int) -> bool:
-    """Whether position k starts a command word (so `if`/`then` there is a keyword)."""
-    before = text[:k].rstrip()
-    return (not before or before[-1] in ";&|({"
-            or re.search(r"(?:^|[\s;])(?:then|do|else|elif|if|while|until|!)$", before) is not None)
-
-
 def lex(texts: list[str]) -> list[Line]:
     """Quote, comment, here-document and list structure of one block, line by line."""
     lines = [Line(t) for t in texts]
-    quote, pending, current, in_cond = None, [], None, False
+    quote, pending, current = None, [], None
     for i, info in enumerate(lines):
         text = info.text
         if current is not None:
@@ -269,19 +259,12 @@ def lex(texts: list[str]) -> list[Line]:
                 k += 1
             elif arith or cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`
                 pass
-            elif (ch.isalpha() and (k == 0 or text[k - 1] in " \t;&|({")
-                  and KEYWORD.match(text, k) and _at_command(text, k)):
-                keyword = KEYWORD.match(text, k)
-                in_cond = keyword.group(1) in ("if", "elif", "while", "until")  # M:IN-CONDITION
-                k = keyword.end()
-                continue
             elif text.startswith("&&", k):
-                if not in_cond:  # conditions are left as written
-                    found.append(("&&", k))  # M:REFUSE-AND
+                found.append(("&&", k))  # M:REFUSE-AND
                 k += 1
             elif text.startswith("||", k):
                 ors.append(k)
-                if not in_cond and not any(r.match(text, k + 2) for r in DECLARED_OR):
+                if not STATUS1_OR.match(text, k + 2):
                     found.append(("||", k))  # M:REFUSE-OR
                 k += 1
             elif ch == ";" and not text.startswith(";;", k):

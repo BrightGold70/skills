@@ -424,44 +424,68 @@
       "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_then_more_inside_an_assignment_substitution_is_refused"
     },
     {
-      "name": "or-true-not-declared",
-      "_mechanism": "`|| true` is refused like any other `||`; a whole statement whose every status is intended cannot be written.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "    re.compile(r\"[ \\t]*(?:true|:)[ \\t]*(?:$|[;)}#])\"),  # M:OR-TRUE: masks EVERY status, by intent",
-      "replace": "    re.compile(r\"(?!)\"),  # M:OR-TRUE: masks EVERY status, by intent",
-      "test": "tests/test_h_mad_expect_screens.py::test_an_explicit_or_true_states_that_no_match_is_intended"
-    },
-    {
       "name": "status-one-remedy-refused",
       "_mechanism": "Review R5 Must-B (x9): the prescribed `|| [ $? = 1 ]` is refused, so the status-1-only remedy cannot PASS.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "    re.compile(r\"[ \\t]*\\[ \\$\\? (?:=|-eq) 1 \\][ \\t]*(?:$|[;)}#])\"),  # M:OR-STATUS1: only status 1",
-      "replace": "    re.compile(r\"(?!)\"),  # M:OR-STATUS1: only status 1",
+      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "replace": "STATUS1_OR = re.compile(r\"(?!)\")  # M:OR-STATUS1",
       "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_only_remedy_passes_a_clean_no_match"
     },
     {
-      "name": "exit-return-guard-refused",
-      "_mechanism": "Review R5 Should-A (o3, o4): `|| exit 1` / `|| return 1` are refused though they cannot hide a failure.",
+      "name": "status-one-check-loosened",
+      "_mechanism": "Review R6: any `|| [ … ]` is accepted, so `|| [ $? = 0 ]` and `|| [ 1 ]` pass every status.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "    re.compile(r\"[ \\t]*(?:exit|return)(?:[ \\t]+\\d+)?[ \\t]*(?:$|[;)}#])\"),  # M:OR-EXIT: still fails",
-      "replace": "    re.compile(r\"(?!)\"),  # M:OR-EXIT: still fails",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_guard_that_exits_or_returns_is_not_refused"
+      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*\\[[^]]*\\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_check_is_the_only_declared_form"
     },
     {
-      "name": "condition-list-refused",
-      "_mechanism": "Review R5 Should-A (o2): an `&&` inside an `if` condition is refused, against the stated residual.",
+      "name": "or-true-accepted",
+      "_mechanism": "Review R6: `|| true` / `|| :` are accepted again and mask git's 128.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                in_cond = keyword.group(1) in (\"if\", \"elif\", \"while\", \"until\")  # M:IN-CONDITION",
-      "replace": "                in_cond = False  # M:IN-CONDITION",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_list_inside_a_condition_is_not_refused"
+      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?:true|:|\\[ \\$\\? = 1 \\])[ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "test": "tests/test_h_mad_expect_screens.py::test_or_true_and_or_colon_are_refused"
     },
     {
-      "name": "condition-never-ends",
-      "_mechanism": "The condition exemption never ends at `then`/`do`, so a list in the body is exempt too.",
+      "name": "exit-zero-accepted-in-substitution",
+      "_mechanism": "Review R6 (R3): `X=$(… || exit 0)` is accepted; the substitution exits 0 over the failure.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                in_cond = keyword.group(1) in (\"if\", \"elif\", \"while\", \"until\")  # M:IN-CONDITION",
-      "replace": "                in_cond = in_cond or keyword.group(1) in (\"if\", \"elif\", \"while\", \"until\")  # M:IN-CONDITION",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_condition_ends_at_then_so_a_later_list_is_refused"
+      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?:exit[ \\t]+0|\\[ \\$\\? = 1 \\])[ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_exit_zero_guard_in_a_substitution_is_refused"
+    },
+    {
+      "name": "exit-zero-accepted-in-subshell",
+      "_mechanism": "Review R6 (R2): `( … || exit 0 )` is accepted; the subshell exits 0 over the failure.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?:exit(?:[ \\t]+\\d+)?|\\[ \\$\\? = 1 \\])[ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_exit_zero_guard_in_a_subshell_is_refused"
+    },
+    {
+      "name": "return-zero-accepted",
+      "_mechanism": "Review R6 (R1): `|| return 0` in a function is accepted; the function returns 0 over the failure.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?:return(?:[ \\t]+\\d+)?|\\[ \\$\\? = 1 \\])[ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_return_zero_guard_in_a_function_is_refused"
+    },
+    {
+      "name": "list-in-condition-exempt",
+      "_mechanism": "Review R6 reverts R5 (o2): an `&&` on an `if`/`while` line is exempt again.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
+      "replace": "                found.append((\"&&\", k)) if not text.lstrip().startswith((\"if \", \"while \", \"until \")) else None  # M:REFUSE-AND",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_list_inside_a_condition_is_refused"
+    },
+    {
+      "name": "list-after-a-condition-exempt",
+      "_mechanism": "Review R6 (C2): the `&&` after an `if (true) then …; fi` goes unrefused, as it did while the condition state leaked.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
+      "replace": "                found.append((\"&&\", k)) if i == 0 else None  # M:REFUSE-AND",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_list_after_a_subshell_condition_if_is_refused"
     },
     {
       "name": "stdin-inherited",

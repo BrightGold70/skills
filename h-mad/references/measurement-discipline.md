@@ -209,21 +209,20 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   `failed_command=…:128`; with a good base and no match it reads 0 and PASSES. The same group
   goes around an `xargs grep`. **Do not write `|| true` there.** It masks EVERY status, git's 128
   included, so a mistyped or deleted base certifies the freeze, which is the #49w shape again.
-  `|| true` is acceptable only on a whole statement whose every non-zero status is intended (a
-  `yes | head -1`). For an untracked tool, call a tracked tool, an absolute path, or a PATH lookup
+  The executor refuses `|| true`. A `yes | head -1` (SIGPIPE) before a screen has no declared form:
+  restructure it. For an untracked tool, call a tracked tool, an absolute path, or a PATH lookup
   (`python3`) instead. Inside the screen's own pipeline, the measured `grep -c` may exit 1, because that is
   its reading of 0. Every member is judged separately, and any status ≥ 2 is UNREADABLE.
 - **No `&&`, `||` or `&` at or before a screen.** bash runs no ERR trap for a non-final member of an
   `&&`/`||` list, or for a background job. So `git diff nosuchref > f && echo done` and
   `git diff nosuchref > f &` both hide git's 128, and the executor refuses them:
   `UNREADABLE:unsupported_construct=<&&|"||"|&>@<doc>:<line>`. This also covers lists inside a group,
-  a subshell, a function body or a substitution. Not refused, because each is recorded or is not a
-  list:
-  - `|| [ $? = 1 ]`, the status-1-only remedy above;
-  - `|| exit [N]` and `|| return [N]`, which end with a status that is still seen;
-  - `|| true` and `|| :`, which mask every status;
-  - `&&`/`||` inside an `if`/`while`/`until` condition (conditions are left as written, and a
-    failing condition is not seen);
+  a subshell, a function body, a substitution and an `if`/`while`/`until` condition. There are no
+  guard or condition exceptions. `|| true`, `|| :`, `|| exit 0` and `|| return 0` can each end with
+  status 0 over a failure; review round 6 measured `go() { … || return 0; }`, `( … || exit 0 )` and
+  `X=$(… || exit 0)` reading PASS while they were allowed. The only forms not refused are:
+  - exactly `|| [ $? = 1 ]`, the status-1-only remedy above. Look-alikes such as `|| [ $? = 0 ]`
+    and `|| [ 1 ]` are refused;
   - `&&` inside `[[ ]]` or `(( ))`, and the `&` in redirections;
   - the whole value of a one-line `NAME=$(…)` whose body is one `&&` chain, with no `;`, `||`, `&`
     or newline. Only then does the assignment carry the failing member's status;

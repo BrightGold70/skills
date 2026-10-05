@@ -712,7 +712,7 @@ def test_a_heredoc_marker_inside_quotes_does_not_hide_later_screens(tmp_path):
     """R2-M1(a): `'<<EOF'` in a quoted grep pattern turned every later line into a heredoc body."""
     root, _, new = _repo(tmp_path)
     doc = _doc(tmp_path, PASSING_BLOCK + f"""{FENCE}bash
-N=$(grep -c '<<EOF' a.txt || true)
+N=$(grep -c '<<EOF' a.txt || [ $? = 1 ])
 grep -c BAD a.txt   # expect 0
 {FENCE}
 """)
@@ -813,18 +813,29 @@ echo 0   # expect 0
         assert result.returncode == 1
 
 
-def test_an_explicit_or_true_states_that_no_match_is_intended(tmp_path):
-    """R3's remedy: the author writes `|| true` (or `|| :`) and the published screen says so."""
+def test_or_true_and_or_colon_are_refused(tmp_path):
+    """R6: `|| true` / `|| :` mask EVERY status (git's 128 included) -- refused, in and out of `$( )`."""
     root, old, _ = _repo(tmp_path)
-    doc = _doc(tmp_path, f"""{FENCE}bash
-MOVED=$(git ls-files | grep '\\.py$' || true)
-N=$(grep -c NOPE a.txt || :)
-LC_ALL=C grep -c NOPE a.txt || true
-echo 0   # expect 0
-{FENCE}
-""")
-    result = run(tmp_path, [doc], root, old)
-    assert _screens(result.stdout) == [f"screen: {doc}:5 expect=0 got=0 PASS"], result.stdout
+    for n, line in enumerate(["MOVED=$(git ls-files | grep '\\.py$' || true)",
+                              "N=$(grep -c NOPE a.txt || :)",
+                              "LC_ALL=C grep -c NOPE a.txt || true"]):
+        doc = _doc(tmp_path, f"{FENCE}bash\n{line}\necho 0   # expect 0\n{FENCE}\n", f"t{n}.md")
+        result = run(tmp_path, [doc], root, old)
+        assert _screens(result.stdout) == [
+            f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+            (line, result.stdout)
+
+
+def test_the_status_one_check_is_the_only_declared_form(tmp_path):
+    """R6: only `|| [ $? = 1 ]` exactly; look-alikes that can pass other statuses are refused."""
+    root, old, _ = _repo(tmp_path)
+    for n, tail in enumerate(["[ $? = 0 ]", ":", "[ 1 ]", "[ $? -ge 1 ]"]):
+        doc = _doc(tmp_path, f"{FENCE}bash\nN=$(git ls-files | {{ grep NOPE || {tail}; }})\n"
+                             f"echo 0   # expect 0\n{FENCE}\n", f"s{n}.md")
+        result = run(tmp_path, [doc], root, old)
+        assert _screens(result.stdout) == [
+            f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+            (tail, result.stdout)
 
 
 def test_a_document_whose_only_screen_is_unparsed_is_fail_not_none(tmp_path):
@@ -933,11 +944,12 @@ echo 0   # expect 0
 
 
 def test_an_assignment_whose_substitution_exits_non_zero_is_unreadable(tmp_path):
-    """R3: only the assignment's own status shows this failure -- `|| exit 1` fires no ERR
-    inside the substitution -- so it must be recorded whatever the statement's text."""
+    """R3: only the assignment's own status shows this failure -- `exit` fires no ERR inside
+    the substitution -- so it must be recorded whatever the statement's text. (R6: `|| exit 1`
+    is now refused outright, so the pin uses a bare `exit`.)"""
     root, _, new = _repo(tmp_path)
     doc = _doc(tmp_path, f"""{FENCE}bash
-B=$(git rev-parse --verify --quiet nosuchref || exit 1)
+B=$(exit 1)
 git log --oneline $B..HEAD | wc -l | tr -d ' '   # expect 0
 {FENCE}
 """)
@@ -1137,26 +1149,24 @@ def test_the_status_one_only_remedy_passes_a_clean_no_match(tmp_path):
     assert _screens(result.stdout) == [f"screen: {doc}:4 expect=0 got=0 PASS"], result.stdout
 
 
-def test_a_guard_that_exits_or_returns_is_not_refused(tmp_path):
-    """R5 Should-A (o3, o4): `|| exit [N]` / `|| return [N]` end with a non-zero status the trap sees."""
+def test_a_guard_that_exits_or_returns_is_refused(tmp_path):
+    """R6 reverts R5 (o3, o4): `|| exit 0` / `|| return 0` mask the failure, so no guard is exempt."""
     root, old, _ = _repo(tmp_path)
-    doc, result = _one(tmp_path, root, old,
-                       "cd . || exit 1\n"
-                       "go() { cd . || return 1; }\n"
-                       "go || exit\n"
-                       "echo 0   # expect 0")
-    assert _screens(result.stdout) == [f"screen: {doc}:5 expect=0 got=0 PASS"], result.stdout
+    for n, line in enumerate(["cd . || exit 1", "go() { cd . || return 1; }"]):
+        doc, result = _one(tmp_path, root, old, f"{line}\necho 0   # expect 0", f"g{n}.md")
+        assert _screens(result.stdout) == [
+            f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+            (line, result.stdout)
 
 
-def test_a_list_inside_a_condition_is_not_refused(tmp_path):
-    """R5 Should-A (o2): conditions are left as written, `&&`/`||` in them included."""
+def test_a_list_inside_a_condition_is_refused(tmp_path):
+    """R6 reverts R5 (o2): no condition tracking; a list in a condition is refused like any other."""
     root, old, _ = _repo(tmp_path)
     doc, result = _one(tmp_path, root, old,
-                       "if [ -f a.txt ] && [ -f nosuch ]; then echo yes; fi\n"
-                       "while false || false; do :; done\n"
-                       "until true && true; do :; done\n"
-                       "echo 0   # expect 0")
-    assert _screens(result.stdout) == [f"screen: {doc}:5 expect=0 got=0 PASS"], result.stdout
+                       "if [ -f a.txt ] && [ -f nosuch ]; then echo yes; fi\necho 0   # expect 0")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
 
 
 def test_an_or_echo_guard_is_still_refused(tmp_path):
@@ -1183,3 +1193,67 @@ def test_the_output_discloses_the_child_shell_residual(tmp_path):
     root, old, _ = _repo(tmp_path)
     result = run(tmp_path, [_doc(tmp_path, CORE)], root, old)
     assert "child shell" in result.stdout.splitlines()[-1], result.stdout
+
+
+# --- review round 6 of b78d837a: guards and conditions reverted ---------------------
+
+ERRORED = "git diff --name-only nosuchref HEAD > list.txt"
+
+
+def test_a_return_zero_guard_in_a_function_is_refused(tmp_path):
+    """R6 (R1): `|| return 0` ends the function with 0 and masks git's 128."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       f"go() {{ {ERRORED} || return 0; }}\ngo\n{SCREEN_LIST}")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_an_exit_zero_guard_in_a_subshell_is_refused(tmp_path):
+    """R6 (R2): `( … || exit 0 )` -- the subshell exits 0."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new, f"( {ERRORED} || exit 0 )\n{SCREEN_LIST}")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_an_exit_zero_guard_in_a_substitution_is_refused(tmp_path):
+    """R6 (R3): `X=$(… || exit 0)` -- the substitution exits 0."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new, f"X=$({ERRORED} || exit 0)\n{SCREEN_LIST}")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def _after_condition(tmp_path, condition, name):
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       f"{condition}\n{ERRORED} && echo ok\n{SCREEN_LIST}", name)
+    return doc, result
+
+
+def test_a_list_after_a_subshell_condition_if_is_refused(tmp_path):
+    """R6 (C2): `if (true) then …; fi` left the condition state open; the later `&&` slipped."""
+    doc, result = _after_condition(tmp_path, "if (true) then echo y; fi", "c2.md")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:3 FAIL"], \
+        result.stdout
+
+
+def test_a_list_after_a_subshell_condition_while_is_refused(tmp_path):
+    """R6 (C4): `while (false) do :; done` -- the same leak through `do`."""
+    doc, result = _after_condition(tmp_path, "while (false) do :; done", "c4.md")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:3 FAIL"], \
+        result.stdout
+
+
+def test_a_list_after_a_group_condition_if_is_refused(tmp_path):
+    """R6 (C7): `if { true; } then …; fi` -- the same leak through a group."""
+    doc, result = _after_condition(tmp_path, "if { true; } then echo y; fi", "c7.md")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:3 FAIL"], \
+        result.stdout
