@@ -368,14 +368,6 @@
       "test": "tests/test_h_mad_expect_screens.py::test_a_background_job_before_a_screen_is_refused"
     },
     {
-      "name": "declared-or-true-refused",
-      "_mechanism": "The documented remedy `|| true` is refused like any other `||`, so no author can declare an intended no-match.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "                if not DECLARED_OR.match(text, k + 2):  # M:OR-TRUE: `|| true` / `|| :` is declared",
-      "replace": "                if True:  # M:OR-TRUE: `|| true` / `|| :` is declared",
-      "test": "tests/test_h_mad_expect_screens.py::test_an_explicit_or_true_states_that_no_match_is_intended"
-    },
-    {
       "name": "redirection-is-a-job",
       "_mechanism": "The `&` of `2>&1` / `&>` is taken for a background job, refusing ordinary redirections.",
       "file": "scripts/h_mad_expect_screens.py",
@@ -400,20 +392,76 @@
       "test": "tests/test_h_mad_expect_screens.py::test_tests_arithmetic_and_redirections_are_not_lists"
     },
     {
-      "name": "assignment-substitution-refused",
-      "_mechanism": "The whole value of a one-line `NAME=$(… && …)` is refused, though its status is the assignment's and is recorded.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "                      if not (whole and assign_open < pos < assign_close)]  # M:ASSIGN-SUBST",
-      "replace": "                      if True]  # M:ASSIGN-SUBST",
-      "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_inside_an_assignment_substitution_is_still_recorded"
-    },
-    {
       "name": "quoted-substitution-skipped",
       "_mechanism": "`\"$(… && …)\"` is scanned as quoted text, so a list whose status `echo` discards goes unrefused.",
       "file": "scripts/h_mad_expect_screens.py",
       "find": "            elif quote == '\"' and text.startswith(\"$(\", k) and not text.startswith(\"$((\", k):",
       "replace": "            elif False:",
       "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_inside_a_non_assignment_substitution_is_refused"
+    },
+    {
+      "name": "and-chain-carve-out-removed",
+      "_mechanism": "The one-`&&`-chain carve-out is gone; a recorded `X=$(a && b)` is refused instead of read.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        info.lists = [(kind, pos) for kind, pos in found if not (chain and inside(pos))]",
+      "replace": "        info.lists = list(found)",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_inside_an_assignment_substitution_is_still_recorded"
+    },
+    {
+      "name": "carve-out-accepts-any-list",
+      "_mechanism": "Review R5 Must-A (x3): any list inside a whole `NAME=$(…)` is exempt, so `$(git diff … & wait)` reads PASS (an `||` is also caught by the `ors` check).",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        chain = (whole and all(kind == \"&&\" for kind, pos in found if inside(pos))",
+      "replace": "        chain = (whole and True",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_background_job_inside_an_assignment_substitution_is_refused"
+    },
+    {
+      "name": "carve-out-ignores-semicolons",
+      "_mechanism": "Review R5 Must-A (x2): `$(a && b; c)` passes as one `&&` chain though it ends on c's status.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                 and not any(inside(p) for p in ors + semis))  # M:AND-CHAIN-ONLY",
+      "replace": "                 and True)  # M:AND-CHAIN-ONLY",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_then_more_inside_an_assignment_substitution_is_refused"
+    },
+    {
+      "name": "or-true-not-declared",
+      "_mechanism": "`|| true` is refused like any other `||`; a whole statement whose every status is intended cannot be written.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    re.compile(r\"[ \\t]*(?:true|:)[ \\t]*(?:$|[;)}#])\"),  # M:OR-TRUE: masks EVERY status, by intent",
+      "replace": "    re.compile(r\"(?!)\"),  # M:OR-TRUE: masks EVERY status, by intent",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_explicit_or_true_states_that_no_match_is_intended"
+    },
+    {
+      "name": "status-one-remedy-refused",
+      "_mechanism": "Review R5 Must-B (x9): the prescribed `|| [ $? = 1 ]` is refused, so the status-1-only remedy cannot PASS.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    re.compile(r\"[ \\t]*\\[ \\$\\? (?:=|-eq) 1 \\][ \\t]*(?:$|[;)}#])\"),  # M:OR-STATUS1: only status 1",
+      "replace": "    re.compile(r\"(?!)\"),  # M:OR-STATUS1: only status 1",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_only_remedy_passes_a_clean_no_match"
+    },
+    {
+      "name": "exit-return-guard-refused",
+      "_mechanism": "Review R5 Should-A (o3, o4): `|| exit 1` / `|| return 1` are refused though they cannot hide a failure.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    re.compile(r\"[ \\t]*(?:exit|return)(?:[ \\t]+\\d+)?[ \\t]*(?:$|[;)}#])\"),  # M:OR-EXIT: still fails",
+      "replace": "    re.compile(r\"(?!)\"),  # M:OR-EXIT: still fails",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_guard_that_exits_or_returns_is_not_refused"
+    },
+    {
+      "name": "condition-list-refused",
+      "_mechanism": "Review R5 Should-A (o2): an `&&` inside an `if` condition is refused, against the stated residual.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                in_cond = keyword.group(1) in (\"if\", \"elif\", \"while\", \"until\")  # M:IN-CONDITION",
+      "replace": "                in_cond = False  # M:IN-CONDITION",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_list_inside_a_condition_is_not_refused"
+    },
+    {
+      "name": "condition-never-ends",
+      "_mechanism": "The condition exemption never ends at `then`/`do`, so a list in the body is exempt too.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                in_cond = keyword.group(1) in (\"if\", \"elif\", \"while\", \"until\")  # M:IN-CONDITION",
+      "replace": "                in_cond = in_cond or keyword.group(1) in (\"if\", \"elif\", \"while\", \"until\")  # M:IN-CONDITION",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_condition_ends_at_then_so_a_later_list_is_refused"
     },
     {
       "name": "stdin-inherited",

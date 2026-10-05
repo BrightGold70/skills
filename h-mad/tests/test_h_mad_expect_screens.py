@@ -1074,3 +1074,112 @@ true && echo after
 """)
     result = run(tmp_path, [doc], root, old)
     assert _screens(result.stdout) == [f"screen: {doc}:2 expect=0 got=0 PASS"], result.stdout
+
+
+# --- review round 5 of e323c8d8 ----------------------------------------------------
+
+SCREEN_LIST = "wc -l < list.txt | tr -d ' '   # expect 0"
+
+
+def _one(tmp_path, root, sha, body, name="doc.md"):
+    doc = _doc(tmp_path, f"{FENCE}bash\n{body}\n{FENCE}\n", name)
+    return doc, run(tmp_path, [doc], root, sha)
+
+
+def test_an_or_list_inside_an_assignment_substitution_is_refused(tmp_path):
+    """R5 (x1): the substitution's status is `echo none`'s, so git's 128 never reaches the trap."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "X=$(git diff --name-only nosuchref HEAD > list.txt || echo none)\n"
+                       + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_an_and_list_then_more_inside_an_assignment_substitution_is_refused(tmp_path):
+    """R5 (x2): `a && b; c` -- the substitution's status is c's."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "X=$(git diff --name-only nosuchref HEAD > list.txt && echo listed; echo done)\n"
+                       + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_a_background_job_inside_an_assignment_substitution_is_refused(tmp_path):
+    """R5 (x3): `a & wait` -- a bare `wait` returns 0."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "X=$(git diff --name-only nosuchref HEAD > list.txt & wait)\n" + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+REMEDY = ("MOVED=$(git diff --name-only \"$BASE\" HEAD | { grep '\\.py$' || [ $? = 1 ]; })\n"
+          "printf '%s\\n' \"$MOVED\" | grep -c .   # expect 0")
+
+
+def test_the_status_one_only_remedy_surfaces_a_bad_base(tmp_path):
+    """R5 Must-B (x8): grep's 1 is absorbed, git's 128 is not -- pipefail carries it out."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new, "BASE=nosuchref\n" + REMEDY)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:failed_command={doc}:3:128 FAIL"], result.stdout
+
+
+def test_the_status_one_only_remedy_passes_a_clean_no_match(tmp_path):
+    """R5 Must-B (x9): a good base whose diff matches nothing reads 0 and PASSES."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new, "BASE=HEAD\n" + REMEDY)
+    assert _screens(result.stdout) == [f"screen: {doc}:4 expect=0 got=0 PASS"], result.stdout
+
+
+def test_a_guard_that_exits_or_returns_is_not_refused(tmp_path):
+    """R5 Should-A (o3, o4): `|| exit [N]` / `|| return [N]` end with a non-zero status the trap sees."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old,
+                       "cd . || exit 1\n"
+                       "go() { cd . || return 1; }\n"
+                       "go || exit\n"
+                       "echo 0   # expect 0")
+    assert _screens(result.stdout) == [f"screen: {doc}:5 expect=0 got=0 PASS"], result.stdout
+
+
+def test_a_list_inside_a_condition_is_not_refused(tmp_path):
+    """R5 Should-A (o2): conditions are left as written, `&&`/`||` in them included."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old,
+                       "if [ -f a.txt ] && [ -f nosuch ]; then echo yes; fi\n"
+                       "while false || false; do :; done\n"
+                       "until true && true; do :; done\n"
+                       "echo 0   # expect 0")
+    assert _screens(result.stdout) == [f"screen: {doc}:5 expect=0 got=0 PASS"], result.stdout
+
+
+def test_an_or_echo_guard_is_still_refused(tmp_path):
+    """R5 Should-A: only exit/return guards are exempt; `|| echo x` still hides the status."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old, "cd . || echo x\necho 0   # expect 0")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_a_condition_ends_at_then_so_a_later_list_is_refused(tmp_path):
+    """R5 Should-A: the condition exemption stops at `then`/`do`; a list after it is refused."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old,
+                       "if true; then cd . && echo moved; fi\necho 0   # expect 0")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_the_output_discloses_the_child_shell_residual(tmp_path):
+    """R5 Should-B (x7): a child shell's failures never reach this trap; every run says so."""
+    root, old, _ = _repo(tmp_path)
+    result = run(tmp_path, [_doc(tmp_path, CORE)], root, old)
+    assert "child shell" in result.stdout.splitlines()[-1], result.stdout
