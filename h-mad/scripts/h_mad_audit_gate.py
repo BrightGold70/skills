@@ -518,6 +518,26 @@ def _digest(path: Path) -> str:
 # the per-cycle `GATE:` verdict is untouched and the streak is what refuses.
 SUITE_UNMEASURED = None
 
+# The exit code `h-mad/tests/conftest.py` refuses a second pytest session with
+# while another run holds the working tree (rows 1391/2361), alongside a
+# `SUITE: BUSY holder=<pid> age=<s> what=<…>` line. EX_TEMPFAIL: try again later.
+# A refused session measured NOTHING, so every caller that runs a repo pytest
+# reads it as cannot-judge — never as a failure, never as a pass.
+SUITE_BUSY_EXIT = 75
+_SUITE_BUSY_LINE = re.compile(r"^SUITE: BUSY .*$", re.MULTILINE)
+
+
+def suite_busy_line(returncode: int | None, output: str) -> str | None:
+    """The `SUITE: BUSY` line when a pytest run was refused by the tree lock.
+
+    Both halves are required: the exit code alone is any test's `sys.exit(75)`,
+    and the line alone could be printed by a test that then went on to run.
+    """
+    if returncode != SUITE_BUSY_EXIT:
+        return None
+    match = _SUITE_BUSY_LINE.search(output or "")
+    return match.group(0) if match else None
+
 
 def run_suite(test_root: Path, command: list[str] | None = None,
               timeout: int = 3600) -> dict:
@@ -535,6 +555,10 @@ def run_suite(test_root: Path, command: list[str] | None = None,
     except (OSError, subprocess.SubprocessError) as exc:
         return {"verdict": "UNREADABLE", "reason": exc.__class__.__name__.lower()}
     tail = (run.stdout or "") + (run.stderr or "")
+    busy = suite_busy_line(run.returncode, tail)
+    if busy:
+        return {"verdict": "UNREADABLE", "reason": "suite_busy", "rc": run.returncode,
+                "holder": busy}
     summary = _suite_summary(tail)
     if summary is None or not summary.phrases.intersection({"passed", "failed"}):
         # No parseable summary line: pytest did not get far enough to report.

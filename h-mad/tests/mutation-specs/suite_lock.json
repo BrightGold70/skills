@@ -1,0 +1,66 @@
+{
+  "root": "../..",
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_suite_lock.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "a-busy-session-runs-anyway",
+      "_mechanism": "The refusal printed and then fell through: the second session measures a tree another run is rewriting, which is the 6-and-3-failures-in-different-sets case this lock exists to stop.",
+      "file": "tests/conftest.py",
+      "find": "            pytest.exit(line, returncode=gate.SUITE_BUSY_EXIT)",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_suite_lock.py::test_second_pytest_session_on_same_toplevel_exits_SUITE_BUSY"
+    },
+    {
+      "name": "the-session-never-asks-for-the-lock",
+      "_mechanism": "The feature removed wholesale: every session treats itself as an enclosing run's child, so nothing is ever refused and an unparseable lock is silently ignored.",
+      "file": "tests/conftest.py",
+      "find": "    if not harness.held_by_an_enclosing_run(REPO_ROOT):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_suite_lock.py::test_unparseable_lock_blocks_and_names_the_file"
+    },
+    {
+      "name": "the-holder-token-is-never-exported",
+      "_mechanism": "Without the token the harness's own inner pytest finds the tree held by its parent and refuses, so every real spec run reads BASELINE_NOT_GREEN.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    os.environ[HOLDER_ENV] = f\"{path}:{os.getpid()}\"",
+      "replace": "    pass",
+      "test": "tests/test_h_mad_suite_lock.py::test_harness_inner_run_is_exempt_via_env_holder"
+    },
+    {
+      "name": "any-token-naming-the-lock-exempts",
+      "_mechanism": "The env is inherited blindly; a token left by a holder that died, or whose lock another run has since taken, would let a stranger measure a held tree.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return _read_holder(path).get(\"pid\") == pid and _process_alive(pid)",
+      "replace": "    return True",
+      "test": "tests/test_h_mad_suite_lock.py::test_stale_env_holder_does_not_exempt"
+    },
+    {
+      "name": "audit-gate-scores-a-busy-run",
+      "_mechanism": "A refused session falls through to summary parsing and is scored on whatever pytest printed; BUSY must read as cannot-judge with its own reason.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if busy:\n        return {\"verdict\": \"UNREADABLE\", \"reason\": \"suite_busy\"",
+      "replace": "    if False:\n        return {\"verdict\": \"UNREADABLE\", \"reason\": \"suite_busy\"",
+      "test": "tests/test_h_mad_suite_lock.py::test_audit_gate_reads_busy_exit_as_unreadable_not_fail"
+    },
+    {
+      "name": "wire-registry-scores-a-busy-run-as-broken",
+      "_mechanism": "A refused session has an empty outcome table, and run_pins reads every absent pin as BROKEN: a held tree becomes a FAIL naming every wire as a regression.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    if busy:\n        raise RegistryError(f\"pytest refused",
+      "replace": "    if False:\n        raise RegistryError(f\"pytest refused",
+      "test": "tests/test_h_mad_suite_lock.py::test_wire_registry_reads_busy_exit_as_unreadable_not_broken"
+    }
+  ]
+}

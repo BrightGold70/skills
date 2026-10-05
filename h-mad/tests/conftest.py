@@ -193,3 +193,100 @@ def _reap_processes_leaked_by_this_run(tmp_path_factory, request):
             reporter.write_line(line, yellow=True)
         else:
             print(line)
+
+
+# --- one measured run per working tree, and a report when the tree moved ------
+#
+# Rows 1391/2361: two pytest runs over one tree produced 6 and 3 failures in
+# DIFFERENT sets, and 0 when the file ran alone; two full suites produced 11
+# phantom failures in a file that passes 40/40 alone; a mutation harness ran
+# under a full suite and was harmless only by luck. "Never run two suites" was
+# prose, so the session now takes the SAME lock the mutation harness takes
+# (`tree_lock`, one per git toplevel) and a second session refuses with
+# `SUITE: BUSY` and exit `SUITE_BUSY_EXIT`. The harness's own inner pytest is
+# exempt through the holder token it exports, or every spec run would refuse
+# itself. Separate worktrees are separate toplevels and never contend.
+#
+# Row 745: the session digests the non-ignored tree at start and end and prints
+# `SUITE: TREE_MOVED paths=… n=K` when the two differ — the pass count above it
+# describes bytes that no longer exist. It reports; it never refuses an edit.
+#
+# Hooks rather than a fixture: the refusal must land before collection, and the
+# end digest after every session fixture's teardown.
+import contextlib
+import importlib.util
+import sys
+import time
+
+_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+_SUITE: dict = {}
+
+
+def _script(name: str):
+    """Load a sibling script by path, under a private name, without touching sys.path.
+
+    None when it is not there: a conftest copied on its own into a scratch
+    directory (the leak-reaper end-to-end test does that) has no tree to lock.
+    """
+    path = _SCRIPTS / f"{name}.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(f"_suite_conftest_{name}", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _say(config, line: str) -> None:
+    reporter = config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None:
+        reporter.write_line(line)
+    else:
+        print(line, flush=True)
+
+
+def pytest_sessionstart(session):
+    harness, gate = _script("h_mad_mutation_harness"), _script("h_mad_audit_gate")
+    if harness is None or gate is None:
+        return
+    _SUITE["harness"] = harness
+    if not harness.held_by_an_enclosing_run(REPO_ROOT):
+        stack = contextlib.ExitStack()
+        try:
+            stack.enter_context(harness.tree_lock(REPO_ROOT, "pytest-session"))
+        except harness.TreeBusy as busy:
+            holder = busy.holder
+            pid = holder.get("pid")
+            started = holder.get("started")
+            age = (f"{time.time() - started:.0f}s" if isinstance(started, (int, float))
+                   else "unknown")
+            line = (f"SUITE: BUSY holder={pid if isinstance(pid, int) else 'unparseable'} "
+                    f"age={age} what={holder.get('spec') or 'unknown'} lock={holder.get('lock')}")
+            _say(session.config, line)
+            _say(session.config, "  another pytest session or mutation run holds this "
+                 "working tree; a second run over it measures a tree being rewritten. "
+                 "Nothing was measured — wait for the holder. Delete the lock file only "
+                 "if you are certain no run is in flight.")
+            pytest.exit(line, returncode=gate.SUITE_BUSY_EXIT)
+        _SUITE["lock"] = stack
+    _SUITE["digest"] = harness.tree_digest(REPO_ROOT)
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session):
+    harness = _SUITE.get("harness")
+    if harness is not None and "digest" in _SUITE:
+        _SUITE["moved"] = harness.moved_paths(_SUITE.pop("digest"),
+                                              harness.tree_digest(REPO_ROOT))
+    stack = _SUITE.pop("lock", None)
+    if stack is not None:
+        stack.close()
+
+
+def pytest_terminal_summary(terminalreporter):
+    moved = _SUITE.pop("moved", None)
+    if moved:
+        shown = ",".join(moved[:10]) + (",…" if len(moved) > 10 else "")
+        terminalreporter.write_line(f"SUITE: TREE_MOVED paths={shown} n={len(moved)}",
+                                    yellow=True)

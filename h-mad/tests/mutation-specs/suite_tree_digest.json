@@ -1,0 +1,50 @@
+{
+  "root": "../..",
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_suite_tree_digest.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-digest-sees-only-head",
+      "_mechanism": "The HEAD-only comparison this row replaces: an uncommitted edit under a run is invisible, which is every recorded case (2026-08-25, 2026-09-07 twice).",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        rel = entry[3:]",
+      "replace": "        rel = \"\"",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_tree_moved_reported_when_tracked_file_edited_mid_session"
+    },
+    {
+      "name": "the-session-never-reports",
+      "_mechanism": "The digest is taken and compared but the line is never printed: the pass count above it still describes bytes that no longer exist, silently.",
+      "file": "tests/conftest.py",
+      "find": "    if moved:\n        shown",
+      "replace": "    if False:\n        shown",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_new_untracked_file_mid_session_is_reported"
+    },
+    {
+      "name": "run-churn-is-reported-as-a-moved-tree",
+      "_mechanism": "pytest's cache and the harness's bytecode purge are written by the run itself; a repo that does not ignore them would see every run as moved, and a report that always fires is read as noise.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if not rel or any(part in _DIGEST_SKIP_PARTS for part in Path(rel).parts):",
+      "replace": "        if not rel:",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_ignored_writes_pycache_pytest_cache_hmad_are_quiet"
+    },
+    {
+      "name": "the-harness-compares-head-only",
+      "_mechanism": "The harness kept its HEAD comparison and dropped the digest: a sibling's unstaged write during a mutation run scores as a clean verdict (2026-09-07: a false REFUSED anchor).",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            paths = moved_paths(digest_before, tree_digest(root))",
+      "replace": "            paths = []",
+      "test": "tests/test_h_mad_suite_tree_digest.py::test_harness_tree_moved_on_dirty_edit_not_only_head"
+    }
+  ]
+}

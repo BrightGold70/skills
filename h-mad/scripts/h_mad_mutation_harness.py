@@ -151,6 +151,7 @@ import argparse
 import ast
 import contextlib
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -1073,6 +1074,69 @@ def _git_head(root: Path) -> str | None:
     return r.stdout.strip() or None if r.returncode == 0 else None
 
 
+# Derived artifacts a run itself churns: the harness purges bytecode around every
+# scoring run and pytest rewrites its cache. In this repo `.gitignore` already
+# hides them, but a repo that does not ignore them would report every run as
+# moved, so they are excluded by name as well.
+_DIGEST_SKIP_PARTS = ("__pycache__", ".pytest_cache")
+
+
+def tree_digest(root: Path) -> dict[str, str] | None:
+    """What a run is measuring: HEAD plus the bytes of every non-ignored change.
+
+    One `git status` lists every path that differs from HEAD, untracked included
+    and ignored excluded; each is keyed to a hash of its current bytes (`absent`
+    for a deletion). Taken at start and end of a run, two digests differ exactly
+    when the tree the run measured moved under it — a commit, a checkout, an edit
+    or a new file. Clean paths cost nothing: HEAD stands for all of them.
+
+    It cannot see an edit that is REVERTED before the second read: the bytes are
+    the same at both reads. That limit is pinned by
+    `test_edit_then_revert_is_not_reported`, not papered over.
+
+    None when there is no repo to ask, and None is not a change (see `_git_head`).
+    """
+    head = _git_head(root)
+    if head is None:
+        return None
+    env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+    try:
+        top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=10, env=env)
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain=v1", "-z", "-uall", "--no-renames"],
+            capture_output=True, timeout=60, env=env)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if top.returncode != 0 or status.returncode != 0:
+        return None
+    toplevel = Path(top.stdout.strip())
+    lock = _lock_path(root)
+    digest = {"HEAD": head}
+    for entry in status.stdout.decode("utf-8", "surrogateescape").split("\0"):
+        rel = entry[3:]
+        if not rel or any(part in _DIGEST_SKIP_PARTS for part in Path(rel).parts):
+            continue
+        path = toplevel / rel
+        if path == lock:
+            continue
+        try:
+            data = os.readlink(path).encode() if path.is_symlink() else path.read_bytes()
+            digest[rel] = hashlib.sha1(data).hexdigest()
+        except FileNotFoundError:
+            digest[rel] = "absent"
+        except OSError as exc:
+            digest[rel] = f"unreadable:{exc.__class__.__name__}"
+    return digest
+
+
+def moved_paths(before: dict[str, str] | None, after: dict[str, str] | None) -> list[str]:
+    """Every key whose value differs between two digests; [] when either is None."""
+    if before is None or after is None:
+        return []
+    return sorted(key for key in before.keys() | after.keys() if before.get(key) != after.get(key))
+
+
 def _lock_path(root: Path) -> Path:
     """One lock per WORKING TREE, not per spec root.
 
@@ -1109,6 +1173,30 @@ def _read_holder(path: Path) -> dict:
         return {"pid": None, "spec": None, "started": None, "unparseable": True}
 
 
+# Exported by every holder to its children as `<lock path>:<holder pid>`. The
+# pytest session in `h-mad/tests/conftest.py` takes this same lock, so without it
+# the harness's own inner pytest would find the tree held -- by its parent -- and
+# every real spec run would refuse itself (rows 1391/2361).
+HOLDER_ENV = "H_MAD_TREE_LOCK_HELD"
+
+
+def held_by_an_enclosing_run(root: Path) -> bool:
+    """True when this process runs INSIDE the run that holds `root`'s tree lock.
+
+    The token must name THIS tree's lock and that lock's CURRENT holder, and the
+    holder must be alive. A token left behind by a holder that has since died, or
+    whose lock another run has taken, exempts nothing: the env is inherited
+    blindly, and a stale one must not let a stranger measure a held tree.
+    """
+    path = _lock_path(root)
+    token = os.environ.get(HOLDER_ENV, "")
+    prefix = f"{path}:"
+    if not token.startswith(prefix) or not token[len(prefix):].isdigit():
+        return False
+    pid = int(token[len(prefix):])
+    return _read_holder(path).get("pid") == pid and _process_alive(pid)
+
+
 @contextlib.contextmanager
 def tree_lock(root: Path, spec_path: Path):
     """Hold the tree for the duration of a run, or raise `TreeBusy`.
@@ -1116,6 +1204,10 @@ def tree_lock(root: Path, spec_path: Path):
     A lock whose holder is gone is STALE and is taken -- a crashed run must not
     wedge the repo forever -- but only when the holder could be identified and
     proven dead. Unparseable, or alive, blocks.
+
+    While held, `HOLDER_ENV` names the holder to every child it starts, so the
+    child's own pytest session (`held_by_an_enclosing_run`) runs instead of
+    refusing a tree that is held on its behalf.
     """
     path = _lock_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1152,9 +1244,15 @@ def tree_lock(root: Path, spec_path: Path):
             except FileNotFoundError:
                 pass
             raise
+    previous = os.environ.get(HOLDER_ENV)
+    os.environ[HOLDER_ENV] = f"{path}:{os.getpid()}"
     try:
         yield path
     finally:
+        if previous is None:
+            os.environ.pop(HOLDER_ENV, None)
+        else:
+            os.environ[HOLDER_ENV] = previous
         # Only release a lock that is still OURS. A stale-take by a third run
         # would otherwise be deleted here by the run that had already lost it.
         try:
@@ -1722,16 +1820,24 @@ def run_spec(spec_path: Path) -> dict:
             # here on 2026-09-14, moving the count by +10 for reasons that were
             # not the run's. A verdict measured across a commit is a statement
             # about a tree that no longer exists.
+            #
+            # HEAD alone misses an UNCOMMITTED write under the run (2026-09-07:
+            # edits during a mutation run produced a false `REFUSED` anchor), so
+            # the bytes of every non-ignored change are compared too. The run's
+            # own mutations are restored before the second read and so cancel out.
             before = _git_head(root)
+            digest_before = tree_digest(root)
             result = _run_spec_holding_the_tree(spec_path, spec=spec, root=root)
             after = _git_head(root)
+            paths = moved_paths(digest_before, tree_digest(root))
             # BOTH present AND different. An unavailable read is not a change —
             # otherwise every tmp-path spec in the suite would refuse.
-            if before and after and before != after:
+            if (before and after and before != after) or paths:
                 return {
                     "verdict": "TREE_MOVED",
                     "head_before": before,
                     "head_after": after,
+                    "paths": paths,
                     # Kept, not discarded: it is still the most informative thing
                     # anyone has about those mutations, and throwing it away would
                     # make the honest verdict cost a whole re-run to look at.
@@ -1867,15 +1973,18 @@ def main(argv: list[str] | None = None) -> int:
     verdict = result["verdict"]
     if verdict == "TREE_MOVED":
         inner = result.get("inner") or {}
+        paths = result.get("paths") or []
+        shown = f" paths={','.join(paths[:10])}{',…' if len(paths) > 10 else ''} n={len(paths)}" if paths else ""
         print(
             f"MUTATION: TREE_MOVED before={result['head_before'][:9]} "
-            f"after={result['head_after'][:9]} inner={inner.get('verdict', 'unknown')}"
+            f"after={result['head_after'][:9]} inner={inner.get('verdict', 'unknown')}{shown}"
         )
         print(
-            "  the working tree was COMMITTED INTO while this run was measuring it. "
-            "Another session in the same clone moved HEAD, so the mutations were "
-            "applied to one tree and scored against another, and the inner verdict "
-            "above is a statement about a tree that no longer exists."
+            "  the working tree was COMMITTED INTO or EDITED while this run was "
+            "measuring it. Another session in the same clone moved HEAD or rewrote "
+            "the paths above, so the mutations were applied to one tree and scored "
+            "against another, and the inner verdict above is a statement about a "
+            "tree that no longer exists."
         )
         print(
             "  Nothing here is a finding about any guard. Re-run on a settled tree; "
@@ -1895,7 +2004,8 @@ def main(argv: list[str] | None = None) -> int:
             f"age={age} spec={holder.get('spec') or 'unknown'}"
         )
         print(
-            "  another mutation run holds this working tree. A run rewrites files in "
+            "  another mutation run or pytest session (spec=pytest-session) holds "
+            "this working tree. A run rewrites files in "
             "place, so a second one measures a TORN tree and returns a verdict about "
             "that — REFUSED for an anchor that is fine, which is indistinguishable "
             "from real drift at the token. Nothing was measured; wait for the holder."

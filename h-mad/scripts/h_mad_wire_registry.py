@@ -11,7 +11,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from h_mad_audit_gate import _acknowledged_from_text
+from h_mad_audit_gate import _acknowledged_from_text, suite_busy_line
 
 VALID_KINDS: frozenset[str] = frozenset({"wire"})
 VALID_PROVENANCE: frozenset[str] = frozenset({"superseded", "pinned-a-defect", "renamed"})
@@ -485,6 +485,19 @@ def partition(
 DEFAULT_TESTPATHS = (Path("h-mad/tests"),)
 
 
+def _refuse_a_busy_tree(result: subprocess.CompletedProcess) -> None:
+    """A pytest session refused by the working-tree lock measured nothing.
+
+    Read as an unreadable registry, never as every pin broken: the lock refuses
+    the whole session before one test runs, so an empty outcome table here is
+    "not measured", and scoring it would report every wire as a regression.
+    """
+    output = (getattr(result, "stdout", "") or "") + (getattr(result, "stderr", "") or "")
+    busy = suite_busy_line(getattr(result, "returncode", None), output)
+    if busy:
+        raise RegistryError(f"pytest refused, another run holds this tree: {busy}")
+
+
 def collect(repo: Path, testpaths: tuple[Path, ...] | list[Path], python: str = sys.executable) -> set[str]:
     """Collect repo-relative pytest node ids from the requested test paths."""
     result = subprocess.run(
@@ -497,6 +510,7 @@ def collect(repo: Path, testpaths: tuple[Path, ...] | list[Path], python: str = 
         text=True,
         check=False,
     )
+    _refuse_a_busy_tree(result)
     if result.returncode not in (0, 5):
         stdout_lines = (getattr(result, "stdout", "") or "").splitlines()
         stderr_lines = (getattr(result, "stderr", "") or "").splitlines()
@@ -533,6 +547,7 @@ def run_pins(resolving: list[dict], repo: Path, python: str = sys.executable) ->
         text=True,
         check=False,
     )
+    _refuse_a_busy_tree(result)
     outcomes: dict[str, str] = {}
     statuses = ("PASSED", "FAILED", "ERROR", "SKIPPED", "XFAIL", "XPASS")
     for line in result.stdout.splitlines():
