@@ -251,8 +251,8 @@
       "name": "arithmetic-shift-is-a-heredoc",
       "_mechanism": "Review R2-M1(c): `$((1<<n))` opens a heredoc named n; every later line becomes its body.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "            elif arith or cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`",
-      "replace": "            elif (arith and False) or cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`",
+      "find": "            elif (text.startswith(\"<<\", k) and not arith  # M:ARITH-NOT-HEREDOC: a shift",
+      "replace": "            elif (text.startswith(\"<<\", k)  # M:ARITH-NOT-HEREDOC: a shift",
       "test": "tests/test_h_mad_expect_screens.py::test_an_arithmetic_shift_is_not_a_heredoc"
     },
     {
@@ -373,23 +373,7 @@
       "file": "scripts/h_mad_expect_screens.py",
       "find": "                  and text[k - 1:k] not in (\">\", \"<\", \"|\", \"&\")):  # M:REDIRECT-NOT-JOB",
       "replace": "                  and True):  # M:REDIRECT-NOT-JOB",
-      "test": "tests/test_h_mad_expect_screens.py::test_tests_arithmetic_and_redirections_are_not_lists"
-    },
-    {
-      "name": "test-operator-is-a-list",
-      "_mechanism": "`[[ a && b ]]` is taken for an `&&` list.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "                cond = True  # M:COND-NOT-LIST: `&&` inside `[[ ]]` is a test operator",
-      "replace": "                cond = False  # M:COND-NOT-LIST: `&&` inside `[[ ]]` is a test operator",
-      "test": "tests/test_h_mad_expect_screens.py::test_tests_arithmetic_and_redirections_are_not_lists"
-    },
-    {
-      "name": "arithmetic-operator-is-a-list",
-      "_mechanism": "`$(( 1 && 1 ))` is taken for an `&&` list.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "            elif arith or cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`",
-      "replace": "            elif cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`",
-      "test": "tests/test_h_mad_expect_screens.py::test_tests_arithmetic_and_redirections_are_not_lists"
+      "test": "tests/test_h_mad_expect_screens.py::test_redirections_are_not_jobs"
     },
     {
       "name": "quoted-substitution-skipped",
@@ -470,6 +454,38 @@
       "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
       "replace": "                found.append((\"||\", k)) if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\]\", text[k + 2:]) else None  # M:REFUSE-OR: no `||` is exempt",
       "test": "tests/test_h_mad_expect_screens.py::test_the_braced_status_one_form_is_refused_with_a_clean_base"
+    },
+    {
+      "name": "bracket-exemption-reintroduced",
+      "_mechanism": "Review R9 (E1): an `&&` after `[[` is exempt again, so `echo [[ ; … && …` reads PASS.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
+      "replace": "                found.append((\"&&\", k)) if \"[[\" not in text[:k] else None  # M:REFUSE-AND",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_bracket_argument_does_not_switch_off_list_detection"
+    },
+    {
+      "name": "arithmetic-exemption-reintroduced",
+      "_mechanism": "Review R9 (E2): an `&&` after `((` is exempt again, so `((cmd) && …)` reads PASS.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
+      "replace": "                found.append((\"&&\", k)) if not arith else None  # M:REFUSE-AND",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_nested_subshell_does_not_switch_off_list_detection"
+    },
+    {
+      "name": "test-bracket-list-exempt",
+      "_mechanism": "Review R9: `[[ a && b ]]` is exempt again (the over-refusal undone, and with it E1's hole).",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
+      "replace": "                found.append((\"&&\", k)) if not text.lstrip().startswith(\"[[\") else None  # M:REFUSE-AND",
+      "test": "tests/test_h_mad_expect_screens.py::test_lists_inside_test_and_arithmetic_brackets_are_refused"
+    },
+    {
+      "name": "job-after-redirect-missed",
+      "_mechanism": "Review R9: a line with a redirection `>&` hides its trailing `&` job.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                  and text[k - 1:k] not in (\">\", \"<\", \"|\", \"&\")):  # M:REDIRECT-NOT-JOB",
+      "replace": "                  and \">&\" not in text and text[k - 1:k] not in (\">\", \"<\", \"|\", \"&\")):  # M:REDIRECT-NOT-JOB",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_job_after_a_redirection_is_refused"
     },
     {
       "name": "stdin-inherited",

@@ -1060,20 +1060,33 @@ grep -c . out.txt   # expect 0
         result.stdout
 
 
-def test_tests_arithmetic_and_redirections_are_not_lists(tmp_path):
-    """R4: `&&` inside `[[ ]]` or `(( ))`, `2>&1` and `&>` are not lists or jobs.
+def test_redirections_are_not_jobs(tmp_path):
+    """R4: the `&` of `2>&1`, `>&2` and `&>` is a redirection, not a job.
     (`|&` is bash 4+; /bin/bash here is 3.2, where it is a syntax error.)"""
     root, old, _ = _repo(tmp_path)
     doc = _doc(tmp_path, f"""{FENCE}bash
-[[ -n x && -n y ]]
-n=$(( 1 && 1 ))
 ls a.txt > /dev/null 2>&1
 ls a.txt &> /dev/null
+echo note >&2
+[ -n x ]
+[ -n y ]
 echo 0   # expect 0
 {FENCE}
 """)
     result = run(tmp_path, [doc], root, old)
-    assert _screens(result.stdout) == [f"screen: {doc}:6 expect=0 got=0 PASS"], result.stdout
+    assert _screens(result.stdout) == [f"screen: {doc}:7 expect=0 got=0 PASS"], result.stdout
+
+
+def test_lists_inside_test_and_arithmetic_brackets_are_refused(tmp_path):
+    """R9: no `[[ ]]` / `(( ))` exemption -- keyed on text, each could switch detection off
+    (E1, E2). The over-refusal is accepted; write separate `[ ]` statements instead."""
+    root, old, _ = _repo(tmp_path)
+    for n, line in enumerate(["[[ -n x && -n y ]]", "n=$(( 1 && 1 ))", "[[ -n x || -n y ]]"]):
+        doc, result = _one(tmp_path, root, old, f"{line}\necho 0   # expect 0", f"b{n}.md")
+        kind = "||" if "||" in line else "&&"
+        assert _screens(result.stdout) == [
+            f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct={kind}@{doc}:2 FAIL"], \
+            (line, result.stdout)
 
 
 def test_a_list_after_the_screen_does_not_refuse_it(tmp_path):
@@ -1349,3 +1362,47 @@ def test_a_braced_pipeline_with_a_status_one_check_is_refused(tmp_path):
     assert _screens(result.stdout) == [
         f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
         result.stdout
+
+
+# --- review round 9 of 844ffd58 -----------------------------------------------------
+
+
+def test_a_bracket_argument_does_not_switch_off_list_detection(tmp_path):
+    """R9 (E1): `echo [[ ; … && …` -- `[[` is an argument, but the lexer opened a test and
+    never saw `]]`, so the `&&` read PASS."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "echo [[ ; git diff --name-only nosuchref HEAD > list.txt && echo ok\n"
+                       + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_a_nested_subshell_does_not_switch_off_list_detection(tmp_path):
+    """R9 (E2): `((cmd) && …)` is two subshells, not arithmetic; the `&&` read PASS."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "((git diff --name-only nosuchref HEAD > list.txt) && echo ok)\n" + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_a_job_after_a_redirection_is_refused(tmp_path):
+    """R9: the redirect exclusion covers only the `&` of `>&2`; a trailing `&` job is refused."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "git diff --name-only nosuchref HEAD > list.txt 2>&1 >&2 &\nwait\n" + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_construct=&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_the_output_discloses_conditions_and_negation(tmp_path):
+    """R9 Should-fix: `!`-negated commands and if/while/until conditions are neither refused nor
+    recorded; every run's coverage line says so."""
+    root, old, _ = _repo(tmp_path)
+    result = run(tmp_path, [_doc(tmp_path, CORE)], root, old)
+    coverage = result.stdout.splitlines()[-1]
+    assert "if/while/until condition" in coverage and "!-negated" in coverage, coverage

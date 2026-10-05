@@ -69,9 +69,13 @@ end with 0 over a failure (review round 6); a list inside an `if`/`while`
 condition leaked past `if (true) then` (round 6); an unbraced `… | grep P ||
 [ $? = 1 ]` binds to the whole pipeline and swallows git's 128 (round 7); and
 even the braced `git … | { grep P || [ $? = 1 ]; } > f` read PASS, because bash
-3.2 runs no ERR trap for a pipeline that ends in such a group (round 8). Not
-refused, because each is recorded or is no list:
-  - an `&&` inside `[[ ]]` or `(( ))`, and the `&` in `2>&1` and `&>`;
+3.2 runs no ERR trap for a pipeline that ends in such a group (round 8). Nor
+is an `&&`/`||` inside `[[ ]]` or `(( ))` exempt: keyed on text, `echo [[ ; …`
+and `((cmd) && …)` switched list detection off (round 9, E1/E2), so the
+over-refusal of `[[ a && b ]]` is accepted -- write separate `[ ]` statements.
+Not refused, because each is recorded or is no list:
+  - the `&` of a redirection (`2>&1`, `>&2`, `&>`): a trailing `&` job after one
+    is still refused;
   - the whole value of a one-line `NAME=$(…)` whose body is ONE `&&` chain, with
     no `;`, `||`, `&` or newline: only then is the substitution's status the
     failing member's, which the assignment carries to the trap (probe on bash
@@ -113,8 +117,11 @@ as grep's no-match; and a failing command earlier on the screen's own line
 (`false; echo 0   # expect 0`) is not seen; and a failure inside a CHILD SHELL
 -- `bash -c '…'`, `sh script`, a heredoc fed to `bash`, `xargs sh -c`, `eval` of
 a list -- never reaches this trap (it is not inherited across processes), so
-`bash -c 'git diff nosuchref > f; echo ok'` reads as clean. No text check can
-close that; the `coverage:` line states it on every run. The trap is disarmed inside screens
+`bash -c 'git diff nosuchref > f; echo ok'` reads as clean; and a failing
+`if`/`while`/`until` CONDITION or a `!`-NEGATED command is neither refused nor
+recorded (bash runs no ERR trap for either): `if git diff nosuchref …; then …;
+fi` and `X=$(true && ! git diff nosuchref …)` read as clean. No text check can
+close these; the `coverage:` line states them on every run. The trap is disarmed inside screens
 because bash 3.2 reports a partial PIPESTATUS to it and leaves its own
 PIPESTATUS behind.
 
@@ -161,6 +168,8 @@ COVERAGE = ("coverage: only statements ending in a '# expect <N>' comment inside
             "fence are screened; expectations stated in prose or untagged commands are not run; "
             "a failure inside a child shell (bash -c, sh script, a heredoc fed to bash, "
             "xargs sh, eval) never reaches this trap and is not seen; "
+            "a failing if/while/until condition or !-negated command is neither refused nor "
+            "recorded; "
             "a statement that leaves the worktree by absolute path reads that tree, not the sha")
 # The ERR trap records EVERY non-zero status outside a screen: no status is judged benign
 # from command text (three rounds of text heuristics each opened a hole in another). It
@@ -213,7 +222,7 @@ def lex(texts: list[str]) -> list[Line]:
                 current = pending.pop(0) if pending else None
             continue  # M:HEREDOC-BODY: a body line has no code and no comment
         info.quoted = quote is not None
-        cut, k, arith, cond, parens, ticks, found = len(text), 0, 0, False, [], [], []
+        cut, k, arith, parens, ticks, found = len(text), 0, 0, [], [], []
         ors, semis = [], []
         assign = None if info.quoted else ASSIGN_SUBST.match(text)
         assign_open = assign.end() - 1 if assign else None
@@ -247,15 +256,7 @@ def lex(texts: list[str]) -> list[Line]:
             elif arith and text.startswith("))", k):
                 arith -= 1
                 k += 1
-            elif text.startswith("[[", k) and (k == 0 or text[k - 1] in " \t;&|("):
-                cond = True  # M:COND-NOT-LIST: `&&` inside `[[ ]]` is a test operator
-                k += 1
-            elif cond and text.startswith("]]", k):
-                cond = False
-                k += 1
-            elif arith or cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`
-                pass
-            elif text.startswith("&&", k):
+            elif text.startswith("&&", k):  # refused inside `[[ ]]` and `(( ))` too: no exemption
                 found.append(("&&", k))  # M:REFUSE-AND
                 k += 1
             elif text.startswith("||", k):
@@ -276,7 +277,7 @@ def lex(texts: list[str]) -> list[Line]:
                 quote = outer
             elif ch == "`" and ticks:
                 quote = ticks.pop()
-            elif (text.startswith("<<", k)  # never inside `(( ))`: the branch above took it
+            elif (text.startswith("<<", k) and not arith  # M:ARITH-NOT-HEREDOC: a shift
                   and not text.startswith("<<<", k) and text[k - 1:k] != "<"):
                 match = HEREDOC.match(text, k)  # only unquoted code reaches here
                 if match:

@@ -226,10 +226,13 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   - a list inside a condition leaked past `if (true) then` (round 6);
   - an unbraced `… | grep P || [ $? = 1 ]` swallows git's 128 (round 7);
   - even the braced `git … | { grep P || [ $? = 1 ]; } > f` read PASS, because bash 3.2 runs no
-    ERR trap for a pipeline that ends in such a group (round 8).
+    ERR trap for a pipeline that ends in such a group (round 8);
+  - an `&&`/`||` inside `[[ ]]` or `(( ))`: keyed on text, `echo [[ ; …` and `((cmd) && …)`
+    switched list detection off (round 9). `[[ a && b ]]` is refused too; write separate `[ ]`
+    statements.
 
   The only forms not refused are:
-  - `&&` inside `[[ ]]` or `(( ))`, and the `&` in redirections;
+  - the `&` of a redirection (`2>&1`, `>&2`, `&>`). A trailing `&` job after one is still refused;
   - the whole value of a one-line `NAME=$(…)` whose body is one `&&` chain, with no `;`, `||`, `&`
     or newline. Only then does the assignment carry the failing member's status;
     `X=$(a || b)`, `X=$(a && b; c)` and `X=$(a & wait)` are refused.
@@ -240,6 +243,16 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   is not inherited across processes. So `bash -c 'git diff nosuchref > f; echo ok'` reads as
   clean. No text check closes this, and the tool's `coverage:` line states it on every run. Keep
   published screen preambles in the block's own shell.
+- **Conditions and `!` are outside the executor's reach too.** bash runs no ERR trap for a failing
+  `if`/`while`/`until` condition or for a `!`-negated command, and the executor neither refuses
+  nor records them. So `if git diff nosuchref …; then …; fi` and
+  `X=$(true && ! git diff nosuchref …)` read as clean, and the `coverage:` line states this on
+  every run. Do not put a census command in a condition or behind `!` before a screen.
+  The full set of disclosed residuals:
+  - child shells and `eval`;
+  - conditions and `!`;
+  - expectations written in prose (untagged);
+  - statements that leave the worktree by absolute path.
 - **A tooling fix landed mid-arc is a measurement event for every document that measures the
   tooling.** Merge tooling only after the round's last gating pass is collected — merging while a
   round is open silently invalidates every stamped census, and the documents are not re-audited
