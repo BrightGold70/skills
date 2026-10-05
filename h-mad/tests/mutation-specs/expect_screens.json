@@ -208,30 +208,6 @@
       "test": "tests/test_h_mad_expect_screens.py::test_a_command_erroring_before_the_screen_is_unreadable"
     },
     {
-      "name": "failed-assignment-not-recorded",
-      "_mechanism": "Review M2: an assignment whose command substitution failed with status 1 is not recorded; `$B..HEAD` collapses and reads 0.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "          k=1; t=${c#*\\\\$(};",
-      "replace": "          k=0; t=${c#*\\\\$(};",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_failed_assignment_before_the_screen_is_unreadable"
-    },
-    {
-      "name": "no-match-recorded-as-failure",
-      "_mechanism": "Review M2's threshold: grep's exit 1 (no match) before a screen poisons it.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "[ \"$r\" -ge 2 ]; then echo",
-      "replace": "[ \"$r\" -ge 1 ]; then echo",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_no_match_before_or_inside_a_screen_does_not_poison_the_next"
-    },
-    {
-      "name": "error-status-not-recorded",
-      "_mechanism": "Review M2: an exit >= 2 before a screen is not recorded.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "[ \"$r\" -ge 2 ]; then echo",
-      "replace": "[ \"$r\" -ge 99 ]; then echo",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_command_erroring_before_the_screen_is_unreadable"
-    },
-    {
       "name": "trap-armed-inside-screens",
       "_mechanism": "The trap stays armed inside a screen; on bash 3.2 it clobbers PIPESTATUS and an erroring member before a no-match count reads 0.",
       "file": "scripts/h_mad_expect_screens.py",
@@ -275,8 +251,8 @@
       "name": "arithmetic-shift-is-a-heredoc",
       "_mechanism": "Review R2-M1(c): `$((1<<n))` opens a heredoc named n; every later line becomes its body.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "            elif (text.startswith(\"<<\", k) and not arith  # M:ARITH-NOT-HEREDOC",
-      "replace": "            elif (text.startswith(\"<<\", k)  # M:ARITH-NOT-HEREDOC",
+      "find": "            elif arith or cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`",
+      "replace": "            elif (arith and False) or cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`",
       "test": "tests/test_h_mad_expect_screens.py::test_an_arithmetic_shift_is_not_a_heredoc"
     },
     {
@@ -320,20 +296,124 @@
       "test": "tests/test_h_mad_expect_screens.py::test_a_failure_inside_a_function_before_the_screen_is_unreadable"
     },
     {
-      "name": "grep-no-match-in-assignment-poisons",
-      "_mechanism": "Review R2-S1: `X=$(… | grep pat)` that matches nothing (status 1) is recorded as a failure.",
+      "name": "pipefail-off",
+      "_mechanism": "Review R3: without pipefail `git diff nosuchref | cat > f` exits 0; the errored member is never recorded.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "          case \"$t\" in grep*|egrep*|fgrep*) if [ \"$r\" = 1 ]; then k=0; fi;; esac;;  # M:GREP-NOMATCH",
-      "replace": "          case \"$t\" in grep*|egrep*|fgrep*) ;; esac;;  # M:GREP-NOMATCH",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_no_match_collected_into_a_variable_does_not_poison_the_screen"
+      "find": "        \"set -o pipefail\",  # M:PIPEFAIL: an errored non-final member fails its pipeline",
+      "replace": "        \"true\",  # M:PIPEFAIL: an errored non-final member fails its pipeline",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_errored_member_before_a_clean_one_is_seen_through_pipefail"
     },
     {
-      "name": "env-prefix-is-an-assignment",
-      "_mechanism": "Review R2-S1: `LC_ALL=C grep …` is classified as an assignment, so grep's no-match is recorded as a failure.",
+      "name": "status-one-before-a-screen-is-benign",
+      "_mechanism": "Review R3: only statuses >= 2 are recorded, so grep's 1 hides git's 128 and the #49w shape certifies.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "        \"$n=\"*[[:space:]]*) ;;  # M:ENV-PREFIX",
-      "replace": "        \"$n=\"*[[:space:]]*) k=1;;  # M:ENV-PREFIX",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_no_match_collected_into_a_variable_does_not_poison_the_screen"
+      "find": "TRAP = '__hmad_r=$?; echo \"$((LINENO - __hmad_l0 - 1)):$__hmad_r\" >> \"$__hmad_ff\"'  # M:ANY-NONZERO",
+      "replace": "TRAP = '__hmad_r=$?; [ \"$__hmad_r\" -ge 2 ] && echo \"$((LINENO - __hmad_l0 - 1)):$__hmad_r\" >> \"$__hmad_ff\"'  # M:ANY-NONZERO",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_errored_ref_at_top_level_into_a_file_is_unreadable"
+    },
+    {
+      "name": "assignments-judged-by-text",
+      "_mechanism": "Review R3-M2: an assignment is recognised from its text and exempted; a substitution that ends in `exit 1` (no ERR fires inside it) reads PASS.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "TRAP = '__hmad_r=$?; echo \"$((LINENO - __hmad_l0 - 1)):$__hmad_r\" >> \"$__hmad_ff\"'  # M:ANY-NONZERO",
+      "replace": "TRAP = '__hmad_r=$?; case \"$BASH_COMMAND\" in *=*) ;; *) echo \"$((LINENO - __hmad_l0 - 1)):$__hmad_r\" >> \"$__hmad_ff\";; esac'  # M:ANY-NONZERO",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_assignment_whose_substitution_exits_non_zero_is_unreadable"
+    },
+    {
+      "name": "no-match-before-a-screen-is-benign",
+      "_mechanism": "Review R3: a preamble grep that matches nothing is treated as benign again; the accepted fail-closed cost is undone.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "TRAP = '__hmad_r=$?; echo \"$((LINENO - __hmad_l0 - 1)):$__hmad_r\" >> \"$__hmad_ff\"'  # M:ANY-NONZERO",
+      "replace": "TRAP = '__hmad_r=$?; [ \"$__hmad_r\" = 1 ] || echo \"$((LINENO - __hmad_l0 - 1)):$__hmad_r\" >> \"$__hmad_ff\"'  # M:ANY-NONZERO",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_no_match_before_a_screen_is_unreadable"
+    },
+    {
+      "name": "sigpipe-treated-as-benign",
+      "_mechanism": "Review R3: SIGPIPE (141) inside a screen's own pipeline is exempted, so `yes | head -1 | wc -l` reads PASS.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    if not statuses or any(not s.isdigit() or int(s) >= 2 for s in statuses):  # M:PIPESTATUS",
+      "replace": "    if not statuses or any(not s.isdigit() or int(s) not in (0, 1, 141) for s in statuses):  # M:PIPESTATUS",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_sigpipe_is_unreadable_not_pass"
+    },
+    {
+      "name": "refusal-not-applied",
+      "_mechanism": "Review R4: constructs are found but never applied; `git diff nosuchref > f && echo` then reads PASS.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        if first is not None:  # M:REFUSE-APPLIED",
+      "replace": "        if False:  # M:REFUSE-APPLIED",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_before_a_screen_is_refused"
+    },
+    {
+      "name": "and-list-not-refused",
+      "_mechanism": "Review R4: an `&&` list is not recognised; `cd nosuchdir && …` reads PASS.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
+      "replace": "                pass  # M:REFUSE-AND",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_failed_cd_in_an_and_list_is_refused"
+    },
+    {
+      "name": "or-list-not-refused",
+      "_mechanism": "Review R4: an `||` list is not recognised; its first member's failure is hidden.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                    found.append((\"||\", k))  # M:REFUSE-OR",
+      "replace": "                    pass  # M:REFUSE-OR",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_or_list_that_is_not_a_declared_or_true_is_refused"
+    },
+    {
+      "name": "background-job-not-refused",
+      "_mechanism": "Review R4 (r): a `&` job is not recognised; its status never reaches the trap.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                found.append((\"&\", k))  # M:REFUSE-JOB",
+      "replace": "                pass  # M:REFUSE-JOB",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_background_job_before_a_screen_is_refused"
+    },
+    {
+      "name": "declared-or-true-refused",
+      "_mechanism": "The documented remedy `|| true` is refused like any other `||`, so no author can declare an intended no-match.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                if not DECLARED_OR.match(text, k + 2):  # M:OR-TRUE: `|| true` / `|| :` is declared",
+      "replace": "                if True:  # M:OR-TRUE: `|| true` / `|| :` is declared",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_explicit_or_true_states_that_no_match_is_intended"
+    },
+    {
+      "name": "redirection-is-a-job",
+      "_mechanism": "The `&` of `2>&1` / `&>` is taken for a background job, refusing ordinary redirections.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                  and text[k - 1:k] not in (\">\", \"<\", \"|\", \"&\")):  # M:REDIRECT-NOT-JOB",
+      "replace": "                  and True):  # M:REDIRECT-NOT-JOB",
+      "test": "tests/test_h_mad_expect_screens.py::test_tests_arithmetic_and_redirections_are_not_lists"
+    },
+    {
+      "name": "test-operator-is-a-list",
+      "_mechanism": "`[[ a && b ]]` is taken for an `&&` list.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                cond = True  # M:COND-NOT-LIST: `&&` inside `[[ ]]` is a test operator",
+      "replace": "                cond = False  # M:COND-NOT-LIST: `&&` inside `[[ ]]` is a test operator",
+      "test": "tests/test_h_mad_expect_screens.py::test_tests_arithmetic_and_redirections_are_not_lists"
+    },
+    {
+      "name": "arithmetic-operator-is-a-list",
+      "_mechanism": "`$(( 1 && 1 ))` is taken for an `&&` list.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            elif arith or cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`",
+      "replace": "            elif cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`",
+      "test": "tests/test_h_mad_expect_screens.py::test_tests_arithmetic_and_redirections_are_not_lists"
+    },
+    {
+      "name": "assignment-substitution-refused",
+      "_mechanism": "The whole value of a one-line `NAME=$(… && …)` is refused, though its status is the assignment's and is recorded.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                      if not (whole and assign_open < pos < assign_close)]  # M:ASSIGN-SUBST",
+      "replace": "                      if True]  # M:ASSIGN-SUBST",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_inside_an_assignment_substitution_is_still_recorded"
+    },
+    {
+      "name": "quoted-substitution-skipped",
+      "_mechanism": "`\"$(… && …)\"` is scanned as quoted text, so a list whose status `echo` discards goes unrefused.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            elif quote == '\"' and text.startswith(\"$(\", k) and not text.startswith(\"$((\", k):",
+      "replace": "            elif False:",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_inside_a_non_assignment_substitution_is_refused"
     },
     {
       "name": "stdin-inherited",

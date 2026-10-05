@@ -191,6 +191,35 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   Only `EXPECT: PASS` certifies. `EXPECT: NONE` (exit 3) means the documents tag no screen, not
   that none moved; an expectation written in prose beside a command (`# the freeze: prints 8`) is
   outside its coverage and is still run by hand.
+- **A published screen block must exit 0 on every line before its screens.** The executor runs
+  each block under `set -o pipefail` and judges no status benign from command text: any statement
+  before a screen that exits non-zero makes every later screen in that block
+  `UNREADABLE:failed_command=<doc>:<line>:<status>`. That includes a grep that legitimately
+  matches nothing (status 1), and `xargs grep` (BSD xargs exits 1 when any batch matches nothing).
+  On HemaSuite `website-corpus-root`, `git ls-files -z | xargs -0 grep -n … | grep -v …` has
+  PIPESTATUS `0 1 0`. It also includes `yes | head -1` (SIGPIPE, 141), and an untracked tool that
+  is absent from the throwaway worktree: `.venv/bin/python` exits 127, because `.venv` is not in
+  the commit. This is the accepted cost of failing closed. Three successive text heuristics for "benign" statuses each opened a hole: an
+  errored `git diff nosuchref` hidden behind `grep -vc`'s 1, and failed backtick and interpolated
+  assignments. When the status is intended, say so in the published screen with `|| true` (or
+  `|| :`):
+  ```bash
+  MOVED=$(git diff --name-only "$BASE" HEAD | grep '\.py$' || true)
+  ```
+  For an untracked tool, call a tracked tool, an absolute path, or a PATH lookup (`python3`)
+  instead. Inside the screen's own pipeline, the measured `grep -c` may exit 1, because that is
+  its reading of 0. Every member is judged separately, and any status ≥ 2 is UNREADABLE.
+- **No `&&`, `||` or `&` at or before a screen.** bash runs no ERR trap for a non-final member of an
+  `&&`/`||` list, or for a background job. So `git diff nosuchref > f && echo done` and
+  `git diff nosuchref > f &` both hide git's 128, and the executor refuses them:
+  `UNREADABLE:unsupported_construct=<&&|"||"|&>@<doc>:<line>`. This also covers lists inside a group,
+  a subshell or a function body. Three forms are not refused:
+  - `|| true` and `|| :`, the declared remedy;
+  - `&&` inside `[[ ]]` or `(( ))`, and the `&` in redirections;
+  - the whole value of a one-line `NAME=$(…)`, whose list status is the assignment's, and the trap
+    records it.
+
+  Write one command per line; to chain on success, put the second command on the next line.
 - **A tooling fix landed mid-arc is a measurement event for every document that measures the
   tooling.** Merge tooling only after the round's last gating pass is collected — merging while a
   round is open silently invalidates every stamped census, and the documents are not re-audited

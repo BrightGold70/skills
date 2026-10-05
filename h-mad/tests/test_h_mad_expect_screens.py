@@ -415,19 +415,19 @@ echo 0   # expect 0
         f"screen: {doc}:3 expect=0 got=UNREADABLE:failed_command={doc}:2:2 FAIL"], result.stdout
 
 
-def test_a_no_match_before_or_inside_a_screen_does_not_poison_the_next(tmp_path):
-    """M2's threshold: grep's exit 1 (no match) is not a failure, before or inside a screen."""
+def test_a_no_match_inside_a_screen_does_not_poison_the_next(tmp_path):
+    """The measured grep's exit 1 IS the reading (a count of 0): inside a screen it is judged
+    by the screen's own per-member statuses, and it never poisons a later screen."""
     root, old, _ = _repo(tmp_path)
     doc = _doc(tmp_path, f"""{FENCE}bash
-grep -c NOPE a.txt
 grep -c BAD a.txt   # expect 0
 echo 0   # expect 0
 {FENCE}
 """)
     result = run(tmp_path, [doc], root, old)
     assert _screens(result.stdout) == [
+        f"screen: {doc}:2 expect=0 got=0 PASS",
         f"screen: {doc}:3 expect=0 got=0 PASS",
-        f"screen: {doc}:4 expect=0 got=0 PASS",
     ], result.stdout
 
 
@@ -484,7 +484,7 @@ def test_a_block_that_deletes_its_worktree_still_leaves_no_entry(tmp_path):
     root, old, _ = _repo(tmp_path)
     doc = _doc(tmp_path, f"""{FENCE}bash
 W=$(git rev-parse --show-toplevel)
-case "$W" in *hmad-expect-*) cd / && rm -rf "$W";; esac
+case "$W" in *hmad-expect-*) cd /; rm -rf "$W";; esac
 echo 0   # expect 0
 {FENCE}
 """)
@@ -712,7 +712,7 @@ def test_a_heredoc_marker_inside_quotes_does_not_hide_later_screens(tmp_path):
     """R2-M1(a): `'<<EOF'` in a quoted grep pattern turned every later line into a heredoc body."""
     root, _, new = _repo(tmp_path)
     doc = _doc(tmp_path, PASSING_BLOCK + f"""{FENCE}bash
-N=$(grep -c '<<EOF' a.txt)
+N=$(grep -c '<<EOF' a.txt || true)
 grep -c BAD a.txt   # expect 0
 {FENCE}
 """)
@@ -792,19 +792,39 @@ git log --oneline $B..HEAD | wc -l | tr -d ' '   # expect 0
         f"screen: {doc}:4 expect=0 got=UNREADABLE:failed_command={doc}:2:1 FAIL"], result.stdout
 
 
-def test_a_no_match_collected_into_a_variable_does_not_poison_the_screen(tmp_path):
-    """R2-S1: a grep's no-match (status 1) inside an assignment, or behind an env prefix, is not a failure."""
+def test_a_no_match_before_a_screen_is_unreadable(tmp_path):
+    """R3: no status is judged benign from command text. A preamble grep that matches nothing
+    (status 1) poisons the screens after it -- the accepted cost of failing closed."""
+    root, old, _ = _repo(tmp_path)
+    for n, line in enumerate(["MOVED=$(git ls-files | grep '\\.py$')",
+                              "N=$(grep -c NOPE a.txt)",
+                              'Q="$(grep NOPE a.txt)"',
+                              "LC_ALL=C grep -c NOPE a.txt",
+                              "X=$(grep -E 'a|b' missing-pattern-file.txt 2>/dev/null; grep -E 'NOPE|ALSO' a.txt)"]):
+        doc = _doc(tmp_path, f"""{FENCE}bash
+{line}
+echo 0   # expect 0
+{FENCE}
+""", f"doc{n}.md")
+        result = run(tmp_path, [doc], root, old)
+        [screen] = _screens(result.stdout)
+        assert screen.startswith(f"screen: {doc}:3 expect=0 got=UNREADABLE:failed_command={doc}:2:"), \
+            (line, result.stdout)
+        assert result.returncode == 1
+
+
+def test_an_explicit_or_true_states_that_no_match_is_intended(tmp_path):
+    """R3's remedy: the author writes `|| true` (or `|| :`) and the published screen says so."""
     root, old, _ = _repo(tmp_path)
     doc = _doc(tmp_path, f"""{FENCE}bash
-MOVED=$(git ls-files | grep '\\.py$')
-N=$(grep -c NOPE a.txt)
-Q="$(grep NOPE a.txt)"
-LC_ALL=C grep -c NOPE a.txt
+MOVED=$(git ls-files | grep '\\.py$' || true)
+N=$(grep -c NOPE a.txt || :)
+LC_ALL=C grep -c NOPE a.txt || true
 echo 0   # expect 0
 {FENCE}
 """)
     result = run(tmp_path, [doc], root, old)
-    assert _screens(result.stdout) == [f"screen: {doc}:6 expect=0 got=0 PASS"], result.stdout
+    assert _screens(result.stdout) == [f"screen: {doc}:5 expect=0 got=0 PASS"], result.stdout
 
 
 def test_a_document_whose_only_screen_is_unparsed_is_fail_not_none(tmp_path):
@@ -819,3 +839,238 @@ echo 0   # expect 0
     assert result.returncode == 1, result.stdout
     assert _screens(result.stdout) == [f"screen: {doc}:3 expect=0 got=UNREADABLE:unparsed FAIL"]
     assert "EXPECT: NONE" not in result.stdout
+
+
+# --- review round 3 of 9f51a5f7 ----------------------------------------------------
+
+
+def test_an_errored_ref_collected_into_a_variable_is_unreadable(tmp_path):
+    """R3-M1: the #49w trip-wire shape in a substitution; git's 128 was hidden behind grep's 1."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+N=$(git diff --name-only nosuchref HEAD | grep -vc '^docs/')
+echo "$N"   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    [screen] = _screens(result.stdout)
+    assert screen.startswith(f"screen: {doc}:3 expect=0 got=UNREADABLE:failed_command={doc}:2:"), \
+        result.stdout
+    assert result.returncode == 1
+
+
+def test_an_errored_ref_at_top_level_into_a_file_is_unreadable(tmp_path):
+    """R3-M1, top level: ERR saw only grep's 1, so the errored git member was never recorded."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+git diff --name-only nosuchref HEAD | grep -vc "^docs/" > n.txt
+cat n.txt   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    [screen] = _screens(result.stdout)
+    assert screen.startswith(f"screen: {doc}:3 expect=0 got=UNREADABLE:failed_command={doc}:2:"), \
+        result.stdout
+
+
+def test_an_errored_member_before_a_clean_one_is_seen_through_pipefail(tmp_path):
+    """R3: without pipefail `git … | cat > f` exits 0 and the error is invisible."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+git diff --name-only nosuchref HEAD | cat > n.txt
+wc -l < n.txt | tr -d ' '   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:failed_command={doc}:2:128 FAIL"], result.stdout
+
+
+def test_a_backtick_assignment_that_failed_is_unreadable(tmp_path):
+    """R3-M2(g): a backtick assignment fell through the env-prefix branch."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+B=`git rev-parse --verify --quiet nosuchref`
+git log --oneline $B..HEAD | wc -l | tr -d ' '   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:failed_command={doc}:2:1 FAIL"], result.stdout
+
+
+def test_an_interpolated_assignment_that_failed_is_unreadable(tmp_path):
+    """R3-M2(h): `R="range: $(…)"` fell through the env-prefix branch."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+R="range: $(git rev-parse --verify --quiet nosuchref)"
+B=${{R#range: }}
+git log --oneline $B..HEAD | wc -l | tr -d ' '   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:failed_command={doc}:2:1 FAIL"], result.stdout
+
+
+def test_a_sigpipe_is_unreadable_not_pass(tmp_path):
+    """R3: `yes | head -1` ends `yes` with SIGPIPE (141). Fail closed: unreadable, before or in a screen."""
+    root, old, _ = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+yes | head -1 | wc -l | tr -d ' '   # expect 1
+{FENCE}
+
+{FENCE}bash
+yes | head -1 > /dev/null
+echo 0   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, old)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:2 expect=1 got=UNREADABLE:exit_status=141,0,0,0 FAIL",
+        f"screen: {doc}:7 expect=0 got=UNREADABLE:failed_command={doc}:6:141 FAIL",
+    ], result.stdout
+
+
+def test_an_assignment_whose_substitution_exits_non_zero_is_unreadable(tmp_path):
+    """R3: only the assignment's own status shows this failure -- `|| exit 1` fires no ERR
+    inside the substitution -- so it must be recorded whatever the statement's text."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+B=$(git rev-parse --verify --quiet nosuchref || exit 1)
+git log --oneline $B..HEAD | wc -l | tr -d ' '   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:failed_command={doc}:2:1 FAIL"], result.stdout
+
+
+# --- review round 4 of 6696f180: refuse what the ERR trap cannot see ----------------
+
+
+def test_an_and_list_before_a_screen_is_refused(tmp_path):
+    """R4 (p): bash runs no ERR trap for a non-final `&&` member; git's 128 read as PASS."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+git diff --name-only nosuchref HEAD > list.txt && echo listed
+wc -l < list.txt | tr -d ' '   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
+    assert result.returncode == 1
+
+
+def test_a_background_job_before_a_screen_is_refused(tmp_path):
+    """R4 (r): a `&` job's status never reaches the trap, and a bare `wait` returns 0."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+git diff --name-only nosuchref HEAD > list.txt &
+wait
+wc -l < list.txt | tr -d ' '   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_construct=&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_a_failed_cd_in_an_and_list_is_refused(tmp_path):
+    """R4: `cd nosuchdir && …` is the same hole; a screen after it is refused."""
+    root, old, _ = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+cd nosuchdir && echo moved
+echo 0   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, old)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_an_or_list_that_is_not_a_declared_or_true_is_refused(tmp_path):
+    """R4: `cmd || other` hides cmd's status just like `&&`; only `|| true`/`|| :` is declared."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+git diff --name-only nosuchref HEAD > list.txt || echo failed > /dev/null
+wc -l < list.txt | tr -d ' '   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_a_list_on_the_screens_own_line_is_refused(tmp_path):
+    """R4: `false || echo 0   # expect 0` would PASS on the fallback branch."""
+    root, old, _ = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+false || echo 0   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, old)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:2 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_an_and_list_inside_an_assignment_substitution_is_still_recorded(tmp_path):
+    """R4: inside a single-line `NAME=$(…)` the list's status IS the assignment's, and the trap
+    records it (probe: `X=$(grep x /nonexistent && echo y)` -> trap rc=2). Not refused."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+B=$(git rev-parse --verify nosuchref 2>/dev/null && echo extra)
+git log --oneline $B..HEAD | wc -l | tr -d ' '   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:failed_command={doc}:2:128 FAIL"], result.stdout
+
+
+def test_an_and_list_inside_a_non_assignment_substitution_is_refused(tmp_path):
+    """R4: `echo "$(a && b)"` discards the substitution's status (probe: no trap), so refuse."""
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+echo "$(git diff --name-only nosuchref HEAD && echo y)" > out.txt
+grep -c . out.txt   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, new)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_tests_arithmetic_and_redirections_are_not_lists(tmp_path):
+    """R4: `&&` inside `[[ ]]` or `(( ))`, `2>&1` and `&>` are not lists or jobs.
+    (`|&` is bash 4+; /bin/bash here is 3.2, where it is a syntax error.)"""
+    root, old, _ = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+[[ -n x && -n y ]]
+n=$(( 1 && 1 ))
+ls a.txt > /dev/null 2>&1
+ls a.txt &> /dev/null
+echo 0   # expect 0
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, old)
+    assert _screens(result.stdout) == [f"screen: {doc}:6 expect=0 got=0 PASS"], result.stdout
+
+
+def test_a_list_after_the_screen_does_not_refuse_it(tmp_path):
+    """R4: only constructs at or before a screen refuse it."""
+    root, old, _ = _repo(tmp_path)
+    doc = _doc(tmp_path, f"""{FENCE}bash
+echo 0   # expect 0
+true && echo after
+{FENCE}
+""")
+    result = run(tmp_path, [doc], root, old)
+    assert _screens(result.stdout) == [f"screen: {doc}:2 expect=0 got=0 PASS"], result.stdout

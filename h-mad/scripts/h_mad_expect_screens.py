@@ -50,26 +50,56 @@ reads that tree, not the sha.
 How a reading is taken. Each qualifying block runs ONCE (non-strict bash, so a
 grep that matches nothing does not end the block), via `run_block`, with marker
 lines inserted around each screen so its stdout is captured alone and every
-earlier line still runs to define variables. An ERR trap with `set -E`
-(errtrace, so it also fires in function bodies, subshells and command
+earlier line still runs to define variables. Every block runs under
+`set -o pipefail`, so an errored non-final member fails its pipeline
+(`git diff nosuchref | cat > f` exits 128, not 0), and an ERR trap with `set -E`
+(errtrace: it also fires in function bodies, subshells and command
 substitutions, writing to one file), disarmed inside screens, records every
-earlier command that failed: a non-zero status of an assignment from a command
-substitution -- except status 1 when the substitution's last command is a grep,
-which is its no-match -- of `cd`, `pushd`, `popd`, `source` or `.`, and a
-status >= 2 of anything else. An env-prefixed command (`LC_ALL=C grep …`) is a
-command, not an assignment. A screen is
-UNREADABLE -- never PASS -- when such a failure precedes it
-(`failed_command=<doc>:<line>:<status>`), its markers are missing, repeated or
-mangled (the block died, or the screen sits in a loop), any member of its
-pipeline exited >= 2 (the error-reads-as-zero class: `grep x missing | wc -l`
-prints 0), its trimmed stdout is empty or not one integer, or the block timed out
-or could not launch. Residuals: a non-assignment that fails with status 1 (`cat`
-on a missing file) is indistinguishable from grep's no-match, at the top level, in
-a function or inside a substitution; `export X=$(cmd)` exits 0 in bash itself;
-and a failing command earlier on the screen's own line
-(`false; echo 0   # expect 0`) is not seen. The trap is
-disarmed inside screens because bash 3.2 reports a partial PIPESTATUS to it and
-leaves its own PIPESTATUS behind.
+command before a screen that bash reports to it: a simple command, pipeline,
+assignment or function call that exits non-zero. No status is judged benign
+from command text. bash runs NO ERR trap for a non-final member of an `&&`/`||`
+list, for a background `&` job, or for an `if`/`while`/`until` condition or a
+`!`-negated command. The first two cannot be recorded, so they are REFUSED: a
+block with an `&&`, an `||` or a `&` at or before a screen -- at top level, in a
+`{ }` group, a `( )` subshell, a function body, or a `$(…)`/backtick used anywhere
+but as the whole value of a one-line `NAME=$(…)` -- makes that screen
+`UNREADABLE:unsupported_construct=<&&|"||"|&>@<doc>:<line>`, never PASS. Three
+forms are not refused, because each is either recorded or not a list: `|| true`
+and `|| :` (the author's declared remedy); an `&&` inside `[[ ]]` or `(( ))`, or
+the `&` in `2>&1` and `&>`; and the whole value of a one-line `NAME=$(…)`, whose
+list status is the assignment's, which the trap records (probe on bash 3.2:
+`X=$(grep x /nonexistent && echo y)` traps rc=2; `{ … && …; }`, `( … && … )` and
+`echo $(… && …)` do not). Conditions are left as written, as a residual: a
+condition is meant to branch on failure. A screen is UNREADABLE -- never PASS --
+when a recorded failure precedes it (`failed_command=<doc>:<line>:<status>`), its markers are missing,
+repeated or mangled (the block died, or the screen sits in a loop), any member
+of its own pipeline exited >= 2 (the error-reads-as-zero class:
+`grep x missing | wc -l` prints 0), its trimmed stdout is empty or not one
+integer, or the block timed out or could not launch. Inside the screen a member
+may exit 1, because the measured `grep -c`/`grep -vc` exits 1 exactly when it
+reads 0; that is the screen's own reading, judged member by member.
+
+The cost, accepted because a false UNREADABLE never certifies: a statement
+before a screen that legitimately exits non-zero makes every later screen in
+its block UNREADABLE. Four triggers, each with its remedy, which belongs to the
+document's author:
+  - a grep that matches nothing (status 1): write `|| true` (or `|| :`), which
+    states in the published screen that the status is intended;
+  - `xargs grep`: BSD xargs exits 1 when any batch's grep matches nothing (on
+    HemaSuite, `git ls-files -z | xargs -0 grep -n … | grep -v …` has
+    PIPESTATUS `0 1 0`): `|| true` again;
+  - `yes | head -1` (SIGPIPE, 141): `|| true`;
+  - an untracked tool, missing from the throwaway worktree (a `.venv/bin/python`
+    exits 127, because `.venv` is not in the commit): call a tracked tool, an
+    absolute path, or a PATH lookup (`python3`) instead.
+The `|| true` and `|| :` forms are the only `||` not refused (see above).
+A SIGPIPE inside a screen's own pipeline reads UNREADABLE:exit_status=141,….
+Residuals: `export X=$(cmd)` exits 0 in bash itself; a non-final member of a
+screen's own pipeline that fails with status 1 (`cat` on a missing file) reads
+as grep's no-match; and a failing command earlier on the screen's own line
+(`false; echo 0   # expect 0`) is not seen. The trap is disarmed inside screens
+because bash 3.2 reports a partial PIPESTATUS to it and leaves its own
+PIPESTATUS behind.
 
 Output and exit:
 
@@ -95,7 +125,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -105,6 +135,8 @@ from h_mad_doc_block_exec import (  # noqa: E402
 
 SCREEN = re.compile(r"#[ \t]*expect[ \t]+(-?\d+)[ \t]*(?:$|[,;(]|--|—)")
 RAW_SCREEN = re.compile(r"(?:^|[ \t;&|()<>])" + SCREEN.pattern)
+ASSIGN_SUBST = re.compile(r"[ \t]*[A-Za-z_][A-Za-z0-9_]*=\$\((?!\()")
+DECLARED_OR = re.compile(r"[ \t]*(?:true|:)[ \t]*(?:$|[;)#])")
 HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
 INTEGER = re.compile(r"-?\d+")
 GIT_REDIRECTS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
@@ -112,27 +144,11 @@ GIT_REDIRECTS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
 COVERAGE = ("coverage: only statements ending in a '# expect <N>' comment inside a bash/sh "
             "fence are screened; expectations stated in prose or untagged commands are not run; "
             "a statement that leaves the worktree by absolute path reads that tree, not the sha")
-# The ERR trap's classifier. `case`, not `[[ =~ ]]`: bash 3.2 never matched `=~` inside an
-# ERR trap. Failures go to a file, not a variable, so a function body, subshell or command
-# substitution (reached through `set -E`) records into the same list as the top level.
-FAIL_FN = """__hmad_fail() {
-  local r=$1 c=$2 at=$3 n t k=0
-  case "$c" in *=*)
-    n=${c%%=*}
-    case "$n" in ""|[0-9]*|*[!A-Za-z0-9_]*) ;; *)
-      case "$c" in
-        "$n="'$('*')'|"$n="'"$('*')"')
-          k=1; t=${c#*\\$(}; t=${t##*|}; t=${t#"${t%%[![:space:]]*}"}  # M:SUBST-ASSIGN
-          case "$t" in grep*|egrep*|fgrep*) if [ "$r" = 1 ]; then k=0; fi;; esac;;  # M:GREP-NOMATCH
-        "$n="*[[:space:]]*) ;;  # M:ENV-PREFIX: `VAR=x cmd` is a command, not an assignment
-        *) k=1;;
-      esac;;
-    esac;;
-  esac
-  case "$c" in cd|cd[[:space:]]*|pushd|pushd[[:space:]]*|popd|popd[[:space:]]*|source[[:space:]]*|.[[:space:]]*) k=1;; esac
-  if [ "$k" = 1 ] || [ "$r" -ge 2 ]; then echo "$at:$r" >> "$__hmad_ff"; fi  # M:TRAP-RULE
-}"""
-TRAP = '__hmad_fail $? "$BASH_COMMAND" $((LINENO - __hmad_l0 - 1))'
+# The ERR trap records EVERY non-zero status outside a screen: no status is judged benign
+# from command text (three rounds of text heuristics each opened a hole in another). It
+# writes to a file, not a variable, so a function body, subshell or command substitution
+# (reached through `set -E`) records into the same list as the top level.
+TRAP = '__hmad_r=$?; echo "$((LINENO - __hmad_l0 - 1)):$__hmad_r" >> "$__hmad_ff"'  # M:ANY-NONZERO
 
 
 class CannotJudge(Exception):
@@ -162,10 +178,11 @@ class Line:
     heredoc_end: int | None = None   # on an opener: its last terminator's index
     backslash: bool = False
     op: bool = False
+    lists: list = field(default_factory=list)  # untracked `&&` / `||` / `&` on this line
 
 
 def lex(texts: list[str]) -> list[Line]:
-    """Quote, comment and here-document structure of one block, line by line."""
+    """Quote, comment, here-document and list structure of one block, line by line."""
     lines = [Line(t) for t in texts]
     quote, pending, current = None, [], None
     for i, info in enumerate(lines):
@@ -178,11 +195,21 @@ def lex(texts: list[str]) -> list[Line]:
                 current = pending.pop(0) if pending else None
             continue  # M:HEREDOC-BODY: a body line has no code and no comment
         info.quoted = quote is not None
-        cut, k, arith = len(text), 0, 0
+        cut, k, arith, cond, parens, ticks, found = len(text), 0, 0, False, [], [], []
+        assign = None if info.quoted else ASSIGN_SUBST.match(text)
+        assign_open = assign.end() - 1 if assign else None
+        assign_close = None
         while k < len(text):
             ch = text[k]
             if quote == "'":
                 quote = None if ch == "'" else quote
+            elif quote == '"' and text.startswith("$(", k) and not text.startswith("$((", k):
+                parens.append((k + 1, '"'))  # M:DQUOTE-SUBST: `"$(…)"` holds code, not text
+                quote = None
+                k += 1
+            elif quote == '"' and ch == "`":
+                ticks.append('"')
+                quote = None
             elif quote in ('"', "$'"):  # `$'…'` honours backslash escapes like `"…"`
                 if ch == "\\":
                     k += 1
@@ -201,7 +228,34 @@ def lex(texts: list[str]) -> list[Line]:
             elif arith and text.startswith("))", k):
                 arith -= 1
                 k += 1
-            elif (text.startswith("<<", k) and not arith  # M:ARITH-NOT-HEREDOC
+            elif text.startswith("[[", k) and (k == 0 or text[k - 1] in " \t;&|("):
+                cond = True  # M:COND-NOT-LIST: `&&` inside `[[ ]]` is a test operator
+                k += 1
+            elif cond and text.startswith("]]", k):
+                cond = False
+                k += 1
+            elif arith or cond:  # M:ARITH-COND: no list, job or heredoc inside `(( ))`/`[[ ]]`
+                pass
+            elif text.startswith("&&", k):
+                found.append(("&&", k))  # M:REFUSE-AND
+                k += 1
+            elif text.startswith("||", k):
+                if not DECLARED_OR.match(text, k + 2):  # M:OR-TRUE: `|| true` / `|| :` is declared
+                    found.append(("||", k))  # M:REFUSE-OR
+                k += 1
+            elif (ch == "&" and text[k + 1:k + 2] not in (">", "&")
+                  and text[k - 1:k] not in (">", "<", "|", "&")):  # M:REDIRECT-NOT-JOB
+                found.append(("&", k))  # M:REFUSE-JOB
+            elif ch == "(":
+                parens.append((k, None))
+            elif ch == ")" and parens:
+                opened, outer = parens.pop()
+                if opened == assign_open:
+                    assign_close = k
+                quote = outer
+            elif ch == "`" and ticks:
+                quote = ticks.pop()
+            elif (text.startswith("<<", k)  # never inside `(( ))`: the branch above took it
                   and not text.startswith("<<<", k) and text[k - 1:k] != "<"):
                 match = HEREDOC.match(text, k)  # only unquoted code reaches here
                 if match:
@@ -213,6 +267,11 @@ def lex(texts: list[str]) -> list[Line]:
                 break
             k += 1
         info.code, info.comment = text[:cut], text[cut:]
+        # The whole value of a one-line `NAME=$(…)`: the list's status is the assignment's,
+        # which the trap records (probe: `X=$(grep x /nonexistent && echo y)` -> rc=2).
+        whole = assign_close is not None and assign_close == len(info.code.rstrip()) - 1
+        info.lists = [(kind, pos) for kind, pos in found
+                      if not (whole and assign_open < pos < assign_close)]  # M:ASSIGN-SUBST
         if quote is None:
             info.backslash = (not info.comment
                               and (len(text) - len(text.rstrip("\\"))) % 2 == 1)
@@ -361,8 +420,8 @@ def _preamble(cwd: str, pidfile: str) -> str:
         f"echo $$ > {shlex.quote(pidfile)}",
         f"cd -- {shlex.quote(cwd)} || exit 97",  # M:CD-WORKTREE
         f"__hmad_ff={shlex.quote(failfile)}; : > \"$__hmad_ff\"",
-        FAIL_FN,
         "set -E",  # M:ERRTRACE: the trap also fires inside function bodies
+        "set -o pipefail",  # M:PIPEFAIL: an errored non-final member fails its pipeline
         f"__hmad_trap={shlex.quote(TRAP)}",
         'trap "$__hmad_trap" ERR',  # M:TRAP-ARMED
         "__hmad_l0=$LINENO",
@@ -400,7 +459,23 @@ def evaluate(blocks, cwd: str, timeout: float, pidfile: str) -> list[Screen]:
             return f"{doc}:{origin[n] if 0 <= n < len(origin) else '?'}"
         for i, s in enumerate(batch):
             s.got, s.verdict = read_screen(result.stdout, nonce, i, s.expect, where)
+        _refuse_untracked(batch, spans, lex(texts), doc, lines_at)
     return screens
+
+
+def _refuse_untracked(batch, spans, lexed, doc, lines_at) -> None:
+    """An `&&`/`||` list or a `&` job at or before a screen is refused, never read.
+
+    bash runs no ERR trap for a non-final member of an `&&`/`||` list or for a background
+    job, so their failures cannot be recorded. This module refuses them rather than adding
+    another tracking mechanism.
+    """
+    found = [(k, kind) for k, line in enumerate(lexed) for kind, _ in line.lists]
+    for (_, end, _, _), s in zip(spans, batch):
+        first = next(((k, kind) for k, kind in found if k <= end), None)
+        if first is not None:  # M:REFUSE-APPLIED
+            s.got = f"UNREADABLE:unsupported_construct={first[1]}@{doc}:{lines_at[first[0]][0]}"
+            s.verdict = "FAIL"
 
 
 def _origins(texts, spans, lines_at) -> list[int]:
