@@ -429,22 +429,33 @@ def _trim_version_history(text: str, keep: int | None, *, ref: str) -> str:
     return body + "\n".join(head + [note] + kept)
 
 
+def doc_path(feature: str, kind: str, project_root: Path, *,
+             docs_dir: Path | None = None, design_dir: Path | None = None) -> Path:
+    """Where a phase document lives. `kind` is spec|plan|design|impl-plan.
+
+    Design documents do NOT live beside the others: Phase 4 writes
+    `docs/02-design/features/<feature>.design.md` (the bkit PDCA layout the
+    doc-template invariant requires), while spec/plan/impl-plan sit under
+    `docs/01-plan/features/`. Assuming one directory for everything makes every
+    design and impl-plan audit unassemblable. `h_mad_delta_stage.py` resolves
+    through this too, so a delta review names the file an audit run with the
+    default directories would (it has no `--docs-dir`/`--design-dir`).
+    """
+    design_dir = design_dir or (project_root / "docs/02-design/features")
+    docs_dir = docs_dir or (project_root / "docs/01-plan/features")
+    base = design_dir if kind == "design" else docs_dir
+    return base / f"{feature}.{kind}.md"
+
+
 def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
              sentinel: str, report_file: str, template: Path,
              design_dir: Path | None = None,
              vh_tail: int | None = None) -> tuple[str, list[str]]:
     text = resolve(strip_orchestrator_note(_read(template, required=True)), phase)
 
-    # Design documents do NOT live beside the others: Phase 4 writes
-    # `docs/02-design/features/<feature>.design.md` (the bkit PDCA layout the
-    # doc-template invariant requires), while spec/plan/impl-plan sit under
-    # `docs/01-plan/features/`. Assuming one directory for everything makes every
-    # design and impl-plan audit unassemblable.
-    design_dir = design_dir or (project_root / "docs/02-design/features")
-
     def doc(kind: str) -> Path:
-        base = design_dir if kind == "design" else docs_dir
-        return base / f"{feature}.{kind}.md"
+        return doc_path(feature, kind, project_root,
+                        docs_dir=docs_dir, design_dir=design_dir)
 
     def doc_text(kind: str) -> str:
         path = doc(kind)

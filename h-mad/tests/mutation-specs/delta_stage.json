@@ -1,0 +1,323 @@
+{
+  "_why": "Skill-candidates row `a delta-self-review verb` (landed 2026-10-05): the delta review was dispatched by hand six times with an identical shape, and the report-naming constraint (a name OUTSIDE the audit filename grammar) was left to the caller's memory. h_mad_delta_stage.py validates everything before claiming anything (sha is a commit, the sha touched each phase doc, each --answers file is readable and non-empty; an unevaluable check halts), MINTS `<feature>.<phase>.delta-review.<sha7>-<UTC stamp>.md` with no override, refuses a minted name any IMPORTED ledger selector would read, claims report AND prompt path once with the assembler's machinery (releasing only this run's own claims on a refusal), and prints the Agent call. Each row breaks one of those properties.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_delta_stage.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "name-has-no-timestamp",
+      "_mechanism": "Two stagings of one sha mint ONE name, so the second is refused as handed instead of staged fresh.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    return f\"{feature}.{phase}.delta-review.{sha7}-{stamp}.md\"  # M:DSTAGE-NAME",
+      "replace": "    return f\"{feature}.{phase}.delta-review.{sha7}.md\"  # M:DSTAGE-NAME",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_second_run_on_the_same_sha_mints_a_different_name"
+    },
+    {
+      "name": "name-has-no-sha",
+      "_mechanism": "The name no longer says which revision was reviewed.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    return f\"{feature}.{phase}.delta-review.{sha7}-{stamp}.md\"  # M:DSTAGE-NAME",
+      "replace": "    return f\"{feature}.{phase}.delta-review.{stamp}.md\"  # M:DSTAGE-NAME",
+      "test": "tests/test_h_mad_delta_stage.py::test_two_phases_are_staged_with_minted_names_and_prompts"
+    },
+    {
+      "name": "version-selector-dropped",
+      "_mechanism": "A `.vN.md` name, which h_mad_cycle_counts counts as an audit cycle, is staged.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    return bool(cc._VERSION_RE.search(name)  # M:DSTAGE-GRAMMAR-VERSION",
+      "replace": "    return bool(False  # M:DSTAGE-GRAMMAR-VERSION",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_name_the_cycle_counter_would_read_halts"
+    },
+    {
+      "name": "version-selector-copied",
+      "_mechanism": "A frozen copy of _VERSION_RE stops tracking the ledger's grammar when it widens.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    return bool(cc._VERSION_RE.search(name)  # M:DSTAGE-GRAMMAR-VERSION",
+      "replace": "    return bool(__import__(\"re\").compile(r\"\\.v(\\d+)(?:\\.[A-Za-z0-9][A-Za-z0-9_-]*)?\\.md$\").search(name)  # M:DSTAGE-GRAMMAR-VERSION",
+      "test": "tests/test_h_mad_delta_stage.py::test_the_grammar_check_tracks_the_cycle_counter_regex"
+    },
+    {
+      "name": "stamp-selector-dropped",
+      "_mechanism": "The gate-stamp grammar is no longer consulted, so a stamp grammar that widens is not followed.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "                or ag._STAMP_NAME_RE.match(name + ag.STAMP_SUFFIX)  # M:DSTAGE-GRAMMAR-STAMP",
+      "replace": "                or False  # M:DSTAGE-GRAMMAR-STAMP",
+      "test": "tests/test_h_mad_delta_stage.py::test_the_grammar_check_tracks_the_stamp_regex"
+    },
+    {
+      "name": "audit-segment-check-dropped",
+      "_mechanism": "A name carrying `.audit.`, which the ledger globs select on, is staged.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "                or \".audit.\" in name)  # M:DSTAGE-GRAMMAR-AUDIT",
+      "replace": "                or False)  # M:DSTAGE-GRAMMAR-AUDIT",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_name_carrying_an_audit_segment_halts"
+    },
+    {
+      "name": "grammar-check-bypassed",
+      "_mechanism": "The minted name is never checked against the ledger grammar.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "        if in_audit_grammar(name):  # M:DSTAGE-GRAMMAR",
+      "replace": "        if False:  # M:DSTAGE-GRAMMAR",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_name_the_cycle_counter_would_read_halts"
+    },
+    {
+      "name": "commit-type-unchecked",
+      "_mechanism": "A sha naming a tree (or blob, or tag) is accepted as the reviewed revision.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "        if kind.stdout.strip() != \"commit\":  # M:DSTAGE-COMMIT",
+      "replace": "        if False:  # M:DSTAGE-COMMIT",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_sha_naming_a_tree_not_a_commit_halts"
+    },
+    {
+      "name": "unresolvable-sha-misreported",
+      "_mechanism": "A sha git cannot resolve is reported under the wrong reason rather than unresolvable.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "        if kind.returncode != 0:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_bad_sha_halts_and_writes_nothing"
+    },
+    {
+      "name": "unchanged-doc-accepted",
+      "_mechanism": "A sha that did not touch the doc stages a review of nothing.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    return None if show.stdout.strip() else \"unchanged\"  # M:DSTAGE-UNCHANGED",
+      "replace": "    return None  # M:DSTAGE-UNCHANGED",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_sha_that_did_not_touch_the_doc_halts_unchanged"
+    },
+    {
+      "name": "show-error-is-not-named",
+      "_mechanism": "A git failure on `show` is not reported as git_error: an evaluation failure reads as a verdict about the doc.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    if show.returncode != 0:  # M:DSTAGE-SHOW-RC",
+      "replace": "    if False:  # M:DSTAGE-SHOW-RC",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_git_error_on_show_fails_closed"
+    },
+    {
+      "name": "missing-answers-accepted",
+      "_mechanism": "A --answers path that does not exist is staged into the prompt.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "        return \"missing\"",
+      "replace": "        return None",
+      "test": "tests/test_h_mad_delta_stage.py::test_missing_answers_halts"
+    },
+    {
+      "name": "empty-answers-accepted",
+      "_mechanism": "An empty --answers file is staged as the findings the revision answers.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    return None if head else \"empty\"  # M:DSTAGE-ANSWERS-EMPTY",
+      "replace": "    return None  # M:DSTAGE-ANSWERS-EMPTY",
+      "test": "tests/test_h_mad_delta_stage.py::test_empty_answers_halts"
+    },
+    {
+      "name": "unreadable-answers-pass",
+      "_mechanism": "A --answers file that cannot be read takes the passed branch: fail-open on an unevaluated check.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    except OSError:  # M:DSTAGE-ANSWERS-FAILCLOSED\n        return \"unreadable\"",
+      "replace": "    except OSError:  # M:DSTAGE-ANSWERS-FAILCLOSED\n        return None",
+      "test": "tests/test_h_mad_delta_stage.py::test_an_unreadable_answers_file_fails_closed"
+    },
+    {
+      "name": "answers-optional",
+      "_mechanism": "With no --answers the review has no findings to scope it, and is staged anyway.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    ap.add_argument(\"--answers\", required=True, action=\"append\", metavar=\"PATH\",",
+      "replace": "    ap.add_argument(\"--answers\", required=False, default=[], action=\"append\", metavar=\"PATH\",",
+      "test": "tests/test_h_mad_delta_stage.py::test_zero_answers_is_a_usage_error"
+    },
+    {
+      "name": "duplicate-phase-accepted",
+      "_mechanism": "`--phase plan --phase plan` mints one name twice and is reported as a handed path instead of a usage error.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    if len(set(args.phase)) != len(args.phase):  # M:DSTAGE-DUP-PHASE",
+      "replace": "    if False:  # M:DSTAGE-DUP-PHASE",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_duplicate_phase_is_a_usage_error"
+    },
+    {
+      "name": "existing-report-path-staged",
+      "_mechanism": "A report path that already exists (a live leg's) is claimed and handed.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "            held = next((p for p in (report, prompt) if aa._present(p)), None)  # M:DSTAGE-FRESH",
+      "replace": "            held = None  # M:DSTAGE-FRESH",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_pre_existing_report_path_halts_and_deletes_nothing"
+    },
+    {
+      "name": "existing-prompt-path-unchecked",
+      "_mechanism": "Only the report path is measured, so a live leg's prompt path is found only at the write.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "            held = next((p for p in (report, prompt) if aa._present(p)), None)  # M:DSTAGE-FRESH",
+      "replace": "            held = next((p for p in (report,) if aa._present(p)), None)  # M:DSTAGE-FRESH",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_pre_existing_prompt_path_halts_and_deletes_nothing"
+    },
+    {
+      "name": "mint-halts-ignored",
+      "_mechanism": "A refused mint (grammar or freshness) is dropped from the run, which then exits as if staged.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    if halts:  # M:DSTAGE-MINT-HALTS",
+      "replace": "    if False:  # M:DSTAGE-MINT-HALTS",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_pre_existing_report_path_halts_and_deletes_nothing"
+    },
+    {
+      "name": "claim-result-ignored",
+      "_mechanism": "A report path claimed by an earlier leg is handed again: the #49o clobber.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "            if not claimed:  # M:DSTAGE-HELD",
+      "replace": "            if False:  # M:DSTAGE-HELD",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_claimed_report_path_halts_and_deletes_nothing"
+    },
+    {
+      "name": "prompt-path-not-claimed",
+      "_mechanism": "Only the report path is claimed, so a prompt path handed to another leg is reused.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "        for path in (report, prompt):  # M:DSTAGE-CLAIM-BOTH",
+      "replace": "        for path in (report,):  # M:DSTAGE-CLAIM-BOTH",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_claimed_prompt_path_halts"
+    },
+    {
+      "name": "refused-claim-keeps-this-runs-claims",
+      "_mechanism": "A later phase's refused claim leaves the earlier phases' fresh claims behind, burning paths for legs never dispatched.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "            aa._marker(path).unlink(missing_ok=True)  # M:DSTAGE-RELEASE",
+      "replace": "            pass  # M:DSTAGE-RELEASE",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_later_phase_claim_failure_releases_this_runs_claims"
+    },
+    {
+      "name": "spec-resolved-beside-design",
+      "_mechanism": "doc_path, shared with the assembler, puts the spec under the design directory.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    base = design_dir if kind == \"design\" else docs_dir",
+      "replace": "    base = design_dir if kind in (\"design\", \"spec\") else docs_dir",
+      "test": "tests/test_h_mad_delta_stage.py::test_spec_resolves_where_the_assembler_puts_it"
+    },
+    {
+      "name": "unchanged-judged-on-a-pathspec",
+      "_mechanism": "The doc path goes to `git show` as a pathspec, so a glob in it matches a changed sibling and an untouched doc reads as changed.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "                    sha, \"--\", f\":(literal){rel}\")  # M:DSTAGE-LITERAL",
+      "replace": "                    sha, \"--\", rel)  # M:DSTAGE-LITERAL",
+      "test": "tests/test_h_mad_delta_stage.py::test_unchanged_is_judged_on_the_literal_path_not_a_glob"
+    },
+    {
+      "name": "feature-grammar-reverted",
+      "_mechanism": "Only `/` is refused, so a newline, quote, space or glob in --feature reaches the prompt, the Agent call and the pathspec.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    if not _FEATURE_RE.fullmatch(args.feature):  # M:DSTAGE-FEATURE",
+      "replace": "    if not args.feature or \"/\" in args.feature:  # M:DSTAGE-FEATURE",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_feature_name_outside_the_name_grammar_is_a_usage_error"
+    },
+    {
+      "name": "feature-grammar-prefix-only",
+      "_mechanism": "A prefix match accepts any name that merely STARTS well-formed.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    if not _FEATURE_RE.fullmatch(args.feature):  # M:DSTAGE-FEATURE",
+      "replace": "    if not _FEATURE_RE.match(args.feature):  # M:DSTAGE-FEATURE",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_feature_name_outside_the_name_grammar_is_a_usage_error"
+    },
+    {
+      "name": "encode-error-escapes-rollback",
+      "_mechanism": "A UnicodeEncodeError (non-UTF-8 path) is not an OSError: it escapes as a traceback, leaving claims and a partial prompt.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    except (OSError, ValueError) as exc:  # M:DSTAGE-WRITE-ERRORS",
+      "replace": "    except OSError as exc:  # M:DSTAGE-WRITE-ERRORS",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_prompt_that_cannot_be_encoded_rolls_back_this_run"
+    },
+    {
+      "name": "written-prompts-kept-on-write-failure",
+      "_mechanism": "A later phase's write failure leaves the earlier phases' prompt files behind for legs never dispatched.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "            Path(path).unlink(missing_ok=True)  # M:DSTAGE-UNLINK-WRITTEN",
+      "replace": "            pass  # M:DSTAGE-UNLINK-WRITTEN",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_failed_second_prompt_write_removes_this_runs_prompts_and_claims"
+    },
+    {
+      "name": "claims-kept-on-write-failure",
+      "_mechanism": "A write failure leaves every claim this run made, burning the paths.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "        release()  # M:DSTAGE-RELEASE-WRITE",
+      "replace": "        pass  # M:DSTAGE-RELEASE-WRITE",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_failed_second_prompt_write_removes_this_runs_prompts_and_claims"
+    },
+    {
+      "name": "write-failure-footer-says-nothing-written",
+      "_mechanism": "The write-failure HALT says nothing was written, after it wrote and removed files.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "                      footer=\"this run's prompt files and claims were removed; \"",
+      "replace": "                      footer=\"nothing was claimed and nothing was written. \"",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_failed_second_prompt_write_removes_this_runs_prompts_and_claims"
+    },
+    {
+      "name": "claims-kept-on-marker-failure",
+      "_mechanism": "A claim that cannot be written leaves the claims this run already made.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "                release()  # M:DSTAGE-RELEASE-MARKER",
+      "replace": "                pass  # M:DSTAGE-RELEASE-MARKER",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_claim_that_cannot_be_written_releases_this_runs_claims"
+    },
+    {
+      "name": "answers-kind-unchecked",
+      "_mechanism": "A FIFO --answers passes open() and blocks the read forever instead of halting.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    if not stat.S_ISREG(st.st_mode):  # M:DSTAGE-ANSWERS-REGULAR",
+      "replace": "    if False:  # M:DSTAGE-ANSWERS-REGULAR",
+      "test": "tests/test_h_mad_delta_stage.py::test_an_answers_fifo_halts_instead_of_blocking"
+    },
+    {
+      "name": "sha-is-one-commit-undocumented",
+      "_mechanism": "SKILL.md no longer says --sha is one commit, so a two-commit revision is staged and half-reviewed.",
+      "file": "SKILL.md",
+      "find": "**`--sha` is ONE commit, and the review sees only that commit.**",
+      "replace": "**The review sees only that commit.**",
+      "test": "tests/test_h_mad_delta_stage.py::test_skill_md_says_sha_is_the_one_commit_carrying_the_revision"
+    },
+    {
+      "name": "control-chars-never-detected",
+      "_mechanism": "No value is ever found to carry a control character, so a newline in --answers writes a second REPORT= into the prompt.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    return any(unicodedata.category(c) in _CONTROL_CATEGORIES  # M:DSTAGE-CONTROL",
+      "replace": "    return False and any(unicodedata.category(c) in _CONTROL_CATEGORIES  # M:DSTAGE-CONTROL",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_control_character_in_any_prompt_value_halts_before_claiming"
+    },
+    {
+      "name": "control-class-is-only-newline",
+      "_mechanism": "Only `\\n` is refused, so a CR, ESC, tab or U+2028 still reaches the prompt.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    return any(unicodedata.category(c) in _CONTROL_CATEGORIES  # M:DSTAGE-CONTROL",
+      "replace": "    return any(c == \"\\n\"  # M:DSTAGE-CONTROL",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_control_character_in_any_prompt_value_halts_before_claiming"
+    },
+    {
+      "name": "answers-not-checked-for-control",
+      "_mechanism": "--answers paths, the value the round-2 review injected through, are left out of the check.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "           + [(\"answers\", a) for a in args.answers])  # M:DSTAGE-CONTROL-ARGS",
+      "replace": "           + [])  # M:DSTAGE-CONTROL-ARGS",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_control_character_in_any_prompt_value_halts_before_claiming"
+    },
+    {
+      "name": "control-halt-ignored",
+      "_mechanism": "Tainted values are found and then staged anyway.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "    if tainted:  # M:DSTAGE-CONTROL-HALT",
+      "replace": "    if False:  # M:DSTAGE-CONTROL-HALT",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_control_character_in_any_prompt_value_halts_before_claiming"
+    },
+    {
+      "name": "minted-paths-not-checked-for-control",
+      "_mechanism": "A minted report or prompt path carrying a control character is staged into the prompt.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "find": "        if _has_control(report) or _has_control(prompt):  # M:DSTAGE-CONTROL-MINTED",
+      "replace": "        if False:  # M:DSTAGE-CONTROL-MINTED",
+      "test": "tests/test_h_mad_delta_stage.py::test_a_minted_path_carrying_a_control_character_halts"
+    }
+  ]
+}
