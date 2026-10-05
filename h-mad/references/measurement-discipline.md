@@ -201,30 +201,34 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   is absent from the throwaway worktree: `.venv/bin/python` exits 127, because `.venv` is not in
   the commit. This is the accepted cost of failing closed. Three successive text heuristics for "benign" statuses each opened a hole: an
   errored `git diff nosuchref` hidden behind `grep -vc`'s 1, and failed backtick and interpolated
-  assignments. When a grep's no-match is intended, absorb status 1 and nothing else:
+  assignments. When a no-match is intended, filter with a tool that exits 0 on no match, so that
+  no `||` is needed:
   ```bash
-  MOVED=$(git diff --name-only "$BASE" HEAD | { grep '\.py$' || [ $? = 1 ]; })
+  MOVED=$(git diff --name-only "$BASE" HEAD | awk '/\.py$/')        # or: sed -n '/\.py$/p'
+  N=$(git diff --name-only "$BASE" HEAD | awk '/\.py$/{n++} END{print n+0}')   # a count
   ```
   Under pipefail, git's own error still surfaces. With `BASE=nosuchref` this reads
-  `failed_command=…:128`; with a good base and no match it reads 0 and PASSES. The same group
-  goes around an `xargs grep`. **Do not write `|| true` there.** It masks EVERY status, git's 128
-  included, so a mistyped or deleted base certifies the freeze, which is the #49w shape again.
-  The executor refuses `|| true`. A `yes | head -1` (SIGPIPE) before a screen has no declared form:
-  restructure it. For an untracked tool, call a tracked tool, an absolute path, or a PATH lookup
+  `failed_command=…:128`; with a good base and no match it reads 0 and PASSES. For an
+  `xargs grep`, use `xargs awk '/PAT/{print FILENAME":"FNR":"$0}'`. `|| true` masks EVERY status,
+  git's 128 included, so a mistyped or deleted base would certify the freeze (the #49w shape
+  again). The executor refuses it, like every other `||`. A `yes | head -1` (SIGPIPE) before a
+  screen must be restructured. For an untracked tool, call a tracked tool, an absolute path, or a PATH lookup
   (`python3`) instead. Inside the screen's own pipeline, the measured `grep -c` may exit 1, because that is
   its reading of 0. Every member is judged separately, and any status ≥ 2 is UNREADABLE.
 - **No `&&`, `||` or `&` at or before a screen.** bash runs no ERR trap for a non-final member of an
   `&&`/`||` list, or for a background job. So `git diff nosuchref > f && echo done` and
   `git diff nosuchref > f &` both hide git's 128, and the executor refuses them:
   `UNREADABLE:unsupported_construct=<&&|"||"|&>@<doc>:<line>`. This also covers lists inside a group,
-  a subshell, a function body, a substitution and an `if`/`while`/`until` condition. There are no
-  guard or condition exceptions. `|| true`, `|| :`, `|| exit 0` and `|| return 0` can each end with
-  status 0 over a failure; review round 6 measured `go() { … || return 0; }`, `( … || exit 0 )` and
-  `X=$(… || exit 0)` reading PASS while they were allowed. The only forms not refused are:
-  - exactly the braced `| { CMD || [ $? = 1 ]; }`, the status-1-only remedy above. Without the
-    braces (`… | grep P || [ $? = 1 ]`, or a bare `cmd || [ $? = 1 ]`), the `||` binds to the whole
-    pipeline, whose pipefail status is grep's 1, so git's 128 is swallowed. That form is refused, as
-    are look-alikes such as `|| [ $? = 0 ]` and `|| [ 1 ]`;
+  a subshell, a function body, a substitution and an `if`/`while`/`until` condition. Every `||`
+  is refused, with no declared form, because each exception tried had a hole:
+  - `|| true` and `|| :` mask every status;
+  - `|| exit 0` and `|| return 0` end with 0 over a failure (round 6);
+  - a list inside a condition leaked past `if (true) then` (round 6);
+  - an unbraced `… | grep P || [ $? = 1 ]` swallows git's 128 (round 7);
+  - even the braced `git … | { grep P || [ $? = 1 ]; } > f` read PASS, because bash 3.2 runs no
+    ERR trap for a pipeline that ends in such a group (round 8).
+
+  The only forms not refused are:
   - `&&` inside `[[ ]]` or `(( ))`, and the `&` in redirections;
   - the whole value of a one-line `NAME=$(…)` whose body is one `&&` chain, with no `;`, `||`, `&`
     or newline. Only then does the assignment carry the failing member's status;

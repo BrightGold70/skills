@@ -63,20 +63,14 @@ list, for a background `&` job, or for an `if`/`while`/`until` condition or a
 block with an `&&`, an `||` or a `&` at or before a screen -- at top level, in a
 `{ }` group, a `( )` subshell, a function body, or a `$(…)`/backtick -- makes
 that screen `UNREADABLE:unsupported_construct=<&&|"||"|&>@<doc>:<line>`, never
-PASS. There are no guard or condition exceptions: `|| true`, `|| :`,
-`|| exit 0`, `|| return 0` and a list inside an `if`/`while`/`until` condition are
-all refused, because each can end with status 0 over a failure (review round 6:
-`go() { … nosuchref … || return 0; }`, `( … || exit 0 )` and `X=$(… || exit 0)`
-each read PASS when they were allowed). Not refused, because each is recorded or
-is no list:
-  - exactly `| { CMD || [ $? = 1 ]; }`, the ONE declared form: inside a group
-    opened right after a single `|`, the `||` binds to that one command, so it
-    passes status 1 (grep's no-match) and turns every other status into a
-    failing final member that the trap records. Unbraced -- `… | grep P ||
-    [ $? = 1 ]` or a bare `cmd || [ $? = 1 ]` -- the `||` binds to the whole
-    pipeline, whose pipefail status is the rightmost non-zero (grep's 1), so it
-    would swallow git's 128 (review round 7, N1/N2): refused. Look-alikes
-    (`|| [ $? = 0 ]`, `|| [ 1 ]`, `|| :`) are refused;
+PASS. Every `||` is refused -- there is no declared form. Each lexical exception
+tried had a hole: `|| true`/`|| :` mask every status; `|| exit 0`/`|| return 0`
+end with 0 over a failure (review round 6); a list inside an `if`/`while`
+condition leaked past `if (true) then` (round 6); an unbraced `… | grep P ||
+[ $? = 1 ]` binds to the whole pipeline and swallows git's 128 (round 7); and
+even the braced `git … | { grep P || [ $? = 1 ]; } > f` read PASS, because bash
+3.2 runs no ERR trap for a pipeline that ends in such a group (round 8). Not
+refused, because each is recorded or is no list:
   - an `&&` inside `[[ ]]` or `(( ))`, and the `&` in `2>&1` and `&>`;
   - the whole value of a one-line `NAME=$(…)` whose body is ONE `&&` chain, with
     no `;`, `||`, `&` or newline: only then is the substitution's status the
@@ -97,15 +91,16 @@ The cost, accepted because a false UNREADABLE never certifies: a statement
 before a screen that legitimately exits non-zero makes every later screen in
 its block UNREADABLE. Four triggers, each with its remedy, which belongs to the
 document's author:
-  - a grep that matches nothing (status 1): absorb status 1 and nothing else,
-    `… | { grep PAT || [ $? = 1 ]; }`. Under pipefail an upstream error still
-    surfaces: with `BASE=nosuchref`,
-    `$(git diff --name-only "$BASE" HEAD | { grep '\\.py$' || [ $? = 1 ]; })`
-    reads `failed_command=…:128`. `|| true` is refused: it masks every status,
-    git's 128 included, and would certify a freeze against a mistyped base;
+  - a grep that matches nothing (status 1): filter with a tool that exits 0 on
+    no match, so no `||` is needed -- `awk '/PAT/'`, `sed -n '/PAT/p'`, or for a
+    count `awk '/PAT/{n++} END{print n+0}'`. Under pipefail an upstream error
+    still surfaces: `$(git diff --name-only nosuchref HEAD | awk '/\\.py$/')`
+    reads `failed_command=…:128`, and a good base with no match reads 0. `|| true`
+    is refused: it masks every status, git's 128 included, and would certify a
+    freeze against a mistyped base;
   - `xargs grep`: BSD xargs exits 1 when any batch's grep matches nothing (on
     HemaSuite, `git ls-files -z | xargs -0 grep -n … | grep -v …` has
-    PIPESTATUS `0 1 0`): the same `|| [ $? = 1 ]` group around the xargs;
+    PIPESTATUS `0 1 0`): `git ls-files -z | xargs -0 awk '/PAT/{print FILENAME":"FNR":"$0}'`;
   - `yes | head -1` (SIGPIPE, 141): restructure so no producer outlives its
     reader before a screen (there is no declared form for it);
   - an untracked tool, missing from the throwaway worktree (a `.venv/bin/python`
@@ -158,13 +153,6 @@ from h_mad_doc_block_exec import (  # noqa: E402
 SCREEN = re.compile(r"#[ \t]*expect[ \t]+(-?\d+)[ \t]*(?:$|[,;(]|--|—)")
 RAW_SCREEN = re.compile(r"(?:^|[ \t;&|()<>])" + SCREEN.pattern)
 ASSIGN_SUBST = re.compile(r"[ \t]*[A-Za-z_][A-Za-z0-9_]*=\$\((?!\()")
-# The ONE `||` that is not refused: exactly `| { CMD || [ $? = 1 ]; }`. Inside a group opened
-# right after a single `|`, the `||` binds to that one command, so it passes status 1 (grep's
-# no-match) and turns every other status into a failing final member; under pipefail an
-# upstream error still surfaces. Unbraced, `||` binds to the WHOLE pipeline, whose pipefail
-# status is the rightmost non-zero (grep's 1), so `[ $? = 1 ]` would swallow git's 128.
-STATUS1_OR = re.compile(r"[ \t]*\[ \$\? = 1 \][ \t]*;[ \t]*\}")  # M:OR-STATUS1
-PIPED_GROUP = re.compile(r"(?:^|[^|])\|[ \t]*\{[ \t]+[^|;&{}()]+$")  # M:PIPED-GROUP
 HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
 INTEGER = re.compile(r"-?\d+")
 GIT_REDIRECTS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
@@ -272,8 +260,7 @@ def lex(texts: list[str]) -> list[Line]:
                 k += 1
             elif text.startswith("||", k):
                 ors.append(k)
-                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):
-                    found.append(("||", k))  # M:REFUSE-OR
+                found.append(("||", k))  # M:REFUSE-OR: no `||` is exempt
                 k += 1
             elif ch == ";" and not text.startswith(";;", k):
                 semis.append(k)

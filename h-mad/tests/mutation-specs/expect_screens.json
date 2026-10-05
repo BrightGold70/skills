@@ -355,8 +355,8 @@
       "name": "or-list-not-refused",
       "_mechanism": "Review R4: an `||` list is not recognised; its first member's failure is hidden.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                    found.append((\"||\", k))  # M:REFUSE-OR",
-      "replace": "                    pass  # M:REFUSE-OR",
+      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "                pass  # M:REFUSE-OR: no `||` is exempt",
       "test": "tests/test_h_mad_expect_screens.py::test_an_or_list_that_is_not_a_declared_or_true_is_refused"
     },
     {
@@ -440,52 +440,36 @@
       "test": "tests/test_h_mad_expect_screens.py::test_a_list_after_a_subshell_condition_if_is_refused"
     },
     {
-      "name": "status-one-remedy-refused",
-      "_mechanism": "Review R5 Must-B (x9): the prescribed braced remedy is refused, so a clean no-match cannot PASS.",
+      "name": "braced-status-one-reaccepted",
+      "_mechanism": "Review R8 (V1): the braced `| { grep P || [ $? = 1 ]; }` is exempt again; at the end of a top-level pipeline bash runs no ERR trap and git's 128 reads PASS.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):",
-      "replace": "                if True:",
-      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_only_remedy_passes_a_clean_no_match"
+      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "                found.append((\"||\", k)) if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*;[ \\t]*\\}\", text[k + 2:]) else None  # M:REFUSE-OR: no `||` is exempt",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_braced_status_one_form_at_the_end_of_a_top_level_pipeline_is_refused"
     },
     {
-      "name": "unbraced-status-one-accepted",
-      "_mechanism": "Review R7 (N1): `… | grep P || [ $? = 1 ]` is accepted unbraced; the `||` binds to the whole pipeline and swallows git's 128.",
+      "name": "any-status-check-accepted",
+      "_mechanism": "Any `|| [ … ]` is exempt again, the exact status-1 form and its look-alikes included.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):",
-      "replace": "                if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\]\", text[k + 2:]):",
-      "test": "tests/test_h_mad_expect_screens.py::test_an_unbraced_status_one_check_in_a_substitution_is_refused"
+      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "                found.append((\"||\", k)) if not re.match(r\"[ \\t]*\\[\", text[k + 2:]) else None  # M:REFUSE-OR: no `||` is exempt",
+      "test": "tests/test_h_mad_expect_screens.py::test_no_status_check_after_or_is_declared"
     },
     {
-      "name": "unbraced-status-one-accepted-top-level",
-      "_mechanism": "Review R7 (N2): the unbraced form at top level, redirected to a file.",
+      "name": "or-true-reaccepted",
+      "_mechanism": "`|| true` / `|| :` are exempt again and mask every status.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):",
-      "replace": "                if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\]\", text[k + 2:]) and False:",
-      "test": "tests/test_h_mad_expect_screens.py::test_an_unbraced_status_one_check_at_top_level_is_refused"
+      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "                found.append((\"||\", k)) if not re.match(r\"[ \\t]*(?:true|:)\", text[k + 2:]) else None  # M:REFUSE-OR: no `||` is exempt",
+      "test": "tests/test_h_mad_expect_screens.py::test_or_true_and_or_colon_are_refused"
     },
     {
-      "name": "piped-group-not-required",
-      "_mechanism": "Review R7: a group around the WHOLE pipeline is accepted; `||` binds to the pipeline and swallows git's 128.",
+      "name": "braced-remedy-reaccepted-in-substitution",
+      "_mechanism": "The braced status-1 form is exempt again inside a substitution, so the remedy reads failed_command or PASS instead of being refused.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):",
-      "replace": "                if not (STATUS1_OR.match(text, k + 2) and True):",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_braced_pipeline_with_a_status_one_check_is_refused"
-    },
-    {
-      "name": "status-one-check-loosened",
-      "_mechanism": "Review R6: any `|| [ … ]` is accepted in the group, so `|| [ $? = 0 ]` and `|| [ 1 ]` pass every status.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*;[ \\t]*\\}\")  # M:OR-STATUS1",
-      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*\\[[^]]*\\][ \\t]*;[ \\t]*\\}\")  # M:OR-STATUS1",
-      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_check_is_the_only_declared_form"
-    },
-    {
-      "name": "or-colon-accepted-in-group",
-      "_mechanism": "Review R6: `| { grep P || :; }` is accepted and masks every status of grep.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*;[ \\t]*\\}\")  # M:OR-STATUS1",
-      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?::|\\[ \\$\\? = 1 \\])[ \\t]*;[ \\t]*\\}\")  # M:OR-STATUS1",
-      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_check_is_the_only_declared_form"
+      "find": "                found.append((\"||\", k))  # M:REFUSE-OR: no `||` is exempt",
+      "replace": "                found.append((\"||\", k)) if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\]\", text[k + 2:]) else None  # M:REFUSE-OR: no `||` is exempt",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_braced_status_one_form_is_refused_with_a_clean_base"
     },
     {
       "name": "stdin-inherited",

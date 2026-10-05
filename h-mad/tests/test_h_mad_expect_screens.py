@@ -712,7 +712,7 @@ def test_a_heredoc_marker_inside_quotes_does_not_hide_later_screens(tmp_path):
     """R2-M1(a): `'<<EOF'` in a quoted grep pattern turned every later line into a heredoc body."""
     root, _, new = _repo(tmp_path)
     doc = _doc(tmp_path, PASSING_BLOCK + f"""{FENCE}bash
-N=$(cat a.txt | {{ grep -c '<<EOF' || [ $? = 1 ]; }})
+N=$(awk '/<<EOF/{{n++}} END{{print n+0}}' a.txt)
 grep -c BAD a.txt   # expect 0
 {FENCE}
 """)
@@ -826,10 +826,10 @@ def test_or_true_and_or_colon_are_refused(tmp_path):
             (line, result.stdout)
 
 
-def test_the_status_one_check_is_the_only_declared_form(tmp_path):
-    """R6: only `|| [ $? = 1 ]` exactly; look-alikes that can pass other statuses are refused."""
+def test_no_status_check_after_or_is_declared(tmp_path):
+    """R8: no `||` is exempt -- the exact status-1 form included, and every look-alike."""
     root, old, _ = _repo(tmp_path)
-    for n, tail in enumerate(["[ $? = 0 ]", ":", "[ 1 ]", "[ $? -ge 1 ]"]):
+    for n, tail in enumerate(["[ $? = 1 ]", "[ $? = 0 ]", ":", "[ 1 ]", "[ $? -ge 1 ]"]):
         doc = _doc(tmp_path, f"{FENCE}bash\nN=$(git ls-files | {{ grep NOPE || {tail}; }})\n"
                              f"echo 0   # expect 0\n{FENCE}\n", f"s{n}.md")
         result = run(tmp_path, [doc], root, old)
@@ -1134,19 +1134,63 @@ REMEDY = ("MOVED=$(git diff --name-only \"$BASE\" HEAD | { grep '\\.py$' || [ $?
           "printf '%s\\n' \"$MOVED\" | grep -c .   # expect 0")
 
 
-def test_the_status_one_only_remedy_surfaces_a_bad_base(tmp_path):
-    """R5 Must-B (x8): grep's 1 is absorbed, git's 128 is not -- pipefail carries it out."""
+def test_the_braced_status_one_form_is_refused_with_a_bad_base(tmp_path):
+    """R8: the braced remedy is no longer an exception, so it is refused whatever the base."""
     root, _, new = _repo(tmp_path)
     doc, result = _one(tmp_path, root, new, "BASE=nosuchref\n" + REMEDY)
     assert _screens(result.stdout) == [
-        f"screen: {doc}:4 expect=0 got=UNREADABLE:failed_command={doc}:3:128 FAIL"], result.stdout
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:3 FAIL"], \
+        result.stdout
 
 
-def test_the_status_one_only_remedy_passes_a_clean_no_match(tmp_path):
-    """R5 Must-B (x9): a good base whose diff matches nothing reads 0 and PASSES."""
+def test_the_braced_status_one_form_is_refused_with_a_clean_base(tmp_path):
+    """R8: refused with a good base too -- a good base cannot be told from a bad one (V1/V7)."""
     root, _, new = _repo(tmp_path)
     doc, result = _one(tmp_path, root, new, "BASE=HEAD\n" + REMEDY)
-    assert _screens(result.stdout) == [f"screen: {doc}:4 expect=0 got=0 PASS"], result.stdout
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:3 FAIL"], \
+        result.stdout
+
+
+def test_the_braced_status_one_form_at_the_end_of_a_top_level_pipeline_is_refused(tmp_path):
+    """R8 (V1): `git … | { grep P || [ $? = 1 ]; } > list.txt` -- bash 3.2 runs no ERR trap for
+    a pipeline that ends in that group, so git's 128 read PASS. Refused now."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "git diff --name-only nosuchref HEAD | { grep '\\.py$' || [ $? = 1 ]; } > list.txt\n"
+                       + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+ZERO_ON_NO_MATCH = {
+    "awk": ("MOVED=$(git diff --name-only \"$BASE\" HEAD | awk '/\\.py$/')\n"
+            "printf '%s\\n' \"$MOVED\" | grep -c .   # expect 0"),
+    "sed": ("MOVED=$(git diff --name-only \"$BASE\" HEAD | sed -n '/\\.py$/p')\n"
+            "printf '%s\\n' \"$MOVED\" | grep -c .   # expect 0"),
+    "awk-count": ("N=$(git diff --name-only \"$BASE\" HEAD | awk '/\\.py$/{n++} END{print n+0}')\n"
+                  "echo \"$N\"   # expect 0"),
+}
+
+
+def test_a_filter_that_exits_zero_on_no_match_passes_a_clean_base(tmp_path):
+    """R8 remedy: awk/sed exit 0 on no match, so no `||` is needed; a clean no-match PASSES."""
+    root, _, new = _repo(tmp_path)
+    for name, body in ZERO_ON_NO_MATCH.items():
+        doc, result = _one(tmp_path, root, new, "BASE=HEAD\n" + body, f"ok-{name}.md")
+        assert _screens(result.stdout) == [f"screen: {doc}:4 expect=0 got=0 PASS"], \
+            (name, result.stdout)
+
+
+def test_a_filter_that_exits_zero_on_no_match_surfaces_a_bad_base(tmp_path):
+    """R8 remedy: the filter exits 0, so under pipefail git's 128 is the pipeline's status."""
+    root, _, new = _repo(tmp_path)
+    for name, body in ZERO_ON_NO_MATCH.items():
+        doc, result = _one(tmp_path, root, new, "BASE=nosuchref\n" + body, f"bad-{name}.md")
+        assert _screens(result.stdout) == [
+            f"screen: {doc}:4 expect=0 got=UNREADABLE:failed_command={doc}:3:128 FAIL"], \
+            (name, result.stdout)
 
 
 def test_a_guard_that_exits_or_returns_is_refused(tmp_path):
