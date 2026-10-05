@@ -1663,7 +1663,12 @@ SPAN — with the command that closes each. The four that cost the most wall clo
   documents had stamped, and each passed the check that was actually run.
 - **The only valid completion signal is an author's own DONE report.** A version bump is the first
   thing an author writes, not the last.
-- **Never re-dispatch to a report path another agent was handed** — suffix it.
+- **Never re-dispatch to a report path another agent was handed** — suffix it. Enforced for legs
+  staged through `h_mad_assemble_audit.py --report-file` and the `audit-cycle` verb: every staged
+  report path and its prompt path are claimed once and never handed again, and the recipes and the
+  verb mint a fresh pair per dispatch. Hand assembly (steps 6.6–8 without the script), dispatches
+  that bypass the assembler (6a-prime, an `Agent()` given a hand-picked path) and sentinel mode
+  (empty `--report-file`) are not guarded.
 - **A claim about the tree in a sheet carries the command that produced it, including the ones that
   are only context.**
 
@@ -2609,10 +2614,15 @@ For each audit pass, the verb **assembles with the script** — it performs step
 through 7.2 below deterministically and refuses to emit a prompt that fails the preflight:
 
 ```bash
+# Orca report-file transport; for the sentinel scrape omit RP, --report-file and --out.
+RUN=$(date -u +%Y%m%dT%H%M%SZ)-$$   # a fresh run token per dispatch, re-dispatches included
+RP=/tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.report.md
 python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py \
   --feature <feature> --phase plan|design|impl-plan --cycle <N> \
   --project-root <PROJECT_ROOT> \
-  --report-file "$RP"          # Orca only; omit for the sentinel scrape
+  --report-file "$RP" \
+  --out /tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.txt
+echo "RUN=$RUN RP=$RP"
 ```
 
 It prints `ASSEMBLE: PASS <path> <size> sentinel=<s> size_status=verified|unverified` or
@@ -2620,8 +2630,40 @@ It prints `ASSEMBLE: PASS <path> <size> sentinel=<s> size_status=verified|unveri
 reasons, **exiting 0 either way** (a rejected prompt is a verdict, not a tool failure —
 see the base invariant on audit-gate signal discipline). A halted prompt is deliberately
 not written, so it cannot be dispatched by mistake. A non-zero exit means unreadable
-inputs. On `HALT`, fix the template or invariants file and re-run; never hand-patch the
-staged prompt.
+inputs. On `HALT <phase>:preflight`, fix the template or invariants file and re-run; never
+hand-patch the staged prompt.
+
+With `--report-file`, the assembler also **claims the report path and its prompt path,
+once**. Before it writes anything it refuses a report path or `--out` that already exists, then
+creates a marker exclusively under `$XDG_CACHE_HOME/h-mad/handed/` (default
+`~/.cache/h-mad/handed/`), and it writes the prompt exclusively; nothing ever releases either.
+The marker is keyed by the realpath of the parent joined with the filename, casefolded as a
+whole, so `/tmp` and `/private/tmp` (or two case spellings) share one claim, and the marker
+never lands in a project. The claim directory is keyed on `XDG_CACHE_HOME`/`HOME`, so
+assemblers that must see each other's claims need the same values; a write-restricted sandbox
+fails closed with `report_path_marker_unwritable`. Without `--out`, the prompt path is the
+report path with `.report.md` turned into `.txt` (any other report path gets `.txt` appended),
+so minting one mints the other. The derived prompt path sits beside RP, so pass an explicit
+`--out` for a report path in the docs tree.
+Every dispatch therefore needs a fresh pair: the recipes below mint one per dispatch with a
+`RUN` token, and `audit-cycle` mints a fresh stem per run. Stale markers are harmless: they only
+refuse paths nobody should reuse. Nothing reaps them, nor the per-run files the verb leaves in
+`/tmp`. Five more HALTs can come back. A HALT deletes nothing.
+
+- `ASSEMBLE: HALT <phase>:report_path_handed path=<RP> held=<path>` — the report path or the
+  prompt path (`held=` names which) was claimed by an earlier hand or already exists. On
+  `ASSEMBLE: HALT <phase>:report_path_handed`, mint a new `RUN`, which moves both paths. Never
+  reuse either, even if its leg looks dead (#49o).
+- `ASSEMBLE: HALT <phase>:report_path_not_absolute path=<path>` — `--report-file` and `--out`
+  must be absolute: a relative path resolves against the agent's cwd, not the assembler's.
+- `ASSEMBLE: HALT <phase>:report_path_is_prompt_path path=<RP>` — `--out` names the same
+  file as `--report-file`, so the prompt would sit at the report path; give it its own path.
+- `ASSEMBLE: HALT <phase>:report_path_unreadable path=<RP>` — the report or prompt path could
+  not be measured, so it is not known to be fresh; fix the permissions on the report directory
+  and re-run.
+- `ASSEMBLE: HALT <phase>:report_path_marker_unwritable path=<RP>` — the claim directory could
+  not be created or written, so no prompt was written; fix it (or `XDG_CACHE_HOME`) and re-run.
+  There is no fallback directory.
 
 **Assert `ASSEMBLE: PASS` before dispatching the assembled prompt** — the same mandated
 read as the Phase-5 `PREFLIGHT:` assertion, for the same reason: the script exits 0 on
@@ -2691,15 +2733,15 @@ assembling by hand because the script is unavailable:
    4. **Trim the rubric** as a last resort, remembering `invariants.base.md` is inlined into every audit prompt, so a rule added there is paid for by all of them.
 6. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
 6.5. Replace `<AUDIT_SENTINEL>` with `AUDIT-<feature>-<phase>-v<N>` — the per-cycle stem step 9 extracts on. It must be unique per cycle; reusing a previous cycle's stem reopens the stale-scrollback trap it exists to close.
-6.6. **Report-file transport (preferred under Orca).** If `hmad-dispatch env` reports `substrate: orca`, replace `<REPORT_FILE_PATH>` with an absolute staged path `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` (and `rm -f "$RP" "$RP.done"` first); the agent will write its report there and mark `$RP.done`. Otherwise (cmux / unpinned) leave `<REPORT_FILE_PATH>` empty and rely on the sentinel scrape. Measured on `audit-cycle-verb`: across the 18 impl-plan audit passes, 17 delivered via the report file (file present, non-empty, `.done` written); 1 did not — cycle 7 pass 1 wrote neither the report file nor the marker, and its report was recovered from `--out`. The verb therefore always arms the `--out` fallback. **Arming it was not the same as it working**: until #16 the fallback passed `--after-marker` unconditionally, which requires the dispatch boundary that only the PANE transport writes, so on every `exec` `--out` file extraction exited 2 and the fallback silently yielded nothing. Measured: a codex pass wrote a **0-byte report file plus its `.done` marker** while `--out` held the complete report, and collection answered `COLLECT: MISSING delivered=none`. The flag is now passed only when the boundary is actually present. See `references/orchestration-mode.md` §"Report-file transport".
-7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
+6.6. **Report-file transport (preferred under Orca).** If `hmad-dispatch env` reports `substrate: orca`, replace `<REPORT_FILE_PATH>` with an absolute staged path `RP=/tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.report.md`, minting `RUN=$(date -u +%Y%m%dT%H%M%SZ)-$$` once per dispatch and using it for the staged prompt too (step 7), so no dispatch ever reuses a report or prompt path. A hand assembly claims nothing: minting a fresh `RUN` is its only guard (only the script claims both paths and HALTs on reuse). Carry the literal `RUN` and `RP` values into steps 7–9, since each Bash call is a fresh shell; the agent will write its report there and mark `$RP.done`. Otherwise (cmux / unpinned) leave `<REPORT_FILE_PATH>` empty and rely on the sentinel scrape. Measured on `audit-cycle-verb`: across the 18 impl-plan audit passes, 17 delivered via the report file (file present, non-empty, `.done` written); 1 did not — cycle 7 pass 1 wrote neither the report file nor the marker, and its report was recovered from `--out`. The verb therefore always arms the `--out` fallback. **Arming it was not the same as it working**: until #16 the fallback passed `--after-marker` unconditionally, which requires the dispatch boundary that only the PANE transport writes, so on every `exec` `--out` file extraction exited 2 and the fallback silently yielded nothing. Measured: a codex pass wrote a **0-byte report file plus its `.done` marker** while `--out` held the complete report, and collection answered `COLLECT: MISSING delivered=none`. The flag is now passed only when the boundary is actually present. See `references/orchestration-mode.md` §"Report-file transport".
+7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.txt`.
 7.2. **Residual-placeholder preflight — mandatory, before any `send`.** Substitution is a
    literal string replace over the whole file, so it is silent in both failure directions: a
    slot you forgot stays in the prompt as a raw token, and a bracketed slot *mention* in prose
    gets replaced too, splicing a second copy of a rubric into the middle of a sentence. Neither
    raises an error; both reach the reviewer. Check:
    ```bash
-   P=/tmp/audit_<feature>_<phase>_cycle<N>.txt
+   P=/tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.txt
    grep -n '<INLINE_\|<AUDIT_SENTINEL>\|<REPORT_FILE_PATH>' "$P" && \
      echo "HALT <phase>:unfilled_slot" || echo "slots OK"
    grep -n '{{' "$P" && \
@@ -2732,7 +2774,7 @@ assembling by hand because the script is unavailable:
 7.5. **On cycle 1 of each audit phase (and after confirming agy is alive via `hmad-dispatch alive agy`), clear agy's context** (see §"Agent-pane context hygiene") so a prior feature's/phase's transcript can't drift the verdict or pollute the scrollback you later grep. Later cycles of the SAME audit reuse the warm context (the running revision thread is wanted).
 8. Dispatch:
    ```bash
-   hmad-dispatch send agy /tmp/audit_<feature>_<phase>_cycle<N>.txt
+   hmad-dispatch send agy /tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.txt
    ```
    `send` chooses its own delivery mode by size: it inlines below
    `HMAD_SEND_INLINE_MAX` (default 8192 bytes) and otherwise tells the agent to
@@ -2823,23 +2865,30 @@ When an audit cycle needs a codex leg beside the primary reviewer, assemble a
 separate transport file for that surface and keep the staged report distinct:
 
 ```bash
-RP=/tmp/audit_<feature>_<phase>_cycle<N>_codex.report.md
-rm -f "$RP" "$RP.done"
+RUN=$(date -u +%Y%m%dT%H%M%SZ)-$$
+RP=/tmp/audit_<feature>_<phase>_cycle<N>_codex_run$RUN.report.md
 python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py \
   --feature <feature> --phase plan|design|impl-plan --cycle <N> \
   --project-root <PROJECT_ROOT> \
   --report-file "$RP" \
-  --out /tmp/audit_<feature>_<phase>_cycle<N>_codex.txt
+  --out /tmp/audit_<feature>_<phase>_cycle<N>_codex_run$RUN.txt
+echo "RUN=$RUN RP=$RP"
 ```
+
+Mint a new `RUN` for every dispatch, re-dispatches included: the assembler claims each report
+path and its prompt path once. On `ASSEMBLE: HALT <phase>:report_path_handed`, mint a new `RUN`.
+The block ends by echoing `RUN` and `RP`. Substitute those literal values into every
+later step: each Bash call is a fresh shell, so `$RUN` and `$RP` do not survive into the
+next block.
 
 Dispatch it through the exec path so the codex process reads the assembled
 prompt directly and writes the contracted report file:
 
 ```bash
-hmad-dispatch exec codex /tmp/audit_<feature>_<phase>_cycle<N>_codex.txt \
+hmad-dispatch exec codex /tmp/audit_<feature>_<phase>_cycle<N>_codex_run$RUN.txt \
   --cd <PROJECT_ROOT> \
-  --out /tmp/audit_<feature>_<phase>_cycle<N>_codex.out.txt \
-  --log /tmp/audit_<feature>_<phase>_cycle<N>_codex.log --timeout 1800
+  --out /tmp/audit_<feature>_<phase>_cycle<N>_codex_run$RUN.out.txt \
+  --log /tmp/audit_<feature>_<phase>_cycle<N>_codex_run$RUN.log --timeout 1800
 ```
 
 After `exec codex` returns, collect the surface report into the docs audit path
@@ -2848,7 +2897,7 @@ before running any gate:
 ```bash
 COLLECT_OUT=$(hmad-dispatch collect-report --surface codex \
   --feature <feature> --phase <phase> --cycle <N> \
-  --report "$RP" --out /tmp/audit_<feature>_<phase>_cycle<N>_codex.out.txt \
+  --report "$RP" --out /tmp/audit_<feature>_<phase>_cycle<N>_codex_run$RUN.out.txt \
   --project-root <PROJECT_ROOT>)
 printf '%s\n' "$COLLECT_OUT"
 ```
@@ -2903,21 +2952,27 @@ Assemble the prompt exactly as the codex leg does — the assembler does not car
 consumes its output — but stage the report under a `teammate` surface:
 
 ```bash
-RP=/tmp/audit_<feature>_<phase>_cycle<N>_teammate.report.md
-rm -f "$RP" "$RP.done"
+RUN=$(date -u +%Y%m%dT%H%M%SZ)-$$
+RP=/tmp/audit_<feature>_<phase>_cycle<N>_teammate_run$RUN.report.md
 python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py \
   --feature <feature> --phase plan|design|impl-plan --cycle <N> \
   --project-root <PROJECT_ROOT> \
   --report-file "$RP" \
-  --out /tmp/audit_<feature>_<phase>_cycle<N>_teammate.txt
+  --out /tmp/audit_<feature>_<phase>_cycle<N>_teammate_run$RUN.txt
+echo "RUN=$RUN RP=$RP"
 ```
+
+As for the codex leg, mint a new `RUN` for every dispatch. On
+`ASSEMBLE: HALT <phase>:report_path_handed`, mint a new `RUN`. The block ends by echoing `RUN` and `RP`. Substitute those literal values into every
+later step: each Bash call is a fresh shell, so `$RUN` and `$RP` do not survive into the
+next block.
 
 Dispatch the teammate against the assembled prompt **by path**, never by pasting it — it is large,
 and a pasted copy is a second version of the prompt that no gate can trace:
 
 ```
 Agent(subagent_type: "doc-auditor", prompt:
-  "PROMPT=/tmp/audit_<feature>_<phase>_cycle<N>_teammate.txt
+  "PROMPT=/tmp/audit_<feature>_<phase>_cycle<N>_teammate_run$RUN.txt
    REPORT=<the $RP above>
    PROJECT_ROOT=<PROJECT_ROOT>
    This pass is GATING.")
@@ -2934,7 +2989,7 @@ made 98 real audits invisible once already.
 ```bash
 COLLECT_OUT=$(hmad-dispatch collect-report --surface teammate \
   --feature <feature> --phase <phase> --cycle <N> \
-  --report "$RP" --out /tmp/audit_<feature>_<phase>_cycle<N>_teammate.out.txt \
+  --report "$RP" --out /tmp/audit_<feature>_<phase>_cycle<N>_teammate_run$RUN.out.txt \
   --project-root <PROJECT_ROOT>)
 printf '%s\n' "$COLLECT_OUT"
 ```

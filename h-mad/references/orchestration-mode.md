@@ -210,14 +210,20 @@ rule for 6a-prime — it reports `result.status` without gating on it.
 **Flow (coordinator).** Instead of `send` → `wait` → `read` → `extract_report`:
 
 ```bash
-RP="/tmp/audit_<feature>_<phase>_cycle<N>.report.md"
-rm -f "$RP" "$RP.done"
-# stage the prompt with the report-file contract + $RP substituted, then:
-hmad-dispatch send agy /tmp/audit_<feature>_<phase>_cycle<N>.txt
+RUN=$(date -u +%Y%m%dT%H%M%SZ)-$$   # a fresh run token per dispatch, re-dispatches included
+RP="/tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.report.md"
+python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py --feature <feature> \
+  --phase <phase> --cycle <N> --project-root <PROJECT_ROOT> \
+  --report-file "$RP" --out /tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.txt
+hmad-dispatch send agy /tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.txt
 hmad-dispatch report-wait "$RP" --timeout 600 > docs/01-plan/features/<feature>.<phase>.audit.v<N>.md
 # the file is clean markdown — gate it directly, no dedent/sentinel needed:
 python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py docs/.../<feature>.<phase>.audit.v<N>.md
 ```
+
+The assembler claims each report path and its prompt path once, so no dispatch reuses either.
+On `ASSEMBLE: HALT <phase>:report_path_handed`, mint a new `RUN`; the old paths may belong to a
+leg that is still writing.
 
 `report-wait` is substrate-agnostic (no coordinator pin required) and polls
 `$RP.done`, so it also replaces the unreliable `wait --for tui-idle` step. If the

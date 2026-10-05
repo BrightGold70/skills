@@ -10,13 +10,6 @@
  ],
  "mutations": [
   {
-   "name": "shell-channel-clear-assertion-drop",
-   "file": "scripts/hmad-dispatch.sh",
-   "find": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\"; do\n      [ ! -e \"$p\" ] || { printf 'ERROR: channel not cleared: %s\\n' \"$p\" >&2; exit 3; }\n    done",
-   "replace": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\"; do\n      :\n    done",
-   "failure_test": "test_verb_unremovable_path"
-  },
-  {
    "name": "shell-prompt-divergence-assertion-drop",
    "file": "scripts/hmad-dispatch.sh",
    "find": "    if [ -z \"$div\" ] || [ \"$foreign\" -ne 0 ]; then\n      python3 \"$here/h_mad_audit_cycle.py\" \\\n        --feature \"$feature\" --phase \"$phase\" --cycle \"$cycle\" \\\n        --project-root \"$root\" --passes \"$passes\" \\\n        --size-status \"$size_status\" --halt-reason \"prompt_divergence\"",

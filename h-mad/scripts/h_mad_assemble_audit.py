@@ -23,8 +23,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
@@ -481,6 +484,96 @@ def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
         text, {"base": base_md, "project": project_md}, slot_text=template_residue)
 
 
+# --- report-path ownership -----------------------------------------------------
+# Two re-dispatched audit legs were handed the original legs' report paths: one
+# clobber, one near-clobber. Both originals were alive and slow, wrongly declared
+# dead from a hook's `Running:` set (#49o). So a report path is CLAIMED ONCE AND
+# NEVER HANDED AGAIN, and so is the prompt path staged for it: the claim is a
+# marker created with O_EXCL before anything is written, the prompt is written
+# with O_EXCL too, and nothing ever releases either. Earlier rounds re-handed a
+# finished leg's path and managed the release, and every defect their reviews found
+# came from that; round 3's `next=` remedy moved only the report path and so
+# overwrote the live leg's prompt. Callers mint a fresh pair (a new RUN) instead.
+#
+# The markers live under `$XDG_CACHE_HOME/h-mad/handed` (default
+# `~/.cache/h-mad/handed`): independent of TMPDIR, which differs between a
+# sandboxed and an unsandboxed process and which `tempfile` silently replaces when
+# it is unwritable. A report path inside a project leaves nothing there. A stale
+# marker costs nothing: it only refuses a path nobody should reuse.
+
+_ABSENT = (FileNotFoundError, NotADirectoryError)
+
+
+def _present(path: str | Path) -> bool:
+    """`os.lstat`, never `Path.exists`: on Python 3.14 `Path.exists` returns False on
+    EACCES, which would read an unmeasured path as fresh. Any OSError other than
+    absence propagates, and callers fail closed."""
+    try:
+        os.lstat(path)
+    except _ABSENT:  # M:HANDED-ABSENT
+        return False
+    return True
+
+
+def _claims_dir() -> Path:
+    """Never falls back: an unusable directory is a HALT, not a different directory."""
+    xdg = os.environ.get("XDG_CACHE_HOME", "")
+    base = Path(xdg) if os.path.isabs(xdg) else Path.home() / ".cache"  # M:HANDED-XDG
+    return base / "h-mad" / "handed"
+
+
+def _marker(rp: str) -> Path:
+    # One file, one key: the realpath of the parent (so `/tmp` and `/private/tmp`,
+    # or a symlinked directory, agree) plus the filename, casefolded, because a
+    # case-insensitive APFS volume names one file by two spellings and `realpath`
+    # does not fold a name that does not exist yet. On a case-sensitive volume this
+    # refuses a path that differs from a claimed one only in case -- an
+    # over-refusal, accepted: the remedy is the same new RUN either way.
+    parent, name = os.path.split(rp)
+    ident = os.path.join(os.path.realpath(parent), name).casefold()  # M:HANDED-IDENT
+    key = hashlib.sha256(ident.encode("utf-8")).hexdigest()
+    return _claims_dir() / f"{key}.handed"  # M:HANDED-CENTRAL
+
+
+def _claim(rp: str, line: str) -> bool:
+    """Claim `rp` once; False when it was claimed before. Other OSErrors propagate.
+
+    O_EXCL lets exactly one of any number of concurrent hands create the marker.
+    """
+    marker = _marker(rp)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        f = open(marker, "x", encoding="utf-8")  # M:HANDED-EXCL
+    except FileExistsError:
+        return False
+    try:
+        with f:
+            f.write(line)
+    except OSError:
+        marker.unlink(missing_ok=True)  # M:HANDED-CLAIM-ROLLBACK
+        raise
+    return True
+
+
+def _default_out(rp: str) -> Path:
+    """The prompt path that goes with a report path: minting one mints the other.
+
+    `.txt` is APPENDED unless RP ends in `.report.md`: replacing the extension mapped
+    `review_x.txt` onto itself, writing the prompt AT the report path.
+    """
+    if rp.endswith(".report.md"):
+        return Path(rp[:-len(".report.md")] + ".txt")  # M:HANDED-DERIVED-OUT
+    return Path(rp + ".txt")  # M:HANDED-DERIVED-APPEND
+
+
+def _halt_handed(phase: str, rp: str, held: str, why: str) -> int:
+    print(f"ASSEMBLE: HALT {phase}:report_path_handed path={rp} held={held}")
+    print(f"  - {why}. A report path and its prompt path are claimed once and never "
+          "reused, even when the leg that holds them looks dead (#49o): mint a new RUN, "
+          "which moves --report-file and --out together.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -491,7 +584,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="spec/plan/impl-plan; default: <project-root>/docs/01-plan/features")
     ap.add_argument("--design-dir", type=Path,
                     help="design docs; default: <project-root>/docs/02-design/features")
-    ap.add_argument("--out", type=Path, help="default: /tmp/audit_<feature>_<phase>_cycle<N>.txt")
+    ap.add_argument("--out", type=Path,
+                    help="where to write the prompt; default: with --report-file, the report "
+                         "path with `.report.md` (else its last suffix) replaced by `.txt`; "
+                         "without it, /tmp/audit_<feature>_<phase>_cycle<N>.txt")
     ap.add_argument("--cycle", default="1")
     ap.add_argument("--sentinel", help="default: AUDIT-<feature>-<phase>-v<cycle>")
     ap.add_argument("--report-file", default="",
@@ -505,7 +601,13 @@ def main(argv: list[str] | None = None) -> int:
 
     docs_dir = args.docs_dir or (args.project_root / "docs/01-plan/features")
     sentinel = args.sentinel or f"AUDIT-{args.feature}-{args.phase}-v{args.cycle}"
-    out = args.out or Path(f"/tmp/audit_{args.feature}_{args.phase}_cycle{args.cycle}.txt")
+    if args.out is not None:
+        out = args.out
+    elif args.report_file:
+        out = _default_out(args.report_file)
+    else:
+        out = Path(f"/tmp/audit_{args.feature}_{args.phase}_cycle{args.cycle}.txt")
+    rp = args.report_file
 
     try:
         text, problems = assemble(
@@ -543,7 +645,64 @@ def main(argv: list[str] | None = None) -> int:
               "via `git show <sha>:<doc>`.")
         return 0
 
-    out.write_text(text, encoding="utf-8")
+    if rp:
+        # Every report-path HALT deletes nothing: the prompt at --out and the report
+        # may belong to a live leg that holds them.
+        for path in (rp, str(out)):  # M:HANDED-ABSOLUTE-BOTH
+            if not os.path.isabs(path):  # M:HANDED-ABSOLUTE
+                # A relative path is resolved against the agent's cwd, not this one's,
+                # so no key this process computes names the file the agent writes.
+                print(f"ASSEMBLE: HALT {args.phase}:report_path_not_absolute path={path}")
+                print("  - --report-file and --out must be absolute paths.")
+                return 0
+        if _marker(rp) == _marker(str(out)):  # M:HANDED-SAME-PATH
+            # The prompt would sit AT the report path: RP would exist before any agent
+            # ran, and an agent reading its prompt by path would overwrite what it reads.
+            print(f"ASSEMBLE: HALT {args.phase}:report_path_is_prompt_path path={rp}")
+            print(f"  - --out {out} names the same file as --report-file; give the prompt "
+                  "its own path.")
+            return 0
+        try:
+            rp_exists, out_exists = _present(rp), _present(out)
+        except OSError as exc:  # M:HANDED-FAILCLOSED
+            # Fail closed: an unmeasured path is not evidence that it is fresh.
+            print(f"ASSEMBLE: HALT {args.phase}:report_path_unreadable path={rp}")
+            print(f"  - cannot stat {rp} or {out}: {exc}. Fix the permissions on the report "
+                  "directory and re-run.")
+            return 0
+        if rp_exists:  # M:HANDED-FRESH
+            return _halt_handed(args.phase, rp, rp, f"{rp} already exists, so it is not fresh")
+        if out_exists:  # M:HANDED-OUT-FRESH
+            return _halt_handed(args.phase, rp, str(out),
+                                f"the prompt path {out} already exists, so it is not fresh")
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            claimed = _claim(rp, f"{stamp} path={rp} out={out} feature={args.feature} "
+                                 f"phase={args.phase} cycle={args.cycle}\n")
+        except OSError as exc:
+            print(f"ASSEMBLE: HALT {args.phase}:report_path_marker_unwritable path={rp}")
+            print(f"  - cannot claim {rp} under {_claims_dir()}: {exc}; no prompt was "
+                  "written. Fix that directory (or XDG_CACHE_HOME) and re-run.")
+            return 0
+        if not claimed:  # M:HANDED-HELD
+            return _halt_handed(args.phase, rp, rp,
+                                f"{rp} was handed to an earlier leg ({_marker(rp)})")
+
+    try:
+        if rp:
+            with open(out, "x", encoding="utf-8") as f:  # M:HANDED-OUT-EXCL
+                f.write(text)
+        else:
+            out.write_text(text, encoding="utf-8")
+    except FileExistsError:
+        _marker(rp).unlink(missing_ok=True)  # M:HANDED-OUT-ROLLBACK
+        return _halt_handed(args.phase, rp, str(out),
+                            f"the prompt path {out} appeared before it could be written")
+    except OSError as exc:
+        if rp:
+            _marker(rp).unlink(missing_ok=True)  # M:HANDED-WRITE-RELEASE
+        print(f"hmad-assemble: cannot write the prompt — {exc}", file=sys.stderr)
+        return 1
     size = len(text.encode())
     # J12: size travels ON the verdict line, not beside it. SKILL.md mandates
     # asserting `ASSEMBLE: PASS`, so a separate warning line is a signal nothing

@@ -861,15 +861,6 @@ def test_audit_cycle_gating_spec_covers_shell_guards_with_landed_anchors():
     spec = load_mutation_spec(GATING_MUTATION_SPEC)
     mutations = spec["mutations"]
 
-    channel_clear_mutations = [
-        mutation for mutation in mutations
-        if Path(mutation["file"]).name == "hmad-dispatch.sh"
-        and '[ ! -e "$p" ]' in mutation["find"]
-    ]
-    assert channel_clear_mutations, (
-        "gating spec must delete the shell channel-clear existence assertion while keeping the rm path"
-    )
-
     prompt_divergence_mutations = [
         mutation for mutation in mutations
         if Path(mutation["file"]).name == "hmad-dispatch.sh"
@@ -880,7 +871,7 @@ def test_audit_cycle_gating_spec_covers_shell_guards_with_landed_anchors():
         "gating spec must delete the shell prompt-divergence assertion while keeping both assemblies"
     )
 
-    for mutation in channel_clear_mutations + prompt_divergence_mutations:
+    for mutation in prompt_divergence_mutations:
         hits = count_anchor_in_named_file(mutation)
         assert hits == 1, (
             f"{mutation['name']} shell guard anchor must match exactly once in "
@@ -899,7 +890,6 @@ def test_audit_cycle_mutation_specs_name_existing_failure_tests():
         "test_verb_two_distinct_dispatches",
         "test_fail_in_either_pass_fails_cycle",
         "test_completed_cycle_emits_token",
-        "test_verb_unremovable_path",
         "test_verb_prompt_divergence",
     }
     missing = sorted(required_tests - known_tests)
@@ -949,16 +939,20 @@ def test_verb_invalid_passes(tmp_path):
         stale_report.unlink(missing_ok=True)
 
 
-def test_verb_clears_all_three_channels(tmp_path):
+FRESH_STEM = r"_run\d{8}T\d{6}Z-\d+"
+
+
+def test_verb_forwards_grace_and_timeout_on_a_fresh_stem(tmp_path):
+    """Was `test_verb_clears_all_three_channels`. The verb used to `rm -f` a fixed
+    `/tmp/audit_<f>_<p>_cycle<N>_p<i>.*` channel and reuse it, which handed a live
+    straggler's path to a new leg (#49o). Every run now mints a fresh stem, so
+    there is nothing to clear; a stale channel at the old fixed path is left alone."""
     root = project_with_docs(tmp_path)
     script_dir, assemble_calls, cycle_calls = install_audit_cycle_stubs(tmp_path)
     feature = "cycle-clear"
-    stem = Path(f"/tmp/audit_{feature}_plan_cycle3_p1")
-    report = Path(str(stem) + ".report.md")
-    done = Path(str(report) + ".done")
-    out = Path(str(stem) + ".out.txt")
-    log = Path(str(stem) + ".log")
-    for path in (report, done, out, log):
+    old = Path(f"/tmp/audit_{feature}_plan_cycle3_p1")
+    stale = [Path(str(old) + suffix) for suffix in (".report.md", ".report.md.done", ".out.txt", ".log")]
+    for path in stale:
         path.write_text("stale channel\n", encoding="utf-8")
     capture = tmp_path / "agy.calls"
     try:
@@ -972,53 +966,25 @@ def test_verb_clears_all_three_channels(tmp_path):
         assert r.returncode == 0, r.stderr
         assert_registered_verb(r)
         assert auditcycle_lines(r.stdout)[0].startswith("AUDITCYCLE: PASS")
-        assert not report.exists(), "stale report must be cleared before dispatch"
-        assert not done.exists(), "stale report .done must be cleared before dispatch"
-        assert out.exists() and "stale channel" not in out.read_text(encoding="utf-8")
-        assert log.exists() and "stale channel" not in log.read_text(encoding="utf-8"), (
-            "the new pass must replace stale log evidence"
+        assert all(p.read_text(encoding="utf-8") == "stale channel\n" for p in stale), (
+            "a fresh stem never touches the old fixed channel"
         )
         assert len(read_jsonl(assemble_calls)) == 1, "assembly must run once for one pass"
         cycle_argv = read_jsonl(cycle_calls)[0]
         assert "--grace" in cycle_argv and cycle_argv[cycle_argv.index("--grace") + 1] == "13"
         assemble_argv = read_jsonl(assemble_calls)[0]
         assemble_out = assemble_argv[assemble_argv.index("--out") + 1]
+        assert re.fullmatch(re.escape(f"/tmp/audit_{feature}_plan_cycle3") + FRESH_STEM + r"_p1\.txt",
+                            assemble_out), assemble_out
         agy_argv = capture.read_text(encoding="utf-8")
         assert "--print-timeout 41s" in agy_argv, "--timeout must reach per-pass exec"
-        assert assemble_out == str(stem.with_suffix(".txt"))
+        log = Path(assemble_out[: -len(".txt")] + ".log")
         assert '"event":"result"' in log.read_text(encoding="utf-8")
     finally:
-        for path in (report, done, out, log):
+        for path in stale:
             path.unlink(missing_ok=True)
-
-
-def test_verb_unremovable_path(tmp_path):
-    root = project_with_docs(tmp_path)
-    script_dir, assemble_calls, cycle_calls = install_audit_cycle_stubs(tmp_path)
-    parent = Path(f"/tmp/audit_ro-{os.getpid()}-{tmp_path.name}")
-    feature = f"ro-{os.getpid()}-{tmp_path.name}/locked"
-    report = parent / "locked_plan_cycle1_p1.report.md"
-    parent.mkdir(exist_ok=True)
-    report.write_text("cannot clear me\n", encoding="utf-8")
-    parent.chmod(0o500)
-    capture = tmp_path / "agy.calls"
-    try:
-        r = run_audit_cycle(
-            tmp_path,
-            dispatch_args(feature=feature, cycle="1", passes="1", root=root),
-            env={"HMAD_AUDIT_CYCLE_SCRIPT_DIR": str(script_dir)},
-            capture=capture,
-        )
-        assert r.returncode == 3, "uncleared channel survivor must exit 3"
-        assert_registered_verb(r)
-        assert "channel not cleared" in r.stderr
-        assert "AUDITCYCLE:" not in r.stdout
-        assert dispatch_count(capture) == 0, "unremovable channel must perform zero dispatches"
-        assert read_jsonl(assemble_calls) == [], "unremovable channel must fail before assembly"
-        assert read_jsonl(cycle_calls) == [], "unremovable channel must not invoke helper"
-    finally:
-        parent.chmod(0o700)
-        shutil.rmtree(parent, ignore_errors=True)
+        for path in Path("/tmp").glob(f"audit_{feature}_plan_cycle3_run*"):
+            path.unlink(missing_ok=True)
 
 
 def test_verb_assemble_halt_no_dispatch(tmp_path):
@@ -1087,7 +1053,10 @@ def test_verb_passes_one(tmp_path):
     assert len(read_jsonl(assemble_calls)) == 1, "--passes 1 must not run a seq-style p2 divergence check"
     assert dispatch_count(capture) == 1, "one-pass verified cycle must dispatch exactly one pass"
     cycle_argv = read_jsonl(cycle_calls)[0]
-    assert any(arg.startswith("1:/tmp/audit_cycle-red_plan_cycle7_p1.report.md:") for arg in cycle_argv)
+    assert any(
+        re.match(r"1:/tmp/audit_cycle-red_plan_cycle7" + FRESH_STEM + r"_p1\.report\.md:", arg)
+        for arg in cycle_argv
+    ), cycle_argv
 
 
 def test_verb_prompt_divergence(tmp_path):
@@ -1175,10 +1144,6 @@ def test_verb_two_pass_dispatch_uses_distinct_per_pass_artifacts_and_worst_size_
     trace = tmp_path / "trace.jsonl"
     bindir = traced_bindir(tmp_path, trace)
     capture = tmp_path / "agy.calls"
-    log_stem = Path("/tmp/audit_cycle-red_plan_cycle7")
-    expected_logs = [Path(f"{log_stem}_p{i}.log") for i in (1, 2)]
-    for log in expected_logs:
-        log.unlink(missing_ok=True)
     r = run_with_bindir(
         dispatch_args(root=root, passes="2"),
         bindir,
@@ -1206,7 +1171,8 @@ def test_verb_two_pass_dispatch_uses_distinct_per_pass_artifacts_and_worst_size_
 
     p1_out, p2_out = [Path(row["out"]) for row in assemble_rows]
     p1_report, p2_report = [Path(row["report"]) for row in assemble_rows]
-    p1_log, p2_log = expected_logs
+    p1_log, p2_log = [Path(str(rep)[: -len(".report.md")] + ".log") for rep in (p1_report, p2_report)]
+    assert re.search(FRESH_STEM + r"_p1\.log$", str(p1_log)), p1_log
     dispatch_artifacts = _dispatch_artifacts_by_pass(dispatch_rows)
 
     assert p1_out != p2_out and "_p1" in str(p1_out) and "_p2" in str(p2_out)
@@ -1344,11 +1310,12 @@ def test_verb_nonzero_exec_rc_is_forwarded_but_not_fatal(tmp_path):
     rows = read_jsonl(trace)
     cycle_rows = [row for row in rows if row["kind"] == "cycle"]
     assert len(cycle_rows) == 1, "non-zero _cmd_exec rc must still reach the helper verdict path"
-    assert cycle_rows[0]["pass_specs"] == [
-        "1:/tmp/audit_cycle-red_plan_cycle7_p1.report.md:"
-        "/tmp/audit_cycle-red_plan_cycle7_p1.out.txt:17:"
-        "/tmp/audit_cycle-red_plan_cycle7_p1.log"
-    ], "non-zero _cmd_exec rc must be forwarded unchanged in the --pass payload"
+    stem = re.escape("/tmp/audit_cycle-red_plan_cycle7") + FRESH_STEM
+    assert len(cycle_rows[0]["pass_specs"]) == 1
+    assert re.fullmatch(
+        rf"1:(?P<s>{stem})_p1\.report\.md:(?P=s)_p1\.out\.txt:17:(?P=s)_p1\.log",
+        cycle_rows[0]["pass_specs"][0],
+    ), "non-zero _cmd_exec rc must be forwarded unchanged in the --pass payload"
     # The rc stays in field 4 with the log appended after it (J49). If the log were
     # inserted anywhere earlier, `_parse_pass_spec` would read a path as the rc and
     # every dispatch would become an argparse error instead of a verdict.

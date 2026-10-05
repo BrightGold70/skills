@@ -153,11 +153,11 @@
       "test": "tests/test_hmad_dispatch_audit_cycle.py::test_verb_two_distinct_dispatches"
     },
     {
-      "name": "d2-audit-cycle-log-clear-dropped",
+      "name": "d2-audit-cycle-log-path-reused",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" \"${log[$i]}\"; do",
-      "replace": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\"; do",
-      "test": "tests/test_hmad_dispatch_audit_cycle_grok.py::test_audit_cycle_clears_stale_grok_log_before_truncated_retry"
+      "find": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
+      "replace": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}\"  # M:STEM-FRESH",
+      "test": "tests/test_hmad_dispatch_audit_cycle_grok.py::test_audit_cycle_never_reuses_a_stale_grok_log_path"
     }
   ]
 }

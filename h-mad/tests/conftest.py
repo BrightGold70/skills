@@ -16,6 +16,7 @@ wrong, because they never assert where the file is NOT.
 So the protection belongs here rather than in any single test — snapshot the real
 file before the session and restore it after if anything moved it, loudly.
 """
+import re
 import subprocess
 from pathlib import Path
 
@@ -118,9 +119,42 @@ def hermetic_env():
 
 
 @pytest.fixture(autouse=True)
+def _hermetic_report_path_claims(monkeypatch, tmp_path):
+    """`h_mad_assemble_audit.py --report-file` claims each report path once under
+    `$XDG_CACHE_HOME/h-mad/handed` (default `~/.cache/h-mad/handed`), and nothing
+    releases a claim. A test that reached the real cache would permanently refuse
+    that path for the developer, so every test gets its own."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+
+
+@pytest.fixture(autouse=True)
 def _hermetic_host_skill_roots(monkeypatch, tmp_path):
     monkeypatch.setenv("HMAD_AGENTS_SKILLS_DIR", str(tmp_path / "absent-agents-skills"))
     monkeypatch.setenv("HMAD_AGY_SKILLS_DIR", str(tmp_path / "absent-agy-skills"))
+
+
+# `audit-cycle` mints a fresh `/tmp/audit_<feature>_<phase>_cycle<N>_run<ts>-<pid>`
+# stem per invocation (claim once, never re-hand a report path), so the verb tests
+# no longer overwrite one fixed set of /tmp files: each run leaves new ones, about
+# 900 per full suite. Remove the ones THIS session created, and only for the
+# synthetic feature names the tests use -- /tmp is shared with live audit runs.
+_TEST_RUN_FILE = re.compile(
+    r"^audit_(cycle-red|cycle-status|cycle-clear|cycle-docs-.+?|size_status=unverified"
+    r"|surf\d+|grok-stale-.+?|handed-.+?|demo)_(plan|design|impl-plan)_cycle[^_]+"
+    r"_run\d{8}T\d{6}Z-\d+_p\d+\."
+)
+
+
+def _test_run_files() -> set[Path]:
+    return {p for p in Path("/tmp").glob("audit_*_run*") if _TEST_RUN_FILE.match(p.name)}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _remove_fresh_stem_files_this_run_created():
+    before = _test_run_files()
+    yield
+    for path in _test_run_files() - before:
+        path.unlink(missing_ok=True)
 
 
 @pytest.fixture(scope="session", autouse=True)

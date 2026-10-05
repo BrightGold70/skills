@@ -87,7 +87,7 @@ def _instantiate_rp_literal(literal: str) -> Path:
 
 def test_existing_6_6_report_file_literal_is_a_transport_path() -> None:
     step = _section(_audit_prompt_assembly(), "6.6.", "\n7.")
-    match = re.search(r"RP=/tmp/audit_<feature>_<phase>_cycle<N>\.report\.md", step)
+    match = re.search(r"RP=/tmp/audit_<feature>_<phase>_cycle<N>_run\$RUN\.report\.md", step)
 
     assert match, "SKILL.md step 6.6 must keep the existing report-file RP literal"
     assert is_transport_path(_instantiate_rp_literal(match.group(0))), (
@@ -156,7 +156,7 @@ def test_second_surface_codex_report_file_literal_is_a_transport_path() -> None:
         if SECOND_SURFACE_HEADING in doc and HELPER_HEADING in doc
         else ""
     )
-    match = re.search(r"RP=/tmp/audit_<feature>_<phase>_cycle<N>_codex\.report\.md", section)
+    match = re.search(r"RP=/tmp/audit_<feature>_<phase>_cycle<N>_codex_run\$RUN\.report\.md", section)
 
     assert match, (
         "Second surface must define the `_codex` report-file RP literal for exec codex"

@@ -69,16 +69,20 @@ def test_audit_cycle_unknown_surface_names_agy_codex_grok(tmp_path):
     )
 
 
-def test_audit_cycle_clears_stale_grok_log_before_truncated_retry(tmp_path):
+def test_audit_cycle_never_reuses_a_stale_grok_log_path(tmp_path):
+    """A stale grok log must never feed the truncated-retry measurement. The verb
+    used to guarantee that by `rm -f`-ing a fixed per-cycle log path; it now mints
+    a fresh stem per run, so the stale log at the old path is simply not reused."""
     feature = f"grok-stale-{tmp_path.name}"
     root = project_with_docs(tmp_path, feature=feature)
-    log = Path(f"/tmp/audit_{feature}_plan_cycle7_p1.log")
+    stale = Path(f"/tmp/audit_{feature}_plan_cycle7_p1.log")
     old_pass = (
         '{"type":"tool_call","toolCallId":"read-1"}\n'
         '{"type":"tool_call_update","toolCallId":"read-1","status":"completed"}\n'
         '{"type":"end","stopReason":"end_turn"}\n'
     )
-    log.write_text(old_pass, encoding="utf-8")
+    stale.write_text(old_pass, encoding="utf-8")
+    log = stale
     try:
         result, trace = run_with_cmd_exec_stub(
             tmp_path,
@@ -90,6 +94,9 @@ def test_audit_cycle_clears_stale_grok_log_before_truncated_retry(tmp_path):
         starts = [row for row in read_jsonl(trace) if row["kind"] == "cmd_exec_start"]
         assert len(starts) == 1
         assert starts[0]["log_existed"] is False, "stale log must be gone before dispatch"
+        log = Path(starts[0]["argv"][starts[0]["argv"].index("--log") + 1])
+        assert log != stale, "the dispatch must not reuse the old fixed log path"
+        assert stale.read_text(encoding="utf-8") == old_pass
         assert log.read_text(encoding="utf-8") == '{"type":"thought","data":"retry"}\n'
 
         env = {key: value for key, value in os.environ.items()
@@ -102,4 +109,5 @@ def test_audit_cycle_clears_stale_grok_log_before_truncated_retry(tmp_path):
         assert "EVIDENCE: UNREADABLE reason=truncated_no_end" in evidence.stdout
         assert audit_cycle.measure_effort(log)["shape"] == "grok-truncated"
     finally:
+        stale.unlink(missing_ok=True)
         log.unlink(missing_ok=True)

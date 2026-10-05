@@ -213,6 +213,9 @@ the same call.
 - **Never re-dispatch to a path another agent was handed.** Suffix every re-dispatch's report path
   (`…teammate-b.md`). Two agents on one path is one of them overwriting the other, and an
   instruction to "write early so a partial survives" guarantees the stub sometimes lands last.
+  Enforced only for audit legs staged through `h_mad_assemble_audit.py --report-file` (the recipes
+  and `audit-cycle`): every staged report path and its prompt path are claimed once and never
+  handed again. Hand assembly, sentinel mode and other dispatches are not guarded.
 - **A stub written early must be UNSCORABLE, never `None` sections that parse as zero findings.**
   This one is now mechanical: `collect` refuses a report carrying an in-progress sentinel in its
   head or a stated `Evidence: 0`, with `COLLECT: INVALID reason=<r>`, and `combine` scores the pass

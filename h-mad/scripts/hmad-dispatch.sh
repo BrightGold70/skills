@@ -3582,8 +3582,14 @@ _cmd_audit_cycle() {
     [ "$_same" -eq 1 ] && echo "hmad-dispatch: audit-cycle: WARNING: all $passes passes run '$_first' — this is one surface repeated, not a union; pass --surfaces agy,codex for a real second opinion" >&2
   fi
 
-  local stem i p arc size_status halt_pass div foreign
-  stem="/tmp/audit_${feature}_${phase}_cycle${cycle}"
+  local stem i arc size_status halt_pass div foreign
+  # Every invocation gets a FRESH stem, so no path is ever handed twice. The
+  # assembler claims each report path once and never releases it (#49o: two
+  # live, slow legs read as dead were handed their own paths again). A fixed
+  # `${stem}_p${i}` reused across runs of one cycle handed a straggler's path to
+  # a new leg, and the `rm -f` that cleared the channel deleted its work. With a
+  # fresh stem there is nothing to clear.
+  stem="/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$"  # M:STEM-FRESH
   i=1
   while [ "$i" -le "$passes" ]; do
     prompt[$i]="${stem}_p${i}.txt"
@@ -3591,16 +3597,6 @@ _cmd_audit_cycle() {
     out[$i]="${stem}_p${i}.out.txt"
     log[$i]="${stem}_p${i}.log"
     asm[$i]="${stem}_p${i}.asm.txt"
-    i=$((i + 1))
-  done
-
-  i=1
-  while [ "$i" -le "$passes" ]; do
-    rm -f "${report[$i]}" "${report[$i]}.done" "${out[$i]}" "${log[$i]}" || true
-    for p in "${report[$i]}" "${report[$i]}.done" "${out[$i]}" "${log[$i]}"; do
-      [ ! -e "$p" ] || { printf 'ERROR: channel not cleared: %s\n' "$p" >&2; exit 3; }
-    done
-    rm -f "${prompt[$i]}" "${asm[$i]}" || true
     i=$((i + 1))
   done
 

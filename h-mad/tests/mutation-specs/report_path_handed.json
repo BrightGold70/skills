@@ -1,0 +1,219 @@
+{
+  "_why": "Skill-candidates row `a re-dispatched auditor gets a SUFFIXED report path, never the original's` (2026-10-05): two re-dispatched audit legs were handed the original legs' report paths, one clobber and one near-clobber, because both originals were alive and slow and were declared dead from a hook's Running: set (#49o). Claim once, never release (round 3), tightened in round 4: the assembler claims an absolute `--report-file` with an O_EXCL marker under $XDG_CACHE_HOME/h-mad/handed (keyed by realpath parent + casefolded name), refuses an existing report or prompt path, writes the prompt with O_EXCL, and derives --out from RP (appending `.txt` unless RP ends `.report.md`), refuses an --out that is RP; a reused path HALTs `report_path_handed` naming which was held and deletes nothing; `audit-cycle` mints a fresh stem per run. Each row breaks one of those properties.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_report_path_handed.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "rehand-is-staged",
+      "_mechanism": "The claim's verdict is ignored, so a path handed before is handed again: the #49o clobber.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        if not claimed:  # M:HANDED-HELD",
+      "replace": "        if False:  # M:HANDED-HELD",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_second_hand_halts_even_when_the_first_leg_finished"
+    },
+    {
+      "name": "claim-is-not-exclusive",
+      "_mechanism": "A plain create succeeds over an existing claim, so every re-hand (and every concurrent hand) passes.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        f = open(marker, \"x\", encoding=\"utf-8\")  # M:HANDED-EXCL",
+      "replace": "        f = open(marker, \"w\", encoding=\"utf-8\")  # M:HANDED-EXCL",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_second_hand_halts_even_when_the_first_leg_finished"
+    },
+    {
+      "name": "existing-report-path-is-staged",
+      "_mechanism": "A report path that already exists on disk is claimed and handed as if fresh.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        if rp_exists:  # M:HANDED-FRESH",
+      "replace": "        if False:  # M:HANDED-FRESH",
+      "test": "tests/test_h_mad_report_path_handed.py::test_an_existing_report_path_halts"
+    },
+    {
+      "name": "existing-prompt-path-is-not-checked-up-front",
+      "_mechanism": "The round-3 must-fix: a re-dispatch with a new RP and the live leg's --out gets as far as a claim before anything notices the prompt path.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        if out_exists:  # M:HANDED-OUT-FRESH",
+      "replace": "        if False:  # M:HANDED-OUT-FRESH",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_new_report_path_with_the_old_prompt_path_halts"
+    },
+    {
+      "name": "prompt-is-not-written-exclusively",
+      "_mechanism": "A prompt path that appears after the check is overwritten: a live leg's prompt now names another leg's report path.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "            with open(out, \"x\", encoding=\"utf-8\") as f:  # M:HANDED-OUT-EXCL",
+      "replace": "            with open(out, \"w\", encoding=\"utf-8\") as f:  # M:HANDED-OUT-EXCL",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_prompt_path_taken_after_the_check_is_still_refused"
+    },
+    {
+      "name": "refused-prompt-keeps-the-claim",
+      "_mechanism": "When the exclusive prompt write is refused, the report-path claim just made stays, burning a path for a leg never dispatched.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        _marker(rp).unlink(missing_ok=True)  # M:HANDED-OUT-ROLLBACK",
+      "replace": "        pass  # M:HANDED-OUT-ROLLBACK",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_prompt_path_taken_after_the_check_is_still_refused"
+    },
+    {
+      "name": "failed-prompt-write-keeps-the-claim",
+      "_mechanism": "The prompt could not be written but the claim stays, burning the path for a leg that does not exist.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "            _marker(rp).unlink(missing_ok=True)  # M:HANDED-WRITE-RELEASE",
+      "replace": "            pass  # M:HANDED-WRITE-RELEASE",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_failed_prompt_write_releases_only_its_own_claim"
+    },
+    {
+      "name": "empty-claim-is-left-behind",
+      "_mechanism": "A claim whose marker line cannot be written stays on disk, holding the path for a leg that was never dispatched.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        marker.unlink(missing_ok=True)  # M:HANDED-CLAIM-ROLLBACK",
+      "replace": "        pass  # M:HANDED-CLAIM-ROLLBACK",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_claim_whose_marker_cannot_be_filled_is_rolled_back"
+    },
+    {
+      "name": "claim-lives-beside-the-report",
+      "_mechanism": "The marker is written next to RP, so a docs-path RP leaves a stray file in the project tree.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    return _claims_dir() / f\"{key}.handed\"  # M:HANDED-CENTRAL",
+      "replace": "    return Path(rp + \".handed\")  # M:HANDED-CENTRAL",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_fresh_path_passes_and_is_claimed_in_the_cache_dir"
+    },
+    {
+      "name": "claim-dir-follows-tmpdir",
+      "_mechanism": "Keying the directory off TMPDIR lets a sandboxed and an unsandboxed assembler each claim the same RP.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    base = Path(xdg) if os.path.isabs(xdg) else Path.home() / \".cache\"  # M:HANDED-XDG",
+      "replace": "    base = Path(os.environ.get(\"TMPDIR\", \"/tmp\"))  # M:HANDED-XDG",
+      "test": "tests/test_h_mad_report_path_handed.py::test_the_claim_does_not_follow_tmpdir"
+    },
+    {
+      "name": "home-cache-is-not-the-default",
+      "_mechanism": "With XDG_CACHE_HOME unset the claim lands in a relative directory (the cwd) instead of ~/.cache.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    base = Path(xdg) if os.path.isabs(xdg) else Path.home() / \".cache\"  # M:HANDED-XDG",
+      "replace": "    base = Path(xdg)  # M:HANDED-XDG",
+      "test": "tests/test_h_mad_report_path_handed.py::test_home_cache_is_the_default_claim_dir"
+    },
+    {
+      "name": "case-spellings-get-two-claims",
+      "_mechanism": "Without the casefold, two spellings of one file on case-insensitive APFS are claimed twice.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    ident = os.path.join(os.path.realpath(parent), name).casefold()  # M:HANDED-IDENT",
+      "replace": "    ident = os.path.join(os.path.realpath(parent), name)  # M:HANDED-IDENT",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_case_variant_shares_the_claim"
+    },
+    {
+      "name": "symlinked-spellings-get-two-claims",
+      "_mechanism": "Without the realpath, `/tmp/x` and `/private/tmp/x` (or a symlinked directory) are claimed twice.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    ident = os.path.join(os.path.realpath(parent), name).casefold()  # M:HANDED-IDENT",
+      "replace": "    ident = os.path.join(parent, name).casefold()  # M:HANDED-IDENT",
+      "test": "tests/test_h_mad_report_path_handed.py::test_tmp_and_private_tmp_share_the_claim"
+    },
+    {
+      "name": "relative-paths-are-accepted",
+      "_mechanism": "A relative path is hashed against this cwd while the agent resolves it against its own: two cwds, two claims, one file.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "            if not os.path.isabs(path):  # M:HANDED-ABSOLUTE",
+      "replace": "            if False:  # M:HANDED-ABSOLUTE",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_relative_report_path_halts"
+    },
+    {
+      "name": "relative-prompt-path-is-accepted",
+      "_mechanism": "Only --report-file is checked, so a relative --out escapes the guard.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        for path in (rp, str(out)):  # M:HANDED-ABSOLUTE-BOTH",
+      "replace": "        for path in (rp,):  # M:HANDED-ABSOLUTE-BOTH",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_relative_prompt_path_halts"
+    },
+    {
+      "name": "prompt-path-is-not-derived-from-the-report-path",
+      "_mechanism": "Without --out, minting a new RP no longer mints a new prompt path.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        return Path(rp[:-len(\".report.md\")] + \".txt\")  # M:HANDED-DERIVED-OUT",
+      "replace": "        return Path(rp + \".txt\")  # M:HANDED-DERIVED-OUT",
+      "test": "tests/test_h_mad_report_path_handed.py::test_out_defaults_to_a_path_derived_from_the_report_path"
+    },
+    {
+      "name": "derived-prompt-path-replaces-the-extension",
+      "_mechanism": "Round-4 review: replacing the extension maps `review_x.txt` onto itself, so the prompt is written AT the report path.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    return Path(rp + \".txt\")  # M:HANDED-DERIVED-APPEND",
+      "replace": "    return Path(os.path.splitext(rp)[0] + \".txt\")  # M:HANDED-DERIVED-APPEND",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_txt_report_path_derives_an_appended_prompt_path"
+    },
+    {
+      "name": "prompt-path-may-be-the-report-path",
+      "_mechanism": "An explicit --out equal to RP is accepted: the report path exists, holding the prompt, before any agent runs.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        if _marker(rp) == _marker(str(out)):  # M:HANDED-SAME-PATH",
+      "replace": "        if False:  # M:HANDED-SAME-PATH",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_prompt_path_equal_to_the_report_path_halts"
+    },
+    {
+      "name": "same-path-check-compares-spellings",
+      "_mechanism": "Comparing the strings misses two spellings of one file (case, symlink), which the claim key already unifies.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        if _marker(rp) == _marker(str(out)):  # M:HANDED-SAME-PATH",
+      "replace": "        if rp == str(out):  # M:HANDED-SAME-PATH",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_prompt_path_equal_to_the_report_path_halts"
+    },
+    {
+      "name": "relative-xdg-cache-home-is-honoured",
+      "_mechanism": "A relative XDG_CACHE_HOME keys the claims off each process's cwd: two cwds, two claim directories.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    base = Path(xdg) if os.path.isabs(xdg) else Path.home() / \".cache\"  # M:HANDED-XDG",
+      "replace": "    base = Path(xdg) if xdg else Path.home() / \".cache\"  # M:HANDED-XDG",
+      "test": "tests/test_h_mad_report_path_handed.py::test_a_relative_xdg_cache_home_is_ignored"
+    },
+    {
+      "name": "unreadable-path-proceeds",
+      "_mechanism": "An unmeasured path is read as fresh: the guard fails open exactly when it cannot see.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        except OSError as exc:  # M:HANDED-FAILCLOSED",
+      "replace": "        except OSError as exc:\n            rp_exists = out_exists = False\n        if False:  # M:HANDED-FAILCLOSED",
+      "test": "tests/test_h_mad_report_path_handed.py::test_an_unreadable_report_dir_halts_and_deletes_nothing"
+    },
+    {
+      "name": "any-stat-error-reads-as-absent",
+      "_mechanism": "Treating every OSError as absence is the Python 3.14 `Path.exists` behaviour: EACCES reads as a fresh path.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    except _ABSENT:  # M:HANDED-ABSENT",
+      "replace": "    except OSError:  # M:HANDED-ABSENT",
+      "test": "tests/test_h_mad_report_path_handed.py::test_an_unreadable_report_dir_halts_and_deletes_nothing"
+    },
+    {
+      "name": "presence-relies-on-path-exists",
+      "_mechanism": "Measuring with `Path.exists` works on 3.11 and fails open on 3.14, where it returns False on EACCES.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        os.lstat(path)",
+      "replace": "        if not Path(path).exists():\n            raise FileNotFoundError(path)",
+      "test": "tests/test_h_mad_report_path_handed.py::test_unreadable_does_not_depend_on_path_exists"
+    },
+    {
+      "name": "verb-reuses-one-stem-per-cycle",
+      "_mechanism": "A fixed per-cycle stem: the second run of a cycle is handed the first run's paths, which the real assembler refuses.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
+      "replace": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}\"  # M:STEM-FRESH",
+      "test": "tests/test_h_mad_report_path_handed.py::test_two_verb_runs_against_the_real_assembler_use_different_stems"
+    },
+    {
+      "name": "verb-stem-drops-the-pid",
+      "_mechanism": "Two runs within one clock second share a stem without the pid.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$\"  # M:STEM-FRESH",
+      "replace": "  stem=\"/tmp/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)\"  # M:STEM-FRESH",
+      "test": "tests/test_h_mad_report_path_handed.py::test_verb_stems_differ_within_one_clock_second"
+    }
+  ]
+}
