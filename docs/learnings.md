@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-05 · gotcha · [0.9] · `h-mad,codex,phase5,handoff:2026-10-05-expect-screens-backstop` — Codex Phase-5 gate admits plain pytest / python -m pytest; it refuses git, pipes, && ; > $( ) and non-h-mad scripts. phase5-shell-allow is for unrelated work only and still cannot admit pipes.
+- 2026-10-05 · pattern · [0.7] · `mutation-testing,h-mad,handoff:2026-10-05-expect-screens-backstop` — A backstop that refuses a superset of an existing detector turns that detector's mutation rows into SURVIVED; delete the redundant detector and port the rows to the backstop, don't add tests.
+- 2026-10-05 · gotcha · [0.7] · `h-mad,expect-screens,lexer,handoff:2026-10-05-expect-screens-backstop` — Two lexical readers sharing one quote model are not independent: 'a misread must fool both' failed 7x ($$', backticks, "${…'}"). Agreement only helps where failure modes are disjoint; use bash's own parse as the independent reader.
 - 2026-10-05 · gotcha · [0.7] · `zsh,shell,verification,handoff:2026-10-05-backlog-burn-to-five` — zsh does not word-split unquoted $VAR: 'for s in $S' ran one bogus arg and reported 'no tests ran'. Wrap such loops in bash -c
 - 2026-10-05 · gotcha · [0.9] · `pytest,conftest,suite-lock,handoff:2026-10-05-backlog-burn-to-five` — pytest_sessionstart in a non-initial conftest never fires; a lock in h-mad/tests/conftest.py skipped handoff/ runs. Put session-wide hooks in a repo-root conftest or a -p plugin
 - 2026-10-05 · gotcha · [0.9] · `pytest,conftest,flake,tmp-race,handoff:2026-10-05-backlog-burn-to-five` — Before/after glob set-difference cleanup over shared /tmp deletes concurrent sessions' files; caused load-only flakes. Give each test session a private dir (HMAD_AUDIT_STEM_DIR) instead
