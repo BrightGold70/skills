@@ -19,6 +19,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "h-mad" / "scripts" / "h_mad_expect_screens.py"
 FENCE = "```"
@@ -1543,3 +1545,216 @@ def test_a_nested_double_quote_does_not_fool_both_readers(tmp_path):
     would agree on a span that bash reads as code."""
     _refused(tmp_path, f"echo \"$(echo \"it's\")\"; {ERRORED} && echo ok; echo 'z'\n" + SCREEN_LIST,
              "&&", 2)
+
+
+# --- review round 11 of 2e88d95b: bash's own parse as the third reader ----------------
+# The lexer and the backstop share one quote and heredoc model, so seven constructs fooled
+# both the same way (M1-M7). `bash -n` on a perturbed copy of the block is the reader that
+# does not share it: a doubled operator fails to parse exactly where bash reads code. A
+# position either reader would exclude is excluded only when bash agrees it is literal.
+
+
+def test_a_dollar_dollar_quote_does_not_fool_all_readers(tmp_path):
+    """R11 (M1): bash reads `$$` as the PID, so the `'` after it is a plain quote. Both models
+    read `$'` there as an ANSI-C string and agreed the list was single-quoted."""
+    _refused(tmp_path, f"echo $$'\\' 'a' ; {ERRORED} && echo '\\'\n" + SCREEN_LIST, "&&", 2)
+
+
+def test_quotes_inside_code_backticks_do_not_fool_all_readers(tmp_path):
+    """R11 (M2): bash 3.2 finds a backtick's closer without honouring `'` inside it."""
+    _refused(tmp_path, f"echo `#'` 'a' ; {ERRORED} && echo '\\'\n" + SCREEN_LIST, "&&", 2)
+
+
+def test_quotes_inside_a_double_quoted_expansion_do_not_fool_all_readers(tmp_path):
+    """R11 (M3): in bash 3.2, quotes inside a `${…}` in double quotes are quotes."""
+    _refused(tmp_path, f"x=; echo \"${{x:-'\"'}}\" ; {ERRORED} && echo '\\'\n" + SCREEN_LIST,
+             "&&", 2)
+    (tmp_path / "nested").mkdir()
+    _refused(tmp_path / "nested", f"x=; echo \"${{x:-\"'\"}}\" ; {ERRORED} && echo '\\'\n"
+             + SCREEN_LIST, "&&", 2)
+
+
+def test_a_continued_heredoc_opener_does_not_fool_all_readers(tmp_path):
+    """R11 (M4): bash joins `\\`-newline before tokenizing, so the body starts after the
+    continued line; both models started it one line early and lost a quote."""
+    _refused(tmp_path, f"true <<'E' \\\nE\nit's\nE\n{ERRORED} && echo '\\'\n" + SCREEN_LIST,
+             "&&", 6)
+
+
+def test_a_paren_in_a_heredoc_inside_a_substitution_does_not_fool_all_readers(tmp_path):
+    """R11 (M5): bash 3.2 ends `$(` at a `)` inside a heredoc body, so the lines after it run
+    as code; both models read them as a quoted-delimiter body."""
+    _refused(tmp_path, f"E() {{ :; }}\nX=$(cat <<'E'\n)\n{ERRORED} && echo x\nE\n" + SCREEN_LIST,
+             "&&", 5)
+
+
+def test_an_old_style_arithmetic_shift_does_not_fool_all_readers(tmp_path):
+    """R11 (M6): `$[1<<E ]` is a shift; the lexer read a heredoc whose "body" bash runs."""
+    _refused(tmp_path, f"E() {{ :; }}\necho $[1<<E ]\necho '\nE\n' ; {ERRORED} && echo '\\'\n"
+             + SCREEN_LIST, "&&", 6)
+
+
+def test_the_assignment_carve_out_needs_a_statement_start(tmp_path):
+    """R11 (M7): after `export \\`, `X=$(a && b)` is an argument whose status is export's 0."""
+    _refused(tmp_path, f"export \\\nX=$({ERRORED} && echo x)\n" + SCREEN_LIST, "&&", 3)
+    (tmp_path / "echo").mkdir()
+    _refused(tmp_path / "echo", f"echo \\\nX=$({ERRORED} && echo x)\n" + SCREEN_LIST, "&&", 3)
+
+
+def test_an_operator_quoted_inside_backticks_is_over_refused(tmp_path):
+    """R11: the accepted cost. bash 3.2's backtick scan ignores `'`, so bash cannot vouch for
+    a single-quoted operator inside backticks. Use `$(…)`."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old, "echo `echo 'a && b'` > data.txt\necho 0   # expect 0")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_a_quoted_heredoc_inside_a_substitution_is_over_refused(tmp_path):
+    """R11: the accepted cost. bash 3.2 closes `$(` at a `)` in a heredoc body (M5), so a body
+    inside a substitution is never vouched for. Write the heredoc at top level."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old,
+                       "X=$(cat <<'NOTE'\na && b\nNOTE\n)\necho 0   # expect 0")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:6 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:3 FAIL"], \
+        result.stdout
+
+
+def test_bash_reads_a_block_without_running_it(tmp_path, monkeypatch):
+    """The third reader is `bash -n`: a block that would escape a function wrapper and run
+    `touch` (what `declare -f` would do) creates nothing."""
+    monkeypatch.chdir(tmp_path)
+    parse = hes.BashParse([":", "}", "touch PWNED && touch PWNED2", "__g() {", ":"])
+    assert parse.code_at(2, 12, "&&") is True
+    assert parse.starts_statement(2, 0) is False  # the block itself does not parse
+    assert os.listdir(tmp_path) == []
+
+
+def test_bash_reads_literal_and_code_positions(tmp_path):
+    parse = hes.BashParse(["echo 'a && b'", "X=$(a && b)", "cat <<'E'", "a && b", "E"])
+    assert parse.code_at(0, 8, "&&") is False
+    assert parse.code_at(1, 6, "&&") is True
+    assert parse.code_at(3, 2, "&&") is False
+    assert parse.starts_statement(1, 0) is True
+    assert hes.BashParse(["export \\", "X=$(a && b)"]).starts_statement(1, 0) is False
+
+
+def test_bash_unavailable_fails_closed(monkeypatch):
+    """No bash, no vouching: every excluded position reads as code, no carve-out applies."""
+    monkeypatch.setenv("PATH", "")
+    parse = hes.BashParse(["echo 'a && b'", "X=$(a && b)"])
+    assert parse.code_at(0, 8, "&&") is True
+    assert parse.starts_statement(1, 0) is False
+
+
+def test_a_round_11_construct_inside_a_substitution_is_refused(tmp_path):
+    """R11: bash 3.2 parses `$(…)` only at run time, so `bash -n` alone vouches for any text
+    inside one. The closer run pushes the doubled operator out to top level, where it fails."""
+    _refused(tmp_path, f"X=$(echo `#'` 'a' ; {ERRORED} && echo '\\')\n" + SCREEN_LIST, "&&", 2)
+
+
+# The models' agreement is defence in depth under bash, not a step bash replaces: each R10
+# misread below must still refuse when bash wrongly vouches for every position.
+
+
+def _hits_if_bash_vouches(monkeypatch, body):
+    monkeypatch.setattr(hes.BashParse, "code_at", lambda self, i, k, op: False)
+    monkeypatch.setattr(hes.BashParse, "starts_statement", lambda self, i, k: True)
+    return hes.backstop(hes.lex(body.split("\n")))
+
+
+def test_a_span_only_the_backstop_reads_as_quoted_needs_the_lexer_too(monkeypatch):
+    body = f"X=${{PWD// #/}}; echo \"$(echo \"it's\")\"; {ERRORED} && echo ok; echo 'z'"
+    assert (0, "&&") in _hits_if_bash_vouches(monkeypatch, body)
+
+
+def test_a_span_only_the_lexer_reads_as_quoted_needs_the_backstop_too(monkeypatch):
+    body = f"X=${{PWD// #/}}'\na'; {ERRORED} && echo ok; echo 'y'\necho \\'"
+    assert (1, "&&") in _hits_if_bash_vouches(monkeypatch, body)
+
+
+def test_a_lexer_heredoc_the_backstop_reads_as_text_is_counted_without_bash(monkeypatch):
+    body = f"X=${{PWD// #/}}'\n<<'true'\n'; {ERRORED} && echo ok; echo \\'\ntrue"
+    assert (2, "&&") in _hits_if_bash_vouches(monkeypatch, body)
+
+
+# --- review round 12 of 8e24635d -------------------------------------------------------
+
+
+def test_a_later_backtick_does_not_reopen_a_top_level_hole(tmp_path):
+    """R12 (M1): the closer's backtick paired with a later inert one (here in a comment), so
+    the doubled operator sat in deferred text and bash vouched for round 11's M1 again."""
+    _refused(tmp_path, f"echo $$'\\' 'a' ; {ERRORED} && echo '\\'\n# it`s\n" + SCREEN_LIST,
+             "&&", 2)
+
+
+def test_a_later_backtick_does_not_reopen_a_heredoc_paren_hole(tmp_path):
+    """R12 (M1): round 11's M5, which needs no quote trick, plus a backtick in a comment."""
+    _refused(tmp_path, f"E() {{ :; }}\nX=$(cat <<'E'\n)\n{ERRORED} && echo x\nE\n# see `notes\n"
+             + SCREEN_LIST, "&&", 5)
+
+
+def test_a_later_backtick_does_not_hide_a_list_inside_a_substitution(tmp_path):
+    _refused(tmp_path, f"X=$(echo `#'` 'a' ; {ERRORED} && echo '\\')\n# it`s\n" + SCREEN_LIST,
+             "&&", 2)
+
+
+@pytest.mark.parametrize("body", [
+    f"echo `echo $$'\\' 'a' ; {ERRORED} && echo '\\'`",
+    f"echo `x=; echo \"${{x:-'\"'}}\" ; {ERRORED} && echo '\\'`",
+    f"echo $(echo `x=; echo \"${{x:-'\"'}}\" ; {ERRORED} && echo '\\'`)",
+    f"echo `echo \\`#'\\` 'a' ; {ERRORED} && echo '\\'`",
+    f"X=$(echo `echo $$'\\' 'a' ; {ERRORED} && echo '\\'`)",
+], ids=["M1-in-backticks", "M3-in-backticks", "M3-in-backticks-in-substitution",
+        "M2-in-backticks", "M1-in-backticks-in-substitution"])
+def test_a_round_11_construct_inside_backticks_is_refused(tmp_path, body):
+    """R12: inside backticks only a closing backtick reaches top level, so one closer run
+    starts with it. Each read PASS over git's 128 on main."""
+    _refused(tmp_path, body + "\n" + SCREEN_LIST, "&&", 2)
+
+
+def test_the_carve_out_needs_a_command_slot_not_a_one_word_slot(tmp_path):
+    """R12 (M2): `then ` also breaks the parse where bash wants ONE word -- the `case`
+    subject, a `[[ -n` operand -- and there the substitution's status is discarded. A start
+    is where `then` breaks the parse AND a plain word does not."""
+    _refused(tmp_path, f"case \\\nX=$({ERRORED} && echo x)\nin *) : ;; esac\n" + SCREEN_LIST,
+             "&&", 3)
+    (tmp_path / "dbrack").mkdir()
+    _refused(tmp_path / "dbrack", f"[[ -n \\\nX=$({ERRORED} && echo x)\n]]\n" + SCREEN_LIST,
+             "&&", 3)
+
+
+def test_a_probe_that_cannot_run_vouches_for_nothing(monkeypatch):
+    """R12 (M3): the block parsed, then the probe's own bash call timed out; the statement
+    probe read that as `then` breaking the parse and applied the carve-out."""
+    real = subprocess.run
+    calls = []
+
+    def first_only(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            return real(*args, **kwargs)
+        raise subprocess.TimeoutExpired(args[0], 10)
+    monkeypatch.setattr(hes.subprocess, "run", first_only)
+    lexed = hes.lex(["export \\", f"X=$({ERRORED} && echo x)"])
+    assert (1, "&&") in hes.backstop(lexed)
+    calls.clear()
+    assert hes.BashParse(["echo 'a && b'"]).code_at(0, 8, "&&") is True
+
+
+def test_a_nul_byte_vouches_for_nothing():
+    """R12 (N1): `subprocess` refuses a NUL byte with ValueError; that is no parse either."""
+    assert hes.BashParse(["echo 'a && b\0'"]).code_at(0, 8, "&&") is True
+
+
+def test_a_then_probe_that_cannot_run_is_no_statement_start(monkeypatch):
+    """R12 (M3): each probe must answer definitely on its own; the word probe parsing does not
+    stand in for a `then` probe that gave no answer."""
+    real = hes.BashParse._parses
+    monkeypatch.setattr(hes.BashParse, "_parses",
+                        staticmethod(lambda text: None if "then X=" in text else real(text)))
+    assert hes.BashParse(["X=$(a && b)"]).starts_statement(0, 0) is False
+    lexed = hes.lex([f"X=$({ERRORED} && echo x)"])
+    assert (0, "&&") in hes.backstop(lexed)

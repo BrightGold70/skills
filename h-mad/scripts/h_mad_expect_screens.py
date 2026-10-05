@@ -17,8 +17,8 @@ followed by end of line or by an annotation after `,` `;` `(` `--` or an em
 dash (`# expect 0 (VACUOUS while BASE==HEAD)` is a screen); an integer followed
 by a word (`# expect 4 methods x 2`) is not, because the expectation is not the
 bare integer. A statement spans lines the way bash joins them: a line ending in
-an unquoted `\\`; a line whose code (comment stripped) ends in `|`, `&&` or
-`|&`, across any blank or comment-only lines after it; a quoted string that
+an unquoted `\\`; a line whose code (comment stripped) ends in `|` or `&&`,
+across any blank or comment-only lines after it; a quoted string that
 runs onto the next line; and a here-document (a `<<` in unquoted code outside
 `((…))` arithmetic), whose body and terminator belong to the line that opened
 it. A leading `|` with no backslash above it is a bash syntax error, so it is
@@ -77,18 +77,28 @@ Round 10 found three more lexer misreads, each a PASS over git's 128 (a list in 
 unquoted heredoc body's `$(…)`, ` #` inside `${…}` read as a comment, `\\&&` read
 as a redirect), so lists are no longer found by the lexer at all. `backstop` reads
 the RAW text on its own smaller model and refuses every `&&`, `||`, job `&` and
-unread `<<`; the lexer only supplies the readings it may agree with. A misread must
-fool both to hide a list. It excludes only a quoted-delimiter heredoc body both read
-as one and a position both read as single-quoted, so it OVER-refuses: `&`, `&&`
-or `||` in double-quoted text, in a comment or in an unquoted heredoc body, a `<<`
-the lexer did not read as a heredoc (an arithmetic shift outside a plain
-`$((…))`, `<<\\EOF`), and `>&$fd`. Single-quote such text, or write it to a file
-outside the block.
+unread `<<`; the lexer only supplies the readings it may agree with. Round 11 found
+seven constructs that fooled both the same way, since the two share one quote and
+heredoc model (`$$'`, quotes in code backticks or in `"${…}"`, a heredoc opener
+ending in `\\`, bash 3.2 closing `$(` at a `)` in a heredoc body, `$[1<<E ]`, and the
+carve-out below after `export \\`). So bash itself is the third reader (`BashParse`):
+`bash -n` on a copy of the block with the operator doubled, which parses and never
+executes. A position is excluded only when all three read it as literal: a
+quoted-delimiter heredoc body both models read as one, or a position both read as
+single-quoted, that bash also parses as text. So it OVER-refuses: `&`, `&&` or `||`
+in double-quoted text, in a comment or in an unquoted heredoc body, a `<<` the lexer
+did not read as a heredoc (an arithmetic shift outside a plain `$((…))`,
+`<<\\EOF`), `>&$fd`, a single-quoted operator inside backticks (bash 3.2's backtick
+scan ignores `'`), and a quoted heredoc body inside `$(…)`. Single-quote such text,
+use `$(…)`, keep the heredoc at top level, or write the text to a file outside the
+block. bash cannot be run, or cannot parse the block: nothing is excluded.
 Not refused, because each is recorded or is no list:
-  - the `&` of a redirection (`2>&1`, `>&2`, `>&-`, `<&0`, `&>`, `&>>`): a trailing
+  - the `&` of a redirection (`2>&1`, `>&2`, `>&-`, `<&0`, `&>`): a trailing
     `&` job after one is still refused;
-  - the whole value of a one-line `NAME=$(…)` whose body is ONE `&&` chain, with
-    no `;`, `||`, `&` or newline: only then is the substitution's status the
+  - the whole value of a one-line `NAME=$(…)` that bash reads as the start of a
+    statement (not an argument after `export \\` or `echo \\`, nor a one-word slot such
+    as a `case` subject or a `[[ -n` operand), whose body is ONE
+    `&&` chain, with no `;`, `||`, `&` or newline: only then is the substitution's status the
     failing member's, which the assignment carries to the trap (probe on bash
     3.2: `X=$(grep x /nonexistent && echo y)` traps rc=2). `X=$(a || b)`,
     `X=$(a && b; c)` and `X=$(a & wait)` end on another command's status and
@@ -151,6 +161,7 @@ Output and exit:
 from __future__ import annotations
 
 import argparse
+import functools
 import os
 import re
 import secrets
@@ -333,7 +344,7 @@ def _raw_op(text: str, k: int, prev: str | None) -> tuple[str | None, int]:
     if text[k] != "&":
         return None, 1
     nxt = text[k + 1:k + 2]
-    redirect = (nxt == ">" or prev in ("<", "|")  # `&>`, `&>>`, `<&`, `|&`
+    redirect = (nxt == ">" or prev in ("<", "|")  # `&>`, `<&` (`&>>`, `|&`: bash 4 only)
                 or (prev == ">" and nxt != "" and nxt in "0123456789-"))  # M:BACKSTOP-REDIRECT
     return (None if redirect else "&"), 1  # M:REFUSE-JOB
 
@@ -359,13 +370,77 @@ def _quote_blind(text: str) -> list[tuple[str, int]]:
     return found
 
 
+class BashParse:
+    """bash's own reading of one block, taken with `bash -n` on perturbed copies of it.
+
+    The third reader, and the only one that does not share the lexer's and the backstop's
+    quote and heredoc model: seven constructs fooled both of those the same way (review
+    round 11, M1-M7). `-n` parses and never executes. `declare -f` of the block wrapped in a
+    function was rejected, because a block that closes the wrapper runs at top level.
+
+    A position is code when doubling its operator stops the block parsing. bash 3.2 defers
+    `$(…)`, backticks, `<(…)` and arithmetic to run time, so a closer run goes first, pushing
+    a position inside one out to top level, where the doubled operator (or a stray `)`) fails
+    to parse. There are two runs, and a position is code if EITHER fails:
+      - `)`s alone close `$(…)` levels. They hold no backtick, so a later backtick in the
+        block -- in a comment, in quotes -- cannot pair with them (review round 12, M1);
+      - a backtick then `)`s: inside backticks only a closing backtick reaches top level.
+    Neither holds a `'` or a newline, so both are inert in single quotes and in a quoted
+    heredoc body. Fail closed: a block bash cannot parse, or a bash call that cannot run or
+    times out, vouches for nothing -- `_parses` answers None there, never False.
+    """
+
+    CLOSERS = (")" * 8, "`" + ")" * 8)  # M:ORACLE-CLOSERS
+
+    def __init__(self, texts: list[str]):
+        self.text = "\n".join(texts)
+        self.starts = [0]
+        for t in texts[:-1]:
+            self.starts.append(self.starts[-1] + len(t) + 1)
+
+    @staticmethod
+    def _parses(text: str) -> bool | None:
+        """True or False from `bash -n`; None when bash could not give an answer."""
+        try:
+            return subprocess.run(["bash", "-n", "-c", text], stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                  timeout=10).returncode == 0
+        except (OSError, ValueError, subprocess.SubprocessError):  # ValueError: a NUL byte
+            return None  # M:ORACLE-NO-BASH
+
+    @functools.cached_property
+    def parses(self) -> bool | None:
+        return self._parses(self.text)
+
+    def code_at(self, i: int, k: int, op: str) -> bool:
+        """Whether bash reads the operator `op` at line i, column k as code."""
+        if self.parses is not True:
+            return True  # M:ORACLE-UNPARSED
+        at, rest = self.starts[i] + k, self.starts[i] + k + len(op)
+        return any(self._parses(self.text[:at] + closer + f"{op} {op}" + self.text[rest:])
+                   is not True for closer in self.CLOSERS)  # M:ORACLE-ANY-CLOSER
+
+    def starts_statement(self, i: int, k: int) -> bool:
+        """Whether line i, column k is where bash starts a statement. A stray `then` breaks
+        the parse there, but also in a slot that takes ONE word (a `case` subject, a `[[ -n`
+        operand); a plain extra word parses at a statement start and not in such a slot
+        (review round 12, M2). Both answers must be definite."""
+        if self.parses is not True:
+            return False  # M:ORACLE-STATEMENT-UNPARSED
+        at = self.starts[i] + k
+        return (self._parses(self.text[:at] + "then " + self.text[at:]) is False  # M:ORACLE-STATEMENT
+                and self._parses(self.text[:at] + "x " + self.text[at:]) is True)  # M:ORACLE-WORD
+
+
 def backstop(lexed: list[Line]) -> list[tuple[int, str]]:
     """(index, kind) of every `&&`, `||`, job `&` and unread `<<` in the RAW text.
 
     The module's only list detector. `lex` found lists until round 10, and every exemption
     it keyed on text opened a hole the next review found (a heredoc body's `$(…)`, ` #` in
     `${…}`, `\\&&`). This reader has its own, smaller model, and excludes text only where
-    `lex` agrees, so a misread must fool BOTH to hide a list:
+    `lex` agrees AND `BashParse` -- bash's own parse -- reads it as text. The two models
+    share one quote and heredoc model, so agreement between them alone was fooled seven
+    ways in round 11; bash is the reader that does not share it:
       - quotes (`'…'`, `"…"`, `$'…'`) and backslash escapes outside `'…'`, carried across
         lines -- so `\\&&` is a literal `&` then a job, and `\\|&` is not bash 4's `|&`;
       - a comment only at a blank-preceded `#` in code outside `${…}`: a strict subset of
@@ -376,14 +451,17 @@ def backstop(lexed: list[Line]) -> list[tuple[int, str]]:
         since its quotes are text. A `<<` the lexer did not read as a heredoc refuses.
     Nothing is excluded except a position BOTH readers call single-quoted; double-quoted
     text is counted, because `"$(a && b)"` is code. The one `NAME=$(a && b)` carve-out
-    survives only where the lexer applied it AND this reader finds nothing else on the line.
+    survives only where the lexer applied it, this reader finds nothing else on the line,
+    and bash reads the assignment as the start of a statement.
     """
     hits, quote, opened, confirmed = [], None, 0, set()
+    bash = BashParse([info.text for info in lexed])
     for i, info in enumerate(lexed):
         text = info.text
         if info.heredoc in confirmed:  # M:BACKSTOP-BODY
-            if not info.literal:  # M:BACKSTOP-LITERAL-BODY
-                hits.extend((i, kind) for kind, _ in _quote_blind(text) if kind != ";")
+            hits.extend((i, kind) for kind, k in _quote_blind(text) if kind != ";"
+                        and (not info.literal  # M:BACKSTOP-LITERAL-BODY
+                             or bash.code_at(i, k, kind)))  # M:ORACLE-BODY
             continue
         found, spans, braces, comment, prev, k, shift_until = [], [], 0, False, " ", 0, -1
         opened = -1 if quote == "'" else opened
@@ -440,8 +518,12 @@ def backstop(lexed: list[Line]) -> list[tuple[int, str]]:
         lexer_says = info.squote  # M:BACKSTOP-AGREE-LEXER
         data = lambda pos: (pos in lexer_says  # noqa: E731
                             and any(a < pos < b for a, b in spans))  # M:BACKSTOP-AGREE-OWN
-        code = [(kind, pos) for kind, pos in found if not data(pos)]
-        if info.chain and _one_chain(text, info.chain, code):  # M:CHAIN-APPLIED
+        code = [(kind, pos) for kind, pos in found
+                if not data(pos) or ((kind != ";" or info.chain)  # a `;` matters to the carve-out
+                                     and bash.code_at(i, pos, kind))]  # M:ORACLE-DATA
+        name = len(text) - len(text.lstrip(" \t"))
+        if (info.chain and _one_chain(text, info.chain, code)  # M:CHAIN-APPLIED
+                and bash.starts_statement(i, name)):  # M:ORACLE-CHAIN-START
             code = []
         hits.extend((i, kind) for kind, _ in code if kind != ";")  # M:BACKSTOP-HITS
     return hits

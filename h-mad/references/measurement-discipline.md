@@ -233,17 +233,28 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   - a list in an unquoted heredoc body's `$(…)`, a ` #` inside `${…}` read as a comment, and a
     job behind `\&&` or `\|&` each read PASS over git's 128 (round 10). The lexer is not patched
     for them. Instead a second reader of the raw text refuses every `&&`, `||`, job `&` and every
-    `<<` the lexer did not read as a heredoc, on its own smaller model, so a misread must fool
-    both readers. It skips only a quoted-delimiter heredoc body and text both readers call
-    single-quoted. So it over-refuses these operators in double quotes, in comments and in
-    unquoted heredoc bodies, and it also refuses `<<\EOF`, a shift outside a plain `$((…))`,
-    and `>&$fd`. Single-quote such text, or keep it out of the screen's block.
+    `<<` the lexer did not read as a heredoc, on its own smaller model. It skips only a
+    quoted-delimiter heredoc body and text both readers call single-quoted;
+  - the two readers share one quote and heredoc model, so seven constructs fooled both the same
+    way (round 11): `$$'`, quotes inside code backticks, quotes inside `"${…}"`, a heredoc opener
+    ending in `\`, bash 3.2 closing `$(` at a `)` in a heredoc body, `$[1<<E ]`, and the carve-out
+    below after `export \`. The lexer is not patched for them either. bash itself is the third
+    reader: `bash -n` on a copy of the block with the operator doubled, which never executes it.
+    Text is skipped only when bash also parses it as text, and nothing is skipped when bash
+    cannot be run or cannot parse the block.
+
+  So the executor over-refuses these operators in double quotes, in comments, in unquoted heredoc
+  bodies, single-quoted inside backticks, and in a quoted heredoc body inside `$(…)`. It also
+  refuses `<<\EOF`, a shift outside a plain `$((…))`, and `>&$fd`. Single-quote such text, use
+  `$(…)` and keep heredocs at top level, or keep the text out of the screen's block.
 
   The only forms not refused are:
-  - the `&` of a redirection (`2>&1`, `>&2`, `>&-`, `<&0`, `&>`, `&>>`). A trailing `&` job
-    after one is still refused;
-  - the whole value of a one-line `NAME=$(…)` whose body is one `&&` chain, with no `;`, `||`, `&`
-    or newline. Only then does the assignment carry the failing member's status;
+  - the `&` of a redirection (`2>&1`, `>&2`, `>&-`, `<&0`, `&>`). A trailing `&` job after one
+    is still refused;
+  - the whole value of a one-line `NAME=$(…)` that bash reads as the start of a statement (not
+    an argument after `export \`, nor a one-word slot such as a `case` subject or a `[[ -n`
+    operand, round 12), whose body is one `&&` chain, with no `;`, `||`, `&` or newline. Only
+    then does the assignment carry the failing member's status;
     `X=$(a || b)`, `X=$(a && b; c)` and `X=$(a & wait)` are refused.
 
   Write one command per line; to chain on success, put the second command on the next line.

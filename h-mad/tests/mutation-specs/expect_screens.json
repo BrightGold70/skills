@@ -385,10 +385,10 @@
     },
     {
       "name": "and-chain-carve-out-removed",
-      "_mechanism": "The one-`&&`-chain carve-out is gone; a recorded `X=$(a && b)` is refused instead of read. (R10: ported from the lexer to `backstop`, which now owns list detection.)",
+      "_mechanism": "The one-`&&`-chain carve-out is gone; a recorded `X=$(a && b)` is refused instead of read. (R10: ported from the lexer to `backstop`, which now owns list detection.) (R11: re-anchored on the oracle-gated line.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "        if info.chain and _one_chain(text, info.chain, code):  # M:CHAIN-APPLIED",
-      "replace": "        if False:  # M:CHAIN-APPLIED",
+      "find": "        if (info.chain and _one_chain(text, info.chain, code)  # M:CHAIN-APPLIED",
+      "replace": "        if (False and _one_chain(text, info.chain, code)  # M:CHAIN-APPLIED",
       "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_inside_an_assignment_substitution_is_still_recorded"
     },
     {
@@ -609,51 +609,51 @@
     },
     {
       "name": "backstop-drops-lexer-agreement",
-      "_mechanism": "R10: a position the backstop alone calls single-quoted is excluded; its misread of `\"$(echo \"it's\")\"` hides the list the lexer lost after ` #` in `${…}`.",
+      "_mechanism": "R10: a position the backstop alone calls single-quoted is excluded; its misread of `\"$(echo \"it's\")\"` hides the list the lexer lost after ` #` in `${…}`. (R11: bash's parse also refuses this case, so the row is pinned to a test where bash wrongly vouches.)",
       "file": "scripts/h_mad_expect_screens.py",
       "find": "        lexer_says = info.squote  # M:BACKSTOP-AGREE-LEXER",
       "replace": "        lexer_says = range(10 ** 6)  # M:BACKSTOP-AGREE-LEXER",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_span_only_the_backstop_reads_as_quoted_is_not_excluded"
+      "test": "tests/test_h_mad_expect_screens.py::test_a_span_only_the_backstop_reads_as_quoted_needs_the_lexer_too"
     },
     {
       "name": "backstop-drops-own-agreement",
-      "_mechanism": "R10: a position the lexer alone calls single-quoted is excluded; the quote it lost after ` #` in `${…}` hides the next line's list.",
+      "_mechanism": "R10: a position the lexer alone calls single-quoted is excluded; the quote it lost after ` #` in `${…}` hides the next line's list. (R11: bash's parse also refuses this case, so the row is pinned to a test where bash wrongly vouches.)",
       "file": "scripts/h_mad_expect_screens.py",
       "find": "                            and any(a < pos < b for a, b in spans))  # M:BACKSTOP-AGREE-OWN",
       "replace": "                            and True)  # M:BACKSTOP-AGREE-OWN",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_quote_both_readers_lose_does_not_hide_a_list"
+      "test": "tests/test_h_mad_expect_screens.py::test_a_span_only_the_lexer_reads_as_quoted_needs_the_backstop_too"
     },
     {
       "name": "backstop-trusts-lexer-heredocs",
-      "_mechanism": "R10: every lexer heredoc body is skipped or read quote-blind, even one the backstop reads as quoted text.",
+      "_mechanism": "R10: every lexer heredoc body is skipped or read quote-blind, even one the backstop reads as quoted text. (R11: bash's parse also refuses this case, so the row is pinned to a test where bash wrongly vouches.)",
       "file": "scripts/h_mad_expect_screens.py",
       "find": "        if info.heredoc in confirmed:  # M:BACKSTOP-BODY",
       "replace": "        if info.body is not None:  # M:BACKSTOP-BODY",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_heredoc_the_backstop_reads_as_quoted_text_is_not_skipped"
+      "test": "tests/test_h_mad_expect_screens.py::test_a_lexer_heredoc_the_backstop_reads_as_text_is_counted_without_bash"
     },
     {
       "name": "backstop-skips-unquoted-bodies",
-      "_mechanism": "R10: an unquoted heredoc body is skipped like a quoted one, so its `$(…)` list is unseen (H1).",
+      "_mechanism": "R10: an unquoted heredoc body is skipped like a quoted one, so its `$(…)` list is unseen (H1). (R11: re-anchored on the oracle-gated line.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "            if not info.literal:  # M:BACKSTOP-LITERAL-BODY",
-      "replace": "            if False:  # M:BACKSTOP-LITERAL-BODY",
+      "find": "                        and (not info.literal  # M:BACKSTOP-LITERAL-BODY",
+      "replace": "                        and (False  # M:BACKSTOP-LITERAL-BODY",
       "test": "tests/test_h_mad_expect_screens.py::test_a_list_inside_an_unquoted_heredoc_substitution_is_refused"
     },
     {
       "name": "backstop-reads-quoted-bodies",
-      "_mechanism": "R10: a quoted-delimiter body is counted, so data there refuses.",
+      "_mechanism": "R10: a quoted-delimiter body is counted, so data there refuses. (R11: re-anchored on the oracle-gated line.)",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "            if not info.literal:  # M:BACKSTOP-LITERAL-BODY",
-      "replace": "            if True:  # M:BACKSTOP-LITERAL-BODY",
+      "find": "                        and (not info.literal  # M:BACKSTOP-LITERAL-BODY",
+      "replace": "                        and (True  # M:BACKSTOP-LITERAL-BODY",
       "test": "tests/test_h_mad_expect_screens.py::test_a_quoted_delimiter_heredoc_body_is_not_refused"
     },
     {
       "name": "backstop-comment-in-braces",
-      "_mechanism": "R10: the backstop opens a comment at ` #` inside `${…}` like the lexer, so both lose the quote after it.",
+      "_mechanism": "R10: the backstop opens a comment at ` #` inside `${…}` like the lexer, so both lose the quote after it. (R11: bash's parse also refuses this case, so the row is pinned to a test where bash wrongly vouches.)",
       "file": "scripts/h_mad_expect_screens.py",
       "find": "            elif ch == \"#\" and not braces and prev in (\" \", \"\\t\"):  # M:BACKSTOP-COMMENT",
       "replace": "            elif ch == \"#\" and prev in (\" \", \"\\t\"):  # M:BACKSTOP-COMMENT",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_quote_both_readers_lose_does_not_hide_a_list"
+      "test": "tests/test_h_mad_expect_screens.py::test_a_span_only_the_lexer_reads_as_quoted_needs_the_backstop_too"
     },
     {
       "name": "backstop-comment-after-escape",
@@ -702,6 +702,118 @@
       "find": "    return all(kind == \"&&\" and opened < pos < closed for kind, pos in code)  # M:BACKSTOP-CHAIN",
       "replace": "    return all(kind == \"&&\" and opened < pos for kind, pos in code)  # M:BACKSTOP-CHAIN",
       "test": "tests/test_h_mad_expect_screens.py::test_a_hash_after_the_carve_out_does_not_hide_a_list"
+    },
+    {
+      "name": "oracle-skips-agreed-quotes",
+      "_mechanism": "R11 (M1): a position both models call single-quoted is excluded without asking bash; `$$'` fools both.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                                     and bash.code_at(i, pos, kind))]  # M:ORACLE-DATA",
+      "replace": "                                     and False)]  # M:ORACLE-DATA",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_dollar_dollar_quote_does_not_fool_all_readers"
+    },
+    {
+      "name": "oracle-skips-quoted-bodies",
+      "_mechanism": "R11 (M5): a quoted-delimiter body is skipped without asking bash; bash 3.2 runs lines after a `)` in a body inside `$(`.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                             or bash.code_at(i, k, kind)))  # M:ORACLE-BODY",
+      "replace": "                             or False))  # M:ORACLE-BODY",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_paren_in_a_heredoc_inside_a_substitution_does_not_fool_all_readers"
+    },
+    {
+      "name": "carve-out-without-statement-start",
+      "_mechanism": "R11 (M7): the `NAME=$(a && b)` carve-out applies after `export \\`, where the assignment is an argument.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                and bash.starts_statement(i, name)):  # M:ORACLE-CHAIN-START",
+      "replace": "                and True):  # M:ORACLE-CHAIN-START",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_assignment_carve_out_needs_a_statement_start"
+    },
+    {
+      "name": "oracle-vouches-for-an-unparsed-block",
+      "_mechanism": "R11: a block bash cannot parse vouches for every position, though no doubled operator can change its rc.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            return True  # M:ORACLE-UNPARSED",
+      "replace": "            return False  # M:ORACLE-UNPARSED",
+      "test": "tests/test_h_mad_expect_screens.py::test_bash_reads_a_block_without_running_it"
+    },
+    {
+      "name": "oracle-closers-without-parens-run",
+      "_mechanism": "R12 (M1): only the backtick run is left, and a later inert backtick pairs with it, so bash vouches for a top-level list.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    CLOSERS = (\")\" * 8, \"`\" + \")\" * 8)  # M:ORACLE-CLOSERS",
+      "replace": "    CLOSERS = (\"`\" + \")\" * 8,)  # M:ORACLE-CLOSERS",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_later_backtick_does_not_reopen_a_top_level_hole"
+    },
+    {
+      "name": "oracle-closers-without-backtick-run",
+      "_mechanism": "R12: only `)`s are left, which cannot leave a backtick substitution, so a list inside backticks is vouched for.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    CLOSERS = (\")\" * 8, \"`\" + \")\" * 8)  # M:ORACLE-CLOSERS",
+      "replace": "    CLOSERS = (\")\" * 8,)  # M:ORACLE-CLOSERS",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_round_11_construct_inside_backticks_is_refused[M1-in-backticks]"
+    },
+    {
+      "name": "oracle-closers-none",
+      "_mechanism": "R11: no closer run at all; code_at always says literal.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    CLOSERS = (\")\" * 8, \"`\" + \")\" * 8)  # M:ORACLE-CLOSERS",
+      "replace": "    CLOSERS = ()  # M:ORACLE-CLOSERS",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_dollar_dollar_quote_does_not_fool_all_readers"
+    },
+    {
+      "name": "oracle-closer-error-reads-as-literal",
+      "_mechanism": "R12 (M3): a perturbation bash could not answer counts as parsing, so a probe error vouches.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                   is not True for closer in self.CLOSERS)  # M:ORACLE-ANY-CLOSER",
+      "replace": "                   is False for closer in self.CLOSERS)  # M:ORACLE-ANY-CLOSER",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_probe_that_cannot_run_vouches_for_nothing"
+    },
+    {
+      "name": "oracle-without-bash-vouches",
+      "_mechanism": "R11: a bash that cannot be run answers True, so every perturbation 'parses' and every excluded position is vouched for.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            return None  # M:ORACLE-NO-BASH",
+      "replace": "            return True  # M:ORACLE-NO-BASH",
+      "test": "tests/test_h_mad_expect_screens.py::test_bash_unavailable_fails_closed"
+    },
+    {
+      "name": "oracle-nul-byte-raises",
+      "_mechanism": "R12 (N1): ValueError from a NUL byte escapes _parses instead of reading as no answer.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        except (OSError, ValueError, subprocess.SubprocessError):  # ValueError: a NUL byte",
+      "replace": "        except (OSError, subprocess.SubprocessError):  # ValueError: a NUL byte",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_nul_byte_vouches_for_nothing"
+    },
+    {
+      "name": "statement-probe-ignores-then",
+      "_mechanism": "R11 (M7): the `then` probe is gone, so the carve-out applies after `export \\`.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        return (self._parses(self.text[:at] + \"then \" + self.text[at:]) is False  # M:ORACLE-STATEMENT",
+      "replace": "        return (True  # M:ORACLE-STATEMENT",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_assignment_carve_out_needs_a_statement_start"
+    },
+    {
+      "name": "statement-probe-error-reads-as-start",
+      "_mechanism": "R12 (M3): a `then` probe bash could not answer counts as a broken parse, so the carve-out applies. Pinned to a test where only the `then` probe errors: when every call errors, the word probe masks it.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        return (self._parses(self.text[:at] + \"then \" + self.text[at:]) is False  # M:ORACLE-STATEMENT",
+      "replace": "        return (self._parses(self.text[:at] + \"then \" + self.text[at:]) is not True  # M:ORACLE-STATEMENT",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_then_probe_that_cannot_run_is_no_statement_start"
+    },
+    {
+      "name": "statement-probe-ignores-word",
+      "_mechanism": "R12 (M2): without the plain-word probe, a one-word slot (`case` subject, `[[ -n` operand) reads as a statement start.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                and self._parses(self.text[:at] + \"x \" + self.text[at:]) is True)  # M:ORACLE-WORD",
+      "replace": "                and True)  # M:ORACLE-WORD",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_carve_out_needs_a_command_slot_not_a_one_word_slot"
+    },
+    {
+      "name": "statement-start-unparsed-vouches",
+      "_mechanism": "R12 (S1d): a block bash cannot parse still reads as a statement start.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            return False  # M:ORACLE-STATEMENT-UNPARSED",
+      "replace": "            return True  # M:ORACLE-STATEMENT-UNPARSED",
+      "test": "tests/test_h_mad_expect_screens.py::test_bash_reads_a_block_without_running_it"
     }
   ]
 }
