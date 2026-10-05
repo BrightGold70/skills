@@ -69,10 +69,14 @@ all refused, because each can end with status 0 over a failure (review round 6:
 `go() { … nosuchref … || return 0; }`, `( … || exit 0 )` and `X=$(… || exit 0)`
 each read PASS when they were allowed). Not refused, because each is recorded or
 is no list:
-  - exactly `|| [ $? = 1 ]`, the ONE declared form: it passes status 1 (grep's
-    no-match) and turns every other status into a failing final member that
-    the trap records. Look-alikes (`|| [ $? = 0 ]`, `|| [ 1 ]`, `|| :`) are
-    refused;
+  - exactly `| { CMD || [ $? = 1 ]; }`, the ONE declared form: inside a group
+    opened right after a single `|`, the `||` binds to that one command, so it
+    passes status 1 (grep's no-match) and turns every other status into a
+    failing final member that the trap records. Unbraced -- `… | grep P ||
+    [ $? = 1 ]` or a bare `cmd || [ $? = 1 ]` -- the `||` binds to the whole
+    pipeline, whose pipefail status is the rightmost non-zero (grep's 1), so it
+    would swallow git's 128 (review round 7, N1/N2): refused. Look-alikes
+    (`|| [ $? = 0 ]`, `|| [ 1 ]`, `|| :`) are refused;
   - an `&&` inside `[[ ]]` or `(( ))`, and the `&` in `2>&1` and `&>`;
   - the whole value of a one-line `NAME=$(…)` whose body is ONE `&&` chain, with
     no `;`, `||`, `&` or newline: only then is the substitution's status the
@@ -154,9 +158,13 @@ from h_mad_doc_block_exec import (  # noqa: E402
 SCREEN = re.compile(r"#[ \t]*expect[ \t]+(-?\d+)[ \t]*(?:$|[,;(]|--|—)")
 RAW_SCREEN = re.compile(r"(?:^|[ \t;&|()<>])" + SCREEN.pattern)
 ASSIGN_SUBST = re.compile(r"[ \t]*[A-Za-z_][A-Za-z0-9_]*=\$\((?!\()")
-# The ONE `||` that is not refused: exactly `|| [ $? = 1 ]`, which passes status 1 (grep's
-# no-match) and turns every other status into a failing final member the trap records.
-STATUS1_OR = re.compile(r"[ \t]*\[ \$\? = 1 \][ \t]*(?:$|[;)}#])")  # M:OR-STATUS1
+# The ONE `||` that is not refused: exactly `| { CMD || [ $? = 1 ]; }`. Inside a group opened
+# right after a single `|`, the `||` binds to that one command, so it passes status 1 (grep's
+# no-match) and turns every other status into a failing final member; under pipefail an
+# upstream error still surfaces. Unbraced, `||` binds to the WHOLE pipeline, whose pipefail
+# status is the rightmost non-zero (grep's 1), so `[ $? = 1 ]` would swallow git's 128.
+STATUS1_OR = re.compile(r"[ \t]*\[ \$\? = 1 \][ \t]*;[ \t]*\}")  # M:OR-STATUS1
+PIPED_GROUP = re.compile(r"(?:^|[^|])\|[ \t]*\{[ \t]+[^|;&{}()]+$")  # M:PIPED-GROUP
 HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
 INTEGER = re.compile(r"-?\d+")
 GIT_REDIRECTS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
@@ -264,7 +272,7 @@ def lex(texts: list[str]) -> list[Line]:
                 k += 1
             elif text.startswith("||", k):
                 ors.append(k)
-                if not STATUS1_OR.match(text, k + 2):
+                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):
                     found.append(("||", k))  # M:REFUSE-OR
                 k += 1
             elif ch == ";" and not text.startswith(";;", k):

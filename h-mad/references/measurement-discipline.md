@@ -221,8 +221,10 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   guard or condition exceptions. `|| true`, `|| :`, `|| exit 0` and `|| return 0` can each end with
   status 0 over a failure; review round 6 measured `go() { … || return 0; }`, `( … || exit 0 )` and
   `X=$(… || exit 0)` reading PASS while they were allowed. The only forms not refused are:
-  - exactly `|| [ $? = 1 ]`, the status-1-only remedy above. Look-alikes such as `|| [ $? = 0 ]`
-    and `|| [ 1 ]` are refused;
+  - exactly the braced `| { CMD || [ $? = 1 ]; }`, the status-1-only remedy above. Without the
+    braces (`… | grep P || [ $? = 1 ]`, or a bare `cmd || [ $? = 1 ]`), the `||` binds to the whole
+    pipeline, whose pipefail status is grep's 1, so git's 128 is swallowed. That form is refused, as
+    are look-alikes such as `|| [ $? = 0 ]` and `|| [ 1 ]`;
   - `&&` inside `[[ ]]` or `(( ))`, and the `&` in redirections;
   - the whole value of a one-line `NAME=$(…)` whose body is one `&&` chain, with no `;`, `||`, `&`
     or newline. Only then does the assignment carry the failing member's status;

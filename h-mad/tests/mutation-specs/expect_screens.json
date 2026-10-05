@@ -424,54 +424,6 @@
       "test": "tests/test_h_mad_expect_screens.py::test_an_and_list_then_more_inside_an_assignment_substitution_is_refused"
     },
     {
-      "name": "status-one-remedy-refused",
-      "_mechanism": "Review R5 Must-B (x9): the prescribed `|| [ $? = 1 ]` is refused, so the status-1-only remedy cannot PASS.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "replace": "STATUS1_OR = re.compile(r\"(?!)\")  # M:OR-STATUS1",
-      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_only_remedy_passes_a_clean_no_match"
-    },
-    {
-      "name": "status-one-check-loosened",
-      "_mechanism": "Review R6: any `|| [ … ]` is accepted, so `|| [ $? = 0 ]` and `|| [ 1 ]` pass every status.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*\\[[^]]*\\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_check_is_the_only_declared_form"
-    },
-    {
-      "name": "or-true-accepted",
-      "_mechanism": "Review R6: `|| true` / `|| :` are accepted again and mask git's 128.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?:true|:|\\[ \\$\\? = 1 \\])[ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "test": "tests/test_h_mad_expect_screens.py::test_or_true_and_or_colon_are_refused"
-    },
-    {
-      "name": "exit-zero-accepted-in-substitution",
-      "_mechanism": "Review R6 (R3): `X=$(… || exit 0)` is accepted; the substitution exits 0 over the failure.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?:exit[ \\t]+0|\\[ \\$\\? = 1 \\])[ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "test": "tests/test_h_mad_expect_screens.py::test_an_exit_zero_guard_in_a_substitution_is_refused"
-    },
-    {
-      "name": "exit-zero-accepted-in-subshell",
-      "_mechanism": "Review R6 (R2): `( … || exit 0 )` is accepted; the subshell exits 0 over the failure.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?:exit(?:[ \\t]+\\d+)?|\\[ \\$\\? = 1 \\])[ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "test": "tests/test_h_mad_expect_screens.py::test_an_exit_zero_guard_in_a_subshell_is_refused"
-    },
-    {
-      "name": "return-zero-accepted",
-      "_mechanism": "Review R6 (R1): `|| return 0` in a function is accepted; the function returns 0 over the failure.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?:return(?:[ \\t]+\\d+)?|\\[ \\$\\? = 1 \\])[ \\t]*(?:$|[;)}#])\")  # M:OR-STATUS1",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_return_zero_guard_in_a_function_is_refused"
-    },
-    {
       "name": "list-in-condition-exempt",
       "_mechanism": "Review R6 reverts R5 (o2): an `&&` on an `if`/`while` line is exempt again.",
       "file": "scripts/h_mad_expect_screens.py",
@@ -486,6 +438,54 @@
       "find": "                found.append((\"&&\", k))  # M:REFUSE-AND",
       "replace": "                found.append((\"&&\", k)) if i == 0 else None  # M:REFUSE-AND",
       "test": "tests/test_h_mad_expect_screens.py::test_a_list_after_a_subshell_condition_if_is_refused"
+    },
+    {
+      "name": "status-one-remedy-refused",
+      "_mechanism": "Review R5 Must-B (x9): the prescribed braced remedy is refused, so a clean no-match cannot PASS.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):",
+      "replace": "                if True:",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_only_remedy_passes_a_clean_no_match"
+    },
+    {
+      "name": "unbraced-status-one-accepted",
+      "_mechanism": "Review R7 (N1): `… | grep P || [ $? = 1 ]` is accepted unbraced; the `||` binds to the whole pipeline and swallows git's 128.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):",
+      "replace": "                if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\]\", text[k + 2:]):",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_unbraced_status_one_check_in_a_substitution_is_refused"
+    },
+    {
+      "name": "unbraced-status-one-accepted-top-level",
+      "_mechanism": "Review R7 (N2): the unbraced form at top level, redirected to a file.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):",
+      "replace": "                if not re.match(r\"[ \\t]*\\[ \\$\\? = 1 \\]\", text[k + 2:]) and False:",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_unbraced_status_one_check_at_top_level_is_refused"
+    },
+    {
+      "name": "piped-group-not-required",
+      "_mechanism": "Review R7: a group around the WHOLE pipeline is accepted; `||` binds to the pipeline and swallows git's 128.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                if not (STATUS1_OR.match(text, k + 2) and PIPED_GROUP.search(text[:k])):",
+      "replace": "                if not (STATUS1_OR.match(text, k + 2) and True):",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_braced_pipeline_with_a_status_one_check_is_refused"
+    },
+    {
+      "name": "status-one-check-loosened",
+      "_mechanism": "Review R6: any `|| [ … ]` is accepted in the group, so `|| [ $? = 0 ]` and `|| [ 1 ]` pass every status.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*;[ \\t]*\\}\")  # M:OR-STATUS1",
+      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*\\[[^]]*\\][ \\t]*;[ \\t]*\\}\")  # M:OR-STATUS1",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_check_is_the_only_declared_form"
+    },
+    {
+      "name": "or-colon-accepted-in-group",
+      "_mechanism": "Review R6: `| { grep P || :; }` is accepted and masks every status of grep.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "STATUS1_OR = re.compile(r\"[ \\t]*\\[ \\$\\? = 1 \\][ \\t]*;[ \\t]*\\}\")  # M:OR-STATUS1",
+      "replace": "STATUS1_OR = re.compile(r\"[ \\t]*(?::|\\[ \\$\\? = 1 \\])[ \\t]*;[ \\t]*\\}\")  # M:OR-STATUS1",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_status_one_check_is_the_only_declared_form"
     },
     {
       "name": "stdin-inherited",

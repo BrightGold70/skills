@@ -712,7 +712,7 @@ def test_a_heredoc_marker_inside_quotes_does_not_hide_later_screens(tmp_path):
     """R2-M1(a): `'<<EOF'` in a quoted grep pattern turned every later line into a heredoc body."""
     root, _, new = _repo(tmp_path)
     doc = _doc(tmp_path, PASSING_BLOCK + f"""{FENCE}bash
-N=$(grep -c '<<EOF' a.txt || [ $? = 1 ])
+N=$(cat a.txt | {{ grep -c '<<EOF' || [ $? = 1 ]; }})
 grep -c BAD a.txt   # expect 0
 {FENCE}
 """)
@@ -1256,4 +1256,52 @@ def test_a_list_after_a_group_condition_if_is_refused(tmp_path):
     doc, result = _after_condition(tmp_path, "if { true; } then echo y; fi", "c7.md")
     assert _screens(result.stdout) == [
         f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:3 FAIL"], \
+        result.stdout
+
+
+# --- review round 7 of 111b522f: the remedy only in its braced form -----------------
+
+
+def test_an_unbraced_status_one_check_in_a_substitution_is_refused(tmp_path):
+    """R7 (N1): unbraced, `||` binds to the whole pipeline; pipefail yields grep's 1, so
+    `[ $? = 1 ]` succeeds and git's 128 is swallowed."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "MOVED=$(git diff --name-only nosuchref HEAD | grep '\\.py$' || [ $? = 1 ])\n"
+                       "printf '%s\\n' \"$MOVED\" | grep -c .   # expect 0")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_an_unbraced_status_one_check_at_top_level_is_refused(tmp_path):
+    """R7 (N2): the same at top level, redirected to a file."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "git diff --name-only nosuchref HEAD | grep '\\.py$' > list.txt || [ $? = 1 ]\n"
+                       + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_a_status_one_check_outside_a_piped_group_is_refused(tmp_path):
+    """R7 (N3): a bare `cmd || [ $? = 1 ]` is not the prescribed `| { grep … || [ $? = 1 ]; }`."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "git diff --name-only nosuchref HEAD > list.txt || [ $? = 1 ]\n" + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_a_braced_pipeline_with_a_status_one_check_is_refused(tmp_path):
+    """R7: braces around the WHOLE pipeline bind `||` to it just as no braces do; only a
+    group opened after `|` around one command is the declared form."""
+    root, _, new = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, new,
+                       "{ git diff --name-only nosuchref HEAD | grep '\\.py$' || [ $? = 1 ]; } > list.txt\n"
+                       + SCREEN_LIST)
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=||@{doc}:2 FAIL"], \
         result.stdout
