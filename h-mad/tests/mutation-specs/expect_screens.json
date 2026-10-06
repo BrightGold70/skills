@@ -942,6 +942,14 @@
       "find": "        if self._parses(self.text[:line] + f\"{op} {op}\\n\" + self.text[line:]) is not True:",
       "replace": "        if self._parses(self.text[:line] + f\"{op} {op}\\n\" + self.text[line:]) is False:",
       "test": "tests/test_h_mad_expect_screens.py::test_a_heredoc_line_check_with_no_answer_is_no_body[raise]"
+    },
+    {
+      "name": "coverage-hides-unparsed-code",
+      "_mechanism": "R14 S1, R17 S4: the coverage line no longer discloses aliases and `.`/`source` of a heredoc, two holes no parse can see.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            \"literal text in this shell -- a list in either is not seen; \"  # M:COVERAGE-UNPARSED",
+      "replace": "            \"\"  # M:COVERAGE-UNPARSED",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_output_discloses_aliases_and_sourced_text"
     }
   ]
 }

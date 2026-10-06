@@ -147,8 +147,13 @@ a list -- never reaches this trap (it is not inherited across processes), so
 `bash -c 'git diff nosuchref > f; echo ok'` reads as clean; and a failing
 `if`/`while`/`until` CONDITION or a `!`-NEGATED command is neither refused nor
 recorded (bash runs no ERR trap for either): `if git diff nosuchref …; then …;
-fi` and `X=$(true && ! git diff nosuchref …)` read as clean. No text check can
-close these; the `coverage:` line states them on every run. The trap is disarmed inside screens
+fi` and `X=$(true && ! git diff nosuchref …)` read as clean; and code the parse
+cannot see -- a block that turns on aliases (`shopt -s expand_aliases`, `set -o
+posix`) runs text `bash -n` read with aliases off, so an alias holding a `'` moves the
+quotes, and `.`/`source` of a heredoc or stdin runs a body every reader proves literal,
+in this shell (review rounds 14 and 17; a runtime guard is open work, since a DEBUG trap
+clobbers bash 3.2's PIPESTATUS). No text check can close these; the `coverage:` line
+states them on every run. The trap is disarmed inside screens
 because bash 3.2 reports a partial PIPESTATUS to it and leaves its own
 PIPESTATUS behind.
 
@@ -206,6 +211,9 @@ COVERAGE = ("coverage: only statements ending in a '# expect <N>' comment inside
             "xargs sh, eval) never reaches this trap and is not seen; "
             "a failing if/while/until condition or !-negated command is neither refused nor "
             "recorded; "
+            "a block that turns on aliases (shopt -s expand_aliases, set -o posix) runs text "
+            "the parse read with aliases off, and . or source of a heredoc or stdin runs "
+            "literal text in this shell -- a list in either is not seen; "  # M:COVERAGE-UNPARSED
             "a statement that leaves the worktree by absolute path reads that tree, not the sha")
 # The ERR trap records EVERY non-zero status outside a screen: no status is judged benign
 # from command text (three rounds of text heuristics each opened a hole in another). It

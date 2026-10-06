@@ -1412,6 +1412,19 @@ def test_the_output_discloses_conditions_and_negation(tmp_path):
     assert "if/while/until condition" in coverage and "!-negated" in coverage, coverage
 
 
+def test_the_output_discloses_aliases_and_sourced_text(tmp_path):
+    """R14 S1, R17 S4: two holes no parse can see, disclosed until a runtime guard closes them.
+    A block that turns on aliases runs text `bash -n` read with aliases off, and `.`/`source`
+    of a heredoc or stdin runs a body every reader proves literal, in the current shell."""
+    root, old, _ = _repo(tmp_path)
+    result = run(tmp_path, [_doc(tmp_path, CORE)], root, old)
+    coverage = result.stdout.splitlines()[-1]
+    for part in ("(shopt -s expand_aliases, set -o posix) runs text",
+                 ". or source of a heredoc or stdin runs",
+                 "literal text in this shell -- a list in either is not seen;"):
+        assert part in coverage, (part, coverage)
+
+
 # --- review round 10 of aa2b968a: the raw-text backstop -----------------------------
 #
 # Each lexer exemption keyed on text opened a hole the next round found. Round 10 found
