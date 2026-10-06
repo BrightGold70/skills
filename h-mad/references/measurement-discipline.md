@@ -292,10 +292,13 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   The full set of disclosed residuals:
   - child shells and `eval`;
   - conditions and `!`;
-  - code the parse cannot see: a block that turns on aliases (`shopt -s expand_aliases`,
-    `set -o posix`) runs text `bash -n` read with aliases off, and `.`/`source` of a heredoc or
-    stdin runs a literal body in the current shell. A runtime guard is open work: a DEBUG-trap
-    guard was measured to clobber bash 3.2's PIPESTATUS, which the screens read;
+  - code the parse cannot see is REFUSED at run time (task #14), not disclosed: every
+    `.`/`source` (shadow functions plus a top-level RETURN trap) and aliases on at either marker
+    of a screen (`expand_aliases`, posix mode, any `alias -p`) read
+    `UNREADABLE:unsupported_runtime=<source|aliases>@<doc>:<line>`. A DEBUG trap was ruled out:
+    it clobbers bash 3.2's PIPESTATUS. What the guard still cannot see: aliases turned on and off
+    again between two screens' markers, a `builtin`/`command` source inside a function body,
+    and a block that disarms the guard (`trap - RETURN`, `unset -f source`);
   - expectations written in prose (untagged);
   - statements that leave the worktree by absolute path.
 - **A tooling fix landed mid-arc is a measurement event for every document that measures the

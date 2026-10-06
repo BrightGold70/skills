@@ -211,8 +211,8 @@
       "name": "trap-armed-inside-screens",
       "_mechanism": "The trap stays armed inside a screen; on bash 3.2 it clobbers PIPESTATUS and an erroring member before a no-match count reads 0.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "            out.append(f\"trap - ERR; printf '\\\\n%s\\\\n' 'HMADB_{nonce}_{starts[k]}'\")",
-      "replace": "            out.append(f\"printf '\\\\n%s\\\\n' 'HMADB_{nonce}_{starts[k]}'\")",
+      "find": "            out.append(f\"trap - ERR; {ALIAS_CHECK}; \"  # M:ALIAS-AT-BEGIN",
+      "replace": "            out.append(f\"{ALIAS_CHECK}; \"  # M:ALIAS-AT-BEGIN",
       "test": "tests/test_h_mad_expect_screens.py::test_an_erroring_member_before_a_no_match_count_is_unreadable"
     },
     {
@@ -227,8 +227,8 @@
       "name": "failure-line-misattributed",
       "_mechanism": "The recorded line is off by one, so the reason names the wrong document line.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "$((LINENO - __hmad_l0 - 1))",
-      "replace": "$((LINENO - __hmad_l0))",
+      "find": "\"$((LINENO - __hmad_l0 - 1)):$__hmad_r\"",
+      "replace": "\"$((LINENO - __hmad_l0)):$__hmad_r\"",
       "test": "tests/test_h_mad_expect_screens.py::test_a_failed_assignment_before_the_screen_is_unreadable"
     },
     {
@@ -945,11 +945,83 @@
     },
     {
       "name": "coverage-hides-unparsed-code",
-      "_mechanism": "R14 S1, R17 S4: the coverage line no longer discloses aliases and `.`/`source` of a heredoc, two holes no parse can see.",
+      "_mechanism": "R14 S1, R17 S4, task #14: the coverage line no longer names what the runtime guard cannot see.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "            \"literal text in this shell -- a list in either is not seen; \"  # M:COVERAGE-UNPARSED",
+      "find": "            \"the guard (trap - RETURN, unset -f source) is not seen; \"  # M:COVERAGE-UNPARSED",
       "replace": "            \"\"  # M:COVERAGE-UNPARSED",
       "test": "tests/test_h_mad_expect_screens.py::test_the_output_discloses_aliases_and_sourced_text"
+    },
+    {
+      "name": "source-shadow-dropped",
+      "_mechanism": "task #14: no shadow functions, so a `.` inside a function body (no RETURN trap there) runs unrecorded.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    f'builtin {name} \"$@\"; }}' for name in (\"source\", \".\"))  # M:SOURCE-SHADOW",
+      "replace": "    f'builtin {name} \"$@\"; }}' for name in ())  # M:SOURCE-SHADOW",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_source_inside_a_function_is_refused_at_the_source_line"
+    },
+    {
+      "name": "return-trap-records-nothing",
+      "_mechanism": "task #14: the RETURN trap writes no record, so `builtin .` bypasses the shadow unseen.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "RETURN_TRAP = f'echo \"{SOURCED.format(line=\"LINENO\")}\" >> \"$__hmad_ff\"'  # M:SOURCE-RETURN",
+      "replace": "RETURN_TRAP = ':'  # M:SOURCE-RETURN",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_sourced_heredoc_is_refused_at_its_line"
+    },
+    {
+      "name": "return-trap-unarmed",
+      "_mechanism": "task #14: the RETURN trap is never set.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        f\"trap {shlex.quote(RETURN_TRAP)} RETURN\",  # M:RETURN-ARMED",
+      "replace": "        f\"trap {shlex.quote(RETURN_TRAP)} USR2\",  # M:RETURN-ARMED",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_sourced_heredoc_is_refused_at_its_line"
+    },
+    {
+      "name": "alias-defined-not-sampled",
+      "_mechanism": "task #14: a defined alias with expansion apparently off is not sampled.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "               '\\\\test -n \"$(\\\\alias -p)\"; } && '  # M:ALIAS-SAMPLE",
+      "replace": "               'false; } && '  # M:ALIAS-SAMPLE",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_alias_mode_is_refused_at_the_screen"
+    },
+    {
+      "name": "alias-not-sampled-at-begin",
+      "_mechanism": "task #14: only the end marker samples, so a screen that turns aliases off again reads clean.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            out.append(f\"trap - ERR; {ALIAS_CHECK}; \"  # M:ALIAS-AT-BEGIN",
+      "replace": "            out.append(f\"trap - ERR; \"  # M:ALIAS-AT-BEGIN",
+      "test": "tests/test_h_mad_expect_screens.py::test_aliases_turned_off_inside_the_screen_are_still_seen_at_its_begin"
+    },
+    {
+      "name": "alias-not-sampled-at-end",
+      "_mechanism": "task #14: only the begin marker samples, so a screen that turns aliases on reads clean.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            out.append(f\"__hmad_ps=\\\"${{PIPESTATUS[*]}}\\\"; {ALIAS_CHECK}; \"  # M:ALIAS-AT-END",
+      "replace": "            out.append(f\"__hmad_ps=\\\"${{PIPESTATUS[*]}}\\\"; \"  # M:ALIAS-AT-END",
+      "test": "tests/test_h_mad_expect_screens.py::test_aliases_turned_on_inside_the_screen_are_seen_at_its_end"
+    },
+    {
+      "name": "bash-env-aliases-kept",
+      "_mechanism": "task #14: without `unalias -a`, a BASH_ENV alias refuses an honest document.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        \"\\\\unalias -a\",  # M:UNALIAS: a BASH_ENV's aliases are not the document's",
+      "replace": "        \":\",  # M:UNALIAS: a BASH_ENV's aliases are not the document's",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_bash_env_alias_is_not_the_documents"
+    },
+    {
+      "name": "unread-code-read-as-status",
+      "_mechanism": "task #14: a `!` record falls through to the status branch and reads as a failed command.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "    if unread:  # M:UNREAD-CODE: anywhere in the list, ahead of any recorded status",
+      "replace": "    if False:  # M:UNREAD-CODE: anywhere in the list, ahead of any recorded status",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_sourced_heredoc_is_refused_at_its_line"
+    },
+    {
+      "name": "alias-line-misattributed",
+      "_mechanism": "task #14: the alias record's line is off by one, so the reason names the wrong document line.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "`alias -p`, recording `!aliases@<line>`. Any such record reads",
+      "replace": "`alias -p`, recording `!aliases@<line>`. Any such record reads",
+      "test": "tests/test_h_mad_expect_screens.py::test_an_alias_mode_is_refused_at_the_screen"
     }
   ]
 }

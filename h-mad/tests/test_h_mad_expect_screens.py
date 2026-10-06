@@ -1413,15 +1413,15 @@ def test_the_output_discloses_conditions_and_negation(tmp_path):
 
 
 def test_the_output_discloses_aliases_and_sourced_text(tmp_path):
-    """R14 S1, R17 S4: two holes no parse can see, disclosed until a runtime guard closes them.
-    A block that turns on aliases runs text `bash -n` read with aliases off, and `.`/`source`
-    of a heredoc or stdin runs a body every reader proves literal, in the current shell."""
+    """R14 S1, R17 S4, task #14: both holes are now refused at run time; the coverage line
+    says so, and names what the runtime guard still cannot see."""
     root, old, _ = _repo(tmp_path)
     result = run(tmp_path, [_doc(tmp_path, CORE)], root, old)
     coverage = result.stdout.splitlines()[-1]
-    for part in ("(shopt -s expand_aliases, set -o posix) runs text",
-                 ". or source of a heredoc or stdin runs",
-                 "literal text in this shell -- a list in either is not seen;"):
+    for part in ("every . or source, and aliases on at a screen",
+                 "is refused at run time",
+                 "aliases turned on and off again between screens",
+                 "the guard (trap - RETURN, unset -f source) is not seen;"):
         assert part in coverage, (part, coverage)
 
 
@@ -2065,3 +2065,118 @@ def test_the_line_check_goes_before_the_body_line():
     lines = ["E() { :; }", "X=$(cat <<'E'", ")", ": $(git x && :) <<'F'", "F", "E"]
     assert hes.BashParse(lines).body_code_at(3, "&&", "E") is True
     assert (3, "&&") in hes.backstop(hes.lex(lines))
+
+
+# --- task #14: the runtime guard for code no parse saw -----------------------------------
+#
+# `.`/`source` runs a body no reader parsed, and a block that turns on aliases runs text
+# `bash -n` read with them off. Both are recorded at run time and refused. Every case runs
+# under each bash on this machine: `run_block` resolves `bash` by PATH.
+
+BASHES = [b for b in ("/bin/bash", "/opt/homebrew/bin/bash", "/usr/local/bin/bash")
+          if os.path.exists(b)]
+
+
+def _under(bash):
+    return {"PATH": f"{os.path.dirname(bash)}:{os.environ['PATH']}"}
+
+
+def _runtime(tmp_path, bash, body, kind, line):
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"{FENCE}bash\n{body}\n{FENCE}\n")
+    result = run(tmp_path, [doc], root, new, env_extra=_under(bash))
+    screen = body.count("\n") + 2
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:{screen} expect=0 got=UNREADABLE:unsupported_runtime={kind}@{doc}:{line} "
+        "FAIL"], result.stdout
+
+
+SOURCED_LIST = f"{ERRORED} && echo x\nE\n"
+
+
+@pytest.mark.parametrize("bash", BASHES)
+@pytest.mark.parametrize("opener", [". /dev/stdin <<'E'", "source /dev/stdin <<'E'",
+                                    "builtin . /dev/stdin <<'E'", "command source /dev/stdin <<'E'",
+                                    "set -o posix; . /dev/stdin <<'E'"],
+                         ids=["dot", "source", "builtin-dot", "command-source", "posix-dot"])
+def test_a_sourced_heredoc_is_refused_at_its_line(tmp_path, bash, opener):
+    """S4: the quoted body is literal to every reader, yet runs in this shell, so the `&&`
+    hides git's 128 and the empty list read 0 (PASS) before the guard."""
+    _runtime(tmp_path, bash, f"{opener}\n{SOURCED_LIST}" + SCREEN_LIST, "source", 2)
+
+
+@pytest.mark.parametrize("bash", BASHES)
+def test_a_source_inside_a_function_is_refused_at_the_source_line(tmp_path, bash):
+    body = f"f() {{\n. /dev/stdin <<'E'\n{SOURCED_LIST}}}\nf\n" + SCREEN_LIST
+    _runtime(tmp_path, bash, body, "source", 3)
+
+
+@pytest.mark.parametrize("bash", BASHES)
+def test_a_sourced_file_is_refused_too(tmp_path, bash):
+    """A tracked file's body is as unparsed as a heredoc's: every `.`/`source` is refused."""
+    body = f"echo '{ERRORED} && echo x' > s.sh\n. ./s.sh\n" + SCREEN_LIST
+    _runtime(tmp_path, bash, body, "source", 3)
+
+
+@pytest.mark.parametrize("bash", BASHES)
+@pytest.mark.parametrize("setup", ["shopt -s expand_aliases", "set -o posix",
+                                   "alias q=echo", "POSIXLY_CORRECT=1"],
+                         ids=["expand-aliases", "posix", "alias-defined", "posixly-correct"])
+def test_an_alias_mode_is_refused_at_the_screen(tmp_path, bash, setup):
+    """R14 S1: an alias holding a `'` moves run-time quoting the parse read with aliases off."""
+    _runtime(tmp_path, bash, f"{setup}\n: > list.txt\n" + SCREEN_LIST, "aliases", 4)
+
+
+@pytest.mark.parametrize("bash", BASHES)
+def test_an_alias_hiding_a_list_reads_unreadable_not_pass(tmp_path, bash):
+    """R14 S1 end to end: the `&&` is single-quoted when the parse reads the `alias` line,
+    but `q` runs it as a list at run time, so git's 128 is unrecorded and the empty list
+    read 0 (PASS) before the guard."""
+    body = f"shopt -s expand_aliases\nalias q='{ERRORED} && echo'\nq\n" + SCREEN_LIST
+    _runtime(tmp_path, bash, body, "aliases", 5)
+
+
+@pytest.mark.parametrize("bash", BASHES)
+def test_a_clean_block_still_passes_and_reads_its_pipestatus(tmp_path, bash):
+    """Negative control: neither shadow nor trap fires without a source, and the RETURN trap
+    leaves a screen's PIPESTATUS alone (`grep -c` exiting 1 still reads 0)."""
+    root, old, _ = _repo(tmp_path)
+    result = run(tmp_path, [_doc(tmp_path, CORE)], root, old, env_extra=_under(bash))
+    assert "EXPECT: PASS screens=1" in result.stdout, result.stdout
+
+
+@pytest.mark.parametrize("bash", BASHES)
+def test_a_bash_env_alias_is_not_the_documents(tmp_path, bash):
+    """`unalias -a` in the preamble: a BASH_ENV that defines an alias must not refuse an
+    honest document."""
+    rc = tmp_path / "rc.sh"
+    rc.write_text("alias ll='ls -l'\n")
+    root, old, _ = _repo(tmp_path)
+    result = run(tmp_path, [_doc(tmp_path, CORE)], root, old,
+                 env_extra={**_under(bash), "BASH_ENV": str(rc)})
+    assert "EXPECT: PASS screens=1" in result.stdout, result.stdout
+
+
+@pytest.mark.parametrize("bash", BASHES)
+def test_aliases_turned_off_inside_the_screen_are_still_seen_at_its_begin(tmp_path, bash):
+    """The begin marker samples before the screen's own line can turn aliases off again."""
+    body = ("shopt -s expand_aliases\n: > list.txt\n"
+            "shopt -u expand_aliases; wc -l < list.txt | tr -d ' '   # expect 0")
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"{FENCE}bash\n{body}\n{FENCE}\n")
+    result = run(tmp_path, [doc], root, new, env_extra=_under(bash))
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:4 expect=0 got=UNREADABLE:unsupported_runtime=aliases@{doc}:4 FAIL"], \
+        result.stdout
+
+
+@pytest.mark.parametrize("bash", BASHES)
+def test_aliases_turned_on_inside_the_screen_are_seen_at_its_end(tmp_path, bash):
+    """The end marker samples after the screen's own line turned aliases on."""
+    body = ": > list.txt\nshopt -s expand_aliases; wc -l < list.txt | tr -d ' '   # expect 0"
+    root, _, new = _repo(tmp_path)
+    doc = _doc(tmp_path, f"{FENCE}bash\n{body}\n{FENCE}\n")
+    result = run(tmp_path, [doc], root, new, env_extra=_under(bash))
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_runtime=aliases@{doc}:3 FAIL"], \
+        result.stdout

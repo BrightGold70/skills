@@ -147,13 +147,25 @@ a list -- never reaches this trap (it is not inherited across processes), so
 `bash -c 'git diff nosuchref > f; echo ok'` reads as clean; and a failing
 `if`/`while`/`until` CONDITION or a `!`-NEGATED command is neither refused nor
 recorded (bash runs no ERR trap for either): `if git diff nosuchref …; then …;
-fi` and `X=$(true && ! git diff nosuchref …)` read as clean; and code the parse
-cannot see -- a block that turns on aliases (`shopt -s expand_aliases`, `set -o
-posix`) runs text `bash -n` read with aliases off, so an alias holding a `'` moves the
-quotes, and `.`/`source` of a heredoc or stdin runs a body every reader proves literal,
-in this shell (review rounds 14 and 17; a runtime guard is open work, since a DEBUG trap
-clobbers bash 3.2's PIPESTATUS). No text check can close these; the `coverage:` line
-states them on every run. The trap is disarmed inside screens
+fi` and `X=$(true && ! git diff nosuchref …)` read as clean. No text check can close
+these; the `coverage:` line states them on every run.
+
+Code the parse cannot see is refused at RUN time (task #14; review rounds 14 and 17).
+`bash -n` reads with aliases off, so an alias defined in single quotes (`alias q='git
+diff nosuchref > f && echo'`) runs a list no reader saw; and `.`/`source` runs a body --
+a heredoc, stdin, or a file -- that no reader parsed, in this shell. A DEBUG trap cannot
+watch for either (it clobbers bash 3.2's PIPESTATUS), so: `source` and `.` are shadowed
+by functions that record `!source@<line>`, a top-level RETURN trap records the same for
+`builtin .`, `command source` and posix mode (where the special builtin outranks a
+function), and both markers of every screen sample `expand_aliases`, posix mode and
+`alias -p`, recording `!aliases@<line>`. Any such record reads
+`UNREADABLE:unsupported_runtime=<source|aliases>@<doc>:<line>`. Every source is refused,
+a tracked file's too: its body is as unparsed as a heredoc's. The preamble runs
+`unalias -a` first, so a BASH_ENV's aliases are not the document's. Residuals: aliases
+turned on and off again between two screens' markers, a `builtin`/`command` source
+inside a function (no RETURN trap there without `set -T`, which would fire on every
+function return), and a block that disarms the guard (`trap - RETURN`, `unset -f
+source`). The trap is disarmed inside screens
 because bash 3.2 reports a partial PIPESTATUS to it and leaves its own
 PIPESTATUS behind.
 
@@ -211,15 +223,33 @@ COVERAGE = ("coverage: only statements ending in a '# expect <N>' comment inside
             "xargs sh, eval) never reaches this trap and is not seen; "
             "a failing if/while/until condition or !-negated command is neither refused nor "
             "recorded; "
-            "a block that turns on aliases (shopt -s expand_aliases, set -o posix) runs text "
-            "the parse read with aliases off, and . or source of a heredoc or stdin runs "
-            "literal text in this shell -- a list in either is not seen; "  # M:COVERAGE-UNPARSED
+            "every . or source, and aliases on at a screen (expand_aliases, posix, an alias "
+            "defined), is refused at run time, but aliases turned on and off again between "
+            "screens, a builtin or command source inside a function, or a block that disarms "
+            "the guard (trap - RETURN, unset -f source) is not seen; "  # M:COVERAGE-UNPARSED
             "a statement that leaves the worktree by absolute path reads that tree, not the sha")
 # The ERR trap records EVERY non-zero status outside a screen: no status is judged benign
 # from command text (three rounds of text heuristics each opened a hole in another). It
 # writes to a file, not a variable, so a function body, subshell or command substitution
 # (reached through `set -E`) records into the same list as the top level.
 TRAP = '__hmad_r=$?; echo "$((LINENO - __hmad_l0 - 1)):$__hmad_r" >> "$__hmad_ff"'  # M:ANY-NONZERO
+# Code no parse saw (task #14). A `.`/`source` runs a body -- a heredoc, stdin, or a file --
+# that no reader parsed, in this shell, so a list in it is unrecorded: every one is recorded
+# as `!source@<line>` and refused. Shadow functions see a call from any depth; a top-level
+# RETURN trap (no `set -T`, so no function return fires it) also sees `builtin .`,
+# `command source` and posix mode, where the special builtin outranks a function.
+SOURCED = "!source@$(({line} - __hmad_l0 - 1))"
+SHADOWS = "\n".join(
+    f'{name}() {{ echo "{SOURCED.format(line="BASH_LINENO[0]")}" >> "$__hmad_ff"; '
+    f'builtin {name} "$@"; }}' for name in ("source", "."))  # M:SOURCE-SHADOW
+RETURN_TRAP = f'echo "{SOURCED.format(line="LINENO")}" >> "$__hmad_ff"'  # M:SOURCE-RETURN
+# Aliases are parsed with expansion off by `bash -n`; a block that turns expansion (or posix
+# mode) on and defines one runs text no reader read. Sampled at both markers of every screen
+# (the begin marker runs with the ERR trap already disarmed), each word backslashed so an
+# alias cannot expand it.
+ALIAS_CHECK = ('{ \\shopt -q expand_aliases || \\shopt -qo posix || '
+               '\\test -n "$(\\alias -p)"; } && '  # M:ALIAS-SAMPLE
+               '\\echo "!aliases@$((LINENO - __hmad_l0 - 1))" >> "$__hmad_ff"')
 
 
 class CannotJudge(Exception):
@@ -687,10 +717,11 @@ def instrument(texts: list[str], spans, nonce: str) -> str:
     ends = {e: n for n, (_, e, _, _) in enumerate(spans)}
     for k, line in enumerate(texts):
         if k in starts:
-            out.append(f"trap - ERR; printf '\\n%s\\n' 'HMADB_{nonce}_{starts[k]}'")
+            out.append(f"trap - ERR; {ALIAS_CHECK}; "  # M:ALIAS-AT-BEGIN
+                       f"printf '\\n%s\\n' 'HMADB_{nonce}_{starts[k]}'")
         out.append(line)
         if k in ends:
-            out.append(f"__hmad_ps=\"${{PIPESTATUS[*]}}\"; "
+            out.append(f"__hmad_ps=\"${{PIPESTATUS[*]}}\"; {ALIAS_CHECK}; "  # M:ALIAS-AT-END
                        f"printf '\\n%s %s|%s\\n' 'HMADE_{nonce}_{ends[k]}' "
                        f"\"$__hmad_ps\" \"$(tr '\\n' ' ' < \"$__hmad_ff\")\"; "
                        f"trap \"$__hmad_trap\" ERR")
@@ -714,6 +745,10 @@ def read_screen(stdout: str, nonce: str, i: int, expect: int,
     if not statuses or any(not s.isdigit() or int(s) >= 2 for s in statuses):  # M:PIPESTATUS
         return "UNREADABLE:exit_status=" + ",".join(statuses), "FAIL"
     failures = failed_field.split()
+    unread = [f[1:] for f in failures if f.startswith("!")]
+    if unread:  # M:UNREAD-CODE: anywhere in the list, ahead of any recorded status
+        kind, _, line = unread[0].partition("@")
+        return f"UNREADABLE:unsupported_runtime={kind}@{where(line)}", "FAIL"
     if failures:  # M:EARLIER-FAILURE
         line, _, status = failures[0].partition(":")
         return f"UNREADABLE:failed_command={where(line)}:{status}", "FAIL"
@@ -741,6 +776,9 @@ def _preamble(cwd: str, pidfile: str) -> str:
         "set -o pipefail",  # M:PIPEFAIL: an errored non-final member fails its pipeline
         f"__hmad_trap={shlex.quote(TRAP)}",
         'trap "$__hmad_trap" ERR',  # M:TRAP-ARMED
+        "\\unalias -a",  # M:UNALIAS: a BASH_ENV's aliases are not the document's
+        SHADOWS,
+        f"trap {shlex.quote(RETURN_TRAP)} RETURN",  # M:RETURN-ARMED
         "__hmad_l0=$LINENO",
     ])
 
