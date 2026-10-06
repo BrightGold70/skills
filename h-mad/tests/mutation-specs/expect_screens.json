@@ -633,11 +633,11 @@
     },
     {
       "name": "backstop-skips-unquoted-bodies",
-      "_mechanism": "R10: an unquoted heredoc body is skipped like a quoted one, so its `$(…)` list is unseen (H1). (R11: re-anchored on the oracle-gated line.)",
+      "_mechanism": "R10: an unquoted heredoc body is skipped like a quoted one, so its `$(…)` list is unseen (H1). (R11: re-anchored on the oracle-gated line.) (R15: bash's quoted-body probe now refuses it too; pinned where bash is stubbed to vouch.)",
       "file": "scripts/h_mad_expect_screens.py",
       "find": "                        and (not info.literal  # M:BACKSTOP-LITERAL-BODY",
       "replace": "                        and (False  # M:BACKSTOP-LITERAL-BODY",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_list_inside_an_unquoted_heredoc_substitution_is_refused"
+      "test": "tests/test_h_mad_expect_screens.py::test_an_unquoted_heredoc_body_is_counted_without_bash"
     },
     {
       "name": "backstop-reads-quoted-bodies",
@@ -715,7 +715,7 @@
       "name": "oracle-skips-quoted-bodies",
       "_mechanism": "R11 (M5): a quoted-delimiter body is skipped without asking bash; bash 3.2 runs lines after a `)` in a body inside `$(`.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                             or bash.code_at(i, k, kind)))  # M:ORACLE-BODY",
+      "find": "                             or bash.body_code_at(i, kind, info.term)))  # M:ORACLE-BODY",
       "replace": "                             or False))  # M:ORACLE-BODY",
       "test": "tests/test_h_mad_expect_screens.py::test_a_paren_in_a_heredoc_inside_a_substitution_does_not_fool_all_readers"
     },
@@ -736,44 +736,76 @@
       "test": "tests/test_h_mad_expect_screens.py::test_bash_reads_a_block_without_running_it"
     },
     {
-      "name": "oracle-closers-without-parens-run",
-      "_mechanism": "R12 (M1): only the backtick run is left, and a later inert backtick pairs with it, so bash vouches for a top-level list.",
+      "name": "oracle-squote-probe-gone",
+      "_mechanism": "R13: code_at vouches for every position the models call single-quoted; `$$'` fools both.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "    CLOSERS = (\")\" * 8, \"`\" + \")\" * 8)  # M:ORACLE-CLOSERS",
-      "replace": "    CLOSERS = (\"`\" + \")\" * 8,)  # M:ORACLE-CLOSERS",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_later_backtick_does_not_reopen_a_top_level_hole"
-    },
-    {
-      "name": "oracle-closers-without-backtick-run",
-      "_mechanism": "R12: only `)`s are left, which cannot leave a backtick substitution, so a list inside backticks is vouched for.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "    CLOSERS = (\")\" * 8, \"`\" + \")\" * 8)  # M:ORACLE-CLOSERS",
-      "replace": "    CLOSERS = (\")\" * 8,)  # M:ORACLE-CLOSERS",
-      "test": "tests/test_h_mad_expect_screens.py::test_a_round_11_construct_inside_backticks_is_refused[M1-in-backticks]"
-    },
-    {
-      "name": "oracle-closers-none",
-      "_mechanism": "R11: no closer run at all; code_at always says literal.",
-      "file": "scripts/h_mad_expect_screens.py",
-      "find": "    CLOSERS = (\")\" * 8, \"`\" + \")\" * 8)  # M:ORACLE-CLOSERS",
-      "replace": "    CLOSERS = ()  # M:ORACLE-CLOSERS",
+      "find": "        return not any(self._proves(wrap(f\" '{op} {op}' \"), wrap(\" 'x' \"))  # M:ORACLE-SQUOTE",
+      "replace": "        return False and any(self._proves(wrap(f\" '{op} {op}' \"), wrap(\" 'x' \"))  # M:ORACLE-SQUOTE",
       "test": "tests/test_h_mad_expect_screens.py::test_a_dollar_dollar_quote_does_not_fool_all_readers"
     },
     {
-      "name": "oracle-closer-error-reads-as-literal",
-      "_mechanism": "R12 (M3): a perturbation bash could not answer counts as parsing, so a probe error vouches.",
+      "name": "oracle-proves-without-control",
+      "_mechanism": "R13: a probe that breaks the parse proves the quote on its own, though after a `}` any quoted word breaks it.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "                   is not True for closer in self.CLOSERS)  # M:ORACLE-ANY-CLOSER",
-      "replace": "                   is False for closer in self.CLOSERS)  # M:ORACLE-ANY-CLOSER",
+      "find": "        return self._parses(probe) is False and self._parses(control) is True  # M:ORACLE-PROVES",
+      "replace": "        return self._parses(probe) is False  # M:ORACLE-PROVES",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_quote_probe_that_breaks_the_parse_anyway_proves_nothing"
+    },
+    {
+      "name": "oracle-proves-error-reads-as-evidence",
+      "_mechanism": "R12 (M3) for the R13 probes: a probe bash could not answer counts as broken and a control it could not answer as parsing, so an error vouches.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        return self._parses(probe) is False and self._parses(control) is True  # M:ORACLE-PROVES",
+      "replace": "        return self._parses(probe) is not True and self._parses(control) is not False  # M:ORACLE-PROVES",
       "test": "tests/test_h_mad_expect_screens.py::test_a_probe_that_cannot_run_vouches_for_nothing"
     },
     {
+      "name": "oracle-backslash-probed",
+      "_mechanism": "R13, R14: after a live backslash the payload's first blank is escaped and the payload joins the word before it; after `<<E` the probe and control make different delimiters and a code `&&` is proven quoted.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            return True  # M:ORACLE-BACKSLASH",
+      "replace": "            pass  # M:ORACLE-BACKSLASH",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_backslash_before_the_payload_is_never_probed[group]"
+    },
+    {
+      "name": "oracle-status-nonzero-is-no-parse",
+      "_mechanism": "R13 (S2): every non-zero status, a signal death included, reads as a syntax error, so a killed `then` probe vouches for a statement start.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        return {0: True, 2: False}.get(status)  # M:ORACLE-STATUS",
+      "replace": "        return status == 0  # M:ORACLE-STATUS",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_then_probe_with_no_answer_alone_is_no_statement_start[-9]"
+    },
+    {
+      "name": "oracle-body-probe-gone",
+      "_mechanism": "R13: a heredoc body line is vouched for without proof that a terminator ends it at a parsed level.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        return not self._proves(cut(f\"{op} {op}\"), cut(\"x\"))  # M:ORACLE-HEREDOC",
+      "replace": "        return False and self._proves(cut(f\"{op} {op}\"), cut(\"x\"))  # M:ORACLE-HEREDOC",
+      "test": "tests/test_h_mad_expect_screens.py::test_bash_vouches_for_a_heredoc_body_only_where_its_terminator_ends_it"
+    },
+    {
+      "name": "oracle-body-without-line-check",
+      "_mechanism": "R13, R16 (M2): with no whole-line check, a code line whose operator is deferred in `$(…)` (round 11's M5) is proven a body, because the reopened heredoc swallows the rest.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            return True  # M:ORACLE-BODY-LINE",
+      "replace": "            pass  # M:ORACLE-BODY-LINE",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_deferred_list_on_a_code_line_is_no_body"
+    },
+    {
+      "name": "oracle-body-unparsed-vouches",
+      "_mechanism": "R13: a block bash cannot parse, or a terminator the probe cannot quote, vouches for the body.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            return True  # M:ORACLE-BODY-UNPARSED",
+      "replace": "            return False  # M:ORACLE-BODY-UNPARSED",
+      "test": "tests/test_h_mad_expect_screens.py::test_bash_vouches_for_a_heredoc_body_only_where_its_terminator_ends_it"
+    },
+    {
       "name": "oracle-without-bash-vouches",
-      "_mechanism": "R11: a bash that cannot be run answers True, so every perturbation 'parses' and every excluded position is vouched for.",
+      "_mechanism": "R11, and R13 for the probes: a bash call that cannot run answers True, so a control that gave no answer reads as parsing and a probe that broke the parse proves a quote.",
       "file": "scripts/h_mad_expect_screens.py",
       "find": "            return None  # M:ORACLE-NO-BASH",
       "replace": "            return True  # M:ORACLE-NO-BASH",
-      "test": "tests/test_h_mad_expect_screens.py::test_bash_unavailable_fails_closed"
+      "test": "tests/test_h_mad_expect_screens.py::test_a_control_with_no_answer_proves_nothing[raise]"
     },
     {
       "name": "oracle-nul-byte-raises",
@@ -814,6 +846,102 @@
       "find": "            return False  # M:ORACLE-STATEMENT-UNPARSED",
       "replace": "            return True  # M:ORACLE-STATEMENT-UNPARSED",
       "test": "tests/test_h_mad_expect_screens.py::test_bash_reads_a_block_without_running_it"
+    },
+    {
+      "name": "oracle-no-bash-reads-as-no-parse",
+      "_mechanism": "R13 (S1a): a `then` probe that cannot run reads as a broken parse; only a test where the word probe still parses can see it.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            return None  # M:ORACLE-NO-BASH",
+      "replace": "            return False  # M:ORACLE-NO-BASH",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_then_probe_with_no_answer_alone_is_no_statement_start[raise]"
+    },
+    {
+      "name": "statement-word-error-reads-as-parse",
+      "_mechanism": "R13 (S1b): a word probe bash could not answer counts as parsing, so a one-word slot reads as a start.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                and self._parses(self.text[:at] + \"x \" + self.text[at:]) is True)  # M:ORACLE-WORD",
+      "replace": "                and self._parses(self.text[:at] + \"x \" + self.text[at:]) is not False)  # M:ORACLE-WORD",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_word_probe_with_no_answer_alone_is_no_statement_start[raise]"
+    },
+    {
+      "name": "oracle-squote-payload-joins-a-word",
+      "_mechanism": "R14 (M1): without blanks the payload joins the word before it; after `<<E` the probe and control make different heredoc delimiters, so a code `&&` is proven quoted.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        return not any(self._proves(wrap(f\" '{op} {op}' \"), wrap(\" 'x' \"))  # M:ORACLE-SQUOTE",
+      "replace": "        return not any(self._proves(wrap(f\"'{op} {op}' \"), wrap(\"'x' \"))  # M:ORACLE-SQUOTE",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_probe_payload_does_not_join_a_heredoc_delimiter[group]"
+    },
+    {
+      "name": "oracle-squote-ungrouped",
+      "_mechanism": "R15 (S1): the copies parse at top level, where bash 3.2 exits 1 on a syntax error in `NAME=( … )`; the probe gives no answer and a quote in an array is refused.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                 lambda payload: \"{\\n\" + before + payload + after + \"\\n}\")  # M:ORACLE-GROUP",
+      "replace": "                 )  # M:ORACLE-GROUP",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_quote_in_a_top_level_array_is_vouched_for[x=( 'a && b' )]"
+    },
+    {
+      "name": "oracle-body-quoting-from-lexer",
+      "_mechanism": "R15 (M1): without the `x\\` line a terminator proves only that a heredoc ends there, not that it is quoted; a `<<E` hidden from both models runs its body's `$(…)`.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        cut = lambda payload: (self.text[:line] + f\"{join}\\\\\\n{term}\\n{payload}\\n:<<'{term}'\\n\"  # noqa: E731",
+      "replace": "        cut = lambda payload: (self.text[:line] + f\"{term}\\n{payload}\\n:<<'{term}'\\n\"  # noqa: E731",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_heredoc_hidden_from_both_models_is_not_proven_quoted"
+    },
+    {
+      "name": "oracle-proves-probe-error-reads-as-broken",
+      "_mechanism": "R15 (S2): a probe bash could not answer counts as breaking the parse; with the control parsing, an error proves the quote.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        return self._parses(probe) is False and self._parses(control) is True  # M:ORACLE-PROVES",
+      "replace": "        return self._parses(probe) is not True and self._parses(control) is True  # M:ORACLE-PROVES",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_quote_probe_with_no_answer_alone_proves_nothing[raise]"
+    },
+    {
+      "name": "oracle-squote-group-only",
+      "_mechanism": "R16 (S1): only the grouped proof counts; the `}` joins a last word ending in `\\` or becomes EOF-heredoc text, so every quote in such a block is refused.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        wraps = (lambda payload: before + payload + after,  # M:ORACLE-UNGROUPED",
+      "replace": "        wraps = (lambda payload: \"{\\n\" + before + payload + after + \"\\n}\",  # M:ORACLE-UNGROUPED",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_quote_is_vouched_for_beside_a_block_end_the_group_would_break[eof-heredoc]"
+    },
+    {
+      "name": "oracle-join-always-x",
+      "_mechanism": "R16 (M1): the join is always `x`; a hidden unquoted `<<xE` is ended by `x\\` + `E` itself and its body is proven quoted.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                    if p + term not in flat)  # M:ORACLE-JOIN-UNSEEN",
+      "replace": "                    if True)  # M:ORACLE-JOIN-UNSEEN",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_hidden_delimiter_the_join_would_end_is_not_proven_quoted[xE]"
+    },
+    {
+      "name": "oracle-join-word-bounded",
+      "_mechanism": "R17 (S1): the join avoids `xx…TERM` only as a whole word; a body line ending in `\\` joins in front of it, so a hidden `<<axE` ends there.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "                    if p + term not in flat)  # M:ORACLE-JOIN-UNSEEN",
+      "replace": "                    if not __import__('re').search(r'(?<![^\\s;&|<>()])' + p + term + r'(?![^\\s;&|<>()])', flat))  # M:ORACLE-JOIN-UNSEEN",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_hidden_delimiter_that_only_ends_in_the_join_is_not_proven_quoted"
+    },
+    {
+      "name": "oracle-line-check-after-the-line",
+      "_mechanism": "R17 (S2): the doubled-operator line goes after the body line, where a `<<'F'` the code line opens swallows it.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        if self._parses(self.text[:line] + f\"{op} {op}\\n\" + self.text[line:]) is not True:",
+      "replace": "        if self._parses(self.text[:self.starts[i + 1] if i + 1 < len(self.starts) else len(self.text)] + f\"\\n{op} {op}\\n\" + self.text[self.starts[i + 1] if i + 1 < len(self.starts) else len(self.text):]) is not True:",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_line_check_goes_before_the_body_line"
+    },
+    {
+      "name": "oracle-join-ignores-continuations",
+      "_mechanism": "R16 (M1): `<<x\\` then `E` is the delimiter `xE`; read without removing backslash-newlines, the join picks `x` and that heredoc ends at it.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        flat = self.text.replace(\"\\\\\\n\", \"\")",
+      "replace": "        flat = self.text",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_continued_hidden_delimiter_is_not_proven_quoted"
+    },
+    {
+      "name": "oracle-body-line-error-reads-as-parse",
+      "_mechanism": "R14 (S2): a whole-line check bash could not answer reads as parsing, so a code line is proven a heredoc body.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        if self._parses(self.text[:line] + f\"{op} {op}\\n\" + self.text[line:]) is not True:",
+      "replace": "        if self._parses(self.text[:line] + f\"{op} {op}\\n\" + self.text[line:]) is False:",
+      "test": "tests/test_h_mad_expect_screens.py::test_a_heredoc_line_check_with_no_answer_is_no_body[raise]"
     }
   ]
 }

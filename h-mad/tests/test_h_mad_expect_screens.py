@@ -1603,7 +1603,8 @@ def test_the_assignment_carve_out_needs_a_statement_start(tmp_path):
 
 def test_an_operator_quoted_inside_backticks_is_over_refused(tmp_path):
     """R11: the accepted cost. bash 3.2's backtick scan ignores `'`, so bash cannot vouch for
-    a single-quoted operator inside backticks. Use `$(…)`."""
+    a single-quoted operator inside backticks. Since round 13 `$(…)` is refused too:
+    single-quote the text at top level."""
     root, old, _ = _repo(tmp_path)
     doc, result = _one(tmp_path, root, old, "echo `echo 'a && b'` > data.txt\necho 0   # expect 0")
     assert _screens(result.stdout) == [
@@ -1636,7 +1637,7 @@ def test_bash_reads_literal_and_code_positions(tmp_path):
     parse = hes.BashParse(["echo 'a && b'", "X=$(a && b)", "cat <<'E'", "a && b", "E"])
     assert parse.code_at(0, 8, "&&") is False
     assert parse.code_at(1, 6, "&&") is True
-    assert parse.code_at(3, 2, "&&") is False
+    assert parse.body_code_at(3, "&&", "E") is False
     assert parse.starts_statement(1, 0) is True
     assert hes.BashParse(["export \\", "X=$(a && b)"]).starts_statement(1, 0) is False
 
@@ -1651,7 +1652,8 @@ def test_bash_unavailable_fails_closed(monkeypatch):
 
 def test_a_round_11_construct_inside_a_substitution_is_refused(tmp_path):
     """R11: bash 3.2 parses `$(…)` only at run time, so `bash -n` alone vouches for any text
-    inside one. The closer run pushes the doubled operator out to top level, where it fails."""
+    inside one. bash now vouches only where a probe proves single-quoted text at a level
+    `-n` parses (round 13), and nothing inside `$(…)` is."""
     _refused(tmp_path, f"X=$(echo `#'` 'a' ; {ERRORED} && echo '\\')\n" + SCREEN_LIST, "&&", 2)
 
 
@@ -1661,6 +1663,7 @@ def test_a_round_11_construct_inside_a_substitution_is_refused(tmp_path):
 
 def _hits_if_bash_vouches(monkeypatch, body):
     monkeypatch.setattr(hes.BashParse, "code_at", lambda self, i, k, op: False)
+    monkeypatch.setattr(hes.BashParse, "body_code_at", lambda self, i, op, term: False)
     monkeypatch.setattr(hes.BashParse, "starts_statement", lambda self, i, k: True)
     return hes.backstop(hes.lex(body.split("\n")))
 
@@ -1672,6 +1675,13 @@ def test_a_span_only_the_backstop_reads_as_quoted_needs_the_lexer_too(monkeypatc
 
 def test_a_span_only_the_lexer_reads_as_quoted_needs_the_backstop_too(monkeypatch):
     body = f"X=${{PWD// #/}}'\na'; {ERRORED} && echo ok; echo 'y'\necho \\'"
+    assert (1, "&&") in _hits_if_bash_vouches(monkeypatch, body)
+
+
+def test_an_unquoted_heredoc_body_is_counted_without_bash(monkeypatch):
+    """R15: bash's `x\\` line now refuses an unquoted body on its own; the backstop's refusal
+    stays as the reader that does not depend on it."""
+    body = f"cat > note.txt <<NOTE\n$({ERRORED} && echo listed)\nNOTE"
     assert (1, "&&") in _hits_if_bash_vouches(monkeypatch, body)
 
 
@@ -1710,8 +1720,8 @@ def test_a_later_backtick_does_not_hide_a_list_inside_a_substitution(tmp_path):
 ], ids=["M1-in-backticks", "M3-in-backticks", "M3-in-backticks-in-substitution",
         "M2-in-backticks", "M1-in-backticks-in-substitution"])
 def test_a_round_11_construct_inside_backticks_is_refused(tmp_path, body):
-    """R12: inside backticks only a closing backtick reaches top level, so one closer run
-    starts with it. Each read PASS over git's 128 on main."""
+    """R12: each read PASS over git's 128 on main. Backticks defer their text like `$(…)`,
+    so no probe proves a quote inside them."""
     _refused(tmp_path, body + "\n" + SCREEN_LIST, "&&", 2)
 
 
@@ -1758,3 +1768,287 @@ def test_a_then_probe_that_cannot_run_is_no_statement_start(monkeypatch):
     assert hes.BashParse(["X=$(a && b)"]).starts_statement(0, 0) is False
     lexed = hes.lex([f"X=$({ERRORED} && echo x)"])
     assert (0, "&&") in hes.backstop(lexed)
+
+
+# --- review round 13 of cd8fba95 -------------------------------------------------------
+# Closer runs push a position out of `$(…)` or backticks, but not out of an enclosing
+# `"…"`, `${…}` or `$[…]`, where the doubled operator is still text; one later backtick then
+# fooled the backtick run again (M1). No finite set of closers leaves every nesting, so bash
+# now vouches only on positive evidence: a probe that proves the position is single-quoted
+# text, or a heredoc body line, at a level `bash -n` parses.
+
+LATER_TICK = "\n# it`s ) 5\" # \""
+
+
+@pytest.mark.parametrize("body", [
+    f"echo \"${{x:-'\"'}}$(echo a ; {ERRORED} && echo \\')\"\n# it`s ) 5\" # \"",
+    f"echo \"${{x:-'\"'}}`echo a ; {ERRORED} && echo \\\\'`\"\n# it`s 5\" # \"",
+], ids=["substitution-in-double-quotes", "backticks-in-double-quotes"])
+def test_a_later_backtick_does_not_hide_a_list_in_a_double_quoted_substitution(tmp_path, body):
+    """R13 (M1): each read PASS over git's 128 on main. Both models lose the `"` at `'"'`
+    (round 11's M3); bash runs the list inside the substitution."""
+    _refused(tmp_path, body + "\n" + SCREEN_LIST, "&&", 2)
+
+
+@pytest.mark.parametrize("line", [
+    "echo \"$(a && b)\"", "echo \"`a && b`\"", "echo ${x:-$(a && b)}",
+    "echo \"${x:-$(a && b)}\"", "echo $[ $(a && b) ]",
+    "echo \"${y:-\"${x:-$(a && b)}\"}\"",
+], ids=["dq", "dq-backticks", "brace", "dq-brace", "old-arith", "nested"])
+def test_bash_vouches_for_no_position_inside_an_enclosed_substitution(line):
+    """R13 (M1): whatever encloses the substitution, and whatever backtick follows it."""
+    for tail in ("", LATER_TICK, "\n# it`s"):
+        parse = hes.BashParse((line + tail).split("\n"))
+        assert parse.code_at(0, line.index("&&"), "&&") is True, tail
+
+
+def test_a_quote_probe_that_breaks_the_parse_anyway_proves_nothing(tmp_path):
+    """R13: after a `}` a quoted word is a syntax error whatever it holds, so the probe's own
+    failure is no evidence; the `'x'` control fails too, and only a passing control proves the
+    quote."""
+    _refused(tmp_path, f"echo $$'\\' 'a' ; {{ {ERRORED}; }} && echo '\\'\n" + SCREEN_LIST,
+             "&&", 2)
+
+
+def test_an_escaped_operator_is_not_vouched_for():
+    """R13: the single-quote probe's `'` after a live backslash is an escaped quote, so the
+    probe would put the doubled operator in code and its control would still parse. bash runs
+    `git \\&` and then a job here; a position right after a backslash is never vouched for."""
+    line = "echo $$'\\' 'a' ; git \\&& echo '\\'"
+    assert hes.BashParse([line]).code_at(0, line.index("&&"), "&&") is True
+
+
+def test_bash_vouches_for_single_quoted_text_at_a_parsed_level():
+    for line in ["echo 'a && b'", "[[ $x == 'a && b' ]]",
+                 "case 'a && b' in *) :;; esac", "f() { echo 'a && b'; }"]:
+        assert hes.BashParse([line]).code_at(0, line.index("&&"), "&&") is False, line
+    assert hes.BashParse(["echo 'x", "a ; b'"]).code_at(1, 2, ";") is False
+
+
+def test_an_operator_single_quoted_inside_a_substitution_is_over_refused(tmp_path):
+    """R13: the accepted cost. `bash -n` defers `$(…)`, so nothing proves the quote there.
+    Single-quote such text at top level, or write it to a file outside the block."""
+    root, old, _ = _repo(tmp_path)
+    doc, result = _one(tmp_path, root, old,
+                       "echo $(echo 'a && b') > data.txt\necho 0   # expect 0")
+    assert _screens(result.stdout) == [
+        f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_construct=&&@{doc}:2 FAIL"], \
+        result.stdout
+
+
+def test_bash_vouches_for_a_heredoc_body_only_where_its_terminator_ends_it():
+    assert hes.BashParse(["cat <<'E'", "a && b", "E"]).body_code_at(1, "&&", "E") is False
+    assert hes.BashParse(["cat <<-'E'", "\ta && b", "\tE"]).body_code_at(1, "&&", "E") is False
+    assert hes.BashParse(["cat <<'E'", "a && b", "E"]).body_code_at(1, "&&", "F") is True
+    assert hes.BashParse(["X=$(cat <<'E'", "a && b", "E", ")"]).body_code_at(
+        1, "&&", "E") is True
+    assert hes.BashParse(["cat <<'E'", "a && b", "E"]).body_code_at(1, "&&", "E'") is True
+
+
+def test_a_heredoc_probe_on_code_is_no_body():
+    """R13: on a code line the probe's reopened heredoc swallows the rest, so its control
+    parses; the doubled operator failing in place is what rules code out."""
+    assert hes.BashParse(["git x && echo y", "E"]).body_code_at(0, "&&", "E") is True
+
+
+def _only_failing(monkeypatch, marker, outcome):
+    """Run bash for real, except the one call whose script contains `marker`."""
+    real = subprocess.run
+
+    def fake(args, **kwargs):
+        if marker in args[-1]:
+            if outcome == "raise":
+                raise subprocess.TimeoutExpired(args, 10)
+            return subprocess.CompletedProcess(args, outcome)
+        return real(args, **kwargs)
+    monkeypatch.setattr(hes.subprocess, "run", fake)
+
+
+@pytest.mark.parametrize("outcome", ["raise", -9, 1])
+def test_a_then_probe_with_no_answer_alone_is_no_statement_start(monkeypatch, outcome):
+    """R13 (S1a, S2): only the `then` probe gives no answer -- a timeout, a bash killed by a
+    signal, an exit status that is not bash's syntax error. The word probe still parses, so
+    it cannot mask a `then` probe that wrongly reads as broken."""
+    _only_failing(monkeypatch, "then X=", outcome)
+    assert hes.BashParse(["export \\", "X=$(a && b)"]).starts_statement(1, 0) is False
+
+
+@pytest.mark.parametrize("outcome", ["raise", -9, 1])
+def test_a_word_probe_with_no_answer_alone_is_no_statement_start(monkeypatch, outcome):
+    """R13 (S1b): only the plain-word probe gives no answer, in a one-word slot where `then`
+    does break the parse."""
+    _only_failing(monkeypatch, "x X=", outcome)
+    assert hes.BashParse(["case \\", "X=$(a && b)", "in *) : ;; esac"]).starts_statement(
+        1, 0) is False
+
+
+@pytest.mark.parametrize("outcome", ["raise", -9, 1])
+def test_a_control_with_no_answer_proves_nothing(monkeypatch, outcome):
+    """R13: the probe really breaks the parse, but its `'x'` control gives no answer. Proof
+    needs the control to parse, so a control that cannot run must not stand in for one."""
+    _only_failing(monkeypatch, "'x'", outcome)
+    assert hes.BashParse(["echo 'a && b'"]).code_at(0, 8, "&&") is True
+    _only_failing(monkeypatch, "\nx\n", outcome)
+    assert hes.BashParse(["cat <<'E'", "a && b", "E"]).body_code_at(1, "&&", "E") is True
+
+
+@pytest.mark.parametrize("rc, answer", [(0, True), (2, False), (1, None), (-9, None)])
+def test_only_bash_syntax_error_status_reads_as_no_parse(monkeypatch, rc, answer):
+    """R13 (S2): bash -n exits 2 on a syntax error. Any other status is no answer."""
+    monkeypatch.setattr(hes.subprocess, "run",
+                        lambda args, **kw: subprocess.CompletedProcess(args, rc))
+    assert hes.BashParse._parses(":") is answer
+
+
+# --- review round 14 of the round-13 redesign -------------------------------------------
+
+
+@pytest.mark.parametrize("wrap", [("{ ", " ; }"), ("( ", " )"), ("if :; then ", " ; fi")],
+                         ids=["group", "subshell", "if"])
+def test_a_probe_payload_does_not_join_a_heredoc_delimiter(tmp_path, wrap):
+    """R14 (M1): `<<E'x'` and `<<E'&& &&'` are different delimiters, so the probe's body ran to
+    EOF (the group never closed: rc 2) while the control's ended at `Ex` (rc 0), and a code
+    `&&` was "proven" single-quoted. PASS over git's 128; main's closers refused it."""
+    head, tail = wrap
+    body = (f"{head}: \"${{x:-'\"'}}\" ; {ERRORED} <<E&& echo y\nEx\nE\necho \\'{tail}\n"
+            + SCREEN_LIST)
+    _refused(tmp_path, body, "&&", 2)
+
+
+def test_bash_proves_nothing_where_the_payload_would_join_a_word():
+    for lines in (["{ cat <<E&& b", "Ex", "E", "}"], ["( cat <<-E&& b", "Ex", "E", ")"]):
+        assert hes.BashParse(lines).code_at(0, lines[0].index("&&"), "&&") is True, lines
+
+
+@pytest.mark.parametrize("outcome", ["raise", -9, 1])
+def test_a_heredoc_line_check_with_no_answer_is_no_body(monkeypatch, outcome):
+    """R14 (S2), R16: on a code line the probes prove a body, so only the whole-line check
+    keeps it code. That check giving no answer must refuse, not read as parsing."""
+    _only_failing(monkeypatch, "&& &&\ngit x", outcome)
+    assert hes.BashParse(["git x && echo y", "E"]).body_code_at(0, "&&", "E") is True
+
+
+def test_the_accepted_heredoc_and_backslash_over_refusals():
+    """R14 (S3): accepted costs, now listed. A body that is not the last heredoc on its opener
+    line: the inserted terminator ends it, and the payload lands in the next body. An operator
+    right after a backslash, even a literal one inside single quotes. And `$'…'`: neither model
+    reads it as single-quoted, so it was never vouched for end to end (N2)."""
+    parse = hes.BashParse(["cat <<'A' <<'B' > out.txt", "a && b", "A", "c && d", "B"])
+    assert parse.body_code_at(1, "&&", "A") is True
+    assert parse.body_code_at(3, "&&", "B") is False
+    assert hes.BashParse(["echo 'a\\&& b'"]).code_at(0, 8, "&&") is True
+    assert (0, "&&") in hes.backstop(hes.lex(["echo $'a && b'"]))
+
+
+@pytest.mark.parametrize("lines", [["{ cat <<E\\&& b", "E x", "E&", "}"],
+                                   ["( cat <<E\\&& b", "E x", "E&", ")"]],
+                         ids=["group", "subshell"])
+def test_a_backslash_before_the_payload_is_never_probed(lines):
+    """R14: the blanks do not protect a payload after a live backslash, which escapes the first
+    blank and joins the word: `<<E\\ 'x'` is the delimiter `E x`, so the control's body ends at
+    the line `E x` while the probe's runs to EOF. That `&&` is code (doubled in place, it does
+    not parse); only the backslash guard keeps it from being proven quoted."""
+    assert hes.BashParse(lines).code_at(0, lines[0].index("&&"), "&&") is True
+
+
+
+# --- review round 15 of the round-14 fixes ----------------------------------------------
+
+
+def test_a_heredoc_hidden_from_both_models_is_not_proven_quoted(tmp_path):
+    """R15 (M1): the models lose the `"` at `'"'` and miss the unquoted `<<E`, then read line
+    2's `cat <<'E'` as a quoted opener. To bash line 2 is body text of `<<E`, whose `$(…)`
+    runs line 3's list. A terminator alone proved only that a heredoc ends there; the `x\\`
+    line proves it quoted. PASS over git's 128 on main."""
+    body = (": \"${x:-'\"'}\" ; cat <<E > /dev/null\n' ; cat <<'E'\n"
+            f"$({ERRORED} && echo y)\nE\n" + SCREEN_LIST)
+    _refused(tmp_path, body, "&&", 4)
+
+
+def test_bash_proves_a_heredoc_body_quoted():
+    assert hes.BashParse(["cat <<E", "a && b", "E"]).body_code_at(1, "&&", "E") is True
+    for lines in (["cat <<\"E\"", "a && b", "E"], ["{ cat <<'E'", "a && b", "E", "}"],
+                  ["f() { cat <<'E'", "a && b", "E", "}"]):
+        assert hes.BashParse(lines).body_code_at(1, "&&", "E") is False, lines
+
+
+@pytest.mark.parametrize("line", ["x=( 'a && b' )", "cmd=( bash -c 'a && b' )"])
+def test_a_quote_in_a_top_level_array_is_vouched_for(line):
+    """R15 (S1): bash 3.2 exits 1, not 2, on a syntax error in a top-level `NAME=( … )`, so the
+    probe gave no answer and the quote was refused. Inside a group it exits 2."""
+    assert hes.BashParse([line]).code_at(0, line.index("&&"), "&&") is False
+
+
+@pytest.mark.parametrize("outcome", ["raise", -9, 1])
+def test_a_quote_probe_with_no_answer_alone_proves_nothing(monkeypatch, outcome):
+    """R15 (S2): only the probe holding the doubled operator gives no answer; the control
+    parses, so it cannot mask a probe that wrongly reads as broken."""
+    _only_failing(monkeypatch, "'&& &&'", outcome)
+    assert hes.BashParse(["git x && echo y"]).code_at(0, 6, "&&") is True
+
+
+
+# --- review round 16 of the round-15 fixes ----------------------------------------------
+
+
+@pytest.mark.parametrize("opener, closer", [("cat <<xE > /dev/null", "xE")], ids=["xE"])
+def test_a_hidden_delimiter_the_join_would_end_is_not_proven_quoted(tmp_path, opener, closer):
+    """R16 (M1): `x\\` + `E` reads `xE`, which ENDS a hidden `<<xE` -- and `<<x\\` then `E` is that
+    delimiter too. `xx…E` now occurs nowhere in the block. PASS over git's 128 on main."""
+    body = (f": \"${{x:-'\"'}}\" ; {opener}\n' ; cat <<'E'\n"
+            f"$({ERRORED} && echo y)\nE\n{closer}\n" + SCREEN_LIST)
+    _refused(tmp_path, body, "&&", 3 + opener.count("\n") + 1)
+
+
+def test_a_continued_hidden_delimiter_is_not_proven_quoted():
+    """R16 (M1): `<<x\\` then `E` is the delimiter `xE` though no `xE` is written, so the join
+    reads the block with backslash-newlines removed. Here the hidden heredoc runs to EOF."""
+    lines = [": \"${x:-'\"'}\" ; cat <<x\\", "E > /dev/null", "' ; cat <<'E'",
+             "$(git x && echo y)", "E"]
+    assert hes.BashParse(lines).body_code_at(3, "&&", "E") is True
+    assert (3, "&&") in hes.backstop(hes.lex(lines))
+
+
+def test_a_deferred_list_on_a_code_line_is_no_body(tmp_path):
+    """R16 (M2): round 11's M5 puts the lines after a `)` in a heredoc body at top level, and
+    `$(… && && …)` still parses there. A whole line of the doubled operator does not. Main's
+    closers refused this; round 13's in-place check did not."""
+    _refused(tmp_path, f"E() {{ :; }}\nX=$(cat <<'E'\n)\n: $({ERRORED} && echo x)\nE\n"
+             + SCREEN_LIST, "&&", 5)
+    parse = hes.BashParse(["E() { :; }", "X=$(cat <<'E'", ")", "`git x && echo :`", "E"])
+    assert parse.body_code_at(3, "&&", "E") is True
+
+
+def test_the_join_spells_no_word_in_the_block():
+    lines = ["cat <<'E'", "a && b", "xE", "E"]
+    assert hes.BashParse(lines).body_code_at(1, "&&", "E") is False
+
+
+@pytest.mark.parametrize("tail", ["echo z \\", "cat <<'E'\nz", "cat <<-'E'\n\tz"],
+                         ids=["trailing-backslash", "eof-heredoc", "eof-dash-heredoc"])
+def test_a_quote_is_vouched_for_beside_a_block_end_the_group_would_break(tail):
+    """R16 (S1): inside `{ … }` the `}` joins a last word ending in `\\` or becomes text of an
+    EOF-ended heredoc, so the grouped probe and control both fail. The ungrouped proof
+    stands."""
+    assert hes.BashParse(["echo 'a && b'"] + tail.split("\n")).code_at(0, 8, "&&") is False
+
+
+
+# --- review round 17 of the round-16 fixes ----------------------------------------------
+
+
+def test_a_hidden_delimiter_that_only_ends_in_the_join_is_not_proven_quoted():
+    """R17 (S1): a body line ending in `\\` joins in front of the join line, so a hidden
+    `<<axE` ends at `a\\` + `x\\` + `E`. `xE` occurs in the block only inside the word `axE`:
+    the join must avoid it anywhere, not only as a word."""
+    lines = [": \"${x:-'\"'}\" ; cat <<axE > /dev/null", "' ; cat <<'E'", "a\\",
+             "$(git x && echo y)", "E", "axE"]
+    assert hes.BashParse(lines).body_code_at(3, "&&", "E") is True
+    assert (3, "&&") in hes.backstop(hes.lex(lines))
+
+
+def test_the_line_check_goes_before_the_body_line():
+    """R17 (S2): after the line it would land in the `<<'F'` the code line opens, and parse."""
+    lines = ["E() { :; }", "X=$(cat <<'E'", ")", ": $(git x && :) <<'F'", "F", "E"]
+    assert hes.BashParse(lines).body_code_at(3, "&&", "E") is True
+    assert (3, "&&") in hes.backstop(hes.lex(lines))

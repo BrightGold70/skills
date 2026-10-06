@@ -82,16 +82,19 @@ seven constructs that fooled both the same way, since the two share one quote an
 heredoc model (`$$'`, quotes in code backticks or in `"${…}"`, a heredoc opener
 ending in `\\`, bash 3.2 closing `$(` at a `)` in a heredoc body, `$[1<<E ]`, and the
 carve-out below after `export \\`). So bash itself is the third reader (`BashParse`):
-`bash -n` on a copy of the block with the operator doubled, which parses and never
-executes. A position is excluded only when all three read it as literal: a
-quoted-delimiter heredoc body both models read as one, or a position both read as
-single-quoted, that bash also parses as text. So it OVER-refuses: `&`, `&&` or `||`
-in double-quoted text, in a comment or in an unquoted heredoc body, a `<<` the lexer
-did not read as a heredoc (an arithmetic shift outside a plain `$((…))`,
-`<<\\EOF`), `>&$fd`, a single-quoted operator inside backticks (bash 3.2's backtick
-scan ignores `'`), and a quoted heredoc body inside `$(…)`. Single-quote such text,
-use `$(…)`, keep the heredoc at top level, or write the text to a file outside the
-block. bash cannot be run, or cannot parse the block: nothing is excluded.
+`bash -n` on perturbed copies of the block, which parses and never executes. A position
+is excluded only when all three read it as literal: a quoted-delimiter heredoc body both
+models read as one, or a position both read as single-quoted, that a bash probe PROVES is
+that text (round 13: closer runs could not leave every nesting). So it OVER-refuses:
+`&`, `&&` or `||` in double-quoted text, in a comment or in an unquoted heredoc body, a
+`<<` the lexer did not read as a heredoc (an arithmetic shift outside a plain `$((…))`,
+`<<\\EOF`), `>&$fd`, a single-quoted operator inside `$(…)`, backticks or `${…}` (bash
+defers all three to run time, so no probe proves the quote), one right after a backslash
+(even a literal one in single quotes), one in `$'…'`, and a quoted heredoc body inside
+`$(…)` or before another heredoc opened on the same line, and one in a top-level
+`NAME=( … )` of a block that ends in an EOF-ended heredoc or a `\\`. Single-quote such text at top
+level, keep the heredoc at top level, or write the text to a file outside the block. bash
+cannot be run, or cannot parse the block: nothing is excluded.
 Not refused, because each is recorded or is no list:
   - the `&` of a redirection (`2>&1`, `>&2`, `>&-`, `<&0`, `&>`): a trailing
     `&` job after one is still refused;
@@ -100,7 +103,10 @@ Not refused, because each is recorded or is no list:
     as a `case` subject or a `[[ -n` operand), whose body is ONE
     `&&` chain, with no `;`, `||`, `&` or newline: only then is the substitution's status the
     failing member's, which the assignment carries to the trap (probe on bash
-    3.2: `X=$(grep x /nonexistent && echo y)` traps rc=2). `X=$(a || b)`,
+    3.2: `X=$(grep x /nonexistent && echo y)` traps rc=2). In an `if`, `while`,
+    `until` or `elif` condition, or after `!`, bash runs no trap at all, so the
+    assignment carries nothing there: that is the disclosed condition residual, not
+    this carve-out (review round 13, N1). `X=$(a || b)`,
     `X=$(a && b; c)` and `X=$(a & wait)` end on another command's status and
     are refused; `{ … && …; }`, `( … && … )` and `echo $(… && …)` trap nothing.
 A screen is UNREADABLE -- never PASS --
@@ -162,6 +168,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import itertools
 import os
 import re
 import secrets
@@ -236,6 +243,7 @@ class Line:
     op: bool = False
     literal: bool = False            # a body line of a quoted-delimiter heredoc: pure data
     heredoc: tuple | None = None     # on a body line: (opener index, `<<` position)
+    term: str | None = None          # on a body line: the terminator the lexer read
     openers: set = field(default_factory=set)  # `<<` positions the lexer read as heredocs
     chain: tuple | None = None       # a whole one-line `NAME=$(…)`: its paren positions
     squote: set = field(default_factory=set)  # positions the lexer read as single-quoted
@@ -250,6 +258,7 @@ def lex(texts: list[str]) -> list[Line]:
         if current is not None:
             delim, tabs, opener, literal, at = current
             info.body, info.literal, info.heredoc = opener, literal, (opener, at)
+            info.term = delim
             if (text.lstrip("\t") if tabs else text) == delim:
                 lines[opener].heredoc_end = i
                 current = pending.pop(0) if pending else None
@@ -378,19 +387,47 @@ class BashParse:
     round 11, M1-M7). `-n` parses and never executes. `declare -f` of the block wrapped in a
     function was rejected, because a block that closes the wrapper runs at top level.
 
-    A position is code when doubling its operator stops the block parsing. bash 3.2 defers
-    `$(…)`, backticks, `<(…)` and arithmetic to run time, so a closer run goes first, pushing
-    a position inside one out to top level, where the doubled operator (or a stray `)`) fails
-    to parse. There are two runs, and a position is code if EITHER fails:
-      - `)`s alone close `$(…)` levels. They hold no backtick, so a later backtick in the
-        block -- in a comment, in quotes -- cannot pair with them (review round 12, M1);
-      - a backtick then `)`s: inside backticks only a closing backtick reaches top level.
-    Neither holds a `'` or a newline, so both are inert in single quotes and in a quoted
-    heredoc body. Fail closed: a block bash cannot parse, or a bash call that cannot run or
-    times out, vouches for nothing -- `_parses` answers None there, never False.
+    bash vouches for a position only on POSITIVE evidence, never because a perturbation
+    failed to break the parse. bash 3.2 defers `$(…)`, backticks, `${…}` and arithmetic to
+    run time, so anything inside them parses under `-n` whatever it is. Rounds 11 and 12
+    pushed a doubled operator out to top level with runs of closers, and round 13 found
+    that no finite set of closers leaves every nesting: inside `"$(…)"`, `"`…`"`,
+    `${x:-$(…)}` or `$[ $(…) ]` the `)`s land in the enclosure, and one later backtick
+    paired with the backtick run. So each probe proves where the position IS, against a
+    control that differs only in the probe's payload:
+      - single-quoted text (`code_at`): ` '` + doubled operator + `' ` breaks the parse and
+        ` 'x' ` does not. Only a `'` that CLOSES a quote at a parsed level puts the payload in
+        code; where the `'` opens a quote, or the text is deferred or in `"…"`, the two
+        copies read alike. The blanks keep the payload a word of its own: joined to the word
+        before it, its text became part of a heredoc delimiter (`<<E'x'` ends at a line
+        `Ex`), and the two copies then ended the body on different lines (review round 14).
+        Only the leading blank does that work; the trailing one is belt and braces. A
+        position right after a backslash is refused: a live one escapes the first blank and
+        joins the payload to the word again (`<<E\\ 'x'` is the delimiter `E x`). A proof
+        counts as it stands or inside `{ … }`: bash 3.2 exits 1, not 2, on a syntax error in
+        a top-level `NAME=( … )` (review round 15), while the group alone fails a block with
+        an EOF-ended heredoc or a last line ending in `\\` (review round 16). A quote in a
+        top-level array in such a block is proven by neither: an accepted over-refusal;
+      - a heredoc body line (`body_code_at`): a line `xx…\\`, a terminator line, a doubled
+        operator, then `:<<'TERM'` to reopen breaks the parse, and the same with `x` does
+        not. The `\\` line proves the body QUOTED: in an unquoted body bash joins it to the
+        terminator, which then ends nothing (review round 15: a `<<E` hidden from both
+        models was proven by its terminator alone). Its `x`s are chosen so that `xx…TERM`
+        occurs NOWHERE in the block, backslash-newlines removed -- not merely as no word: a
+        body line ending in `\\` joins in front of the join line, so a hidden UNQUOTED
+        delimiter need only END in `xx…TERM` (`<<axE` after a line `a\\`), and `<<xE` was
+        ended by the join itself (review rounds 16 and 17). An unquoted delimiter is
+        written out in full; any quoting in one makes its body literal. A
+        line of the doubled operator inserted before the body line must also parse: at a
+        parsed code level it cannot, even where the line's own operator sits deferred in
+        `$(…)` (round 11's M5, review round 16), while the reopened heredoc would swallow
+        the rest and let the control parse.
+    So bash vouches for nothing inside a substitution, backticks or `${…}`: a single-quoted
+    operator or a heredoc body there is refused (accepted over-refusals). Fail closed: a
+    block bash cannot parse, or a bash call that cannot run, times out, is killed or exits
+    other than 0 or 2 (2 is its syntax error; see the group above), vouches for nothing --
+    `_parses` answers None there, never False.
     """
-
-    CLOSERS = (")" * 8, "`" + ")" * 8)  # M:ORACLE-CLOSERS
 
     def __init__(self, texts: list[str]):
         self.text = "\n".join(texts)
@@ -400,25 +437,51 @@ class BashParse:
 
     @staticmethod
     def _parses(text: str) -> bool | None:
-        """True or False from `bash -n`; None when bash could not give an answer."""
+        """True on bash -n's 0, False on its syntax error 2; None when bash gave no answer."""
         try:
-            return subprocess.run(["bash", "-n", "-c", text], stdin=subprocess.DEVNULL,
-                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                  timeout=10).returncode == 0
+            status = subprocess.run(["bash", "-n", "-c", text], stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    timeout=10).returncode
         except (OSError, ValueError, subprocess.SubprocessError):  # ValueError: a NUL byte
             return None  # M:ORACLE-NO-BASH
+        return {0: True, 2: False}.get(status)  # M:ORACLE-STATUS
 
     @functools.cached_property
     def parses(self) -> bool | None:
         return self._parses(self.text)
 
+    def _proves(self, probe: str, control: str) -> bool:
+        return self._parses(probe) is False and self._parses(control) is True  # M:ORACLE-PROVES
+
     def code_at(self, i: int, k: int, op: str) -> bool:
-        """Whether bash reads the operator `op` at line i, column k as code."""
+        """Whether the operator `op` at line i, column k is anything but single-quoted text."""
         if self.parses is not True:
             return True  # M:ORACLE-UNPARSED
-        at, rest = self.starts[i] + k, self.starts[i] + k + len(op)
-        return any(self._parses(self.text[:at] + closer + f"{op} {op}" + self.text[rest:])
-                   is not True for closer in self.CLOSERS)  # M:ORACLE-ANY-CLOSER
+        at = self.starts[i] + k
+        before, after = self.text[:at], self.text[at + len(op):]
+        if before.endswith("\\"):
+            return True  # M:ORACLE-BACKSLASH
+        wraps = (lambda payload: before + payload + after,  # M:ORACLE-UNGROUPED
+                 lambda payload: "{\n" + before + payload + after + "\n}")  # M:ORACLE-GROUP
+        return not any(self._proves(wrap(f" '{op} {op}' "), wrap(" 'x' "))  # M:ORACLE-SQUOTE
+                       for wrap in wraps)
+
+    def body_code_at(self, i: int, op: str, term: str | None) -> bool:
+        """Whether line i, holding the operator `op`, is anything but quoted heredoc body text,
+        where `term` is the terminator the lexer read for that body."""
+        # Belt and braces, not separately pinned: `HEREDOC` never captures a `'`, and an
+        # unparsed block or a missing terminator rarely survives the probes below.
+        if self.parses is not True or not term or "'" in term:
+            return True  # M:ORACLE-BODY-UNPARSED
+        line = self.starts[i]
+        if self._parses(self.text[:line] + f"{op} {op}\n" + self.text[line:]) is not True:
+            return True  # M:ORACLE-BODY-LINE
+        flat = self.text.replace("\\\n", "")
+        join = next(p for p in ("x" * n for n in itertools.count(1))
+                    if p + term not in flat)  # M:ORACLE-JOIN-UNSEEN
+        cut = lambda payload: (self.text[:line] + f"{join}\\\n{term}\n{payload}\n:<<'{term}'\n"  # noqa: E731
+                               + self.text[line:])  # M:ORACLE-QUOTED-BODY
+        return not self._proves(cut(f"{op} {op}"), cut("x"))  # M:ORACLE-HEREDOC
 
     def starts_statement(self, i: int, k: int) -> bool:
         """Whether line i, column k is where bash starts a statement. A stray `then` breaks
@@ -461,7 +524,7 @@ def backstop(lexed: list[Line]) -> list[tuple[int, str]]:
         if info.heredoc in confirmed:  # M:BACKSTOP-BODY
             hits.extend((i, kind) for kind, k in _quote_blind(text) if kind != ";"
                         and (not info.literal  # M:BACKSTOP-LITERAL-BODY
-                             or bash.code_at(i, k, kind)))  # M:ORACLE-BODY
+                             or bash.body_code_at(i, kind, info.term)))  # M:ORACLE-BODY
             continue
         found, spans, braces, comment, prev, k, shift_until = [], [], 0, False, " ", 0, -1
         opened = -1 if quote == "'" else opened

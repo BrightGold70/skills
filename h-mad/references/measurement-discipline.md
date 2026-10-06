@@ -239,14 +239,34 @@ being got wrong: the four documents being byte-identical is **not** the predicat
     way (round 11): `$$'`, quotes inside code backticks, quotes inside `"${…}"`, a heredoc opener
     ending in `\`, bash 3.2 closing `$(` at a `)` in a heredoc body, `$[1<<E ]`, and the carve-out
     below after `export \`. The lexer is not patched for them either. bash itself is the third
-    reader: `bash -n` on a copy of the block with the operator doubled, which never executes it.
-    Text is skipped only when bash also parses it as text, and nothing is skipped when bash
-    cannot be run or cannot parse the block.
+    reader: `bash -n` on perturbed copies of the block, which never executes them;
+  - bash vouches only on positive evidence (round 13). Rounds 11 and 12 doubled the operator
+    behind runs of closers meant to reach top level, and no finite set of closers leaves every
+    nesting: inside `"$(…)"`, `"`…`"`, `${x:-$(…)}` or `$[ $(…) ]` the closers stopped in the
+    enclosure, and one later backtick fooled the rest. Now text is skipped only where a probe
+    proves it: ` '` + doubled operator + `' ` breaks the parse while ` 'x' ` does not (the `'`
+    closed a single quote at a level `-n` parses; the blanks stop the payload joining a word
+    such as a heredoc delimiter, round 14; the proof counts as it stands or inside `{ … }`,
+    since bash 3.2 exits 1 rather than 2 on a syntax error in a top-level `NAME=( … )`,
+    round 15), or a line `xx…\` then a terminator line inserted before a body line ends a
+    heredoc there. The `\` line proves the heredoc quoted: an unquoted body joins it to the
+    terminator, which then ends nothing (round 15). `xx…TERM` occurs nowhere in the block,
+    not merely as no word, since a hidden `<<xE` was ended by the join itself (round 16) and a
+    body line ending in `\` joins in front of it, so `<<axE` after `a\` ends there too
+    (round 17). A line of the doubled
+    operator inserted before the body line must also parse: at a parsed code level it cannot,
+    even where the line's own operator is deferred in `$(…)` (round 16). A position after a
+    backslash is never vouched for, and nothing is skipped when bash cannot be run, cannot
+    parse the block, or exits other than 0 or 2.
 
   So the executor over-refuses these operators in double quotes, in comments, in unquoted heredoc
-  bodies, single-quoted inside backticks, and in a quoted heredoc body inside `$(…)`. It also
-  refuses `<<\EOF`, a shift outside a plain `$((…))`, and `>&$fd`. Single-quote such text, use
-  `$(…)` and keep heredocs at top level, or keep the text out of the screen's block.
+  bodies, single-quoted inside `$(…)`, backticks or `${…}` (bash defers all three, so no probe
+  proves the quote), right after a backslash (even inside single quotes), in `$'…'`, and in a
+  quoted heredoc body inside `$(…)` or before another heredoc opened on the same line, and
+  single-quoted in a top-level `NAME=( … )` of a block that ends in an EOF-ended heredoc or a
+  `\` (bash exits 1 ungrouped, and the group breaks both copies). It also
+  refuses `<<\EOF`, a shift outside a plain `$((…))`, and `>&$fd`. Single-quote such text at top
+  level and keep heredocs at top level, or keep the text out of the screen's block.
 
   The only forms not refused are:
   - the `&` of a redirection (`2>&1`, `>&2`, `>&-`, `<&0`, `&>`). A trailing `&` job after one
@@ -254,7 +274,8 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   - the whole value of a one-line `NAME=$(…)` that bash reads as the start of a statement (not
     an argument after `export \`, nor a one-word slot such as a `case` subject or a `[[ -n`
     operand, round 12), whose body is one `&&` chain, with no `;`, `||`, `&` or newline. Only
-    then does the assignment carry the failing member's status;
+    then does the assignment carry the failing member's status. In an `if`, `while` or `until`
+    condition, or after `!`, no trap runs at all: that is the condition residual, not this form;
     `X=$(a || b)`, `X=$(a && b; c)` and `X=$(a & wait)` are refused.
 
   Write one command per line; to chain on success, put the second command on the next line.
