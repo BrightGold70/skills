@@ -1019,8 +1019,8 @@
       "name": "alias-line-misattributed",
       "_mechanism": "task #14: the alias record's line is off by one, so the reason names the wrong document line.",
       "file": "scripts/h_mad_expect_screens.py",
-      "find": "`alias -p`, recording `!aliases@<line>`. Any such record reads",
-      "replace": "`alias -p`, recording `!aliases@<line>`. Any such record reads",
+      "find": "               '\\\\echo \"!aliases@$((LINENO - __hmad_l0 - 1))\" >> \"$__hmad_ff\"')",
+      "replace": "               '\\\\echo \"!aliases@$((LINENO - __hmad_l0))\" >> \"$__hmad_ff\"')",
       "test": "tests/test_h_mad_expect_screens.py::test_an_alias_mode_is_refused_at_the_screen"
     }
   ]
