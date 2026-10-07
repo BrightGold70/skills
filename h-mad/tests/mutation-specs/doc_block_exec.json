@@ -301,8 +301,8 @@
       "_mechanism": "Always launch plain bash, dropping all strict flags.",
       "test": "tests/test_h_mad_doc_block_exec.py::test_unset_variable_fails_under_strict",
       "file": "scripts/h_mad_doc_block_exec.py",
-      "find": "[\"bash\", \"-euo\", \"pipefail\", \"-c\", script]\n                    if block.shell == \"strict\" else [\"bash\", \"-c\", script]",
-      "replace": "[\"bash\", \"-c\", script]"
+      "find": "[BASH, \"-euo\", \"pipefail\", \"-c\", script]\n                    if block.shell == \"strict\" else [BASH, \"-c\", script]",
+      "replace": "[BASH, \"-c\", script]"
     },
     {
       "name": "preamble-separator-dropped",
@@ -453,8 +453,8 @@
       "_mechanism": "Prefix both real bash argv branches with external timeout.",
       "test": "tests/test_h_mad_doc_block_exec.py::test_no_timeout_invocation_in_source",
       "file": "scripts/h_mad_doc_block_exec.py",
-      "find": "[\"bash\", \"-euo\", \"pipefail\", \"-c\", script]\n                    if block.shell == \"strict\" else [\"bash\", \"-c\", script]",
-      "replace": "[\"timeout\", \"5\", \"bash\", \"-euo\", \"pipefail\", \"-c\", script]\n                    if block.shell == \"strict\" else [\"timeout\", \"5\", \"bash\", \"-c\", script]"
+      "find": "[BASH, \"-euo\", \"pipefail\", \"-c\", script]\n                    if block.shell == \"strict\" else [BASH, \"-c\", script]",
+      "replace": "[\"timeout\", \"5\", BASH, \"-euo\", \"pipefail\", \"-c\", script]\n                    if block.shell == \"strict\" else [\"timeout\", \"5\", BASH, \"-c\", script]"
     },
     {
       "name": "mktemp-invocation-planted",
