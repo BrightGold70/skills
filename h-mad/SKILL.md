@@ -256,7 +256,9 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.js
 #   --feature "<feature>" --beat --session-id "<session-id>"
 ```
 
-**A non-`owned_elsewhere` token guarantees the claim will be accepted.** The router
+**A non-`owned_elsewhere` token guarantees the claim will be accepted** — among the tokens
+that route to a claim at all; `cannot_judge` and `state_lost` STOP before any claim (there is
+no readable record to claim, and `--claim` exits 2 with `no such feature`). The router
 and `--claim` read the SAME staleness window (`h_mad_state_ownership`), so a claim
 the router judged abandoned is takeable without `--force`. They used to disagree: the
 router released a 19.6h-dead claim while `--claim` refused it outright, leaving

@@ -67,6 +67,30 @@
       "find": "| `state_lost` | There is no record",
       "replace": "| `state_lost_x` | There is no record",
       "test": "tests/test_h_mad_resume_decision.py::TestALostRecordIsNotANewFeature::test_the_token_is_a_STOP_in_both_skills"
+    },
+    {
+      "name": "a-state-path-outside-docs-reads-as-no-documents",
+      "_mechanism": "The docs root is state_file.parent unchecked: any --state not in docs/ silently restores start_fresh over a lost feature.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    if docs.name != \"docs\":  # M:RD-LOST-DOCSROOT",
+      "replace": "    if False:  # M:RD-LOST-DOCSROOT",
+      "test": "tests/test_h_mad_resume_decision.py::TestALostRecordIsNotANewFeature::test_a_state_path_outside_docs_is_cannot_judge"
+    },
+    {
+      "name": "a-feature-name-probes-outside-docs",
+      "_mechanism": "A name with / or .. probes paths outside docs/, against the containment rule.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "    if not feature or \"/\" in feature or \"\\0\" in feature or feature in {\".\", \"..\"}:  # M:RD-LOST-NAME",
+      "replace": "    if False:  # M:RD-LOST-NAME",
+      "test": "tests/test_h_mad_resume_decision.py::TestALostRecordIsNotANewFeature::test_a_feature_name_that_leaves_the_docs_tree_is_cannot_judge"
+    },
+    {
+      "name": "a-dangling-phase-doc-reads-as-no-document",
+      "_mechanism": "stat follows the link and a dangling phase-doc symlink reads as absent evidence.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "            os.lstat(docs / directory / (feature + suffix))",
+      "replace": "            os.stat(docs / directory / (feature + suffix))",
+      "test": "tests/test_h_mad_resume_decision.py::TestALostRecordIsNotANewFeature::test_a_dangling_phase_doc_symlink_counts_as_evidence"
     }
   ]
 }

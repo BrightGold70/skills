@@ -138,7 +138,10 @@ the existing file belongs to another or earlier session, so halt for the operato
 never deleted or reused without the operator. Each subsequent command reads the id from
 that file in its own shell invocation. Keep `<feature>` literal here and replace it with
 the active feature name when executing these lines. The resume oracle decides the route
-before any state write; use `--create --claim` only for its `start_fresh` verdict.
+before any state write; use `--create --claim` only for its `start_fresh` verdict, or to
+reconstruct a lost record after `state_lost` exactly as the decision table in `SKILL.md`
+prescribes (restore the file from git first if it is tracked). `state_lost` and `cannot_judge`
+otherwise STOP: neither is a free claim.
 
 ```bash
 ( set -C; python3 -c 'import uuid; print(uuid.uuid4())' > "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>" ) && echo "SID: MINTED" || echo "SID: NOT_MINTED"

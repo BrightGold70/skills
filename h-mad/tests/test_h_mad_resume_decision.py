@@ -133,7 +133,9 @@ class TestAnUnreadableStateFileIsNotAnEmptyOne:
         the callers that know better check for the file before asking. Telling "never
         existed" from "vanished" needs evidence this script does not have — so that
         half of WSG-6 stays open rather than being papered over with a false alarm."""
-        assert decide(tmp_path / "nonexistent.json", "feat") == "start_fresh"
+        # Under docs/, where the phase-document probe can look (2026-10-07: a state
+        # path outside docs/ is cannot_judge, there being nowhere to look).
+        assert decide(tmp_path / "docs" / ".bkit-memory.json", "feat") == "start_fresh"
 
     def test_the_token_is_documented_where_callers_read_it(self) -> None:
         """A token nobody documented is one every caller's enumeration misclassifies.
@@ -176,9 +178,10 @@ class TestAnUnreadableStateFileIsNotAnEmptyOne:
 
 
 def test_decide_missing_feature_or_state_starts_fresh(tmp_path: Path) -> None:
-    state = _write_state(tmp_path, "other", {"last_completed_phase": "step7"})
+    (tmp_path / "docs").mkdir()
+    state = _write_state(tmp_path / "docs", "other", {"last_completed_phase": "step7"})
     assert decide(state, "absent") == "start_fresh"
-    assert decide(tmp_path / "nonexistent.json", "feat") == "start_fresh"
+    assert decide(tmp_path / "docs" / "nonexistent.json", "feat") == "start_fresh"
 
 
 @pytest.fixture
@@ -614,6 +617,31 @@ class TestALostRecordIsNotANewFeature:
         finally:
             plan.chmod(0o700)
 
+    @pytest.mark.parametrize("docs_present", [True, False], ids=["docs-present", "no-docs"])
+    def test_a_state_path_outside_docs_is_cannot_judge(self, tmp_path: Path, docs_present: bool) -> None:
+        """The phase documents are located relative to the state file's `docs/`. A
+        `--state` that is not directly in a `docs/` directory leaves the oracle no
+        place to look, and "could not look" must not read as "no documents" --
+        that silently restores the start_fresh this class exists to remove."""
+        if docs_present:
+            (tmp_path / "docs/01-plan/features").mkdir(parents=True)
+            (tmp_path / "docs/01-plan/features/feat.plan.md").write_text("# p\n", encoding="utf-8")
+        assert decide(tmp_path / "elsewhere.json", "feat") == "cannot_judge"
+        parsed = tmp_path / "parsed.json"
+        parsed.write_text(json.dumps({"orchestrator_state": {"other": {}}}), encoding="utf-8")
+        assert decide(parsed, "feat") == "cannot_judge"
+
+    def test_a_dangling_phase_doc_symlink_counts_as_evidence(self, tmp_path: Path) -> None:
+        docs, state = self._docs(tmp_path)
+        (docs / "01-plan/features").mkdir(parents=True)
+        (docs / "01-plan/features/feat.plan.md").symlink_to("nowhere.md")
+        assert decide(state, "feat") == "state_lost"
+
+    @pytest.mark.parametrize("name", ["../feat", "sub/feat", "..", "."])
+    def test_a_feature_name_that_leaves_the_docs_tree_is_cannot_judge(self, tmp_path: Path, name: str) -> None:
+        docs, state = self._docs(tmp_path)
+        assert decide(state, name) == "cannot_judge"
+
     def test_the_token_is_a_STOP_in_both_skills(self) -> None:
         skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
         row = next((ln for ln in skill.splitlines() if ln.startswith("| `state_lost` |")), "")
@@ -622,3 +650,13 @@ class TestALostRecordIsNotANewFeature:
         safe = handoff.split("→ no live owner. Safe to proceed.")[0].rsplit("- **one of", 1)[1]
         assert "`state_lost`" not in safe, "state_lost must not be on HANDOVER's safe list"
         assert "- **`state_lost`** →" in handoff, "HANDOVER Step 2 must classify state_lost as a STOP"
+
+
+@pytest.mark.parametrize("adapter", ["codex", "agy", "grok"])
+def test_each_runtime_adapter_classifies_state_lost(adapter: str) -> None:
+    """The adapters restrict `--create --claim` to start_fresh; without naming
+    state_lost they forbid the recovery SKILL.md prescribes and give no route."""
+    text = " ".join((REPO_ROOT / "h-mad" / "references" / f"{adapter}-runtime.md")
+                    .read_text(encoding="utf-8").split())
+    assert "reconstruct a lost record after `state_lost`" in text, adapter
+    assert "`state_lost` and `cannot_judge` otherwise STOP" in text, adapter

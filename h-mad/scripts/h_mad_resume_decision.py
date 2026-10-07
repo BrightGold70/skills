@@ -24,7 +24,9 @@ restore or reconstruct the record, re-run. Measured 2026-10-07: a vanished state
 file over a feature with committed documents through Phase 6 answered `start_fresh`,
 which routes to "enter Phase 1". `docs/archive/` is never consulted -- an archived
 feature with no record closed its cycle, and re-using the name is a new one. A docs
-tree that cannot be searched is `cannot_judge`, not "no documents".
+tree that cannot be searched is `cannot_judge`, not "no documents" -- and so is a
+`--state` that is not directly inside a `docs/` directory (there is nowhere to look),
+or a feature name that would probe outside it.
 
 v2.2 thresholds:
 - complete: last_completed_phase >= 7 (was 9 in v1)
@@ -146,12 +148,21 @@ def _has_phase_docs(state_file: Path, feature: str) -> bool:
     """True when a live phase document for `feature` exists beside the state file.
 
     Raises OSError when the tree cannot be searched: `Path.is_file()` would read
-    that as "no document", the could-not-look/found-nothing collapse.
+    that as "no document", the could-not-look/found-nothing collapse. Also raises
+    when there is no tree to search: a state file not directly inside a `docs/`
+    directory, or a feature name that would probe outside it.
+
+    `lstat`, not `stat`: a dangling link at a phase-doc path is still evidence the
+    feature was worked, and is read as such rather than as "no document".
     """
     docs = state_file.parent
+    if docs.name != "docs":  # M:RD-LOST-DOCSROOT
+        raise OSError(f"state file {state_file} is not inside a docs/ directory")
+    if not feature or "/" in feature or "\0" in feature or feature in {".", ".."}:  # M:RD-LOST-NAME
+        raise OSError(f"feature name {feature!r} leaves the docs tree")
     for directory, suffix in PHASE_DOC_SUFFIXES:
         try:
-            os.stat(docs / directory / (feature + suffix))
+            os.lstat(docs / directory / (feature + suffix))
         except (FileNotFoundError, NotADirectoryError):
             continue
         return True  # M:RD-LOST-DOC

@@ -233,7 +233,11 @@ def test_budget_unknown_host_precedes_window_check(tmp_path, hermetic_env, value
 
 
 def _resume_state(tmp_path, state):
-    state_file = tmp_path / ".bkit-memory.json"
+    # The canonical docs/ layout: outside it the oracle answers cannot_judge on the
+    # no-record paths by itself (2026-10-07), which would hide a host check moved
+    # below them -- the W2a/W2b mutations survived exactly that way.
+    (tmp_path / "docs").mkdir(exist_ok=True)
+    state_file = tmp_path / "docs" / ".bkit-memory.json"
     if state == "absent-file":
         return state_file
     if state == "unreadable-file":

@@ -103,10 +103,28 @@ class TestEveryTokenIsClassified:
             r"(?m)^- \*\*one of (.+?)\*\* → no live owner\. Safe to proceed\.", BODY
         )
         assert safe
-        for token in ("owned_elsewhere", "cannot_judge"):
+        for token in ("owned_elsewhere", "cannot_judge", "state_lost"):
             assert f"`{token}`" not in safe.group(1), (
                 f"`{token}` was moved into the safe set; it must STOP the caller"
             )
+
+    def test_takeover_stops_on_the_two_no_claim_tokens(self) -> None:
+        """TAKEOVER's own list ends "anything else -> claim it"; without this bullet
+        a lost record (`state_lost`) or an unreadable store (`cannot_judge`) is
+        claimed. Pinned in TAKEOVER's section, ahead of that catch-all."""
+        takeover = BODY[BODY.index("### Step T2: Adopt it"):]
+        stop = takeover.find("- `cannot_judge` or `state_lost` → STOP")
+        claim = takeover.find("- anything else → claim it:")
+        assert stop != -1, "TAKEOVER lost its STOP bullet for cannot_judge/state_lost"
+        assert claim != -1 and stop < claim, "the STOP bullet must precede the claim catch-all"
+
+    def test_takeover_asks_the_oracle_even_with_no_state_file(self) -> None:
+        """2026-10-07: the state file VANISHED over a Phase-6 feature. "No state file
+        means nothing is claimed" is the conclusion state_lost exists to refuse."""
+        takeover = _norm(BODY[BODY.index("### Step T2: Adopt it"):])
+        assert "No state file means nothing is claimed" not in takeover
+        assert "--state ./docs/.bkit-memory.json" in takeover, (
+            "on the absent-file path TAKEOVER must still run the oracle at the canonical path")
 
     def test_the_list_is_still_closed(self) -> None:
         """The catch-all must remain fail-closed; the defect was membership, not the rule."""

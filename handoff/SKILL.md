@@ -827,8 +827,17 @@ echo "${STATE:-no state file}"
 ```
 
 A **failed** search is not an empty one, and more than one hit is not a reason to take the first —
-this repository has three. No state file means nothing is claimed: say so, skip to point 2, and do
-not invent one. Otherwise pass the path it printed:
+this repository has three. **No state file is not yet "nothing is claimed"** — on 2026-10-07 the state
+file VANISHED over a feature with phase documents through Phase 6. Ask the oracle at the canonical
+path anyway; it looks for the feature's phase documents:
+
+```bash
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_decision.py" \
+  --state ./docs/.bkit-memory.json --feature "<feature>" --session-id "<your-session-id>"
+```
+
+`state_lost` (or `cannot_judge`) → STOP and surface it; do not create a state file. `start_fresh` →
+nothing is claimed: say so, skip to point 2, and do not invent one. Otherwise pass the path it printed:
 
 **If the brief names NO feature but a state file exists, CREATE the record and claim it.** Use the
 brief's **slug** as the feature name — derived and traceable back to the document that asked for the

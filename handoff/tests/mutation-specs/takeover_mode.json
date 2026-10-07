@@ -94,6 +94,22 @@
       "find": "        print(f\"{p}:{n}: {line}\")",
       "replace": "        print(FILENAME + \":\" + str(n) + \": \" + \"$0\")",
       "test": "tests/test_handoff_takeover_mode.py::TestNoDollarArgInTheSkillBody::test_no_positional_shell_arg_survives_in_the_body"
+    },
+    {
+      "name": "takeover-claims-a-lost-record",
+      "_mechanism": "Without the STOP bullet, TAKEOVER's 'anything else -> claim it' claims on state_lost and cannot_judge.",
+      "file": "SKILL.md",
+      "find": "- `cannot_judge` or `state_lost` \u2192 STOP, exactly as HANDOVER Step 2 says.",
+      "replace": "- (removed)",
+      "test": "tests/test_handoff_oracle_token_coverage.py::TestEveryTokenIsClassified::test_takeover_stops_on_the_two_no_claim_tokens"
+    },
+    {
+      "name": "takeover-trusts-an-absent-file-again",
+      "_mechanism": "2026-10-07: the state file vanished over a Phase-6 feature; skipping the oracle on the absent-file path reads that as nothing claimed.",
+      "file": "SKILL.md",
+      "find": "  --state ./docs/.bkit-memory.json --feature \"<feature>\" --session-id \"<your-session-id>\"",
+      "replace": "  --feature \"<feature>\" --session-id \"<your-session-id>\"",
+      "test": "tests/test_handoff_oracle_token_coverage.py::TestEveryTokenIsClassified::test_takeover_asks_the_oracle_even_with_no_state_file"
     }
   ]
 }
