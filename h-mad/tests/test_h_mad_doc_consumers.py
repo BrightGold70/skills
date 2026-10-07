@@ -398,8 +398,13 @@ def test_run_times_out_as_UNREADABLE(tmp_path: Path) -> None:
 def test_run_interrupted_is_UNREADABLE_not_a_traceback(tmp_path: Path) -> None:
     repo = _run_repo(tmp_path, extra_b="\n\ndef test_hangs():\n    import time\n    time.sleep(120)\n")
     env = {**os.environ, "DOC_RUN_LOG": str(repo.parent / "ran.log")}
+    # A suite started as a background job (`&`, nohup, an agent's background shell) inherits
+    # SIGINT as SIG_IGN, and Python keeps an inherited ignore: the script then never sees the
+    # interrupt and the test hangs 60s. Give the child the default disposition, as a terminal
+    # Ctrl-C would find it.
     proc = subprocess.Popen([sys.executable, str(SCRIPT), "skill-a/SKILL.md", "--run"], cwd=str(repo),
-                            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
     deadline = time.monotonic() + 60
     while len(_ran(repo)) < 2 and time.monotonic() < deadline:
         time.sleep(0.1)
