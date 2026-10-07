@@ -1022,6 +1022,22 @@
       "find": "               '\\\\echo \"!aliases@$((LINENO - __hmad_l0 - 1))\" >> \"$__hmad_ff\"')",
       "replace": "               '\\\\echo \"!aliases@$((LINENO - __hmad_l0))\" >> \"$__hmad_ff\"')",
       "test": "tests/test_h_mad_expect_screens.py::test_aliases_turned_on_inside_the_screen_are_seen_at_its_end"
+    },
+    {
+      "name": "run-uses-paths-bash",
+      "_mechanism": "task #8: the block runs under PATH's first `bash`, not the pinned interpreter the guards were calibrated on.",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "                    if block.shell == \"strict\" else [BASH, \"-c\", script],  # M:RUN-PINNED",
+      "replace": "                    if block.shell == \"strict\" else [\"bash\", \"-c\", script],  # M:RUN-PINNED",
+      "test": "tests/test_h_mad_expect_screens.py::test_screens_run_under_the_pinned_bash_not_paths"
+    },
+    {
+      "name": "oracle-uses-paths-bash",
+      "_mechanism": "task #8: the parse oracle asks PATH's first `bash`, which may not be the one the block runs under.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            status = subprocess.run([BASH, \"-n\", \"-c\", text], stdin=subprocess.DEVNULL,  # M:ORACLE-PINNED",
+      "replace": "            status = subprocess.run([\"bash\", \"-n\", \"-c\", text], stdin=subprocess.DEVNULL,  # M:ORACLE-PINNED",
+      "test": "tests/test_h_mad_expect_screens.py::test_the_parse_oracle_uses_the_pinned_bash_not_paths"
     }
   ]
 }

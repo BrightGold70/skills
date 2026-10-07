@@ -364,6 +364,12 @@ class RunResult:
 
 _MAX_TIMEOUT_SECONDS = (2**31 - 1) / 1000  # CPython's INT_MAX-milliseconds selector limit.
 DRAIN_SECONDS = 5.0
+# One interpreter, not whatever `bash` PATH finds first. Every behaviour these modules rely on
+# (bash 3.2's PIPESTATUS after a trap, its heredoc line numbers, its `bash -n` exits) was
+# measured on /bin/bash; with Homebrew's 5.x first on PATH, four expect-screens guards went
+# unexercised (their mutants survived, all caught under 3.2). Fall back to PATH only where
+# there is no /bin/bash.
+BASH = "/bin/bash" if os.path.exists("/bin/bash") else "bash"  # M:PINNED-BASH
 
 
 def _validate_timeout(value: object) -> float:
@@ -410,8 +416,8 @@ def run_block(block: Block, *, preamble: str | None = None,
             script = _compose(preamble, block.text)
             try:
                 proc = subprocess.Popen(
-                    ["bash", "-euo", "pipefail", "-c", script]
-                    if block.shell == "strict" else ["bash", "-c", script],
+                    [BASH, "-euo", "pipefail", "-c", script]
+                    if block.shell == "strict" else [BASH, "-c", script],  # M:RUN-PINNED
                     cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                     text=True, encoding="utf-8", errors="replace",
                     start_new_session=True,

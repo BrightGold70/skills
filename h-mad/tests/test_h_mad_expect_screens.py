@@ -2070,15 +2070,14 @@ def test_the_line_check_goes_before_the_body_line():
 # --- task #14: the runtime guard for code no parse saw -----------------------------------
 #
 # `.`/`source` runs a body no reader parsed, and a block that turns on aliases runs text
-# `bash -n` read with them off. Both are recorded at run time and refused. Every case runs
-# under each bash on this machine: `run_block` resolves `bash` by PATH.
+# `bash -n` read with them off. Both are recorded at run time and refused. `run_block` and
+# the parse oracle use one pinned interpreter (`BASH`, task #8), so PATH no longer chooses.
 
-BASHES = [b for b in ("/bin/bash", "/opt/homebrew/bin/bash", "/usr/local/bin/bash")
-          if os.path.exists(b)]
+BASHES = [hes.BASH]
 
 
 def _under(bash):
-    return {"PATH": f"{os.path.dirname(bash)}:{os.environ['PATH']}"}
+    return {}
 
 
 def _runtime(tmp_path, bash, body, kind, line):
@@ -2180,3 +2179,33 @@ def test_aliases_turned_on_inside_the_screen_are_seen_at_its_end(tmp_path, bash)
     assert _screens(result.stdout) == [
         f"screen: {doc}:3 expect=0 got=UNREADABLE:unsupported_runtime=aliases@{doc}:3 FAIL"], \
         result.stdout
+
+
+
+# --- task #8: one pinned interpreter, never PATH's first `bash` --------------------------
+
+
+def _decoy_bash(tmp_path):
+    """A `bash` that is not one: first on PATH, it exits 99 for anything it is asked."""
+    decoy = tmp_path / "decoy-bin"
+    decoy.mkdir()
+    (decoy / "bash").write_text("#!/bin/sh\nexit 99\n")
+    (decoy / "bash").chmod(0o755)
+    return {"PATH": f"{decoy}:{os.environ['PATH']}"}
+
+
+@pytest.mark.skipif(not os.path.exists("/bin/bash"), reason="the pin is /bin/bash")
+def test_screens_run_under_the_pinned_bash_not_paths(tmp_path):
+    """A decoy `bash` first on PATH would kill every block (markers missing) if the runner
+    resolved `bash` by PATH."""
+    root, old, _ = _repo(tmp_path)
+    result = run(tmp_path, [_doc(tmp_path, CORE)], root, old, env_extra=_decoy_bash(tmp_path))
+    assert "EXPECT: PASS screens=1" in result.stdout, result.stdout
+
+
+@pytest.mark.skipif(not os.path.exists("/bin/bash"), reason="the pin is /bin/bash")
+def test_the_parse_oracle_uses_the_pinned_bash_not_paths(tmp_path, monkeypatch):
+    """The oracle's `bash -n` answers from the same interpreter the block runs under; a decoy
+    first on PATH would answer 99, i.e. no proof."""
+    monkeypatch.setenv("PATH", _decoy_bash(tmp_path)["PATH"])
+    assert hes.BashParse(["echo 'a && b'"]).code_at(0, 8, "&&") is False

@@ -42,7 +42,8 @@ an exception, and on SIGTERM/SIGHUP (which also kill the running block's process
 group); only this run's own worktree entry is ever deleted, never by a
 repo-wide prune. `GIT_DIR` and the other repository-redirecting `GIT_*`
 variables are dropped first, so neither `git` here nor a screen reads another
-repository. Blocks read stdin from /dev/null. When ROOT is a subdirectory of its
+repository. Blocks read stdin from /dev/null and run under /bin/bash (`BASH`, pinned in
+`h_mad_doc_block_exec`), never PATH's first `bash`; the `bash -n` oracle asks the same one. When ROOT is a subdirectory of its
 repository, screens run in the same subdirectory of the worktree. Residual: a
 statement that leaves the worktree by absolute path (`cd /abs`, `git -C /abs`)
 reads that tree, not the sha.
@@ -200,7 +201,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from h_mad_doc_block_exec import (  # noqa: E402
-    Block, BlockTimeout, DocBlockError, _fence_events, _validate_timeout, run_block,
+    BASH, Block, BlockTimeout, DocBlockError, _fence_events, _validate_timeout, run_block,
 )
 
 SCREEN = re.compile(r"#[ \t]*expect[ \t]+(-?\d+)[ \t]*(?:$|[,;(]|--|—)")
@@ -477,7 +478,7 @@ class BashParse:
     def _parses(text: str) -> bool | None:
         """True on bash -n's 0, False on its syntax error 2; None when bash gave no answer."""
         try:
-            status = subprocess.run(["bash", "-n", "-c", text], stdin=subprocess.DEVNULL,
+            status = subprocess.run([BASH, "-n", "-c", text], stdin=subprocess.DEVNULL,  # M:ORACLE-PINNED
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                     timeout=10).returncode
         except (OSError, ValueError, subprocess.SubprocessError):  # ValueError: a NUL byte
