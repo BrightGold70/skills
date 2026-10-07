@@ -1657,7 +1657,7 @@ def test_bash_reads_literal_and_code_positions(tmp_path):
 
 def test_bash_unavailable_fails_closed(monkeypatch):
     """No bash, no vouching: every excluded position reads as code, no carve-out applies."""
-    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(hes, "BASH", "/nonexistent/bash")  # pinned, so PATH cannot remove it
     parse = hes.BashParse(["echo 'a && b'", "X=$(a && b)"])
     assert parse.code_at(0, 8, "&&") is True
     assert parse.starts_statement(1, 0) is False

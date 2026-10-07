@@ -956,7 +956,7 @@ def test_mkdtemp_failure_is_a_verdict(monkeypatch, recording_spawn):
 
 
 def test_spawn_failure_is_a_verdict(tmp_path, monkeypatch, recording_spawn):
-    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setattr(dbe, "BASH", str(tmp_path / "no-such-bash"))
     with pytest.raises(dbe.LaunchFailed) as error:
         dbe.run_block(execution_block("true"))
     assert error.value.stage == "spawn" and isinstance(error.value.err, OSError)
@@ -1298,8 +1298,16 @@ def cli_case(tmp_path, hostile):
                 effect='touch ' + shlex.quote(str(marker)) + '\n')
 
 
-def cli_run(argv, *, env=None, timeout=15):
-    return subprocess.run([sys.executable, str(CLI_SCRIPT), *map(str, argv)],
+# The CLI with `BASH` pointed elsewhere. The interpreter is pinned (`/bin/bash`), so emptying
+# PATH no longer makes the spawn fail; this is the one way left to produce LAUNCH_FAILED.
+_CLI_WITH_BASH = ("import sys; sys.path.insert(0, {scripts!r}); import h_mad_doc_block_exec as m; "
+                  "m.BASH = sys.argv[1]; sys.exit(m.main(sys.argv[2:]))")
+
+
+def cli_run(argv, *, env=None, timeout=15, bash=None):
+    head = ([sys.executable, str(CLI_SCRIPT)] if bash is None else
+            [sys.executable, "-c", _CLI_WITH_BASH.format(scripts=str(SCRIPTS)), str(bash)])
+    return subprocess.run([*head, *map(str, argv)],
                           capture_output=True, text=True, env=env, timeout=timeout)
 
 
@@ -1929,7 +1937,7 @@ def real_cli_producer(c, head):
     elif head == 'TIMEOUT':
         argv = c['prepare']('sleep 300\n') + ['--shell-timeout', '1']
     elif head == 'LAUNCH_FAILED stage=spawn':
-        env = dict(os.environ, PATH='')
+        return cli_run(argv, env=env, bash=c['doc'].parent / 'no-such-bash')
     elif head == 'UNREADABLE reason=doc_unreadable':
         c['doc'].write_bytes(b'\xff')
     elif head == 'UNREADABLE reason=preamble_unreadable':
