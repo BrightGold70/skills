@@ -307,6 +307,9 @@ def _trusted_executable(token: str) -> Path | None:
     return resolved if candidate.parent in TRUSTED_BIN_DIRS else None
 
 
+MALFORMED_WORKDIR = object()  # a workdir codex sent that is not a string
+
+
 def _command_cwd(payload: dict[str, Any]) -> object:
     """The directory the shell command runs in, which is not always the session's.
 
@@ -321,7 +324,11 @@ def _command_cwd(payload: dict[str, Any]) -> object:
     session = payload.get("cwd")
     raw = payload.get("tool_input")
     workdir = raw.get("workdir") if isinstance(raw, dict) else None  # M:F2-WORKDIR
-    if not isinstance(workdir, str) or not workdir:
+    if workdir is not None and not isinstance(workdir, str):  # M:F2-MALFORMED
+        # Present but unreadable (0, a list, a dict): the command's directory is
+        # unknown, which is not the same as "the session's". Fail closed.
+        return MALFORMED_WORKDIR
+    if not workdir:
         return session
     path = Path(workdir).expanduser()
     if not path.is_absolute():
@@ -337,6 +344,8 @@ def _cwd_escapes_root(root: Path, cwd: object) -> bool:
     named directory, so resolving its token under the root would vouch for a venv
     the command never executes.
     """
+    if cwd is MALFORMED_WORKDIR:
+        return True
     if not isinstance(cwd, str) or not cwd:
         return False
     return _payload_cwd_base(root, cwd) == root and Path(cwd).expanduser().resolve() != root

@@ -832,7 +832,7 @@ def test_shell_venv_token(shell_rows, name, expected):
     assert verdict == expected, f"{name}: venv token must be {expected}: {verdict}: {reason}"
 
 
-def _exec_workdir_verdict(root: Path, session_cwd: Path, workdir: str, command: str) -> tuple[str, str]:
+def _exec_workdir_verdict(root: Path, session_cwd: Path, workdir: object, command: str) -> tuple[str, str]:
     """codex's real exec_command shape: the SESSION cwd at top level, the shell's own
     directory in tool_input.workdir (observed in codex rollouts, 2026-07..10)."""
     verdict, reason, _ = _run(
@@ -859,6 +859,28 @@ def test_a_relative_workdir_joins_the_session_cwd(shell_rows):
     assert not (row.root / ".venv").exists(), "fixture drift: the root must have no venv"
     verdict, reason = _exec_workdir_verdict(row.root, row.cwd, ".", row.command)
     assert verdict == "allow", f"relative workdir must join the session cwd: {verdict}: {reason}"
+
+
+def test_the_inverse_a_workdir_without_a_venv_is_not_rescued_by_the_session_cwd(shell_rows):
+    """Session cwd = the sub-project (which HAS a venv), workdir = the root (which has
+    none): the command runs `<root>/.venv/bin/python`, which does not exist. A gate that
+    admitted the token under EITHER directory would vouch for the session's venv."""
+    row = next(row for row in shell_rows if row.name == "contained/sub-cwd/pytest")
+    assert (row.cwd / ".venv").is_dir() and not (row.root / ".venv").exists(), "fixture drift"
+    control, why = _shell_verdict(row.root, row.cwd, row.command)
+    assert control == "allow", f"positive control: the session's own venv with no workdir: {control}: {why}"
+    verdict, reason = _exec_workdir_verdict(row.root, row.cwd, str(row.root), row.command)
+    assert verdict == "deny", f"a venv only under the session cwd must not be admitted: {verdict}: {reason}"
+
+
+@pytest.mark.parametrize("workdir", [0, ["/elsewhere"], {"path": "."}, True],
+                         ids=["int", "list", "dict", "bool"])
+def test_a_present_but_malformed_workdir_fails_closed(shell_rows, workdir):
+    """A workdir codex sent but the gate cannot read is not an absent one: falling back
+    to the session cwd judges the token where the command may not run."""
+    row = next(row for row in shell_rows if row.name == "contained/sub-cwd/pytest")
+    verdict, reason = _exec_workdir_verdict(row.root, row.cwd, workdir, row.command)
+    assert verdict == "deny", f"malformed workdir {workdir!r} must refuse a relative venv: {verdict}: {reason}"
 
 
 @pytest.mark.parametrize("shape", ["outside-absolute", "dotdot-escape", "absent"])
