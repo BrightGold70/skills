@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-08 · gotcha · [0.7] · `bash,bash-3.2,heredoc,pinned-bash,handoff:2026-10-08-token-weather-memory-probes` — bash 3.2 rejects an apostrophe inside a $(cat <<'EOF' ... EOF) heredoc body (unexpected EOF looking for matching '); bash 5 parses it. Feature-regex scans miss it; only /bin/bash -n catches it.
 - 2026-10-07 · pattern · [0.5] · `worktrees,multi-machine,handoff:2026-10-07-runtime-guard-pinned-bash` — Before deleting stale agent-* worktrees, diff each against origin: a cherry-picked backup missed a review fix (61b7525a) and a never-picked commit; push or archive before switching machines.
 - 2026-10-07 · gotcha · [0.7] · `mutation-harness,handoff:2026-10-07-runtime-guard-pinned-bash` — Editing any tracked file while a mutation sweep runs voids it (TREE_MOVED, nothing scored). Commit first, sweep, touch nothing until it reports.
 - 2026-10-07 · gotcha · [0.7] · `expect-screens,bash,mutation,handoff:2026-10-07-runtime-guard-pinned-bash` — run_block and bash -n resolved bash by PATH; Homebrew 5.3 first made 4 expect-screens guards unexercised (mutants survived). Pin /bin/bash in h_mad_doc_block_exec.BASH; sweep mutations under the DEFAULT PATH.
