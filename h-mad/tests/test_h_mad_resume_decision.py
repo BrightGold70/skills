@@ -141,7 +141,10 @@ class TestAnUnreadableStateFileIsNotAnEmptyOne:
         proceed", which is fail-OPEN: a token added FOR safety would have been read as
         permission to proceed."""
         skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
-        assert "`cannot_judge`" in skill, (
+        # A ROW, not a mention: the routing sentence above the table names
+        # `cannot_judge` too (2026-10-07), so a bare substring check stayed green
+        # with the table row gone -- the mutation harness reported it SURVIVED.
+        assert any(ln.startswith("| `cannot_judge` |") for ln in skill.splitlines()), (
             "the decision-token table must name cannot_judge, or an operator hitting "
             "it has no prescribed action")
 
@@ -537,3 +540,85 @@ def test_session_id_alone_does_not_read_git_dir(
     assert not recording_git.exists(), (
         "main with only --session-id must not invoke git, even when the minted id is readable"
     )
+
+
+class TestALostRecordIsNotANewFeature:
+    """2026-10-07, a HemaSuite worktree: `docs/.bkit-memory.json` had vanished (only
+    its `.lock` remained) while the feature had committed phase documents through
+    Phase 6. The oracle answered `start_fresh` -- "initialize state, enter Phase 1" --
+    for a Phase-6 feature. Absence of the RECORD is evidence of nothing being claimed
+    only when nothing on disk says the feature was ever worked.
+    """
+
+    @staticmethod
+    def _docs(tmp_path: Path) -> tuple[Path, Path]:
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        return docs, docs / ".bkit-memory.json"
+
+    @pytest.mark.parametrize("relative", [
+        "01-plan/features/feat-brainstorm.md",
+        "01-plan/features/feat.spec.md",
+        "01-plan/features/feat.plan.md",
+        "01-plan/features/feat.impl-plan.md",
+        "02-design/features/feat.design.md",
+    ])
+    def test_absent_state_file_with_phase_docs_is_state_lost(self, tmp_path: Path, relative: str) -> None:
+        docs, state = self._docs(tmp_path)
+        doc = docs / relative
+        doc.parent.mkdir(parents=True)
+        doc.write_text("# feat\n", encoding="utf-8")
+        assert decide(state, "feat") == "state_lost"
+
+    def test_a_record_missing_from_a_parsed_file_with_phase_docs_is_state_lost(self, tmp_path: Path) -> None:
+        docs, state = self._docs(tmp_path)
+        state.write_text(json.dumps({"version": 1, "orchestrator_state": {"other": {}}}), encoding="utf-8")
+        (docs / "02-design/features").mkdir(parents=True)
+        (docs / "02-design/features/feat.design.md").write_text("# d\n", encoding="utf-8")
+        assert decide(state, "feat") == "state_lost"
+
+    def test_an_ARCHIVED_feature_with_no_record_starts_fresh(self, tmp_path: Path) -> None:
+        """Archive is where a COMPLETED feature's documents go; no live record there
+        means the cycle closed, and re-running the name is a new cycle."""
+        docs, state = self._docs(tmp_path)
+        archived = docs / "archive/2026-09/feat"
+        archived.mkdir(parents=True)
+        (archived / "feat.plan.md").write_text("# p\n", encoding="utf-8")
+        assert decide(state, "feat") == "start_fresh"
+
+    def test_another_features_docs_do_not_count(self, tmp_path: Path) -> None:
+        docs, state = self._docs(tmp_path)
+        (docs / "01-plan/features").mkdir(parents=True)
+        (docs / "01-plan/features/feat-two.plan.md").write_text("# p\n", encoding="utf-8")
+        assert decide(state, "feat") == "start_fresh"
+
+    def test_an_existing_record_still_routes_on_its_phase(self, tmp_path: Path) -> None:
+        docs, state = self._docs(tmp_path)
+        state.write_text(json.dumps({"version": 1, "orchestrator_state": {
+            "feat": {"last_completed_phase": 5}}}), encoding="utf-8")
+        (docs / "01-plan/features").mkdir(parents=True)
+        (docs / "01-plan/features/feat.plan.md").write_text("# p\n", encoding="utf-8")
+        assert decide(state, "feat") == "enter_autonomous"
+
+    def test_an_unsearchable_docs_tree_is_cannot_judge(self, tmp_path: Path) -> None:
+        """`Path.is_file()` swallows PermissionError; reading "could not look" as
+        "nothing there" is the WSG-6 collapse one level down."""
+        docs, state = self._docs(tmp_path)
+        plan = docs / "01-plan"
+        (plan / "features").mkdir(parents=True)
+        plan.chmod(0o000)
+        try:
+            if os.access(plan, os.X_OK):
+                pytest.skip("running as root — the permission path is unreachable")
+            assert decide(state, "feat") == "cannot_judge"
+        finally:
+            plan.chmod(0o700)
+
+    def test_the_token_is_a_STOP_in_both_skills(self) -> None:
+        skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+        row = next((ln for ln in skill.splitlines() if ln.startswith("| `state_lost` |")), "")
+        assert "**Stop." in row, "h-mad decision table must give state_lost a STOP row"
+        handoff = " ".join((REPO_ROOT / "handoff" / "SKILL.md").read_text(encoding="utf-8").split())
+        safe = handoff.split("→ no live owner. Safe to proceed.")[0].rsplit("- **one of", 1)[1]
+        assert "`state_lost`" not in safe, "state_lost must not be on HANDOVER's safe list"
+        assert "- **`state_lost`** →" in handoff, "HANDOVER Step 2 must classify state_lost as a STOP"

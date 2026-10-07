@@ -2,7 +2,7 @@
 """h_mad_resume_decision.py — read state file + feature; print decision token.
 
 Tokens: start_fresh | resume_manual | enter_autonomous | halted | complete
-        | owned_elsewhere | cannot_judge
+        | owned_elsewhere | cannot_judge | state_lost
 
 `cannot_judge` is the one token that is not a decision. It means the state file
 EXISTS and could not be read -- truncated mid-write, invalid JSON, unreadable --
@@ -15,10 +15,16 @@ be mid-flight and owned by a live session. WSG-6 was a state file that vanished
 with the cause undetermined, and this is the half of that incident a tool can
 defend against.
 
-An ABSENT file still answers `start_fresh`, deliberately: a feature that has never
-been started is the common case and the callers that know better (the handoff
-skill's HANDOVER and TAKEOVER) check for the file before asking. Distinguishing
-"never existed" from "vanished" needs evidence this script does not have.
+An ABSENT file -- or a parsed file with no record for the feature -- answers
+`start_fresh` only when nothing on disk says the feature was ever worked. If its
+live phase documents exist (`docs/01-plan/features/<f>-brainstorm.md`, `.spec.md`,
+`.plan.md`, `.impl-plan.md`, `docs/02-design/features/<f>.design.md`, beside the
+state file's `docs/`), the record was LOST and the answer is `state_lost`: stop,
+restore or reconstruct the record, re-run. Measured 2026-10-07: a vanished state
+file over a feature with committed documents through Phase 6 answered `start_fresh`,
+which routes to "enter Phase 1". `docs/archive/` is never consulted -- an archived
+feature with no record closed its cycle, and re-using the name is a new one. A docs
+tree that cannot be searched is `cannot_judge`, not "no documents".
 
 v2.2 thresholds:
 - complete: last_completed_phase >= 7 (was 9 in v1)
@@ -29,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -126,6 +133,41 @@ def _host_verdict(session_id: str | None, host: str | None = None) -> str | None
     return CANNOT_JUDGE_WITHOUT_SESSION
 
 
+PHASE_DOC_SUFFIXES = (
+    ("01-plan/features", "-brainstorm.md"),
+    ("01-plan/features", ".spec.md"),
+    ("01-plan/features", ".plan.md"),
+    ("01-plan/features", ".impl-plan.md"),
+    ("02-design/features", ".design.md"),
+)
+
+
+def _has_phase_docs(state_file: Path, feature: str) -> bool:
+    """True when a live phase document for `feature` exists beside the state file.
+
+    Raises OSError when the tree cannot be searched: `Path.is_file()` would read
+    that as "no document", the could-not-look/found-nothing collapse.
+    """
+    docs = state_file.parent
+    for directory, suffix in PHASE_DOC_SUFFIXES:
+        try:
+            os.stat(docs / directory / (feature + suffix))
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+        return True  # M:RD-LOST-DOC
+    return False
+
+
+def _no_record(state_file: Path, feature: str) -> str:
+    try:
+        lost = _has_phase_docs(state_file, feature)
+    except OSError:
+        return "cannot_judge"  # M:RD-LOST-UNSEARCHABLE
+    if lost:
+        return "state_lost"
+    return "start_fresh"
+
+
 def decide(
     state_file: Path,
     feature: str,
@@ -137,7 +179,7 @@ def decide(
     if host_verdict is not None:
         return host_verdict
     if not state_file.is_file():
-        return "start_fresh"
+        return _no_record(state_file, feature)  # M:RD-LOST-ABSENT
     try:
         state = json.loads(state_file.read_text())
     except (json.JSONDecodeError, OSError):
@@ -150,7 +192,7 @@ def decide(
     orchestrator_state = state.get("orchestrator_state") or {}
     feat_state = orchestrator_state.get(feature)
     if not feat_state:
-        return "start_fresh"
+        return _no_record(state_file, feature)  # M:RD-LOST-NORECORD
     # Ownership is checked before halt: a halted feature held by a live session
     # is still held, and routing a second session to `halted` would send it to
     # fix something the first is already working on.
