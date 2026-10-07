@@ -326,6 +326,38 @@
       "find": "            if header == marker[:-1]:\n",
       "replace": "            if False:\n",
       "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_empty_header_path_is_judge_error"
+    },
+    {
+      "name": "F2-WORKDIR",
+      "_mechanism": "F2: the per-command tool_input.workdir is ignored, so a workdir-relative venv token is judged against the session cwd and a contained interpreter is refused.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    workdir = raw.get(\"workdir\") if isinstance(raw, dict) else None  # M:F2-WORKDIR",
+      "replace": "    workdir = None  # M:F2-WORKDIR",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_relative_venv_resolves_against_the_commands_workdir_not_the_session_cwd"
+    },
+    {
+      "name": "F2-WIRE",
+      "_mechanism": "F2: the shell judgement is fed the session cwd again instead of the command's own directory.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "not _safe_shell_command(command, root, _command_cwd(payload)):  # M:F2-WIRE",
+      "replace": "not _safe_shell_command(command, root, payload.get(\"cwd\")):  # M:F2-WIRE",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_relative_venv_resolves_against_the_commands_workdir_not_the_session_cwd"
+    },
+    {
+      "name": "F2-ESCAPE",
+      "_mechanism": "F2 fail-closed half: an out-of-root or ..-escaped workdir falls back to the root, vouching for a venv the command never runs.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if not os.path.isabs(os.path.expanduser(token)) and _cwd_escapes_root(root, cwd):  # M:F2-ESCAPE",
+      "replace": "    if False:  # M:F2-ESCAPE",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_a_workdir_outside_the_root_stays_refused"
+    },
+    {
+      "name": "F2-RELATIVE",
+      "_mechanism": "F2: a relative workdir is taken as-is rather than joined to the session cwd.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "        path = (Path(session).expanduser() if isinstance(session, str) and session else Path.cwd()) / path",
+      "replace": "        path = path",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_a_relative_workdir_joins_the_session_cwd"
     }
   ]
 }

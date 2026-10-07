@@ -307,8 +307,45 @@ def _trusted_executable(token: str) -> Path | None:
     return resolved if candidate.parent in TRUSTED_BIN_DIRS else None
 
 
+def _command_cwd(payload: dict[str, Any]) -> object:
+    """The directory the shell command runs in, which is not always the session's.
+
+    codex puts its SESSION cwd at the payload's top level and the shell call's own
+    directory in `tool_input.workdir` (exec_command, shell, shell_command). F2: a
+    codex launched with `--cd <repo>` ran `.venv/bin/python -m pytest` with workdir
+    `<repo>/hematology-paper-writer`; judged against the session cwd the token named
+    a venv that does not exist, and a contained interpreter was refused -- while the
+    inverse (session cwd in a sub-project, workdir elsewhere) admitted a venv the
+    command would never run. A relative workdir is relative to the session cwd.
+    """
+    session = payload.get("cwd")
+    raw = payload.get("tool_input")
+    workdir = raw.get("workdir") if isinstance(raw, dict) else None  # M:F2-WORKDIR
+    if not isinstance(workdir, str) or not workdir:
+        return session
+    path = Path(workdir).expanduser()
+    if not path.is_absolute():
+        path = (Path(session).expanduser() if isinstance(session, str) and session else Path.cwd()) / path
+    return str(path)
+
+
+def _cwd_escapes_root(root: Path, cwd: object) -> bool:
+    """A named cwd that does not resolve inside the root (absent, outside, `..`-escaped).
+
+    `_payload_cwd_base` falls such a cwd back to the root, which is right for judging
+    a write target and wrong for a relative interpreter: the command runs in the
+    named directory, so resolving its token under the root would vouch for a venv
+    the command never executes.
+    """
+    if not isinstance(cwd, str) or not cwd:
+        return False
+    return _payload_cwd_base(root, cwd) == root and Path(cwd).expanduser().resolve() != root
+
+
 def _contained_venv_executable(token: str, root: Path, cwd: object) -> Path | None:
     if "/" not in token:
+        return None
+    if not os.path.isabs(os.path.expanduser(token)) and _cwd_escapes_root(root, cwd):  # M:F2-ESCAPE
         return None
     path = Path(os.path.normpath(os.path.join(str(_payload_cwd_base(root, cwd)), os.path.expanduser(token))))  # M:G10
     if not (path.name.startswith("python") and path.parent.name == "bin" and path.parent.parent.name == ".venv"):
@@ -532,7 +569,7 @@ def _main_guarded() -> int:
 
     if command and phase5_status == "unknown":
         return _deny("H-MAD state is unreadable; refusing shell execution fail-closed.")
-    if command and phase5_status == "active" and not _safe_shell_command(command, root, payload.get("cwd")):
+    if command and phase5_status == "active" and not _safe_shell_command(command, root, _command_cwd(payload)):  # M:F2-WIRE
         allowance = _shell_allowance(root)
         if isinstance(allowance, str):
             return _deny(f"H-MAD Phase 5 shell allowance {allowance}; refusing fail-closed.")

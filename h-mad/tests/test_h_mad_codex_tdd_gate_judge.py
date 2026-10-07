@@ -832,6 +832,57 @@ def test_shell_venv_token(shell_rows, name, expected):
     assert verdict == expected, f"{name}: venv token must be {expected}: {verdict}: {reason}"
 
 
+def _exec_workdir_verdict(root: Path, session_cwd: Path, workdir: str, command: str) -> tuple[str, str]:
+    """codex's real exec_command shape: the SESSION cwd at top level, the shell's own
+    directory in tool_input.workdir (observed in codex rollouts, 2026-07..10)."""
+    verdict, reason, _ = _run(
+        root, {"tool_name": "exec_command", "cwd": str(session_cwd),
+               "tool_input": {"cmd": command, "workdir": workdir}}, path="/usr/bin:/bin",
+    )
+    return verdict, reason
+
+
+def test_relative_venv_resolves_against_the_commands_workdir_not_the_session_cwd(shell_rows):
+    """F2 (HemaSuite citation-fidelity-blind-adjudication, Phase 5): codex ran with
+    `--cd <repo root>` and issued `.venv/bin/python -m pytest` with workdir
+    `<repo>/hematology-paper-writer`. The gate resolved the token against the session
+    cwd, found no `<root>/.venv`, and refused a contained interpreter."""
+    row = next(row for row in shell_rows if row.name == "contained/sub-cwd/pytest")
+    verdict, reason = _exec_workdir_verdict(row.root, row.root, str(row.cwd), row.command)
+    assert verdict == "allow", f"workdir-relative venv must resolve under the workdir: {verdict}: {reason}"
+
+
+def test_a_relative_workdir_joins_the_session_cwd(shell_rows):
+    """`.` names the SESSION cwd (the sub-project here), not the hook process's cwd
+    (the root, which has no venv): taken as-is it would resolve under the root."""
+    row = next(row for row in shell_rows if row.name == "contained/sub-cwd/pytest")
+    assert not (row.root / ".venv").exists(), "fixture drift: the root must have no venv"
+    verdict, reason = _exec_workdir_verdict(row.root, row.cwd, ".", row.command)
+    assert verdict == "allow", f"relative workdir must join the session cwd: {verdict}: {reason}"
+
+
+@pytest.mark.parametrize("shape", ["outside-absolute", "dotdot-escape", "absent"])
+def test_a_workdir_outside_the_root_stays_refused(tmp_path, shape):
+    """Fail-closed: the workdir is honoured, never trusted. The ROOT carries a contained
+    venv here on purpose -- falling an out-of-root workdir back to the root (as a write
+    target's cwd does) would vouch for `<root>/.venv` while the command runs elsewhere."""
+    root = tmp_path / "root"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q", str(root)], check=True, stdin=subprocess.DEVNULL,
+                   timeout=30.0, env=hermetic_env())
+    write_state(root, {"feat": {"phase": "step5"}})
+    build_venv(root / ".venv", with_pytest=True)
+    outside = tmp_path / "elsewhere"
+    build_venv(outside / ".venv", with_pytest=True)
+    workdir = {"outside-absolute": str(outside), "dotdot-escape": "../elsewhere",
+               "absent": str(root / "no-such-dir")}[shape]
+    command = ".venv/bin/python -m pytest tests/test_x.py"
+    control, why = _exec_workdir_verdict(root, root, str(root), command)
+    assert control == "allow", f"positive control: the root's own venv must be admitted: {control}: {why}"
+    verdict, reason = _exec_workdir_verdict(root, root, workdir, command)
+    assert verdict == "deny", f"{shape}: an out-of-root workdir must not admit a venv: {verdict}: {reason}"
+
+
 @pytest.mark.parametrize("case,expected", [
     ("contained-venv", "allow"),
     ("usr-bin-python3-control", "allow"),
