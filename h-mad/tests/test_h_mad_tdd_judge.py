@@ -77,12 +77,26 @@ def _cli(*args):
                           capture_output=True, text=True, timeout=60.0, check=False)
 
 
+# A sleeper must fork `sleep` and write its pid BEFORE the run's deadline kills its group.
+# At 1.0s that margin was what the judge's own pre-spawn work left over, and a loaded suite
+# run spent it: the judge still reported `timeout` correctly, but nothing was ever written
+# and `_pid_gone` failed "never wrote its child pid" (measured: a 0.2s budget reports
+# `timeout` with no pidfile, 4/4). 3s leaves the start-up the margin it needs.
+SLEEPER_BUDGET_S = 3.0
+
+
 def _pid_gone(pidfile):
-    deadline = time.monotonic() + 0.5
+    """The sleeper's `sleep` child is gone. Each wait has its own deadline and its own
+    message, so a failure says which half was slow: the pid was never written (the group
+    died before the sleeper reached `echo`), or the killed child outlived the wait."""
+    deadline = time.monotonic() + 5.0
     while not pidfile.exists() and time.monotonic() < deadline:
         time.sleep(0.01)
-    assert pidfile.exists(), "sleeper never wrote its child pid"
+    assert pidfile.exists(), (
+        "sleeper never wrote its child pid: the run's deadline killed its group before the "
+        "sleeper started, so nothing about reaping was measured")
     pid = int(pidfile.read_text())
+    deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
         try:
             os.kill(pid, 0)
@@ -456,10 +470,11 @@ def test_run_bounded_kills_the_process_group(tmp_path):
     pidfile = tmp_path / "child.pid"
     script = sleeper(tmp_path / "runner", pidfile, 30)
     start = time.monotonic()
-    _, _, _, timed_out, _, reap_failed = judge._run_bounded([str(script)], root, start + 1.0)
+    _, _, _, timed_out, _, reap_failed = judge._run_bounded([str(script)], root,
+                                                            start + SLEEPER_BUDGET_S)
     assert timed_out
     assert reap_failed is False
-    assert time.monotonic() - start < 6.0
+    assert time.monotonic() - start < SLEEPER_BUDGET_S + 5.0
     _pid_gone(pidfile)
 
 
@@ -483,10 +498,10 @@ def test_run_bounded_plain_timeout_is_not_reap_failure(tmp_path):
     pidfile = tmp_path / "ordinary.pid"
     script = sleeper(tmp_path / "runner", pidfile, 30)
     start = time.monotonic()
-    result = judge._run_bounded([str(script)], root, start + 1.0)
+    result = judge._run_bounded([str(script)], root, start + SLEEPER_BUDGET_S)
     assert result.timed_out is True
     assert result.reap_failed is False
-    assert time.monotonic() - start < 4.0
+    assert time.monotonic() - start < SLEEPER_BUDGET_S + 3.0
     _pid_gone(pidfile)
 
 
@@ -558,10 +573,10 @@ def test_name_map_runs_under_the_budget(tmp_path, monkeypatch):
     script = sleeper(tmp_path / "map.sh", pidfile, 30)
     monkeypatch.setattr(judge, "NAME_MAP", script)
     start = time.monotonic()
-    verdict = judge.judge(root, _target(root, "tools/x.py"), (), budget_s=1.0,
+    verdict = judge.judge(root, _target(root, "tools/x.py"), (), budget_s=SLEEPER_BUDGET_S,
                           fallback_interpreter=sys.executable)
     assert _kind(verdict) == "timeout"
-    assert time.monotonic() - start < 6.0
+    assert time.monotonic() - start < SLEEPER_BUDGET_S + 5.0
     _pid_gone(pidfile)
 
 
@@ -821,10 +836,10 @@ def test_timeout_kind(tmp_path):
     python = fake_venv(root / "hematology-paper-writer", "exit 0")
     sleeper(python, pidfile, 30)
     start = time.monotonic()
-    verdict = judge.judge(root, target, _records(root), budget_s=1.0,
+    verdict = judge.judge(root, target, _records(root), budget_s=SLEEPER_BUDGET_S,
                           fallback_interpreter=sys.executable)
     assert _kind(verdict) == "timeout"
-    assert time.monotonic() - start < 6.0
+    assert time.monotonic() - start < SLEEPER_BUDGET_S + 5.0
     _pid_gone(pidfile)
 
 
