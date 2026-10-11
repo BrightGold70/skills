@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-12 · pattern · [0.5] · `handoff,carry-forward,watch-items,handoff:2026-10-12-fence-probe-hmad-todo-rebuild` — A carried 'watch X' item needs its own close condition. A blast-radius watch rode 5 handoffs after its risk had been disproved (the lane ran 19 tasks under the new gates). Record what would close it when you open it.
+- 2026-10-12 · gotcha · [0.5] · `pytest,rtk,python-version,background,handoff:2026-10-12-fence-probe-hmad-todo-rebuild` — A foreground python3 -m pytest passes because rtk rewrites it; the same command backgrounded with a redirect hits homebrew 3.14: 'No module named pytest'. Pin /opt/anaconda3/bin/python3 for background suites.
 - 2026-10-08 · gotcha · [0.7] · `bash,bash-3.2,heredoc,pinned-bash,handoff:2026-10-08-token-weather-memory-probes` — bash 3.2 rejects an apostrophe inside a $(cat <<'EOF' ... EOF) heredoc body (unexpected EOF looking for matching '); bash 5 parses it. Feature-regex scans miss it; only /bin/bash -n catches it.
 - 2026-10-07 · pattern · [0.5] · `worktrees,multi-machine,handoff:2026-10-07-runtime-guard-pinned-bash` — Before deleting stale agent-* worktrees, diff each against origin: a cherry-picked backup missed a review fix (61b7525a) and a never-picked commit; push or archive before switching machines.
 - 2026-10-07 · gotcha · [0.7] · `mutation-harness,handoff:2026-10-07-runtime-guard-pinned-bash` — Editing any tracked file while a mutation sweep runs voids it (TREE_MOVED, nothing scored). Commit first, sweep, touch nothing until it reports.
