@@ -1,0 +1,83 @@
+{
+  "_why": "Skill-candidates rows 2495 + 2478. Each row removes one tier or one fail-closed path of local_only_commits.py.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_local_only_commits.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "no-ancestor-tier",
+      "_mechanism": "Without the ancestor check a fast-forwarded branch falls through to `git cherry`, which lists nothing, and reads ON_BASE via=patch instead of MERGED.",
+      "file": "scripts/local_only_commits.py",
+      "find": "    if _ok(repo, \"merge-base\", \"--is-ancestor\", sha, base):",
+      "replace": "    if False:",
+      "test": "tests/test_local_only_commits.py::test_a_branch_whose_tip_is_on_main_is_merged"
+    },
+    {
+      "name": "no-tree-tier",
+      "_mechanism": "Row 2478 restored: a squash-merged branch reads UNIQUE, because each commit is `+` to `git cherry`.",
+      "file": "scripts/local_only_commits.py",
+      "find": "    if changed and all(tip_tree.get(p) == base_tree.get(p) for p in changed):",
+      "replace": "    if False:",
+      "test": "tests/test_local_only_commits.py::test_a_squash_merged_branch_is_on_base_by_tree_though_cherry_says_unique"
+    },
+    {
+      "name": "tree-tier-compares-nothing",
+      "_mechanism": "The fail-open the per-path compare exists to avoid: comparing no paths makes every branch ON_BASE.",
+      "file": "scripts/local_only_commits.py",
+      "find": "    if changed and all(tip_tree.get(p) == base_tree.get(p) for p in changed):",
+      "replace": "    if all(tip_tree.get(p) == base_tree.get(p) for p in []):",
+      "test": "tests/test_local_only_commits.py::test_a_branch_with_its_own_content_is_unique"
+    },
+    {
+      "name": "no-fetch-by-default",
+      "_mechanism": "The incident restored: a stale local origin/main reads a branch already on the remote main as UNIQUE.",
+      "file": "scripts/local_only_commits.py",
+      "find": "    if fetch:\n        proc = subprocess.run([\"git\", \"-C\", str(repo), \"fetch\", \"--quiet\", \"origin\"],",
+      "replace": "    if False:\n        proc = subprocess.run([\"git\", \"-C\", str(repo), \"fetch\", \"--quiet\", \"origin\"],",
+      "test": "tests/test_local_only_commits.py::test_a_stale_local_origin_main_is_the_incident_and_fetch_fixes_it"
+    },
+    {
+      "name": "failed-fetch-answers-anyway",
+      "_mechanism": "A fetch that fails leaves the stale base and still produces a verdict against it.",
+      "file": "scripts/local_only_commits.py",
+      "find": "        if proc.returncode != 0:\n            raise Unreadable(\"fetch_failed",
+      "replace": "        if False:\n            raise Unreadable(\"fetch_failed",
+      "test": "tests/test_local_only_commits.py::test_a_failed_fetch_is_unreadable_not_a_stale_verdict"
+    },
+    {
+      "name": "detached-heads-skipped",
+      "_mechanism": "Detached linked-worktree HEADs, where h-mad lanes park, drop out of the audit.",
+      "file": "scripts/local_only_commits.py",
+      "find": "        elif line == \"detached\" and head:",
+      "replace": "        elif False:",
+      "test": "tests/test_local_only_commits.py::test_a_detached_linked_worktree_head_is_audited"
+    },
+    {
+      "name": "unresolved-base-is-a-verdict",
+      "_mechanism": "A base that does not resolve no longer refuses, so the run fails later or answers against nothing.",
+      "file": "scripts/local_only_commits.py",
+      "find": "        raise Unreadable(f\"base_unresolved: {base}\")",
+      "replace": "        pass",
+      "test": "tests/test_local_only_commits.py::test_an_unresolvable_base_is_unreadable_not_merged"
+    },
+    {
+      "name": "partial-reads-unique",
+      "_mechanism": "A branch half on the base is reported as wholly unique, which hides that some work landed.",
+      "file": "scripts/local_only_commits.py",
+      "find": "    verdict = \"PARTIAL\" if len(unique) < len(marks) else \"UNIQUE\"",
+      "replace": "    verdict = \"UNIQUE\"",
+      "test": "tests/test_local_only_commits.py::test_a_branch_with_one_landed_and_one_unique_commit_is_partial"
+    }
+  ]
+}
