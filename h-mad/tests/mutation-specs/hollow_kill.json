@@ -1,0 +1,75 @@
+{
+  "_why": "Skill-candidates row 'a hollow-kill detector'. Each condition of `hollow_kill` / `replacement_span` and each place it is wired, disabled once.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_mutation_harness.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-site-is-the-outermost-frame-in-the-file",
+      "_mechanism": "Reads the FIRST frame naming the mutated file instead of the deepest: `<module>` calling `main()` is then blamed, and a span covering only the call line reads hollow though nothing was raised there.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if lines and first <= lines[-1] <= last:\n            return f\"{exception} at {target}:{lines[-1]}\"",
+      "replace": "        if lines and first <= lines[0] <= last:\n            return f\"{exception} at {target}:{lines[0]}\"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_the_site_is_the_DEEPEST_frame_in_the_mutated_file_not_the_outermost"
+    },
+    {
+      "name": "a-guards-own-exception-reads-hollow",
+      "_mechanism": "Drops the builtin filter. A guard's own refusal (`StateWriteError`, `SpecError`) raised at the replacement — the 2026-10-04 sweep's commonest real crash kill — would be called hollow.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if exception not in _BUILTIN_EXCEPTIONS:\n            continue\n",
+      "replace": "",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_guards_own_exception_or_assertion_is_never_hollow"
+    },
+    {
+      "name": "a-deletion-gets-a-span",
+      "_mechanism": "A blank replacement gets the line it deleted as its span, so whatever crash lands on the line that moved up is blamed on code that does not exist.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if not replace.strip():\n        return None\n    offset",
+      "replace": "    offset",
+      "test": "tests/test_h_mad_mutation_harness.py::test_an_empty_replacement_has_no_span_and_is_never_hollow"
+    },
+    {
+      "name": "the-span-stops-at-the-first-line",
+      "_mechanism": "A multi-line replacement is scored on its first line only, so a crash on its later lines reads as downstream.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return first, first + replace.count(\"\\n\")",
+      "replace": "    return first, first",
+      "test": "tests/test_h_mad_mutation_harness.py::test_an_empty_replacement_has_no_span_and_is_never_hollow"
+    },
+    {
+      "name": "the-targeted-branch-stops-reporting-hollow",
+      "_mechanism": "The wire, severed on the targeted path: `hollow_kill` still works and nothing calls it, so `hollow_kills=0` everywhere — the exact silence the row exists to end.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                            detail += _hollow_note(result, pin_output, mutation[\"file\"], span)\n",
+      "replace": "",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_hollow_kill_is_counted_and_annotated_but_still_caught"
+    },
+    {
+      "name": "the-untargeted-branch-stops-reporting-hollow",
+      "_mechanism": "Same wire on the untargeted path, which once lacked every other classification too.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                        mechanism += _hollow_note(result, suite_output, mutation[\"file\"], span)\n",
+      "replace": "",
+      "test": "tests/test_h_mad_mutation_harness.py::test_an_untargeted_hollow_kill_is_classified_too"
+    },
+    {
+      "name": "the-sweep-drops-hollow-lines",
+      "_mechanism": "The corpus reading the refusal must be calibrated on is thrown away: a sweep forwards crash and timeout kills but not which of them were hollow.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            for kind in (\"crash\", \"hollow\", \"timeout\"):",
+      "replace": "            for kind in (\"crash\", \"timeout\"):",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_forwards_each_hollow_kill_with_its_mutation"
+    }
+  ]
+}

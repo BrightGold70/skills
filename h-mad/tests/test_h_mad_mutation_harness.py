@@ -3728,3 +3728,177 @@ def test_an_untargeted_mutation_that_stops_the_file_parsing_is_refused_not_caugh
     assert result["verdict"] == "REFUSED", result
     assert result["caught"] == 0, result
     assert "did not parse" in result["refused"][0], result["refused"]
+
+
+# --- hollow-kill detection (skill-candidates row "a hollow-kill detector") ---
+#
+# A crash kill is counted `caught` and annotated, because a crash can BE the
+# property violation (strip a None-check and the graceful-message test fails on
+# an `AttributeError`). What a crash kill could not say is whether the mutant
+# ever reached the property. Measured 2026-09-14 over 92 specs: 4 of 12 genuine
+# crash kills were hollow — a kwarg that does not exist, a name never written, a
+# deleted regex group, an int/str comparison — and each died INSIDE the text the
+# mutation had just written. The exception type cannot separate them from real
+# crash kills (the 2026-10-04 calibration had two real `TypeError`s); the SITE
+# can. A builtin exception whose deepest frame in the mutated file lies within
+# the replacement's own lines means the new code failed to run — not that the
+# guard was disabled and something downstream noticed.
+
+SUBPROCESS_STDLIB_INNERMOST = '''\
+E       AssertionError: Traceback (most recent call last):
+E           File "/tmp/proj/guard.py", line 20, in <module>
+E             sys.exit(main())
+E           File "/tmp/proj/guard.py", line 13, in main
+E             print(m.group("gone"))
+E           File "/opt/py/lib/python3.12/re/__init__.py", line 200, in group
+E             return _inner()
+E         IndexError: no such group
+
+test_guard.py:15: AssertionError
+'''
+
+SUBPROCESS_OWN_REFUSAL = '''\
+E       AssertionError: Traceback (most recent call last):
+E           File "/tmp/proj/guard.py", line 13, in main
+E             raise StateWriteError("refused")
+E         guard.StateWriteError: refused
+
+test_guard.py:15: AssertionError
+'''
+
+ASSERTION_IN_MUTATED_FILE = '''\
+>       assert over(6)
+E       assert False
+
+guard.py:13: AssertionError
+'''
+
+
+def test_a_crash_inside_the_replacement_span_is_hollow() -> None:
+    hollow = h_mad_mutation_harness.hollow_kill
+    assert hollow(SUBPROCESS_NAMEERROR, "guard.py", (13, 13)) == "NameError at guard.py:13"
+    assert hollow(DIRECT_IMPORT_NAMEERROR, "guard.py", (9, 9)) == "NameError at guard.py:9"
+
+
+def test_a_crash_outside_the_replacement_span_is_not_hollow() -> None:
+    """The inverse. A crash downstream of the new text is what a disabled guard
+    LOOKS like, and is exactly the case tier 2 refuses to judge."""
+    hollow = h_mad_mutation_harness.hollow_kill
+    assert hollow(SUBPROCESS_NAMEERROR, "guard.py", (3, 3)) is None
+    assert hollow(SUBPROCESS_NAMEERROR, "guard.py", (14, 16)) is None
+    assert hollow(SUBPROCESS_NAMEERROR, "guard.py", (12, 12)) is None
+
+
+def test_the_site_is_the_DEEPEST_frame_in_the_mutated_file_not_the_outermost() -> None:
+    """`<module>` at line 20 calls `main` at line 13; a span covering only line 20
+    did not raise anything — it called the code that did."""
+    hollow = h_mad_mutation_harness.hollow_kill
+    assert hollow(SUBPROCESS_NAMEERROR, "guard.py", (20, 20)) is None
+
+
+def test_a_stdlib_frame_below_the_replacement_still_makes_it_hollow() -> None:
+    """`m.group("gone")` raises from inside `re`, so the innermost frame overall
+    is the stdlib's. The mutated file's deepest frame is still the replacement."""
+    hollow = h_mad_mutation_harness.hollow_kill
+    assert hollow(SUBPROCESS_STDLIB_INNERMOST, "guard.py", (13, 13)) == \
+        "IndexError at guard.py:13"
+
+
+def test_a_guards_own_exception_or_assertion_is_never_hollow() -> None:
+    """A non-builtin exception is a guard's own refusal (`StateWriteError` IS the
+    property in several committed specs); an `AssertionError` is a guard firing."""
+    hollow = h_mad_mutation_harness.hollow_kill
+    assert hollow(SUBPROCESS_OWN_REFUSAL, "guard.py", (13, 13)) is None
+    assert hollow(ASSERTION_IN_MUTATED_FILE, "guard.py", (13, 13)) is None
+
+
+def test_an_empty_replacement_has_no_span_and_is_never_hollow() -> None:
+    """A deletion writes no code, so nothing can fail to run at its own site."""
+    assert h_mad_mutation_harness.replacement_span("a\nb\nc\n", "b\n", "") is None
+    assert h_mad_mutation_harness.replacement_span("a\nb\nc\n", "b", "   ") is None
+    assert h_mad_mutation_harness.replacement_span("a\nb\nc\n", "b", "x") == (2, 2)
+    assert h_mad_mutation_harness.replacement_span("a\nb\nc\n", "b", "x\ny") == (2, 3)
+    assert h_mad_mutation_harness.hollow_kill(SUBPROCESS_NAMEERROR, "guard.py", None) is None
+
+
+def test_a_hollow_kill_is_counted_and_annotated_but_still_caught(tmp_path: Path) -> None:
+    """Published, not yet refused: the refusal is wired only once a corpus sweep
+    shows the predicate fires on no crash that IS the property."""
+    spec = _crash_project(tmp_path, [
+        {"name": "unbind the printed name", "file": "guard.py",
+         "find": 'print("OVER")', "replace": "print(OVER)", "test": CRASH_PIN},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result["crash_kills"] == 1, result
+    assert result["hollow_kills"] == 1, result
+    mechanism = result["mechanism"]["unbind the printed name"]
+    assert "(hollow: NameError at guard.py:13 " in mechanism, mechanism
+
+
+def test_a_multi_line_replacement_is_hollow_on_its_last_line(tmp_path: Path) -> None:
+    spec = _crash_project(tmp_path, [
+        {"name": "add an unbound print", "file": "guard.py",
+         "find": 'print("OVER")', "replace": 'x = 0\n        print(OVR)',
+         "test": CRASH_PIN},
+    ])
+    result = run_spec(spec)
+
+    assert result["hollow_kills"] == 1, result
+    assert "(hollow: NameError at guard.py:14 " in result["mechanism"]["add an unbound print"]
+
+
+def test_a_crash_downstream_of_the_replacement_is_a_crash_kill_not_hollow(
+    tmp_path: Path
+) -> None:
+    """The live inverse: `LIMIT = "5"` is written on line 3 and runs fine there;
+    the `TypeError` fires at `value > LIMIT` on line 12."""
+    spec = _crash_project(tmp_path, [
+        {"name": "stringify the limit", "file": "guard.py",
+         "find": "LIMIT = 5", "replace": 'LIMIT = "5"', "test": CRASH_PIN},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result["crash_kills"] == 1, result
+    assert result["hollow_kills"] == 0, result
+    assert "hollow:" not in result["mechanism"]["stringify the limit"]
+
+
+def test_an_untargeted_hollow_kill_is_classified_too(tmp_path: Path) -> None:
+    spec = _crash_project(tmp_path, [
+        {"name": "unbind the printed name", "file": "guard.py",
+         "find": 'print("OVER")', "replace": "print(OVER)"},
+    ])
+    result = run_spec(spec)
+
+    assert result["hollow_kills"] == 1, result
+    assert "(hollow: NameError at guard.py:13 " in result["mechanism"]["unbind the printed name"]
+
+
+def test_the_summary_line_carries_hollow_kills_appended_last(tmp_path: Path) -> None:
+    spec = _crash_project(tmp_path, [
+        {"name": "unbind the printed name", "file": "guard.py",
+         "find": 'print("OVER")', "replace": "print(OVER)", "test": CRASH_PIN},
+    ])
+    proc = _run_cli(spec)
+
+    summary = [l for l in proc.stdout.splitlines() if l.startswith("MUTATION:")]
+    assert len(summary) == 1, proc.stdout
+    assert re.search(r" untargeted=0/1 hollow_kills=1(\s|$)", summary[0]), proc.stdout
+    src = HARNESS.read_text(encoding="utf-8")
+    assert src.index("untargeted={result") < src.index("hollow_kills={result"), \
+        "hollow_kills must stay AFTER untargeted — left-to-right readers"
+
+
+def test_sweep_forwards_each_hollow_kill_with_its_mutation(tmp_path: Path) -> None:
+    spec = _crash_project(tmp_path, [
+        {"name": "unbind the printed name", "file": "guard.py",
+         "find": 'print("OVER")', "replace": "print(OVER)", "test": CRASH_PIN},
+    ])
+
+    proc = _sweep(spec)
+
+    assert (f"  kill: {spec} :: unbind the printed name :: hollow: NameError at guard.py:13 "
+            in proc.stdout), proc.stdout

@@ -12,9 +12,9 @@ This is that harness, once.
 
 Verdicts, printed as a canonical token:
 
-    MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=19/19 timeout_kills=0 untargeted=0/7 exit 0
-    MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0 unreadable=0 crash_kills=1 crash_visible=12/19 timeout_kills=0 untargeted=0/7 exit 0
-    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1 unreadable=0 crash_kills=0 crash_visible=19/19 timeout_kills=1 untargeted=7/7 exit 2
+    MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=19/19 timeout_kills=0 untargeted=0/7 hollow_kills=0 exit 0
+    MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0 unreadable=0 crash_kills=1 crash_visible=12/19 timeout_kills=0 untargeted=0/7 hollow_kills=1 exit 0
+    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1 unreadable=0 crash_kills=0 crash_visible=19/19 timeout_kills=1 untargeted=7/7 hollow_kills=0 exit 2
     MUTATION: PRECHECK_FAILED specs=3 drifted=1 unreadable=0               exit 2
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
@@ -138,6 +138,19 @@ never "none there". `crash_visible=M/T` on the token line is that caveat made
 reportable: T returncode assertions in the files this spec targets, M of which
 carry a message and could surface a traceback at all. `crash_kills=0` beside
 `crash_visible=19/19` is evidence; beside `12/19` it is a partial reading.
+
+Tier 2 has one sub-case the harness CAN name: the **hollow** crash kill,
+published as `hollow_kills=N` (a subset of `crash_kills`) and annotated
+`(hollow: NameError at foo.py:12 …)`. A builtin exception whose deepest frame in
+the mutated file lies within the lines the replacement wrote means the new text
+itself failed to run — a name never defined, a kwarg that does not exist — so
+the kill is about the mutation, not the guard. Site, not type, discriminates:
+the 2026-10-04 sweep had real `TypeError` kills too. Replayed against the
+2026-09-14 hollow five it flags 3; the other 2 crash DOWNSTREAM of a poisoned
+value (an int/str comparison, a deleted regex group read later), which is what
+a disabled guard looks like, and they stay plain crash kills. Still counted
+`caught`: a refusal waits on a corpus sweep showing the predicate fires on no
+crash that IS the property. See `hollow_kill`.
 
 What stays with the author: whether the mechanism that fired is the mechanism
 the spec claims. The harness reports; it never judges that. `_mechanism` on a
@@ -508,7 +521,7 @@ _TRACEBACK_HEADER = "Traceback (most recent call last):"
 # `EnvironmentError:` are terminal lines, not markers, and `^\s*E\s*` would eat
 # their first letter and classify them as `OFError`.
 _PYTEST_MARKER = re.compile(r"^\s*E\s+")
-_FRAME_LINE = re.compile(r'^File "([^"]+)", line \d+')
+_FRAME_LINE = re.compile(r'^File "([^"]+)", line (\d+)')
 # Dotted names are as real a terminal line as the bare ones:
 # `json.decoder.JSONDecodeError: Expecting value` is what this suite's
 # subprocess tests actually surface.
@@ -516,7 +529,7 @@ _TERMINAL_LINE = re.compile(r"^([\w.]+(?:Error|Exception)): ")
 # pytest's own failure footer — `guard.py:9: NameError` — which is the ONLY
 # attribution a direct-import failure carries: pytest prints no `Traceback`
 # header of its own, so there are no `File "…"` frames to read.
-_PYTEST_FOOTER = re.compile(r"^(.+?\.py):\d+: ([\w.]+(?:Error|Exception))$")
+_PYTEST_FOOTER = re.compile(r"^(.+?\.py):(\d+): ([\w.]+(?:Error|Exception))$")
 # A timeout kill, which `_TERMINAL_LINE` structurally cannot see: the name
 # `subprocess.TimeoutExpired` carries neither `Error` nor `Exception`. It is
 # matched on its OWN pattern rather than by widening that one, because the two
@@ -539,6 +552,8 @@ DID_NOT_PARSE = ("SyntaxError", "IndentationError", "TabError")
 
 def crash_reports(output: str) -> list[tuple[str, list[str]]]:
     """Every crash report in a run's output, as (exception type, file basenames).
+
+    The basename view of `crash_sites`, which also keeps each frame's line.
 
     A bare `Traceback` search is far too loose to build a verdict on: at least
     one test in this suite asserts on crash-related WORDS as its subject matter
@@ -564,8 +579,19 @@ def crash_reports(output: str) -> list[tuple[str, list[str]]]:
     stderr, and its crash kill is indistinguishable from an ordinary assertion
     failure. `crash_kills=0` therefore means "none found", never "none there".
     """
-    reports: list[tuple[str, list[str]]] = []
-    frames: list[str] = []
+    return [(exception, [name for name, _ in frames])
+            for exception, frames in crash_sites(output)]
+
+
+def crash_sites(output: str) -> list[tuple[str, list[tuple[str, int]]]]:
+    """`crash_reports` with each frame's line kept: (exception, [(basename, line)]).
+
+    Frames are in traceback order, outermost first, so the LAST frame naming a
+    file is that file's deepest. `hollow_kill` needs the line; every other reader
+    needs only the basename and goes through `crash_reports`.
+    """
+    reports: list[tuple[str, list[tuple[str, int]]]] = []
+    frames: list[tuple[str, int]] = []
     for raw in output.splitlines():
         line = _PYTEST_MARKER.sub("", raw, count=1).strip()
 
@@ -587,8 +613,9 @@ def crash_reports(output: str) -> list[tuple[str, list[str]]]:
             # traceback embedded in an assertion message is recognised by the
             # frames path above, whose terminal line is the real exception. So this
             # narrows exactly one spelling and loses no detection.
-            if footer.group(2) != "AssertionError":
-                reports.append((footer.group(2), [Path(footer.group(1)).name]))
+            if footer.group(3) != "AssertionError":
+                reports.append((footer.group(3),
+                                [(Path(footer.group(1)).name, int(footer.group(2)))]))
             frames = []
             continue
 
@@ -607,7 +634,7 @@ def crash_reports(output: str) -> list[tuple[str, list[str]]]:
 
         frame = _FRAME_LINE.match(line)
         if frame:
-            frames.append(Path(frame.group(1)).name)
+            frames.append((Path(frame.group(1)).name, int(frame.group(2))))
     return reports
 
 
@@ -623,6 +650,82 @@ def crash_kill(output: str, mutated_file: str) -> str | None:
         if target in files:
             return exception
     return None
+
+
+# Builtin exception names, the only ones `hollow_kill` will call hollow. A
+# non-builtin is a guard's OWN refusal (`StateWriteError`, `SpecError`,
+# `RegistryError` all appeared as real crash kills in the 2026-10-04 sweep), and
+# `AssertionError` is a guard firing.
+_BUILTIN_EXCEPTIONS = frozenset(
+    name for name, obj in vars(__import__("builtins")).items()
+    if isinstance(obj, type) and issubclass(obj, BaseException)
+) - {"AssertionError"}
+
+
+def replacement_span(source: str, find: str, replace: str) -> tuple[int, int] | None:
+    """The 1-based (first, last) lines `replace` occupies once written over `find`.
+
+    None when `replace` is blank: a deletion writes no code, so nothing can fail
+    to run at its own site, and whatever crashes afterwards is downstream.
+    """
+    if not replace.strip():
+        return None
+    offset = source.find(find)
+    if offset < 0:
+        return None
+    first = source.count("\n", 0, offset) + 1
+    return first, first + replace.count("\n")
+
+
+def hollow_kill(output: str, mutated_file: str,
+                span: tuple[int, int] | None) -> str | None:
+    """`"<Exception> at <file>:<line>"` when a crash died INSIDE the replacement.
+
+    Tier 2 counts every crash kill as caught because a crash can BE the property
+    violation — strip a None-check and the graceful-message test fails on an
+    `AttributeError` raised further on. What it could not say is whether the
+    mutant ever RAN. A builtin exception whose deepest frame in the mutated file
+    lies within the lines the mutation just wrote says it did not: the new text
+    itself failed (a name never defined, a kwarg that does not exist, a regex
+    group that was deleted), so the kill is evidence about the mutation, not
+    about the guard. Measured 2026-09-14: 4 of 12 genuine crash kills had this
+    shape, and the exception TYPE could not have found them — the 2026-10-04
+    calibration had two real `TypeError` kills beside them.
+
+    The DEEPEST frame in the file, not the innermost overall: `m.group("gone")`
+    raises from inside `re`, and the mutated file's last frame is still the
+    replacement. Not the outermost either: `<module>` calling `main()` raised
+    nothing itself.
+
+    What this cannot see, and says so rather than guessing: a mutant that
+    poisons a VALUE whose crash fires downstream. `wraps = (lambda …)` instead
+    of a tuple (2026-10-06) runs fine on its own line and raises `TypeError` two
+    lines later at `for wrap in wraps`, which is exactly what a disabled guard
+    looks like from the traceback. That stays an ordinary crash kill, for the
+    author to read.
+    """
+    if span is None:
+        return None
+    target = Path(mutated_file).name
+    first, last = span
+    for exception, frames in crash_sites(output):
+        if exception not in _BUILTIN_EXCEPTIONS:
+            continue
+        lines = [line for name, line in frames if name == target]
+        if lines and first <= lines[-1] <= last:
+            return f"{exception} at {target}:{lines[-1]}"
+    return None
+
+
+def _hollow_note(result: dict, output: str, mutated_file: str,
+                 span: tuple[int, int] | None) -> str:
+    """Count a hollow crash kill on `result` and return its mechanism suffix."""
+    site = hollow_kill(output, mutated_file, span)
+    if not site:
+        return ""
+    result["hollow_kills"] += 1
+    return (f" (hollow: {site} inside the replacement — the mutant's own new text "
+            f"failed to run, so this kill says nothing about the guard)")
 
 
 def timeout_kill(output: str) -> str | None:
@@ -1360,6 +1463,12 @@ def _run_spec_holding_the_tree(
         # guard biting — a guard that fires RETURNS, it does not hang — so a
         # non-zero here is a prompt to go and look, not a reassurance.
         "timeout_kills": 0,
+        # A SUBSET of `crash_kills`: crashes whose deepest frame in the mutated
+        # file lies inside the lines the replacement wrote, i.e. the mutant's own
+        # new text failed to run (`hollow_kill`). PUBLISHED, not refused: a
+        # refusal is wired only once a corpus sweep shows it fires on no crash
+        # that is the property itself.
+        "hollow_kills": 0,
         # How many of this run's mutations were scored WITHOUT a `test` key, and
         # therefore against the whole suite rather than against a named pin. Not
         # a fault and not a subset of anything — a measurement of how much of
@@ -1531,6 +1640,7 @@ def _run_spec_holding_the_tree(
                     continue
 
             originals.setdefault(target, source)
+            span = replacement_span(source, mutation["find"], mutation["replace"])
             mutated = source.replace(mutation["find"], mutation["replace"])
             target.write_text(mutated, encoding="utf-8")
 
@@ -1585,6 +1695,7 @@ def _run_spec_holding_the_tree(
                         if crash:
                             result["crash_kills"] += 1
                             detail = f" (crash: {crash} in {basename})"
+                            detail += _hollow_note(result, pin_output, mutation["file"], span)
                         else:
                             detail = f" (assertion: no traceback from {basename})"
                         # A timeout is a THIRD mechanism, not a flavour of the
@@ -1679,6 +1790,7 @@ def _run_spec_holding_the_tree(
                     if crash:
                         result["crash_kills"] += 1
                         mechanism += f" (crash: {crash} in {Path(mutation['file']).name})"
+                        mechanism += _hollow_note(result, suite_output, mutation["file"], span)
                     timeout = timeout_kill(suite_output)
                     if timeout:
                         result["timeout_kills"] += 1
@@ -1939,7 +2051,7 @@ def _sweep(spec_paths: list[Path]) -> int:
         for child in proc.stdout.splitlines():
             if child.startswith("  caught: "):
                 name = child[len("  caught: "):].strip()
-            for kind in ("crash", "timeout"):
+            for kind in ("crash", "hollow", "timeout"):
                 m = re.search(r"\((%s: [^)]*)\)" % kind, child)
                 if m and name:
                     print(f"  kill: {spec_path} :: {name} :: {m.group(1)}", flush=True)
@@ -2114,6 +2226,9 @@ def main(argv: list[str] | None = None) -> int:
             # different reports and used to print identically.
             f" timeout_kills={result.get('timeout_kills', 0)}"
             f" untargeted={result.get('untargeted', 0)}/{result.get('mutations', 0)}"
+            # Appended last, as every field before it: a SUBSET of
+            # `crash_kills` — crashes raised inside the replacement's own lines.
+            f" hollow_kills={result.get('hollow_kills', 0)}"
         )
     _print_skipped_precheck_entries(result)
     mechanism = result.get("mechanism") or {}
