@@ -20,6 +20,29 @@ Line numbers are those of the HemaSuite file as read on 2026-10-13; re-anchor by
 applying (the uncommitted row shifts nothing above it, but any later edit will).
 
 
+## Applied — HemaSuite `ab94673ea` on `main` (2026-10-13)
+
+Applied through a throwaway detached HemaSuite worktree off `origin/main`, so no other lane's tree was
+touched, and pushed as a fast-forward (`ed2a01fed..ab94673ea`). **`origin/main` had moved past the
+reconciled copy:** 409 candidates, OPEN 75, against 389 / 56. Status lines were therefore matched by
+NAME to the exact line the census lists as open. Two near-misses were refused before any write: a
+recurrence bump (`committed-file-revert-helper`, :990) and a declined reinforcement row
+(`resumed-round-launcher`, :1264). 53 lines were inserted and 0 deleted. OPEN 75 -> 65, exactly the 10 terminal
+verdicts; parse coverage stayed 413/413.
+
+**Not applied / not covered — open follow-ups:**
+- `land-on-main-from-worktree`, `pid-and-log-watcher` exist only on `feature/10-asset-legend-native-citations`;
+  their verdicts (both STILL-OPEN) apply when that branch's rows reach main.
+- `jev-blind-label-desk-sheet` is still UNCOMMITTED in HemaSuite's canonical checkout. Its verdict is in the
+  slice-4 table below.
+- **22 open rows on main were never reconciled**, because they were added after the reconciled copy was read.
+  Among them: `archived-feature-stale-state`, `baseline-failure-set-diff`, `collect-report-docs-dir`,
+  `cross-task-green-obligation-sweep`, `endnote-cwyw-live-probe`, `ff-guarded-push`, `ff-land-quick-fix`,
+  `hpw-full-suite-canonical`, `machine-local-state-restore-in-handoff`, `mutant-survivor-branch-reachability`,
+  `phase7-integrate-from-base-checkout`, `recover-swallowed-subagent-report`, `registry-derived-source-census`,
+  `subagent-report-recover`, `suite-failure-set-diff`, `tdd-judge-test-file-budget`, `tui-screenshot-crop`.
+  Some names repeat as recurrence rows.
+
 ## Slice 1
 
 | line | name | verdict | evidence (file:line / sha / command+result) | proposed status line |
