@@ -1,0 +1,43 @@
+{
+  "_why": "Skill-candidates row 'commit the BashParse false-proof sweep as a test' (2486). The sweep's property: wherever bash runs an operator, the oracle proves it literal nowhere. Each row restores a soundness regression a review round found, and must be caught by the SWEEP rather than by its hand-written pin.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_expect_screens.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "sweep-sees-a-probe-proved-without-its-control",
+      "_mechanism": "R13 restored: a probe that breaks the parse proves the quote alone, though after `}` any quoted word breaks it. The sweep's `{ :; } @ b` lines turn up as false proofs.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "        return self._parses(probe) is False and self._parses(control) is True  # M:ORACLE-PROVES",
+      "replace": "        return self._parses(probe) is False  # M:ORACLE-PROVES",
+      "test": "tests/test_h_mad_expect_screens.py::test_bash_proves_no_operator_literal_where_bash_runs_it"
+    },
+    {
+      "name": "sweep-sees-a-probe-after-a-live-backslash",
+      "_mechanism": "R14 restored: after a live backslash the payload joins the heredoc delimiter (`<<E\\ 'x'` is `E x`), so a code `&&` is proven quoted. Caught through the sweep's `{ cat <<E\\@ b` / `E x` / `E&` frame.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            return True  # M:ORACLE-BACKSLASH",
+      "replace": "            pass  # M:ORACLE-BACKSLASH",
+      "test": "tests/test_h_mad_expect_screens.py::test_bash_proves_no_operator_literal_where_bash_runs_it"
+    },
+    {
+      "name": "sweep-sees-a-body-line-proved-without-the-line-check",
+      "_mechanism": "Drops the doubled-operator line check before the body probe, so a line under a fake heredoc header (`echo '<<E'`) that bash RUNS is proven literal.",
+      "file": "scripts/h_mad_expect_screens.py",
+      "find": "            return True  # M:ORACLE-BODY-LINE",
+      "replace": "            pass  # M:ORACLE-BODY-LINE",
+      "test": "tests/test_h_mad_expect_screens.py::test_bash_proves_no_heredoc_body_line_literal_where_bash_runs_it"
+    }
+  ]
+}

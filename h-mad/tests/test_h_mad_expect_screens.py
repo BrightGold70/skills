@@ -2209,3 +2209,94 @@ def test_the_parse_oracle_uses_the_pinned_bash_not_paths(tmp_path, monkeypatch):
     first on PATH would answer 99, i.e. no proof."""
     monkeypatch.setenv("PATH", _decoy_bash(tmp_path)["PATH"])
     assert hes.BashParse(["echo 'a && b'"]).code_at(0, 8, "&&") is False
+
+
+# --- the false-proof sweep (skill-candidates row "commit the BashParse false-proof sweep") ---
+#
+# Review rounds 14-17 each re-ran a throwaway fuzz with one property: wherever bash RUNS an
+# operator, the oracle must not prove it literal. That property found R14 M1 (60 false proofs)
+# and confirmed every later fix. "bash runs it" is taken from bash itself: the block parses, and
+# the same block with the operator doubled in place (`op op`) is a syntax error. Bounded so it
+# costs seconds, not a review round.
+
+_SWEEP_OPS = ("&&", ";", "|")
+# One line holding `@` where the operator goes, wrapped in the shapes the review rounds broke.
+_SWEEP_LINES = (
+    "a @ b", "echo 'a @ b'", 'echo "a @ b"', "echo $(a @ b)", "echo `a @ b`",
+    "echo \"'\" a @ b \"'\"", "echo $'x' a @ b", "echo \\' a @ b \\'", "echo x # 'a @ b'",
+    "X=( 'a @ b' )", "f() { echo 'a @ b'; }", "case 'a @ b' in *) :;; esac",
+    "echo '<<E' a @ b", "[[ $x == 'a @ b' ]]",
+    # R13: after `}` any quoted word breaks the parse, probe and control alike; and a
+    # position after a live backslash, where `$$'\'` flips both models' quote state.
+    "{ :; } @ b", "echo $$'\\' 'a' ; git \\@ echo '\\'",
+    # R14: after a live backslash the payload joins a heredoc delimiter (`<<E\\ 'x'` is `E x`).
+    "{ cat <<E\\@ b", "( cat <<E\\@ b",
+)
+# Lines before it (a quote or heredoc opened, a continuation) and after it (what closes them).
+_SWEEP_FRAMES = (
+    ((), ()), (("echo 'x",), ("y'",)), (("cat <<'E'",), ("E",)), (("cat <<E",), ("E",)),
+    (("cat <<-'E'",), ("E",)), (("a \\",), ()), (("echo \"$(",), (")\"",)),
+    (("# <<E",), ("E",)), (("x=$(cat <<'E'",), ("E", ")")), ((), ("# it`s",)),
+    ((), ("{ :; }",)), ((), ("E x", "E&", "}")), ((), ("E x", "E&", ")")),
+)
+
+
+def _sweep_positions():
+    for prefix, suffix in _SWEEP_FRAMES:
+        for template in _SWEEP_LINES:
+            for op in _SWEEP_OPS:
+                k = template.index("@")
+                line = template.replace("@", op)
+                doubled = template.replace("@", f"{op} {op}")
+                yield list(prefix) + [line] + list(suffix), len(prefix), k, op, \
+                    "\n".join(list(prefix) + [doubled] + list(suffix))
+
+
+@pytest.mark.skipif(not os.path.exists("/bin/bash"), reason="the pin is /bin/bash")
+def test_bash_proves_no_operator_literal_where_bash_runs_it():
+    runs = vouched = 0
+    false_proofs = []
+    for texts, i, k, op, doubled in _sweep_positions():
+        parse = hes.BashParse(texts)
+        if parse.parses is not True:
+            continue
+        literal = parse.code_at(i, k, op) is False
+        vouched += literal
+        if hes.BashParse._parses(doubled) is False:
+            runs += 1
+            if literal:
+                false_proofs.append((texts, i, k, op))
+    assert not false_proofs, false_proofs[:5]
+    # Not vacuous in either direction: the sweep reached positions bash runs AND positions
+    # the oracle does vouch for, so neither "always code" nor "always literal" passes it.
+    # Measured 2026-10-12 over 702 positions: runs=113, vouched=87.
+    assert runs >= 110, runs
+    assert vouched >= 85, vouched
+
+
+@pytest.mark.skipif(not os.path.exists("/bin/bash"), reason="the pin is /bin/bash")
+def test_bash_proves_no_heredoc_body_line_literal_where_bash_runs_it():
+    """The same property for `body_code_at`, over lines a heredoc header may or may not open."""
+    runs = vouched = 0
+    false_proofs = []
+    for prefix in ("cat <<'E'", "cat <<E", 'cat <<"E"', "cat <<-'E'", "echo '<<E'",
+                   "# <<'E'", "echo \"<<'E'\"", "x=$(cat <<'E'", "cat <<'E' &&",
+                   "f() { cat <<'E'"):
+        for template in ("a @ b", "echo 'a @ b'", "$(a @ b)"):
+            for op in _SWEEP_OPS:
+                for tail in (["E"], ["E", ")"], ["E", "}"], ["E", ":"]):
+                    texts = [prefix, template.replace("@", op)] + tail
+                    parse = hes.BashParse(texts)
+                    if parse.parses is not True:
+                        continue
+                    literal = parse.body_code_at(1, op, "E") is False
+                    vouched += literal
+                    doubled = "\n".join([prefix, template.replace("@", f"{op} {op}")] + tail)
+                    if hes.BashParse._parses(doubled) is False:
+                        runs += 1
+                        if literal:
+                            false_proofs.append(texts)
+    assert not false_proofs, false_proofs[:5]
+    # Measured 2026-10-12: runs=18, vouched=72.
+    assert runs >= 18, runs
+    assert vouched >= 70, vouched
