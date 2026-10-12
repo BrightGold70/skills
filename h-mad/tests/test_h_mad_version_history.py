@@ -644,3 +644,50 @@ class TestFenceGrammarIsTheSharedOne:
         assert after.index("- v1.1: ported.") > after.index("- v1.0: the real log."), (
             "the entry landed in `## Version Notes`"
         )
+
+
+class TestLineSeparatorsRefuse:
+    """HemaSuite (f), reproduced 2026-10-13: Edit/Write turn `\\u2028`/`\\u2029` escapes into raw
+    characters, `str.splitlines()` (the shared fence grammar) breaks on them, and `split("\\n")`
+    here does not. The two line lists then disagree. That crashed with `IndexError`, and where it
+    did not crash it could misplace the insertion silently. So every such character is refused,
+    with where it is, rather than guessed around."""
+
+    DOC = "# Doc\n\nBody{sep}line.\n\n## Version History\n\n- v1.0: First.\n"
+
+    @pytest.mark.parametrize("sep", [" ", " ", "\x85", "\x0b", "\x0c", "\x1c", "\x1d",
+                                     "\x1e", "\r"],
+                             ids=["U+2028", "U+2029", "NEL", "VT", "FF", "FS", "GS", "RS", "lone-CR"])
+    def test_a_splitlines_only_break_refuses_and_names_it(self, tmp_path: Path, sep: str) -> None:
+        doc = tmp_path / "d.md"
+        doc.write_bytes(self.DOC.format(sep=sep).encode("utf-8"))
+        before = doc.read_bytes()
+        with pytest.raises(Refusal) as exc:
+            bump(doc, "v1.1", "Probe.")
+        assert exc.value.reason == "line_separator", exc.value.reason
+        assert f"U+{ord(sep):04X}" in exc.value.detail and "line=3" in exc.value.detail, exc.value.detail
+        assert doc.read_bytes() == before
+
+    def test_the_separator_inside_the_section_no_longer_crashes(self, tmp_path: Path) -> None:
+        """The reproduced crash shape: before and inside `## Version History`."""
+        doc = tmp_path / "d.md"
+        doc.write_text("# Doc\n\nPre anchor.\n\n## Version History\n\nnote x\n- v1.0: First.\n",
+                       encoding="utf-8")
+        with pytest.raises(Refusal) as exc:
+            bump(doc, "v1.1", "Probe.", dry_run=True)
+        assert exc.value.reason == "line_separator"
+
+    def test_crlf_is_still_accepted(self, tmp_path: Path) -> None:
+        """The control: `\\r\\n` is normalised before the check, so only a LONE `\\r` refuses."""
+        doc = tmp_path / "d.md"
+        doc.write_bytes(self.DOC.format(sep=" ").replace("\n", "\r\n").encode("utf-8"))
+        assert bump(doc, "v1.1", "Probe.")["placement"] == "append"
+        assert b"- v1.1: Probe.\r\n" in doc.read_bytes()
+
+    def test_the_cli_prints_the_named_refusal(self, tmp_path: Path) -> None:
+        doc = tmp_path / "d.md"
+        doc.write_text(self.DOC.format(sep=" "), encoding="utf-8")
+        proc = run_cli(str(doc), "--version", "v1.1", "--text", "Probe.")
+        assert "VERSION-HISTORY: REFUSED" in proc.stdout and "reason=line_separator" in proc.stdout, \
+            proc.stdout + proc.stderr
+        assert "Traceback" not in proc.stderr, proc.stderr

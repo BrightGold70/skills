@@ -207,6 +207,21 @@ def classify_order(versions: list[tuple[int, int]]) -> str:
     raise Refusal("mixed_order")
 
 
+# Characters `str.splitlines()` breaks on and `split("\n")` does not. The shared fence grammar
+# reads lines with the first and this file with the second, so one of these anywhere makes the
+# two line lists disagree: `IndexError` near the section (HemaSuite (f), reproduced 2026-10-13),
+# or an insertion at the wrong line where it happens not to crash. CRLF is normalised before this
+# runs, so only a LONE `\r` is here.
+LINE_BREAKS_SPLIT_DISAGREES_ON = "\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029"
+
+
+def _line_separator(text: str) -> tuple[str, int] | None:
+    for pos, ch in enumerate(text):
+        if ch in LINE_BREAKS_SPLIT_DISAGREES_ON:  # M:VH-SEP
+            return f"U+{ord(ch):04X}", text.count("\n", 0, pos) + 1
+    return None
+
+
 def plan_insertion(text: str, version: str, entry_text: str) -> tuple[list[str], int, str]:
     """Return (new_lines, insert_index, placement) without touching the file."""
     version_match = VERSION_ARG.match(version)
@@ -216,6 +231,11 @@ def plan_insertion(text: str, version: str, entry_text: str) -> tuple[list[str],
         raise Refusal("empty_text")
     if "\n" in entry_text:
         raise Refusal("multiline_text")
+    found = _line_separator(text + entry_text)
+    if found:  # M:VH-SEP-REFUSE
+        raise Refusal("line_separator",
+                      f"char={found[0]} line={found[1]} -- splitlines() and split('\\n') would "
+                      f"disagree on line numbers; replace it with a newline or a space")
 
     lines = text.split("\n")
     anchor = find_anchor(text)

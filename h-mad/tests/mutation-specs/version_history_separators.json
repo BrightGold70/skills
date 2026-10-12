@@ -1,0 +1,51 @@
+{
+  "_why": "HemaSuite (f): h_mad_version_history.py refuses every character splitlines() breaks on and split('\\n') does not, naming it and its line, instead of crashing or misplacing the entry.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_version_history.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "separator-refusal-removed",
+      "_mechanism": "HemaSuite (f) restored: the bump proceeds, and the two line lists disagree until it crashes with IndexError.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "    if found:  # M:VH-SEP-REFUSE",
+      "replace": "    if False:  # M:VH-SEP-REFUSE",
+      "test": "tests/test_h_mad_version_history.py::TestLineSeparatorsRefuse::test_the_separator_inside_the_section_no_longer_crashes"
+    },
+    {
+      "name": "u2028-dropped-from-the-set",
+      "_mechanism": "Narrows the set to what the first fix happened to think of; the reproduced character slips through.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "LINE_BREAKS_SPLIT_DISAGREES_ON = \"\\r\\x0b\\x0c\\x1c\\x1d\\x1e\\x85\\u2028\\u2029\"",
+      "replace": "LINE_BREAKS_SPLIT_DISAGREES_ON = \"\\r\\x0b\\x0c\\x1c\\x1d\\x1e\\x85\\u2029\"",
+      "test": "tests/test_h_mad_version_history.py::TestLineSeparatorsRefuse::test_a_splitlines_only_break_refuses_and_names_it[U+2028]"
+    },
+    {
+      "name": "lone-cr-dropped-from-the-set",
+      "_mechanism": "A lone CR (CRLF is already normalised) is a splitlines break too.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "LINE_BREAKS_SPLIT_DISAGREES_ON = \"\\r\\x0b\\x0c\\x1c\\x1d\\x1e\\x85\\u2028\\u2029\"",
+      "replace": "LINE_BREAKS_SPLIT_DISAGREES_ON = \"\\x0b\\x0c\\x1c\\x1d\\x1e\\x85\\u2028\\u2029\"",
+      "test": "tests/test_h_mad_version_history.py::TestLineSeparatorsRefuse::test_a_splitlines_only_break_refuses_and_names_it[lone-CR]"
+    },
+    {
+      "name": "refusal-names-the-wrong-line",
+      "_mechanism": "The refusal says where the character is; an off-by-one sends the author to the wrong line.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "            return f\"U+{ord(ch):04X}\", text.count(\"\\n\", 0, pos) + 1",
+      "replace": "            return f\"U+{ord(ch):04X}\", text.count(\"\\n\", 0, pos)",
+      "test": "tests/test_h_mad_version_history.py::TestLineSeparatorsRefuse::test_a_splitlines_only_break_refuses_and_names_it[U+2029]"
+    }
+  ]
+}

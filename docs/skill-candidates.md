@@ -2560,6 +2560,7 @@ drop the line.
   inside `## Version History` gives `IndexError`, in `--dry-run` and in a real write, for both
   characters. design-author hit it twice (HemaSuite, 2026-10-06). Fix: refuse with a named token
   (`reason=line_separator`), and pin it with a test per character. recurrence: 2 — candidate: yes
+  — **LANDED 2026-10-13** — `plan_insertion` now refuses `reason=line_separator char=U+XXXX line=<n>` for every character `splitlines()` breaks on and `split("\n")` does not: U+2028/U+2029, NEL, VT, FF, FS/GS/RS, and a lone CR (CRLF is normalised first, and CRLF docs are still accepted). Calibrated before building: 0 of 1587 HemaSuite and 1 of 263 skills Version-History docs carry one, and that one is `docs/skill-candidates.md`, which this tool never bumps. The live repro files now refuse by name and the control still passes. 12 tests; `h-mad/tests/mutation-specs/version_history_separators.json` ALL_CAUGHT 4/4. Documented in `h-mad/SKILL.md`. Note the fix is wider than the row: where the mismatch did not crash, it could misplace the entry silently.
 - **(g) the bkit SubagentStop hook suggests `/pdca analyze` to every subagent** (authors reported it 8×,
   HemaSuite 2026-10-06) — bkit is a vendor plugin installed under
   `~/.claude/plugins/cache/`, not code in this repo. A local patch is overwritten on every plugin
