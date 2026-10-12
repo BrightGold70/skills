@@ -1,0 +1,59 @@
+{
+  "_why": "skill-monitoring J50: the session scratchpad is exempt from the Phase-5 TDD gate only when both spellings have its shape AND git positively answers that the target is in no repository.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_gate_judge.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "scratch-exemption-removed",
+      "_mechanism": "J50 restored: a scratchpad reader is refused codex-authorship.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "elif _scratch_shape \"$TARGET_PATH\" && _scratch_shape \"$RAW_TARGET\" \\\n     && _outside_every_work_tree \"$TARGET_PATH\"; then  # M:H-SCRATCH",
+      "replace": "elif false; then  # M:H-SCRATCH",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_a_scratchpad_reader_outside_every_work_tree_is_allowed"
+    },
+    {
+      "name": "scratch-work-tree-check-dropped",
+      "_mechanism": "The bypass the review named: production in a worktree inside a scratchpad goes ungated.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "elif _scratch_shape \"$TARGET_PATH\" && _scratch_shape \"$RAW_TARGET\" \\\n     && _outside_every_work_tree \"$TARGET_PATH\"; then  # M:H-SCRATCH",
+      "replace": "elif _scratch_shape \"$TARGET_PATH\" && _scratch_shape \"$RAW_TARGET\"; then  # M:H-SCRATCH",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_a_work_tree_inside_the_scratchpad_is_still_gated"
+    },
+    {
+      "name": "scratch-canonical-conjunct-dropped",
+      "_mechanism": "Only the raw spelling is checked, so `scratchpad/../../../../sibling/x.py` passes.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "elif _scratch_shape \"$TARGET_PATH\" && _scratch_shape \"$RAW_TARGET\" \\\n     && _outside_every_work_tree \"$TARGET_PATH\"; then  # M:H-SCRATCH",
+      "replace": "elif _scratch_shape \"$RAW_TARGET\" \\\n     && _outside_every_work_tree \"$TARGET_PATH\"; then  # M:H-SCRATCH",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_a_traversal_out_of_the_scratchpad_is_gated"
+    },
+    {
+      "name": "scratch-shape-without-session-uuid",
+      "_mechanism": "Any `claude-N/x/y/scratchpad/` qualifies, not only a real session directory.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "_SCRATCH_RE='(^|/)claude-[0-9]+/[^/]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/scratchpad/'",
+      "replace": "_SCRATCH_RE='(^|/)claude-[0-9]+/[^/]+/[^/]+/scratchpad/'",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_a_lookalike_scratchpad_is_gated[no-uuid]"
+    },
+    {
+      "name": "scratch-could-not-check-reads-as-outside",
+      "_mechanism": "git missing (or any error) is taken as 'in no repository', the fail-open the review named.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  case \"$out\" in *\"not a git repository\"*) return 0 ;; esac  # M:H-SCRATCH-ANSWER",
+      "replace": "  case \"$out\" in *) return 0 ;; esac  # M:H-SCRATCH-ANSWER",
+      "test": "tests/test_h_mad_tdd_gate_judge.py::test_a_scratchpad_write_is_gated_when_git_cannot_answer"
+    }
+  ]
+}

@@ -422,8 +422,10 @@ def test_the_live_backlog_has_no_unqualified_declined() -> None:
 def test_the_non_j_rows_are_reported_but_never_parsed_as_entries() -> None:
     out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-monitoring.md")
 
-    assert "J-entries=   46" in out or "J-entries=46" in out, out
-    assert "parsed=46 row-shaped=79" in out, out
+    # Bumped 46 -> 48 for J50/J51 (2026-10-12). Two real entries move both numbers by 2; the
+    # historical gap the pin exists for stays exactly 33 (81 - 48).
+    assert "J-entries=   48" in out or "J-entries=48" in out, out
+    assert "parsed=48 row-shaped=81" in out, out
 
 
 def test_widening_the_parser_would_be_visible_here() -> None:

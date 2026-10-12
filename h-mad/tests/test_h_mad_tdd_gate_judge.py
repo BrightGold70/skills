@@ -858,3 +858,68 @@ def test_claude_gate_is_bash_3_2_clean(tmp_path):
 def test_claude_single_pwd_p_is_the_h8_walk():
     lines = [line for line in HOOK.read_text(encoding="utf-8").splitlines() if "pwd -P" in line]
     assert len(lines) == 1 and "# M:H8" in lines[0]
+
+
+# --- J50: the session scratchpad is not production ------------------------------------------
+#
+# A throwaway reader written to Claude's own scratchpad was refused `codex-authorship` like a
+# production write, though it could not reach any repository. The exemption is deliberately
+# narrow: both spellings of the target must have the scratchpad's shape, AND git must say the
+# target is in no work tree. A worktree can live in a scratchpad (the 2026-10-12 sweep ran in
+# one), and production written there is production. Anything git cannot answer stays gated.
+
+SESSION = "7fb697fd-2103-4d98-8e2b-aa461f12b33d"
+
+
+def _scratchpad(tmp_path: Path, session: str = SESSION) -> Path:
+    pad = tmp_path / "claude-501" / "-Users-x-repo" / session / "scratchpad"
+    pad.mkdir(parents=True)
+    return pad
+
+
+def test_a_scratchpad_reader_outside_every_work_tree_is_allowed(tmp_path):
+    root = _root(tmp_path, status=None)
+    pad = _scratchpad(tmp_path)
+    _assert(_gate(root, arg=str(pad / "task0_fg.py"), bin_dir=_bin(tmp_path, codex=True)), "allow")
+
+
+def test_a_work_tree_inside_the_scratchpad_is_still_gated(tmp_path):
+    root = _root(tmp_path, status=None)
+    wt = _scratchpad(tmp_path) / "sweep-wt"
+    wt.mkdir()
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    _file(wt, "pkg/prod.py")
+    _assert(_gate(root, arg=str(wt / "pkg/prod.py"), bin_dir=_bin(tmp_path, codex=True)),
+            "deny", "codex-authorship")
+
+
+def test_a_traversal_out_of_the_scratchpad_is_gated(tmp_path):
+    """The raw spelling has the shape; the canonical one is a sibling directory."""
+    root = _root(tmp_path, status=None)
+    pad = _scratchpad(tmp_path)
+    (tmp_path / "sibling").mkdir()
+    arg = str(pad) + "/../../../../sibling/x.py"
+    _assert(_gate(root, arg=arg, bin_dir=_bin(tmp_path, codex=True)), "deny", "codex-authorship")
+
+
+@pytest.mark.parametrize("session", ["not-a-session", "7fb697fd-2103-4d98-8e2b"],
+                         ids=["no-uuid", "short-uuid"])
+def test_a_lookalike_scratchpad_is_gated(tmp_path, session):
+    root = _root(tmp_path, status=None)
+    pad = _scratchpad(tmp_path, session)
+    _assert(_gate(root, arg=str(pad / "x.py"), bin_dir=_bin(tmp_path, codex=True)),
+            "deny", "codex-authorship")
+
+
+def test_a_scratchpad_write_is_gated_when_git_cannot_answer(tmp_path):
+    """No git on PATH: 'could not check' must not read as 'outside every work tree'."""
+    root = _root(tmp_path, status=None)
+    pad = _scratchpad(tmp_path)
+    b = _bin(tmp_path, codex=True)
+    for tool in ("sed", "tr", "cat", "head", "grep", "awk", "env", "realpath", "readlink", "pwd",
+                 "mktemp", "rm", "mkdir", "cut", "wc", "sort", "uname", "id", "stat", "date"):
+        found = shutil.which(tool, path="/usr/bin:/bin")
+        if found and not (b / tool).exists():
+            (b / tool).symlink_to(found)
+    assert not (b / "git").exists()
+    _assert(_gate(root, arg=str(pad / "x.py"), bin_dir=b, path_tail=""), "deny", "codex-authorship")

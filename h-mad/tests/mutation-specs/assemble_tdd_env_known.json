@@ -1,0 +1,59 @@
+{
+  "_why": "skill-monitoring J51 fix (b): sandbox-only failures are declared per node id, rendered into the prompt with their bound, and validated.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_assemble_tdd.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "env-ids-not-validated",
+      "_mechanism": "A whole file or a blank id passes, so a declaration can hide every failure in a file.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if not ENV_NODE.match(node):  # M:AT-ENV-SHAPE",
+      "replace": "        if False:  # M:AT-ENV-SHAPE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestEnvKnownFailures::test_a_malformed_id_halts[no-separator]"
+    },
+    {
+      "name": "env-ids-dropped-from-the-prompt",
+      "_mechanism": "J51 restored: the ids are validated and never reach Codex, which stops BLOCKED on a correct RED.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if env_known:  # M:AT-ENV",
+      "replace": "    if False:  # M:AT-ENV",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestEnvKnownFailures::test_declared_ids_reach_the_prompt_with_the_rule_that_bounds_them"
+    },
+    {
+      "name": "env-exception-unbounded",
+      "_mechanism": "The exception loses its bound: Codex is no longer told that any OTHER unexplained failure is still a stop.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            + \". Do not modify them and do not count them as a discrepancy. A failure in \"\n            \"any OTHER test that the counts do not explain is still a discrepancy: stop \"\n            \"with STATUS: BLOCKED. The orchestrator",
+      "replace": "            + \". Do not modify them and do not count them as a discrepancy. The orchestrator",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestEnvKnownFailures::test_declared_ids_reach_the_prompt_with_the_rule_that_bounds_them"
+    },
+    {
+      "name": "env-cli-not-wired",
+      "_mechanism": "The flags parse and are dropped before assemble().",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            env_known_failures=env_known,  # M:AT-ENV-WIRE",
+      "replace": "            env_known_failures=[],  # M:AT-ENV-WIRE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestEnvKnownFailures::test_the_cli_takes_flags_and_a_file_and_merges_them"
+    },
+    {
+      "name": "env-listing-unreadable-ignored",
+      "_mechanism": "A missing listing silently declares nothing instead of halting.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "                raise Halt(\"env_known_failures_unreadable\",\n                           f\"{args.env_known_failures_file}: {exc}\") from None",
+      "replace": "                listing = \"\"",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestEnvKnownFailures::test_an_unreadable_listing_halts"
+    }
+  ]
+}

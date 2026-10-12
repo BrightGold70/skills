@@ -2014,7 +2014,17 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   **Fix direction (hypothesis):** allow a target under the harness scratchpad, the session dir that
   carries `CLAUDE_CODE_SESSION_ID`, or under `$TMPDIR` when it is outside every project root. Pin it
   with a mutation that removes the exemption.
-  Status: `MONITORING`.
+  **Review 2026-10-12: the cause holds; the hypothesis's `$TMPDIR` arm would open a bypass.** A
+  worktree can live in a scratchpad (that day's mutation sweep ran in one), and an exemption by
+  location alone would ungate production written there. So the exemption is narrower than proposed.
+  Both the canonical and the raw spelling must have the scratchpad's shape,
+  `claude-<uid>/<slug>/<session-uuid>/scratchpad/`, as `M:H20` requires for its own exemption. And
+  `git rev-parse` must answer exactly "not a git repository". A work tree, a bare repo, a missing git
+  or any other error keeps the gate closed (`_outside_every_work_tree`, `# M:H-SCRATCH`). The
+  `$TMPDIR` arm was not built.
+  Status: `FIXED` — 6 tests in `tests/test_h_mad_tdd_gate_judge.py` (allow; a worktree inside the
+  scratchpad, a traversal, two lookalikes and git-absent all deny), `tests/mutation-specs/tdd_gate_scratchpad.json`
+  ALL_CAUGHT 5/5, TDD-gate test set 602 passed.
 
 - 🟡 **J51 — Codex's `workspace-write` sandbox denies loopback socket binding, so any 5d/5e scope
   containing socket tests reads RED-over-count and Codex reports `STATUS: BLOCKED` on a correct
@@ -2032,4 +2042,14 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   `--env-known-failures <file|nodeid>` input it renders into the prompt, so the exception is
   declared by the orchestrator per scope rather than hand-appended. Either way, the orchestrator's
   re-run outside the sandbox stays the gate.
-  Status: `MONITORING`.
+  **Measured 2026-10-12** with `codex sandbox` (codex-cli 0.162.1, no model call), running
+  `bind(("127.0.0.1", 0))`. Under `-c 'sandbox_mode="workspace-write"'` it raised
+  `PermissionError: [Errno 1] Operation not permitted`. Adding
+  `-c sandbox_workspace_write.network_access=true` made it succeed, and so did running unsandboxed.
+  Fix (a) therefore exists but opens ALL network, outbound included, not only loopback, and no
+  loopback-only option was found. It was rejected.
+  Status: `FIXED` via (b) — `h_mad_assemble_tdd.py --env-known-failure <path>::<test>` (repeatable)
+  or `--env-known-failures-file`. It renders the ids into the prompt, says the counts were measured
+  outside the sandbox, and keeps any OTHER unexplained failure a `STATUS: BLOCKED` stop. A
+  whole-file id is refused (`env_known_failure_malformed`). Documented in `h-mad/SKILL.md` (helper
+  scripts). 6 tests; `tests/mutation-specs/assemble_tdd_env_known.json` ALL_CAUGHT 5/5.

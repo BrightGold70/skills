@@ -254,6 +254,10 @@ def find_interpreters_with_pytest() -> list[str]:
     ]
 
 
+# `<path>::<test>`, optionally parametrised; no whitespace anywhere.
+ENV_NODE = re.compile(r"^[^\s:]+(?:::[^\s:]+)+(?:\[[^\s\]]*\])?$")
+
+
 def assemble(
     *,
     feature: str,
@@ -270,7 +274,15 @@ def assemble(
     report_file: str,
     template: Path,
     mutation_spec: str | None = None,
+    env_known_failures: list[str] | None = None,
 ) -> tuple[str, dict]:
+    env_known = list(env_known_failures or [])
+    for node in env_known:
+        # A whole FILE is refused on purpose: declaring every test in it would hide a
+        # real failure among the sandbox ones.
+        if not ENV_NODE.match(node):  # M:AT-ENV-SHAPE
+            raise Halt("env_known_failure_malformed",
+                       f"{node!r} is not a pytest node id (<path>::<test>, no whitespace)")
     try:
         plan_text = impl_plan.read_text(encoding="utf-8")
     except OSError as exc:
@@ -373,6 +385,20 @@ def assemble(
     # Guards are orthogonal to shape. The label is what makes an immediate pass
     # legitimate instead of something to be manufactured away, and the shipped
     # template promises it unconditionally.
+    # J51: Codex's workspace-write sandbox denies loopback socket binding, so socket tests
+    # fail there and pass outside it. The exception is declared per node id rather than
+    # hand-appended, and it stays bounded: every OTHER discrepancy is still a stop.
+    if env_known:  # M:AT-ENV
+        lines.append(
+            "**Environment-known failures:** the stated counts were measured OUTSIDE the "
+            "sandbox. Inside your sandbox these tests may also fail, for an environmental "
+            "reason (e.g. loopback socket binding is denied), not a code one: "
+            + ", ".join(f"`{n}`" for n in env_known)
+            + ". Do not modify them and do not count them as a discrepancy. A failure in "
+            "any OTHER test that the counts do not explain is still a discrepancy: stop "
+            "with STATUS: BLOCKED. The orchestrator re-runs this scope outside the sandbox, "
+            "and that run is the gate."
+        )
     if guards:
         lines.append(
             "**Regression guards (must pass from the first run — do NOT manufacture "
@@ -513,6 +539,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--expect-pass", type=int)
     ap.add_argument("--guard", action="append", default=[],
                     help="a regression guard that must pass from the first run; repeatable")
+    ap.add_argument("--env-known-failure", action="append", default=[],
+                    help="a node id that fails only inside the dispatch sandbox; repeatable")
+    ap.add_argument("--env-known-failures-file", type=Path,
+                    help="one node id per line; blank lines and # comments ignored")
     ap.add_argument("--mutation-spec", default=None,
                     help="5e: the spec GREEN appends its mutation rows to")
     ap.add_argument("--out", type=Path)
@@ -546,6 +576,15 @@ def main(argv: list[str] | None = None) -> int:
                 "this dispatch runs pytest, and a read-only sandbox kills pytest's "
                 "tempdir — the run then passes without measuring anything",
             )
+        env_known = list(args.env_known_failure)
+        if args.env_known_failures_file is not None:
+            try:
+                listing = args.env_known_failures_file.read_text(encoding="utf-8")
+            except OSError as exc:
+                raise Halt("env_known_failures_unreadable",
+                           f"{args.env_known_failures_file}: {exc}") from None
+            env_known += [l.strip() for l in listing.splitlines()
+                          if l.strip() and not l.lstrip().startswith("#")]
         filled, meta = assemble(
             feature=args.feature, task_id=args.task, phase=args.phase,
             impl_plan=impl_plan, project_root=args.project_root, module=args.module,
@@ -553,6 +592,7 @@ def main(argv: list[str] | None = None) -> int:
             expect_fail=args.expect_fail, expect_pass=args.expect_pass,
             guards=args.guard, report_file=args.report_file, template=args.template,
             mutation_spec=args.mutation_spec,  # M:AT-MUT-WIRE
+            env_known_failures=env_known,  # M:AT-ENV-WIRE
         )
     except Halt as exc:
         print(f"{TOKEN}: HALT {exc.reason}")

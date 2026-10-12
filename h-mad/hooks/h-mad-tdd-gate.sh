@@ -61,6 +61,24 @@ _chain_may_hold_state() {
   done
 }
 _dir_match() { case "$1" in */tests/*|*/fixtures/*) return 0 ;; esac; return 1; }  # M:H15
+# J50: Claude's per-session scratchpad, `claude-<uid>/<project-slug>/<session-uuid>/scratchpad/`.
+# Shape alone is never enough (see _outside_every_work_tree): a worktree can live in a scratchpad.
+_SCRATCH_RE='(^|/)claude-[0-9]+/[^/]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/scratchpad/'
+_scratch_shape() { [[ "$1" =~ $_SCRATCH_RE ]]; }  # M:H-SCRATCH-SHAPE
+# Exempt only on git's POSITIVE answer that the target is in no repository. rc 0 means a work
+# tree (`true`) or a bare repo (`false`), both refused; git missing or any other error reads as
+# "could not check", which must not borrow the spelling of "outside every work tree".
+_outside_every_work_tree() {
+  local d=${1%/*} out
+  while [ ! -d "$d" ]; do
+    if [ -z "$d" ] || [ "$d" = / ]; then return 1; fi
+    d=$(dirname "$d")
+  done
+  out=$(cd / && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_CEILING_DIRECTORIES \
+        git -C "$d" rev-parse --is-inside-work-tree 2>&1) && return 1  # M:H-SCRATCH-REPO
+  case "$out" in *"not a git repository"*) return 0 ;; esac  # M:H-SCRATCH-ANSWER
+  return 1
+}
 _pct_decode() { [ "$1" = % ] && return 0; printf '%b' "${1//%/\\x}"; }
 _pct_capture() {
   local _pct_v
@@ -271,6 +289,9 @@ if [ "$IN_ROOT" = yes ]; then
   # importable package it chose to put there.
   case "$DIR_SUBJECT" in /docs/*) _allow ;; esac  # M:H-DOCS
 elif _dir_match "$TARGET_PATH" && _dir_match "$RAW_TARGET"; then  # M:H20
+  _allow
+elif _scratch_shape "$TARGET_PATH" && _scratch_shape "$RAW_TARGET" \
+     && _outside_every_work_tree "$TARGET_PATH"; then  # M:H-SCRATCH
   _allow
 fi
 ALL_SUFFIX_NAMES=yes

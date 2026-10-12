@@ -1073,3 +1073,70 @@ def test_a_task_that_quotes_a_slot_token_reaches_the_prompt_verbatim(tmp_path: P
     filled, _ = call(target, tmp_path)
 
     assert quote in filled
+
+
+# --- J51: failures the dispatch sandbox causes, declared by the orchestrator ------------------
+#
+# Codex's workspace-write sandbox denies loopback socket binding (measured 2026-10-12: `bind`
+# raises PermissionError there, succeeds outside it). A scope holding socket tests then reads
+# RED-over-count, and Codex correctly stops with `STATUS: BLOCKED`. The exception used to be
+# hand-appended to a GREEN prompt. It is now declared per node id, and the prompt keeps every
+# OTHER discrepancy a stop. Opening the sandbox's network instead was rejected: it opens far more
+# than loopback.
+
+ENV_IDS = ["tests/test_shadow.py::test_binds_a_port", "tests/test_shadow.py::test_serves[a]"]
+
+
+class TestEnvKnownFailures:
+    def test_declared_ids_reach_the_prompt_with_the_rule_that_bounds_them(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(plan, tmp_path, env_known_failures=ENV_IDS)
+        assert all(i in filled for i in ENV_IDS), filled
+        assert "OUTSIDE the sandbox" in filled
+        assert "Do not modify" in filled
+        assert "any OTHER" in filled and "STATUS: BLOCKED" in filled
+
+    def test_none_declared_adds_nothing(self, plan: Path, tmp_path: Path) -> None:
+        filled, _ = call(plan, tmp_path)
+        assert "Environment-known failures" not in filled
+
+    @pytest.mark.parametrize("bad", ["", "   ", "tests/test_shadow.py", "a b::c", "::test_x"],
+                             ids=["empty", "blank", "no-separator", "whitespace", "no-file"])
+    def test_a_malformed_id_halts(self, plan: Path, tmp_path: Path, bad: str) -> None:
+        """A whole FILE is refused on purpose: declaring every test in it would hide a real
+        failure among the socket ones."""
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, env_known_failures=[bad])
+        assert exc.value.reason == "env_known_failure_malformed"
+
+    def test_the_cli_takes_flags_and_a_file_and_merges_them(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        listing = tmp_path / "known.txt"
+        listing.write_text("# loopback denied in the codex sandbox\n" + ENV_IDS[1] + "\n\n",
+                           encoding="utf-8")
+        prompt = tmp_path / "prompt.txt"
+        proc = run_cli(
+            "--feature", "f", "--task", "Task 1", "--phase", "red",
+            "--project-root", str(tmp_path), "--module", "m",
+            "--test-path", "tests/t.py", "--impl-plan", str(plan),
+            "--expect-fail", "3", "--expect-pass", "1",
+            "--python", PYTHON, "--prompt", str(prompt),
+            "--env-known-failure", ENV_IDS[0], "--env-known-failures-file", str(listing),
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        text = prompt.read_text(encoding="utf-8")
+        assert ENV_IDS[0] in text and ENV_IDS[1] in text, text
+
+    def test_an_unreadable_listing_halts(self, plan: Path, tmp_path: Path) -> None:
+        proc = run_cli(
+            "--feature", "f", "--task", "Task 1", "--phase", "red",
+            "--project-root", str(tmp_path), "--module", "m",
+            "--test-path", "tests/t.py", "--impl-plan", str(plan),
+            "--expect-fail", "3", "--expect-pass", "1", "--python", PYTHON,
+            "--prompt", str(tmp_path / "p.txt"),
+            "--env-known-failures-file", str(tmp_path / "absent.txt"),
+        )
+        assert proc.returncode == 2, proc.stdout
+        assert "ASSEMBLE-TDD: HALT env_known_failures_unreadable" in proc.stdout
