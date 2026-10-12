@@ -173,14 +173,24 @@ class TestAgainstTheLiveBinary:
         assert found == MATCHER
 
     def test_the_two_numeric_constants_are_still_five_and_forty(self) -> None:
-        """`bko=5`/`npn=40` sit immediately after the two Sets in the emitter's
-        declaration run. Anchor on that run, not on the names."""
+        """The key-list cap and the key-truncation length, found by USE, not by
+        position or name. Through 2.1.250 they sat right after the matcher Set
+        (`bko=5,npn=40`); 2.1.296 moved the declaration ahead of the helpers
+        (`var Pft=5,Mft=40;function HPe…`) with the values unchanged, and a
+        position anchor read that as "no longer parses". The emitter's own
+        code says which is which: the cap is what `slice(0,X)…more` slices to,
+        the truncation length is what `n.length<=Y?n:` compares against."""
         blob = self._blob()
-        m = re.search(
-            rb'new Set\(\["matcher","hooks"\]\),\w+=(\d+),\w+=(\d+)', blob
-        )
-        assert m, "the declaration run after the matcher Set no longer parses"
-        assert (int(m.group(1)), int(m.group(2))) == (MAXKEYS, TRUNC)
+        cap = re.search(rb'slice\(0,(\w+)\)\.join\(", "\)\+\(\w+>0\?` and \$\{\w+\} more`', blob)
+        trunc = re.search(rb'return \w+\.length<=(\w+)\?\w+:`\$\{\w+\(\w+,\1\)\}\.\.\.`', blob)
+        assert cap and trunc, "the emitter's key-list cap or key truncation no longer parses"
+
+        def value(name: bytes) -> int:
+            decl = re.search(rb'[\s,;(]' + re.escape(name) + rb'=(\d+)[,;]', blob)
+            assert decl, f"no declaration found for {name!r}"
+            return int(decl.group(1))
+
+        assert (value(cap.group(1)), value(trunc.group(1))) == (MAXKEYS, TRUNC)
 
 
 class TestTheRecordedWarnings:
