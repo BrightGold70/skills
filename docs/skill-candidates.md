@@ -2514,3 +2514,54 @@ Reconciled first: the census reads OPEN=10 (yes=3, maybe=7). The three `yes` row
 ## 2026-10-12 — fence-probe-and-hmad-todo-rebuild — no candidates
 
 Reconciled first. The census read OPEN=11 before this pass. Row 2499 is now LANDED (above), so OPEN=10. The only commit since the last reconcile is `a60122d9`, which touches none of the other open rows; the three `yes` rows (1351, 2214, 2486) are still open. This session's todo list was rebuilt from the 7 open rows that target h-mad: 2214, 1351, 2486, 2364, 2395, 2481 and 1269. Handoff has no open rows. Rows 2476, 2492 and 2493 are general git or test tooling and were left out.
+
+## 2026-10-13 — HemaSuite "(a)–(g), item 12" pointer reconciled (takeover of `2026-10-13-main__hemasuite-skills-lane-items.md`)
+
+HemaSuite's chain carried "skills-lane candidates (a)–(g) and item 12" from 2026-10-07 with no
+definition. The definition was found on `origin/handoff/feature-vancouver-output-normalization`:
+(a)–(e) in `2026-10-05-…__h11-phase1-approved.md` (§Open), (f)/(g) added in
+`2026-10-06-…__h11-implplan-v1-0-machine-switch.md`. These are NOT the 2026-09-30 brief's (a)–(d);
+**item 12 is that brief** (`docs/handoffs/2026-09-30-main__hmad-defects-from-hemasuite.md`, taken
+over `714086d7`), and all of it is closed: (a) and (c) LANDED `86479f73`, (d) LANDED `c820a1ac`,
+(b) fixed on `feature/tdd-gate-fail-opens` and re-measured green in HemaSuite `main` @ `b5710ce90`
+on 2026-10-13. Each row below was checked against this tree on 2026-10-13. HemaSuite's chain can
+drop the line.
+
+- **(a) the Phase-5 TDD gate refuses a scratchpad `.py`** (HemaSuite 2026-10-05) — the same defect
+  as skill-monitoring J50. candidate: **LANDED** (`05cc4d0d`, 2026-10-12: the exemption needs the
+  scratchpad shape on both spellings AND git answering "not a git repository").
+- **(b) Codex's Phase-5 shell allowlist forces the orchestrator to run gate-task readings**: during
+  Phase 5 the Codex TDD gate's shell allowlist refuses the read-only probes a gate task (an
+  orchestrator-run task with no production edit) needs. So the orchestrator runs them by hand, and
+  the allowlist goes only at 5g (HemaSuite `failed-round-diagnostic-letter`, 2026-10-05). Related:
+  the resume-call row above (`SAFE_HMAD_SCRIPT_OPTIONS`, folded into tdd-gate-fail-opens FR-8).
+  recurrence: 1 — candidate: maybe
+- **(c) the 5d template should request a labelled `Concerns:` line** (HemaSuite 2026-10-05) — the
+  premise was already false when filed. `h-mad/references/codex-implementer-prompt.md:121-139` has
+  asked for a labelled `Concerns:` line (`Concern:`/`Blockers:` accepted) since `322a1793`
+  (2026-09-07), and an unlabelled report is rejected as contentless (#152). candidate: **LANDED**
+  (`322a1793`, before filing)
+- **(d) the impl-plan template's per-task "Regression guards" conflict with every-5d-before-any-5e
+  sequencing**: a guard list that names an EARLIER task's classes is RED by construction during 5d,
+  because no 5e has run yet. So the guard cannot "pass from the first run", as the assembled prompt
+  demands (HemaSuite `failed-round-diagnostic-letter`, 2026-10-05). Needs either a guard scope ("guards
+  that exist before this 5d") or a sequencing note in the template. recurrence: 1 — candidate: maybe
+- **(e) the TDD judge's 40 s budget starves a later task's RED**: `h-mad/scripts/h_mad_tdd_judge.py:28`
+  `JUDGE_BUDGET_S = 40.0` is spent across EVERY task's Test-file list for a production file, in plan
+  order. Listing green guard files under Task 6 starved Task 7's RED, and every write was refused
+  `kind=timeout` (HemaSuite `preflight-command-aware`, 2026-10-05; carried in 4 handoffs, 1 incident).
+  Remedies proposed there: order the files by the active task, or a per-write budget override.
+  recurrence: 1 — candidate: maybe
+- **(f) `h_mad_version_history.py` crashes on U+2028/U+2029**: Edit/Write turn ` `/` `
+  escapes into raw characters. Then `splitlines()` and `split("\n")` (`:220`, `:308`) disagree on line
+  count, and the tool dies with `IndexError: list index out of range` instead of refusing.
+  REPRODUCED 2026-10-13 on a copy of `docs/01-plan/features/exec-missing-report-recovery-brainstorm.md`:
+  the control gives `DRY-RUN`; a separator in the body alone does not crash; a separator before or
+  inside `## Version History` gives `IndexError`, in `--dry-run` and in a real write, for both
+  characters. design-author hit it twice (HemaSuite, 2026-10-06). Fix: refuse with a named token
+  (`reason=line_separator`), and pin it with a test per character. recurrence: 2 — candidate: yes
+- **(g) the bkit SubagentStop hook suggests `/pdca analyze` to every subagent** (authors reported it 8×,
+  HemaSuite 2026-10-06) — bkit is a vendor plugin installed under
+  `~/.claude/plugins/cache/`, not code in this repo. A local patch is overwritten on every plugin
+  update (memory: vendor-managed skills are not patchable). Report it upstream or disable the hook
+  in settings. — candidate: **DECLINED 2026-10-13 (triage: useful, not codable here)**
