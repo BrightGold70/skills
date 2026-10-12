@@ -142,15 +142,17 @@ carry a message and could surface a traceback at all. `crash_kills=0` beside
 Tier 2 has one sub-case the harness CAN name: the **hollow** crash kill,
 published as `hollow_kills=N` (a subset of `crash_kills`) and annotated
 `(hollow: NameError at foo.py:12 …)`. A builtin exception whose deepest frame in
-the mutated file lies within the lines the replacement wrote means the new text
-itself failed to run — a name never defined, a kwarg that does not exist — so
-the kill is about the mutation, not the guard. Site, not type, discriminates:
-the 2026-10-04 sweep had real `TypeError` kills too. Replayed against the
-2026-09-14 hollow five it flags 3; the other 2 crash DOWNSTREAM of a poisoned
-value (an int/str comparison, a deleted regex group read later), which is what
-a disabled guard looks like, and they stay plain crash kills. Still counted
-`caught`: a refusal waits on a corpus sweep showing the predicate fires on no
-crash that IS the property. See `hollow_kill`.
+the mutated file lies within the lines the replacement wrote has ONE of two
+causes, and the flag cannot say which: the new text cannot run at all (a name
+never defined, a kwarg that does not exist), or it ran an operation the removed
+guard was protecting and failed on the very input the test feeds it. Replayed
+against the 2026-09-14 hollow five it flags 3; the other 2 crash DOWNSTREAM of a
+poisoned value and stay plain crash kills. The full sweep of 2026-10-12 (165
+specs, 20 crash kills) flagged 2, and BOTH were the second cause:
+`review_evidence_grok.json` drops an `isinstance(…, str)` guard, and `x in _SET`
+on an unhashable value raises `TypeError` on the replacement's own line — the
+property violation itself. So the flag is a pointer for the author, and it is
+never a refusal: `docs/03-analysis/2026-10-12-mutation-sweep-hollow-calibration.md`.
 
 What stays with the author: whether the mechanism that fired is the mechanism
 the spec claims. The harness reports; it never judges that. `_mechanism` on a
@@ -687,8 +689,10 @@ def hollow_kill(output: str, mutated_file: str,
     mutant ever RAN. A builtin exception whose deepest frame in the mutated file
     lies within the lines the mutation just wrote says it did not: the new text
     itself failed (a name never defined, a kwarg that does not exist, a regex
-    group that was deleted), so the kill is evidence about the mutation, not
-    about the guard. Measured 2026-09-14: 4 of 12 genuine crash kills had this
+    group that was deleted), so the kill may be evidence about the mutation, not
+    about the guard. MAY: the 2026-10-12 sweep's only two flags were real kills,
+    where the replacement ran `x in _SET` on the unhashable value its removed
+    guard existed to reject. Same site, opposite meaning, so this annotates. Measured 2026-09-14: 4 of 12 genuine crash kills had this
     shape, and the exception TYPE could not have found them — the 2026-10-04
     calibration had two real `TypeError` kills beside them.
 
@@ -724,8 +728,8 @@ def _hollow_note(result: dict, output: str, mutated_file: str,
     if not site:
         return ""
     result["hollow_kills"] += 1
-    return (f" (hollow: {site} inside the replacement — the mutant's own new text "
-            f"failed to run, so this kill says nothing about the guard)")
+    return (f" (hollow: {site} inside the replacement — either the new text cannot run, "
+            f"or it ran what the removed guard protected; read the message)")
 
 
 def timeout_kill(output: str) -> str | None:
@@ -1465,9 +1469,9 @@ def _run_spec_holding_the_tree(
         "timeout_kills": 0,
         # A SUBSET of `crash_kills`: crashes whose deepest frame in the mutated
         # file lies inside the lines the replacement wrote, i.e. the mutant's own
-        # new text failed to run (`hollow_kill`). PUBLISHED, not refused: a
-        # refusal is wired only once a corpus sweep shows it fires on no crash
-        # that is the property itself.
+        # new text failed to run, or ran what the removed guard protected
+        # (`hollow_kill`). PUBLISHED, never refused: the 2026-10-12 sweep's only
+        # two flags were both real kills.
         "hollow_kills": 0,
         # How many of this run's mutations were scored WITHOUT a `test` key, and
         # therefore against the whole suite rather than against a named pin. Not

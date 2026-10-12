@@ -3835,6 +3835,10 @@ def test_a_hollow_kill_is_counted_and_annotated_but_still_caught(tmp_path: Path)
     assert result["hollow_kills"] == 1, result
     mechanism = result["mechanism"]["unbind the printed name"]
     assert "(hollow: NameError at guard.py:13 " in mechanism, mechanism
+    # The 2026-10-12 sweep's two flags were REAL kills (an unguarded `x in _SET` on an
+    # unhashable value), so the note must not claim the kill says nothing about the guard.
+    assert "says nothing about the guard" not in mechanism, mechanism
+    assert "or it ran what the removed guard protected" in mechanism, mechanism
 
 
 def test_a_multi_line_replacement_is_hollow_on_its_last_line(tmp_path: Path) -> None:
