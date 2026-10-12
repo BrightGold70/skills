@@ -1995,3 +1995,41 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   (2 tools / 5,356 thinking, flagged) and one deep (31 tools / 8,339 thinking, unflagged) — both
   gating `PASS`, with one identical `AUDITCYCLE:` line above them.
   Status: `FIXED` — suite 1668 passed, 12/12 mutants caught (`tests/mutation-specs/audit_effort.json`).
+
+## Surfaced by the HemaSuite `evidence-jev-promotion` Phase 5 run (2026-10-12)
+
+- 🟡 **J50 — the Phase-5 TDD gate refuses a `.py` written to the session scratchpad, outside the
+  project root.** During Task 0 (an orchestrator-run gate task with no production edit), a `Write` of
+  a throwaway reader to
+  `/private/tmp/claude-501/<project-slug>/<session>/scratchpad/task0_fg.py` was denied
+  `[H-MAD-TDD-GATE] BLOCK kind=codex-authorship`, exactly as a production write would be. The file
+  could not reach the repository, so nothing was protected by the refusal.
+  **Cause (read, not run):** `h-mad/hooks/h-mad-tdd-gate.sh` treats an out-of-root target as gated
+  unless `_dir_match` passes on both the canonical and the raw path (`# M:H20`). The docs exemption
+  is root-only on purpose ("Out-of-root targets never take this exemption"), and no rule names the
+  harness scratchpad. So this is a missing exemption, not a wrong rule: an out-of-root production
+  write may be worth gating, but the session's own scratchpad never holds one.
+  **Cost:** low. The workaround is a stdin heredoc (`python3 - <<EOF`), which the impl-plan
+  prescribed anyway. But the refusal names Codex as the remedy for a file Codex should never write.
+  **Fix direction (hypothesis):** allow a target under the harness scratchpad, the session dir that
+  carries `CLAUDE_CODE_SESSION_ID`, or under `$TMPDIR` when it is outside every project root. Pin it
+  with a mutation that removes the exemption.
+  Status: `MONITORING`.
+
+- 🟡 **J51 — Codex's `workspace-write` sandbox denies loopback socket binding, so any 5d/5e scope
+  containing socket tests reads RED-over-count and Codex reports `STATUS: BLOCKED` on a correct
+  RED.** Task 1 RED (`hmad-dispatch exec codex`, scope of 6 HPW test files) came back `BLOCKED`
+  because 25 existing tests in `tests/test_citation_fidelity_shadow.py` failed inside the sandbox
+  ("the sandbox denies loopback socket binding"). The same scope re-run by the orchestrator outside
+  the sandbox gave exactly the stated split, `47 failed, 326 passed, 1 skipped`. Codex was right to
+  stop at a count discrepancy. The discrepancy was environmental.
+  **Cost:** each affected dispatch costs a round trip, and a less careful agent could "fix" 25 green
+  tests. The workaround was an orchestrator note appended to the GREEN prompt, which named the
+  loopback failures as expected and excluded only those. GREEN then completed (`373 passed, 1
+  skipped` outside the sandbox).
+  **Fix direction (hypothesis):** either (a) dispatch pytest-running phases with a sandbox profile
+  that permits loopback, if codex exposes one, or (b) have `h_mad_assemble_tdd.py` take an
+  `--env-known-failures <file|nodeid>` input it renders into the prompt, so the exception is
+  declared by the orchestrator per scope rather than hand-appended. Either way, the orchestrator's
+  re-run outside the sandbox stays the gate.
+  Status: `MONITORING`.
