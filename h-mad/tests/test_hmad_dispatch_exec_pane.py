@@ -569,12 +569,18 @@ def test_a_finishing_slot_is_waited_for_and_then_reused(tmp_path):
     (d / "term_IDLE.cd").write_text(str(tmp_path))
     (d / "term_IDLE.finishing").write_text("")
 
-    # the pane frees its slot shortly after the dispatch starts looking
+    # The pane frees its slot shortly after the dispatch starts looking, in the
+    # release snippet's order, with each step held long enough that the waiter
+    # polls (every 0.2s) inside every intermediate state. In the old order
+    # (`.finishing` cleared first) one of those states made the waiter give up and
+    # create a pane; it failed once in a full-suite run under load.
     def free_it():
         time.sleep(1.5)
-        (d / "term_IDLE.finishing").unlink()
         (d / "term_IDLE.busy").rmdir()
+        time.sleep(0.6)
         (d / "term_IDLE.idle").write_text("")
+        time.sleep(0.6)
+        (d / "term_IDLE.finishing").unlink()
     t = threading.Thread(target=free_it); t.start()
     r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
              "--reuse-wait", "15"], env=env)
@@ -655,8 +661,10 @@ def test_the_pane_marks_itself_finishing_as_soon_as_rc_lands(tmp_path):
     assert ".finishing" in cmd
     subshell = cmd.split("&", 1)[0]
     assert "echo $? >" in subshell and ".finishing" in subshell, subshell[:300]
-    # and it is cleared on release, before the slot goes idle
-    assert cmd.index('"$ORCA_TERMINAL_HANDLE".finishing 2>/dev/null; rmdir') < cmd.index('.idle')
+    # and it is cleared on release AFTER the slot goes idle: cleared first, a
+    # waiter polling between the two saw neither and created a second pane
+    release = cmd[cmd.index('.busy 2>/dev/null; :'):]
+    assert release.index('.idle') < release.index('.finishing'), release
 
 
 def test_reuse_wait_zero_disables_the_wait(tmp_path):

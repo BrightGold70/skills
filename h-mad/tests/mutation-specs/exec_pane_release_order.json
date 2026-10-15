@@ -1,0 +1,28 @@
+{
+  "_why": "A pane releases its reuse slot with a three-step shell fragment, and the ORDER is the guard: `.finishing` must be cleared after `.idle` is written. Cleared first, exec-pane's reuse-wait polled the window between the two, saw neither a claimable slot nor a finishing marker, gave up and created a second pane. That is the case the marker exists to prevent; it surfaced as a one-off full-suite failure under load (2026-10-15, test_a_finishing_slot_is_waited_for_and_then_reused). The behavioural test exercises the wait loop through each intermediate state of the new order but does not read the snippet, so the order pin is the only guard on the order itself.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_exec_pane.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "finishing-cleared-before-idle",
+      "_mechanism": "Restore the pre-fix release order: `.finishing` removed first, then `.busy`, then `.idle` written. Every exec-pane run still releases its slot, so nothing visible fails; only a waiter polling inside the gap creates a second pane.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  printf 'rmdir %s/\"$ORCA_TERMINAL_HANDLE\".busy 2>/dev/null; : > %s/\"$ORCA_TERMINAL_HANDLE\".idle; rm -f %s/\"$ORCA_TERMINAL_HANDLE\".finishing 2>/dev/null' \"$d\" \"$d\" \"$d\"\n",
+      "replace": "  printf 'rm -f %s/\"$ORCA_TERMINAL_HANDLE\".finishing 2>/dev/null; rmdir %s/\"$ORCA_TERMINAL_HANDLE\".busy 2>/dev/null; : > %s/\"$ORCA_TERMINAL_HANDLE\".idle' \"$d\" \"$d\" \"$d\"\n",
+      "test": "tests/test_hmad_dispatch_exec_pane.py::test_the_pane_marks_itself_finishing_as_soon_as_rc_lands",
+      "symbol": "_pane_slot_release_snippet"
+    }
+  ]
+}

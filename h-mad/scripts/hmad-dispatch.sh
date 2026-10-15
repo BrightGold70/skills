@@ -3809,9 +3809,17 @@ _pane_slot_register() {  # <handle> <cd_dir>
 
 # The shell fragment a pane runs to release its own slot. Uses the pane's own
 # $ORCA_TERMINAL_HANDLE, so it needs nothing spliced in but the directory.
+#
+# ORDER IS LOAD-BEARING: `.idle` first, `.finishing` cleared LAST. A waiter
+# (exec-pane's reuse-wait loop) keeps waiting while `.finishing` exists and
+# gives up the moment it is gone. Clearing it first opened a window, between the
+# `rm` and the `.idle` write, in which the slot is neither claimable nor
+# finishing: the waiter gave up and created a second pane, the exact case the
+# marker exists to prevent (measured: a full-suite run under load, 2026-10-15).
+# A claim landing after `.idle` but before the `rm` simply takes the free slot.
 _pane_slot_release_snippet() {  # <slot-dir>
   local d; d="$(_shq "$1")"
-  printf 'rm -f %s/"$ORCA_TERMINAL_HANDLE".finishing 2>/dev/null; rmdir %s/"$ORCA_TERMINAL_HANDLE".busy 2>/dev/null; : > %s/"$ORCA_TERMINAL_HANDLE".idle' "$d" "$d" "$d"
+  printf 'rmdir %s/"$ORCA_TERMINAL_HANDLE".busy 2>/dev/null; : > %s/"$ORCA_TERMINAL_HANDLE".idle; rm -f %s/"$ORCA_TERMINAL_HANDLE".finishing 2>/dev/null' "$d" "$d" "$d"
 }
 
 # Marker a pane drops the moment its DISPATCH is done but before the pane itself
