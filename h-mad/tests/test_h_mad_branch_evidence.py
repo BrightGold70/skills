@@ -38,10 +38,13 @@ files = [a for a in sys.argv[1:] if a.endswith(".py")]
 def note(event):
     with open(log, "a") as fh:
         fh.write(json.dumps({"who": "pytest", "event": event, "t": time.time(),
-                             "args": files}) + "\n")
+                             "args": files, "cwd": os.getcwd(),
+                             "venv": os.environ.get("STUB_VENV")}) + "\n")
 note("start")
 time.sleep(float(os.environ.get("STUB_SLEEP", "0")))
 mode = os.environ.get("STUB_PYTEST", "pass")
+if os.path.exists("STUB_MODE"):  # a per-directory mode, for one group of a multi-group run
+    mode = open("STUB_MODE").read().strip()
 note("end")
 if mode == "pass":
     print(f"{len(files) * 2} passed in 0.01s")
@@ -837,3 +840,111 @@ def test_repo_root_conftest_runs_every_test_in_testpaths(tmp_path: Path, stubs: 
         "h-mad/tests/test_docs.py", "h-mad/tests/test_other.py", "h-mad/tests/test_tool.py",
         "h-mad/tests/test_toolkit.py", "handoff/scripts/test_learn.py"]], proc.stdout
     assert _verdict(proc) == "EVIDENCE-VERDICT: COMPLETE"
+
+
+# --- multi-project repos: one pytest per rootdir (HemaSuite synopsis-path-preflight Task 3) ---
+# A monorepo whose sub-projects each carry a `pytest.ini` and a `tests/conftest.py`
+# cannot run as ONE pytest from the top: both conftests register as the same
+# plugin and collection dies (`ValueError: Plugin already registered under a
+# different name`), so a green branch read UNREADABLE. Brief:
+# docs/handoffs/2026-10-15-main__branch-evidence-multiproject.md.
+
+def _two_project_repo(tmp_path: Path, venv_b: str | None = None) -> Path:
+    """`a/` and `b/`, each with its own pytest.ini, tests/conftest.py and one test."""
+    repo = tmp_path / "mono"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    files = {"conftest.py": "", "README.md": "# mono\n"}
+    for p in ("a", "b"):
+        files |= {f"{p}/pytest.ini": "[pytest]\n",
+                  f"{p}/tests/__init__.py": "",  # packages, as in HemaSuite: both are `tests`
+                  f"{p}/tests/conftest.py": "import pytest\n",
+                  f"{p}/tests/test_{p}.py": f"def test_{p}(): pass\n"}
+    _commit(repo, files, "base")
+    if venv_b is not None:
+        exe = repo / "b" / ".venv" / "bin" / "python"
+        exe.parent.mkdir(parents=True)
+        exe.write_text(venv_b.replace("@PY@", sys.executable), encoding="utf-8")
+        exe.chmod(0o755)
+        (repo / ".git" / "info" / "exclude").write_text(".venv/\n", encoding="utf-8")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    _commit(repo, {"a/tests/test_a.py": "def test_a(): pass\n# edited\n",
+                   "b/tests/test_b.py": "def test_b(): pass\n# edited\n"}, "feat: both")
+    return repo
+
+
+VENV_MARKED = '#!/bin/sh\nSTUB_VENV=b exec "@PY@" "$@"\n'
+VENV_WITHOUT_PYTEST = '#!/bin/sh\ncase "$*" in *"import pytest"*) exit 1;; esac\nexec "@PY@" "$@"\n'
+
+
+def test_two_projects_with_their_own_conftest_run_green_with_real_pytest(tmp_path: Path) -> None:
+    """The defect itself, with the real pytest: before the fix this read
+    `TESTS: UNREADABLE` on a branch whose every test passes."""
+    repo = _two_project_repo(tmp_path)
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("HMAD_BRANCH_EVIDENCE_SCRIPT_DIR", "PYTHONPATH", "PYTEST_ADDOPTS")}
+
+    proc = _run(repo, env)
+
+    assert "TESTS: PASS files=2 passed=2" in proc.stdout, proc.stdout + proc.stderr
+    assert _verdict(proc) == "EVIDENCE-VERDICT: COMPLETE", proc.stdout
+
+
+def test_each_rootdir_runs_from_its_own_directory(tmp_path: Path, stubs: dict) -> None:
+    repo = _two_project_repo(tmp_path)
+
+    proc = _run(repo, stubs["env"])
+
+    starts = [e for e in _events(stubs["log"]) if e["who"] == "pytest" and e["event"] == "start"]
+    assert [(Path(e["cwd"]).resolve(), e["args"]) for e in starts] == [
+        ((repo / "a").resolve(), ["tests/test_a.py"]),
+        ((repo / "b").resolve(), ["tests/test_b.py"])], proc.stdout
+    assert "PYTEST-GROUPS: n=2" in proc.stdout, proc.stdout
+    assert "TESTS: PASS files=2 passed=4" in proc.stdout, proc.stdout
+    assert _verdict(proc) == "EVIDENCE-VERDICT: COMPLETE"
+
+
+def test_a_rootdir_with_a_venv_runs_under_that_venv(tmp_path: Path, stubs: dict) -> None:
+    repo = _two_project_repo(tmp_path, venv_b=VENV_MARKED)
+
+    proc = _run(repo, stubs["env"])
+
+    starts = {Path(e["cwd"]).name: e["venv"] for e in _events(stubs["log"])
+              if e["who"] == "pytest" and e["event"] == "start"}
+    assert starts == {"a": None, "b": "b"}, proc.stdout
+    assert f"b exe={repo / 'b' / '.venv' / 'bin' / 'python'}" in proc.stdout, proc.stdout
+    assert _verdict(proc) == "EVIDENCE-VERDICT: COMPLETE"
+
+
+def test_a_venv_without_pytest_is_UNREADABLE_never_a_fallback(tmp_path: Path, stubs: dict) -> None:
+    """The venv is the project's interpreter: running its tests under another one
+    instead would measure the wrong environment and could read green."""
+    repo = _two_project_repo(tmp_path, venv_b=VENV_WITHOUT_PYTEST)
+
+    proc = _run(repo, stubs["env"])
+
+    starts = [Path(e["cwd"]).name for e in _events(stubs["log"])
+              if e["who"] == "pytest" and e["event"] == "start"]
+    assert starts == ["a"], proc.stdout
+    assert "TESTS: UNREADABLE reason=pytest-missing" in proc.stdout, proc.stdout
+    assert "  [b] UNREADABLE reason=pytest-missing" in proc.stdout, "name the group that refused"
+    assert "  [a] PASS files=1 passed=2" in proc.stdout, proc.stdout
+    assert _verdict(proc).startswith("EVIDENCE-VERDICT: UNREADABLE reason=tests-pytest-missing")
+
+
+@pytest.mark.parametrize("mode, token, verdict", [
+    ("fail", "TESTS: FAIL files=2 failed=1 errors=0 passed=3",
+     "EVIDENCE-VERDICT: INCOMPLETE reason=tests-failed"),
+    ("nosummary", "TESTS: UNREADABLE reason=pytest-no-summary",
+     "EVIDENCE-VERDICT: UNREADABLE reason=tests-pytest-no-summary"),
+])
+def test_one_bad_group_decides_the_whole_run(tmp_path: Path, stubs: dict, mode: str,
+                                             token: str, verdict: str) -> None:
+    repo = _two_project_repo(tmp_path)
+    (repo / "b" / "STUB_MODE").write_text(mode, encoding="utf-8")
+    (repo / ".git" / "info" / "exclude").write_text("STUB_MODE\n", encoding="utf-8")
+
+    proc = _run(repo, stubs["env"])
+
+    assert token in proc.stdout, proc.stdout
+    assert _verdict(proc) == verdict, proc.stdout

@@ -37,7 +37,15 @@ anchor.
 
 Steps run strictly one after another, never concurrently: pytest, consumers,
 `--check-anchors <specs>`, then the harness once per run spec. Children run with
-this interpreter (`sys.executable`), in their own process group.
+this interpreter (`sys.executable`), in their own process group, except pytest:
+the pytest set is split by rootdir (the nearest ancestor holding `pytest.ini`,
+or a `tox.ini`/`setup.cfg`/`pyproject.toml` pytest section; else the top), and
+each group runs from its rootdir under that directory's `.venv`/`venv` python
+when it has one, never falling back to this interpreter when that venv lacks
+pytest. Two sub-projects whose `tests/conftest.py` packages share a run collide
+at collection. `PYTEST-GROUPS:` lists the groups; their results fold into the one
+`TESTS:` token, where any UNREADABLE group makes it UNREADABLE and any failing
+group makes it FAIL.
 
 Prints, first line `EVIDENCE: sha=<tip9> base=<base9> ahead=<n> dirty=<n>`,
 then `TESTS:`, `CONSUMERS-RUN:`, `ANCHORS:` (the harness's own line) and one
@@ -244,17 +252,73 @@ def _suite_signal(text: str, returncode: int | None) -> str | None:
     return None
 
 
-def _pytest(top: Path, files: list[str], timeout: float) -> tuple[str, str | None, list[str]]:
-    """(token body, outcome, detail lines); outcome None=pass, 'failed', or 'u:<reason>'."""
+def _is_rootdir(d: Path) -> bool:
+    """A directory pytest would take as rootdir: it holds an ini file with a pytest section."""
+    if (d / "pytest.ini").is_file():
+        return True
+    for name, section in (("tox.ini", "pytest"), ("setup.cfg", "tool:pytest")):
+        if (d / name).is_file():
+            ini = configparser.ConfigParser()
+            try:
+                ini.read(d / name, encoding="utf-8")
+            except (OSError, configparser.Error):
+                continue
+            if ini.has_section(section):
+                return True
     try:
-        proc = _child([sys.executable, "-m", "pytest", "-q", *files], top, timeout)
+        toml = (d / "pyproject.toml").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return re.search(r"^\[tool\.pytest\.ini_options\]", toml, re.M) is not None
+
+
+def _rootdir(top: Path, rel: str) -> str:
+    """The nearest ancestor of a test file that is a pytest rootdir, or "." for the top."""
+    parts = Path(rel).parts[:-1]
+    for n in range(len(parts), 0, -1):
+        if _is_rootdir(top / Path(*parts[:n])):
+            return str(Path(*parts[:n]))
+    return "."
+
+
+def _interpreter(top: Path, group: str) -> str:
+    """The group's own venv when it has one, never a fallback once one exists."""
+    for venv in (".venv", "venv"):
+        exe = top / group / venv / "bin" / "python"
+        if exe.exists():
+            return str(exe)
+    return sys.executable
+
+
+def _groups(top: Path, files: list[str]) -> list[tuple[str, str, list[str]]]:
+    """(rootdir, interpreter, files relative to that rootdir), in rootdir order.
+
+    One pytest over several sub-projects resolves a common rootdir, and two
+    `tests/conftest.py` packages then register as the same plugin: collection
+    dies with rc 4 on a green branch (HemaSuite synopsis-path-preflight Task 3).
+    """
+    by_root: dict[str, list[str]] = {}
+    for rel in files:
+        by_root.setdefault(_rootdir(top, rel), []).append(rel)
+    out = []
+    for root in sorted(by_root):
+        local = [rel if root == "." else str(Path(rel).relative_to(root)) for rel in by_root[root]]
+        out.append((root, _interpreter(top, root), local))
+    return out
+
+
+def _pytest(top: Path, files: list[str], timeout: float, exe: str = sys.executable
+            ) -> tuple[str, str | None, list[str], dict[str, int]]:
+    """(token body, outcome, detail lines, counts); outcome None=pass, 'failed', or 'u:<reason>'."""
+    counts = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0}
+    try:
+        proc = _child([exe, "-m", "pytest", "-q", *files], top, timeout)
     except subprocess.TimeoutExpired:
-        return "UNREADABLE reason=pytest-timeout", "u:pytest-timeout", []
+        return "UNREADABLE reason=pytest-timeout", "u:pytest-timeout", [], counts
     text = proc.stdout + proc.stderr
     lines = proc.stdout.splitlines()
     failed_ids = [ln for ln in lines if ln.startswith(("FAILED ", "ERROR "))]
     summary = next((ln for ln in reversed(lines) if _SUMMARY_RE.search(ln)), None)
-    counts = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0}
     for n, word in _COUNT_RE.findall(summary or ""):
         counts["errors" if word.startswith("error") else word] += int(n)
     suite = _suite_signal(text, proc.returncode)
@@ -266,14 +330,61 @@ def _pytest(top: Path, files: list[str], timeout: float) -> tuple[str, str | Non
         reason = "pytest-no-summary"
     elif proc.returncode == 0 and counts["passed"] and not counts["failed"] + counts["errors"]:
         skipped = f" skipped={counts['skipped']}" if counts["skipped"] else ""
-        return f"PASS files={len(files)} passed={counts['passed']}{skipped}", None, []
+        return f"PASS files={len(files)} passed={counts['passed']}{skipped}", None, [], counts
     elif proc.returncode == 1 and counts["failed"] + counts["errors"]:
         return (f"FAIL files={len(files)} failed={counts['failed']} errors={counts['errors']} "
-                f"passed={counts['passed']}", "failed", failed_ids)
+                f"passed={counts['passed']}", "failed", failed_ids, counts)
     else:
         reason = "pytest-inconsistent"
     tail = [f"  | {ln}" for ln in text.strip().splitlines()[-5:]]
-    return f"UNREADABLE reason={reason}", f"u:{reason}", tail
+    return f"UNREADABLE reason={reason}", f"u:{reason}", tail, counts
+
+
+def _run_tests(top: Path, files: list[str], timeout: float,
+               out: list[str], incomplete: list[str], unreadable: list[str]) -> None:
+    """One pytest per rootdir, in sequence, folded into ONE `TESTS:` token.
+
+    Any group UNREADABLE makes the token UNREADABLE (a group that did not run
+    certifies nothing); otherwise any FAIL makes it FAIL; PASS needs every group.
+    """
+    groups = _groups(top, files)
+    out.append(f"PYTEST-GROUPS: n={len(groups)}")
+    out.extend(f"  {root} exe={exe} files={len(local)}" for root, exe, local in groups)
+    reasons: list[str] = []
+    detail: list[str] = []
+    per_group: list[str] = []
+    failed = False
+    total = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0}
+    for root, exe, local in groups:
+        where = top / root
+        if _child([exe, "-c", "import pytest"], where, timeout).returncode != 0:
+            body, outcome, lines = "UNREADABLE reason=pytest-missing", "u:pytest-missing", []
+        else:
+            body, outcome, lines, counts = _pytest(where, local, timeout, exe)
+            for k in total:
+                total[k] += counts[k]
+        if outcome == "failed":
+            failed = True
+        elif outcome and outcome[2:] not in reasons:
+            reasons.append(outcome[2:])
+        prefix = "" if len(groups) == 1 else f"[{root}] "
+        per_group.append(f"  [{root}] {body}")
+        detail.extend(prefix + ln if not ln.startswith("  ") else f"  {prefix}{ln.strip()}"
+                      for ln in lines)
+    n = len(files)
+    if reasons:
+        out.append(f"TESTS: UNREADABLE reason={','.join(reasons)}")
+        unreadable.extend("tests-" + r for r in reasons)
+    elif failed:
+        out.append(f"TESTS: FAIL files={n} failed={total['failed']} errors={total['errors']} "
+                   f"passed={total['passed']}")
+        incomplete.append("tests-failed")
+    else:
+        skipped = f" skipped={total['skipped']}" if total["skipped"] else ""
+        out.append(f"TESTS: PASS files={n} passed={total['passed']}{skipped}")
+    if len(groups) > 1:  # which group decided the token, not only that one did
+        out.extend(per_group)
+    out.extend(f"  {ln}" if not ln.startswith("  ") else ln for ln in detail)
 
 
 def _token(proc: subprocess.CompletedProcess, prefix: str) -> str | None:
@@ -430,17 +541,8 @@ def _execute(top: Path, pytest_set: list[str], docs: list[str], specs: list[str]
     """Every step, strictly in sequence; each child finishes before the next starts."""
     if not pytest_set:
         out.append("TESTS: NONE")
-    elif _child([sys.executable, "-c", "import pytest"], top, timeout).returncode != 0:
-        out.append("TESTS: UNREADABLE reason=pytest-missing")
-        unreadable.append("tests-pytest-missing")
     else:
-        body, outcome, detail = _pytest(top, pytest_set, timeout)
-        out.append(f"TESTS: {body}")
-        out.extend(f"  {ln}" if not ln.startswith("  ") else ln for ln in detail)
-        if outcome == "failed":
-            incomplete.append("tests-failed")
-        elif outcome:
-            unreadable.append("tests-" + outcome[2:])
+        _run_tests(top, pytest_set, timeout, out, incomplete, unreadable)
 
     if not docs:
         out.append("CONSUMERS-RUN: NONE docs=0")

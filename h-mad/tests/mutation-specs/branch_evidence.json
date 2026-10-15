@@ -118,10 +118,10 @@
       "name": "failing-tests-ignored",
       "_mechanism": "TESTS: FAIL is printed but does not stop COMPLETE.",
       "file": "scripts/h_mad_branch_evidence.py",
-      "find": "            incomplete.append(\"tests-failed\")\n",
-      "replace": "            pass\n",
+      "find": "        incomplete.append(\"tests-failed\")\n",
+      "replace": "        pass\n",
       "test": "tests/test_h_mad_branch_evidence.py::test_failing_tests_are_INCOMPLETE_and_name_the_failure",
-      "symbol": "_execute"
+      "symbol": "_run_tests"
     },
     {
       "name": "no-summary-reads-as-pass",
@@ -136,10 +136,10 @@
       "name": "missing-pytest-not-probed",
       "_mechanism": "pytest not importable is reported as a test result instead of a named refusal.",
       "file": "scripts/h_mad_branch_evidence.py",
-      "find": "    elif _child([sys.executable, \"-c\", \"import pytest\"], top, timeout).returncode != 0:\n",
-      "replace": "    elif False:\n",
+      "find": "        if _child([exe, \"-c\", \"import pytest\"], where, timeout).returncode != 0:\n",
+      "replace": "        if False:\n",
       "test": "tests/test_h_mad_branch_evidence.py::test_missing_pytest_is_UNREADABLE",
-      "symbol": "_execute"
+      "symbol": "_run_tests"
     },
     {
       "name": "consumers-run-without-run",
@@ -343,8 +343,8 @@
       "name": "pytest-timeout-reads-as-pass",
       "_mechanism": "S6: a pytest that hung reads as a pass.",
       "file": "scripts/h_mad_branch_evidence.py",
-      "find": "        return \"UNREADABLE reason=pytest-timeout\", \"u:pytest-timeout\", []\n",
-      "replace": "        return \"PASS files=0 passed=0\", None, []\n",
+      "find": "        return \"UNREADABLE reason=pytest-timeout\", \"u:pytest-timeout\", [], counts\n",
+      "replace": "        return \"PASS files=0 passed=0\", None, [], counts\n",
       "test": "tests/test_h_mad_branch_evidence.py::test_pytest_timeout_is_UNREADABLE",
       "symbol": "_pytest"
     },
@@ -455,6 +455,60 @@
       "replace": "    return [\"\"]\n",
       "test": "tests/test_h_mad_branch_evidence.py::test_repo_root_conftest_runs_every_test_in_testpaths",
       "symbol": "_testpaths"
+    },
+    {
+      "name": "groups-collapsed-to-the-top",
+      "_mechanism": "Every test file runs in ONE pytest from the top again: two sub-projects' tests/conftest.py packages collide at collection (rc 4) on a green branch.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        by_root.setdefault(_rootdir(top, rel), []).append(rel)\n",
+      "replace": "        by_root.setdefault(\".\", []).append(rel)\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_two_projects_with_their_own_conftest_run_green_with_real_pytest",
+      "symbol": "_groups"
+    },
+    {
+      "name": "a-groups-venv-ignored",
+      "_mechanism": "A sub-project's own .venv is ignored and its tests run under the collector's interpreter.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            return str(exe)\n",
+      "replace": "            return sys.executable\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_rootdir_with_a_venv_runs_under_that_venv",
+      "symbol": "_interpreter"
+    },
+    {
+      "name": "pytest-probed-under-the-wrong-interpreter",
+      "_mechanism": "The pytest probe runs under the collector's interpreter, not the group's venv: a venv lacking pytest passes the probe and its run is then trusted.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        if _child([exe, \"-c\", \"import pytest\"], where, timeout).returncode != 0:\n",
+      "replace": "        if _child([sys.executable, \"-c\", \"import pytest\"], where, timeout).returncode != 0:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_venv_without_pytest_is_UNREADABLE_never_a_fallback",
+      "symbol": "_run_tests"
+    },
+    {
+      "name": "an-unreadable-group-is-dropped",
+      "_mechanism": "One group that crashed or printed no summary no longer makes the whole run UNREADABLE; the other group's PASS stands for both.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        elif outcome and outcome[2:] not in reasons:\n            reasons.append(outcome[2:])\n",
+      "replace": "        elif False:\n            pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_one_bad_group_decides_the_whole_run",
+      "symbol": "_run_tests"
+    },
+    {
+      "name": "a-failing-group-is-dropped",
+      "_mechanism": "One group's failures no longer make the whole run FAIL.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        if outcome == \"failed\":\n            failed = True\n",
+      "replace": "        if outcome == \"failed\":\n            pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_one_bad_group_decides_the_whole_run",
+      "symbol": "_run_tests"
+    },
+    {
+      "name": "the-deciding-group-is-unnamed",
+      "_mechanism": "A multi-group run prints one UNREADABLE token and no per-group results, so nobody can tell which sub-project refused (live on HemaSuite feature/204: a docs/ probe under the launcher's python).",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if len(groups) > 1:  # which group decided the token, not only that one did\n        out.extend(per_group)\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_venv_without_pytest_is_UNREADABLE_never_a_fallback",
+      "symbol": "_run_tests"
     }
   ]
 }
