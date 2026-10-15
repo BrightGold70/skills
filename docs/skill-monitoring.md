@@ -2053,3 +2053,45 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   outside the sandbox, and keeps any OTHER unexplained failure a `STATUS: BLOCKED` stop. A
   whole-file id is refused (`env_known_failure_malformed`). Documented in `h-mad/SKILL.md` (helper
   scripts). 6 tests; `tests/mutation-specs/assemble_tdd_env_known.json` ALL_CAUGHT 5/5.
+
+- 🟡 **J52 — The Codex implementer template prescribes a bounded test command that the Codex
+  Phase-5 shell gate refuses inside Codex, so a 5d dispatch can come back `STATUS: BLOCKED`
+  with every pytest denied.** `references/codex-implementer-prompt.md:52` names
+  `hmad-dispatch run --timeout 600 -- python3 -m pytest <tests> -q` as "the bounded test run to
+  use". Inside `hmad-dispatch exec codex`, `hmad-dispatch` is not on Codex's PATH, so
+  `hooks/h-mad-codex-tdd-gate.py::_safe_argv` cannot resolve the executable and denies the command.
+  Codex's fallback, `bash …/hmad-dispatch.sh run …`, is denied too, because `bash` is not admitted.
+  Measured 2026-10-13, HemaSuite `pubmed-shared-rate-limiter` Task 22 RED: all 3 pytest attempts
+  denied ("H-MAD Phase 5 permits only explicit test, read-only, and H-MAD control commands"), and
+  the dispatch reported `BLOCKED` with tests written and never run. Calling the gate's
+  `_safe_argv` directly with cwd `hematology-paper-writer/` admitted both
+  `.venv/bin/python -m pytest …` and `hmad-dispatch run --timeout 180 -- .venv/bin/python -m pytest …`.
+  So the gate is correct when the executable resolves, and the defect is the template steering
+  Codex to an executable it cannot resolve. Workaround in use: an orchestrator addendum on every
+  dispatch saying "run pytest exactly as `.venv/bin/python -m pytest <args>`; no `hmad-dispatch
+  run`, no `bash`, no `timeout`". Re-dispatches with it ran clean (Tasks 22, 23).
+  Fix direction (unverified): have `exec codex` put `h-mad/bin` on the child's PATH, or have the
+  template say the plain interpreter form is the Phase-5 form under `exec`. A side note, not filed
+  separately: the template's bare `python3` also names the wrong interpreter in a project with a
+  `.venv`. Status: `MONITORING`.
+
+- 🟡 **J53 — `hmad-dispatch exec` reports a codex model-capacity abort as
+  `INPUT_TOO_LARGE … nothing to recover, tree untouched`. Both halves are false, and the
+  remedy it prints (`--vh-tail N`, shrink the prompt) is wrong.** Measured 2026-10-13, HemaSuite
+  Task 23 GREEN: the transcript shows `ERROR: Selected model is at capacity` (gpt-6.1-sol)
+  AFTER Codex had applied its production edit to `tools/references/rate_limiter.py`. The wrapper
+  printed `INPUT_TOO_LARGE — codex refused the prompt before running a turn (max_chars=?
+  actual_chars=?) … tree untouched`, and its own next line reported `tree delta: 4 changed`.
+  Likely mechanism: `_codex_input_too_large` (`scripts/hmad-dispatch.sh`, called when
+  `final_empty=1`) matched the PROMPT ECHO, not an error event. The dispatch prompt quotes h-mad
+  documentation containing `input_too_large` and `"input_error_code":"input_too_large"`, and the
+  log's only hits are those echoed lines (2397, 2400, 4238). That is the J17 prompt-echo class,
+  reached through the refusal classifier, and the unparsed `max_chars=?` fits it. Cost: the message
+  says "nothing to recover", which would have discarded a correct, landed GREEN edit. The
+  orchestrator recovered it only by reading the log and verifying from code (scoped 33 passed;
+  revert reproduced the 11 RED failures). Fix direction (unverified): match only a structured
+  `Error: turn/start` event after the dispatch boundary; classify `Selected model is at capacity`
+  as its own outcome (retryable, tree possibly changed); never print "tree untouched" without
+  reading the tree delta first. Transcript:
+  `/private/tmp/claude-501/-Users-kimhawk-orca-workspaces-HemaSuite-pubmed-shared-rate-limiter/a01be1fe-c7f1-4fb1-9884-6080ffcfcacd/scratchpad/t23g.log`
+  (volatile). Status: `MONITORING`.

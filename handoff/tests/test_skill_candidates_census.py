@@ -422,20 +422,22 @@ def test_the_live_backlog_has_no_unqualified_declined() -> None:
 def test_the_non_j_rows_are_reported_but_never_parsed_as_entries() -> None:
     out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-monitoring.md")
 
-    # Bumped 46 -> 48 for J50/J51 (2026-10-12). Two real entries move both numbers by 2; the
-    # historical gap the pin exists for stays exactly 33 (81 - 48).
-    assert "J-entries=   48" in out or "J-entries=48" in out, out
-    assert "parsed=48 row-shaped=81" in out, out
+    # Bumped 46 -> 48 for J50/J51 (2026-10-12), 48 -> 50 for J52/J53 (2026-10-15). Two real
+    # entries move both numbers by 2; the historical gap the pin exists for stays exactly 33
+    # (83 - 50).
+    assert "J-entries=   50" in out or "J-entries=50" in out, out
+    assert "parsed=50 row-shaped=83" in out, out
 
 
 def test_widening_the_parser_would_be_visible_here() -> None:
     """A regression pin with teeth: if a later change makes the reader absorb
-    the 33, `parsed` moves off 46 and this fails. The count is the guard — the
+    the 33, `parsed` moves off 50 and this fails. The count is the guard — the
     coverage line alone would still print, just with different numbers."""
     out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-monitoring.md")
 
+    # 0 -> 2 for J52/J53 (2026-10-15), both MONITORING. Lower it when either is closed.
     open_line = [l for l in out.splitlines() if "J-entries" in l][0]
-    assert "OPEN(MONITORING+PLANNED)=   0" in open_line, open_line
+    assert "OPEN(MONITORING+PLANNED)=   2" in open_line, open_line
 
 
 def test_the_coverage_gap_names_what_it_is(tmp_path) -> None:
