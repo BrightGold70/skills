@@ -1,0 +1,75 @@
+{
+  "_why": "The run suggestion (80%/90%) in h-mad-advisor-warn.sh: suggestive close-out with /handoff, its own throttle, escalation at 90%.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_advisor_warn.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "run-halt-ignored",
+      "_mechanism": "The run suggestion never fires: the 80% ceiling goes back to being prose nobody reads.",
+      "file": "hooks/h-mad-advisor-warn.sh",
+      "find": "  *\"CTXBUDGET: HALT\"*)                           # M:RUN-HALT-ONLY",
+      "replace": "  *\"CTXBUDGET: NEVER\"*)                          # M:RUN-HALT-ONLY",
+      "test": "tests/test_h_mad_advisor_warn.py::TestTheRunSuggestion::test_eighty_percent_suggests_finishing_the_task_then_handing_off"
+    },
+    {
+      "name": "urgent-band-never-reached",
+      "_mechanism": "At 90%+ the note still suggests the full WRITE, which may not fit.",
+      "file": "hooks/h-mad-advisor-warn.sh",
+      "find": "\"${RPCT:-0}\" \"$URGENT_AT\" 2>/dev/null && BAND=urgent   # M:RUN-URGENT",
+      "replace": "\"${RPCT:-0}\" \"$URGENT_AT\" 2>/dev/null && true   # M:RUN-URGENT",
+      "test": "tests/test_h_mad_advisor_warn.py::TestTheRunSuggestion::test_ninety_percent_suggests_the_lean_close_out"
+    },
+    {
+      "name": "run-repeats-every-call",
+      "_mechanism": "The suggestion reprints on every tool call: the context bloat this hook exists to prevent.",
+      "file": "hooks/h-mad-advisor-warn.sh",
+      "find": "\"$BAND\":*) [ \"$((NOW - LAST_AT))\" -lt \"$RUN_EVERY\" ] && RUN_DUE=no ;;   # M:RUN-THROTTLE",
+      "replace": "\"$BAND\":*) ;;   # M:RUN-THROTTLE",
+      "test": "tests/test_h_mad_advisor_warn.py::TestTheRunSuggestion::test_it_repeats_slowly_not_on_every_call"
+    },
+    {
+      "name": "escalation-is-throttled",
+      "_mechanism": "Crossing into 90% waits out the 80% interval, so the urgent note can arrive ten minutes late.",
+      "file": "hooks/h-mad-advisor-warn.sh",
+      "find": "        *) ;;                                    # entering a higher band, or garbage -> speak",
+      "replace": "        *) RUN_DUE=no ;;",
+      "test": "tests/test_h_mad_advisor_warn.py::TestTheRunSuggestion::test_crossing_into_ninety_speaks_at_once_despite_the_interval"
+    },
+    {
+      "name": "run-shares-the-advisor-stamp",
+      "_mechanism": "One stamp for both halves: the advisor note silences the run suggestion.",
+      "file": "hooks/h-mad-advisor-warn.sh",
+      "find": "RUN_STAMP=\"${STAMP_DIR%/}/h-mad-run-suggest.${SESSION}.stamp\"",
+      "replace": "RUN_STAMP=\"${STAMP_DIR%/}/h-mad-advisor-warn.${SESSION}.stamp\"",
+      "test": "tests/test_h_mad_advisor_warn.py::TestTheRunSuggestion::test_a_second_call_is_silent_for_both_halves"
+    },
+    {
+      "name": "suggest-threshold-not-tunable",
+      "_mechanism": "HMAD_RUN_SUGGEST_AT is ignored.",
+      "file": "hooks/h-mad-advisor-warn.sh",
+      "find": "RUN_AT=\"${HMAD_RUN_SUGGEST_AT:-80}\"",
+      "replace": "RUN_AT=\"80\"",
+      "test": "tests/test_h_mad_advisor_warn.py::TestTheRunSuggestion::test_the_thresholds_are_tunable"
+    },
+    {
+      "name": "soft-wording-dropped",
+      "_mechanism": "The suggestion loses the line that gives time to finish the task in hand (operator decision: suggestive, not obligatory).",
+      "file": "hooks/h-mad-advisor-warn.sh",
+      "find": "No rush, and nothing is blocked: finish the task you are on and avoid starting a new large one, \\\n",
+      "replace": "",
+      "test": "tests/test_h_mad_advisor_warn.py::TestTheRunSuggestion::test_eighty_percent_suggests_finishing_the_task_then_handing_off"
+    }
+  ]
+}

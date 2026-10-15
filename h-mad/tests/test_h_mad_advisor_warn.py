@@ -208,7 +208,10 @@ class TestItStaysSilentWhenItCannotMeasure:
                  HMAD_CONTEXT_BUDGET_SCRIPT=str(fake))
 
         assert r.returncode == 0
-        assert _context(r) is None
+        # The run suggestion may speak on a HALT -- that is its job. What must never happen is
+        # the ADVISOR note reading a HALT as its own DENY.
+        ctx = _context(r) or ""
+        assert "advisor() call forwards" not in ctx, ctx
 
 
 class TestItIsTunable:
@@ -335,3 +338,95 @@ class TestTheDeadGateIsGone:
         """The gate needed `HMAD_ADVISOR_OVERRIDE` because it could refuse. An
         advisory that ships an escape hatch is telling the reader it blocks."""
         assert "HMAD_ADVISOR_OVERRIDE" not in _code(HOOK)
+
+
+# --- the run suggestion: 80% suggests closing out, 90% suggests closing out NOW -------------
+#
+# The 80% run ceiling (`--mode run`) used to be prose an orchestrator had to remember at a phase
+# boundary, and outside an /h-mad run nothing read it at all. This half of the hook reads it on
+# every tool call and SUGGESTS -- by operator decision 2026-10-15, never obliges: there is time to
+# finish the task in hand, so the wording asks for a close-out after it, not a halt now.
+
+def _run_ctx(r):
+    ctx = _context(r) or ""
+    return ctx[ctx.find("[H-MAD] Run context"):] if "[H-MAD] Run context" in ctx else ""
+
+
+class TestTheRunSuggestion:
+    def test_eighty_percent_suggests_finishing_the_task_then_handing_off(self, tmp_path):
+        r = _run(_payload(tmp_path, 850_000), tmp_path)
+        # Advisory only: rc 0 and no `decision` in the hook JSON. (The WORDS "nothing is
+        # blocked" appear in the text on purpose, so a raw substring check would misfire.)
+        assert r.returncode == 0
+        out = json.loads(r.stdout)
+        assert "decision" not in out and "continue" not in out, out
+        run = _run_ctx(r)
+        assert "85.0%" in run and "/handoff" in run, run
+        assert "finish the task you are on" in run and "nothing is blocked" in run, run
+        assert "--skip-scout" not in run, run
+
+    def test_ninety_percent_suggests_the_lean_close_out(self, tmp_path):
+        run = _run_ctx(_run(_payload(tmp_path, 920_000), tmp_path))
+        assert "92.0%" in run and "/handoff --skip-scout --skip-memories" in run, run
+        assert "finish only the step in hand" in run, run
+
+    @pytest.mark.parametrize("read,band", [(800_000, None), (810_000, "soon"),
+                                           (899_000, "soon"), (900_000, "urgent")],
+                             ids=["at-80-is-quiet", "just-over-80", "just-under-90", "at-90"])
+    def test_the_bands(self, tmp_path, read, band):
+        run = _run_ctx(_run(_payload(tmp_path, read), tmp_path))
+        if band is None:
+            assert run == "", run
+        else:
+            assert ("--skip-scout" in run) == (band == "urgent"), run
+
+    def test_it_rides_beside_the_advisor_note_in_one_payload(self, tmp_path):
+        r = _run(_payload(tmp_path, 850_000), tmp_path)
+        ctx = _context(r)
+        assert "advisor() call forwards" in ctx and "[H-MAD] Run context" in ctx, ctx
+        assert len(r.stdout.strip().splitlines()) == 1, r.stdout
+
+    def test_below_eighty_it_says_nothing_of_its_own(self, tmp_path):
+        assert _run_ctx(_run(_payload(tmp_path, 600_000), tmp_path)) == ""
+
+    def test_it_repeats_slowly_not_on_every_call(self, tmp_path):
+        """Suggestive means it gives time: once on entering a band, then a reminder per
+        interval (default 600 s), on its own stamp so the advisor throttle never silences it."""
+        first = _run_ctx(_run(_payload(tmp_path, 850_000), tmp_path))
+        again = _run_ctx(_run(_payload(tmp_path, 850_000), tmp_path))
+        assert first and again == "", (first, again)
+
+    def test_crossing_into_ninety_speaks_at_once_despite_the_interval(self, tmp_path):
+        _run(_payload(tmp_path, 850_000), tmp_path)
+        run = _run_ctx(_run(_payload(tmp_path, 920_000), tmp_path))
+        assert "--skip-scout" in run, run
+
+    def test_a_zero_interval_always_speaks(self, tmp_path):
+        _run(_payload(tmp_path, 850_000), tmp_path, HMAD_RUN_SUGGEST_INTERVAL=0)
+        run = _run_ctx(_run(_payload(tmp_path, 850_000), tmp_path, HMAD_RUN_SUGGEST_INTERVAL=0))
+        assert run, run
+
+    def test_its_throttle_is_independent_of_the_advisor_throttle(self, tmp_path):
+        """The advisor note has just spoken (60 s throttle armed); the run suggestion, never
+        having spoken, must still speak."""
+        _run(_payload(tmp_path, 600_000), tmp_path)        # advisor speaks, run silent
+        run = _run_ctx(_run(_payload(tmp_path, 850_000), tmp_path))
+        assert run, run
+
+    def test_a_corrupt_stamp_falls_through_to_speaking(self, tmp_path):
+        _run(_payload(tmp_path, 850_000), tmp_path)
+        for st in (tmp_path / "stamps").glob("h-mad-run-suggest.*"):
+            st.write_text("garbage")
+        assert _run_ctx(_run(_payload(tmp_path, 850_000), tmp_path))
+
+    def test_the_thresholds_are_tunable(self, tmp_path):
+        run = _run_ctx(_run(_payload(tmp_path, 700_000), tmp_path,
+                            HMAD_RUN_SUGGEST_AT=60, HMAD_RUN_URGENT_AT=65))
+        assert "--skip-scout" in run, run
+
+    def test_a_second_call_is_silent_for_both_halves(self, tmp_path):
+        """Each half keeps its own stamp. Sharing one makes each read the other's as
+        unreadable and fall through to speaking -- the advisor note would then reprint on
+        every call once the run suggestion had spoken."""
+        _run(_payload(tmp_path, 850_000), tmp_path)
+        assert _context(_run(_payload(tmp_path, 850_000), tmp_path)) is None

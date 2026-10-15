@@ -2364,8 +2364,20 @@ the next session, so skipping them last is the cheaper loss. If the halted work 
 different repo or worktree, that is the skill's HANDOVER mode, not WRITE — it releases the claim as
 part of the transfer, so do not also release it here.
 
-**`HALT` is not `DENY`, deliberately.** `hooks/h-mad-advisor-warn.sh` speaks on the glob
-`*"CTXBUDGET: DENY"*`. Had a run-ceiling breach reused that word, no existing consumer could tell an
+**The hook suggests it, too — it does not oblige.** `hooks/h-mad-advisor-warn.sh` (PostToolUse,
+every session, not only `/h-mad` runs) also reads `--mode run`. Past 80% it injects a suggestion,
+not a halt: finish the task in hand, avoid starting a new large one, then `/handoff` (WRITE). From
+90% the suggestion is the lean close-out: finish only the step in hand, then
+`/handoff --skip-scout --skip-memories`. It speaks once on entering a band and then every
+`HMAD_RUN_SUGGEST_INTERVAL` seconds (default 600). Escalating to 90% speaks at once, and it keeps
+its own stamp, so the 45% advisor note never silences it. The thresholds are `HMAD_RUN_SUGGEST_AT`
+(80) and `HMAD_RUN_URGENT_AT` (90). Suggestive by operator decision (2026-10-15): a phase
+boundary is still where an orchestrator should check and act. The hook only makes sure the number
+is SEEN, which it never was outside an h-mad run. A hook cannot invoke a skill; the model still
+runs `/handoff`.
+
+**`HALT` is not `DENY`, deliberately.** The advisor half of `hooks/h-mad-advisor-warn.sh` speaks on
+the glob `*"CTXBUDGET: DENY"*`, and its run half speaks on `HALT`, with different words. Had a run-ceiling breach reused that word, no existing consumer could tell an
 advisor refusal from a dying run — and they prescribe opposite actions (choose a cheaper channel
 versus stop the run entirely). `--mode run` omits the `projected=` field for the same reason: it is
 `used * 2` because advisor forwards a copy, a run cap forwards nothing, and printing it would invite

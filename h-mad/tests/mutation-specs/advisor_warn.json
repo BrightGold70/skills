@@ -11,19 +11,19 @@
   {
    "name": "unknown-warns",
    "file": "hooks/h-mad-advisor-warn.sh",
-   "find": "  *) exit 0 ;;\nesac",
-   "replace": "  *) ;;\nesac"
+   "find": "    *\"CTXBUDGET: DENY\"*)\n      [ -n \"$STAMP\" ]",
+   "replace": "    *)\n      [ -n \"$STAMP\" ]"
   },
   {
    "name": "halt-read-as-deny",
    "file": "hooks/h-mad-advisor-warn.sh",
-   "find": "  *\"CTXBUDGET: DENY\"*) ;;",
-   "replace": "  *\"CTXBUDGET: \"*) ;;"
+   "find": "    *\"CTXBUDGET: DENY\"*)",
+   "replace": "    *\"CTXBUDGET: \"*)"
   },
   {
    "name": "ignore-the-handed-transcript",
    "file": "hooks/h-mad-advisor-warn.sh",
-   "find": "[ \"$TRANSCRIPT\" != \"-\" ] && [ -f \"$TRANSCRIPT\" ] && ARGS+=(--transcript \"$TRANSCRIPT\")",
+   "find": "[ \"$TRANSCRIPT\" != \"-\" ] && [ -f \"$TRANSCRIPT\" ] && TARGS+=(--transcript \"$TRANSCRIPT\")",
    "replace": "true"
   },
   {
@@ -41,20 +41,20 @@
   {
    "name": "throttle-never-expires",
    "file": "hooks/h-mad-advisor-warn.sh",
-   "find": "    *) [ \"$((NOW - THEN))\" -lt \"$EVERY\" ] && exit 0 ;;",
-   "replace": "    *) exit 0 ;;"
+   "find": "    *) [ \"$((NOW - THEN))\" -lt \"$EVERY\" ] && ADV_DUE=no ;;",
+   "replace": "    *) ADV_DUE=no ;;"
   },
   {
    "name": "corrupt-stamp-silences",
    "file": "hooks/h-mad-advisor-warn.sh",
-   "find": "    *[!0-9]*|\"\") ;;                              # unreadable -> emit",
-   "replace": "    *[!0-9]*|\"\") exit 0 ;;"
+   "find": "    *[!0-9]*|\"\") ;;                              # unreadable -> speak",
+   "replace": "    *[!0-9]*|\"\") ADV_DUE=no ;;"
   },
   {
    "name": "hostile-session-id-builds-a-path",
    "file": "hooks/h-mad-advisor-warn.sh",
-   "find": "  \"\"|*/*|*..*) STAMP=\"\" ;;                       # refuse to build a path from it",
-   "replace": "  \"\") STAMP=\"\" ;;"
+   "find": "  \"\"|*/*|*..*) STAMP=\"\"; RUN_STAMP=\"\" ;;           # refuse to build a path from it",
+   "replace": "  \"\") STAMP=\"\"; RUN_STAMP=\"\" ;;"
   },
   {
    "name": "stamp-shared-across-sessions",
