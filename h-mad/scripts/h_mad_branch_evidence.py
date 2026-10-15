@@ -28,6 +28,11 @@ enclosing checkout) is UNREADABLE. Everything else derives from
 The pytest set is the changed tests, every tracked test whose source names the
 stem of a changed or deleted prod/support file (or the name of a deleted
 document) as a whole word, and every tracked test under a changed `conftest.py` (for the repo root's, every test in `pytest.ini` testpaths).
+A test in a different rootdir from the changed file (see below) is selected only by
+an import-shaped reference: an `import`/`from … import` of the stem, or a string
+literal with the stem as a dotted or path component (a monkeypatch target, a
+script path). A sibling project's docstring or comment that says the word is not
+a consumer. A file `ast` cannot parse falls back to the word match.
 The documents go to `h_mad_doc_consumers.py --run`, whose `CONSUMERS-RUN:` token
 is forwarded. Specs: the changed specs plus every committed spec with a mutation
 whose `file` is changed or deleted code are RUN; a spec whose mutations only
@@ -78,7 +83,9 @@ tree. HEAD and `git status` are compared before and after.
 from __future__ import annotations
 
 import argparse
+import ast
 import configparser
+import functools
 import json
 import os
 import re
@@ -252,6 +259,7 @@ def _suite_signal(text: str, returncode: int | None) -> str | None:
     return None
 
 
+@functools.lru_cache(maxsize=None)
 def _is_rootdir(d: Path) -> bool:
     """A directory pytest would take as rootdir: it holds an ini file with a pytest section."""
     if (d / "pytest.ini").is_file():
@@ -407,6 +415,33 @@ def _names(text: str, token: str) -> bool:
     return re.search(rf"(?<![\w-]){re.escape(token)}(?!\w)", text) is not None
 
 
+def _import_parts(text: str) -> set[str] | None:
+    """Every dotted or path component a test can reach a module by: its import
+    statements (module and imported names) and its string literals (a monkeypatch
+    target `"pkg.mod.attr"`, a script path `"scripts/mod.py"`; a string with no `.`
+    or `/` is not a reference). None if it does not parse. Comments are not in the tree, and prose in a string is one component,
+    so a sentence that says the word is not an import."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return None
+    parts: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts.update(alias.name.split("."))
+        elif isinstance(node, ast.ImportFrom):
+            parts.update((node.module or "").split("."))
+            parts.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            # Only a STRUCTURED reference: a lone word is a dict key or a label
+            # (`context["eligibility"]` in a sibling project), not a module.
+            if re.search(r"[./]", node.value):
+                parts.update(re.split(r"[./]", node.value))
+    parts.discard("")
+    return parts
+
+
 def collect(target: str, base: str, no_mutation: bool,
             timeout: float) -> tuple[list[str], str, int]:
     out: list[str] = []
@@ -461,6 +496,11 @@ def collect(target: str, base: str, no_mutation: bool,
     # The pytest set: changed tests, tests naming a changed script, tests under a changed conftest.
     why: dict[str, str] = {rel: "changed" for rel in live["test"]}
     tokens = {Path(rel).stem for rel in kinds["prod"] + kinds["support"]}
+    # Where each code token lives: a test in ANOTHER rootdir is selected only by an
+    # import-shaped reference (a sibling project saying the word is not a consumer).
+    homes: dict[str, set[str]] = {}
+    for rel in kinds["prod"] + kinds["support"]:
+        homes.setdefault(Path(rel).stem, set()).add(_rootdir(top, rel))
     tokens |= {Path(rel).name for rel in kinds["doc"] if rel in deleted}
     conftest_dirs: list[str] = []
     for rel in kinds["support"]:
@@ -482,9 +522,24 @@ def collect(target: str, base: str, no_mutation: bool,
             text = (top / rel).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        named = sorted(tok for tok in tokens if _names(text, tok))
+        here = _rootdir(top, rel)
+        cross = {tok for tok in tokens if tok in homes and here not in homes[tok]}
+        named = {tok for tok in tokens - cross if _names(text, tok)}
+        imported: set[str] = set()
+        if cross:
+            parts = _import_parts(text)
+            if parts is None:  # unparseable: the word match, as before
+                named |= {tok for tok in cross if _names(text, tok)}
+            else:
+                imported = cross & parts
+        reasons = []
+        if imported:
+            reasons.append("imports " + ",".join(sorted(imported)) + " from "
+                           + ",".join(sorted({h for tok in imported for h in homes[tok]})))
         if named:
-            why[rel] = "names " + ",".join(named)
+            reasons.append("names " + ",".join(sorted(named)))
+        if reasons:
+            why[rel] = "; ".join(reasons)
     pytest_set = sorted(why)
     out.append(f"PYTEST-SET: n={len(pytest_set)}")
     out.extend(f"  {rel} ({why[rel]})" for rel in pytest_set)

@@ -948,3 +948,87 @@ def test_one_bad_group_decides_the_whole_run(tmp_path: Path, stubs: dict, mode: 
 
     assert token in proc.stdout, proc.stdout
     assert _verdict(proc) == verdict, proc.stdout
+
+
+# --- consumer selection across rootdirs: an import, not a word (same brief, defect 1) ---
+# A bare-word match on a changed module's stem selected sibling-project tests that
+# only SAID the word (`eligibility` in a docstring, a module name in a comment).
+# Inside one rootdir the word match stays; across rootdirs it must be import-shaped.
+
+CROSS_IMPORTS = {
+    "b/tests/test_imports.py": "import eligibility\ndef test_i(): pass\n",
+    "b/tests/test_from_pkg.py": "from pkg.eligibility import rule\ndef test_f(): pass\n",
+    "b/tests/test_from_names.py": "from pkg import (\n    other,\n    eligibility,\n)\ndef test_n(): pass\n",
+    "b/tests/test_patch_target.py": 'def test_p(monkeypatch):\n    monkeypatch.setattr("pkg.eligibility.rule", 1)\n',
+    "b/tests/test_script_path.py": 'SCRIPT = HERE / "scripts" / "eligibility.py"\ndef test_s(): pass\n',
+}
+CROSS_PROSE = {
+    "b/tests/test_prose.py": '"""Checks eligibility of a patient for the trial."""\ndef test_x(): pass\n',
+    "b/tests/test_comment.py": "# eligibility rules live elsewhere\ndef test_y(): pass\n",
+    "b/tests/test_string.py": 'def test_z(): assert "patient eligibility" != ""\n',
+    # Live on HemaSuite feature/204: a CSA test keyed a dict by the word.
+    "b/tests/test_dict_key.py": 'def test_k(): assert {"eligibility": 1}["eligibility"]\n',
+}
+
+
+def _cross_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "cross"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    files = {"a/pytest.ini": "[pytest]\n", "b/pytest.ini": "[pytest]\n",
+             "a/scripts/eligibility.py": "def rule():\n    return 1\n",
+             "a/tests/test_eligibility.py": "from eligibility import rule\ndef test_rule(): pass\n",
+             # Same rootdir as the change: a bare word still selects it, as before.
+             "a/tests/test_mentions.py": "# eligibility is covered elsewhere\ndef test_m(): pass\n"}
+    _commit(repo, files | CROSS_IMPORTS | CROSS_PROSE, "base")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    _commit(repo, {"a/scripts/eligibility.py": "def rule():\n    # changed\n    return 1\n",
+                   "a/tests/test_eligibility.py": "from eligibility import rule\ndef test_rule(): pass\n# more\n"},
+            "feat: eligibility")
+    return repo
+
+
+def _selected(proc: subprocess.CompletedProcess) -> dict[str, str]:
+    lines = proc.stdout.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("PYTEST-SET: "))
+    out = {}
+    for ln in lines[start + 1:]:
+        if not ln.startswith("  "):
+            break
+        rel, _, why = ln.strip().partition(" (")
+        out[rel] = why.rstrip(")")
+    return out
+
+
+def test_a_sibling_rootdir_is_selected_only_by_an_import_shaped_match(tmp_path: Path, stubs: dict) -> None:
+    repo = _cross_repo(tmp_path)
+
+    proc = _run(repo, stubs["env"], "--no-mutation")
+
+    picked = _selected(proc)
+    for rel in CROSS_IMPORTS:
+        assert rel in picked, f"{rel} imports the changed module and was not selected:\n{proc.stdout}"
+        assert picked[rel].startswith("imports eligibility from a"), picked[rel]
+    for rel in CROSS_PROSE:
+        assert rel not in picked, f"{rel} only says the word and was selected:\n{proc.stdout}"
+
+
+def test_the_same_rootdir_keeps_the_whole_word_match(tmp_path: Path, stubs: dict) -> None:
+    repo = _cross_repo(tmp_path)
+
+    proc = _run(repo, stubs["env"], "--no-mutation")
+
+    assert _selected(proc).get("a/tests/test_mentions.py") == "names eligibility", proc.stdout
+
+
+def test_an_unparseable_sibling_test_falls_back_to_the_word_match(tmp_path: Path, stubs: dict) -> None:
+    """A file `ast` cannot read is not proven to be a non-consumer: select it as before."""
+    repo = _cross_repo(tmp_path)
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, {"b/tests/test_broken.py": "def test_b(:\n    eligibility\n"}, "broken")
+    _git(repo, "checkout", "-q", "feat")
+    _git(repo, "rebase", "-q", "main")
+
+    proc = _run(repo, stubs["env"], "--no-mutation")
+
+    assert _selected(proc).get("b/tests/test_broken.py") == "names eligibility", proc.stdout

@@ -64,8 +64,8 @@
       "name": "tests-naming-a-changed-script-are-not-run",
       "_mechanism": "Only the changed test files run; an existing test of the changed script is skipped.",
       "file": "scripts/h_mad_branch_evidence.py",
-      "find": "        named = sorted(tok for tok in tokens if _names(text, tok))\n",
-      "replace": "        named = []\n",
+      "find": "        named = {tok for tok in tokens - cross if _names(text, tok)}\n",
+      "replace": "        named = set()\n",
       "test": "tests/test_h_mad_branch_evidence.py::test_changed_tests_are_the_pytest_set",
       "symbol": "collect"
     },
@@ -509,6 +509,60 @@
       "replace": "",
       "test": "tests/test_h_mad_branch_evidence.py::test_a_venv_without_pytest_is_UNREADABLE_never_a_fallback",
       "symbol": "_run_tests"
+    },
+    {
+      "name": "a-sibling-saying-the-word-is-a-consumer",
+      "_mechanism": "The cross-rootdir rule is dropped: a sibling project's docstring or comment that says a changed module's stem selects its test again.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        cross = {tok for tok in tokens if tok in homes and here not in homes[tok]}\n",
+      "replace": "        cross = set()\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_sibling_rootdir_is_selected_only_by_an_import_shaped_match",
+      "symbol": "collect"
+    },
+    {
+      "name": "a-sibling-import-is-not-a-consumer",
+      "_mechanism": "Across rootdirs nothing is selected, not even a test that imports the changed module.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "                imported = cross & parts\n",
+      "replace": "                imported = set()\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_sibling_rootdir_is_selected_only_by_an_import_shaped_match",
+      "symbol": "collect"
+    },
+    {
+      "name": "string-references-are-not-imports",
+      "_mechanism": "A monkeypatch target or a script path in a string no longer counts as a reference.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            parts.update(re.split(r\"[./]\", node.value))\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_sibling_rootdir_is_selected_only_by_an_import_shaped_match",
+      "symbol": "_import_parts"
+    },
+    {
+      "name": "from-import-names-ignored",
+      "_mechanism": "`from pkg import mod` imports the module by NAME; reading only the module path misses it.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            parts.update(alias.name for alias in node.names)\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_sibling_rootdir_is_selected_only_by_an_import_shaped_match",
+      "symbol": "_import_parts"
+    },
+    {
+      "name": "unparseable-sibling-dropped",
+      "_mechanism": "A sibling test that does not parse is silently left out instead of falling back to the word match.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "                named |= {tok for tok in cross if _names(text, tok)}\n",
+      "replace": "                pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_an_unparseable_sibling_test_falls_back_to_the_word_match",
+      "symbol": "collect"
+    },
+    {
+      "name": "a-lone-word-string-is-a-reference",
+      "_mechanism": "Every string literal counts, so a sibling test that keys a dict by the word (`context[\"eligibility\"]`, live on HemaSuite feature/204) is selected as a consumer.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            if re.search(r\"[./]\", node.value):\n",
+      "replace": "            if True:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_sibling_rootdir_is_selected_only_by_an_import_shaped_match",
+      "symbol": "_import_parts"
     }
   ]
 }
