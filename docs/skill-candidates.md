@@ -2566,3 +2566,22 @@ drop the line.
   `~/.claude/plugins/cache/`, not code in this repo. A local patch is overwritten on every plugin
   update (memory: vendor-managed skills are not patchable). Report it upstream or disable the hook
   in settings. — candidate: **DECLINED 2026-10-13 (triage: useful, not codable here)**
+
+## 2026-10-15 — candidates-burn-run-suggest (scout)
+
+Reconciled first: census OPEN=8, all `maybe` (1269, 2366, 2397, 2487, 2502, and the HemaSuite (b), (d), (e)). Every row was
+re-checked against source on 2026-10-12/13 in this session (`86e08e43`, `fec09a63`), and none of
+the commits since touches what they ask for. `2a03ca2b` changes only `h-mad-advisor-warn.sh`.
+
+- **census `--rev <ref>` (read a store as committed, not as the working tree)**: twice this
+  session a census-driven test failed only because ANOTHER session had uncommitted entries in a
+  shared doc (J52/J53 in `docs/skill-monitoring.md`). Telling "my change broke it" from "their WIP
+  broke it" took `git show HEAD:<file> > tmp` plus a census on the copy. A `--rev HEAD` flag, or
+  a test-side read of the committed blob, would make that one command and stop the pins flapping on
+  a neighbour's edit. — recurrence: 1 — candidate: maybe
+- **apply a reconciliation decisions table to a store, by census open-line**: applying 53 status
+  lines to HemaSuite took three attempts. Name matching refused on a recurrence bump, then on a
+  declined reinforcement row, and what held was "insert under the exact line `--list-open`
+  reports". A `skill_candidates_census.py --apply <table>` (insert-only, refuse on ambiguity, print
+  the OPEN delta) would make the next pass (22 rows remain) mechanical. — recurrence: 1 (3 tries in
+  one task) — candidate: maybe
