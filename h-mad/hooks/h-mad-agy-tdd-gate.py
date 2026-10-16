@@ -187,7 +187,50 @@ def main() -> int:
             decision = {"decision": "allow"}
             return 0
 
-        # Task 7 replaces this conservative rule for class (c).
+        if tool_class == "c":
+            args = call.get("args")
+            if not isinstance(args, dict):
+                args = {}
+            command = args.get("CommandLine")
+            if not isinstance(command, str):
+                if phase5_status in {"active", "unknown"}:
+                    decision = {"decision": "deny", "reason": "Shell call has no string CommandLine. kind=judge-error"}
+                else:
+                    decision = {"decision": "allow"}
+                return 0
+            if phase5_status == "unknown":
+                decision = {"decision": "deny", "reason": "State governing shell execution is unreadable. kind=judge-error"}
+                return 0
+            if phase5_status == "active":
+                workdir = args.get("Cwd")
+                if workdir is not None and not isinstance(workdir, str):
+                    cwd = MALFORMED_WORKDIR
+                elif not workdir:
+                    cwd = str(root)
+                else:
+                    path = Path(workdir).expanduser()
+                    cwd = str(root / path if not path.is_absolute() else path)
+                try:
+                    if isinstance(cwd, str) and Path(cwd).is_dir():
+                        os.chdir(cwd)
+                except OSError:
+                    pass
+                if not _safe_shell_command(command, root, cwd):
+                    allowance = _shell_allowance(root)
+                    if isinstance(allowance, str):
+                        decision = {"decision": "deny", "reason": "Shell allowance is unreadable or unparsable. kind=judge-error"}
+                        return 0
+                    if not _operator_allowed(command, allowance):
+                        decision = {
+                            "decision": "deny",
+                            "reason": "Phase 5 permits only explicit test, read-only, and H-MAD control commands. "
+                                      f"Use {', '.join(sorted(CLASS_B))} for writes so the TDD gate can verify a failing test. "
+                                      f"The operator may list command prefixes in {SHELL_ALLOW_FILE}. kind=shell-not-admitted",
+                        }
+                        return 0
+            decision = {"decision": "allow"}
+            return 0
+
         if phase5_status == "inactive":
             decision = {"decision": "allow"}
         elif phase5_status == "active":

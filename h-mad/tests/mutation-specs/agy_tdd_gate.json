@@ -147,6 +147,42 @@
       "find": "                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=allowance-file-write\"}",
       "replace": "                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=judge-error\"}",
       "test": "tests/test_h_mad_agy_tdd_gate.py::test_deny_row_kind"
+    },
+    {
+      "name": "fr4-class-c-command-s-dropped",
+      "_mechanism": "Deny a missing or non-string CommandLine even when Phase 5 is inactive.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                if phase5_status in {\"active\", \"unknown\"}:\n                    decision = {\"decision\": \"deny\", \"reason\": \"Shell call has no string CommandLine. kind=judge-error\"}",
+      "replace": "                if True:\n                    decision = {\"decision\": \"deny\", \"reason\": \"Shell call has no string CommandLine. kind=judge-error\"}",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_run_command_missing_command_line"
+    },
+    {
+      "name": "fr4-kind-shell-not-admitted",
+      "_mechanism": "Report a shell policy refusal with judge-error instead of shell-not-admitted.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "f\"The operator may list command prefixes in {SHELL_ALLOW_FILE}. kind=shell-not-admitted\"",
+      "replace": "f\"The operator may list command prefixes in {SHELL_ALLOW_FILE}. kind=judge-error\"",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_deny_row_kind"
+    },
+    {
+      "name": "fr4-class-c-bad-cwd-judge-error",
+      "_mechanism": "Deny a malformed or nonexistent command directory with judge-error before the shell policy can admit ls.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                if not _safe_shell_command(command, root, cwd):",
+      "replace": "                if not isinstance(cwd, str) or not Path(cwd).is_dir():\n                    decision = {\"decision\": \"deny\", \"reason\": \"Shell directory is invalid. kind=judge-error\"}\n                    return 0\n                if not _safe_shell_command(command, root, cwd):",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_ls_under_each_bad_cwd_is_allowed"
+    },
+    {
+      "name": "fr4-class-c-cwd-joined-to-handler-dir",
+      "_mechanism": "Resolve a relative Cwd against the hook handler's directory rather than the session root.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                    cwd = str(root / path if not path.is_absolute() else path)",
+      "replace": "                    cwd = str(Path(__file__).resolve().parent / path if not path.is_absolute() else path)",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_relative_cwd_is_joined_against_the_root"
     }
   ]
 }
