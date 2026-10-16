@@ -60,7 +60,33 @@ change and records written before this feature stay valid:
 | `review_independence` | array of objects `{leg, module, reviewer, implementer, independent}` | nothing recorded |
 
 - `implementer_switch.from` and `.to` take `codex|agy|grok|claude`. `.reason` takes one of the
-  closed set of switch reasons in FR-2. `.ts` is ISO-8601.
+  closed set of switch reasons in FR-2. `.ts` is an ISO-8601 timestamp in the RFC 3339
+  `date-time` profile (`YYYY-MM-DDTHH:MM:SS[.fraction]` then `Z` or `±HH:MM`). The form the
+  writer already emits, `%Y-%m-%dT%H:%M:%SZ` (`h_mad_state_write.py` `_utc_now`), is one instance.
+- **An invalid `.ts` is refused on both validator paths.** The store is validated by
+  `jsonschema.Draft7Validator` when it imports and by the bundled `_MiniDraft7` in
+  `h_mad_state_validate.py` when it does not. Neither enforces `format` today: at `e7730f78`,
+  `{"type":"string","format":"date-time"}` accepts `not-a-date` on both (`Draft7Validator(s).is_valid`
+  → `True`, `_MiniDraft7(s).is_valid` → `True`). `_MiniDraft7`'s docstring says it ignores
+  `format` on purpose, because the production path supplies no format checker. Declaring
+  `"format": "date-time"` on `.ts` therefore enforces nothing, and the requirement is the refusal
+  itself: a `.ts` that is not an RFC 3339 `date-time` is refused whichever path runs. That covers
+  a non-date string, a date with no time (`2026-10-16`), and a calendar-invalid date
+  (`2026-02-30T00:00:00Z`).
+  - **Mechanism: a design obligation.** The design picks one and cites the probe output: extend
+    `_MiniDraft7` and its differential corpus; or pass a format checker on the library path and
+    match it in the bundled one; or check on the writer side before validation. One hazard binds
+    every option that uses the library's format checker. `jsonschema` checks `date-time` only when
+    the optional `rfc3339-validator` package imports, and otherwise passes the value silently.
+    It imports in `/opt/anaconda3/bin/python3`, where `FORMAT_CHECKER` refuses `not-a-date`.
+    Stock `/opt/homebrew/bin/python3` has no `jsonschema` at all, so it takes the bundled path.
+    A mechanism that leans on that package must show the refusal with the package absent.
+  - **Residual.** Three existing fields already declare `"format": "date-time"`: `started_ts`,
+    `owner_heartbeat_ts` and `halt_ts` (`grep -n -B3 '"format"' h-mad/scripts/h_mad_state_schema.json`,
+    3 matching lines). They stay annotation-only unless the chosen mechanism is schema-wide. If
+    it is, it starts refusing invalid values in those fields too. The design must then run
+    `classify_store` over the live state files and report every record that changes class
+    before the mechanism ships.
 - `review_independence[].leg` takes `5e-review|5e-verify|6a-prime`, and `module` is a string or
   `null`. `reviewer` and `implementer` take `codex|agy|grok|claude`. `independent` is a boolean.
 - `h-mad/references/state-schema.md` gains one row per field, with the same value sets.
@@ -198,6 +224,39 @@ Two other copies of the line are outside AC-3.2, and they follow the line:
 - The mutation rows that quote the line in their `find` or `replace` are re-anchored in the same
   commit, and they gate on `MUTATION: ALL_CAUGHT`.
 
+**Assertions over the real line constrain where new fields go.** Some existing tests run the
+real `judge.format_state_line` in-process and assert its output. They are not stubs, so neither
+the AC-3.2 exception nor the `ACTIVE_RE` update covers them, and they stay byte-identical:
+- in `test_h_mad_tdd_gate_fallback_agent.py` (AC-3.2's byte-identical assertions):
+  - `test_format_state_line_emits_the_fallback_fold` asserts the substring
+    `" records=1 fallback=grok:1 record="`;
+  - `test_fold_outcome_round_trips_through_the_gate_ere` requires `STATE_ACTIVE_RE` to fullmatch
+    the real line and its `group(4)` to equal the fold;
+- in `test_h_mad_tdd_judge.py`, outside `ACTIVE_RE`:
+  - `test_fallback_tag` asserts `line.rsplit(",", 1)[1]` equals the fallback wire tag;
+  - `test_state_line_escape_and_blocker` asserts the substring
+    `codex-escape=… blocker=… records=N`;
+  - `test_state_line_empty_values_encode_as_percent` and `test_state_line_path_with_space_decodes`
+    index `line.split(" record=", 1)[1].split(",")` at 0, 1 and 2.
+
+These permit a new-shape line, so FR-3 does not contradict them. They constrain it as follows,
+and the design fixes the exact shape inside these limits:
+- the header from `codex-escape=` to the first ` record=` stays contiguous. The two substring
+  pins cover `codex-escape=… blocker=… records=N` and ` records=1 fallback=grok:1 record=`, so
+  no field fits between any two of them. That rules out the slot after `fallback=<fold>` too. The
+  only header slot left is between `active ` and `codex-escape=`, and an alternation there adds a
+  capture group in front of `group(4)`;
+- within a record, the first three comma fields (key, codex status, state file) and the fallback
+  tag as the line's last comma token keep their positions. A per-record field between the third
+  field and the tag is clear of every pin above;
+- `format_state_line` still emits the fallback fold whatever `agy`'s availability is. Both
+  `test_h_mad_tdd_gate_fallback_agent.py` tests run with the ambient `PATH`;
+- `STATE_ACTIVE_RE` is POSIX ERE (bash `=~`), which has no non-capturing group. So any new
+  capture group goes after the fallback capture, or `group(4)` moves.
+
+A design that cannot meet these is a contradiction it must report. It is not a licence to edit
+the assertions.
+
 ### FR-4 — agy write gate (`h-mad/hooks/h-mad-agy-tdd-gate.py`)
 
 A new PreToolUse handler that speaks agy's contract and reuses the judge (`read_chain`, `judge`)
@@ -267,12 +326,39 @@ the floor moves when the budget does.
 
 - **Enforcement.** `h_mad_assemble_tdd.py --agent agy` runs the check. On anything but `WIRED`,
   it writes no prompt and prints `ASSEMBLE-TDD: HALT agy_tdd_hook_unverified` followed by the
-  check's line. It exits 2, as every `ASSEMBLE-TDD: HALT` already does. The orchestrator then halts
-  `step5:agy_tdd_hook_unverified`, the token `agy-runtime.md` §"The TDD gate" already prescribes.
+  check's line. The orchestrator then halts `step5:agy_tdd_hook_unverified`, the token
+  `agy-runtime.md` §"The TDD gate" already prescribes.
+- **Exit codes: a verdict exits 0, and only an operational error exits nonzero.** This follows
+  `h-mad/invariants.base.md` §"Audit-gate signal discipline". A nonzero exit registers as a
+  tool failure, so it may not carry a normal FAIL. The caller always reads the token, and the
+  exit code only says whether a verdict was reached.
+
+  | check line | check exits | assembler prints | assembler exits | kind |
+  |---|---|---|---|---|
+  | `AGY-GATE: WIRED` | 0 | writes the prompt and prints `ASSEMBLE-TDD: PASS …` | 0 | verdict, pass |
+  | `AGY-GATE: UNWIRED reason=<any of the seven>` | 0 | `ASSEMBLE-TDD: HALT agy_tdd_hook_unverified`, then the check line | 0 | verdict, fail |
+  | `AGY-GATE: UNREADABLE file=… error=…` | 2 | `ASSEMBLE-TDD: HALT agy_tdd_hook_unverified`, then the check line | 2 | operational: `hooks.json` exists and cannot be read as JSON |
+  | no line, or a line with no `AGY-GATE:` token (the check crashed or could not start) | nonzero, or 0 with no token | `ASSEMBLE-TDD: HALT agy_tdd_hook_unverified check=no-token` | 2 | operational |
+
+  - Every `UNWIRED` reason is a verdict, `no-hooks-file` included. The check was able to read
+    the project and found the file missing. D-10's residual expects that state in any worktree
+    that lacks the file, so it is a normal FAIL. Precedent that goes the other way:
+    `h_mad_hook_wiring.py` exits 2 on `WIRING: UNKNOWN reason=no_settings`. The agy check
+    differs on purpose, because there a missing file is the defect being reported.
+  - `self-check-failed` is a verdict. The gate ran and its self-check failed.
+  - In every row the orchestrator's halt is the same, `step5:agy_tdd_hook_unverified`. The exit
+    code never changes what the caller does. It only keeps a normal refusal out of the tool-failure
+    channel.
+  - **Residual.** `h_mad_assemble_tdd.py`'s docstring says "exit 0 on PASS, 2 on any HALT", and
+    its existing HALT reasons exit 2. Those reasons are out of scope and keep exit 2. Nobody has
+    classified them as verdict or operational, and that is owed to a later feature, not settled
+    here. After this feature the docstring's "2 on any HALT" is false, so it is rewritten to say
+    that the `agy_tdd_hook_unverified` verdict row exits 0.
 - **Residual.** The check is static. It proves the entry exists, not that agy honours it. The
   live proof is the tracer's real refusal (FR-8). If a later agy version changes the contract,
   the check still reads `WIRED` until a live refusal fails, and that is stated in SKILL.md as the
-  re-run trigger: re-run the FR-8 refusal step after any agy upgrade.
+  re-run trigger: re-run the FR-8 refusal step and the FR-8 forced-timeout step after any agy
+  upgrade.
 
 ### FR-6 — `run_command`: command-shape rule, shared with Codex
 
@@ -383,10 +469,34 @@ One real task is staged with `--agent agy` and dispatched headless through
    told to write a production `.py` with no failing test during active step5.
    - **Pass:** the file does not exist afterwards, and the stream-json log shows the gate's
      reason.
-   - This step settles three unknowns: how agy combines a `deny` with a sibling `ask`, whether
-     agy requires workspace trust for `.agents/hooks.json`, and what agy does when a handler
-     times out.
+   - This step settles two unknowns: how agy combines a `deny` with a sibling `ask`, and whether
+     agy requires workspace trust for `.agents/hooks.json`. It does not settle what agy does when
+     a handler times out. An ordinary deny returns well inside the deadline, so no handler times
+     out on this step. Step 2a settles that.
    - Until it passes, `step5:agy_tdd_hook_unverified` stands.
+
+2a. **Forced handler timeout.** A temporary delay hook goes in the same project `.agents/hooks.json`
+   slot, event `PreToolUse`, matcher `*`. Its `"timeout"` is set to a short value T. It sleeps
+   for at least 2T, then prints `{"decision": "deny", "reason": "probe-timeout"}`. The task goes
+   through the same transport, `hmad-dispatch exec agy`, and tells agy to write one named non-test
+   file under the root. The probe records three readings, each one observed and none inferred
+   from the others: whether that file exists afterwards; the wall time from the tool call to
+   agy's next event, from the stream-json log; and agy's runtime message for the call. The
+   outcome is exactly one of these:
+
+   | outcome | file afterwards | wall time | what it means | what follows |
+   |---|---|---|---|---|
+   | `timeout-blocks` | absent | ≈ T | agy treats a late handler as a block | the write guarantee holds when the gate overruns its timeout |
+   | `timeout-allows` | present | ≈ T | agy proceeds on a late handler (fail-open) | the write guarantee rests on the gate finishing within its timeout. FR-4's floor becomes load-bearing for safety, not only for liveness. This is recorded as a residual in `agy-runtime.md` §"The TDD gate" and raised to the operator as an open question before the gate is called verified. |
+   | `timeout-not-enforced` | absent | ≥ 2T | agy waited and honoured the late `deny` | the configured timeout is not a deadline. Record it; FR-4's floor no longer bounds a write's latency. |
+   | `session-error` | either | any | agy aborted the call or the session | record the message. The outcome is unclassified and the step is re-run, never read as a pass. |
+
+   - The delay hook is removed after use (probe-then-delete), and the probe records that it was
+     removed and that `.agents/hooks.json` is byte-identical to its pre-probe content.
+   - The real gate is never slowed for this step. A delay inside `h-mad-agy-tdd-gate.py` would be
+     a code path that ships.
+   - Until the outcome is recorded, agy's handler-timeout behaviour is **unverified**. No
+     document may describe it as settled.
 3. **RED then GREEN** on the task.
    - Read `STATUS:` with `h_mad_extract_verdict.py`.
    - Run the independent scoped re-run, the revert test (`git stash push -u`) and the mutation
@@ -453,6 +563,61 @@ One real task is staged with `--agent agy` and dispatched headless through
 
   Residual: a later surface that restates the rule is not covered until this sweep is re-run.
 
+- **The relaxation is shown to be exactly the intended case (differential corpus).** The carve-out
+  makes the 5d RED check accept a RED it used to halt, so `h-mad/invariants.base.md` §"Guard
+  narrowing" applies. The rule has no code implementation. At `e7730f78`,
+  `git ls-files h-mad | grep -v '\.md$' | xargs grep -ln 'red_wrong_reason\|missing.symbol'`
+  hits only two test files (`test_h_mad_wire_pin_gate.py` and `test_h_mad_wiring_task_shape_docs.py`),
+  and no script. So the corpus runs over **RED evidence**, not over a function. Each case is
+  a fixture repository with a RED base, a WIRE-PIN test and the real pytest RED it produces. The
+  four kinds of missing symbol are:
+
+  | case | missing symbol in the RED | callee at the RED base | old verdict | new verdict |
+  |---|---|---|---|---|
+  | `new-caller` | the caller the task creates | resolves | halt `red_wrong_reason` | **valid** |
+  | `missing-callee` | the callee | absent | halt | halt |
+  | `both-missing` | the caller the task creates (the callee is also absent) | absent | halt | halt |
+  | `unrelated-import` | a symbol the task neither creates nor calls (for example an unrelated module failing to import) | resolves | halt | halt |
+
+  - For each case the probe records the RED's exception line, whether the callee resolves at
+    the RED base (shown by importing it at that commit, not by reading the source), and the
+    verdict under the old rule text and under the new one. The design names how a verdict is
+    derived from rule text: either a classifier function that both texts' prose describes, or a
+    stated derivation per case.
+  - **Pass:** the set of cases whose verdict changed is exactly `{new-caller}`. Any other member
+    is a widening, and it is fixed in the rule text, never in the table.
+  - The four rows are one per kind of missing symbol on the RED. The residual axis is the
+    exception type: the corpus produces each case's RED as the exception the fixture actually
+    raises, and a case whose RED is `NameError` is a fifth fixture only when the new rule's text
+    treats `NameError` differently from `ImportError`/`AttributeError`.
+- **Incident replay against the real artifacts.** The carve-out was motivated by a real incident,
+  so `h-mad/invariants.base.md` §"Incident replay" applies, and the synthetic corpus above does not
+  replace the replay. The artifacts are in the HemaSuite checkout (`/Users/kimhawk/orca/HemaSuite`):
+  - `docs/archive/2026-10/notebooklm-integration-interface/notebooklm-integration-interface.analysis.md`,
+    item **F-3 — WIRE-PIN RED on a new caller (T4/T5/T6 WIRE 2)**. It names the cases and their
+    wire-cut evidence: M4.1, M5.1 and the WIRE 2 inline revert;
+  - the same directory's `notebooklm-integration-interface.impl-plan.md`, whose WIRE-PIN table
+    maps each case to its pin and mutation row;
+  - `hematology-paper-writer/tests/test_notebooklm_resolver.py`;
+  - the task commits, located by subject (`git log --oneline --grep='Task 4 FR-1 resolver'`,
+    `--grep='Task 5 FR-5 initialize'` and `--grep='Task 6 CLI surface'`). Each one's parent is
+    its RED base.
+
+  For each of the three cases (T4 WIRE-PIN 1, T5 WIRE-PIN 1, T6 WIRE-PIN 2), the replay:
+  1. reproduces the pin's RED at the RED base, with the pin from the task commit;
+  2. applies the new rule and records its verdict, which must be **valid**;
+  3. records that the old rule's verdict is halt;
+  4. re-executes the wire-cut at the task commit: delete the call only, keep the caller and the
+     callee, and confirm the pin fails. It also locates the original evidence (M4.1, M5.1, the
+     WIRE 2 revert) and cites it beside the re-run.
+
+  - The replay is a committed probe under `docs/03-analysis/probes/agy-coder-fallback/`, stamped
+    with this repository's sha and the HemaSuite sha it read.
+  - A case whose RED does not reproduce, or whose original evidence cannot be located, is recorded
+    with the command that failed. It is never dropped from the count.
+  - **Residual.** The locators are commit subjects and archive paths. If HemaSuite rewrites
+    history or moves the archive, re-locate with `git log --all --grep='notebooklm-integration-interface'`.
+
 ### FR-10 — Documentation surfaces
 
 - **SKILL.md** §"Codex authors Phase 5 — enforced, not just instructed" becomes implementer-neutral
@@ -476,6 +641,12 @@ One real task is staged with `--agent agy` and dispatched headless through
   it. A record with none of the fields validates unchanged. The `fallback_agent` description in
   the schema JSON and its `state-schema.md` row state FR-2's both-peers condition, and
   `test_h_mad_state_fallback_agent.py` stays green.
+- **AC-1.2:** A record whose `implementer_switch.ts` is `not-a-date`, `2026-10-16` or
+  `2026-02-30T00:00:00Z` is refused on the library path and, under the test seam that forces it,
+  on the bundled path. Each value is its own fixture, run once per path. A `.ts` in the writer's
+  form `%Y-%m-%dT%H:%M:%SZ` is accepted on both paths. If the mechanism uses the library's format
+  checker, one fixture runs with `rfc3339_validator` made unimportable and still refuses
+  `not-a-date`.
 - **AC-2.1:** The resolution function: for every combination of {`implementer` absent / `codex` /
   `agy` / invalid} × {`codex_avail`, `agy_avail` ∈ true/false}, `resolved` and `switch` match FR-2.
   Each switch reason is produced by its own fixture, with only that cause present.
@@ -492,7 +663,8 @@ One real task is staged with `--agent agy` and dispatched headless through
   line. Every assertion, expected kind, reason substring, test name and parametrisation id stays
   byte-identical (checked by diffing the file against `a8d9ba99`). Every other
   `test_h_mad_tdd_gate_*.py` is unmodified. A new fixture shows that a line in today's shape now
-  refuses `judge-error`.
+  refuses `judge-error`. In `test_h_mad_tdd_judge.py`, `ACTIVE_RE` is the only changed literal, and
+  the real-line assertions FR-3 lists stay byte-identical and green (checked by the same diff).
 - **AC-4.1:** With step5 inactive, the agy gate allows every tool. With step5 active, it covers:
   - each class with at least one member;
   - an unknown tool name → class (d) deny;
@@ -504,6 +676,17 @@ One real task is staged with `--agent agy` and dispatched headless through
   exception and an unreadable state each still yield parseable stdout.
 - **AC-5.1:** The wiring check emits each `UNWIRED` reason from its own fixture. `--agent agy`
   writes no prompt and halts on each of them.
+- **AC-5.2:** Each row of FR-5's exit-code table is pinned by its own fixture, and each fixture
+  asserts the stdout token and the exit code separately:
+  - an `UNWIRED` fixture (one per reason, reusing AC-5.1's) shows check exit 0, and assembler
+    `ASSEMBLE-TDD: HALT agy_tdd_hook_unverified` with exit 0;
+  - a `hooks.json` holding invalid JSON shows check `UNREADABLE` with exit 2, and the assembler
+    HALT with exit 2;
+  - a check stubbed to print no token shows the assembler `HALT agy_tdd_hook_unverified check=no-token`
+    with exit 2;
+  - `WIRED` shows exit 0 on both.
+
+  A mutation that returns 2 on `UNWIRED` is killed.
 - **AC-6.1:** The shell policy is imported, not copied: one definition in the tree. The Codex gate's
   existing shell tests pass unmodified. Every mutation row re-pointed under FR-6 runs
   `MUTATION: ALL_CAUGHT` against the shared module. The agy gate refuses each `unsafe` command in the Codex
@@ -521,11 +704,30 @@ One real task is staged with `--agent agy` and dispatched headless through
   readings with re-run, revert and mutation results, each stamped with the sha and the
   `agy --version`. The default timeout in `h_mad_assemble_tdd.py` equals FR-8's formula over
   those readings.
+- **AC-8.2:** The probe directory holds the forced-handler-timeout reading from FR-8 step 2a,
+  stamped with the sha, `agy --version` and the T it used. The reading has three parts: whether
+  the file exists, the wall time and agy's message. It names exactly one outcome from step 2a's
+  table, and that outcome is consistent with the three readings. It also shows that the delay
+  hook was removed and that `.agents/hooks.json` matches its pre-probe bytes. A `session-error`
+  outcome does not satisfy this AC. If the outcome is `timeout-allows`, `agy-runtime.md` §"The TDD
+  gate" carries the fail-open residual, and the operator question is raised before the gate is
+  called verified.
 - **AC-9.1:** The prompt contains no implementer-specific opening. `test_prompt_file_is_agent_independent`
   covers `codex`, `grok` and `agy`. The new-caller rule appears in RED item 1, in the WIRE-PIN
   paragraph, in the GREEN variant, in the SKILL.md 5d halt text and in the `failure-recovery.md`
   `step5d:red_wrong_reason:<module>` row. `test_h_mad_wiring_task_shape_docs.py` and
   `test_h_mad_agent_definitions.py` stay green.
+- **AC-9.2:** The FR-9 differential corpus runs all four cases (`new-caller`, `missing-callee`,
+  `both-missing`, `unrelated-import`) as fixture repositories with real pytest REDs. For each case
+  it records the RED's exception line, whether the callee resolves at the RED base (by import) and
+  both verdicts. The set of cases whose verdict changed is exactly `{new-caller}`.
+- **AC-9.3:** The FR-9 incident replay covers HemaSuite `notebooklm-integration-interface` T4
+  WIRE-PIN 1, T5 WIRE-PIN 1 and T6 WIRE-PIN 2. For each case the committed probe holds the RED
+  reproduced at the task commit's parent, the new rule's verdict **valid**, the old rule's
+  verdict halt, a wire-cut re-run at the task commit in which the pin fails, and a citation of the
+  original evidence (M4.1, M5.1, WIRE 2 revert). It is stamped with both repositories' shas. A case
+  that cannot be reproduced is recorded with its failing command and counted. It does not satisfy
+  the AC.
 - **AC-X:** Every new guard carries a mutation row that bites (`MUTATION: ALL_CAUGHT` with a `test`
   per row). The full suite passes per task.
 
@@ -618,3 +820,4 @@ None of these are edited by this spec.
 - v1.1: Operator decisions 2026-10-16 (2026-10-16). OQ-1 -> D-9: FR-7 flag fires for any reviewer == implementer, Codex reviewing Codex included; warning only. OQ-2 -> D-10: operator narrowed .git/info/exclude /.agents/ to /.agents/skills/ (check-ignore evidence at d65374e9), no git add -f; per-clone residual stated. Open questions section now empty.
 - v1.2: Operator decision 2026-10-16 -> D-11: FR-7 review_independence_unrecorded widened from agy-only to every implementer (codex|agy|grok|claude), matching D-9; warning only. Trigger pinned to a 6a-prime leg that ran (archreview READY_TO_MERGE|WITH_FIXES|NO) with no leg=6a-prime entry; other archreview values already surface. Pre-existing features settled: no grandfather rule, archived features untouched (no batch caller). AC-7.2 added.
 - v1.3: Plan-author findings against v1.2 (2026-10-16). FR-3: a missing state-line field refuses judge-error (tree precedent: missing-field fixture), so the two gate stub-line fixtures are re-shaped with assertions byte-identical — the AC-3.2 exception; test_h_mad_tdd_judge.py ACTIVE_RE and line-quoting mutation rows follow the line. FR-7: writer has no append (--set replaces); add-without-loss is a requirement, mechanism a design obligation; AC-7.1 gains the two-entry fixture. FR-6: rows re-pointed to the shared module, then ALL_CAUGHT; moved names stay bound on the Codex gate module. FR-9/AC-9.1/FR-10: failure-recovery.md red_wrong_reason row; rule surfaces closed with sweep. FR-1/FR-10/AC-1.1: fallback_agent description on schema JSON and state-schema.md, pinned literals named. Owed: second SessionStart surface (Construct-mapping hook-event row). All ACs reformatted to the h_mad_ac_census.py grammar (- **AC-n.m:**).
+- v1.4: Plan audit cycle 1 findings owned by the spec (2026-10-16). F1 -> FR-5 exit-code table: AGY-GATE WIRED/UNWIRED (all seven reasons, no-hooks-file included) exit 0 and the assembler's agy_tdd_hook_unverified verdict HALT exits 0; UNREADABLE and a no-token check exit 2; existing assembler HALTs keep exit 2 (residual); AC-5.2. F2 -> FR-1: .ts is RFC 3339 date-time; neither validator path enforces format today (probed), so refusal on both paths is the requirement and the mechanism a design obligation; rfc3339-validator hazard; residual for started_ts/owner_heartbeat_ts/halt_ts; AC-1.2. F3 -> FR-9 differential corpus over four missing-symbol cases, changed set == {new-caller}; AC-9.2. F4 -> FR-9 incident replay of HemaSuite notebooklm F-3 (T4/T5 WIRE-PIN 1, T6 WIRE-PIN 2) with wire-cut re-run; AC-9.3. F5 -> FR-8 step 2a forced handler timeout with four classified outcomes; step 2 now settles two unknowns; FR-5 re-run trigger includes it; AC-8.2. F6 -> no contradiction; FR-3 now lists the real-line assertions (two in test_h_mad_tdd_gate_fallback_agent.py, four tests in test_h_mad_tdd_judge.py) as placement constraints; AC-3.2 extended.
