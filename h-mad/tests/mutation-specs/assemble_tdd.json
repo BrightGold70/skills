@@ -326,6 +326,78 @@
       "find": "    if proc is not None and proc.returncode == 0:\n",
       "replace": "    if False:\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_a_gitignored_tree_is_not_offered_as_the_fix"
+    },
+    {
+      "name": "drop-the-referenced-sections",
+      "_mechanism": "The filed defect itself: the cited global section never reaches the prompt, so the orchestrator pastes it by hand again.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if sections:  # M:AT-REF-INLINE",
+      "replace": "    if False:  # M:AT-REF-INLINE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_the_real_101_hash_re_pin_reaches_the_green_prompt"
+    },
+    {
+      "name": "inline-another-tasks-body",
+      "_mechanism": "A citation of a sibling task would paste that task's scope into this one's prompt.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            if any(s <= index < e for s, e in spans):  # M:AT-REF-OTHER-TASK",
+      "replace": "            if False:  # M:AT-REF-OTHER-TASK",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_another_tasks_section_is_never_inlined"
+    },
+    {
+      "name": "paste-a-nested-section-twice",
+      "_mechanism": "A section inside one already inlined would arrive twice.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if index < covered_to:  # M:AT-REF-NESTED",
+      "replace": "        if False:  # M:AT-REF-NESTED",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_a_global_section_is_carried_whole_through_its_own_fence"
+    },
+    {
+      "name": "resolve-another-documents-citation",
+      "_mechanism": "`design §\"D8\"` resolved against a same-named impl-plan heading pastes the wrong document's section.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            if qualifier in _FOREIGN_QUALIFIERS:",
+      "replace": "            if False:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_a_reference_qualified_by_another_document_is_not_resolved_here"
+    },
+    {
+      "name": "read-citations-inside-fences",
+      "_mechanism": "Quoted text in a code fence is not a citation.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    for _, line in _outside_fences(body.splitlines()):  # M:AT-REF-FENCE",
+      "replace": "    for line in body.splitlines():  # M:AT-REF-FENCE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_a_reference_inside_a_fence_is_quoted_text_not_a_citation"
+    },
+    {
+      "name": "take-the-first-ambiguous-prefix",
+      "_mechanism": "Two headings share the cited prefix; picking one by document order is a coin flip.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            if len(hits) != 1:",
+      "replace": "            if not hits:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_an_ambiguous_prefix_inlines_neither_and_is_reported"
+    },
+    {
+      "name": "run-an-inlined-section-to-eof",
+      "_mechanism": "An unbounded section carries every later heading, the trailing-section defect `_body_end` closed for tasks.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        end = _body_end(lines, index, len(lines))",
+      "replace": "        end = len(lines)",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_an_inlined_section_stops_at_its_next_equal_heading"
+    },
+    {
+      "name": "report-own-sub-headings-as-unresolved",
+      "_mechanism": "The task's own sub-heading is already in its body; reporting it is noise that trains the reader to skip the line.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            if own is not None and own[0] <= index < own[1]:\n                continue\n",
+      "replace": "",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_an_unresolved_reference_is_reported_not_halted"
+    },
+    {
+      "name": "silence-the-unresolved-report",
+      "_mechanism": "An unresolved citation is reported instead of halted; dropping the report makes it invisible.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if meta[\"unresolved_refs\"]:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_the_cli_reports_inlined_and_unresolved_under_the_pass_line"
     }
   ],
   "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."

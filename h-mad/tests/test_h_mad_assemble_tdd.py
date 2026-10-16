@@ -1140,3 +1140,217 @@ class TestEnvKnownFailures:
         )
         assert proc.returncode == 2, proc.stdout
         assert "ASSEMBLE-TDD: HALT env_known_failures_unreadable" in proc.stdout
+
+
+# Cut from the real HemaSuite #101 impl-plan (notebooklm-integration-interface,
+# archived 2026-10). Its global §"Hash re-pin" had to be spliced into each T3-T6
+# GREEN prompt by hand, because only the `## Task N` section was inlined.
+REAL_101_PLAN = """# Implementation Plan: notebooklm-integration-interface
+
+## Global Conventions (every task)
+- **Probes** live under `docs/03-analysis/probes/notebooklm-integration-interface/`.
+
+### Hash re-pin (operator decision 2026-10-15; Tasks 3, 4, 5, 6)
+Two sibling tests hash `tools/notebooklm_integration.py` against a 64-hex literal (premise P21).
+1. after the production edit, replace the literal in **both** tests with the output of
+   `shasum -a 256 hematology-paper-writer/tools/notebooklm_integration.py`, run from the repository root;
+3. commit both test files in the **same commit** as the production edit.
+
+### Guard → failing control
+Base §"Test discrimination": every labelled guard has been seen to fail.
+
+## Task 3: FR-2 query core
+
+**Production file**: `tools/notebooklm_integration.py`
+**Task shape**: `new-behaviour` (plus a refactor of `ask()` whose characterization guards are green first)
+
+**Hash re-pin (decided, operator 2026-10-15).** This GREEN ends with §"Hash re-pin": both literals are re-pinned to
+the module's new sha256, in the same commit as the production edit.
+
+## Version History
+- v1.0: initial.
+"""
+
+# Every way a `§"…"` reference can be mistaken for an inline-able section.
+HOSTILE_REF_PLAN = """# Feature impl-plan
+
+## Global Conventions
+Run every scoped test from the repository root. GLOBAL-CONVENTIONS-MARKER.
+The slot token `<INLINE_TASK_FROM_IMPL_PLAN>` is prose here, quoted by the plan.
+
+```bash
+# a column-0 shell comment inside the global section
+echo still-inside-global
+```
+GLOBAL-AFTER-FENCE-MARKER
+
+### Nested note (operator decision)
+NESTED-NOTE-MARKER
+
+## D8
+IMPL-PLAN-D8-MARKER (a same-named heading the DESIGN reference must not reach)
+
+## Retry policy
+RETRY-POLICY-MARKER
+
+## Retry budget
+RETRY-BUDGET-MARKER
+
+## Fenced only
+FENCED-ONLY-MARKER
+
+## Task 1: the referencing task
+
+- **Task shape**: new-behaviour
+
+Follow §"Global Conventions". Also §"Global Conventions" again, and §"Nested note".
+Per design §"D8" and invariant §"Connection enforcement", and §"Not a heading anywhere".
+See §"Task 2" for the sibling, and §"Retry" which matches two headings.
+
+### Own sub-heading
+Per §"Own sub-heading" above.
+
+```text
+quoted in a fence: §"Fenced only"
+```
+
+## Task 2: the sibling
+
+- **Task shape**: new-behaviour
+
+TASK-TWO-BODY-MARKER
+
+## Version History
+- v1.0
+"""
+
+
+@pytest.fixture()
+def real_101(tmp_path: Path) -> Path:
+    target = tmp_path / "notebooklm-integration-interface.impl-plan.md"
+    target.write_text(REAL_101_PLAN, encoding="utf-8")
+    return target
+
+
+@pytest.fixture()
+def hostile(tmp_path: Path) -> Path:
+    target = tmp_path / "hostile.impl-plan.md"
+    target.write_text(HOSTILE_REF_PLAN, encoding="utf-8")
+    return target
+
+
+class TestReferencedGlobalSections:
+    """A task that cites a global impl-plan section by `§"…"` carries that section.
+
+    HemaSuite #101's Tasks 3-6 each ended with §"Hash re-pin", a `###` section
+    outside every task; the assembler inlined only `## Task N`, so the step
+    reached codex only because the orchestrator pasted it in by hand.
+    """
+
+    def test_the_real_101_hash_re_pin_reaches_the_green_prompt(
+        self, real_101: Path, tmp_path: Path
+    ) -> None:
+        filled, meta = call(real_101, tmp_path, task_id="Task 3", phase="green",
+                            expect_fail=None, expect_pass=None)
+        assert "shasum -a 256 hematology-paper-writer/tools/notebooklm_integration.py" in filled
+        assert "### Hash re-pin (operator decision 2026-10-15; Tasks 3, 4, 5, 6)" in filled
+        assert meta["inlined_sections"] == [
+            "Hash re-pin (operator decision 2026-10-15; Tasks 3, 4, 5, 6)"
+        ]
+
+    def test_an_inlined_section_stops_at_its_next_equal_heading(
+        self, real_101: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(real_101, tmp_path, task_id="Task 3", phase="green",
+                         expect_fail=None, expect_pass=None)
+        assert "Guard → failing control" not in filled
+        assert "every labelled guard has been seen to fail" not in filled
+
+    def test_a_global_section_is_carried_whole_through_its_own_fence(
+        self, hostile: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(hostile, tmp_path)
+        assert "GLOBAL-CONVENTIONS-MARKER" in filled
+        assert "GLOBAL-AFTER-FENCE-MARKER" in filled
+        # `## Global Conventions` contains `### Nested note`, so the nested
+        # section arrives inside it and is not pasted a second time.
+        assert filled.count("NESTED-NOTE-MARKER") == 1
+
+    def test_a_section_cited_twice_is_inlined_once(
+        self, hostile: Path, tmp_path: Path
+    ) -> None:
+        filled, meta = call(hostile, tmp_path)
+        assert filled.count("GLOBAL-CONVENTIONS-MARKER") == 1
+        assert meta["inlined_sections"] == ["Global Conventions"]
+
+    def test_a_reference_qualified_by_another_document_is_not_resolved_here(
+        self, hostile: Path, tmp_path: Path
+    ) -> None:
+        filled, meta = call(hostile, tmp_path)
+        assert "IMPL-PLAN-D8-MARKER" not in filled
+        assert "D8" not in meta["unresolved_refs"]
+        assert "Connection enforcement" not in meta["unresolved_refs"]
+
+    def test_another_tasks_section_is_never_inlined(
+        self, hostile: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(hostile, tmp_path)
+        assert "TASK-TWO-BODY-MARKER" not in filled
+
+    def test_a_reference_inside_a_fence_is_quoted_text_not_a_citation(
+        self, hostile: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(hostile, tmp_path)
+        assert "FENCED-ONLY-MARKER" not in filled
+
+    def test_an_ambiguous_prefix_inlines_neither_and_is_reported(
+        self, hostile: Path, tmp_path: Path
+    ) -> None:
+        filled, meta = call(hostile, tmp_path)
+        assert "RETRY-POLICY-MARKER" not in filled
+        assert "RETRY-BUDGET-MARKER" not in filled
+        assert "Retry" in meta["unresolved_refs"]
+
+    def test_an_unresolved_reference_is_reported_not_halted(
+        self, hostile: Path, tmp_path: Path
+    ) -> None:
+        """Measured 2026-10-16 over 241 impl-plans: 220 unqualified `§"…"`
+        references in task bodies name a section of ANOTHER document (an
+        invariant, SKILL.md, the plan). A halt would refuse nearly every plan."""
+        _, meta = call(hostile, tmp_path)
+        assert meta["unresolved_refs"] == ["Not a heading anywhere", "Retry", "Task 2"]
+
+    def test_quoted_slot_prose_in_an_inlined_section_does_not_halt(
+        self, hostile: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(hostile, tmp_path)
+        assert "`<INLINE_TASK_FROM_IMPL_PLAN>` is prose here" in filled
+
+    def test_a_task_without_references_inlines_nothing(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        filled, meta = call(plan, tmp_path)
+        assert meta["inlined_sections"] == []
+        assert meta["unresolved_refs"] == []
+        assert "Referenced impl-plan sections" not in filled
+
+    def test_the_cli_reports_inlined_and_unresolved_under_the_pass_line(
+        self, hostile: Path, tmp_path: Path
+    ) -> None:
+        prompt = tmp_path / "p.txt"
+        proc = run_cli(
+            "--feature", "f", "--task", "Task 1", "--phase", "red",
+            "--project-root", str(tmp_path), "--module", "m",
+            "--test-path", "tests/t.py", "--impl-plan", str(hostile),
+            "--expect-fail", "3", "--expect-pass", "1",
+            "--python", PYTHON, "--prompt", str(prompt),
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        lines = proc.stdout.splitlines()
+        assert lines[0].startswith("ASSEMBLE-TDD: PASS ")
+        assert lines[0].endswith("task=Task 1 shape=new-behaviour"), lines[0]
+        assert lines[1].startswith("  inlined-sections: 1 (")
+        assert '"Global Conventions"' in lines[1]
+        assert lines[2] == (
+            '  referenced-not-inlined: "Not a heading anywhere", "Retry", "Task 2"'
+        )

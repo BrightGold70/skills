@@ -40,7 +40,12 @@ changed" and "test weakened" are otherwise indistinguishable, and a default
 would quietly pick one.
 
     ASSEMBLE-TDD: PASS <promptfile> <bytes>B phase=<red|green> task=<id> shape=<s>
+      inlined-sections: <n> (<lines> lines): "<heading>", …     (only when any)
+      referenced-not-inlined: "<name>", …                       (only when any)
     ASSEMBLE-TDD: HALT <reason>
+
+A global impl-plan section the task cites by `§"…"` is inlined after the task
+(`referenced_sections`); a citation it cannot place is listed, never a halt.
 
 exit 0 on PASS, 2 on any HALT. Stdlib-only.
 """
@@ -150,6 +155,101 @@ def task_body(text: str, task_id: str) -> str:
         end = _body_end(lines, index, next_task)
         return "\n".join(lines[index:end]).rstrip()
     raise Halt("task_not_found", f"task={task_id}")
+
+
+# A `§"…"` citation and the word in front of it. That word decides which
+# document is meant: `design §"D8"` names the DESIGN's D8, and resolving it
+# against a same-named impl-plan heading would paste the wrong section.
+_REF_RE = re.compile(r'(?:(?<![\w.])([A-Za-z][\w.-]*)\s+)?§\s*"([^"\n]+)"')
+_FOREIGN_QUALIFIERS = frozenset({
+    "analysis", "audit", "base", "brainstorm", "design", "invariant",
+    "invariants", "plan", "report", "skill.md", "spec",
+})
+# A cited name matches a heading exactly, or as a prefix ending at a boundary:
+# `§"Hash re-pin"` is `### Hash re-pin (operator decision 2026-10-15; …)`.
+_PREFIX_BOUNDARY = re.compile(r"[\s(:—-]")
+
+
+def _outside_fences(lines: list[str]):
+    """(index, line) for every line outside a ``` fence; the markers are dropped."""
+    inside = False
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            inside = not inside
+        elif not inside:
+            yield index, line
+
+
+def _heading_text(line: str) -> str:
+    return _HEADING_RE.sub("", line, count=1).rstrip().rstrip("#").rstrip()
+
+
+def referenced_sections(text: str, task_id: str) -> tuple[list[tuple[str, str]], list[str]]:
+    """The global impl-plan sections `task_id` cites, and the citations left alone.
+
+    A task routinely says "this GREEN ends with §"Hash re-pin"" about a section
+    that sits OUTSIDE every task. Only the task was inlined, so HemaSuite #101
+    pasted that section into four GREEN prompts by hand.
+
+    Only a section owned by no task is inlined: another task's body is that
+    task's scope, not this one's, and the task's own sub-headings are already in
+    its body. A section nested in one already inlined is not pasted twice. Each
+    is bounded by `_body_end`, the same fence-aware rule that bounds a task. Only
+    direct citations are followed; an inlined section's own `§` references are not.
+
+    Unresolved citations are RETURNED, never a halt. Measured 2026-10-16 over 241
+    impl-plans: 220 unqualified `§"…"` citations in task bodies name a section of
+    another document (an invariant, SKILL.md, the plan), so refusing them would
+    refuse nearly every plan. An ambiguous prefix inlines neither candidate and is
+    returned too; a citation inside a fence is quoted text, not a citation.
+    """
+    lines = text.splitlines()
+    task_starts = [i for i, ln in enumerate(lines) if _TASK_RE.match(ln)]
+    spans = [
+        (s, _body_end(lines, s, task_starts[k + 1] if k + 1 < len(task_starts) else len(lines)))
+        for k, s in enumerate(task_starts)
+    ]
+    body = task_body(text, task_id)
+    own = next(
+        (span for span in spans if "\n".join(lines[span[0]:span[1]]).rstrip() == body),
+        None,
+    )
+    headings = [
+        (index, _heading_text(line)) for index, line in _outside_fences(lines)
+        if _heading_level(line) is not None
+    ]
+
+    chosen: dict[int, str] = {}
+    unresolved: set[str] = set()
+    for _, line in _outside_fences(body.splitlines()):  # M:AT-REF-FENCE
+        for match in _REF_RE.finditer(line):
+            qualifier, name = (match.group(1) or "").lower(), match.group(2).strip()
+            if qualifier in _FOREIGN_QUALIFIERS:
+                continue
+            hits = [h for h in headings if h[1] == name] or [
+                h for h in headings
+                if h[1].startswith(name) and _PREFIX_BOUNDARY.match(h[1][len(name):])
+            ]
+            if len(hits) != 1:
+                unresolved.add(name)
+                continue
+            index, heading = hits[0]
+            if own is not None and own[0] <= index < own[1]:
+                continue
+            if any(s <= index < e for s, e in spans):  # M:AT-REF-OTHER-TASK
+                unresolved.add(name)
+                continue
+            chosen[index] = heading
+
+    sections: list[tuple[str, str]] = []
+    covered_to = -1
+    for index in sorted(chosen):
+        if index < covered_to:  # M:AT-REF-NESTED
+            continue
+        end = _body_end(lines, index, len(lines))
+        covered_to = end
+        sections.append((chosen[index], "\n".join(lines[index:end]).rstrip()))
+    return sections, sorted(unresolved)
 
 
 _WALK_SKIP = {
@@ -360,6 +460,13 @@ def assemble(
     }[phase]
 
     lines = [directive, "", body, ""]
+    sections, unresolved_refs = referenced_sections(plan_text, task_id)
+    if sections:  # M:AT-REF-INLINE
+        lines.append("**Referenced impl-plan sections (inlined — the task above cites "
+                     "them by §, and each is quoted whole from the impl-plan):**")
+        for _, section in sections:
+            lines += ["", section]
+        lines.append("")
     if shape == "wiring":
         lines.append(f"**Task shape:** wiring — WIRE: {meta['wire']} · WIRE-PIN: {meta['pin']}")
         lines.append(
@@ -450,7 +557,12 @@ def assemble(
     if residual:
         raise Halt("residual_slots", ", ".join(residual))
 
-    return filled, {"shape": shape, "task": meta["id"], "pin": meta["pin"]}
+    return filled, {
+        "shape": shape, "task": meta["id"], "pin": meta["pin"],
+        "inlined_sections": [heading for heading, _ in sections],
+        "inlined_lines": sum(len(s.splitlines()) for _, s in sections),
+        "unresolved_refs": unresolved_refs,
+    }
 
 
 def command_block(
@@ -612,6 +724,15 @@ def main(argv: list[str] | None = None) -> int:
         f"{TOKEN}: PASS {prompt} {size}B phase={args.phase} "
         f"task={meta['task']} shape={meta['shape']}"
     )
+    # Under the PASS line, never on it: the PASS line is parsed. Inlined size is
+    # reported rather than capped, since a truncated section is a silent cut.
+    if meta["inlined_sections"]:
+        print(f"  inlined-sections: {len(meta['inlined_sections'])} "
+              f"({meta['inlined_lines']} lines): "
+              + ", ".join(f'"{h}"' for h in meta["inlined_sections"]))
+    if meta["unresolved_refs"]:
+        print("  referenced-not-inlined: "
+              + ", ".join(f'"{r}"' for r in meta["unresolved_refs"]))
     print(command_block(
         feature=args.feature, module=args.module, phase=args.phase, prompt=prompt,
         out=out, log=log, timeout=timeout, model=args.model, effort=args.effort,
