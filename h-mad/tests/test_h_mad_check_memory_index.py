@@ -52,6 +52,12 @@ import claudebinary  # noqa: E402
 
 _claude_binary = claudebinary.claude_binary
 
+# Both caps sit in ONE declaration chain right after the file name, in every
+# version measured (2.1.299-2.1.301): `"MEMORY.md",NF=200,Lae=25000,`. Anchor on
+# that, not on a bare `var X=25000,`. The bare form matched an unrelated constant
+# all along, and stopped matching when 2.1.301 renamed it to `$Po`.
+MEMORY_CAPS = r'"MEMORY\.md",[\w$]+=(?P<lines>\d+),[\w$]+=(?P<bytes>\d+),'
+
 
 class TestAgainstTheLiveBinary:
     """Re-derive the contract rather than trusting the transcription.
@@ -77,14 +83,15 @@ class TestAgainstTheLiveBinary:
     def test_the_byte_cap_is_still_the_splice_cap_in_the_size_warning(self) -> None:
         """`${Ot(d)} (limit: ${Ot(F2)})` — the byte limit the loader reports."""
         blob = self._blob()
-        m = re.search(r"var ([\w$]+)=25000,", blob)
-        assert m, "25000 is no longer declared — BYTE_CAP may be stale"
-        assert BYTE_CAP == 25000
+        m = re.search(MEMORY_CAPS, blob)
+        assert m, "the MEMORY.md cap declaration moved — re-decode BYTE_CAP before trusting it"
+        assert int(m.group("bytes")) == BYTE_CAP == 25000
 
     def test_the_line_cap_is_still_two_hundred(self) -> None:
         blob = self._blob()
-        assert re.search(r"=200;?\}?function|,([\w$]+)=200\b", blob), "200 not found"
-        assert LINE_CAP == 200
+        m = re.search(MEMORY_CAPS, blob)
+        assert m, "the MEMORY.md cap declaration moved — re-decode LINE_CAP before trusting it"
+        assert int(m.group("lines")) == LINE_CAP == 200
 
     def test_the_silent_drop_wording_still_describes_this_failure(self) -> None:
         """If this sentence goes, the premise of the whole script should be re-checked:

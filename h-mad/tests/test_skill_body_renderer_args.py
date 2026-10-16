@@ -180,6 +180,12 @@ class TestAgainstTheLiveBinary:
         )
 
 
+# A constant known to be in every installed binary: the MEMORY.md byte cap,
+# anchored on its declaration chain. The bare `var \w+=(25000),` matched an
+# unrelated constant that 2.1.301 renamed to `$Po`, and that broke these tests.
+MEMORY_BYTE_CAP = r'"MEMORY\.md",[\w$]+=200,[\w$]+=(25000),'
+
+
 class TestTheSharedConstantHelper:
     """`claudebinary.assert_constant` — the re-derivation shape, factored once.
 
@@ -191,12 +197,12 @@ class TestTheSharedConstantHelper:
     """
 
     def test_it_confirms_a_constant_that_is_really_there(self) -> None:
-        claudebinary.assert_constant(r"var \w+=(25000),", 25000)
+        claudebinary.assert_constant(MEMORY_BYTE_CAP, 25000)
 
     def test_an_int_and_its_string_spelling_both_pass(self) -> None:
         """`"25000" == 25000` is silently False, which would fail toward RED and
         get the whole re-derivation deleted as flaky."""
-        claudebinary.assert_constant(r"var \w+=(25000),", "25000")
+        claudebinary.assert_constant(MEMORY_BYTE_CAP, "25000")
 
     def test_a_pattern_that_no_longer_matches_fails_loudly(self) -> None:
         with pytest.raises(AssertionError, match="no longer matches"):
@@ -204,7 +210,7 @@ class TestTheSharedConstantHelper:
 
     def test_a_changed_value_names_both_numbers(self) -> None:
         with pytest.raises(AssertionError, match="transcribed"):
-            claudebinary.assert_constant(r"var \w+=(25000),", 24999)
+            claudebinary.assert_constant(MEMORY_BYTE_CAP, 24999)
 
     def test_the_blob_is_read_once_per_session(self) -> None:
         """The cache is the reason this helper exists at all."""
