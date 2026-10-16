@@ -249,6 +249,16 @@ uses. The write is skipped when the stored value has the same `from`, `to` and `
 `StateWriteError` or an `OSError` appends ` record=failed` to the line. The verb always exits 0
 after printing a line, and the caller reads the token.
 
+**The caller's halts (v1.4).** The orchestrator (SKILL.md, §"FR-10") reads the token and never
+dispatches on these three outcomes, adopting the impl-plan's names:
+- a line ending ` record=failed`, whatever precedes it, read before any other field →
+  `step5:implementer_switch_unrecorded` (the name spec FR-2 "CLI verb" already gives);
+- `invalid field=` → `step5:implementer_invalid`;
+- `no-record` or `unreadable` → `step5:implementer_unresolved`.
+
+Each prints its `[H-MAD] <feature> halt <name>` marker. The verb itself raises no halt; the names
+live in the caller's prose, and the impl-plan's SKILL.md Task pins them.
+
 Residual: the verb reads the root's own state file. The gate folds the whole chain from the target
 up to the root. A nested sub-project state file that holds a record with the same key is read by
 the gate and not by the verb.
@@ -551,6 +561,7 @@ fires before the status can be known, or because judging failed, is unconditiona
 | `workspacePaths` names nothing inside the root (step 5) | `S` | `judge-error` |
 | class (b) with no target (no recognised key, or no recognised value that is a non-empty `str`) | `S` | `judge-error` |
 | T2 unresolvable | `S` | `judge-error` |
+| T2a an existing directory (OD-2) | `S` | `judge-error` |
 | T4 outside the root, not admitted | `S` | `target-outside-root` |
 | T5 the allowance file | `S` | `allowance-file-write` |
 | T7 chain unreadable | whatever the status (`M:G5`) | `judge-error` |
@@ -562,7 +573,7 @@ fires before the status can be known, or because judging failed, is unconditiona
 | class (d) | `active` | `tool-not-admitted` |
 | class (d) | `unknown` | `judge-error` |
 
-The table is the whole set: 16 rows, counted from this table, and every `deny` this section
+The table is the whole set: 17 rows (v1.4 adds T2a), counted from this table, and every `deny` this section
 names elsewhere is one of them. Under `inactive` the only denies left are the three unconditional
 rows and the two T7 rows; AC-4.1's "allows every tool" holds for every payload whose root resolves
 and whose chain is not `active` or `unreadable`. The T7 exception is v1.1's (step 4): an
@@ -615,6 +626,15 @@ and whose chain is not `active` or `unreadable`. The T7 exception is v1.1's (ste
   - **T2 unresolvable.** `resolved.unresolvable` → if `S`, deny `kind=judge-error`; else allow.
     This runs before containment, as in `_relative_target`, which returns an unresolvable identity
     before it tests `relative_to(root)`.
+  - **T2a an existing directory (OD-2, operator, 2026-10-16; v1.4).** `Path(resolved.target).is_dir()`
+    → if `S`, deny `kind=judge-error` with a reason naming the directory target; else allow. It runs
+    right after T2 and before T3, so an out-of-root directory under `S` denies `judge-error` too.
+    Without it the sequence allows a directory under `active`: `canonicalise` gives a directory
+    target (`.`, `src/`, `src`, the root itself) `unresolvable=False` and `names=()`, so T2 does not
+    fire, T3 and T5 pass, and T6 has no name to judge (scratch call at `84ec2133`, deleted). A
+    symlink to a directory is a directory here, since `is_dir` follows it. Residual: a target
+    ending in `/` that names no existing directory is not a directory; `canonicalise` gives it
+    `names=('nodir',)` (same scratch call), and it goes through T3–T7 as a file name.
   - **T3 containment, before anything that assumes it.** `Path(resolved.target).relative_to(root)`
     raising `ValueError` means outside the root, and the target goes to T4 and never to T5–T7.
     The order is load-bearing: `_is_shell_allowance` calls `candidate.relative_to(root)` without
@@ -658,7 +678,10 @@ and whose chain is not `active` or `unreadable`. The T7 exception is v1.1's (ste
   - (v1.2) every deny carries a kind from the closed set above, where 6 of the Codex gate's 13 do
     not; spec v1.8 FR-4 adopts the four above and this one as its fifth;
   - (v1.2) a recognised path key whose value is a truthy non-`str` is no target here (spec v1.8
-    FR-4 §"Target keys"), where the Codex gate stringifies it.
+    FR-4 §"Target keys"), where the Codex gate stringifies it;
+  - (v1.4) T2a refuses an existing-directory target under `S` (OD-2); the Codex gate's per-target
+    sequence has no such step (its three `is_dir` calls test a root candidate or a payload cwd,
+    never a write target).
   Residual: any rule the Codex gate gains later is not inherited, because the per-target
   composition is written in both gates, like the shell composition below. The target
   differential test (§"Test Plan", AC-4.1) is what catches that drift.
@@ -726,10 +749,21 @@ with no command reaches none of its shell denies.
 58 − 11 − 5 − 1, derived as a set difference over the parsed inventory. Any name absent from the
 inventory, which includes tools added later, also falls here.
 
-**`--self-check`.** It prints `AGY-TDD-GATE: PASS`, or `AGY-TDD-GATE: FAIL <what>` with a nonzero
-exit. It checks four things: the classifier puts `view_file` in (a) and `call_mcp_tool` in (d);
-`_safe_shell_command` refuses `python3 -c "open('x','w').write('x')"`; the policy names import; and
-`JUDGE_BUDGET_S` is readable. AC-6.1's parity with the Codex list is a test, not this self-check.
+**`--self-check`.** It checks four things: the classifier puts `view_file` in (a) and
+`call_mcp_tool` in (d); `_safe_shell_command` refuses `python3 -c "open('x','w').write('x')"`; the
+policy names import; and `JUDGE_BUDGET_S` is readable. It prints exactly one line on stdout.
+**Rule over the axis (v1.4, orchestrator decision):** a FAIL that is a verdict of a check that ran
+prints its token and exits 0, like PASS; the token carries the verdict. Only a FAIL meaning the
+check could not run exits 2. So `AGY-TDD-GATE: PASS` and the two verdict FAILs,
+`FAIL classification` and `FAIL shell-policy`, exit 0. `FAIL policy-import` (the judge, the
+identity module or the policy names do not import, or `JUDGE_BUDGET_S` cannot be read) exits 2.
+FR-6's Codex `FAIL policy-import` exits 2 for the same reason. FR-5's wiring check is unaffected:
+it requires the exact line `AGY-TDD-GATE: PASS` with exit 0, so a FAIL line with exit 0 still reads
+as `self-check-failed`. The Codex gate's own `--self-check` breaks this rule today: its verdict
+FAILs `FAIL parser` and `FAIL shell-policy` print to stderr and return 2. The impl-plan's FR-6
+Task (Task 4) corrects `FAIL shell-policy` by orchestrator decision. `FAIL parser` is the same
+class and is owed (§"Owed by other documents"). Residual: a self-check FAIL added later is
+classed by this rule, not listed here. AC-6.1's parity with the Codex list is a test, not this self-check.
 The test locates the `unsafe` tuple assigned inside the Codex gate's `main` with `ast`, requires
 exactly one, and asserts that the agy gate refuses each member.
 
@@ -1254,6 +1288,9 @@ Each new guard below gets one row. The fixture that kills it is named beside it.
   - The `finally` deny removed → malformed stdin.
   - T3 moved after T5 (allowance check before containment) → a `/tmp` non-`.py` write, which then
     denies `judge-error` instead of allowing.
+  - (v1.4) T2a removed → a `write_to_file` whose `TargetFile` names an existing in-root directory
+    under `active`, which then allows instead of denying `judge-error` (the impl-plan's
+    `od2-directory-target-check-dropped`).
   - T6 judging `resolved.target` alone instead of every name → the `test_a.py`/`z.py` hard-link
     fixture.
   - T6–T7 skipped when `phase5_status == "inactive"` → the `chmod 000` `docs/` chain fixture.
@@ -1360,7 +1397,11 @@ Each is stated where it arises. Collected here:
   no well-formed author entry, or a record holding a malformed one (FR-7);
 - (v1.3) the author-before-review ordering is prose, not refused by code (FR-7);
 - (v1.3) a history array added to the schema later and not added to `APPEND_ONLY` (FR-7);
-- (v1.2) rows moved by an edit wider than this design describes (Mutation rows, "Existing rows").
+- (v1.2) rows moved by an edit wider than this design describes (Mutation rows, "Existing rows");
+- (v1.4) a class-(b) target ending in `/` that names no existing directory passes T2a and is
+  judged as a file name (FR-4, OD-2);
+- (v1.4) a self-check FAIL added later is classed by the verdict/could-not-run rule, not listed
+  (FR-4 `--self-check`).
 
 ## Measurements
 
@@ -1395,6 +1436,12 @@ and the method is stated beside each figure so a probe can re-derive it.
   `implementation_authors` field (§"FR-1"), appended through `--append` at each accepted
   implementation dispatch and read as the only source of a module's author set (§"FR-7"). Option
   (b), amending AC-7.3's expected outcome to "no entry", is not taken.
+- **OD-2 — a class-(b) directory target: decided 2026-10-16 (operator), impl-plan Task 6.** An
+  existing-directory target is refused `kind=judge-error` under `S` and allowed under `inactive`,
+  as T2a (§"FR-4"). Residual: a trailing-`/` path naming no existing directory.
+- **Self-check exits: decided 2026-10-16 (orchestrator, impl-plan cycles 1–2).** A verdict FAIL
+  exits 0 and a could-not-run FAIL exits 2 (§"FR-4" `--self-check`); the Codex gate's
+  `FAIL shell-policy` is corrected in impl-plan Task 4.
 
 ## Owed by other documents
 
@@ -1421,6 +1468,12 @@ Spec v1.7 (`c117a695`) settled the v1.0 items it owned: the `codex_status` descr
 - **Impl-plan, AC-7.3's surface.** Attribution is orchestrator prose; AC-7.3's five fixtures need
   a code surface to drive, which spec v1.8 also files as an OPEN-DECISION. OD-E2 leaves this open:
   it makes the fixtures' inputs durable, not executable.
+- **Spec (v1.4 items).** Lines recording OD-2 (T2a, with its residual); FR-2 naming
+  `step5:implementer_invalid` and `step5:implementer_unresolved`, or adopting them from the
+  impl-plan (§"FR-2" "The caller's halts"); FR-4/FR-5 self-check: a verdict FAIL exits 0.
+- **Impl-plan (v1.4 item).** The Codex gate's `FAIL parser` is a verdict FAIL that returns 2 like
+  `FAIL shell-policy`; Task 4 corrects only the latter by name. Either Task 4 corrects both, or the
+  impl-plan states why `FAIL parser` stays.
 - **Impl-plan.** These become committed probes: the M-3/M-4 censuses, the class inventory, the FR-9
   corpus reading and the replay. The FR-3 grammar probe and the FR-6 import-failure probe are
   committed by this design. Each FR-9/FR-10 Task's RED names the doc-pin census entries it moves.
@@ -1430,3 +1483,4 @@ Spec v1.7 (`c117a695`) settled the v1.0 items it owned: the `codex_status` descr
 - v1.1: Design audit cycle 1 (2026-10-16), against spec v1.7 (c117a695), tree at 200ffd52. C1: leap second refused per spec FR-1/D-14, residual framing dropped. C2/C3: FR-4 class (b) is the Codex gate per-target sequence T1-T7 (unresolvable, containment before _is_shell_allowance, every hard-link name for production, read_chain unreadable/inactive branches, no rglob-inactive shortcut per M:G5, non-empty artifactDirectoryPath), deliberate differences listed, target differential test. C4/C11: AC-9.1 WIRED fixture and three-hash assertion. C5: in-place append row dropped as unbitable, replaced by loss and accumulation mutants. C6: FR-7 attribution from accepted implementation dispatches per spec FR-7 Attribution, per-module 6a-prime entries, unrecorded detail text no longer reads implementer_switch. C7: --append accumulates from the updated record; same-key --set/--append refused. C8: import failure re-raised inside _main_guarded so row G2 stays killed; self-check FAIL policy-import. C9: class (c) cwd computed like _command_cwd, chdir only to an existing command directory, no judge-error on a bad Cwd. C10: _semantic_ok never raises; new properties after fallback_agent. M1: committed probes fr3_state_line_grammar.py and fr6_import_failure_pair.py (both PROBE: PASS at 200ffd52). OQ-A/OQ-B recorded as spec D-12/D-13.
 - v1.2: Design audit cycle 2, final corrective revision after the round cap, not re-audited (2026-10-16); spec v1.8 (bd508fbf), plan v1.6 (8e242d06), tree at cff71b49. E1: step-5 workspacePaths cross-check and class (c) missing CommandLine gated on S (active|unknown); every FR-4 deny tabulated with its gating (16 rows). E5: class (b) targets are recognised values that are a non-empty str, '' never canonicalised. E6: closed kind set - judge-error, tool-not-admitted, target-outside-root, allowance-file-write, shell-not-admitted, plus the judge's KINDS passthrough at T7; 'as the Codex gate does' claim corrected (6 of 13 Codex _deny calls kindless). E3: T4 row re-fixtured on a non-str artifactDirectoryPath under inactive; the empty-string arm declared an equivalent mutant (step-3 chdir). E2/E4: authors = accepted 5e GREEN + accepted fix dispatches, never 5d RED; complete set kept in procedure, never rebuilt from entries; lost list -> no entry; OD-E2 (AC-7.3 multi-author recovery needs a durable FR-1 record) to the impl-plan. E7: re-anchor of assemble_tdd_agent w10a-grok-by-default; t1, wr3 and two heartbeat_beat rows kept by stated line forms; --check-anchors rule per Task. E8: property_valid guards dict via _semantic_ok. New rows for the S-gates, the target test, the three design kinds, the dict guard.
 - v1.3: Operator decision OD-E2 option (a) (2026-10-16), aligned to spec v1.9 D-15; tree at 3ad735f7. FR-1: fifth property implementation_authors, array of {module (string, minLength 1), agent (codex|agy|grok|claude)}, both required, no extra keys, placed after review_independence; minLength confirmed in _MiniDraft7's supported set; zero-record reading for the fifth key (54 + 8 records, 0 carrying any of the five keys). FR-7: the author record appended through the existing --append at each accepted 5e GREEN and accepted fix dispatch, never 5d RED, before any review leg of that code runs; the author set and the latest author are read from the field only (v1.2's in-procedure list retired); no entry only for an absent field, a module with no well-formed entry, or a malformed field; the AC-7.3 multi-author recovered and pre-field fixtures derived from durable state. New: APPEND_ONLY --set refusal in merge_fields over review_independence and implementation_authors, with a per-key mutation row (owed to the spec). OD-E2 closed in Operator decisions; Test Plan gains AC-1.3; Residuals, Components, FR-10 and Owed updated. AC-7.3's code surface stays the impl-plan's open decision.
+- v1.4: Owed lines from Phase 5b impl-plan audit cycle 2, final corrective, not re-audited (2026-10-16); impl-plan v1.1 (fc92becf), tree at 84ec2133. Q1: OD-2 recorded as FR-4 T2a (existing-directory target -> judge-error under S, allow under inactive; before T3), deny table 17 rows, deliberate difference, mutation row, residual (trailing '/' naming no directory), Operator decisions. Q2: --self-check rule - a verdict FAIL exits 0, a could-not-run FAIL (policy-import) exits 2; the Codex gate's FAIL shell-policy corrected in impl-plan Task 4, FAIL parser owed. Q3: FR-2 caller halts step5:implementer_switch_unrecorded, step5:implementer_invalid, step5:implementer_unresolved adopted from the impl-plan. Owed: spec lines for all three; impl-plan FAIL parser.
