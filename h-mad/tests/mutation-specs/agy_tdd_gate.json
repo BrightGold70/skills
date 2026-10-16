@@ -1,0 +1,53 @@
+{
+  "root": "../..",
+  "_why": "FR-4 Task 5: classifier, fail-closed output, workspace activity gating, and self-check signal discipline.",
+  "command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "tests/test_h_mad_agy_tdd_gate.py", "-q"],
+  "target_command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "selfcheck-verdict-fail-exits-2",
+      "_mechanism": "A shell-policy verdict FAIL is misreported as an operational failure through exit 2.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                check_result = \"AGY-TDD-GATE: FAIL shell-policy\"\n                return 0",
+      "replace": "                check_result = \"AGY-TDD-GATE: FAIL shell-policy\"\n                return 2",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_self_check_policy_fail_is_a_verdict_with_exit_0"
+    },
+    {
+      "name": "fr4-class-a-name-moved",
+      "_mechanism": "Removing view_file from class (a) makes a read-only call depend on root and state discovery.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "<module>",
+      "find": "    \"view_file\", \"list_dir\",",
+      "replace": "    \"list_dir\",",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_class_a_allowed_before_state_is_read"
+    },
+    {
+      "name": "fr4-class-d-default-allows",
+      "_mechanism": "The active class-(d) default admits unknown and unlisted tools.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "            decision = {\"decision\": \"deny\", \"reason\": \"Tool is not admitted during Phase 5. kind=tool-not-admitted\"}",
+      "replace": "            decision = {\"decision\": \"allow\"}",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_unknown_tool_is_class_d"
+    },
+    {
+      "name": "fr4-finally-deny-dropped",
+      "_mechanism": "An undecided or malformed call emits null instead of the required fail-closed JSON decision.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "            if decision is None:\n                decision = {\"decision\": \"deny\", \"reason\": \"Gate could not reach a judgement. kind=judge-error\"}",
+      "replace": "            if decision is None:\n                pass",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_every_exit_prints_one_json_object"
+    },
+    {
+      "name": "fr4-step5-s-dropped",
+      "_mechanism": "The workspace check runs under inactive state and refuses a call that must be allowed.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "        if phase5_status in {\"active\", \"unknown\"} and isinstance(workspace_paths, list):",
+      "replace": "        if isinstance(workspace_paths, list):",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_workspace_paths_cross_check"
+    }
+  ]
+}
