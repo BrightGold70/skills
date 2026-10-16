@@ -107,6 +107,8 @@ def main() -> int:
         )
         root = Path(identity.canonical_directory(result.stdout.strip()))
         os.chdir(root)
+        adp = payload.get("artifactDirectoryPath")
+        artifact = Path(adp) if isinstance(adp, str) and adp else None
         phase5_status = _any_phase5_status(root)
         workspace_paths = payload.get("workspacePaths")
         if phase5_status in {"active", "unknown"} and isinstance(workspace_paths, list):
@@ -114,7 +116,78 @@ def main() -> int:
                 decision = {"decision": "deny", "reason": "Workspace paths do not name the root. kind=judge-error"}
                 return 0
 
-        # Tasks 6 and 7 replace this conservative rule for classes (b) and (c).
+        if tool_class == "b":
+            args = call.get("args")
+            if not isinstance(args, dict):
+                args = {}
+            targets = [args[key] for key in PATH_KEYS.get(call["name"], ())
+                       if key in args and isinstance(args[key], str) and args[key]]
+            if not targets:
+                if phase5_status in {"active", "unknown"}:
+                    decision = {"decision": "deny", "reason": "Write has no recognised string target. kind=judge-error"}
+                else:
+                    decision = {"decision": "allow"}
+                return 0
+
+            for raw in targets:
+                # T1–T2: resolve from the root before examining the identity.
+                resolved = identity.canonicalise(str(root), str(Path(raw).expanduser()), str(root))
+                if resolved.unresolvable:
+                    if phase5_status in {"active", "unknown"}:
+                        detail = repr(resolved.component).replace("kind=", "kind:")
+                        decision = {"decision": "deny", "reason": f"Write target is unresolvable ({detail}). kind=judge-error"}
+                        return 0
+                    continue
+                # T2a: an existing directory has no file names for T6 to judge.
+                if Path(resolved.target).is_dir():
+                    if phase5_status in {"active", "unknown"}:
+                        detail = repr(resolved.target).replace("kind=", "kind:")
+                        decision = {"decision": "deny", "reason": f"Write target is a directory ({detail}). kind=judge-error"}
+                        return 0
+                    continue
+                # T3–T4: containment must precede the allowance-file helper.
+                try:
+                    Path(resolved.target).relative_to(root)
+                except ValueError:
+                    outside_allowed = (
+                        not any(Path(identity.fold_py_suffix(name)).suffix == ".py" for name in resolved.names)
+                        and (_path_within(resolved.target, Path("/tmp"))
+                             or (artifact is not None and _path_within(resolved.target, artifact)))
+                    )
+                    if not outside_allowed and phase5_status in {"active", "unknown"}:
+                        decision = {"decision": "deny", "reason": "Write target is outside the root. kind=target-outside-root"}
+                        return 0
+                    continue
+                # T5: only the operator may declare shell allowances.
+                if phase5_status in {"active", "unknown"} and _is_shell_allowance(root, resolved):
+                    decision = {"decision": "deny", "reason": "Writing the shell allowance file is forbidden. kind=allowance-file-write"}
+                    return 0
+                # T6–T7: the chain is authoritative even after an inactive scan.
+                production = []
+                for name in resolved.names:
+                    absolute = Path(resolved.target).parent / name
+                    relative = absolute.relative_to(root).as_posix()
+                    if _is_production_python(relative):
+                        production.append((name, absolute, relative))
+                if not production:
+                    continue
+                _, absolute, relative = min(production)
+                chain = judge.read_chain(root, absolute)
+                if chain.value == "unreadable":
+                    detail = f"{chain.error_file}: {chain.error}".replace("kind=", "kind:")
+                    decision = {"decision": "deny", "reason": f"State governing the write is unreadable ({detail}). kind=judge-error"}
+                    return 0
+                if chain.value != "active":
+                    continue
+                verdict = judge.judge(root, absolute, chain.records)
+                if verdict.decision != "ALLOW":
+                    detail = f"{relative}: {verdict.reason}".replace("kind=", "kind:")
+                    decision = {"decision": "deny", "reason": f"Phase 5 requires a failing test before {detail} kind={verdict.kind}"}
+                    return 0
+            decision = {"decision": "allow"}
+            return 0
+
+        # Task 7 replaces this conservative rule for class (c).
         if phase5_status == "inactive":
             decision = {"decision": "allow"}
         elif phase5_status == "active":
