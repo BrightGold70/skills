@@ -275,9 +275,22 @@ The revert test, the independent re-run and the mutation pass still cover all fo
   untouched (it prints only `<KEY>: <VALUE>`).
 - **Surface.** `h_mad_phase7_preconditions.py` emits, as warnings (never blockers):
   - `review_non_independent` for each entry with `independent=false`, naming leg, module and agent;
-  - `review_independence_unrecorded` when the feature's implementer was `agy` at any point
-    (`implementer=agy`, or `implementer_switch.to=agy`) and there is no `6a-prime` entry. "Not
-    recorded" must not read as "independent".
+  - `review_independence_unrecorded` for every implementer (`codex|agy|grok|claude`, the
+    `implementer` field and `implementer_switch` alike) when a 6a-prime leg ran — `archreview` is
+    `READY_TO_MERGE`, `WITH_FIXES` or `NO` — and there is no `review_independence` entry with
+    `leg=6a-prime` (operator decision D-11). "Not recorded" must not read as "independent": without
+    the warning, a skipped record would hide a Codex-on-Codex self-review. The other `archreview`
+    values already surface on their own and add no `unrecorded` warning: absent or unrecognised is
+    the blocker `archreview_not_run`, `SKIPPED_NO_PANE` the blocker `archreview_skipped`, and
+    `SKIPPED_OPERATOR_OVERRIDE` the warning `archreview_overridden` — in none of them did a
+    6a-prime leg run, so there is nothing to record.
+  - **Features that predate this field.** The check applies to every feature whose Phase-7 check
+    runs after this ships, with no grandfather rule (D-11). An archived feature is unaffected: the
+    only code callers of `h_mad_phase7_preconditions.py` are its own CLI and its tests, so nothing
+    re-runs it over closed features. A feature in flight whose 6a-prime ran before the field
+    existed reaches Phase 7 with the warning; the orchestrator either appends the missing entry
+    with `h_mad_state_write.py` from the 6a-prime dispatch log, or carries the warning into the
+    report.
   - `review_independence_malformed` per FR-1.
 
   The CLI prints each one as a `WARNING <code>: …` line, the form it already uses for every
@@ -389,6 +402,11 @@ One real task is staged with `--agent agy` and dispatched headless through
   gate's `--self-check` list.
 - **AC-7.1** `h_mad_phase7_preconditions.py` emits each of the three FR-7 warnings from its own
   fixture, and none of them moves `ready`.
+- **AC-7.2** `review_independence_unrecorded` fires, with no `leg=6a-prime` entry, for each
+  implementer `codex` (field absent included), `agy`, `grok` and `claude`, each from its own
+  fixture (`grok` and `claude` through `implementer_switch.to`, the only FR-1 field that takes them), and for each `archreview` value `READY_TO_MERGE`, `WITH_FIXES` and `NO`. It does not fire
+  when a `leg=6a-prime` entry exists, nor when `archreview` is absent, `SKIPPED_NO_PANE` or
+  `SKIPPED_OPERATOR_OVERRIDE`.
 - **AC-8.1** The probe directory holds the payload capture, the real refusal, and the RED/GREEN
   readings with re-run, revert and mutation results, each stamped with the sha and the
   `agy --version`. The default timeout in `h_mad_assemble_tdd.py` equals FR-8's formula over
@@ -443,6 +461,18 @@ One real task is staged with `--agent agy` and dispatched headless through
     inherit the narrowing from the clone they belong to. Where the file is not tracked, FR-5's
     check reads `UNWIRED reason=no-hooks-file` in any worktree that lacks it, so the gap is a halt,
     not a silent pass.
+- **D-11 `review_independence_unrecorded` for every implementer (operator decision, 2026-10-16):**
+  widened from agy-only to `codex|agy|grok|claude`, matching D-9 (FR-7). Warning only, never a
+  block. Rationale: it fires only when the recording step was skipped, so a feature that follows
+  the new flow stays quiet; without it, a missing record would hide a Codex-on-Codex self-review,
+  which D-9 now flags when it IS recorded.
+  - **Pre-existing features — settled, no grandfather rule.** The check applies to every feature
+    whose Phase-7 check runs after this ships. Archived features are untouched because nothing
+    re-runs the check over them (FR-7). A grandfather rule would need a signal separating "began
+    before this shipped" from "skipped the recording step", and the only signal the record offers
+    — absence of `review_independence` — is the skip itself, so any such rule would also silence
+    the case the warning exists for. A warning on an in-flight feature costs one backfilled entry
+    or one report line.
 
 ## Open questions for the operator
 
@@ -468,3 +498,4 @@ None of these are edited by this spec.
 ## Version History
 - v1.0: Initial spec (2026-10-16) from brainstorm v1.1. Settles 8 open questions (D-1..D-8): run_command takes the Codex command-shape rule, not a stated residual; per-project .agents/hooks.json; root from handler cwd; provisional 1500 s timeout then tracer formula; PATH+status+env availability; feature-only implementer; flag in state; audit legs unchanged. Folds brief fix 3 (#8) WIRE-PIN new-caller RED case as FR-9. OQ-1 (Codex-reviews-Codex flag), OQ-2 (.agents exclude) for the operator.
 - v1.1: Operator decisions 2026-10-16 (2026-10-16). OQ-1 -> D-9: FR-7 flag fires for any reviewer == implementer, Codex reviewing Codex included; warning only. OQ-2 -> D-10: operator narrowed .git/info/exclude /.agents/ to /.agents/skills/ (check-ignore evidence at d65374e9), no git add -f; per-clone residual stated. Open questions section now empty.
+- v1.2: Operator decision 2026-10-16 -> D-11: FR-7 review_independence_unrecorded widened from agy-only to every implementer (codex|agy|grok|claude), matching D-9; warning only. Trigger pinned to a 6a-prime leg that ran (archreview READY_TO_MERGE|WITH_FIXES|NO) with no leg=6a-prime entry; other archreview values already surface. Pre-existing features settled: no grandfather rule, archived features untouched (no batch caller). AC-7.2 added.
