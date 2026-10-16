@@ -58,6 +58,7 @@ change and records written before this feature stay valid:
 | `agy_status` | `"available"` \| `"unavailable"` \| `"exhausted"` \| `null` | `available` |
 | `implementer_switch` | object `{from, to, reason, ts}` \| `null` | no switch has happened |
 | `review_independence` | array of objects `{leg, module, reviewer, implementer, independent}` | nothing recorded |
+| `implementation_authors` | array of objects `{module, agent}` (D-15) | no implementation dispatch recorded |
 
 - `implementer_switch.from` and `.to` take `codex|agy|grok|claude`. `.reason` takes one of the
   closed set of switch reasons in FR-2. `.ts` is an ISO-8601 timestamp in the RFC 3339
@@ -100,6 +101,37 @@ change and records written before this feature stay valid:
     before the mechanism ships.
 - `review_independence[].leg` takes `5e-review|5e-verify|6a-prime`, and `module` is a string or
   `null`. `reviewer` and `implementer` take `codex|agy|grok|claude`. `independent` is a boolean.
+- **`implementation_authors` — the durable author record (D-15, operator decision OD-E2 (a)).**
+  One entry per accepted implementation dispatch, so FR-7 §"Attribution" can recover a module's
+  complete author set after the orchestrator has lost its dispatch context.
+  - **Entry schema.** An object with exactly two keys, both required, no others
+    (`additionalProperties: false`): `module`, a non-empty string (`minLength: 1`; it is the
+    `--module` value the assembler requires), and `agent`, one of `codex|agy|grok|claude`. An
+    entry with an agent outside that set, a missing or empty `module`, a missing `agent`, or an
+    extra key is refused on both validator paths. Every keyword this uses (`type`, `items`,
+    `required`, `additionalProperties`, `enum`, `minLength`) is in `_MiniDraft7`'s supported set
+    (its docstring's `Deliberately supports ONLY` paragraph, at `3ad735f7`). The field itself is optional, so a
+    record written before this feature, which has no such field, validates unchanged.
+  - **Duplicates are allowed and meaningful.** The array is a log, not a set: agy's 5e GREEN and a
+    later agy fix dispatch are two entries. The author set of a module is the distinct `agent`
+    values of the entries whose `module` equals it; array order is dispatch-acceptance order, so
+    the module's last entry names its latest accepted implementation dispatch.
+  - **When the orchestrator appends.** On accepting a module's 5e GREEN dispatch, and on accepting
+    each later fix dispatch for that module: exactly the dispatches FR-7 §"Which dispatches are
+    implementation dispatches" counts. Never on a 5d RED dispatch, and never on a dispatch that
+    halted, timed out or was rejected. `agent` is the agent that authored the accepted code:
+    `codex` or `agy` for a peer dispatch, `grok` for a `fallback_agent` grok dispatch, and
+    `claude` when FR-2 resolves `claude` and Claude writes the code itself (that write is the
+    accepted dispatch). The append happens before any review leg of that code runs, so every
+    review entry is preceded by the authors it reviews.
+  - **Mechanism.** The same Record mechanism as `review_independence` (FR-7 §"Record"): an add
+    that never removes or alters an existing entry, validated against this schema before anything
+    is written, with a refused add leaving the store unchanged and printing the writer's existing
+    refusal. Whatever mechanism the design names for `review_independence` serves both keys.
+  - **Failure the caller sees.** A refused append (invalid entry) is the writer's `ERROR:` refusal
+    and the store is unchanged; the orchestrator corrects the entry and appends again before any
+    review leg of that code. A skipped or lost append leaves the module's author set incomplete,
+    which FR-7 handles by its unrecoverable rule, never by guessing.
 - `h-mad/references/state-schema.md` gains one row per field, with the same value sets.
 - **The existing `fallback_agent` description changes on both surfaces that state it.** Its
   `description` in `h_mad_state_schema.json` ("Who covers Phase-5 authoring when Codex is out. The
@@ -142,6 +174,12 @@ hand-edited record can still hold anything, so the judge treats values as follow
 - `implementer_switch` and `review_independence` are read by `h_mad_phase7_preconditions.py`
   only (FR-7). There a malformed entry is reported as the warning `review_independence_malformed`
   and is never read as `independent=true`.
+- `implementation_authors` is read by the orchestrator's FR-7 attribution step only; no script
+  reads it. The writer refuses a malformed entry, so one can only come from a hand edit. A field
+  that is not an array, or that holds any entry not matching the entry schema, establishes no
+  module's author set (a malformed entry's `module` cannot be trusted to say which module it
+  belongs to): every module's set is unrecoverable (FR-7), and each leg writes no entry rather
+  than one with a guessed `independent`.
 
 ### FR-2 — One resolution function, in the judge
 
@@ -493,8 +531,8 @@ The revert test, the independent re-run and the mutation pass still cover all fo
   example the 5e anti-gaming verifier dispatched to Codex) is flagged exactly as agy on agy is
   (operator decision D-9). The flag is a warning, never a block.
 - **Attribution: the implementer is the author of the reviewed code.** An entry's `implementer` is
-  the agent whose successful implementation dispatch produced the code the leg reviews, read from
-  that dispatch. It is never read from `implementer_switch.to` or from the `implementer` field,
+  the agent whose successful implementation dispatch produced the code the leg reviews, as
+  recorded for that dispatch in FR-1's `implementation_authors` (D-15). It is never read from `implementer_switch.to` or from the `implementer` field,
   which record routing, not authorship. `implementer_switch` is historical: Codex out → agy
   dispatched → switch stored; Codex back → Codex dispatched with `switch=none`, and the stored
   `.to` still says `agy`. Attributing from it would mark a Codex reviewer of Codex-written code as
@@ -509,23 +547,34 @@ The revert test, the independent re-run and the mutation pass still cover all fo
   - **The reviewer is none of the authors (S5, v1.8: adopted from design v1.1).** `independent` is
     `true` and `implementer` names the author of the module's latest accepted implementation
     dispatch. Reason: the schema holds one agent, the choice changes no `independent` value, and
-    "latest" is decidable from the dispatch order the orchestrator already holds.
-  - **The author set is complete, never a projection (E2, v1.8).** Whatever the orchestrator reads
-    authorship back from after it has lost its dispatch context (for example a resumed 6a-prime
-    leg), it recovers every author of the module, not one per earlier entry. Reading the
-    `implementer` values of earlier entries alone is not enough: a module written by agy and then
-    fixed by Codex, reviewed at 5e by grok and verified by Codex, stores `implementer=codex` in both
-    5e entries, and an agy 6a-prime reviewer would then read as independent. The design names where
-    the complete set is kept. If it needs a field in the `review_independence` entry, that is an
-    FR-1 schema change this revision does not make (owed; see §"Owed by other documents"). When the
-    set cannot be recovered, the leg gets no entry for that module rather than an
-    `independent=true` one. Residual: `review_independence_unrecorded` fires only when no
-    `leg=6a-prime` entry exists at all, so one module missing among several recorded ones has no
-    warning of its own, like a missing 5e entry (§"Record").
+    "latest" is decidable from `implementation_authors`' array order (D-15).
+  - **The author set is complete, never a projection (E2, v1.8; source fixed by D-15, v1.9).**
+    The orchestrator reads a module's author set from FR-1's `implementation_authors`: the
+    distinct `agent` values of the entries whose `module` equals it, and "latest accepted
+    implementation dispatch" is that module's last entry in array order. It reads the field on
+    every leg, with or without its dispatch context, so a resumed 6a-prime leg recovers the same
+    set a 5e leg used. It never rebuilds the set from earlier `review_independence` entries: a
+    module written by agy and then fixed by Codex, reviewed at 5e by grok and verified by Codex,
+    stores `implementer=codex` in both 5e entries, and an agy 6a-prime reviewer would then read as
+    independent.
+  - **When the set is unrecoverable, the leg writes no entry for that module** rather than an
+    `independent=true` one. The cases, closed:
+    - **Field absent.** Expected only for a feature whose implementation dispatches were accepted
+      before `implementation_authors` existed.
+    - **Field present, no entry for the module.** For a feature recorded after the field existed,
+      this is a skipped or lost append (FR-1), a defect of the record step, not an expected
+      state; the outcome is the same.
+    - **Field malformed** per FR-1 §"Failure modes".
+
+    The record cannot tell the first two apart, for the reason D-11 gives: the only signal is the
+    absence itself. Residual: `review_independence_unrecorded` fires only when no `leg=6a-prime`
+    entry exists at all, so one module missing among several recorded ones has no warning of its
+    own, like a missing 5e entry (§"Record").
 - **Record.** After each leg, the orchestrator adds one `review_independence` entry (FR-1) to the
   record through `h_mad_state_write.py`'s write path, so the claim and session rules apply. No
   verdict word changes, and `h_mad_extract_verdict.py` output is untouched (it prints only
-  `<KEY>: <VALUE>`).
+  `<KEY>: <VALUE>`). The same mechanism adds each `implementation_authors` entry (FR-1, D-15);
+  every requirement below applies to both keys.
   - **The writer has no append today.** `--set KEY=VALUE` JSON-decodes VALUE and replaces the
     whole value (`grep -n '"--set"' -A 6 h-mad/scripts/h_mad_state_write.py`). Adding an entry
     with `--set` is therefore a hand read-modify-write of the whole array, and it drops every
@@ -825,6 +874,9 @@ One real task is staged with `--agent agy` and dispatched headless through
   `codex_status` `description`s, all four per FR-1.
 - **`h-mad/references/failure-recovery.md`** gets the 5d `red_wrong_reason` row carve-out per
   FR-9.
+- **SKILL.md, the Phase-5 orchestrator steps:** the `implementation_authors` append on accepting
+  a 5e GREEN or fix dispatch, and the attribution read from it before each review leg, per FR-1
+  and FR-7 (D-15).
 - **SKILL.md, Phase 7 closure step:** the report carries every `WARNING` line that
   `h_mad_phase7_preconditions.py` prints, the FR-7 warnings included.
 - **SKILL.md §"Teammate audit leg — when codex is unavailable"**, the bullet that begins
@@ -861,6 +913,15 @@ One real task is staged with `--agent agy` and dispatched headless through
   form `%Y-%m-%dT%H:%M:%SZ` is accepted on both paths. If the mechanism uses the library's format
   checker, one fixture runs with `rfc3339_validator` made unimportable and still refuses
   `not-a-date`.
+- **AC-1.3 (D-15):** `implementation_authors` is pinned on the library path and, under the same
+  test seam as AC-1.2, on the bundled path; each fixture runs once per path:
+  - accepted: `[]`; one entry per agent `codex`, `agy`, `grok`, `claude`, each its own fixture;
+    and `[{"module":"m","agent":"agy"},{"module":"m","agent":"codex"},{"module":"m","agent":"agy"}]`
+    (duplicates and order kept);
+  - refused, each its own fixture: an unknown agent (`"agent":"gemini"`), a missing `agent`, a
+    missing `module`, `"module":""`, an extra key, a non-object entry, and a non-array value;
+  - a record with no `implementation_authors` validates unchanged.
+  An append of a refused entry through the Record mechanism leaves the store byte-identical.
 - **AC-2.1:** The resolution function: for every combination of {`implementer` absent / `codex` /
   `agy` / invalid} × {`codex_avail`, `agy_avail` ∈ true/false}, `resolved` and `switch` match FR-2.
   Each switch reason is produced by its own fixture, with only that cause present.
@@ -922,7 +983,7 @@ One real task is staged with `--agent agy` and dispatched headless through
   refused, and the store is unchanged.
 - **AC-7.2:** `review_independence_unrecorded` fires, with no `leg=6a-prime` entry, for each
   implementer `codex` (field absent included), `agy`, `grok` and `claude`, each from its own
-  fixture (`grok` and `claude` through `implementer_switch.to`, the only FR-1 field that takes them), and for each `archreview` value `READY_TO_MERGE`, `WITH_FIXES` and `NO`. It does not fire
+  fixture (`grok` and `claude` through `implementer_switch.to`, the only FR-1 routing field that takes them; `implementation_authors` is an authorship record and does not trigger the warning), and for each `archreview` value `READY_TO_MERGE`, `WITH_FIXES` and `NO`. It does not fire
   when a `leg=6a-prime` entry exists, nor when `archreview` is absent, `SKIPPED_NO_PANE` or
   `SKIPPED_OPERATOR_OVERRIDE`.
 - **AC-7.3 (v1.8):** FR-7 §"Attribution" is pinned by fixtures, each RED against the mutant it
@@ -934,7 +995,11 @@ One real task is staged with `--agent agy` and dispatched headless through
     `implementer=codex`, `independent=true`; a Codex 5e-verify → `implementer=codex`,
     `independent=false`; then, with the dispatch context discarded, an agy 6a-prime →
     `implementer=agy`, `independent=false`. Mutant: authors recovered from earlier entries'
-    `implementer` values only.
+    `implementer` values only. The recovered set's source is `implementation_authors` (FR-1,
+    D-15), holding `{m, agy}` then `{m, codex}`.
+  - **pre-field feature (D-15):** the same reviews on a record with no `implementation_authors`
+    → the 6a-prime leg writes no entry for the module. Mutant: an absent field read as an empty
+    author set, so the agy reviewer reads as independent.
   - **RED is not authorship (E4):** an agy 5d RED dispatch then a Codex 5e GREEN; an agy reviewer →
     `independent=true`, `implementer=codex`. Mutant: a 5d RED dispatch counted as an author.
   - **unaccepted dispatches author nothing:** a rejected agy GREEN then an accepted Codex GREEN;
@@ -1075,10 +1140,19 @@ One real task is staged with `--agent agy` and dispatched headless through
 - **D-14 Leap-second `.ts` refused (orchestrator decision, design audit cycle 1, 2026-10-16):**
   FR-1 narrows `implementer_switch.ts` to seconds `00`–`59`. Reason: state timestamps are written
   by h-mad's own writer through Python `datetime`, which cannot produce a seconds field of `60`.
+- **D-15 Durable author record (OD-E2, operator decision, 2026-10-16: option (a)):** FR-1 gains
+  `implementation_authors`, an optional array of `{module, agent}` entries appended (never
+  removed or altered) through FR-7's Record mechanism, one per accepted 5e GREEN or accepted fix
+  dispatch and never for a 5d RED. FR-7 §"Attribution" reads a module's author set from it.
+  Reason: design v1.2 (OD-E2) showed AC-7.3's "multi-author, recovered" fixture could not pass
+  without a durable author record, because the assembler's prompt, out and log files are under
+  `/tmp` and its slug names no agent. The fixture stays as written and now has its source. The
+  rejected option (b) was to amend the fixture to "no entry".
 
 ## Open questions for the operator
 
-None — OQ-1/OQ-2 settled 2026-10-16; the design's OQ-A/OQ-B settled 2026-10-16 (D-12, D-13).
+None — OQ-1/OQ-2 settled 2026-10-16; the design's OQ-A/OQ-B settled 2026-10-16 (D-12, D-13);
+the design's OD-E2 settled 2026-10-16 (D-15).
 
 ## Non-goals
 
@@ -1107,10 +1181,17 @@ None of these are edited by this spec.
   (E6); its claim that `unknown` "denies `kind=judge-error`, as the Codex gate does for a shell
   command" is false at `cff71b49` — the Codex gate's `unknown` shell deny carries no `kind=`
   token. FR-7: name where the complete author set is kept (E2) and correct "the GREEN dispatch the
-  orchestrator accepted at 5d" to 5e (E4). If E2's mechanism needs a new `review_independence`
-  field, FR-1 here must gain it in a later spec revision; this one adds none.
+  orchestrator accepted at 5d" to 5e (E4).
+- **Design (v1.9, D-15).** FR-1: add `implementation_authors` with FR-1's entry schema to the
+  schema JSON and a `state-schema.md` row. FR-7: retire "the complete set is kept in the
+  procedure" and OD-E2 in favour of reading the set from `implementation_authors`; the
+  `--append` mechanism (DO-3) must accept this key with the same guarantees, and the "When the
+  dispatch list is lost" rule becomes FR-7's three closed unrecoverable cases.
 - **Impl-plan.** AC-7.3's surface (FR-7 §"Attribution" must have code to drive, or the AC is an
-  OPEN-DECISION); AC-4.1's `unknown` fixtures and AC-4.2's per-deny-path kind fixtures.
+  OPEN-DECISION), now including the pre-field fixture; AC-1.3's fixtures; AC-4.1's `unknown`
+  fixtures and AC-4.2's per-deny-path kind fixtures.
+- **Plan.** If the plan carries FR-1's field list or AC-7.3's fixtures, it gains
+  `implementation_authors`, AC-1.3 and the pre-field fixture.
 
 ## Version History
 - v1.0: Initial spec (2026-10-16) from brainstorm v1.1. Settles 8 open questions (D-1..D-8): run_command takes the Codex command-shape rule, not a stated residual; per-project .agents/hooks.json; root from handler cwd; provisional 1500 s timeout then tracer formula; PATH+status+env availability; feature-only implementer; flag in state; audit legs unchanged. Folds brief fix 3 (#8) WIRE-PIN new-caller RED case as FR-9. OQ-1 (Codex-reviews-Codex flag), OQ-2 (.agents exclude) for the operator.
@@ -1122,3 +1203,4 @@ None of these are edited by this spec.
 - v1.6: Advisory delta review of plan v1.3 (608e430), spec-owned parts (2026-10-16). Should-fix 3 -> FR-9: the joined reading (ast str constants) is blind to non-str text in a .py file; axis named with three members (comments, files ast.parse rejects, bytes literals). The sweep is now the union of the line grep and the joined reading, which adds joined .py comment tokens; parse failures are reported as unparsed=N and read by hand; residual: run-time-built strings and a bytes literal split across lines. Measured at 5f72c2f3: union 7 files, line-grep-minus-joined 0, comment hits 0 (incidental), unparsed=0. AC-9.1 re-run is the union and reports unparsed=N. Must-fix 1 (spec side) and Should-fix 4 -> AC-9.4: the carve-out text is the whole three-sentence FR-9 block; each copy is read from its own source location, never from the assembled prompt or a file-level contains-check over a file holding more than one copy; a locator matching zero or several spans fails the test; the control mutates exactly one copy, runs once per copy and once per sentence in at least one copy, with a find unique in its file (mutation harness anchor_status), the .py find written against source bytes including the literal split.
 - v1.7: Design audit cycle 1, spec-owned items (2026-10-16). S1 (codex C1) -> FR-1/AC-1.1/AC-1.2 + D-14: .ts narrowed to seconds 00-59, a leap second (2016-12-31T23:59:60Z) refused on both paths; reason: every .ts comes from Python datetime via the writer, which cannot hold second 60 (orchestrator decision). S2 (codex C6) -> FR-7 Attribution: an entry's implementer is the author of the reviewed code, from its successful implementation dispatch, never implementer_switch.to (historical) or the implementer field; multi-author code is non-independent if the reviewer is any author. S3 -> FR-1/FR-10/AC-1.1: codex_status schema description and state-schema.md row rewritten to FR-2 authorship (no test pins the text; the fallback_agent-after-codex_status order pin stated); FR-8 Version: 1.4.0 at 200ffd52, each reading stamps its version; Owed SessionStart re-check re-stamped 1.4.0 at 200ffd52; FR-6/AC-6.1 shared module = h_mad_target_identity.py (D-12, OQ-A); FR-8/AC-8.1 post-merge stage, COMPLETE only after it (D-13, OQ-B). Open questions: OQ-A/OQ-B settled.
 - v1.8: Design audit cycle 2, final corrective revision after the round cap, not re-audited (2026-10-16). S1/E6 -> FR-4 'Every deny carries a kind': rule over every deny path, closed list owned by the design, spec names only judge-error, tool-not-admitted and the judge's Verdict kind; Codex gate has 6 of 13 kindless _deny call sites at cff71b49. E1 -> FR-4 'The activity reading': three-valued scan (active/unknown/inactive), every step5-gated deny also fires on unknown, class-(b) production .py still read through read_chain under inactive; workspacePaths and Tool classes sentences re-worded. E5 -> FR-4 Target keys: a non-empty-string value counts as no path key. S4 -> FR-4 'Deliberate differences from the Codex gate': design's four adopted plus the kind rule as a fifth. S2/E2/E4 -> FR-7 Attribution sub-bullets (5e GREEN + accepted fixes, never 5d RED; complete author set, never a projection) and new AC-7.3. S5 -> adopted: reviewer none of the authors names the latest accepted dispatch's author. S3 -> leap-second ValueError quote drops the version-dependent tail. AC-4.1/AC-4.2 extended; FR-6 states the unknown-scan shell deny; Owed gains design and impl-plan items.
+- v1.9: Operator decision OD-E2 (a) (2026-10-16) -> D-15: FR-1 gains implementation_authors, an optional array of {module, agent} (agent codex|agy|grok|claude; module non-empty string; no extra keys), appended never altered through FR-7's Record mechanism on accepting a 5e GREEN or fix dispatch, never 5d RED or a halted/timed-out/rejected dispatch; duplicates kept, array order = acceptance order. New AC-1.3 (valid entries accepted, unknown agent and other malformed shapes refused, both validator paths). FR-7 Attribution reads the author set from the field on every leg; unrecoverable cases closed to three (field absent: pre-field features; no entry for the module: a record-step defect; malformed) -> no entry. AC-7.3 multi-author fixture unchanged with its source named; pre-field fixture added. AC-7.2 'only FR-1 field' narrowed to routing field. FR-10 SKILL.md Phase-5 step bullet. Owed: design FR-1/FR-7 (retire procedure-kept set and OD-E2), impl-plan AC-1.3 + pre-field fixture, plan mirror.
