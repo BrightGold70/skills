@@ -64,6 +64,22 @@ change and records written before this feature stay valid:
 - `review_independence[].leg` takes `5e-review|5e-verify|6a-prime`, and `module` is a string or
   `null`. `reviewer` and `implementer` take `codex|agy|grok|claude`. `independent` is a boolean.
 - `h-mad/references/state-schema.md` gains one row per field, with the same value sets.
+- **The existing `fallback_agent` description changes on both surfaces that state it.** Its
+  `description` in `h_mad_state_schema.json` ("Who covers Phase-5 authoring when Codex is out. The
+  field is read only when codex is out: …") and its `state-schema.md` row ("Optional Phase-5
+  author when Codex is out.") are both false after FR-3, which reads the field only when **both**
+  peers are out for the record. Both are rewritten to the FR-2 condition, so that each names agy
+  beside Codex. (`grep -n 'fallback_agent' h-mad/scripts/h_mad_state_schema.json
+  h-mad/references/state-schema.md`.)
+  - **Pinned literals.** `test_h_mad_state_fallback_agent.py`
+    `test_fallback_agent_description_states_the_four_facts` asserts four substrings of the schema
+    description: `read only when codex is out`, `are equivalent`, `HMAD_CODEX_UNAVAILABLE does not
+    override` and `prose-enforced`. The rewrite either keeps all four (for example "read only when
+    codex is out and agy is out too"), or changes the test in the same commit to the new fact.
+    The test must never be deleted to make the rewrite pass.
+  - **Residual.** The `fallback-grok` refusal text in `h-mad-tdd-gate.sh` says "while codex is
+    out". FR-3 keeps it byte-identical. It stays true, because codex is out whenever the refusal
+    fires, but it does not mention agy. That is accepted as the price of byte-identity.
 
 **Failure modes.** The schema validates only the values that `h_mad_state_write.py` writes. A
 hand-edited record can still hold anything, so the judge treats values as follows:
@@ -151,6 +167,36 @@ The `TDD-STATE:` line is a contract between the judge and the hook. It must carr
 step 1 and step 2 need, so the hook never reads state or `PATH` itself. Its exact shape is the
 design's choice. Every added field gets a closed value set, and an unknown value matches no
 alternative of `STATE_ACTIVE_RE`, so it refuses as `judge-error`.
+
+**A field that is missing is not an admitting value.** A line that lacks a field steps 1 or 2
+need refuses `judge-error`, like an unknown value. That covers a line in today's shape. It is the
+rule the tree already holds for the `fallback=` field:
+`test_h_mad_tdd_gate_fallback_agent.py` `test_state_stub_fallback_field_is_judge_error[missing-field]`
+asserts `judge-error` for a line that omits it. Reading a missing peer field as "no peer
+resolved" would let a judge that stops emitting it admit Claude silently. So the design may not
+keep old-shape lines passing by making the new fields optional.
+
+**Consequence for the existing stub-line fixtures (the AC-3.2 exception).** Two gate test files
+stub the judge's `state` verb with a `TDD-STATE: active` literal in today's shape:
+- `test_h_mad_tdd_gate_judge.py`: the `_tree_b` default `state_line`;
+- `test_h_mad_tdd_gate_fallback_agent.py`: the `PREFIX` and `RECORD` constants that its
+  `_stub_outcome` lines are built from.
+
+(`git ls-files h-mad/tests | grep 'test_h_mad_tdd_gate_.*\.py$' | xargs grep -l 'TDD-STATE: active'`
+finds those two files at `17d73037`.) Under the rule above, those literals would refuse
+`judge-error`. So they are re-shaped to the new line. The permitted edit is exactly this: the
+text of a string literal that stubs a `TDD-STATE: active` line, plus the minimum code that
+composes one, such as a constant that the line is concatenated from. Each re-shaped stub must
+carry values for the new fields that reach the outcome the test already asserts. The following
+stay byte-identical: every assertion, every expected kind and reason substring, every test name
+and every parametrisation id. A test whose asserted outcome cannot be reached by some new-shape
+line is a contradiction for the design to report. It is never a licence to change the assertion.
+
+Two other copies of the line are outside AC-3.2, and they follow the line:
+- `test_h_mad_tdd_judge.py` `ACTIVE_RE` is a `$`-anchored copy of the grammar. It is updated to
+  the new grammar in the same commit, and its existing assertions keep their meaning.
+- The mutation rows that quote the line in their `find` or `replace` are re-anchored in the same
+  commit, and they gate on `MUTATION: ALL_CAUGHT`.
 
 ### FR-4 — agy write gate (`h-mad/hooks/h-mad-agy-tdd-gate.py`)
 
@@ -240,7 +286,19 @@ shell policy** as `h-mad-codex-tdd-gate.py`:
 
 There is **one implementation** of the policy. The design moves it to a shared module that both
 gates import. The hyphenated hook filename cannot be imported directly, and two copies would
-drift. The Codex gate's behaviour is unchanged; its existing tests and mutation rows stay green.
+drift. The Codex gate's behaviour is unchanged, and its existing tests pass unmodified.
+- **Tests reach the policy through the Codex gate module.** `test_h_mad_codex_tdd_gate_judge.py`
+  calls `module._safe_shell_command(...)` on the loaded Codex gate. So after the move, each moved
+  name that an existing test reaches must stay bound on the Codex gate module, by import.
+  (`grep -n '_safe_shell_command' h-mad/tests/test_h_mad_codex_tdd_gate_judge.py`.)
+- **Mutation rows are re-pointed, then green.** Every mutation row whose `file` is
+  `h-mad/hooks/h-mad-codex-tdd-gate.py` and whose anchor lies in the moved code is re-pointed to
+  the shared module in the same change. Its `find`/`replace` follows the code. Then each spec that
+  holds such a row runs `MUTATION: ALL_CAUGHT`.
+  - A row left pointing at the old file matches zero times. That reads as
+    `step5e:mutation_unverified`, never as caught.
+  - Which rows those are is a census over the set the design moves. It is the plan's M-4, and it
+    is re-derived once the design fixes that set. It is not restated here.
 
 `send_command_input` (input to a running process) and `notebook_execution` fall in class (d) and
 are denied.
@@ -270,9 +328,23 @@ The revert test, the independent re-run and the mutation pass still cover all fo
   The rule covers every implementer, Codex included: a Codex reviewer on Codex-written code (for
   example the 5e anti-gaming verifier dispatched to Codex) is flagged exactly as agy on agy is
   (operator decision D-9). The flag is a warning, never a block.
-- **Record.** After each leg, the orchestrator appends one `review_independence` entry (FR-1)
-  with `h_mad_state_write.py`. No verdict word changes, and `h_mad_extract_verdict.py` output is
-  untouched (it prints only `<KEY>: <VALUE>`).
+- **Record.** After each leg, the orchestrator adds one `review_independence` entry (FR-1) to the
+  record through `h_mad_state_write.py`'s write path, so the claim and session rules apply. No
+  verdict word changes, and `h_mad_extract_verdict.py` output is untouched (it prints only
+  `<KEY>: <VALUE>`).
+  - **The writer has no append today.** `--set KEY=VALUE` JSON-decodes VALUE and replaces the
+    whole value (`grep -n '"--set"' -A 6 h-mad/scripts/h_mad_state_write.py`). Adding an entry
+    with `--set` is therefore a hand read-modify-write of the whole array, and it drops every
+    earlier entry the caller fails to carry.
+  - **Requirement.** Adding an entry never removes or alters an existing one. It is validated
+    against FR-1 before anything is written. A refused add leaves the store unchanged and prints
+    the writer's existing refusal. The design names the mechanism, and this spec does not choose
+    it. The preferred mechanism is a writer operation that appends one entry. A read-modify-write
+    procedure is acceptable only if it states how it detects an entry lost between the read and
+    the write.
+  - **Failure the caller sees.** A failed add is a missing record. FR-7's `unrecorded` warning
+    surfaces a missing `6a-prime` entry at Phase 7. A missing 5e entry has no warning of its own,
+    and that is the stated residual.
 - **Surface.** `h_mad_phase7_preconditions.py` emits, as warnings (never blockers):
   - `review_non_independent` for each entry with `independent=false`, naming leg, module and agent;
   - `review_independence_unrecorded` for every implementer (`codex|agy|grok|claude`, the
@@ -288,8 +360,8 @@ The revert test, the independent re-run and the mutation pass still cover all fo
     runs after this ships, with no grandfather rule (D-11). An archived feature is unaffected: the
     only code callers of `h_mad_phase7_preconditions.py` are its own CLI and its tests, so nothing
     re-runs it over closed features. A feature in flight whose 6a-prime ran before the field
-    existed reaches Phase 7 with the warning; the orchestrator either appends the missing entry
-    with `h_mad_state_write.py` from the 6a-prime dispatch log, or carries the warning into the
+    existed reaches Phase 7 with the warning; the orchestrator either adds the missing entry by
+    the **Record** mechanism above, from the 6a-prime dispatch log, or carries the warning into the
     report.
   - `review_independence_malformed` per FR-1.
 
@@ -356,6 +428,30 @@ One real task is staged with `--agent agy` and dispatched headless through
   - A missing callee still halts.
   - SKILL.md §"Phase 5 (Implementation) sub-steps", 5d bullet: the halt
     `step5d:red_wrong_reason:<module>` gains the same carve-out, worded identically.
+  - `h-mad/references/failure-recovery.md`, the 5d row whose token is
+    `step5d:red_wrong_reason:<module>`: its remedy column ("An `ImportError`/`AttributeError`/
+    `NameError` RED means the pin tests the callee …") gains the same carve-out, worded
+    identically. The token itself is unchanged. `test_h_mad_wiring_task_shape_docs.py` `HALT_TOKENS`
+    requires it in both `failure-recovery.md` and SKILL.md.
+    (`grep -n 'red_wrong_reason' h-mad/references/failure-recovery.md`.)
+
+  **The surfaces of this rule, closed.** Today the rule "a missing-symbol RED on a `WIRE-PIN` is
+  invalid" is stated on four surfaces:
+  1. prompt RED item 1;
+  2. the prompt's WIRE-PIN paragraph;
+  3. the SKILL.md 5d bullet;
+  4. the `failure-recovery.md` 5d row.
+
+  The carve-out reaches all four, and the prompt's GREEN variant gains it as a fifth. Sweep:
+  `git ls-files h-mad | xargs grep -ln -i 'missing.symbol\|tests the callee\|ImportError.*AttributeError\|AttributeError.*ImportError'`.
+  At `17d73037` it hits SKILL.md, `codex-implementer-prompt.md` and `failure-recovery.md`, and
+  otherwise only two tests and one fixture log. None of those three states the rule. Two tests pin
+  literals on these surfaces, and the edit keeps those literals:
+  - `test_h_mad_agent_definitions.py` `test_implementer_scopes_the_import_error_red_rule_to_wiring_tasks`
+    pins item 1's sentences;
+  - `HALT_TOKENS` pins the token.
+
+  Residual: a later surface that restates the rule is not covered until this sweep is re-run.
 
 ### FR-10 — Documentation surfaces
 
@@ -364,7 +460,10 @@ One real task is staged with `--agent agy` and dispatched headless through
   dispatch beside its review role.
 - **`h-mad/references/agy-runtime.md`** §"The TDD gate" names the new gate and FR-5's check, and keeps
   the halt.
-- **`h-mad/references/state-schema.md`** gains the FR-1 rows.
+- **`h-mad/references/state-schema.md`** gains the FR-1 rows. Its existing `fallback_agent` row
+  is rewritten, and so is the schema JSON's `fallback_agent` `description`, both per FR-1.
+- **`h-mad/references/failure-recovery.md`** gets the 5d `red_wrong_reason` row carve-out per
+  FR-9.
 - **SKILL.md, Phase 7 closure step:** the report carries every `WARNING` line that
   `h_mad_phase7_preconditions.py` prints, the FR-7 warnings included.
 - **Audit legs in Phases 3/4/5b are unchanged.** `codex_status` still routes the second audit
@@ -373,48 +472,61 @@ One real task is staged with `--agent agy` and dispatched headless through
 
 ## Acceptance criteria
 
-- **AC-1.1** The schema accepts each FR-1 field at each listed value and rejects a value outside
-  it. A record with none of the fields validates unchanged.
-- **AC-2.1** The resolution function: for every combination of {`implementer` absent / `codex` /
+- **AC-1.1:** The schema accepts each FR-1 field at each listed value and rejects a value outside
+  it. A record with none of the fields validates unchanged. The `fallback_agent` description in
+  the schema JSON and its `state-schema.md` row state FR-2's both-peers condition, and
+  `test_h_mad_state_fallback_agent.py` stays green.
+- **AC-2.1:** The resolution function: for every combination of {`implementer` absent / `codex` /
   `agy` / invalid} × {`codex_avail`, `agy_avail` ∈ true/false}, `resolved` and `switch` match FR-2.
   Each switch reason is produced by its own fixture, with only that cause present.
-- **AC-2.2** The `implementer` verb prints exactly one line for each of the six token rows, and
+- **AC-2.2:** The `implementer` verb prints exactly one line for each of the six token rows, and
   for `record=failed`. `--record` writes `implementer_switch` once and does not rewrite it on an
   identical re-run.
-- **AC-3.1** Each of the five gate-specific refusal kinds is produced by its own fixture. In
+- **AC-3.1:** Each of the five gate-specific refusal kinds is produced by its own fixture. In
   addition, `implementer-invalid` outranks `codex-authorship`, a peer refusal outranks
   `fallback-invalid`, and the chain fold blocks on the FIRST eligible record.
-- **AC-3.2** The `codex-authorship`, `fallback-grok` and `fallback-invalid` message bytes equal
-  those at `a8d9ba99`, and every existing `test_h_mad_tdd_gate_*.py` stays green unmodified.
-- **AC-4.1** With step5 inactive, the agy gate allows every tool. With step5 active, it covers:
+- **AC-3.2:** The `codex-authorship`, `fallback-grok` and `fallback-invalid` message bytes equal
+  those at `a8d9ba99`. Every existing `test_h_mad_tdd_gate_*.py` stays green, and the only change
+  allowed is FR-3's stub-line exception. In the two files FR-3 names, a string literal that stubs
+  a `TDD-STATE: active` line, and the constants it is composed from, are re-shaped to the new
+  line. Every assertion, expected kind, reason substring, test name and parametrisation id stays
+  byte-identical (checked by diffing the file against `a8d9ba99`). Every other
+  `test_h_mad_tdd_gate_*.py` is unmodified. A new fixture shows that a line in today's shape now
+  refuses `judge-error`.
+- **AC-4.1:** With step5 inactive, the agy gate allows every tool. With step5 active, it covers:
   - each class with at least one member;
   - an unknown tool name → class (d) deny;
   - a class-(b) payload with no path key → deny;
   - a production `.py` without a failing test → deny, with a judge kind;
   - with a failing test → allow;
   - `/tmp` and `artifactDirectoryPath` non-`.py` → allow, and `.py` there → deny.
-- **AC-4.2** Every exit path prints exactly one JSON object: malformed stdin, an internal
+- **AC-4.2:** Every exit path prints exactly one JSON object: malformed stdin, an internal
   exception and an unreadable state each still yield parseable stdout.
-- **AC-5.1** The wiring check emits each `UNWIRED` reason from its own fixture. `--agent agy`
+- **AC-5.1:** The wiring check emits each `UNWIRED` reason from its own fixture. `--agent agy`
   writes no prompt and halts on each of them.
-- **AC-6.1** The shell policy is imported, not copied: one definition in the tree. The Codex gate's
-  existing shell tests pass unmodified. The agy gate refuses each `unsafe` command in the Codex
+- **AC-6.1:** The shell policy is imported, not copied: one definition in the tree. The Codex gate's
+  existing shell tests pass unmodified. Every mutation row re-pointed under FR-6 runs
+  `MUTATION: ALL_CAUGHT` against the shared module. The agy gate refuses each `unsafe` command in the Codex
   gate's `--self-check` list.
-- **AC-7.1** `h_mad_phase7_preconditions.py` emits each of the three FR-7 warnings from its own
-  fixture, and none of them moves `ready`.
-- **AC-7.2** `review_independence_unrecorded` fires, with no `leg=6a-prime` entry, for each
+- **AC-7.1:** `h_mad_phase7_preconditions.py` emits each of the three FR-7 warnings from its own
+  fixture, and none of them moves `ready`. Adding a `review_independence` entry to a record that
+  already holds two leaves both earlier entries byte-identical. An entry that fails FR-1 is
+  refused, and the store is unchanged.
+- **AC-7.2:** `review_independence_unrecorded` fires, with no `leg=6a-prime` entry, for each
   implementer `codex` (field absent included), `agy`, `grok` and `claude`, each from its own
   fixture (`grok` and `claude` through `implementer_switch.to`, the only FR-1 field that takes them), and for each `archreview` value `READY_TO_MERGE`, `WITH_FIXES` and `NO`. It does not fire
   when a `leg=6a-prime` entry exists, nor when `archreview` is absent, `SKIPPED_NO_PANE` or
   `SKIPPED_OPERATOR_OVERRIDE`.
-- **AC-8.1** The probe directory holds the payload capture, the real refusal, and the RED/GREEN
+- **AC-8.1:** The probe directory holds the payload capture, the real refusal, and the RED/GREEN
   readings with re-run, revert and mutation results, each stamped with the sha and the
   `agy --version`. The default timeout in `h_mad_assemble_tdd.py` equals FR-8's formula over
   those readings.
-- **AC-9.1** The prompt contains no implementer-specific opening. `test_prompt_file_is_agent_independent`
+- **AC-9.1:** The prompt contains no implementer-specific opening. `test_prompt_file_is_agent_independent`
   covers `codex`, `grok` and `agy`. The new-caller rule appears in RED item 1, in the WIRE-PIN
-  paragraph, in the GREEN variant and in the SKILL.md 5d halt text.
-- **AC-X** Every new guard carries a mutation row that bites (`MUTATION: ALL_CAUGHT` with a `test`
+  paragraph, in the GREEN variant, in the SKILL.md 5d halt text and in the `failure-recovery.md`
+  `step5d:red_wrong_reason:<module>` row. `test_h_mad_wiring_task_shape_docs.py` and
+  `test_h_mad_agent_definitions.py` stay green.
+- **AC-X:** Every new guard carries a mutation row that bites (`MUTATION: ALL_CAUGHT` with a `test`
   per row). The full suite passes per task.
 
 ## Decisions on the brainstorm's open questions
@@ -491,11 +603,18 @@ None — OQ-1/OQ-2 settled 2026-10-16.
 ## Owed by other documents
 
 None of these are edited by this spec.
-- `h-mad/references/agy-runtime.md` §"Hooks" says "There is **no `SessionStart`**". agy's current
-  hooks.md lists `SessionStart` as a supported event. The section needs a re-check against the
-  installed agy (1.3.6 at this reading).
+- `h-mad/references/agy-runtime.md` says there is no `SessionStart` on two surfaces:
+  - §"Hooks" ("There is **no `SessionStart`**");
+  - the §"Construct mapping" table's `hook-event` row ("there is no `SessionStart`").
+
+  agy's current hooks.md lists `SessionStart` as a supported event. Both surfaces need a re-check
+  against the installed agy (1.3.6 at this reading), and they are corrected together.
+  (`grep -n 'SessionStart' h-mad/references/agy-runtime.md` at `17d73037`: 2 matching lines, one
+  under each heading.) Residual: this is a content predicate, so a third restatement added later
+  is found only by re-running the grep.
 
 ## Version History
 - v1.0: Initial spec (2026-10-16) from brainstorm v1.1. Settles 8 open questions (D-1..D-8): run_command takes the Codex command-shape rule, not a stated residual; per-project .agents/hooks.json; root from handler cwd; provisional 1500 s timeout then tracer formula; PATH+status+env availability; feature-only implementer; flag in state; audit legs unchanged. Folds brief fix 3 (#8) WIRE-PIN new-caller RED case as FR-9. OQ-1 (Codex-reviews-Codex flag), OQ-2 (.agents exclude) for the operator.
 - v1.1: Operator decisions 2026-10-16 (2026-10-16). OQ-1 -> D-9: FR-7 flag fires for any reviewer == implementer, Codex reviewing Codex included; warning only. OQ-2 -> D-10: operator narrowed .git/info/exclude /.agents/ to /.agents/skills/ (check-ignore evidence at d65374e9), no git add -f; per-clone residual stated. Open questions section now empty.
 - v1.2: Operator decision 2026-10-16 -> D-11: FR-7 review_independence_unrecorded widened from agy-only to every implementer (codex|agy|grok|claude), matching D-9; warning only. Trigger pinned to a 6a-prime leg that ran (archreview READY_TO_MERGE|WITH_FIXES|NO) with no leg=6a-prime entry; other archreview values already surface. Pre-existing features settled: no grandfather rule, archived features untouched (no batch caller). AC-7.2 added.
+- v1.3: Plan-author findings against v1.2 (2026-10-16). FR-3: a missing state-line field refuses judge-error (tree precedent: missing-field fixture), so the two gate stub-line fixtures are re-shaped with assertions byte-identical — the AC-3.2 exception; test_h_mad_tdd_judge.py ACTIVE_RE and line-quoting mutation rows follow the line. FR-7: writer has no append (--set replaces); add-without-loss is a requirement, mechanism a design obligation; AC-7.1 gains the two-entry fixture. FR-6: rows re-pointed to the shared module, then ALL_CAUGHT; moved names stay bound on the Codex gate module. FR-9/AC-9.1/FR-10: failure-recovery.md red_wrong_reason row; rule surfaces closed with sweep. FR-1/FR-10/AC-1.1: fallback_agent description on schema JSON and state-schema.md, pinned literals named. Owed: second SessionStart surface (Construct-mapping hook-event row). All ACs reformatted to the h_mad_ac_census.py grammar (- **AC-n.m:**).
