@@ -1,0 +1,21 @@
+{
+  "agy_events": 663,
+  "collected": "agy-coder-fallback.impl-plan.audit.v1.p2.md",
+  "failed": 8,
+  "log": "/tmp/audit_agy-coder-fallback_impl-plan_cycle1_run20261016T105224Z-46748_p2.log",
+  "log_retained": "/Users/kimhawk/orca/skills/.h-mad/pass-logs/agy-coder-fallback.impl-plan.audit.v1.p2.md.log",
+  "log_sha256": "f2a3b926a507fd03c123aaee5481e422f6bbc1ae186c0a8b9ee8e92fbc004eec",
+  "ok": 129,
+  "pass": 2,
+  "readable": true,
+  "shape": "parsed",
+  "status": "SUCCESS",
+  "targets": {
+    "code": 31,
+    "other": 11,
+    "paths": 42,
+    "unmeasured": 0
+  },
+  "thinking": 25098,
+  "tools": 137
+}
