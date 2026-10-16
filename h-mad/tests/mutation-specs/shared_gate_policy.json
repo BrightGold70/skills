@@ -1,0 +1,54 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_shared_gate_policy.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "fr6-import-guard-dropped",
+      "symbol": "<module>",
+      "_mechanism": "FR-6: replacing the guarded policy import with a bare import must break the missing-policy fail-closed JSON decision.",
+      "find": "_POLICY_IMPORT_ERROR = None\ntry:\n    scripts = str(Path(__file__).resolve().parents[1] / \"scripts\")\n    if scripts not in sys.path:\n        sys.path.insert(0, scripts)\n    from h_mad_target_identity import (\n        SIMPLE_SHELL_COMMAND,\n        READ_ONLY_COMMANDS,\n        SAFE_DISPATCH_VERBS,\n        SAFE_HMAD_SCRIPT_OPTIONS,\n        TEMP_OUTPUT_OPTIONS,\n        SHELL_ALLOW_FILE,\n        TRUSTED_BIN_DIRS,\n        MALFORMED_WORKDIR,\n        _contained_venv_executable,\n        _cwd_escapes_root,\n        _load_judge,\n        _option_value,\n        _path_within,\n        _payload_cwd_base,\n        _safe_argv,\n        _safe_hmad_script,\n        _safe_shell_command,\n        _trusted_executable,\n        _shell_allowance,\n        _operator_allowed,\n        _is_shell_allowance,\n        _read_regular_text,\n        _state_status,\n        _any_phase5_status,\n        _is_production_python,\n    )\nexcept Exception as exc:\n    _POLICY_IMPORT_ERROR = exc",
+      "replace": "from h_mad_target_identity import (\n    SIMPLE_SHELL_COMMAND,\n    READ_ONLY_COMMANDS,\n    SAFE_DISPATCH_VERBS,\n    SAFE_HMAD_SCRIPT_OPTIONS,\n    TEMP_OUTPUT_OPTIONS,\n    SHELL_ALLOW_FILE,\n    TRUSTED_BIN_DIRS,\n    MALFORMED_WORKDIR,\n    _contained_venv_executable,\n    _cwd_escapes_root,\n    _load_judge,\n    _option_value,\n    _path_within,\n    _payload_cwd_base,\n    _safe_argv,\n    _safe_hmad_script,\n    _safe_shell_command,\n    _trusted_executable,\n    _shell_allowance,\n    _operator_allowed,\n    _is_shell_allowance,\n    _read_regular_text,\n    _state_status,\n    _any_phase5_status,\n    _is_production_python,\n)",
+      "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[judge-error]",
+      "file": "hooks/h-mad-codex-tdd-gate.py"
+    },
+    {
+      "name": "fr6-self-check-policy-import-branch-dropped",
+      "symbol": "main",
+      "_mechanism": "FR-6: without the policy-import operational-error branch, a missing policy cannot produce stderr FAIL policy-import and exit 2.",
+      "find": "        if _POLICY_IMPORT_ERROR is not None:\n            print(\"CODEX-TDD-GATE: FAIL policy-import\", file=sys.stderr)\n            return 2",
+      "replace": "",
+      "test": "tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_reports_a_policy_import_failure",
+      "file": "hooks/h-mad-codex-tdd-gate.py"
+    },
+    {
+      "name": "codex-selfcheck-shell-policy-exits-2",
+      "symbol": "main",
+      "_mechanism": "I4: a completed shell-policy probe finding a defect is a verdict on stdout with exit 0; exit 2 wrongly reports could-not-run.",
+      "find": "            print(\"CODEX-TDD-GATE: FAIL shell-policy\")\n            return 0",
+      "replace": "            print(\"CODEX-TDD-GATE: FAIL shell-policy\")\n            return 2",
+      "test": "tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_shell_policy_fail_is_a_verdict_with_exit_0",
+      "file": "hooks/h-mad-codex-tdd-gate.py"
+    },
+    {
+      "name": "codex-selfcheck-parser-exits-2",
+      "symbol": "main",
+      "_mechanism": "I4: a completed parser probe finding a defect is a verdict on stdout with exit 0; exit 2 wrongly reports could-not-run.",
+      "find": "            print(\"CODEX-TDD-GATE: FAIL parser\")\n            return 0",
+      "replace": "            print(\"CODEX-TDD-GATE: FAIL parser\")\n            return 2",
+      "test": "tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_parser_fail_is_a_verdict_with_exit_0",
+      "file": "hooks/h-mad-codex-tdd-gate.py"
+    }
+  ]
+}
