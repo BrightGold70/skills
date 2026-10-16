@@ -13,3 +13,13 @@
 - **Owed:** impl-plan item 15 wording to be aligned at the next impl-plan revision (one line).
 - **Not a defect:** the sandbox-only teardown `ERROR` (leak-reaper `ps` → `PermissionError`)
   does not occur outside the sandbox.
+
+## D5d-2 · GREEN verdict override + symbol pins (2026-10-17)
+- Codex GREEN reported `STATUS: BLOCKED` solely for the sandbox-only leak-reaper `ps`
+  teardown error. Orchestrator gates, all outside the sandbox: Task 1 files + guards
+  `185 passed`; revert probe (HEAD production bytes) `114 failed, 8 passed` = RED split, restored
+  `122 passed`; `ANCHORS_OK` 4/4; `MUTATION: ALL_CAUGHT` 4/4 (each by its plan-named test);
+  full suite `6158 passed` (= 6042 floor + 116 new). Verdict overridden to GREEN.
+- Codex's rows omitted `symbol` (plan rule "Every new row sets `symbol`"); the orchestrator added
+  them mechanically (enclosing `def` by `ast`): `classify`, `rfc3339_datetime` ×2, `property_valid`.
+- Regex = design FR-1 pattern verbatim; `_semantic_ok` precedes both schema tiers in `classify`.
