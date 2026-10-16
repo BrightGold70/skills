@@ -1,0 +1,34 @@
+AUDIT-agy-coder-fallback-design-v2-BEGIN
+## Summary
+Design v1.1 (`docs/02-design/features/agy-coder-fallback.design.md`) cleanly resolves the cycle-1 obligations (DO-1 through DO-7, OQ-A, OQ-B) and aligns its schema, resolver, hook, and census specifications with spec v1.7 (`c853b207`) and the live `h-mad/` tree. Two build-class gaps remain in the FR-4 agy write gate (`workspacePaths` / `run_command` step-5 inactivity gating and class-(b) empty-path handling), alongside three build-class should-fix items covering deny `kind=` tokens, existing mutation-spec anchors, and `property_valid` null-handling.
+
+## Must-fix
+- In `docs/02-design/features/agy-coder-fallback.design.md` §"FR-4 — the agy write gate (DO-2)", Step 5 (`workspacePaths` cross-check) and the initial `args.CommandLine` type/presence check in Step 6 Class (c) (`run_command`) are specified without gating on `phase5_status in {"active", "unknown"}` (`S`), whereas Spec FR-4 scopes the `workspacePaths` deny to `step5 active` or `unknown`, Spec AC-4.1 requires allowing every tool when `step5` is `inactive`, and the Codex gate (`h-mad/hooks/h-mad-codex-tdd-gate.py`) only inspects shell commands when `phase5_status` is `active` or `unknown` — if implemented as written, when `step5` is `inactive`, any payload with an empty or out-of-root `workspacePaths` list or a `run_command` with a missing/non-`str` `CommandLine` is denied instead of standing down.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `5. **The `workspacePaths` cross-check.** When it is a list and no entry resolves inside the root,`
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `**Class (c): `run_command`.** The command is `args.CommandLine`; a missing or non-`str` value denies.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `and none of its entries resolves inside the root, the gate denies with `kind=judge-error` during`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `- **AC-4.1:** With step5 inactive, the agy gate allows every tool.`
+- In `docs/02-design/features/agy-coder-fallback.design.md` §"FR-4 — the agy write gate (DO-2)", the class-(b) fail-closed check tests only whether a key from `PATH_KEYS` is present in `args` and then passes `str(Path(raw).expanduser())` to `canonicalise(str(root), ..., str(root))` — unlike the Codex gate (`[path] if path else []`, which treats `""` as an empty target list and denies when `phase5_status in {"active", "unknown"}`), an empty string `{"TargetFile": ""}` or `"."` has the key present, expands to `"."`, canonicalises to the directory `root` with `resolved.names == ()`, passes T2–T5, collects zero production names in T6, and is allowed (`None → allow`) during active RED.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `- **Fail-closed.** A class-(b) call whose `args` carry no key from its table entry is denied`
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `- **T1 canonicalise.** `canonicalise(str(root), str(Path(raw).expanduser()), str(root))`, the`
+
+## Should-fix
+- Both Spec FR-4 and Design FR-4 state that every deny printed by `h-mad-agy-tdd-gate.py` has the shape `{"decision": "deny", "reason": "<text> kind=<kind>"}`, yet Design FR-4 specifies no `kind` for T4 (out-of-root target), T5 (`_is_shell_allowance`), or Class (c)'s missing-command / shell-allowance / disallowed-command denies, and claims in Step 6 that `unknown` denies `kind=judge-error, as the Codex gate does for a shell command` even though `h-mad/hooks/h-mad-codex-tdd-gate.py` omits `kind=` on its shell `phase5_status == "unknown"`, out-of-root, shell-allowance, and shell-policy denies — an implementer cannot satisfy both the mandatory `kind=<kind>` output contract and the Test Plan's parity rule (`the same kind wherever the Codex deny carries one`) without a decision on whether those denies carry a `kind=` token.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `object, `{"decision": "allow"}` or `{"decision": "deny", "reason": "<text> kind=<kind>"}`, then`
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `denies `kind=judge-error`, as the Codex gate does for a shell command.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `on stdout, either `{"decision": "allow"}` or `{"decision": "deny", "reason": "<text> kind=<kind>"}`,`
+- Design FR-5 and FR-7 do not update existing mutation anchors in `h-mad/tests/mutation-specs/assemble_tdd_agent.json` and `h-mad/tests/mutation-specs/heartbeat_beat.json` that break under their edits: `assemble_tdd_agent.json` row `w10a-grok-by-default` anchors on `"find": "ap.add_argument(\"--agent\", choices=(\"codex\", \"grok\"), default=\"codex\")"`, which matches zero times once FR-5 adds `"agy"` to `--agent` and fails `h_mad_mutation_harness.py`'s sibling precheck (`MUTATION: PRECHECK_FAILED`), and `heartbeat_beat.json` rows `the-owners-set-no-longer-beats` / `a-bystanders-set-beats-too` anchor on `if session_id and records[feature].get("owner_session_id") == session_id:` in `h_mad_state_write.py`, which breaks or becomes a 2-match error if FR-7 rewrites `records[feature]` to `prior` or duplicates the heartbeat check across two helpers.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `**The assembler.** `--agent` gains `agy`, and the timeout default becomes a table,`
+  quote: docs/02-design/features/agy-coder-fallback.design.md › ``record = {**prior, **fields}`; then, for each pair in order, `current = record.get(key, [])``
+- In `docs/02-design/features/agy-coder-fallback.design.md` §"FR-7 — `review_independence` and `--append` (DO-3)", `property_valid(name, value)` states that for `implementer_switch` it applies `rfc3339_datetime` to `ts` without guarding on `isinstance(value, dict)` (unlike `_semantic_ok` in §"FR-1"), which would reject or raise on `None` even though `implementer_switch` has schema type `["object", "null"]`; in the same section, the attribution prose says `the GREEN dispatch the orchestrator accepted at 5d`, conflating Phase 5d (RED) with Phase 5e (GREEN).
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › ``implementer_switch` it also applies `rfc3339_datetime` to `ts`.`
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `implementation dispatches: the GREEN dispatch the orchestrator accepted at 5d, and any later`
+
+## Nit
+- In `docs/02-design/features/agy-coder-fallback.design.md` §"Owed by other documents", the note says `The plan-author is revising these for v1.5; this design does not read the uncommitted plan.`, whereas `docs/01-plan/features/agy-coder-fallback.plan.md` is now committed at v1.6 (`c8e4f24c`) with those reconciliations already landed.
+AUDIT-agy-coder-fallback-design-v2-END
