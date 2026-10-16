@@ -1,0 +1,11 @@
+{
+ "verdict": "PASS",
+ "files": {
+  "agy-coder-fallback.impl-plan.md": "68d840551343e52a555d261b3fcf30fc28b9ee3ab83f6850fa6a51fd2b60da2d"
+ },
+ "suite": "PASS",
+ "legs": [
+  "agy",
+  "codex"
+ ]
+}
