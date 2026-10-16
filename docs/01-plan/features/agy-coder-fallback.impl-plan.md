@@ -52,12 +52,31 @@ Shapes: `wiring` 2 (Tasks 3, 10); `new-behaviour` 14 (Tasks 1, 2, 5, 6, 7, 9, 11
   `$?`. The floor is the 5c collection reading (plan M-1), plus the tests the Task adds.
 - **RED counts are pytest node IDs.** A parametrised test counts once per id. `F` = fails at RED,
   `P` = passes at RED.
+- **Working directory.** A command whose paths start `h-mad/` or `docs/` runs from the repository
+  root. The mutation harness runs from `h-mad/`, the `root` every spec uses, with paths relative to
+  it: `python3 scripts/h_mad_mutation_harness.py …` and specs as
+  `tests/mutation-specs/<name>.json`. From `h-mad/`, `python3 h-mad/scripts/…` names
+  `h-mad/h-mad/scripts/…`, which does not exist ("can't open file", exit 2).
 - **Anchors (design §"Existing rows the edits move", E7).** After each Task's GREEN, run
-  `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors <every spec naming a file the Task
-  edited>` from `h-mad/` and require `ANCHORS: ANCHORS_OK`. A row the edit breaks is re-anchored in
-  that Task, to the same intent and the same `test`. Every new row sets `symbol`.
-- **Mutation verdicts.** Each spec a Task adds or re-anchors is run alone and gated on
+  `python3 scripts/h_mad_mutation_harness.py --check-anchors tests/mutation-specs/<spec>.json …`
+  from `h-mad/`, over every spec naming a file the Task edited, and require
+  `ANCHORS: ANCHORS_OK`. A row the edit breaks is re-anchored in that Task, to the same intent and
+  the same `test`. A row whose `replace` names a symbol the edit removes from that file is
+  rewritten in the same Task, even when its `find` still matches. Every new row sets `symbol`.
+  Each Task below names the existing rows its edits touch, or says it touches none. Those lists
+  come from one sweep at `4e4b5ded`: each row's `find` was located in its file and mapped to its
+  enclosing `def` (or `.md` section), then compared with the spans each Task edits.
+- **Mutation verdicts.** Each spec a Task adds or re-anchors is run alone, from `h-mad/`, as
+  `python3 scripts/h_mad_mutation_harness.py tests/mutation-specs/<spec>.json`, and gated on
   `MUTATION: ALL_CAUGHT`, read from the token line.
+- **Verdict exits.** Every script and probe this plan adds or changes prints its verdict as a
+  token and exits 0 on a normal `FAIL`, `UNWIRED` or `HALT` verdict, unless a Task states another
+  exit for that verdict and the design table it cites gives that exit (the base invariant on
+  audit-gate signal discipline). A nonzero exit means an operational error: the input could not
+  be read, or a module could not be imported.
+- **Halt markers.** Every new halt prints an `[H-MAD]` marker line at the transition, after its
+  machine-read token line (`invariants.base.md` §"Marker discipline"). The tests on that halt
+  assert the marker.
 - **New mutation specs** copy the header shape of `tests/mutation-specs/heartbeat_beat.json`
   (`root`, `command`, `target_command`, `mutations`). Each row's `find` is written at GREEN
   against the committed bytes; the row's intent and `test` are fixed here.
@@ -73,8 +92,9 @@ Shapes: `wiring` 2 (Tasks 3, 10); `new-behaviour` 14 (Tasks 1, 2, 5, 6, 7, 9, 11
 
 **Description**: Commit the probes the design and the plan owe, under
 `docs/03-analysis/probes/agy-coder-fallback/`, before any code moves. Each probe prints
-`PROBE: PASS` or `PROBE: FAIL`, stamps `git rev-parse HEAD`, states its invocation in its
-docstring, and carries a control that makes it print `PROBE: FAIL`. Tasks 3, 4 and 18 re-run them.
+`PROBE: PASS` or `PROBE: FAIL` and exits 0 on both, stamps `git rev-parse HEAD`, states its
+invocation and working directory in its docstring, and carries a control that makes it print
+`PROBE: FAIL`. Tasks 3, 4 and 18 re-run them.
 
 - `census_mutation_rows.py` — from `h-mad/`, over `git ls-files 'tests/mutation-specs/*.json'`:
   - **M-2**, rows per file and specs per file, for `hooks/h-mad-tdd-gate.sh`,
@@ -252,7 +272,8 @@ re-runs `git ls-files -z h-mad/tests | xargs -0 grep -l 'permitting Claude to wr
 | `fr7-property-valid-dict-guard-dropped` | the predicate applied to `value["ts"]` unguarded | `tests/test_h_mad_state_validate_fallback.py::test_property_valid_implementer_switch_none_does_not_raise` |
 
 The fourth row is design §"Mutation rows" FR-7's dict-guard row, placed with the code it bites.
-`h_mad_state_validate.py` and `h_mad_state_schema.json` carry no existing rows (M-2 reading: 0).
+`h_mad_state_validate.py` and `h_mad_state_schema.json` carry no existing rows (M-2 reading: 0),
+and no row names `references/state-schema.md`, so this Task touches no existing row.
 
 **Acceptance Criteria**:
 - [ ] AC-1.1: items 1–3 and 12–17 pass; the regression guards pass.
@@ -317,8 +338,11 @@ controlled `PATH`):
    {absent, codex, agy, invalid} × codex available {yes, no} × agy available {yes, no}, fallback
    tag `absent`; `resolved` and `reason` per FR-2. 16 nodes.
 2. `tests/test_h_mad_tdd_judge_implementer.py::test_each_cause_alone` — `chosen=codex`, agy
-   available, only one cause present: `env`, `status-unavailable`, `status-exhausted`,
-   `cli-absent`; `reason` equals that cause. 4 nodes.
+   available, only one cause present. The ids are fixture names, not reason values: `env`
+   expects `reason == "env"`; `status-unavailable` (`codex_status` `unavailable`) and
+   `status-exhausted` (`codex_status` `exhausted`) both expect `reason == "status"`; `cli-absent`
+   expects `reason == "cli-absent"`. `reason` takes only the design's enum `env`, `status`,
+   `cli-absent`. 4 nodes.
 3. `tests/test_h_mad_tdd_judge_implementer.py::test_peers_out_fallback_tag_decides` — tags
    `absent`, `null`, `claude` → `claude`; `grok` → `grok`; an invalid tag →
    `invalid_field="fallback_agent"`. 5 nodes.
@@ -360,7 +384,9 @@ Task.
 `tdd_judge_venv.json`, `tdd_judge_wiring.json`). The candidate this Task moves is
 `tdd_gate_fallback_agent.json` `g3-reads-another-feature`, whose `find` sits in `_active_records`,
 which this Task edits; it is re-anchored here if it drifts, with its `test`
-(`tests/test_h_mad_tdd_gate_fallback_agent.py::test_gate_matrix`) unchanged.
+(`tests/test_h_mad_tdd_gate_fallback_agent.py::test_gate_matrix`) unchanged. It is the only
+existing row whose `find` sits in a span this Task edits: no row sits in `Record` or in `main`'s
+subparser block.
 
 **Acceptance Criteria**:
 - [ ] AC-2.1: items 1–3 pass.
@@ -462,11 +488,29 @@ guards on existing kinds and bytes.
 enumeration holds at `4e4b5ded`: `_tree_b(` matches 9 lines in `test_h_mad_tdd_gate_judge.py`
 (1 `def`, 8 call sites) and `_stub_outcome(` 6 lines in `test_h_mad_tdd_gate_fallback_agent.py`
 (1 `def`, 5 call sites). `test_h_mad_tdd_gate_fallback_agent.py::test_absent_null_claude_match_the_base_hook`
-is the `shutil.which` equivalence check. The committed probe
-`docs/03-analysis/probes/agy-coder-fallback/fr3_state_line_grammar.py` is re-run after GREEN and
-must print `PROBE: PASS` under `/bin/bash` and `/opt/homebrew/bin/bash`.
+is the `shutil.which` equivalence check.
 
-**Mutation rows** — new spec `h-mad/tests/mutation-specs/tdd_gate_peers.json`, 6 rows:
+**The grammar probe.** `docs/03-analysis/probes/agy-coder-fallback/fr3_state_line_grammar.py` was
+updated with this revision of the plan (it is not a file this Task edits). The `fc6b497e` version
+derived the new grammar by splicing the author group in front of `OLD_TAIL`. `NEW_TAIL` ends with
+`OLD_TAIL`, so on the hook after GREEN it spliced a second author group and printed
+`PROBE: FAIL`. The updated probe picks its mode from the literal it reads. `derived` is a literal
+ending with `OLD_TAIL`: the probe derives the grammar, as before. `shipped` is a literal ending
+with `NEW_TAIL`: the probe checks the literal as written, and checks that it equals the grammar
+derived from `git show a8d9ba99:h-mad/hooks/h-mad-tdd-gate.sh`. A literal ending with neither is
+drift and prints `PROBE: FAIL`. `--control` drops `peers-out|` from the grammar under test and
+must print `PROBE: FAIL`. `--hook PATH` reads another copy of the hook. Readings at `fc6b497e`
+plus the update, from the repository root, under `/bin/bash` and `/opt/homebrew/bin/bash`:
+the tree's hook gives `mode=derived` and `PROBE: PASS`, and `--control` gives `PROBE: FAIL`. A
+scratch copy of the hook carrying this Task's grammar (the block above) gives `mode=shipped`,
+`shipped literal == grammar derived from a8d9ba99` and `PROBE: PASS`, and `--control` gives
+`PROBE: FAIL`. A drifted literal gives `PROBE: FAIL` with exit 0, and an unreadable `--hook`
+exits 2. After GREEN, from the repository root:
+`python3 docs/03-analysis/probes/agy-coder-fallback/fr3_state_line_grammar.py /bin/bash /opt/homebrew/bin/bash`
+must print `mode=shipped` and `PROBE: PASS`, and the same command with `--control` must print
+`PROBE: FAIL`.
+
+**Mutation rows** — new spec `h-mad/tests/mutation-specs/tdd_gate_peers.json`, 7 rows:
 | name | mutant | test |
 |---|---|---|
 | `fr3-implementer-invalid-dropped` | the `implementer-invalid` branch removed | `tests/test_h_mad_tdd_gate_peers.py::test_implementer_invalid_refused` |
@@ -475,6 +519,14 @@ must print `PROBE: PASS` under `/bin/bash` and `/opt/homebrew/bin/bash`.
 | `fr3-peers-out-alternative-dropped` | `peers-out` removed from the grammar's author alternation | `tests/test_h_mad_tdd_gate_peers.py::test_hook_reads_authorship_from_the_state_line_not_the_environment` |
 | `wire1-author-not-from-resolver` (wire-cut) | `format_state_line` writes `codex` for every record instead of calling `resolve_implementer` | `tests/test_h_mad_tdd_gate_peers.py::test_format_state_line_takes_the_author_from_resolve_implementer` |
 | `wire2-hook-rederives-from-env` (wire-cut) | the author-field read replaced by today's `HMAD_CODEX_UNAVAILABLE`/`command -v codex` test | `tests/test_h_mad_tdd_gate_peers.py::test_hook_reads_authorship_from_the_state_line_not_the_environment` |
+| `wire2-every-author-is-a-peer` (converse) | the loop's author test replaced so the first record sets `PEER_RECORD` with `PEER=codex` whatever its author, and `codex-authorship` fires unconditionally | `tests/test_h_mad_tdd_gate_peers.py::test_hook_reads_authorship_from_the_state_line_not_the_environment` |
+
+**Both directions.** WIRE 2's cut is `wire2-hook-rederives-from-env`, and its converse is
+`wire2-every-author-is-a-peer`. In item 2 the record's author is `peers-out`, so the converse
+mutant denies `codex-authorship` where GREEN allows. A mutant that sets `PEER=peers-out` would
+match neither refusal arm and survive, so the row's `replace` sets `PEER=codex`. WIRE 1 has no converse mutant: `format_state_line` calls
+`resolve_implementer` for every record unconditionally by design, so no fall-through exists for a
+mutant to force. Its one direction is `wire1-author-not-from-resolver`.
 
 **Re-anchoring (R-1)**: read every row whose `file` is `hooks/h-mad-tdd-gate.sh` (56 rows) or
 `scripts/h_mad_tdd_judge.py` (36 rows plus Task 2's 4), not only the 13 the region census lists.
@@ -491,7 +543,10 @@ to the class M-3 counts, so it moves by construction).
 - [ ] AC-3.1: items 3–10 pass.
 - [ ] AC-3.2: item 11 and item 14 pass; the three diffs against `a8d9ba99` show only the three
   literals; every other `test_h_mad_tdd_gate_*.py` is unmodified.
-- [ ] WIRE-PIN 1 and WIRE-PIN 2 each fail when only their wire is cut (the two wire-cut rows).
+- [ ] WIRE-PIN 1 and WIRE-PIN 2 each fail when only their wire is cut (the two wire-cut rows), and
+  WIRE-PIN 2 fails when its wire is forced (`wire2-every-author-is-a-peer`).
+- [ ] The grammar probe prints `mode=shipped` and `PROBE: PASS` under both bashes, and
+  `PROBE: FAIL` under `--control`.
 - [ ] AC-X: the 12 specs above → `MUTATION: ALL_CAUGHT`.
 
 **Dependencies on other tasks**: Task 2.
@@ -526,7 +581,10 @@ level inside a `try:` block whose `except Exception as exc:` handler assigns
 `_main_guarded` re-raises it, so `main`'s `except Exception as exc:  # M:G2` answers. No early
 return is added between `main`'s entry and that `try`. The `--self-check` branch prints
 `CODEX-TDD-GATE: FAIL policy-import` to stderr and returns 2 when `_POLICY_IMPORT_ERROR` is set,
-before it calls `_safe_shell_command`.
+before it calls `_safe_shell_command`. Exit 2 is the operational-error exit: the gate cannot import
+its policy (design §"FR-6"). The Codex gate's existing `FAIL shell-policy` branch also returns 2.
+That is behaviour from before this feature, and this Task does not change it (see the residual
+under §"Residuals carried from the design").
 
 **Tests** (all in `h-mad/tests/test_h_mad_shared_gate_policy.py`):
 1. `tests/test_h_mad_shared_gate_policy.py::test_each_moved_function_has_one_definition_in_the_identity_module`
@@ -572,11 +630,37 @@ over every spec naming either edited file: `codex_gate_judge_wiring.json`,
 is re-anchored here. Re-run `census_mutation_rows.py`; the post-move reading is 0 Codex-gate rows
 inside a moved span.
 
+**Rows whose text the move changes** (sweep at `4e4b5ded`: the `find` and `replace` of each of
+the 31 rows, checked for names the identity module will not define). Two of the 31 need more than
+the `file` change:
+- `codex_gate_judge_wiring.json` `CX-FOLD` (`find`
+  `    path = Path(_load_identity().fold_py_suffix(relative))`, in `_is_production_python`): the
+  move rewrites that line, so `find` becomes `    path = Path(fold_py_suffix(relative))`.
+  `replace` (`    path = Path(relative)`) and `test` are unchanged. Re-pointing `file` alone leaves 0
+  matches, and that fails `--check-anchors` and
+  `tests/test_h_mad_mutation_harness.py::test_committed_mutation_specs_are_not_drifted`.
+- `codex_gate_judge_wiring.json` `CX-FORCE-SCRIPT` (`find` in `_safe_argv`, a moved function): its
+  `find` moves byte for byte, but its `replace` calls `_load_identity().canonical_directory`,
+  and `_load_identity` stays in the Codex gate. Run from the identity module, that mutant raises
+  `NameError` instead of forcing the canonical spelling, so its `test`
+  (`tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_safe_shell_script_keeps_path_resolve_spelling`)
+  would be killed by a crash. `replace` becomes the same line with `_load_identity().` removed, so
+  it calls the module's own `canonical_directory`.
+No other row among the 31 names a symbol outside the moved set. `G3`'s `replace` names `Path`,
+which the moved code also uses, so the identity module imports `Path` and every other name the
+moved code uses. Codex-gate rows outside the moved spans that sit near this Task's other edits are
+`G2` (`    except Exception as exc:  # M:G2`, in `main`) and `CX-ROOT-ENTER` (in `_main_guarded`).
+The `--self-check` branch and the re-raise are inserted beside them and leave both `find` texts
+unique. `codex_gate_tmp_reports.json` `python-under-tmp-admitted` and
+`the-name-check-reads-the-link-not-its-target` call `_load_identity()` inside `_tmp_report_target`,
+which does not move, so both stay valid.
+
 **Acceptance Criteria**:
 - [ ] AC-6.1 (one definition): items 1–2 pass.
 - [ ] AC-6.1 (existing shell tests unmodified): the regression guards pass.
 - [ ] AC-6.1 (re-pointed rows): each of the 7 specs → `MUTATION: ALL_CAUGHT` against
-  `h_mad_target_identity.py`.
+  `h_mad_target_identity.py`; `CX-FOLD` and `CX-FORCE-SCRIPT` each killed by an assertion of its
+  `test`, not by an exception.
 - [ ] AC-X: `shared_gate_policy.json` → `MUTATION: ALL_CAUGHT`.
 
 **Dependencies on other tasks**: Task 3 (both re-anchor rows of `tdd_gate_differential.json`,
@@ -605,10 +689,19 @@ canonicalised with `canonical_directory`; then `os.chdir(root)` once.
 `inactive`): fail-closed, and replaced by Tasks 6 and 7. The class table itself is complete here:
 `CLASS_A` (11 names), `CLASS_B` (5 names), `run_command`, and everything else.
 
-`--self-check` prints `AGY-TDD-GATE: PASS`, or `AGY-TDD-GATE: FAIL` plus what failed with a
-nonzero exit, over the design's four checks (`view_file` in (a) and `call_mcp_tool` in (d);
-`_safe_shell_command` refuses `python3 -c "open('x','w').write('x')"`; the policy names import;
-`JUDGE_BUDGET_S` readable).
+`--self-check` runs the design's four checks and prints exactly one line on stdout:
+- `AGY-TDD-GATE: PASS`, exit 0, when all four hold;
+- `AGY-TDD-GATE: FAIL policy-import`, exit 2, when the judge, the identity module or the policy
+  names do not import, or `JUDGE_BUDGET_S` cannot be read. The gate cannot run, so this is an
+  operational error;
+- `AGY-TDD-GATE: FAIL classification` (`view_file` not in class (a), or `call_mcp_tool` not in
+  class (d)) or `AGY-TDD-GATE: FAIL shell-policy` (`_safe_shell_command` admits
+  `python3 -c "open('x','w').write('x')"`), each with **exit 0**. These are ordinary verdicts, and
+  the token carries them (the base invariant on audit-gate signal discipline).
+Design §"FR-4" `--self-check` says "a nonzero exit" for every `FAIL`. The exit 0 on the two
+verdict `FAIL`s is the orchestrator's cycle-1 decision, and the design owes a line recording it
+(this plan's report). Task 9's check is unaffected: it requires the exact line
+`AGY-TDD-GATE: PASS` and exit 0, so a `FAIL` line with exit 0 reads as `self-check-failed`.
 
 **Code structure**:
 ```python
@@ -646,16 +739,25 @@ deny it asserts the reason ends with exactly one `kind=` token whose value is in
    (`active`), `class-d-active`, `class-d-unknown`; each asserts its row's kind. 6 nodes.
 6. `tests/test_h_mad_agy_tdd_gate.py::test_self_check_passes`. 1 node.
 7. `tests/test_h_mad_agy_tdd_gate.py::test_self_check_fails_on_a_policy_import_failure` — the gate
-   copied beside a real judge and no identity module. 1 node.
+   copied beside a real judge and no identity module; stdout is exactly
+   `AGY-TDD-GATE: FAIL policy-import` and the exit is 2. 1 node.
 8. `tests/test_h_mad_agy_tdd_gate.py::test_classification_table_is_the_recorded_inventory` —
    every `CLASS_A` and `CLASS_B` name and `run_command` is in the committed log's first `init`
    `tools`; the remainder is 41 names. 1 node.
+9. `tests/test_h_mad_agy_tdd_gate.py::test_self_check_policy_fail_is_a_verdict_with_exit_0` —
+   in-process, the gate loaded from its path and `sys.argv` patched to `--self-check`:
+   `classification` (`CLASS_A` patched to drop `view_file`) and `shell-policy`
+   (`_safe_shell_command` patched to return `True`). Each id asserts that stdout is exactly
+   `AGY-TDD-GATE: FAIL classification` or `AGY-TDD-GATE: FAIL shell-policy`, and separately that
+   `main()` returns 0. The fixture imports the policy, so it is not item 7's import failure. 2 nodes.
 
-**RED split**: 29 nodes, 29 F, 0 P (4 + 11 + 2 + 3 + 6 + 1 + 1 + 1). The file does not exist.
+**RED split**: 31 nodes, 31 F, 0 P (4 + 11 + 2 + 3 + 6 + 1 + 1 + 1 + 2). The file does not exist.
 
-**Mutation rows** — new spec `h-mad/tests/mutation-specs/agy_tdd_gate.json`, 4 rows here:
+**Mutation rows** — new spec `h-mad/tests/mutation-specs/agy_tdd_gate.json`, 5 rows here (4
+design rows and 1 signal-discipline row):
 | name | mutant | test |
 |---|---|---|
+| `selfcheck-verdict-fail-exits-2` (signal discipline) | the `FAIL shell-policy` branch returns 2 | `tests/test_h_mad_agy_tdd_gate.py::test_self_check_policy_fail_is_a_verdict_with_exit_0` |
 | `fr4-class-a-name-moved` | `view_file` moved from `CLASS_A` to the class-(d) default | `tests/test_h_mad_agy_tdd_gate.py::test_class_a_allowed_before_state_is_read` |
 | `fr4-class-d-default-allows` | the class-(d) default replaced by allow | `tests/test_h_mad_agy_tdd_gate.py::test_unknown_tool_is_class_d` |
 | `fr4-finally-deny-dropped` | the `finally` deny removed | `tests/test_h_mad_agy_tdd_gate.py::test_every_exit_prints_one_json_object` |
@@ -670,7 +772,9 @@ The design's fixture for the step-5 row is `run_command` `ls` with `workspacePat
   `unknown`): items 2–4 pass.
 - [ ] AC-4.2 (one JSON object on every exit; this Task's 6 deny rows each with its kind): items
   1, 5 and 7 pass, and `_decide`'s kind assertion holds on every deny.
-- [ ] AC-X: the 4 rows above → `MUTATION: ALL_CAUGHT`.
+- [ ] Signal discipline: item 9 passes, each verdict `FAIL` with exit 0, and item 7 passes with
+  exit 2.
+- [ ] AC-X: the 5 rows above → `MUTATION: ALL_CAUGHT`.
 
 **Dependencies on other tasks**: Task 4 (policy names), Task 2 (judge).
 
@@ -691,10 +795,18 @@ T5 the allowance file, T6 production over every name (`min` of the collected tup
 (`read_chain`, `unreadable` → `judge-error`, not `active` → allow, else `judge`; a non-ALLOW
 passes the judge's kind through). T6–T7 run whatever `phase5_status` is.
 
-**OPEN-DECISION OD-2 — a directory target.** A class-(b) target naming a directory (`TargetFile`
-`.` or `src/`) was not analysed by the design: what T1 returns for a directory, and what T6 reads
-from its `resolved.names`, are unread. This Task adds no fixture for it and does not design it.
-Until decided it is a residual of this Task, reported at 5e.
+**OD-2, decided (operator, 2026-10-16): a directory target is refused under `S`.** A class-(b)
+target whose `resolved.target` is an existing directory (`TargetFile` `.`, `src/`, or any other
+existing directory, a symlink to one included) denies `judge-error` under `S` and is allowed under
+`inactive`. Without this check the T1–T7 sequence allows such a target under `active`. Read at
+`4e4b5ded` on a scratch root: `canonicalise(root, ".", root)`, `canonicalise(root, "src/", root)`,
+`canonicalise(root, "src", root)` and `canonicalise(root, root, root)` each return
+`unresolvable=False` and `names=()`, so T2 does not fire, T3 and T5 pass, and T6 has no name to
+judge. The check is **T2a**, right after T2: `Path(resolved.target).is_dir()` → `judge-error` under
+`S` (the reason names the directory target), allow under `inactive`. It runs before T3, so an
+out-of-root directory under `S` also denies `judge-error`. Residual: a target ending in `/` that
+names no existing directory is not covered by T2a and goes through T3–T7 as a file name. The spec
+and the design owe a line recording OD-2 (this plan's report).
 
 **Tests** (in `h-mad/tests/test_h_mad_agy_tdd_gate.py`):
 1. `tests/test_h_mad_agy_tdd_gate.py::test_class_b_no_target` — `no-key-unknown`,
@@ -718,14 +830,22 @@ Until decided it is a residual of this Task, reported at 5e.
 9. `tests/test_h_mad_agy_tdd_gate.py::test_deny_row_kind` gains 6 ids: `class-b-no-target`,
    `t2-unresolvable`, `t4-outside-root`, `t5-allowance-file`, `t7-chain-unreadable`,
    `t7-judge-non-allow`, all under `active`. 6 nodes, F.
+10. `tests/test_h_mad_agy_tdd_gate.py::test_class_b_directory_target` — OD-2. `write_to_file` with
+    `TargetFile` `.` and with `src/` (an existing directory in the fixture root), each under
+    `active`, `unknown` and `inactive`: ids `dot-active`, `dot-unknown`, `dot-inactive`,
+    `src-active`, `src-unknown`, `src-inactive`. Each id asserts deny `kind=judge-error` under
+    `active` and `unknown`, and allow under `inactive`. 6 nodes: 2 F (the two `active` ids: class
+    (d)'s rule denies `tool-not-admitted` there), 4 P (class (d)'s rule already gives `judge-error`
+    under `unknown` and allow under `inactive`; these pin T2a at GREEN).
 
-**RED split**: 26 nodes; 21 F, 5 P (8 + 4 + 1 + 3 + 1 + 1 + 1 + 1 + 6 = 26; P = 4 in item 1 and 1
-in item 4). At the RED base class (b) takes class (d)'s rule (Task 5), which fixes every value
-above.
+**RED split**: 32 nodes; 23 F, 9 P (8 + 4 + 1 + 3 + 1 + 1 + 1 + 1 + 6 + 6 = 32; P = 4 in item 1,
+1 in item 4 and 4 in item 10). At the RED base class (b) takes class (d)'s rule (Task 5), which
+fixes every value above.
 
-**Mutation rows** — `agy_tdd_gate.json`, 10 rows here:
+**Mutation rows** — `agy_tdd_gate.json`, 11 rows here (10 design rows and 1 OD-2 row):
 | name | mutant | test |
 |---|---|---|
+| `od2-directory-target-check-dropped` (OD-2) | T2a removed | `tests/test_h_mad_agy_tdd_gate.py::test_class_b_directory_target` |
 | `fr4-no-path-key-deny-dropped` | the no-target deny removed | `tests/test_h_mad_agy_tdd_gate.py::test_class_b_tools_without_a_recorded_key_deny_under_active` |
 | `fr4-artifact-py-refusal-dropped` | T4's `.py` refusal removed for `artifactDirectoryPath` | `tests/test_h_mad_agy_tdd_gate.py::test_artifact_directory_path` |
 | `fr4-t3-after-t5` | the allowance check moved before containment | `tests/test_h_mad_agy_tdd_gate.py::test_tmp_non_py_write_allowed_under_active` |
@@ -745,7 +865,8 @@ T4's empty-string arm has no row: the design declares it an equivalent mutant at
   failing test, `/tmp` and `artifactDirectoryPath`, the `chmod 000` chain, out-of-root `.py`
   under `unknown`): items 1–8 pass.
 - [ ] AC-4.2 (this Task's 6 deny rows): item 9 passes.
-- [ ] AC-X: the 10 rows → `MUTATION: ALL_CAUGHT`.
+- [ ] OD-2: item 10 passes, and under `od2-directory-target-check-dropped` its `active` ids fail.
+- [ ] AC-X: the 11 rows → `MUTATION: ALL_CAUGHT`.
 
 **Dependencies on other tasks**: Task 5.
 
@@ -809,8 +930,9 @@ item 1, 3 in item 2, 1 in item 11).
 | `fr4-class-c-bad-cwd-judge-error` | a `cwd` that is not an existing directory denies `judge-error` | `tests/test_h_mad_agy_tdd_gate.py::test_ls_under_each_bad_cwd_is_allowed` |
 | `fr4-class-c-cwd-joined-to-handler-dir` | a relative `Cwd` joined against the handler's directory | `tests/test_h_mad_agy_tdd_gate.py::test_relative_cwd_is_joined_against_the_root` |
 
-`agy_tdd_gate.json` holds 4 + 10 + 4 = 18 rows after this Task, the design's FR-4 count. The
-step-5 row (Task 5) also bites item 2's `inactive-allows`.
+`agy_tdd_gate.json` holds 5 + 11 + 4 = 20 rows after this Task: the design's FR-4 count of 18
+(4 + 10 + 4), plus Task 5's signal-discipline row and Task 6's OD-2 row. The step-5 row (Task 5)
+also bites item 2's `inactive-allows`.
 
 **Acceptance Criteria**:
 - [ ] AC-4.1 (class (c) member, `run_command` refused under `unknown`, the `workspacePaths=[]`
@@ -818,7 +940,7 @@ step-5 row (Task 5) also bites item 2's `inactive-allows`.
 - [ ] AC-4.2 (this Task's 4 deny rows): item 11 passes; `test_deny_row_kind` now has 16 ids, one
   per row of design §"FR-4" "Every deny".
 - [ ] AC-6.1 (`unsafe` parity): item 4 passes.
-- [ ] AC-X: `agy_tdd_gate.json` (18 rows) → `MUTATION: ALL_CAUGHT`.
+- [ ] AC-X: `agy_tdd_gate.json` (20 rows) → `MUTATION: ALL_CAUGHT`.
 
 **Dependencies on other tasks**: Task 6.
 
@@ -849,6 +971,9 @@ a finding against Task 6 or 7, or, when the cell is outside the stated differenc
 behave as designed, against the design.
 
 **Mutation rows**: none (the corpora pin agreement; the guards' rows are in Tasks 5–7).
+
+Neither corpus holds a directory target. OD-2's T2a (Task 6) is a difference from the Codex gate,
+which this feature does not change. It is pinned by Task 6 item 10, not here.
 
 **Acceptance Criteria**:
 - [ ] AC-4.1 (the target differential): item 1 passes.
@@ -888,7 +1013,10 @@ def check_agy(project_root: Path) -> tuple[str, int]: ...
    `timeout-below-floor`, `timeout-absent`, `self-check-failed`; stdout
    `AGY-GATE: UNWIRED reason=` plus the reason, asserted separately from exit 0. 10 nodes.
 2. `tests/test_h_mad_hook_wiring_agy.py::test_unreadable_hooks_file` — `not-json`,
-   `not-an-object`; exit 2. 2 nodes.
+   `not-an-object`. Each id asserts that stdout is the one line `AGY-GATE: UNREADABLE file=` plus
+   the percent-encoded path plus ` error=` plus `JSONDecodeError` or `not-an-object`, and,
+   separately, exit 2. Exit 2 alone would pass at RED, because argparse refuses the absent `--agy`
+   with exit 2. 2 nodes.
 3. `tests/test_h_mad_hook_wiring_agy.py::test_wired`. 1 node.
 4. `tests/test_h_mad_hook_wiring_agy.py::test_timeout_floor_is_derived_from_the_judge_budget` —
    `59` (`timeout-below-floor`), `60` (`WIRED`). 2 nodes.
@@ -902,7 +1030,11 @@ def check_agy(project_root: Path) -> tuple[str, int]: ...
 reason check removed (`fr5-no-hooks-file`, `fr5-no-entry`, `fr5-disabled`, `fr5-matcher-narrow`,
 `fr5-bad-command`, `fr5-timeout-below-floor`, `fr5-self-check-failed`), each with `test`
 `tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason`. `--check-anchors` also over
-`hook_wiring.json` (10 rows).
+`hook_wiring.json`, which holds 12 rows: the 10 Task 0's M-2 counts for
+`scripts/h_mad_hook_wiring.py`, plus 2 on `SKILL.md` (`docs-lose-the-no-halt-rule`,
+`docs-lose-a-detail-line`). The `--agy` branch is added to `main` before its `root =` line. The
+one row in `main`, `unknown-exits-0` (`find` from `print("WIRING: UNKNOWN reason=no_settings")`),
+is left byte for byte. That makes it the only existing row near this Task's edit.
 
 **Acceptance Criteria**:
 - [ ] AC-5.1 (each reason from its own fixture): item 1 passes.
@@ -929,11 +1061,18 @@ becomes `timeout = args.timeout if args.timeout is not None else TIMEOUT_DEFAULT
 with `TIMEOUT_DEFAULTS = {"codex": 900, "grok": 1500, "agy": 1500}` (agy's 1500 is provisional
 until Task 22). For `--agent agy`, `main` runs
 `[sys.executable, AGY_WIRING_CHECK, "--agy", "--project-root", <root>]` with a bound of
-`AGY_WIRING_TIMEOUT_S = 60` before `assemble`: `WIRED` → continue; `UNWIRED` → print
-`ASSEMBLE-TDD: HALT agy_tdd_hook_unverified` then the check line indented two spaces, write no
-prompt, exit 0; `UNREADABLE` → the same two lines, exit 2; no `AGY-GATE:` line or a timeout →
-`ASSEMBLE-TDD: HALT agy_tdd_hook_unverified check=no-token`, exit 2. The verdict branch does not
-raise `Halt`. The module docstring's `exit 0 on PASS, 2 on any HALT` (line 50 at `4e4b5ded`)
+`AGY_WIRING_TIMEOUT_S = 60` before `assemble`. `AGY_WIRING_CHECK` is the module constant
+`str(Path(__file__).resolve().parent / "h_mad_hook_wiring.py")`, the tests' seam. The check runs
+only when `args.agent == "agy"`. `WIRED` → continue. `UNWIRED` → print
+`ASSEMBLE-TDD: HALT agy_tdd_hook_unverified`, then the check line indented two spaces, then the
+marker line, write no prompt, exit 0. `UNREADABLE` → the same three lines, exit 2. No
+`AGY-GATE:` line, or a timeout → `ASSEMBLE-TDD: HALT agy_tdd_hook_unverified check=no-token`,
+then the marker line, exit 2. The marker line is
+`print(f"[H-MAD] {args.feature} tdd-assemble halt agy_tdd_hook_unverified {args.task}")`. It is
+built like the PASS path's `print(f"[H-MAD] {args.feature} tdd-assemble {args.phase} {meta['task']}")`,
+with the literal `halt agy_tdd_hook_unverified` in place of the phase, and with `args.task`
+because `meta` does not exist yet. It always comes after the token line, so the token stays the first line. The verdict branch
+does not raise `Halt`, and the existing `Halt` branches are not changed. The module docstring's `exit 0 on PASS, 2 on any HALT` (line 50 at `4e4b5ded`)
 becomes `exit 0 on PASS and on HALT agy_tdd_hook_unverified after AGY-GATE: UNWIRED; 2 on every
 other HALT`. The check run must not repeat the line `        agent=args.agent,` (1 occurrence at
 `4e4b5ded`), which `wr3-assembler-drops-agent` anchors on.
@@ -948,20 +1087,27 @@ holding FR-5's exact entry.
    str(stub), raising=False)`, where `stub` is a script that writes its argv to a record file and
    prints `AGY-GATE: UNWIRED reason=no-entry`; `main` is called through a helper that catches
    `SystemExit` and returns its code. Asserts the record file holds `--agy --project-root` and the
-   root, stdout is the HALT line then `  AGY-GATE: UNWIRED reason=no-entry`, no prompt file, and
-   return 0. F: at the RED base `check_agy` exists (Task 9) and argparse refuses `agy`, so the
+   root, stdout is the HALT line, then `  AGY-GATE: UNWIRED reason=no-entry`, then the marker line
+   `f"[H-MAD] {FEATURE} tdd-assemble halt agy_tdd_hook_unverified Task 1"` (the file's `FEATURE`
+   constant and the task the helper passes), no prompt file, and return 0. F: at the RED base `check_agy` exists (Task 9) and argparse refuses `agy`, so the
    record file is absent and the assertion that the check ran fails; `raising=False` keeps the
    absent constant from raising `AttributeError`.
 2. `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_unwired_halts_with_exit_0` — one id per
    reason (7), through `run_cli` with the fixture `HOME` and a `hooks.json` built to give that
-   reason; the HALT line, the indented check line and exit 0 asserted separately, no prompt.
-   7 nodes, F.
-3. `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_unreadable_halts_with_exit_2`. 1 node, F.
+   reason; the HALT line, the indented check line, the marker line and exit 0 asserted
+   separately, no prompt. 7 nodes, F.
+3. `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_unreadable_halts_with_exit_2` — a
+   `hooks.json` that is not JSON; the HALT line, the indented `  AGY-GATE: UNREADABLE` line and
+   the marker line asserted, then exit 2 separately. 1 node, F.
 4. `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_no_token_halts_with_exit_2` — in-process
-   stub that prints nothing. 1 node, F.
+   stub that prints nothing; stdout holds `ASSEMBLE-TDD: HALT agy_tdd_hook_unverified check=no-token`
+   and the marker line, then exit 2 separately. 1 node, F.
 5. `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_check_timeout_halts_with_exit_2` —
-   in-process, `AGY_WIRING_TIMEOUT_S` patched to `1` with `raising=False`, a stub that sleeps 5 s.
-   1 node, F.
+   in-process, `AGY_WIRING_TIMEOUT_S` patched to `1` with `raising=False`, a stub that sleeps 5 s;
+   the same two lines as item 4, then exit 2. 1 node, F.
+
+Items 3–5 assert the HALT line, not only the exit. At RED, argparse refuses `--agent agy` with
+exit 2, so an exit-only assertion would pass for the wrong reason.
 6. `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_wired_writes_the_prompt` — the WIRED
    fixture; PASS, exit 0, the command block names `hmad-dispatch exec agy` and `--timeout 1500`.
    1 node, F.
@@ -986,17 +1132,30 @@ table and docstring, which is new behaviour.
 `tests/test_h_mad_assemble_tdd.py::TestCli::test_a_clean_assembly_prints_pass_and_the_command_block`
 (row `w10a-grok-by-default`), and the rest of `tests/test_h_mad_assemble_tdd.py`.
 
-**Mutation rows** — new spec `h-mad/tests/mutation-specs/assemble_tdd_agy.json`, 2 rows:
+**Mutation rows** — new spec `h-mad/tests/mutation-specs/assemble_tdd_agy.json`, 4 rows:
 | name | mutant | test |
 |---|---|---|
 | `fr5-unwired-exits-2` | the `UNWIRED` verdict branch returns 2 | `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_unwired_halts_with_exit_0` |
 | `wire-check-not-run` (wire-cut) | the check subprocess call deleted, the check and `assemble` kept | `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_runs_the_wiring_check_before_assembling` |
+| `wire-check-runs-for-every-agent` (converse) | the `args.agent == "agy"` condition on the check run replaced by `True` | `tests/test_h_mad_assemble_tdd_agent.py::test_agent_grok_block_names_exec_grok_with_1500` |
+| `halt-marker-dropped` (marker discipline) | the `[H-MAD]` marker print removed from the `UNWIRED` branch | `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_unwired_halts_with_exit_0` |
+
+**Both directions.** `wire-check-not-run` cuts the wire, and `wire-check-runs-for-every-agent`
+forces it. The converse's killer is an existing regression guard. It runs
+`run_cli(..., "--agent", "grok")` with `root = tmp_path`, which holds no `.agents/hooks.json`. Under
+the mutant the real check runs, prints `AGY-GATE: UNWIRED reason=no-hooks-file` (FR-5's first
+reason, whatever `HOME` holds), and the assembler halts with no command block, so the test's
+`hmad-dispatch exec grok` assertion fails.
+`tests/test_h_mad_assemble_tdd_agent.py::test_agent_codex_default_timeout_is_900` fails the same
+way for codex. Neither test changes, so the RED counts do not move.
 
 **Anchors (E7)**: `assemble_tdd_agent.json` `w10a-grok-by-default` is re-anchored in this Task:
 `find` `ap.add_argument("--agent", choices=("codex", "grok", "agy"), default="codex")`, `replace`
 the same with `default="grok"`, `test` unchanged. `t1-timeout-judged-by-value` (`find`
 `args.timeout is not None`) and `wr3-assembler-drops-agent` (`find` `        agent=args.agent,`)
-need no re-anchor if the line forms above are kept. `--check-anchors` over the 6 specs naming the
+need no re-anchor if the line forms above are kept. No other row among the 60 naming the
+assembler holds the docstring line (`2 on any HALT`), the `--agent` line or the timeout line, so
+these three are the only existing rows this Task's edits touch. `--check-anchors` over the 6 specs naming the
 assembler (`assemble_tdd.json`, `assemble_tdd_agent.json`, `assemble_tdd_env_known.json`,
 `assemble_tdd_mutation_rows.json`, `fill_slots.json`, `grok_wire_reverts.json`) plus
 `assemble_tdd_agy.json`.
@@ -1007,7 +1166,10 @@ assembler (`assemble_tdd.json`, `assemble_tdd_agent.json`, `assemble_tdd_env_kno
   returning 2 on `UNWIRED` killed): items 2–6 pass and `fr5-unwired-exits-2` is caught.
 - [ ] AC-9.1 (`test_prompt_file_is_agent_independent` covers `codex`, `grok`, `agy`): item 10
   passes.
-- [ ] The WIRE-PIN fails when only the wire is cut (`wire-check-not-run`).
+- [ ] The WIRE-PIN fails when only the wire is cut (`wire-check-not-run`), and the codex/grok
+  regression guards fail when the wire is forced (`wire-check-runs-for-every-agent`).
+- [ ] Marker discipline: every new halt path prints the `[H-MAD]` marker after its token, as
+  items 1–5 assert; `halt-marker-dropped` is caught.
 - [ ] AC-X: `assemble_tdd_agy.json` → `MUTATION: ALL_CAUGHT`; `ANCHORS: ANCHORS_OK` over the 7
   assembler specs.
 
@@ -1048,23 +1210,41 @@ def merge_fields(state_file: Path, feature: str, fields: dict[str, Any], *,
    `json.dumps` text.
 2. `tests/test_h_mad_state_write.py::TestAppend::test_two_appends_in_one_call_keep_order`.
 3. `tests/test_h_mad_state_write.py::TestAppend::test_set_and_append_on_the_same_key_are_refused`
-   — exit 2, stderr names the key, store unchanged.
+   — the key is `production_paths_needing_red_tests` (a schema `array` of strings, not in
+   `APPEND_ONLY`, so the `APPEND_ONLY` check cannot refuse it first and mask a removed same-key
+   guard): `--set production_paths_needing_red_tests=[] --append production_paths_needing_red_tests=["a"]`.
+   Asserts stderr carries the exact diagnostic
+   `--set and --append name the same key: production_paths_needing_red_tests`, stderr does not carry
+   `unrecognized arguments`, exit 2, and the store is byte-identical. Read at `4e4b5ded` on a
+   scratch store: the current writer exits 2 with
+   `error: unrecognized arguments: --append production_paths_needing_red_tests=["a"]` and leaves the
+   store unchanged. So a key-and-exit-only assertion passes at RED, and the exact diagnostic is
+   what makes this item fail there.
 4. `tests/test_h_mad_state_write.py::TestAppend::test_append_only_key_refuses_set` —
    `review_independence`, `implementation_authors`, each alone: `--set <key>=[]` exits 2 with the
    append-only message and the store unchanged. 2 nodes.
 5. `tests/test_h_mad_state_write.py::TestAppend::test_append_only_refusal_applies_to_library_callers`
    — `merge_fields` raises `StateWriteError`.
-6. `tests/test_h_mad_state_write.py::TestAppend::test_append_value_is_strict_json`.
-7. `tests/test_h_mad_state_write.py::TestAppend::test_append_to_non_array_refused`.
+6. `tests/test_h_mad_state_write.py::TestAppend::test_append_value_is_strict_json` — a value that
+   is not JSON; stderr starts with the writer's `ERROR: ` line naming the `--append` item and does
+   not carry `unrecognized arguments`; exit 2; store unchanged.
+7. `tests/test_h_mad_state_write.py::TestAppend::test_append_to_non_array_refused` — stderr
+   carries `cannot append to a non-array value`; exit 2; store unchanged.
 8. `tests/test_h_mad_state_write.py::TestAppend::test_refused_entry_leaves_store_byte_identical` —
-   `review-independence-bad-leg`, `implementation-authors-gemini`. 2 nodes.
+   `review-independence-bad-leg`, `implementation-authors-gemini`. Each id asserts that stderr
+   carries the writer's schema refusal (`would not validate`, from `_refusal`) and not
+   `unrecognized arguments`, that the exit is 2, and that the store is byte-identical. 2 nodes.
+
+Items 3 and 6–8 each assert the refusal's own text. At RED every `--append` run exits 2 on
+argparse's `unrecognized arguments` with the store unchanged, so the exit and the store alone
+would pass there.
 9. `tests/test_h_mad_state_write.py::TestAppend::test_ok_line_lists_appended_keys`.
 10. `tests/test_h_mad_state_write.py::TestAppend::test_owner_append_refreshes_the_heartbeat`.
 11. `tests/test_h_mad_state_write.py::TestAppend::test_append_implementation_authors_entry`.
 
-**RED split**: 13 nodes, 13 F, 0 P (1 + 1 + 1 + 2 + 1 + 1 + 1 + 2 + 1 + 1 + 1). Item 3 asserts the
-refusal's message, and item 4 runs against Task 1's schema (which accepts `--set
-review_independence=[]` at RED), so neither passes at RED on argparse's own refusal.
+**RED split**: 13 nodes, 13 F, 0 P (1 + 1 + 1 + 2 + 1 + 1 + 1 + 2 + 1 + 1 + 1). Items 3 and 6–8
+assert the refusal's message. Item 4 runs against Task 1's schema, which accepts
+`--set review_independence=[]` at RED. So none of them passes at RED on argparse's own refusal.
 
 **Regression guards**: the rest of `tests/test_h_mad_state_write.py`, including
 `tests/test_h_mad_state_write.py::TestHeartbeatBeats::test_a_set_by_the_owner_refreshes_the_heartbeat`
@@ -1081,7 +1261,9 @@ and `tests/test_h_mad_state_write.py::TestHeartbeatBeats::test_a_set_by_a_bystan
 
 **Anchors (E7)**: `heartbeat_beat.json` `the-owners-set-no-longer-beats` and
 `a-bystanders-set-beats-too` anchor on `merge_fields`' owner-heartbeat `if` and its assignment,
-which stay byte for byte, so no re-anchor; `--check-anchors` over the 4 specs naming the writer
+which stay byte for byte, so no re-anchor. These are the only rows inside `merge_fields`. The
+writer's other rows sit in the nested `apply` functions of the beat, release, lane and
+drop-undeclared paths, and none of them sits in `main`'s argument parsing. `--check-anchors` over the 4 specs naming the writer
 (`heartbeat_beat.json`, `lane_liveness.json`, `release_ownership_guard.json`,
 `state_undeclared_keys.json`) plus `state_write_append.json`.
 
@@ -1151,7 +1333,10 @@ and item 9).
 | `fr7-detail-reads-switch` | the detail text reads `implementer_switch.to` | `tests/test_h_mad_phase7_preconditions.py::TestReviewIndependence::test_unrecorded_detail_names_entry_authors_not_routing` |
 
 **Anchors**: `--check-anchors` over `phase7_analysis_anchor.json`,
-`phase7_preconditions_gates.json` and `phase7_review_independence.json`.
+`phase7_preconditions_gates.json` and `phase7_review_independence.json`. Existing rows touched:
+none. The call is added immediately before `check`'s line starting `return {"ready": not blockers`,
+on which no row sits. The 4 rows inside `check` and the 3 inside `main` are not on the edited
+lines.
 
 **Acceptance Criteria**:
 - [ ] AC-7.1 (each warning from its own fixture; none moves `ready`): items 1, 2, 3 and 9 pass.
@@ -1214,7 +1399,9 @@ each run alone:
 
 **Anchors**: `--check-anchors` over every spec naming `SKILL.md` (16 specs, 57 rows at
 `4e4b5ded`), `references/failure-recovery.md` (`archreview_done_marker_recovery.json`) and the 7
-assembler specs.
+assembler specs. Existing rows touched: none. No row's `find` holds any of the six context
+sentences, the `"symbol."` literal or `never a missing`. No row names
+`references/codex-implementer-prompt.md`. The 2 `failure-recovery.md` rows sit outside the 5d row.
 
 **Acceptance Criteria**:
 - [ ] AC-9.1 (the rule on all six surfaces; the three pin files green): item 1 and the
@@ -1277,19 +1464,38 @@ then holds 8 + 2 = 10 rows.
 
 **Description**: Design §"FR-10", "The prompt". The opening sentence (`You are Codex implementing
 module …` at `4e4b5ded`, pinned by no test: `git ls-files 'h-mad/tests/*.py' | xargs grep -ln
-'You are Codex implementing'` prints nothing) names no implementer. The one `Hook: ` line names
-each gate by implementer: Codex's `h-mad-codex-tdd-gate.py`, agy's `h-mad-agy-tdd-gate.py`, Claude's
-`h-mad-tdd-gate.sh`, keeping every token `test_hook_line_names_both_gates` pins and introducing no
-`<`, `>` or `->` on the line or its bullets. The filename stays (plan "Tradeoffs kept").
+'You are Codex implementing'` prints nothing) names "the Phase-5 implementer" and no implementer
+by name (spec FR-9, first bullet). Line 9 at `4e4b5ded` reads ``You are Codex implementing module
+`<INLINE_MODULE_NAME>` for feature `<INLINE_FEATURE>`.``. Its two template slots stay.
+
+The one `Hook: ` line (line 19 at `4e4b5ded`) names each gate by implementer, as spec FR-9's
+second bullet requires:
+- Codex: `h-mad-codex-tdd-gate.py`, guarding `apply_patch` and shell writes;
+- agy: `h-mad-agy-tdd-gate.py`. For agy the line states that the class-(b) tools are how writes are
+  made, naming all five: `write_to_file`, `replace_file_content`, `multi_replace_file_content`,
+  `sed_file`, `notebook_edit` (design §"FR-4" class (b));
+- grok: no write-time gate, in those words;
+- Claude: `h-mad-tdd-gate.sh`, guarding `Write` and `Edit` (kept from today's line).
+The line keeps every token `test_hook_line_names_both_gates` pins (`h-mad-codex-tdd-gate.py`,
+`apply_patch`, `shell`, `h-mad-tdd-gate.sh`, `Write`, `Edit`). It introduces no `<`, `>` or `->` on
+the line or its bullets, so the spec's `→` is written as a colon or as words. The filename stays
+(plan "Tradeoffs kept").
 
 **Tests**:
 1. `tests/test_h_mad_implementer_neutral_prompt.py::test_prompt_opening_names_no_implementer` — the
-   first line starting `You are` contains none of `Codex`, `agy`, `grok`, `Claude` (case-
-   insensitive). F.
+   first line starting `You are` contains `the Phase-5 implementer` and none of `Codex`, `agy`,
+   `grok`, `Claude` (case-insensitive). F.
 2. `tests/test_h_mad_implementer_neutral_prompt.py::test_hook_line_names_the_agy_gate` — the `Hook: `
    line names `h-mad-agy-tdd-gate.py`. F.
+3. `tests/test_h_mad_implementer_neutral_prompt.py::test_hook_line_names_the_agy_write_tools` — the
+   `Hook: ` line contains `agy` and each of the five class-(b) names. F.
+4. `tests/test_h_mad_implementer_neutral_prompt.py::test_hook_line_says_grok_has_no_write_time_gate`
+   — the `Hook: ` line contains `grok` and `no write-time gate`. F.
 
-**RED split**: 2 nodes, 2 F.
+Each test reads the `Hook: ` line through `test_h_mad_tdd_gate_docs._hook_block`'s rule (the one
+line starting `Hook: `), so a clause moved onto a bullet fails items 2–4.
+
+**RED split**: 4 nodes, 4 F.
 
 **Regression guards (doc-pin census, the prompt)**: `tests/test_h_mad_tdd_gate_docs.py`
 (`_hook_block`: exactly one `Hook: ` line; `test_hook_line_names_both_gates`;
@@ -1298,14 +1504,23 @@ each gate by implementer: Codex's `h-mad-codex-tdd-gate.py`, agy's `h-mad-agy-td
 `tests/test_h_mad_portable_timeout.py`, and the 23 literals across the 8 files the census lists.
 Expected pins moved: none.
 
-**Mutation rows** — new spec `h-mad/tests/mutation-specs/implementer_neutral_prompt.json`, 2 rows
-(doc pins, plan §"Success Criteria"): `fr10-prompt-opening-names-codex` (the opening restored to
-name Codex) → item 1; `fr10-hook-line-drops-agy-gate` (the agy clause deleted) → item 2.
+**Mutation rows** — new spec `h-mad/tests/mutation-specs/implementer_neutral_prompt.json`, 4 rows
+(doc pins, plan §"Success Criteria"), each with `symbol` the prompt's enclosing heading:
+- `fr10-prompt-opening-names-codex` (the opening restored to `You are Codex implementing`) →
+  `tests/test_h_mad_implementer_neutral_prompt.py::test_prompt_opening_names_no_implementer`;
+- `fr10-hook-line-drops-agy-gate` (the `h-mad-agy-tdd-gate.py` name deleted) →
+  `tests/test_h_mad_implementer_neutral_prompt.py::test_hook_line_names_the_agy_gate`;
+- `fr10-hook-line-drops-agy-write-tools` (the class-(b) clause deleted) →
+  `tests/test_h_mad_implementer_neutral_prompt.py::test_hook_line_names_the_agy_write_tools`;
+- `fr10-hook-line-drops-grok` (the grok clause deleted) →
+  `tests/test_h_mad_implementer_neutral_prompt.py::test_hook_line_says_grok_has_no_write_time_gate`.
 
 **Acceptance Criteria**:
-- [ ] AC-9.1 (no implementer-specific opening): item 1 passes.
-- [ ] FR-10 (the `Hook:` line): item 2 and the regression guards pass.
-- [ ] The 2 rows → `MUTATION: ALL_CAUGHT`.
+- [ ] AC-9.1 and spec FR-9 first bullet (the opening names "the Phase-5 implementer" and no
+  implementer): item 1 passes.
+- [ ] Spec FR-9 second bullet and FR-10 (the `Hook:` line: Codex, agy with its class-(b) tools,
+  grok with no write-time gate): items 2–4 and the regression guards pass.
+- [ ] The 4 rows → `MUTATION: ALL_CAUGHT`.
 
 **Dependencies on other tasks**: Task 13 (both edit the prompt).
 
@@ -1324,7 +1539,7 @@ instructed" becomes implementer-neutral, states FR-2 and FR-3, and names `agy-au
 the same commit). It also states the re-run trigger: after any agy upgrade, re-run FR-8 step 2 and
 step 2a and re-take the class-(a) inventory. §"Exit-code dispatch for 5d/5e (`hmad-dispatch exec`)
 — default for one-shot" gains a line holding both `exec agy` and "implement", plus the
-`TDD-IMPLEMENTER:` staging step. The teammate-audit bullet starting
+`TDD-IMPLEMENTER:` staging step below. The teammate-audit bullet starting
 `- **It does not license Claude to write Phase 5 production code` separates audit-leg selection
 from resolved authorship, keeping its anchor prefix and the tokens `ACTIVE`, `every`,
 `unavailable` and `exhausted`. `agy-runtime.md` §"The TDD gate" names `h-mad-agy-tdd-gate.py` and
@@ -1332,6 +1547,29 @@ from resolved authorship, keeping its anchor prefix and the tokens `ACTIVE`, `ev
 one under §"Hooks" and one in the §"Construct mapping" `hook-event` row) are re-checked against
 the installed agy (`agy --version` prints `1.4.0` at `4e4b5ded`; its bundled `hooks.md` has 3
 lines naming `SessionStart`) and corrected together, stamping that version.
+
+**The staging step** (spec FR-2 "CLI verb", design §"FR-2" "The `implementer` verb"). It is one
+bullet that starts `- **Stage the implementer.**`, which occurs once in SKILL.md after this Task
+and nowhere at `4e4b5ded`. It states:
+- the command, run before every 5d and 5e dispatch, from the project root:
+  `python3 ~/.claude/skills/h-mad/scripts/h_mad_tdd_judge.py implementer --root . --feature "$FEATURE" --record`.
+  Read the `TDD-IMPLEMENTER:` token, never `$?`, because the verb always exits 0;
+- a line that ends ` record=failed`, whatever comes before it: **do not dispatch.** Halt
+  `step5:implementer_switch_unrecorded` and print the marker
+  `[H-MAD] <feature> halt step5:implementer_switch_unrecorded`, because a switch that is not in
+  state is the silent switch the operator decision forbids (spec FR-2). This branch is checked
+  first, before the token's other fields are read;
+- `switch=none`: stage `h_mad_assemble_tdd.py --agent` with the resolved peer (`codex` or `agy`);
+- a peer switch (`switch=codex->agy` or `switch=agy->codex`, with `reason=`): stage the resolved
+  peer, and print the token line on the dispatch;
+- `switch=peers-out`: today's fallback path (grok or Claude), unchanged;
+- `invalid field=`: fix the record and never dispatch. Halt `step5:implementer_invalid` and print
+  its `[H-MAD]` marker;
+- `no-record` or `unreadable`: halt `step5:implementer_unresolved` and print its `[H-MAD]`
+  marker. The feature name or root is wrong, or the state file cannot be read.
+The spec says "halt" and "never dispatch" for the last three rows but names no halt. The names
+`step5:implementer_invalid` and `step5:implementer_unresolved` are this plan's. The spec and
+design owe a line adopting them (this plan's report).
 
 **Tests** (all in `h-mad/tests/test_h_mad_agy_authorship_docs.py`; section locators are
 `docsections.titled_section`, and the bullet locator is `test_h_mad_tdd_gate_docs.py`
@@ -1346,8 +1584,26 @@ lines naming `SessionStart`) and corrected together, stamping that version.
    — `h-mad-agy-tdd-gate`, `AGY-GATE` and `step5:agy_tdd_hook_unverified`. F.
 6. `tests/test_h_mad_agy_authorship_docs.py::test_agy_runtime_sessionstart_claim_is_rechecked_and_stamped`
    — neither surface still says there is no `SessionStart`, and both stamp `1.4.0`. F.
+7. `tests/test_h_mad_agy_authorship_docs.py::test_staging_step_runs_the_verb_with_record_and_names_every_branch`
+   — the bullet starting `- **Stage the implementer.**` (exactly one) contains
+   `h_mad_tdd_judge.py implementer`, `--record`, one sentence holding both `never` and `$?`, and
+   each branch token: `record=failed`, `switch=none`, `switch=peers-out`, `invalid field=`,
+   `no-record`, `unreadable`. F.
+8. `tests/test_h_mad_agy_authorship_docs.py::test_staging_step_halts_on_record_failed_before_any_dispatch`
+   — runs the module's `record_failed_branch_refuses_dispatch(bullet)` on the staging bullet and
+   asserts `True`. That function takes the branch span: the text from the bullet's first
+   `record=failed` to the first `switch=none` after it, with whitespace collapsed. A bullet where
+   `switch=none` does not follow `record=failed` returns `False`, so the `record=failed` branch must
+   be listed first. The span must hold `do not dispatch` (case-insensitive),
+   `step5:implementer_switch_unrecorded`, `[H-MAD]` and `first`. F.
+9. `tests/test_h_mad_agy_authorship_docs.py::test_record_failed_check_rejects_a_procedure_that_dispatches`
+   — the discriminating control. `record_failed_branch_refuses_dispatch` returns `False` on four
+   doctored bullets: one whose `record=failed` branch says to stage the resolved peer and
+   dispatch; one with the halt sentence deleted; one that keeps the halt but drops `[H-MAD]`; and
+   one that lists the `record=failed` branch after `switch=none`. P (it exercises the test's own
+   function, which exists at RED).
 
-**RED split**: 6 nodes, 6 F.
+**RED split**: 9 nodes, 8 F, 1 P (item 9).
 
 **Regression guards (doc-pin census)**: `tests/test_grok_fallback_docs.py` (`PHASE5_HEADING`,
 `TEAMMATE_HEADING`, the exit-code heading and tokens),
@@ -1357,18 +1613,27 @@ sentence and tokens, `_skill_gate_bullet`, §"The TDD gate" tokens, `rc 0`, no `
 `tests/test_h_mad_context_budget_docs.py` (`hmad-dispatch exec agy`), `tests/test_h_mad_assemble_tdd.py`
 (`hmad-dispatch exec codex`). Expected pins moved: none.
 
-**Mutation rows** — new spec `h-mad/tests/mutation-specs/agy_authorship_docs.json`, 6 rows (doc
-pins), one per item, each deleting the pinned sentence: `fr10-authorship-section`,
+**Mutation rows** — new spec `h-mad/tests/mutation-specs/agy_authorship_docs.json`, 8 rows (doc
+pins), one per F item, each deleting the pinned sentence: `fr10-authorship-section`,
 `fr10-upgrade-trigger`, `fr10-exit-code-exec-agy`, `fr10-teammate-bullet`,
-`fr10-agy-runtime-tdd-gate`, `fr10-sessionstart-stamp`; each `test` is its item's node ID.
+`fr10-agy-runtime-tdd-gate`, `fr10-sessionstart-stamp`, `fr10-staging-drops-record-flag` (the
+`--record` flag deleted from the staging command) and `fr10-staging-dispatches-after-record-failed`
+(the `record=failed` halt sentence replaced by "stage the resolved peer"). Each `test` is its
+item's node ID, items 1–8 in that order.
 
 **Anchors**: `--check-anchors` over the 16 specs naming `SKILL.md`; `agy-runtime.md` has no rows.
+Existing rows touched: none. No SKILL.md row's `find` lies in §"Codex authors Phase 5", in
+§"Exit-code dispatch for 5d/5e" or in the teammate-audit bullet (sweep at `4e4b5ded`, by offset
+span).
 
 **Acceptance Criteria**:
 - [ ] Plan §"Success Criteria" FR-10 baselines (0 at `d90decc6`/`9c3b799d`) are non-zero: items
   1, 3, 4 and 5 pass.
 - [ ] Spec §"Owed" `SessionStart`: item 6 passes.
-- [ ] The 6 rows → `MUTATION: ALL_CAUGHT`; `ANCHORS: ANCHORS_OK` over the SKILL.md specs.
+- [ ] Spec FR-2 "CLI verb" (the caller halts `step5:implementer_switch_unrecorded` on
+  `record=failed` and never dispatches): items 7–9 pass, and
+  `fr10-staging-dispatches-after-record-failed` is caught.
+- [ ] The 8 rows → `MUTATION: ALL_CAUGHT`; `ANCHORS: ANCHORS_OK` over the SKILL.md specs.
 
 **Dependencies on other tasks**: Task 13 (both edit SKILL.md).
 
@@ -1395,20 +1660,22 @@ accepted 5e fix dispatch, before the leg that reviews the code. The 6a-prime bul
 (`- **5d** — RED dispatch`) gains none. Each of these four prefixes occurs once in SKILL.md at
 `4e4b5ded`.
 
-**OPEN-DECISION OD-1 — AC-7.3's code surface.** Attribution is orchestrator prose (design FR-7),
+**OD-1, decided (operator, 2026-10-16): option (A).** AC-7.3 is met by the transcription test
+below, not by a script surface. The text that follows records the reasoning.
+Attribution is orchestrator prose (design FR-7),
 and spec FR-1 says `implementation_authors` "is read by the orchestrator's FR-7 attribution step
 only; no script reads it". A production function that computes an entry's `implementer` and
 `independent` from `implementation_authors` would therefore contradict spec FR-1 and design
 FR-7 ("The writer does not check attribution").
-- **(A), what this Task builds unless the operator decides otherwise:** a transcription test, on
+- **(A), decided and built here:** a transcription test, on
   the FR-9 corpus precedent. A test-local `attribute(record, leg, module, reviewer)` transcribes
   the SKILL.md step; each AC-7.3 fixture runs it on a durable record, and also runs that fixture's
   named mutant transcription, asserting the mutant gives the wrong outcome (so the fixture is RED
   against it). One test ties the transcription to the SKILL.md words. Residual: this shows what the
   rule's text selects, not that any orchestrator applies it.
-- **(B):** a script surface, for example a writer operation that derives `implementer` and
-  `independent` from `implementation_authors` before appending. It needs spec FR-1 and design FR-7
-  revised first, and it is not planned here.
+- **(B), not chosen:** a script surface, for example a writer operation that derives `implementer`
+  and `independent` from `implementation_authors` before appending. It would need spec FR-1 and
+  design FR-7 revised first.
 
 **Tests** (all in `h-mad/tests/test_h_mad_review_attribution_docs.py`):
 1. `tests/test_h_mad_review_attribution_docs.py::test_closure_step_carries_every_warning_line` —
@@ -1435,7 +1702,10 @@ slice and its `SKIPPED_NO_PANE` sentence), `tests/test_h_mad_phase7_integrate_do
 (`must name a LOCAL branch`, `git branch main origin/main`),
 `tests/test_h_mad_wiring_task_shape_docs.py` (the 5d wiring bullet). Expected pins moved: none.
 `phase7_integrate_blockers_documented.json`'s three rows sit inside item 7, which this Task only
-adds to.
+adds to. They are the only rows in the four spans this Task edits (sweep at `4e4b5ded`, by offset
+span). `baseline_sha.json` `skill-stops-naming-the-wrong-command` has a `find` that starts exactly
+at `- **5f** —`. The 5e bullet's addition therefore goes before the newline that ends the 5e
+bullet, and that `find` stays unique.
 
 **Mutation rows** — new spec `h-mad/tests/mutation-specs/review_attribution_docs.json`, 6 rows (doc
 pins), one per F item, each deleting the pinned sentence: `fr7-docs-warning-lines`,
@@ -1448,8 +1718,7 @@ ID.
 - [ ] Design AC-7.1 row (the dispatch as the source): item 3 passes.
 - [ ] Design §"Owed" (the author append at 5e GREEN acceptance and at each accepted fix): items
   4–6 pass.
-- [ ] AC-7.3, under OD-1 (A): items 7 and 8 pass. Under (B) this criterion moves to the Task that
-  builds the surface.
+- [ ] AC-7.3, under OD-1 (A): items 7 and 8 pass.
 - [ ] The 6 rows → `MUTATION: ALL_CAUGHT`.
 
 **Dependencies on other tasks**: Task 12 (item 7's first fixture runs `check`), Task 16 (both edit
@@ -1520,29 +1789,63 @@ with its failing command and counted.
 
 **Description**: Design §"FR-8" step 1, on main after the merge. In a throwaway fixture project
 created beside this checkout (never under `/tmp`), with its own `docs/.bkit-memory.json` step5
-record and FR-5's exact `.agents/hooks.json` entry, a temporary capture hook records the real
-class-(b) payload keys and `init.tools`, with `agy --version`. The captured payloads are committed
-under `h-mad/tests/fixtures/agy-payloads/`, and the capture hook is deleted. `PATH_KEYS` gains each
-observed key. `class_inventory.py` (Task 0) is re-run with the capture as its second log.
+record and FR-5's exact `.agents/hooks.json` entry, a temporary capture hook records one real
+`toolCall` envelope **for each of the six required tools**: the five class-(b) tools
+(`write_to_file`, `replace_file_content`, `multi_replace_file_content`, `sed_file`,
+`notebook_edit`) and `run_command` (spec FR-8 step 1: "one real `toolCall` per class-(b) tool and
+per `run_command`"). It also records `init.tools` and `agy --version`. Each sample is the hook's
+whole stdin as received, unedited, committed under `h-mad/tests/fixtures/agy-payloads/` as six
+files named by the tool: `write_to_file.json`, `replace_file_content.json`,
+`multi_replace_file_content.json`, `sed_file.json`, `notebook_edit.json`, `run_command.json`. The capture
+record `docs/03-analysis/probes/agy-coder-fallback/fr8_payload_capture.md` holds, per tool: the
+instruction given to agy that produced the call, the stream-json line showing it, and whether
+`workspacePaths` is present in the envelope. It also holds the sha, `agy --version`, and the
+`ls` reading showing the capture hook removed (probe-then-delete). The fixture project's
+`notebook_edit` sample needs an `.ipynb` file in the project, which the fixture creates.
+
+**Capture gate.** All six samples must exist before the RED dispatch. A missing sample (agy
+refuses the instruction, or never routes the edit through that tool) is not dropped: re-instruct
+up to three times, then stop the Task and report which tool could not be captured, with its three
+instructions. The capture does not pass on a subset.
+
+`PATH_KEYS` gains each class-(b) key the capture shows that it does not already hold. If
+`run_command`'s envelope names its command or workdir under a key other than `CommandLine` or
+`Cwd`, class (c)'s reads change to the captured keys, and that is a finding against design
+§"FR-4", reported before GREEN. `class_inventory.py` (Task 0) is re-run with the capture as its
+second log.
 
 **Tests**:
-1. `tests/test_h_mad_agy_tdd_gate.py::test_captured_payload_is_judged_by_its_recorded_key` — one id
-   per class-(b) tool the capture observed: the captured payload, aimed at a production `.py`
-   without a failing test under `active`, denies with the judge's kind.
-2. `tests/test_h_mad_agy_tdd_gate.py::test_class_a_names_are_in_the_recaptured_inventory`.
+1. `tests/test_h_mad_agy_tdd_gate.py::test_capture_holds_every_required_sample` — one id per
+   required tool (6): the fixture file exists, parses as JSON, names that tool in its `toolCall`,
+   and the capture record states `workspacePaths` present or absent for it. 6 nodes.
+2. `tests/test_h_mad_agy_tdd_gate.py::test_captured_payload_is_judged_by_its_recorded_key` — one id
+   per class-(b) tool (5): the captured payload, with its path values aimed at a production `.py`
+   without a failing test under `active`, denies with the judge's kind (not `judge-error`). 5 nodes.
+3. `tests/test_h_mad_agy_tdd_gate.py::test_captured_run_command_is_judged_by_its_recorded_keys` —
+   the captured `run_command` envelope with its command set to `ls`, under `active`: allowed.
+   1 node.
+4. `tests/test_h_mad_agy_tdd_gate.py::test_class_a_names_are_in_the_recaptured_inventory`. 1 node.
 
-**RED split**: item 1 has one node per observed tool, and each fails at RED (its key is not in
-`PATH_KEYS`, so the call has no target and denies `judge-error`); item 2 is 1 node that passes at
-RED unless the re-capture drops a class-(a) name, which is a finding for the design. The node
-count of item 1 is fixed by the capture, which is committed before the RED dispatch.
+**RED split**, derived from the committed capture before the RED dispatch, and stated in it:
+- item 1: 6 P. The capture is committed first; this item is the capture gate's regression pin;
+- item 2: an id fails at RED exactly when its captured path key is not in `PATH_KEYS` at the RED
+  base. Only `write_to_file` → `TargetFile` is there, from Task 5. So `write_to_file` is P when
+  its captured key is `TargetFile`, and F otherwise; each of the other four is F when its captured
+  key is new and P when the capture shows a key already mapped;
+- item 3: P when the captured keys are `CommandLine` and `Cwd` (Task 7's reads), F otherwise;
+- item 4: P, unless the re-capture drops a class-(a) name, which is a finding for the design.
+Total 13 nodes. F is the number of genuinely new mappings, in items 2 and 3 together, and P is
+13 minus F. When F is 0, the Task is **capture-only**: no production change, the RED dispatch's
+gate is "0 F, 13 P", and GREEN is the RED tree.
 
-**Mutation rows**: none new. A `PATH_KEYS` entry is data: removing one fails its own item-1 node,
+**Mutation rows**: none new. A `PATH_KEYS` entry is data: removing one fails its own item-2 node,
 and the no-target guard keeps its Task 6 row.
 
 **Acceptance Criteria**:
-- [ ] AC-8.1 (the payload capture, stamped with the sha and `agy --version`): the capture is
-  committed under `docs/03-analysis/probes/agy-coder-fallback/`.
-- [ ] Items 1–2 pass; the inventory partition and its difference from Task 0's are recorded.
+- [ ] AC-8.1 (the payload capture, stamped with the sha and `agy --version`): all six samples are
+  committed under `h-mad/tests/fixtures/agy-payloads/`, and the capture record, with the capture
+  hook's removal, under `docs/03-analysis/probes/agy-coder-fallback/`. Item 1 passes.
+- [ ] Items 2–4 pass; the inventory partition and its difference from Task 0's are recorded.
 
 **Dependencies on other tasks**: the merge of Tasks 0–19.
 
@@ -1596,12 +1899,22 @@ test, so archiving the probe directory cannot break the suite).
 
 **Tests**:
 1. `tests/test_h_mad_assemble_tdd_agent.py::test_agent_default_timeouts[agy-1500]` is re-pointed:
-   its id and expected value become the figure the formula probe prints, and
-   `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_wired_writes_the_prompt` follows it.
-   RED: 1 node of item 1 fails against `1500` (unless the formula gives 1500, in which case this
-   Task changes no code and records that).
+   its id becomes `agy-` followed by the figure the formula probe prints, and its expected value
+   becomes that figure.
+2. `tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_wired_writes_the_prompt` (Task 10 item 6)
+   pins `--timeout 1500` in the command block. Its expected `--timeout` becomes the same figure.
 
-**RED split**: 1 F, or 0 when the derived figure is 1500.
+Both expectations change in the RED commit. Task 10's `TIMEOUT_DEFAULTS["agy"]` is still `1500`
+at RED, so both nodes fail there.
+
+**RED split**: when the derived figure is not 1500, 2 F: the re-pointed `test_agent_default_timeouts`
+id and `test_agent_agy_wired_writes_the_prompt`. When it is 1500, 0 F: this Task changes no code
+and no test, and records that.
+
+**Anchors**: the edit touches only the `"agy"` value of `TIMEOUT_DEFAULTS`, on which no row sits
+(Task 10 adds `assemble_tdd_agy.json`, and none of its rows anchors on that value).
+`--check-anchors` over the 8 specs naming the assembler by then: Task 10's 7, plus
+`new_caller_carveout_copies.json`, whose `fr9-copy-L5` row names it (Task 13).
 
 **Acceptance Criteria**:
 - [ ] AC-8.1 (the default timeout equals FR-8's formula over the readings): the formula probe
@@ -1620,37 +1933,45 @@ branches and the other-peer step); FR-3 4; FR-6 2; FR-4 18 (13 single bullets, 3
 `cwd` rows); FR-5 8 (7 reasons and `UNWIRED` returning 2); FR-7 10 (3 append rows, 2 `APPEND_ONLY`,
 5 warning and `property_valid` rows); FR-9 10 (8 + 2). 3 + 4 + 4 + 2 + 18 + 8 + 10 + 10 = 59.
 
-| Task | design rows | wire-cut rows | doc-pin rows (plan §"Success Criteria") |
-|---|---|---|---|
-| 1 | 4 (FR-1 3, FR-7 1) | 0 | 0 |
-| 2 | 4 | 0 | 0 |
-| 3 | 4 | 2 | 0 |
-| 4 | 2 | 0 | 0 |
-| 5 | 4 | 0 | 0 |
-| 6 | 10 | 0 | 0 |
-| 7 | 4 | 0 | 0 |
-| 9 | 7 | 0 | 0 |
-| 10 | 1 | 1 | 0 |
-| 11 | 5 | 0 | 0 |
-| 12 | 4 | 0 | 0 |
-| 13 | 8 | 0 | 0 |
-| 14 | 2 | 0 | 0 |
-| 15 | 0 | 0 | 2 |
-| 16 | 0 | 0 | 6 |
-| 17 | 0 | 0 | 6 |
-| total | 59 | 3 | 14 |
+| Task | design rows | wire rows (cut + converse) | doc-pin rows (plan §"Success Criteria") | discipline and decision rows |
+|---|---|---|---|---|
+| 1 | 4 (FR-1 3, FR-7 1) | 0 | 0 | 0 |
+| 2 | 4 | 0 | 0 | 0 |
+| 3 | 4 | 3 (2 + 1) | 0 | 0 |
+| 4 | 2 | 0 | 0 | 0 |
+| 5 | 4 | 0 | 0 | 1 (signal discipline) |
+| 6 | 10 | 0 | 0 | 1 (OD-2) |
+| 7 | 4 | 0 | 0 | 0 |
+| 9 | 7 | 0 | 0 | 0 |
+| 10 | 1 | 2 (1 + 1) | 0 | 1 (marker discipline) |
+| 11 | 5 | 0 | 0 | 0 |
+| 12 | 4 | 0 | 0 | 0 |
+| 13 | 8 | 0 | 0 | 0 |
+| 14 | 2 | 0 | 0 | 0 |
+| 15 | 0 | 0 | 4 | 0 |
+| 16 | 0 | 0 | 8 | 0 |
+| 17 | 0 | 0 | 6 | 0 |
+| total | 59 | 5 | 18 | 3 |
 
 Design rows: 4 + 4 + 4 + 2 + 4 + 10 + 4 + 7 + 1 + 5 + 4 + 8 + 2 = 59, equal to the design's
-list. All new rows: 59 + 3 + 14 = 76. Existing rows moved, not new: the 31 re-pointed in Task 4, the
-re-anchors of Tasks 2, 3 and 10 (`w10a-grok-by-default` named; the others as `--check-anchors`
-finds them).
+list. Wire rows: 3 + 2 = 5. Doc-pin rows: 4 + 8 + 6 = 18. Discipline and decision rows:
+1 + 1 + 1 = 3, none of them in the design's list (the cycle-1 audit's signal-discipline and
+marker findings, and the operator's OD-2). All new rows: 59 + 5 + 18 + 3 = 85. Existing rows
+changed, not new: the 31 re-pointed in Task 4, of which `CX-FOLD` also takes a new `find` and
+`CX-FORCE-SCRIPT` a new `replace`; and the re-anchors of Tasks 2, 3 and 10 (`w10a-grok-by-default`
+named; the others as `--check-anchors` finds them). Each Task states which existing rows its
+edits touch.
 
-## Open decisions
+## Decisions (closed)
 
-- **OD-1 (Task 17)** — AC-7.3's code surface; option (A) planned, (B) needs spec FR-1 and design
-  FR-7 revised.
-- **OD-2 (Task 6)** — a directory as a class-(b) target; not analysed by the design, not designed
-  here.
+- **OD-1 (Task 17)**, closed 2026-10-16. Operator: option (A), a transcription test over the
+  written procedure. Spec FR-1 and design FR-7 stand unchanged.
+- **OD-2 (Task 6)**, closed 2026-10-16. Operator: a class-(b) target naming an existing directory
+  is refused with `kind=judge-error` under `S` (`active`, `unknown`) and allowed under `inactive`.
+  Task 6 implements it as T2a, with item 10 and row `od2-directory-target-check-dropped`. The spec
+  and the design owe a line recording it.
+
+No decision is open.
 
 ## Residuals carried from the design
 
@@ -1662,5 +1983,15 @@ not settle); an equivalent command spelling (Task 9); a writer that bypasses `_m
 prose application, a seventh surface (Tasks 13, 18); a later `KINDS` member (Task 5's kind scan
 reads `KINDS` live); T4's empty-string arm (Task 6); the author-before-review ordering (Task 17).
 
+Added by this plan, not by the design:
+- The Codex gate's existing `--self-check` `FAIL shell-policy` returns 2 for a verdict, against
+  the signal-discipline rule Task 5 applies to the agy gate. This feature does not change it
+  (Task 4).
+- OD-2's T2a covers an existing directory only. A target ending in `/` that names no existing
+  directory goes through T3–T7 as a file name (Task 6).
+- The staging step is prose that the orchestrator follows. Task 16's tests pin its words, not its
+  execution (the same residual as AC-7.3 under OD-1 (A)).
+
 ## Version History
 - v1.0: Initial implementation plan draft (2026-10-16), Phase 5a, from design v1.3 (4e4b5ded), spec v1.9 (4bef0e76), plan v1.6 (8e242d06); tree read at 4e4b5ded. 23 Tasks (0-19 pre-merge, 20-22 post-merge per D-13); wiring Tasks 3 and 10 with WIRE/WIRE-PIN; 59 design mutation rows plus 3 wire-cut and 14 doc-pin rows; OD-1 (AC-7.3 surface vs spec FR-1 "no script reads it") and OD-2 (directory target).
+- v1.1: Impl-plan audit cycle 1 (2026-10-16), answering codex p1 (9 must, 3 should) and agy p2 (2 must, 2 should) against v1.0 (fc6b497e), tree at 683777df. Grammar probe fr3_state_line_grammar.py updated (derived/shipped modes, --control, --hook) so Task 3's post-GREEN re-run passes. Harness cwd convention (scripts/ from h-mad/). agy --self-check: verdict FAILs exit 0, policy-import exit 2. Task 16 staging step with record=failed halt step5:implementer_switch_unrecorded and its discriminating control. Task 20 requires all six samples (5 class-(b) + run_command), RED split derived from captured keys, capture-only gate. Task 10 converse wire row, [H-MAD] halt marker. Task 3 converse wire row. Task 11, 9, 10 RED assertions on refusal text, not argparse exit 2. Task 2 status fixtures expect reason=status. Task 22 two timeout tests. Task 4 CX-FOLD find and CX-FORCE-SCRIPT replace. Task 15 FR-9 prompt bullets. hook_wiring.json 12 rows. OD-1 closed (A); OD-2 closed: directory target judge-error under S (Task 6 T2a). Rows: 59 design + 5 wire + 18 doc-pin + 3 discipline/decision = 85.
