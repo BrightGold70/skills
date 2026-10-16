@@ -464,11 +464,17 @@ def format_state_line(chain: Chain, root: Path) -> str:
     blocker = next((i for i, r in enumerate(chain.records, 1) if r.codex_status not in ESCAPE_STATUSES), 0)  # M:C5
     line = (f"TDD-STATE: active codex-escape={'yes' if escape else 'no'} blocker={blocker} "
             f"records={len(chain.records)} fallback={_fallback_fold(chain.records)}")  # M:F0
+    env, which = dict(os.environ), shutil.which
     for record in chain.records:
+        implementer = resolve_implementer(record, env=env, which=which)
+        if implementer.invalid_field == "implementer":
+            author = "invalid:" + _enc(implementer.invalid_value)
+        else:
+            author = implementer.resolved if implementer.resolved in ("codex", "agy") else "peers-out"
         fallback = record.fallback
         if fallback.startswith("invalid:"):
             fallback = "invalid:" + _enc(fallback[len("invalid:"):])
-        line += f" record={_enc(record.key)},{_enc(record.codex_status)},{_enc(str(record.state_file))},{fallback}"
+        line += f" record={_enc(record.key)},{_enc(record.codex_status)},{_enc(str(record.state_file))},{author},{fallback}"
     return line
 
 
