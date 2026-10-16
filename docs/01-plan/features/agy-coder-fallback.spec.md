@@ -209,9 +209,18 @@ prints exactly one line. Read the token, never `$?`. Its values:
 | `TDD-IMPLEMENTER: <codex\|agy> chosen=<peer> switch=none` | chosen peer is available | stage `--agent <codex\|agy>` |
 | `TDD-IMPLEMENTER: <codex\|agy> chosen=<peer> switch=<peer>-><peer> reason=<env\|status\|cli-absent>` | automatic peer switch | stage the resolved peer; print the line on the dispatch |
 | `TDD-IMPLEMENTER: <grok\|claude> chosen=<peer> switch=peers-out reason=<chosen peer's reason>` | both peers out | today's fallback path, unchanged |
-| `TDD-IMPLEMENTER: invalid field=<implementer\|fallback_agent> value=<pct-encoded>` | record holds an invalid value | fix the record; never dispatch |
-| `TDD-IMPLEMENTER: no-record feature=<pct-encoded>` | no such feature in the state file | halt; the feature name or root is wrong |
-| `TDD-IMPLEMENTER: unreadable file=<pct-encoded> error=<name>` | state file cannot be read | halt, same as the gate's unreadable state |
+| `TDD-IMPLEMENTER: invalid field=<implementer\|fallback_agent> value=<pct-encoded>` | record holds an invalid value | halt `step5:implementer_invalid`; fix the record; never dispatch |
+| `TDD-IMPLEMENTER: no-record feature=<pct-encoded>` | no such feature in the state file | halt `step5:implementer_unresolved`; the feature name or root is wrong |
+| `TDD-IMPLEMENTER: unreadable file=<pct-encoded> error=<name>` | state file cannot be read | halt `step5:implementer_unresolved`, same as the gate's unreadable state |
+
+**Halts (v1.10, adopted from impl-plan v1.1 Task 16).** The verb's caller has exactly three halts,
+one per failure class of the token above: `step5:implementer_invalid` (an `invalid` token: the
+record is wrong and a human fixes it), `step5:implementer_unresolved` (a `no-record` or
+`unreadable` token: the verb could not reach a record), and `step5:implementer_switch_unrecorded`
+(any token with ` record=failed`, below). The three tokens that name a peer (`switch=none`, a peer switch,
+`peers-out`) halt nothing. Residual: `failure-recovery.md` gains no row for any of the three
+halts in this feature (impl-plan v1.1 adds none); a recovery row for them is owed to a later
+feature, not settled here.
 
 With `--record`, any `switch` other than `none` writes `implementer_switch` to the record through
 `h_mad_state_write.py`'s write path, so the claim and session rules apply. The write is skipped
@@ -381,7 +390,7 @@ With it `active` or `unknown`:
 | (c) shell | `run_command` | the Codex gate's shell policy (FR-6) |
 | (d) everything else | every tool not in (a)–(c), including tools added in later agy versions | deny, `kind=tool-not-admitted` |
 
-**Deliberate differences from the Codex gate (S4, v1.8: all adopted).** Class (b)'s "same rules
+**Deliberate differences from the Codex gate (S4, v1.8: all adopted; item 6 added v1.10, D-16).** Class (b)'s "same rules
 as the Codex gate" holds except for exactly these, which design §"FR-4" lists under the same
 name. Each fails toward refusal or is forced by agy's payload:
 1. A relative path resolves against the root, never a payload cwd. Forced: agy sends none.
@@ -394,6 +403,12 @@ name. Each fails toward refusal or is forced by agy's payload:
    the Codex gate allows when its scan reads `inactive`. Toward refusal.
 5. Every deny carries a kind (above); the Codex gate has kindless denies. Toward legibility; it
    changes no decision.
+6. A class-(b) target that names an existing directory (`.`, `src/`, the root itself, or a
+   symlink to a directory) denies `kind=judge-error` when the scan reads `active` or `unknown`,
+   and is allowed when it reads `inactive` (D-16, OD-2). Toward refusal: without it such a target
+   carries no file name to judge and is allowed under `active`. Residual: a path ending in `/`
+   that names no existing directory is not a directory target under this rule; it is judged as a
+   file name by the remaining class-(b) rules.
 Residual: a rule the Codex gate gains later is not inherited, because each gate writes its own
 composition. The target differential test (AC-4.1) is what catches that drift. A difference not
 in this list is a defect in whichever gate it appears in.
@@ -459,6 +474,17 @@ the floor moves when the budget does.
     `h_mad_hook_wiring.py` exits 2 on `WIRING: UNKNOWN reason=no_settings`. The agy check
     differs on purpose, because there a missing file is the defect being reported.
   - `self-check-failed` is a verdict. The gate ran and its self-check failed.
+  - **The gate's own `--self-check` follows the same rule (v1.10, orchestrator decision).** It
+    prints exactly one token line on stdout. A normal `FAIL` verdict (a self-test of the gate's
+    classification or shell policy came out wrong) prints its `FAIL` token and exits 0; only an
+    operational error (the gate cannot run: an import it needs fails, or `JUDGE_BUDGET_S` cannot
+    be read) exits nonzero. The design and impl-plan name the tokens. The wiring check reads
+    `self-check-failed` on anything but the PASS token with exit 0, so the exit code changes no
+    wiring verdict. The same decision corrects the Codex gate's pre-existing `--self-check`
+    `FAIL shell-policy` branch, which at `84ec2133` prints to stderr and returns 2: it prints its
+    token on stdout and exits 0 (impl-plan Task 4). Residual: the Codex gate's
+    `FAIL parser` branch (stderr, return 2 at `84ec2133`) is not reached by that decision and is
+    unchanged and unclassified here.
   - In every row the orchestrator's halt is the same, `step5:agy_tdd_hook_unverified`. The exit
     code never changes what the caller does. It only keeps a normal refusal out of the tool-failure
     channel.
@@ -682,8 +708,10 @@ One real task is staged with `--agent agy` and dispatched headless through
   rename is churn this feature does not need. Its text becomes implementer-neutral:
   - the opening line names "the Phase-5 implementer", not Codex;
   - the `Hook:` line names each gate by implementer: Codex → `h-mad-codex-tdd-gate.py`; agy →
-    `h-mad-agy-tdd-gate.py`; grok → no write-time gate. For agy it states that the class-(b)
-    tools are how writes are made.
+    `h-mad-agy-tdd-gate.py`; grok → no write-time gate; and, unchanged, Claude's
+    `h-mad-tdd-gate.sh` guarding `Write` and `Edit` (pinned by
+    `test_h_mad_tdd_gate_docs.py::test_hook_line_names_both_gates`). For agy it states that the
+    class-(b) tools are how writes are made.
 
   The prompt bytes stay agent-independent, so `test_prompt_file_is_agent_independent` stays green
   and gains `agy`. Residual: the filename still says `codex`.
@@ -948,10 +976,12 @@ One real task is staged with `--agent agy` and dispatched headless through
   - a class-(b) payload with no path key → deny, and the same with the key's value `""` → deny;
   - a production `.py` without a failing test → deny, with a judge kind;
   - with a failing test → allow;
-  - `/tmp` and `artifactDirectoryPath` non-`.py` → allow, and `.py` there → deny.
+  - `/tmp` and `artifactDirectoryPath` non-`.py` → allow, and `.py` there → deny;
+  - a class-(b) target naming an existing directory (`.` and `src/`) → deny `kind=judge-error`,
+    and the same target with the scan reading `inactive` → allow (D-16).
   With the scan reading `unknown` (a `docs/.bkit-memory.json` that is not JSON), each deny above
   that does not need the judge still fires (class (d), no path key, `""`, out-of-root `.py`, a
-  `run_command` FR-6 refuses, and the `workspacePaths` cross-check), each from its own fixture.
+  directory target, a `run_command` FR-6 refuses, and the `workspacePaths` cross-check), each from its own fixture.
   The **target differential** runs one corpus of target shapes through both gates and shows they
   agree on every shape except those FR-4's §"Deliberate differences" names, where the agy gate
   refuses.
@@ -970,9 +1000,12 @@ One real task is staged with `--agent agy` and dispatched headless through
     HALT with exit 2;
   - a check stubbed to print no token shows the assembler `HALT agy_tdd_hook_unverified check=no-token`
     with exit 2;
-  - `WIRED` shows exit 0 on both.
+  - `WIRED` shows exit 0 on both;
+  - the agy gate's `--self-check` with a verdict `FAIL` forced prints that `FAIL` token on stdout
+    with exit 0, and the wiring check reads it as `UNWIRED reason=self-check-failed`.
 
-  A mutation that returns 2 on `UNWIRED` is killed.
+  A mutation that returns 2 on `UNWIRED` is killed, and so is one that returns 2 on a self-check
+  verdict `FAIL`.
 - **AC-6.1:** The shell policy is imported, not copied: one definition in the tree. The Codex gate's
   existing shell tests pass unmodified. Every mutation row re-pointed under FR-6 runs
   `MUTATION: ALL_CAUGHT` against the shared module, `h_mad_target_identity.py` (D-12). The agy gate refuses each `unsafe` command in the Codex
@@ -1148,11 +1181,18 @@ One real task is staged with `--agent agy` and dispatched headless through
   without a durable author record, because the assembler's prompt, out and log files are under
   `/tmp` and its slug names no agent. The fixture stays as written and now has its source. The
   rejected option (b) was to amend the fixture to "no entry".
+- **D-16 Directory target refused under active step5 (OD-2, operator decision, 2026-10-16):** a
+  class-(b) target that names an existing directory is refused with `kind=judge-error` when the
+  scan reads `active` or `unknown`, and allowed when it reads `inactive` (FR-4 deliberate
+  difference 6). Reason: impl-plan v1.1 Task 6 showed that `canonicalise` returns no name and
+  no `unresolvable` flag for `.`, `src/`, `src` and the root, so the class-(b) sequence would
+  otherwise allow a directory target under `active`. Residual: a trailing-`/` path that names no
+  existing directory is not covered and is judged as a file name.
 
 ## Open questions for the operator
 
 None — OQ-1/OQ-2 settled 2026-10-16; the design's OQ-A/OQ-B settled 2026-10-16 (D-12, D-13);
-the design's OD-E2 settled 2026-10-16 (D-15).
+the design's OD-E2 settled 2026-10-16 (D-15); the impl-plan's OD-2 settled 2026-10-16 (D-16).
 
 ## Non-goals
 
@@ -1187,6 +1227,10 @@ None of these are edited by this spec.
   procedure" and OD-E2 in favour of reading the set from `implementation_authors`; the
   `--append` mechanism (DO-3) must accept this key with the same guarantees, and the "When the
   dispatch list is lost" rule becomes FR-7's three closed unrecoverable cases.
+- **Design (spec v1.10).** FR-4: record D-16 as a directory check before the target is judged,
+  and add it to §"Deliberate differences" as item 6; FR-4 `--self-check`: a verdict `FAIL` exits
+  0 (replacing "a nonzero exit"), and the Codex gate's `FAIL shell-policy` is corrected in impl-plan
+  Task 4; FR-2: adopt the halts `step5:implementer_invalid` and `step5:implementer_unresolved`.
 - **Impl-plan.** AC-7.3's surface (FR-7 §"Attribution" must have code to drive, or the AC is an
   OPEN-DECISION), now including the pre-field fixture; AC-1.3's fixtures; AC-4.1's `unknown`
   fixtures and AC-4.2's per-deny-path kind fixtures.
@@ -1204,3 +1248,4 @@ None of these are edited by this spec.
 - v1.7: Design audit cycle 1, spec-owned items (2026-10-16). S1 (codex C1) -> FR-1/AC-1.1/AC-1.2 + D-14: .ts narrowed to seconds 00-59, a leap second (2016-12-31T23:59:60Z) refused on both paths; reason: every .ts comes from Python datetime via the writer, which cannot hold second 60 (orchestrator decision). S2 (codex C6) -> FR-7 Attribution: an entry's implementer is the author of the reviewed code, from its successful implementation dispatch, never implementer_switch.to (historical) or the implementer field; multi-author code is non-independent if the reviewer is any author. S3 -> FR-1/FR-10/AC-1.1: codex_status schema description and state-schema.md row rewritten to FR-2 authorship (no test pins the text; the fallback_agent-after-codex_status order pin stated); FR-8 Version: 1.4.0 at 200ffd52, each reading stamps its version; Owed SessionStart re-check re-stamped 1.4.0 at 200ffd52; FR-6/AC-6.1 shared module = h_mad_target_identity.py (D-12, OQ-A); FR-8/AC-8.1 post-merge stage, COMPLETE only after it (D-13, OQ-B). Open questions: OQ-A/OQ-B settled.
 - v1.8: Design audit cycle 2, final corrective revision after the round cap, not re-audited (2026-10-16). S1/E6 -> FR-4 'Every deny carries a kind': rule over every deny path, closed list owned by the design, spec names only judge-error, tool-not-admitted and the judge's Verdict kind; Codex gate has 6 of 13 kindless _deny call sites at cff71b49. E1 -> FR-4 'The activity reading': three-valued scan (active/unknown/inactive), every step5-gated deny also fires on unknown, class-(b) production .py still read through read_chain under inactive; workspacePaths and Tool classes sentences re-worded. E5 -> FR-4 Target keys: a non-empty-string value counts as no path key. S4 -> FR-4 'Deliberate differences from the Codex gate': design's four adopted plus the kind rule as a fifth. S2/E2/E4 -> FR-7 Attribution sub-bullets (5e GREEN + accepted fixes, never 5d RED; complete author set, never a projection) and new AC-7.3. S5 -> adopted: reviewer none of the authors names the latest accepted dispatch's author. S3 -> leap-second ValueError quote drops the version-dependent tail. AC-4.1/AC-4.2 extended; FR-6 states the unknown-scan shell deny; Owed gains design and impl-plan items.
 - v1.9: Operator decision OD-E2 (a) (2026-10-16) -> D-15: FR-1 gains implementation_authors, an optional array of {module, agent} (agent codex|agy|grok|claude; module non-empty string; no extra keys), appended never altered through FR-7's Record mechanism on accepting a 5e GREEN or fix dispatch, never 5d RED or a halted/timed-out/rejected dispatch; duplicates kept, array order = acceptance order. New AC-1.3 (valid entries accepted, unknown agent and other malformed shapes refused, both validator paths). FR-7 Attribution reads the author set from the field on every leg; unrecoverable cases closed to three (field absent: pre-field features; no entry for the module: a record-step defect; malformed) -> no entry. AC-7.3 multi-author fixture unchanged with its source named; pre-field fixture added. AC-7.2 'only FR-1 field' narrowed to routing field. FR-10 SKILL.md Phase-5 step bullet. Owed: design FR-1/FR-7 (retire procedure-kept set and OD-E2), impl-plan AC-1.3 + pre-field fixture, plan mirror.
+- v1.10: Owed lines from impl-plan v1.1 (Phase 5b), final corrective revision, not re-audited (2026-10-16). P1 -> D-16 (OD-2, operator): a class-(b) target naming an existing directory denies kind=judge-error under active/unknown, allowed under inactive; FR-4 deliberate difference 6, AC-4.1 fixture; residual: trailing-/ path naming no existing directory. P2 -> FR-2 halts named: step5:implementer_invalid (invalid), step5:implementer_unresolved (no-record, unreadable), step5:implementer_switch_unrecorded (record=failed); adopted from impl-plan Task 16; failure-recovery.md rows not added (residual). P3 -> FR-5: the gate's --self-check verdict FAIL prints its token on stdout and exits 0, operational error nonzero; Codex gate FAIL shell-policy corrected in impl-plan Task 4; Codex FAIL parser residual; AC-5.2 gains the self-check fixture and mutant. P4 -> FR-9 Hook line keeps Claude's h-mad-tdd-gate.sh (test_hook_line_names_both_gates). Owed: design FR-4/FR-2 lines.
