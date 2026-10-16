@@ -9,6 +9,11 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-16 · gotcha · [0.5] · `markdown,reconciliation,handoff:2026-10-16-branch-evidence-flake-recon` — Copying verdict text out of a markdown table: unescape '\|' → '|', or grep -E alternations become literal pipes.
+- 2026-10-16 · gotcha · [0.5] · `suite-lock,handoff:2026-10-16-branch-evidence-flake-recon` — Editing the tree during a full-suite run voids it (SUITE: TREE_MOVED) and a scoped run is refused BUSY while it holds the lock — batch edits, then run the suite once.
+- 2026-10-16 · gotcha · [0.7] · `claude-binary,pins,handoff:2026-10-16-branch-evidence-flake-recon` — Binary pin 'var \w+=VALUE,' matched an unrelated constant for 3 CC versions; 2.1.301 renamed it $Po and it broke. Anchor on a semantic neighbour: '"MEMORY.md",x=200,y=25000,'.
+- 2026-10-16 · solution · [0.7] · `race,flaky-test,handoff:2026-10-16-branch-evidence-flake-recon` — A microsecond race won't show under CPU stress (old+new both 10/10 under 24 burners); hold each intermediate state open (sleep per step) to reproduce it deterministically.
+- 2026-10-16 · gotcha · [0.7] · `pytest,conftest,tdd,handoff:2026-10-16-branch-evidence-flake-recon` — A fixture that passes BEFORE the fix is not a repro: two sub-projects only collide when both tests/ dirs are packages (__init__.py → both 'tests.conftest'). Run the RED first.
 - 2026-10-15 · gotcha · [0.5] · `census,tests,concurrent-sessions,handoff:2026-10-15-candidates-burn-run-suggest` — Census count pins read the WORKING-TREE doc, so another session's uncommitted entries fail them; prove it by running the census on git show HEAD:<file>.
 - 2026-10-15 · solution · [0.5] · `skill-candidates,census,hemasuite,handoff:2026-10-15-candidates-burn-run-suggest` — Applying a cross-repo backlog reconciliation: target the exact line census --list-open reports, not the row name; name matching hits recurrence bumps and reinforcement rows.
 - 2026-10-15 · gotcha · [0.7] · `bashparse,fuzz,mutation,handoff:2026-10-15-candidates-burn-run-suggest` — A fuzz sweep is only as good as its shapes: 462 positions, 0 false proofs, yet both restored regressions survived until their exact shapes were added. Mutation-test the sweep itself.

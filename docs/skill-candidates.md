@@ -2585,3 +2585,25 @@ the commits since touches what they ask for. `2a03ca2b` changes only `h-mad-advi
   reports". A `skill_candidates_census.py --apply <table>` (insert-only, refuse on ambiguity, print
   the OPEN delta) would make the next pass (22 rows remain) mechanical. — recurrence: 1 (3 tries in
   one task) — candidate: maybe
+
+## 2026-10-16 — branch-evidence-flake-recon (scout)
+
+Reconciled first: census OPEN=10, all `maybe`, 0 `yes`. None of this session's commits (`a00ee6ff`..`efeca369`)
+builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence selection and grouping,
+`2658b600` the exec-pane release order, and `efeca369` test pins only.
+
+- **census `--rev <ref>`** (see 2026-10-15): recurrence +1. The second HemaSuite reconciliation read
+  `origin/main` with `git show origin/main:docs/skill-candidates.md > tmp`, then ran the census on the copy,
+  so as not to read a working tree other lanes are using. — recurrence: 2 — candidate: maybe
+- **apply a reconciliation decisions table by census open-line** (see 2026-10-15): recurrence +1. The
+  second pass (23 lines into HemaSuite `001656eb3`) was hand-scripted again. It hit a new trap: table cells
+  escape `|` as `\|`, and 13 status lines carried the escape into `grep -E` patterns until a check caught it.
+  An `--apply` mode should unescape cells and print the OPEN delta (it was 68 → 62 here). — recurrence: 2 —
+  candidate: yes
+- **mutation sweep in an isolated worktree**: `h_mad_mutation_harness.py` mutates scripts in place, and a
+  live HemaSuite session executes the same files through the skills symlink. So every sweep this session
+  (4 of them) was hand-run as: `git worktree add --detach <scratch> HEAD`, copy the changed files in, run
+  the harness there, `cmp` the files back, then remove the worktree. The 2026-10-12 session did the same.
+  A harness `--isolate` flag (or an `hmad-dispatch` verb) would make that one command. Absence:
+  `grep -nE 'worktree|isolat|detach' h-mad/scripts/h_mad_mutation_harness.py` returns nothing.
+  — recurrence: 5 — candidate: yes
