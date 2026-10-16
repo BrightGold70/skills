@@ -267,7 +267,9 @@ The revert test, the independent re-run and the mutation pass still cover all fo
 - **Rule over the axis.** A code-review leg is flagged non-independent when its reviewer agent
   equals the implementer of the code it reviews. The legs are 5e spec review, 5e anti-gaming
   verification and 6a-prime. Phase 3/4/5b audits review documents, not code, and are not legs.
-  OQ-1 asks the operator to confirm the Codex-reviews-Codex case.
+  The rule covers every implementer, Codex included: a Codex reviewer on Codex-written code (for
+  example the 5e anti-gaming verifier dispatched to Codex) is flagged exactly as agy on agy is
+  (operator decision D-9). The flag is a warning, never a block.
 - **Record.** After each leg, the orchestrator appends one `review_independence` entry (FR-1)
   with `h_mad_state_write.py`. No verdict word changes, and `h_mad_extract_verdict.py` output is
   untouched (it prints only `<KEY>: <VALUE>`).
@@ -424,18 +426,27 @@ One real task is staged with `--agent agy` and dispatched headless through
 - **D-7 Flag location:** a state field (FR-7). It is not on the extracted verdict, because that
   line is `<KEY>: <VALUE>` and its consumers parse it.
 - **D-8 Audit legs:** unchanged (FR-10).
+- **D-9 Codex reviewing Codex (was OQ-1; operator decision, 2026-10-16):** yes. FR-7's flag fires
+  for any `reviewer == implementer`, Codex included, for example the 5e anti-gaming verifier
+  dispatched to Codex on a Codex-implemented feature. It is a warning only, never a block.
+  Consequence: Codex-implemented features can now carry a `review_non_independent` Phase-7
+  warning that has never appeared before.
+- **D-10 `.agents/` exclusion (was OQ-2; operator decision, 2026-10-16):** narrow it. Applied in this
+  clone by the orchestrator on the operator's answer: the `.git/info/exclude` entry `/.agents/` is now `/.agents/skills/`.
+  Evidence at `d65374e9`: `git check-ignore -v .agents/hooks.json` prints nothing (exit 1, not
+  ignored), and `git check-ignore -v .agents/skills` still reports the `/.agents/skills/` entry.
+  D-2's tracked `.agents/hooks.json` therefore needs no `git add -f`.
+  - **Residual / prerequisite.** `.git/info/exclude` is per-clone local configuration and is not
+    versioned. Every other clone of this repository, and every other project that adopts the agy
+    gate, needs the same narrowing (or a `git add -f`) before its `.agents/hooks.json` can be
+    tracked. Linked worktrees share the main clone's `info/exclude` (git's common dir), so they
+    inherit the narrowing from the clone they belong to. Where the file is not tracked, FR-5's
+    check reads `UNWIRED reason=no-hooks-file` in any worktree that lacks it, so the gap is a halt,
+    not a silent pass.
 
 ## Open questions for the operator
 
-- **OQ-1** Should FR-7's same-agent rule also flag **Codex reviewing Codex-written code**? It
-  would apply to the 5e anti-gaming verifier when dispatched to Codex. The operator decision
-  names agy only. The class rule includes Codex, which adds a Phase-7 warning to Codex-implemented
-  features that has never appeared before. **Recommended: yes**, a warning only. If no, FR-7
-  narrows to `reviewer == implementer == agy`.
-- **OQ-2** In this repository `.git/info/exclude` excludes `/.agents/`
-  (`git check-ignore -v .agents/hooks.json`). D-2's tracked `.agents/hooks.json` therefore needs a
-  `git add -f`, or the exclusion has to be narrowed. Both are local configuration choices.
-  **Recommended:** narrow the exclusion to `/.agents/skills/`.
+None — OQ-1/OQ-2 settled 2026-10-16.
 
 ## Non-goals
 
@@ -456,3 +467,4 @@ None of these are edited by this spec.
 
 ## Version History
 - v1.0: Initial spec (2026-10-16) from brainstorm v1.1. Settles 8 open questions (D-1..D-8): run_command takes the Codex command-shape rule, not a stated residual; per-project .agents/hooks.json; root from handler cwd; provisional 1500 s timeout then tracer formula; PATH+status+env availability; feature-only implementer; flag in state; audit legs unchanged. Folds brief fix 3 (#8) WIRE-PIN new-caller RED case as FR-9. OQ-1 (Codex-reviews-Codex flag), OQ-2 (.agents exclude) for the operator.
+- v1.1: Operator decisions 2026-10-16 (2026-10-16). OQ-1 -> D-9: FR-7 flag fires for any reviewer == implementer, Codex reviewing Codex included; warning only. OQ-2 -> D-10: operator narrowed .git/info/exclude /.agents/ to /.agents/skills/ (check-ignore evidence at d65374e9), no git add -f; per-clone residual stated. Open questions section now empty.
