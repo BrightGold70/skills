@@ -80,10 +80,10 @@ may now carry `review_non_independent`, `review_independence_unrecorded` or
 
 ## Requirements
 
-This plan satisfies FR-1 through FR-10 of the spec, with the 18 acceptance criteria AC-1.1, AC-1.2,
+This plan satisfies FR-1 through FR-10 of the spec, with the 19 acceptance criteria AC-1.1, AC-1.2,
 AC-2.1, AC-2.2, AC-3.1, AC-3.2, AC-4.1, AC-4.2, AC-5.1, AC-5.2, AC-6.1, AC-7.1, AC-7.2, AC-8.1,
-AC-8.2, AC-9.1, AC-9.2 and AC-9.3, plus AC-X (`python3 h-mad/scripts/h_mad_ac_census.py
-docs/01-plan/features/agy-coder-fallback.spec.md` → `ACS: OK count=18 frs=9` at `e6610381`). The
+AC-8.2, AC-9.1, AC-9.2, AC-9.3 and AC-9.4, plus AC-X (`python3 h-mad/scripts/h_mad_ac_census.py
+docs/01-plan/features/agy-coder-fallback.spec.md` → `ACS: OK count=19 frs=9` at `e8def13f`, spec v1.5). The
 decisions D-1..D-11 are inputs, not open questions. Two of them must be carried exactly as the
 spec states them, because the brainstorm's framing was narrower:
 
@@ -160,10 +160,55 @@ impl-plan Tasks, and the full h-mad suite runs per Task (see §"Success Criteria
 6. **Prompt and doc surfaces (FR-9, FR-10)**, including the WIRE-PIN new-caller rule on every
    surface that states the halt (see §"Architecture Considerations", the halt-surface census).
    That covers the `h-mad/references/failure-recovery.md` 5d row, whose token stays unchanged.
-   Two tests pin literals on these surfaces, and the edit keeps both green:
+   It also covers the wiring-task header that `h-mad/scripts/h_mad_assemble_tdd.py` `assemble()`
+   emits under `if shape == "wiring":`. That header is written as adjacent Python string literals
+   split between `never a missing ` and `symbol.`, and the carve-out is appended after the
+   existing sentence, so the literal `never a missing` stays. Three tests pin literals on these
+   surfaces, and the edit keeps all three green:
    - `h-mad/tests/test_h_mad_agent_definitions.py` `test_implementer_scopes_the_import_error_red_rule_to_wiring_tasks`
      pins the sentences of RED item 1;
-   - `h-mad/tests/test_h_mad_wiring_task_shape_docs.py` `HALT_TOKENS` pins the token.
+   - `h-mad/tests/test_h_mad_wiring_task_shape_docs.py` `HALT_TOKENS` pins the token;
+   - `h-mad/tests/test_h_mad_assemble_tdd.py` `TestWiringShape.test_the_pin_is_told_what_its_red_must_be`
+     pins `never a missing` in the assembled prompt
+     (`git ls-files h-mad | xargs grep -ln 'never a missing'` at `9c3b799d` → 2 files, the
+     assembler and this test).
+
+   **The copies of the carve-out bind to one authority (AC-9.4, DO-7).** Spec FR-9 requires the
+   carve-out worded identically on every surface: five surfaces today plus the prompt's GREEN
+   variant, six copies in all. A presence pin per surface does not show that the copies agree, so
+   one copy could keep a broader or narrower exception while the corpus passes. AC-9.4 offers two
+   mechanisms, a shared source or an equality test, and asks the plan to name one. **The plan
+   names the equality test.** The six copies sit in four files of three formats: a markdown list
+   item, a markdown table cell, and a Python string literal. A shared source would mean
+   generating or templating those files, and that is restructuring this feature does not
+   otherwise need. The stage ships a doc-derived equivalence test. It holds the canonical
+   carve-out sentence once and asserts that each of the six copies contains it verbatim. Hard-
+   wrapped markdown is compared after collapsing whitespace runs to one space. The assembler copy
+   is read from the assembled wiring prompt, not from the source text. **Control:** six mutation
+   rows, one per copy, each changing only that one copy (for example, dropping
+   `the callee resolves at the RED base` from it). Each row is run alone and must fail the
+   equivalence test, scored `MUTATION: ALL_CAUGHT`. A row that mutates two copies at once does not
+   count, because a healthy copy can mask a sick one.
+
+   **The teammate-audit authorship bullet (FR-10).** SKILL.md §"Teammate audit leg — when codex
+   is unavailable", sub-section `### What this leg does NOT license`, holds the bullet
+   `- **It does not license Claude to write Phase 5 production code — but the declaration you just`
+   `made does, and that is one switch with two effects.**` It says that declaring `codex_status`
+   unavailable for a 5b audit licenses Claude to author 5d/5e. Under FR-2/FR-3 that is false when
+   agy is available: the resolver picks agy and Claude's gate refuses `agy-authorship`. Stage 6
+   rewrites the bullet so that it separates the two things. Audit-leg selection still follows
+   `codex_status` (D-8, unchanged). Phase 5 authorship is whatever `h_mad_tdd_judge.py implementer`
+   resolves. Per spec v1.5 FR-10, Claude may write Phase-5 production code only when FR-2's
+   `resolved` is `claude` for every ACTIVE `step5` record on the chain: both peers unavailable,
+   and `fallback_agent` absent, `null` or `claude`. The replaced condition is "the `codex_status`
+   declaration licenses Claude", and the new one is "`resolved` = `claude`". The rewrite keeps the
+   anchor prefix and the tokens `ACTIVE`, `every`, `unavailable` and `exhausted`. **The
+   replacement condition is pinned:** the FR-10 doc-derived test asserts that the bullet names
+   `h_mad_tdd_judge.py implementer` and `agy-authorship`. Baseline at `9c3b799d`: 0 and 0, from
+   `/opt/anaconda3/bin/python3 -I -c 'import sys; t=open("h-mad/SKILL.md",encoding="utf-8").read(); a="- **It does not license Claude to write Phase 5 production code"; b=t.split(a,1)[1].split("\n\n",1)[0]; print(sum(n in b for n in sys.argv[1:]))' 'h_mad_tdd_judge.py implementer'`
+   and the same command with `'agy-authorship'` as the last argument. The locator is the one
+   `test_h_mad_tdd_gate_docs.py` `_skill_gate_bullet` already uses, and that test's anchor and
+   tokens are kept (doc-pin census).
 
    The SKILL.md heading `### Codex authors Phase 5 — enforced, not just instructed` and the
    sentence `Phase 5 implementation is **Codex's job**` are also pinned, along with every other
@@ -196,13 +241,38 @@ impl-plan Tasks, and the full h-mad suite runs per Task (see §"Success Criteria
        (F-3);
      - the same directory's `notebooklm-integration-interface.impl-plan.md`, which holds the
        wire-cut rows M4.1 and M5.1 (`grep -n 'M4.1\|M5.1'` on that file);
-     - `hematology-paper-writer/tests/test_notebooklm_resolver.py`.
+     - the three pins, each under `hematology-paper-writer/tests/` at its task commit. Checked at
+       HemaSuite `4d7a392c5` with `git show --stat --format= <sha>` and
+       `git show <sha>:<file> | grep -n 'def <test>'`, and each commit is an ancestor of that HEAD
+       (`git merge-base --is-ancestor <sha> HEAD`):
+       - T4 WIRE-PIN 1: `test_notebooklm_resolver.py::test_resolver_calls_registry_arm_notebook_id_once`
+         at `531a6296b`;
+       - T5 WIRE-PIN 1: `test_notebooklm_initialize.py::test_initialize_entry_point_resolves_through_registry_arm`
+         at `7aa0d9dec`;
+       - T6 WIRE-PIN 2: `test_notebooklm_status_report.py::test_status_entry_point_resolves_through_registry_arm`
+         at `c2d671f6b`.
+
+     **Which form of each pin is replayed.** T4's committed pin uses two-argument
+     `getattr(integration, "resolve_registry_notebook")`, so its RED at the parent is the
+     missing caller. T5 and T6 do not. Their committed pins carry the impl-plan's WIRE-PIN RED
+     scaffold, a three-argument `getattr(..., None)` inside `except (Exception, SystemExit)`
+     followed by a spy assertion. Their committed RED is therefore an `AssertionError`, which the
+     old rule already accepts, so replaying them verbatim cannot show an old verdict of halt. For
+     T5 and T6 the replay evaluates the **direct-call form**: the scaffold is replaced by a
+     two-argument `getattr` on the same name (or a direct call), the `try`/`except` is removed,
+     and the spy assertion is unchanged. That form's RED is the missing caller. Each caller is
+     absent at its parent and present at its task commit. At HemaSuite `4d7a392c5`, counting
+     `git grep -n "def <caller>" <rev> -- hematology-paper-writer/tools` matching lines gives
+     parent 0 and task commit 1 for each of `resolve_registry_notebook`,
+     `initialize_project_notebook` and `generate_setup_report`.
 
      Each RED is reproduced at its task commit's parent, in a scratch worktree or a `git archive`
      export. The live HemaSuite clone is never checked out. For each case the probe holds the
-     RED, the old verdict (halt), the new verdict (valid), a wire-cut re-run at the task commit
-     in which the pin fails, and a citation of the original evidence (M4.1, M5.1, the WIRE 2
-     revert). It is stamped with both repositories' shas. A case that cannot be reproduced is
+     direct-call form's RED, the old verdict on it (halt), the new verdict on it (valid), a
+     wire-cut re-run at the task commit with the committed pin, in which the pin fails, and a
+     citation of the original evidence (M4.1, M5.1, the WIRE 2 revert). For T5 and T6 it also
+     records the committed scaffolded pin's own RED (`AssertionError`) and the old verdict on it
+     (valid). It is stamped with both repositories' shas. A case that cannot be reproduced is
      recorded with its failing command and counted. It is never dropped, and it does not satisfy
      AC-9.3.
 7. **Review-independence warnings (FR-7)** in `h-mad/scripts/h_mad_phase7_preconditions.py`. The
@@ -394,6 +464,18 @@ them. The plan does not settle them.
   the corpus checks the rule's wording, not any one application of it, and the design states
   that residual. For code, the corpus becomes a test over that code, and the classifier gets a
   mutation row.
+  **The copies bind to one authority.** The rule's six copies (the five surfaces of the FR-9
+  census plus the prompt's GREEN variant) must not be able to diverge (AC-9.4). The plan names
+  the mechanism, as AC-9.4 asks: a doc-derived equivalence test, not a shared source (stage 6
+  gives the reason). The test holds the canonical carve-out sentence once and asserts each copy
+  contains it verbatim, with whitespace collapsed for hard-wrapped markdown and the assembler copy
+  read from the assembled prompt. It carries the stage-6 control: one mutation row per copy, each
+  changing only that copy and run alone, each failing the check, scored `MUTATION: ALL_CAUGHT`.
+  The design owes the test's placement and the canonical sentence's exact text, which must match
+  spec FR-9. Residual: the test shows that every copy carries the canonical sentence. It does not
+  show that a copy carries no other, contradicting sentence beside it, or
+  that a seventh surface exists. That surface is found only by re-running the spec's FR-9
+  joined-literal sweep.
 
 **Integration points.**
 - The judge runs as a child of each gate and inherits its environment. The resolution reads
@@ -415,10 +497,25 @@ them. The plan does not settle them.
   handler rewrites a path key after this gate judged it, the gate judged the wrong path. The design
   states this as a residual, or shows that agy applies `deny` before any `overwrite`.
 
-**The halt-surface census for FR-9.** Spec v1.3 FR-9 closes the rule's surfaces. There are four
-today: prompt RED item 1, the prompt's WIRE-PIN paragraph, the SKILL.md 5d bullet, and the
-`failure-recovery.md` 5d row. The prompt's GREEN variant is added as a fifth. The spec also
-writes the sweep command and its residual. The plan does not restate the sweep. It holds one
+**The halt-surface census for FR-9.** Spec FR-9 closes the rule's surfaces (v1.5, revised
+alongside this plan). There are five today: prompt RED item 1, the prompt's WIRE-PIN paragraph,
+the SKILL.md 5d bullet, the `failure-recovery.md` 5d row, and the wiring-task header in
+`h-mad/scripts/h_mad_assemble_tdd.py` `assemble()`. The prompt's GREEN variant is added as a
+sixth. v1.2 counted four, because its line-oriented grep cannot see a phrase split across a
+physical line break, and the assembler's phrase spans two adjacent Python string literals. The
+class has two members here: adjacent Python string literals, and hard-wrapped markdown. The
+spec's sweep covers both. It reads every `str` constant from `ast.parse` (which joins adjacent
+literals) in each `.py` file, and it collapses whitespace runs in every other file. Reading at
+`9c3b799d`, regex
+`missing.symbol|tests the callee|ImportError.*AttributeError|AttributeError.*ImportError`
+(case-insensitive) over `git ls-files h-mad`: 7 files. They are the four surface files
+(`SKILL.md`, `codex-implementer-prompt.md`, `failure-recovery.md`, `h_mad_assemble_tdd.py`),
+plus `test_h_mad_agent_definitions.py`, `test_h_mad_wire_pin_gate.py` and
+`h-mad/tests/fixtures/codex-text-8-exec.log`, none of which states the rule. The line grep returns
+the same set without `h_mad_assemble_tdd.py` (6 files). Residual: a phrase built at run time (an
+f-string field, `%` or `.format` interpolation, or a `+` join of names) is not a `str` constant,
+so the sweep does not see it. A surface added later is not covered until the sweep is re-run.
+The spec holds the sweep's text. The plan holds one
 reading of the halt token, scoped to `h-mad/` so that this feature's own documents cannot move
 it. Command at `e7730f78`: `git ls-files -z h-mad | xargs -0 grep -l 'red_wrong_reason'` →
 3 files: `h-mad/SKILL.md`, `h-mad/references/failure-recovery.md` and
@@ -429,19 +526,38 @@ feature commits a document that names the token, and this plan names it too.
 **The doc-pin census for stages 6 and 7 (R-8).** A test that locates or bounds a doc span by an
 exact substring, or pins an exact sentence, breaks when the sentence is rewritten. v1.1 named the
 heading pins and missed the end anchor beside them. That is one member of a class, so the plan
-lists the whole class for every section this feature rewrites.
+sweeps the class for every section this feature rewrites. The list below is the sweep's result
+plus the pins the cycle-2 audit found by reading. It is a candidate list, not a closed one.
 
 The census was swept at `d90decc6` with a scratch script, since deleted. It took every string
 constant of at least 16 characters, containing a space, from each `git ls-files 'h-mad/tests/*.py'`
 file that names the doc, and matched it verbatim inside the section. Residual: a shorter literal,
 one with no space, or one built at run time is missed. The short locators below were added by a
-second pass at 8 characters. A committed probe for this census is owed under
+second pass at 8 characters. **The literal matcher misses more than short strings.** The v1.3
+additions show the axes it cannot see:
+- short single-word tokens checked by a loop (`rc 0`, `exec grok`, `fallback_agent`, the Hook
+  line's `Write`/`Edit`);
+- **negative assertions** (`"exit-code protocol" not in section`, `"<" not in hook_line`). These
+  forbid text, so no literal of theirs occurs in the doc;
+- **structural locators** that are not section-scoped (`_hook_block`'s `Hook: ` line and its
+  `- ` bullets);
+- a bullet the census filed under the wrong section (`_skill_gate_bullet`, which lives in the
+  teammate-audit section).
+
+So the census does not certify that every pin is listed. The backstop is R-8's: each doc-editing
+Task runs the full h-mad suite, never a scoped selection, and any pin that fails there is added
+to that Task's RED before the Task closes. File-level reading at `9c3b799d` for the prompt:
+`git ls-files 'h-mad/tests/*.py' | xargs grep -l 'codex-implementer-prompt'` → 14 files. Nine
+carry a pin listed below. The other five (`test_h_mad_assemble_tdd_agent.py`,
+`test_h_mad_extract_verdict.py`, `test_h_mad_install_check.py`, `test_h_mad_portable_timeout.py`,
+`test_h_mad_verifier_prompt.py`) returned no match from the literal matcher. They have not been
+read by hand, so they are unclassified, not pin-free. A committed probe for this census is owed under
 `docs/03-analysis/probes/agy-coder-fallback/`. Each entry can be checked with
 `grep -n '<literal>' h-mad/tests/<file>`.
 - **SKILL.md §"Codex authors Phase 5 — enforced, not just instructed":**
   - `test_grok_fallback_docs.py` `PHASE5_HEADING` (the full heading), plus
-    `no write-time test-first gate`, `fallback-grok` and `HMAD_CODEX_UNAVAILABLE` inside the
-    section.
+    `no write-time test-first gate`, `fallback-grok`, `HMAD_CODEX_UNAVAILABLE` and
+    `fallback_agent` inside the section (`test_phase5_section_documents_fallback_agent`).
   - `test_h_mad_mutation_harness.py` `_phase_5e_text`. It slices from `### Codex authors Phase 5`
     to `Phase 5 implementation is **Codex's job**` with `str.index`, so a rewrite that drops
     either literal raises `ValueError` in `test_skill_documents_the_precheck_is_automatic`.
@@ -452,7 +568,8 @@ second pass at 8 characters. A committed probe for this census is owed under
     tokens `FIRST component`, `relative to the project root`, `` `src/docs/foo.py` `` and
     `Both gates`.
 - **SKILL.md §"Exit-code dispatch for 5d/5e":**
-  - `test_grok_fallback_docs.py` pins the full heading;
+  - `test_grok_fallback_docs.py` pins the full heading, and `exec grok` and `--agent grok` inside
+    the section (`test_exec_section_documents_exec_grok`);
   - `test_h_mad_context_budget_docs.py` pins `hmad-dispatch exec agy`;
   - `test_h_mad_assemble_tdd.py` pins `hmad-dispatch exec codex`.
 - **SKILL.md Phase-7 closure step**, which is list item 7 under `## Per-phase actions` and not a
@@ -461,19 +578,43 @@ second pass at 8 characters. A committed probe for this census is owed under
     `\n## Phase 5`, and pins its `SKIPPED_NO_PANE` sentence;
   - `test_h_mad_phase7_integrate_docs.py` pins `must name a LOCAL branch` and
     `git branch main origin/main`.
+- **SKILL.md §"Teammate audit leg — when codex is unavailable", the bullet
+  `- **It does not license Claude to write Phase 5 production code`** (rewritten by stage 6):
+  - `test_h_mad_tdd_gate_docs.py` `_skill_gate_bullet` requires that anchor exactly once in
+    SKILL.md (`text.count(anchor) == 1`), slices the bullet up to the next blank line, and
+    `test_skill_gate_bullet_states_the_every_record_rule` pins `ACTIVE`, `every`, `unavailable`
+    and `exhausted` inside it. The audit report filed this pin under §"Codex authors Phase 5". At
+    `9c3b799d` the bullet is inside the teammate-audit section and outside §"Codex authors
+    Phase 5" (both checked with `titled_section`), so it is listed here;
+  - `test_grok_fallback_docs.py` `TEAMMATE_HEADING` (the full heading), plus `--surfaces agy,grok`
+    and `unmeasured` inside the section.
+- **`h_mad_assemble_tdd.py` wiring-task header** (FR-9 surface 5):
+  `test_h_mad_assemble_tdd.py` `test_the_pin_is_told_what_its_red_must_be` pins `never a missing`
+  in the assembled prompt.
 - **SKILL.md 5d wiring bullet:** `test_h_mad_wiring_task_shape_docs.py` pins
   ``The third task shape is `wiring`, and counts cannot gate it.`` and
   `failure mode per test, not only the count`.
 - **`agy-runtime.md` §"The TDD gate":** `test_h_mad_tdd_gate_docs.py` locates it with
   `titled_section(..., "The TDD gate")` and pins `h-mad-codex-tdd-gate.py`, `h-mad-tdd-gate.sh`
-  and `permissionDecision`. §"Hooks" and §"Construct mapping" carry no pin.
+  and `permissionDecision`. Under refusal form b, `test_tdd_gate_section_names_the_chosen_form`
+  also pins `rc 0` and forbids `exit-code protocol` in the section. §"Hooks" and
+  §"Construct mapping" carry no pin.
 - **`failure-recovery.md` 5d row:** `test_h_mad_wiring_task_shape_docs.py` `HALT_TOKENS` pins
   `step5d:red_wrong_reason:<module>`.
 - **The prompt (`codex-implementer-prompt.md`, whole file):** 23 distinct literals across 8 test
   files: `test_h_mad_agent_definitions.py`, `test_h_mad_assemble_tdd.py`,
   `test_h_mad_preflight_docs.py`, `test_h_mad_prompt_tails.py`,
   `test_h_mad_tdd_dispatch_discipline_prompt.py`, `test_h_mad_wiring_task_shape_docs.py`,
-  `test_hmad_dispatch.py` and `test_hmad_dispatch_exec.py`.
+  `test_hmad_dispatch.py` and `test_hmad_dispatch_exec.py`. That figure is the ≥16-character
+  sweep's, at `d90decc6`. The sweep missed a ninth file, `test_h_mad_tdd_gate_docs.py`, which
+  pins the prompt structurally. `_hook_block` requires exactly one line starting `Hook: ` and
+  takes the `- ` bullets that follow it. `test_hook_line_names_both_gates` pins
+  `h-mad-codex-tdd-gate.py`, `apply_patch`, `shell`, `h-mad-tdd-gate.sh`, `Write` and `Edit` on
+  that line, and `test_hook_bullets_state_the_shipped_rule` pins `impl-plan`, `name map`,
+  `summary`, `N failed`, `test_*.py`, `*_test.py` and `conftest*.py` in the bullets. Both tests
+  forbid `<` and `>` on the line and in the bullets, so FR-9's implementer-neutral rewrite of the
+  Hook block may not introduce a `<slot>` placeholder or an ASCII `->` arrow. The 23-literal
+  count has not been re-derived with these added.
 
 **Rule over the class.** A rewrite either keeps each pinned literal, or changes that test's
 literal in the same commit to text the rewrite keeps, with the test's assertions otherwise
@@ -512,6 +653,7 @@ precedent that fits the target's structure: `titled_section` for an ATX heading,
 | `agy-runtime.md` hook-event claims re-checked against the installed agy | docs | spec §"Owed by other documents" |
 | Probe directory `docs/03-analysis/probes/agy-coder-fallback/`: payload capture, real refusal, forced handler timeout with its outcome and the delay hook's removal, RED/GREEN with re-run, revert and mutation, each stamped with the sha and `agy --version`; derived timeout | probe | FR-8, AC-8.2 |
 | FR-9 differential corpus (fixture repositories with real REDs, old and new verdicts) and HemaSuite incident replay, stamped with both repositories' shas | probe | FR-9, AC-9.2, AC-9.3 |
+| Equivalence test over the six copies of the FR-9 carve-out, with one mutation row per copy | tests | FR-9, AC-9.4 |
 | `implementer_switch.ts` refusal on both validator paths (DO-4 mechanism) | module / tests | FR-1, AC-1.2 |
 | FR-5 exit-code split, with the `h_mad_assemble_tdd.py` docstring rewritten | CLI / tests | FR-5, AC-5.2 |
 | Mutation rows for every new guard, plus re-pointed existing rows (R-1, R-3) | tests | AC-X |
@@ -527,13 +669,13 @@ precedent that fits the target's structure: `titled_section` for an ATX heading,
 | **R-5 — a `review_independence` add loses or alters entries.** `--set` replaces the whole array (DO-3). | M | DO-3's mechanism. Per AC-7.1, the fixture adds to a record that already holds two entries and asserts both stay byte-identical. A refused entry leaves the store unchanged. |
 | **R-6 — the FR-1 schema validates differently on the two validator paths, or `format` enforces nothing on either.** `format: date-time` is accepted for `not-a-date` on both paths at `d90decc6` (DO-4). | M | DO-4's mechanism, chosen by the design. AC-1.1 and AC-1.2 run on both paths, with AC-1.2's package-absent fixture where the library's format checker is used. |
 | **R-7 — a deny does not bind under `--dangerously-skip-permissions`, or a sibling `ask` / `overwrite` changes the outcome.** | H | FR-8 step 2 runs through `hmad-dispatch exec agy` with the operator's real global `~/.gemini/config/hooks.json` loaded. At `17d73037` its `orca-status` `PreToolUse` `*` handler prints `{"decision":"ask"}` (`grep -n decision ~/.orca/agent-hooks/antigravity-hook.sh`). The halt stands until the step passes, and SKILL.md names "after any agy upgrade" as the re-run trigger (FR-5 residual). |
-| **R-8 — doc-derived tests break on the doc edits.** `test_h_mad_tdd_gate_docs.py` reads `agy-runtime.md` §"The TDD gate", requires exactly one `Hook: ` line in the prompt, and anchors on a SKILL.md gate bullet. `test_h_mad_wiring_task_shape_docs.py` pins literals in the prompt and the halt tokens. At `17d73037`, 15 tracked test-side files name the prompt (M-5). The SKILL.md heading FR-10 makes implementer-neutral is pinned by two tests: `git ls-files -z h-mad/tests | xargs -0 grep -l 'Codex authors Phase 5'` → 2 files at `e7730f78`, `h-mad/tests/test_grok_fallback_docs.py` (`PHASE5_HEADING`) and `h-mad/tests/test_h_mad_mutation_harness.py` (`skill.index`). The same `_phase_5e_text` also ends its slice at `Phase 5 implementation is **Codex's job**`, the sentence FR-10's neutral rewrite is most likely to drop. Every pin inside a rewritten section is listed in §"Architecture Considerations", the doc-pin census. | M | Run the full suite per Task, never a scoped selection: a scoped green misses a doc-derived test in another file. A FR-9/FR-10 Task's RED names every census pin it expects to move. Each pinned literal is kept, or the test's literal is changed in the same commit to text the rewrite keeps, with its assertions otherwise unchanged. A pin is never deleted. |
+| **R-8 — doc-derived tests break on the doc edits.** `test_h_mad_tdd_gate_docs.py` reads `agy-runtime.md` §"The TDD gate", requires exactly one `Hook: ` line in the prompt, and anchors on a SKILL.md gate bullet. `test_h_mad_wiring_task_shape_docs.py` pins literals in the prompt and the halt tokens. At `17d73037`, 15 tracked test-side files name the prompt (M-5). The SKILL.md heading FR-10 makes implementer-neutral is pinned by two tests: `git ls-files -z h-mad/tests | xargs -0 grep -l 'Codex authors Phase 5'` → 2 files at `e7730f78`, `h-mad/tests/test_grok_fallback_docs.py` (`PHASE5_HEADING`) and `h-mad/tests/test_h_mad_mutation_harness.py` (`skill.index`). The same `_phase_5e_text` also ends its slice at `Phase 5 implementation is **Codex's job**`, the sentence FR-10's neutral rewrite is most likely to drop. §"Architecture Considerations", the doc-pin census, lists the pins found inside each rewritten section. It is a candidate list, not a closed one: its matcher misses short tokens, negative assertions and structural locators, and the full-suite run below is the backstop. | M | Run the full suite per Task, never a scoped selection: a scoped green misses a doc-derived test in another file. A FR-9/FR-10 Task's RED names every census pin it expects to move. Each pinned literal is kept, or the test's literal is changed in the same commit to text the rewrite keeps, with its assertions otherwise unchanged. A pin is never deleted. |
 | **R-9 — the `agy-runtime.md` hook-event claim is stale on two surfaces, not one.** The spec names §"Hooks". The §"Construct mapping" `hook-event` row says the same thing ("there is no `SessionStart`"). Command at `17d73037`: `grep -n 'SessionStart' h-mad/references/agy-runtime.md` → 2 lines. Installed hooks.md lists it: `grep -c 'SessionStart' ~/.gemini/antigravity-cli/builtin/skills/agy-customizations/docs/hooks.md` → 3 matching lines, agy `1.3.6`. | L | A Task re-checks both surfaces against the installed agy (by reading hooks.md and, if the claim matters to h-mad, by a live probe), and corrects both together. `grep -rn 'no .SessionStart' h-mad/tests` → no hits at `17d73037`, so no test pins the stale claim. |
 | **R-10 — a stale suite floor lets a test be deleted while staying green.** | M | The floor is re-measured at the 5c baseline, not copied from here (M-1). |
 | **R-11 — agy's writes land outside `--cd`** (brainstorm; seen for audit reports, J30). | M | FR-8 step 3 checks where files landed. The gate denies an out-of-root `.py`. |
 | **R-12 — agy narrates work it did not do, or reports false counts.** | M | The tree delta, the independent re-run and the revert test are the evidence. The `STATUS:` line is a claim. |
 | **R-13 — agy fails open when a handler overruns its timeout.** hooks.md does not say what agy does with a late handler, and FR-8 step 2 cannot observe it. | H | Stage 8, step 2a (AC-8.2). If the outcome is `timeout-allows`, the gate's write guarantee rests on finishing within its timeout. `agy-runtime.md` §"The TDD gate" then states that residual, and the operator question is raised before the gate is called verified. |
-| **R-14 — the FR-9 carve-out admits more than the new-caller case.** | H | Stage 6: the differential corpus (AC-9.2), with the changed set equal to `{new-caller}`, and the incident replay (AC-9.3). DO-7 says where the rule is applied. |
+| **R-14 — the FR-9 carve-out admits more than the new-caller case.** | H | Stage 6: the differential corpus (AC-9.2), with the changed set equal to `{new-caller}`, and the incident replay (AC-9.3). The six copies are held equal by the equivalence test (AC-9.4), so one copy cannot carry a broader exception. DO-7 says where the rule is applied. |
 
 ## Convention Prerequisites
 
@@ -609,6 +751,10 @@ precedent that fits the target's structure: `titled_section` for an ATX heading,
   - `h-mad/references/agy-runtime.md` §"The TDD gate" names `h-mad-agy-tdd-gate.py` and the
     `AGY-GATE:` check, and it keeps the halt. Baseline: 0, from
     `/opt/anaconda3/bin/python3 -I -c "$Q" h-mad/references/agy-runtime.md 'The TDD gate' 'h-mad-agy-tdd-gate' 'AGY-GATE'`.
+  - The SKILL.md teammate-audit bullet `- **It does not license Claude to write Phase 5 production code`
+    separates audit-leg selection from resolved authorship, and names
+    `h_mad_tdd_judge.py implementer` and `agy-authorship`. Baseline: 0 and 0 at `9c3b799d`. The
+    commands and the locator are in stage 6.
 
   These baselines do not drift on their own, because `h-mad/` has not moved since `17d73037`.
   Re-measure them only if a commit touches SKILL.md or `agy-runtime.md` before the FR-10 Task.
@@ -679,7 +825,10 @@ None of these are edited by this plan.
   AC-3.2 extended to `test_h_mad_tdd_judge.py`). The six v1.0 items stay answered, as v1.1
   recorded. FR-8 step 2 now settles two unknowns and leaves handler timeout to step 2a
   (`grep -n 'settles two unknowns' docs/01-plan/features/agy-coder-fallback.spec.md` at
-  `e6610381`). FR-10 still has no AC of its own, but the plan gates it in §"Success Criteria". So
+  `e6610381`). FR-10 still has no AC of its own, but the plan gates it in §"Success Criteria". Spec
+  v1.5 (`e8def13f`) answers the plan-audit cycle-2 items it owns: the teammate-audit bullet in
+  FR-10's surface list (B), FR-9 surface 5 and the joined-literal sweep (C), the three pin files
+  and the direct-call replay of T5/T6 in AC-9.3 (D), and AC-9.4 for the six copies (A). So
   nothing is owed by the spec.
 - **Design.** DO-1 through DO-7:
   - choose the `TDD-STATE:` shape: no optional peer fields, the five placement invariants
@@ -692,7 +841,8 @@ None of these are edited by this plan.
   - fix the moved-name set and keep the names an existing test reaches bound on the Codex gate
     module (DO-5);
   - say whether the FR-9 carve-out stays prose-applied or gains a check, and state the corpus
-    residual that follows (DO-7).
+    residual that follows. Place the AC-9.4 equivalence test, which the plan has named, and fix
+    its canonical sentence to spec FR-9's text (DO-7).
 - **Impl-plan.** Each FR-9/FR-10 Task's RED names the doc-pin census entries it moves (R-8). The
   doc-pin census and the DO-1a line census become committed probes under
   `docs/03-analysis/probes/agy-coder-fallback/`.
@@ -708,3 +858,4 @@ operator then reviews and approves. The design obligations DO-1..DO-7 are inputs
 - v1.0: Initial plan (2026-10-16) from spec v1.2 at 17d73037. Carries D-9/D-11 for every implementer, D-10 per-clone prerequisite, design obligations DO-1..DO-6 (state-line shape and its literals, read-only allowlist, review_independence append, schema constructs on both validator paths, shell-policy module boundary, installed-path vs worktree), mutation re-anchoring risks R-1/R-3, and six items owed by the spec.
 - v1.1: Re-synced to spec v1.3 at e7730f78 (2026-10-16). DO-1a/R-4 closed to the AC-3.2 stub-line exception (missing field = judge-error; the keep-old-stubs branch is removed). DO-3, stage 7 and R-5 now carry FR-7's add requirement. DO-5, stage 4 and R-3 keep the moved names bound on the Codex gate module, with rows re-pointed then ALL_CAUGHT. Stage 6 adds the failure-recovery.md 5d row and the test_h_mad_agent_definitions.py pin. Stage 1 adds the four pinned fallback_agent substrings. R-8 adds the two SKILL.md heading pins. Success Criteria now gate FR-10. The halt-token census is re-scoped to h-mad/ (3 files). All spec items under Owed are marked answered.
 - v1.2: Plan audit cycle 1 and spec v1.4 at e6610381 (2026-10-16). F1: stage 5 mirrors the FR-5 exit table and AC-5.2 (verdicts exit 0, UNREADABLE and no-token exit 2; token and exit code pinned separately; assembler docstring rewritten). F2: DO-4 premise corrected (format is enforced on neither path, probed at d90decc6); the mechanism is a design obligation, with the rfc3339-validator hazard, the AC-1.2 fixtures and classify_store for a schema-wide mechanism. F3/F4: stage 6 adds the old/new differential corpus (AC-9.2, changed set = {new-caller}) and the HemaSuite T4/T5/T6 incident replay (AC-9.3); new DO-7 says where the rule is applied. F5: stage 8 adds step 2a, the forced handler timeout (AC-8.2), and R-13. F6: DO-1a corrected; placement invariants P-1..P-5 over 6 tests, probed; the per-record slot is free and no header field may follow fallback=. F7: the Phase-7 locator is a str.index slice, not titled_section; the doc-pin census covers every rewritten section, including the _phase_5e_text end anchor; R-8 is rewritten. S1: each FR-10 baseline carries its command, re-run at d90decc6. ACs are now 18.
+- v1.3: Final corrective revision after the plan audit round cap: cycle-2 build findings only, and spec v1.5 at e8def13f (2026-10-16). A: stage 6 and DO-7 bind the six copies of the FR-9 carve-out to one authority (AC-9.4). The plan names the equivalence test and carries a one-copy-per-row mutation control. B: stage 6 rewrites the SKILL.md teammate-audit bullet to separate audit-leg selection from resolved authorship (resolved = claude), and pins the replacement condition (baseline 0/0 at 9c3b799d); Success Criteria lists it. C: the FR-9 census adds surface 5, the h_mad_assemble_tdd.py assemble() wiring header, and its pin in test_h_mad_assemble_tdd.py. The census states the split-across-a-line-break class and its joined-literal sweep (7 files at 9c3b799d). D: the incident replay names the three pin files and commits, and replays T5/T6 in direct-call form, recording the scaffolded RED. E: the doc-pin census adds the missed pins from test_h_mad_tdd_gate_docs.py and test_grok_fallback_docs.py, files the _skill_gate_bullet pin under the teammate section, and becomes a candidate list with stated residuals; the R-8 over-claim is removed. ACs are now 19.
