@@ -1,6 +1,7 @@
-"""FR-4 Tasks 5–6: agy gate contract, activity, and classes (a), (b), and (d)."""
+"""FR-4 Tasks 5–7: agy gate contract, activity, and tool classes (a)–(d)."""
 from __future__ import annotations
 
+import ast
 import importlib
 import importlib.util
 import io
@@ -14,7 +15,7 @@ import sys
 
 import pytest
 
-from tdd_gate_support import hermetic_env, write_plan, write_state
+from tdd_gate_support import build_venv, hermetic_env, write_plan, write_state
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -210,12 +211,17 @@ def test_workspace_paths_cross_check(tmp_path, status, names_root, verdict, kind
     ("t5-allowance-file", "allowance-file-write"),
     ("t7-chain-unreadable", "judge-error"),
     ("t7-judge-non-allow", "test-passing"),
+    ("class-c-no-command", "judge-error"),
+    ("class-c-unknown", "judge-error"),
+    ("class-c-allowance-unreadable", "judge-error"),
+    ("class-c-policy-refusal", "shell-not-admitted"),
 ], ids=["malformed-payload", "root-unresolvable", "exception-after-step-2",
         "workspace-paths", "class-d-active", "class-d-unknown", "class-b-no-target",
         "t2-unresolvable", "t2a-directory", "t4-outside-root", "t5-allowance-file",
-        "t7-chain-unreadable", "t7-judge-non-allow"])
+        "t7-chain-unreadable", "t7-judge-non-allow", "class-c-no-command",
+        "class-c-unknown", "class-c-allowance-unreadable", "class-c-policy-refusal"])
 def test_deny_row_kind(tmp_path, monkeypatch, capsys, row, kind):
-    root = _root(tmp_path, "unknown" if row == "class-d-unknown" else "active",
+    root = _root(tmp_path, "unknown" if row in {"class-d-unknown", "class-c-unknown"} else "active",
                  name="repo Ω *? 'q'" if row == "t7-judge-non-allow" else "repo Ω [*] 'q'")
     if row == "exception-after-step-2":
         gate = _load_gate(monkeypatch)
@@ -284,9 +290,25 @@ def test_deny_row_kind(tmp_path, monkeypatch, capsys, row, kind):
     elif row == "t7-judge-non-allow":
         target = _production_with_test(root)
         decision = _decide(root, _write_payload(str(target)))
+    elif row == "class-c-no-command":
+        decision = _decide(root, _payload("run_command"))
+    elif row == "class-c-unknown":
+        decision = _decide(root, _command_payload("ls"))
+    elif row == "class-c-allowance-unreadable":
+        policy = importlib.import_module("h_mad_target_identity")
+        (root / policy.SHELL_ALLOW_FILE).mkdir(parents=True)
+        assert isinstance(policy._shell_allowance(root), str), "fixture must make the allowance unreadable"
+        decision = _decide(root, _command_payload("python3 --version"))
+    elif row == "class-c-policy-refusal":
+        decision = _decide(root, _command_payload("python3 --version"))
     else:
         decision = _decide(root, _payload())
     _expect(decision, "deny", kind, because=f"FR-4 deny row {row}")
+    if row == "class-c-policy-refusal":
+        policy = importlib.import_module("h_mad_target_identity")
+        assert policy.SHELL_ALLOW_FILE in decision["reason"], "shell refusal must name the operator allowance file"
+        for name in CLASS_B:
+            assert name in decision["reason"], f"shell refusal must direct agy to class-(b) tool {name}"
 
 
 def test_self_check_passes(tmp_path):
@@ -488,3 +510,159 @@ def test_class_b_directory_target(tmp_path, target, status):
     _expect(_decide(root, _write_payload(target)), "allow" if status == "inactive" else "deny",
             None if status == "inactive" else "judge-error",
             because=f"OD-2 T2a directory target {target!r} under {status}")
+
+
+def _command_payload(command: str, **args):
+    payload = _payload("run_command")
+    payload["toolCall"]["args"].update(CommandLine=command, **args)
+    return payload
+
+
+def _bad_command_cwd(root: Path, shape: str):
+    if shape in {"outside-absolute", "dotdot-escape"}:
+        outside = root.parent / "elsewhere Ω [*] 'q'"
+        build_venv(outside / ".venv", with_pytest=True)
+        return str(outside) if shape == "outside-absolute" else f"../{outside.name}"
+    return {
+        "absent": str(root / "no-such-dir"), "zero": 0,
+        "list": [HOSTILE], "dict": {"path": HOSTILE}, "true": True,
+    }[shape]
+
+
+@pytest.mark.parametrize("status,missing", [
+    ("inactive", True), ("inactive", False), ("unknown", True),
+], ids=["absent-inactive", "nonstr-inactive", "absent-unknown"])
+def test_run_command_missing_command_line(tmp_path, status, missing):
+    root = _root(tmp_path, status)
+    payload = _payload("run_command")
+    if not missing:
+        payload["toolCall"]["args"]["CommandLine"] = [HOSTILE]
+    _expect(_decide(root, payload), "allow" if status == "inactive" else "deny",
+            None if status == "inactive" else "judge-error",
+            because=f"missing/non-string CommandLine under {status} must respect the S gate")
+
+
+@pytest.mark.parametrize("status", ["inactive", "active", "unknown"],
+                         ids=["inactive-allows", "active-denies", "unknown-denies"])
+def test_run_command_ls_with_empty_workspace_paths(tmp_path, status):
+    root = _root(tmp_path, status)
+    payload = _command_payload("ls")
+    payload["workspacePaths"] = []
+    _expect(_decide(root, payload), "allow" if status == "inactive" else "deny",
+            None if status == "inactive" else "judge-error",
+            because=f"run_command workspacePaths=[] cross-check under {status}")
+
+
+@pytest.mark.parametrize("command", ["ls"], ids=["ls"])
+def test_run_command_read_only_command_allowed_under_active(tmp_path, command):
+    root = _root(tmp_path, "active")
+    _expect(_decide(root, _command_payload(command)), "allow",
+            because="class (c) admits the read-only ls command under active")
+
+
+def test_unsafe_tuple_parity(tmp_path):
+    codex_gate = GATE.with_name("h-mad-codex-tdd-gate.py")
+    tree = ast.parse(codex_gate.read_text(encoding="utf-8"))
+    mains = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main"]
+    assert len(mains) == 1, "unsafe parity must locate the Codex gate's one main function"
+    tuples = [node.value for node in ast.walk(mains[0])
+              if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == "unsafe" for target in node.targets)]
+    assert len(tuples) == 1 and isinstance(tuples[0], ast.Tuple), "Codex main must assign exactly one unsafe tuple"
+    commands = ast.literal_eval(tuples[0])
+    assert commands and all(isinstance(command, str) for command in commands), "unsafe tuple must contain shell commands"
+    root = _root(tmp_path, "active")
+    decisions = [(command, _decide(root, _command_payload(command))) for command in commands]
+    for command, decision in decisions:
+        _expect(decision, "deny", "shell-not-admitted",
+                because=f"unsafe tuple parity must refuse {command!r} as a shell policy refusal")
+
+
+@pytest.mark.parametrize("shape", ["outside-absolute", "dotdot-escape", "absent"])
+def test_cwd_outside_the_root_refuses_a_relative_venv_interpreter(tmp_path, shape):
+    root = _root(tmp_path, "active")
+    build_venv(root / ".venv", with_pytest=True)
+    cwd = _bad_command_cwd(root, shape)
+    _expect(_decide(root, _command_payload(".venv/bin/python -m pytest tests/test_x.py", Cwd=cwd)),
+            "deny", "shell-not-admitted",
+            because=f"{shape} Cwd must refuse a relative venv even though the root has one")
+
+
+def test_root_venv_interpreter_is_admitted(tmp_path):
+    root = _root(tmp_path, "active")
+    build_venv(root / ".venv", with_pytest=True)
+    for args in ({}, {"Cwd": None}, {"Cwd": str(root)}):
+        _expect(_decide(root, _command_payload(".venv/bin/python -m pytest tests/test_x.py", **args)),
+                "allow", because=f"root venv positive control with absent, null, or root Cwd: {args!r}")
+
+
+@pytest.mark.parametrize("shape", ["zero", "list", "dict", "true"])
+def test_malformed_cwd_fails_closed(tmp_path, shape):
+    root = _root(tmp_path, "active")
+    build_venv(root / ".venv", with_pytest=True)
+    _expect(_decide(root, _command_payload(".venv/bin/python -m pytest tests/test_x.py",
+                                         Cwd=_bad_command_cwd(root, shape))),
+            "deny", "shell-not-admitted",
+            because=f"malformed {shape} Cwd must refuse the relative venv through shell policy")
+
+
+def test_empty_cwd_behaves_as_absent(tmp_path):
+    root = _root(tmp_path, "active")
+    build_venv(root / ".venv", with_pytest=True)
+    _expect(_decide(root, _command_payload(".venv/bin/python -m pytest tests/test_x.py", Cwd="")),
+            "allow", because="empty Cwd must resolve the relative venv against the root")
+
+
+@pytest.mark.parametrize("shape", [
+    "outside-absolute", "dotdot-escape", "absent", "zero", "list", "dict", "true",
+])
+def test_ls_under_each_bad_cwd_is_allowed(tmp_path, shape):
+    root = _root(tmp_path, "active")
+    _expect(_decide(root, _command_payload("ls", Cwd=_bad_command_cwd(root, shape))),
+            "allow", because=f"ls under {shape} Cwd must remain read-only and must not raise judge-error")
+
+
+def test_relative_cwd_is_joined_against_the_root(tmp_path, monkeypatch, capsys):
+    root = _root(tmp_path, "active")
+    subproject = root / "subproject Ω [*] 'q'"
+    build_venv(subproject / ".venv", with_pytest=True)
+    assert not (root / ".venv").exists(), "relative Cwd fixture must have a venv only in its subproject"
+    assert not (root / ".agents" / subproject.name).exists(), "handler-relative Cwd must not name the subproject"
+    gate = _load_gate(monkeypatch)
+    policy = importlib.import_module("h_mad_target_identity")
+    command = ".venv/bin/python -m pytest tests/test_x.py"
+    visits = []
+    original_policy = policy._safe_shell_command
+
+    def record_policy(command, root, cwd):
+        visits.append((command, root, cwd, Path.cwd()))
+        return original_policy(command, root, cwd)
+
+    monkeypatch.setattr(policy, "_safe_shell_command", record_policy)
+    monkeypatch.setattr(gate, "_safe_shell_command", record_policy, raising=False)
+    for name in tuple(os.environ):
+        if name.startswith("GIT_"):
+            monkeypatch.delenv(name)
+    monkeypatch.chdir(root / ".agents")
+    monkeypatch.setattr(sys, "argv", [str(GATE)])
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(_command_payload(command, Cwd=subproject.name))))
+    rc = gate.main()
+    captured = capsys.readouterr()
+    _expect(_one_decision(captured.out, rc, stderr=captured.err), "allow",
+            because="relative Cwd must join the git root, not the handler's .agents directory")
+    assert visits == [(command, root, str(subproject), subproject)], (
+        "relative Cwd must be root-joined and passed to shared policy after chdir to the existing command directory"
+    )
+
+
+def test_operator_allowance_admits_a_listed_command(tmp_path):
+    root = _root(tmp_path, "active")
+    policy = importlib.import_module("h_mad_target_identity")
+    command = "python3 --version"
+    assert shutil.which("python3", path=_env()["PATH"]), "operator fixture needs a resolvable executable"
+    assert not policy._safe_shell_command(command, root, str(root)), "operator fixture must be refused by ordinary policy"
+    allowance = root / policy.SHELL_ALLOW_FILE
+    allowance.parent.mkdir()
+    allowance.write_text(f"# {HOSTILE.splitlines()[0]}\npython3 --version\n", encoding="utf-8")
+    _expect(_decide(root, _command_payload(command)), "allow",
+            because="a policy-refused command listed by the operator in SHELL_ALLOW_FILE must be admitted")
