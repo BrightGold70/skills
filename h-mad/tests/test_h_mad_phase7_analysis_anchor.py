@@ -196,3 +196,107 @@ class TestTheAnchorHelper:
     def test_an_explicit_path_is_returned_untouched(self, tmp_path: Path) -> None:
         state = tmp_path / "docs" / ".bkit-memory.json"
         assert p7.resolve_analysis_path(Path("mine.md"), state, "demo") == Path("mine.md")
+
+
+def feature_worktree(root: Path, *, analysis: str = PASSING) -> Path:
+    """A feature worktree holding the Phase-6 artifacts; returns its docs/ dir.
+
+    Before 7f merges, the state file is main's while the analysis, its v<N>
+    versions and any parked mutation spec exist only in the feature worktree.
+    HemaSuite #101 got `BLOCKED` from the CLI for that reason and closed Phase 7
+    through a hand-written `check(record, analysis, docs_root=<worktree>/docs)`.
+    """
+    docs = root / "docs"
+    (docs / "03-analysis").mkdir(parents=True, exist_ok=True)
+    (docs / "03-analysis" / "demo.analysis.md").write_text(analysis, encoding="utf-8")
+    (docs / "03-analysis" / "demo.analysis.v1.md").write_text(analysis, encoding="utf-8")
+    return docs
+
+
+def main_checkout(root: Path) -> Path:
+    """Main's state file with the record and NO Phase-6 artifacts."""
+    docs = root / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    state = docs / ".bkit-memory.json"
+    state.write_text(json.dumps({"orchestrator_state": {"demo": RECORD}}), encoding="utf-8")
+    return state
+
+
+def park_spec(docs: Path, *, restored: bool) -> None:
+    pending = docs / "03-analysis" / "demo.pending-mutation-specs"
+    pending.mkdir(parents=True, exist_ok=True)
+    (pending / "guards.json.pending").write_text("{}", encoding="utf-8")
+    live = docs.parent / "tests" / "mutation-specs"
+    live.mkdir(parents=True, exist_ok=True)
+    if restored:
+        (live / "guards.json").write_text("{}", encoding="utf-8")
+
+
+class TestDocsRootFlag:
+    def test_without_the_flag_main_state_blocks_on_artifacts_only_the_worktree_has(
+        self, tmp_path: Path
+    ) -> None:
+        state = main_checkout(tmp_path / "main")
+        feature_worktree(tmp_path / "wt")
+        proc = run(tmp_path, state)
+        assert proc.returncode == 0, proc.stderr
+        assert "PHASE7: BLOCKED" in proc.stdout
+        assert "analysis_missing" in proc.stdout
+
+    def test_the_flag_reads_the_worktrees_analysis_and_versions(self, tmp_path: Path) -> None:
+        state = main_checkout(tmp_path / "main")
+        docs = feature_worktree(tmp_path / "wt")
+        proc = run(tmp_path, state, "--docs-root", str(docs))
+        assert proc.returncode == 0, proc.stderr
+        assert "PHASE7: READY blockers=0" in proc.stdout, proc.stdout
+
+    def test_the_versioned_check_follows_the_flag_not_the_state_file(
+        self, tmp_path: Path
+    ) -> None:
+        """Main holds a passing analysis but no v<N>; the worktree holds both."""
+        state = main_checkout(tmp_path / "main")
+        (state.parent / "03-analysis").mkdir()
+        (state.parent / "03-analysis" / "demo.analysis.md").write_text(PASSING, encoding="utf-8")
+        docs = feature_worktree(tmp_path / "wt")
+        without = run(tmp_path, state)
+        assert "analysis_unversioned" in without.stdout, without.stdout
+        with_flag = run(tmp_path, state, "--docs-root", str(docs))
+        assert "PHASE7: READY blockers=0" in with_flag.stdout, with_flag.stdout
+
+    def test_a_parked_spec_restored_in_the_worktree_is_seen_as_restored(
+        self, tmp_path: Path
+    ) -> None:
+        state = main_checkout(tmp_path / "main")
+        docs = feature_worktree(tmp_path / "wt")
+        park_spec(docs, restored=True)
+        proc = run(tmp_path, state, "--docs-root", str(docs))
+        assert "PHASE7: READY blockers=0" in proc.stdout, proc.stdout
+
+    def test_a_parked_spec_never_restored_in_the_worktree_still_blocks(
+        self, tmp_path: Path
+    ) -> None:
+        state = main_checkout(tmp_path / "main")
+        docs = feature_worktree(tmp_path / "wt")
+        park_spec(docs, restored=False)
+        proc = run(tmp_path, state, "--docs-root", str(docs))
+        assert "pending_mutation_spec_not_restored" in proc.stdout, proc.stdout
+
+    def test_an_explicit_analysis_still_wins_over_the_flag(self, tmp_path: Path) -> None:
+        state = main_checkout(tmp_path / "main")
+        docs = feature_worktree(tmp_path / "wt")
+        low = tmp_path / "low.analysis.md"
+        low.write_text("# Analysis\n\n## Match Rate: 40%\n", encoding="utf-8")
+        proc = run(tmp_path, state, "--docs-root", str(docs), "--analysis", str(low))
+        assert "match_rate_below_threshold" in proc.stdout or "BLOCKED" in proc.stdout
+        assert "PHASE7: READY" not in proc.stdout
+
+    def test_a_docs_root_that_is_not_a_directory_is_an_operational_error(
+        self, tmp_path: Path
+    ) -> None:
+        """A typo must not read as "no analysis here" — that is a verdict about
+        artifacts the gate never looked at."""
+        state = main_checkout(tmp_path / "main")
+        proc = run(tmp_path, state, "--docs-root", str(tmp_path / "absent" / "docs"))
+        assert proc.returncode == 2, proc.stdout
+        assert "PHASE7:" not in proc.stdout
+        assert "--docs-root" in proc.stderr

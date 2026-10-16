@@ -18,7 +18,7 @@
       "name": "the-default-goes-back-to-a-cwd-relative-path",
       "_mechanism": "The original defect. Same state and same files give BLOCKED from the monorepo root and READY from the sub-project -- and in a tree that happens to hold a matching relative path, READY on another feature's analysis with nothing in the output naming the file it read.",
       "file": "scripts/h_mad_phase7_preconditions.py",
-      "find": "    return resolve_docs_root(None, state_path) / \"03-analysis\" / f\"{feature}.analysis.md\"",
+      "find": "    return root / \"03-analysis\" / f\"{feature}.analysis.md\"",
       "replace": "    return Path(\"docs/03-analysis\") / f\"{feature}.analysis.md\"",
       "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestTheUnsafeDirection::test_a_decoy_analysis_in_the_cwd_is_not_read"
     },
@@ -45,6 +45,38 @@
       "find": "    if state_path.parent.name == \"docs\":\n        return state_path.parent",
       "replace": "    if False:\n        return state_path.parent",
       "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestTheAnchorHelper::test_a_state_file_in_docs_anchors_to_that_docs"
+    },
+    {
+      "name": "ignore-the-docs-root-flag",
+      "_mechanism": "The flag parses and changes nothing: every check reads main's docs, the #101 BLOCKED returns.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "    docs_root = (args.docs_root if args.docs_root is not None  # M:P7-DOCS-ROOT",
+      "replace": "    docs_root = (resolve_docs_root(None, args.state_file) if True  # M:P7-DOCS-ROOT",
+      "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestDocsRootFlag::test_the_flag_reads_the_worktrees_analysis_and_versions"
+    },
+    {
+      "name": "leave-the-default-analysis-on-main",
+      "_mechanism": "The checks move to the worktree but the default analysis stays on main's docs, so two trees are read as one.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "    root = docs_root if docs_root is not None else resolve_docs_root(None, state_path)",
+      "replace": "    root = resolve_docs_root(None, state_path)",
+      "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestDocsRootFlag::test_the_flag_reads_the_worktrees_analysis_and_versions"
+    },
+    {
+      "name": "keep-the-checks-on-the-state-files-docs",
+      "_mechanism": "The analysis follows the flag but the versioned and parked-spec checks still read main's docs.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "                   docs_root=docs_root, feature=args.feature)",
+      "replace": "                   docs_root=resolve_docs_root(None, args.state_file), feature=args.feature)",
+      "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestDocsRootFlag::test_the_versioned_check_follows_the_flag_not_the_state_file"
+    },
+    {
+      "name": "accept-a-docs-root-that-does-not-exist",
+      "_mechanism": "A typo reads as 'no analysis here': a verdict about artifacts the gate never looked at.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "    if args.docs_root is not None and not args.docs_root.is_dir():  # M:P7-DOCS-ROOT-EXISTS",
+      "replace": "    if False:  # M:P7-DOCS-ROOT-EXISTS",
+      "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestDocsRootFlag::test_a_docs_root_that_is_not_a_directory_is_an_operational_error"
     }
   ]
 }

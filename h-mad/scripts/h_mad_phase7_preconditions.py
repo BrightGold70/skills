@@ -285,7 +285,8 @@ def check(record: dict, analysis_path: Path, spec_dirs: list[Path] | None = None
 
 
 def resolve_analysis_path(
-    explicit: Path | None, state_path: Path, feature: str
+    explicit: Path | None, state_path: Path, feature: str,
+    docs_root: Path | None = None,
 ) -> Path:
     """Where the gap analysis lives, anchored to the STATE FILE, never to the CWD.
 
@@ -306,10 +307,14 @@ def resolve_analysis_path(
 
     Shares `resolve_docs_root` with telemetry rather than re-deriving it: two
     copies of one rule is how the audit-gate caller drifted from the gate CLI (#39).
+
+    An explicit `docs_root` (`--docs-root`) moves the default with it, so the
+    analysis and the versioned/parked checks read one tree, never two.
     """
     if explicit is not None:
         return explicit
-    return resolve_docs_root(None, state_path) / "03-analysis" / f"{feature}.analysis.md"
+    root = docs_root if docs_root is not None else resolve_docs_root(None, state_path)
+    return root / "03-analysis" / f"{feature}.analysis.md"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -330,6 +335,14 @@ def main(argv: list[str] | None = None) -> int:
         "(repeatable). Default: every such directory up to two levels below the "
         "repo root derived from the analysis path.",
     )
+    parser.add_argument(
+        "--docs-root", type=Path, default=None, metavar="DIR",
+        help="The docs/ tree holding the Phase-6 artifacts, when it is not the state "
+        "file's. Before 7f the state file is main's while the analysis, its v<N> "
+        "versions and parked mutation specs exist only in the feature worktree: pass "
+        "<worktree>/docs. Moves the default --analysis, the versioned-analysis check "
+        "and the parked-spec check together. Default: the state file's docs/.",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -346,9 +359,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: no such feature: {args.feature}", file=sys.stderr)
         return 2
 
-    analysis = resolve_analysis_path(args.analysis, args.state_file, args.feature)
+    # A docs root that does not exist would read as "no analysis, no versions" --
+    # a verdict about artifacts the gate never looked at -- so it is refused.
+    if args.docs_root is not None and not args.docs_root.is_dir():  # M:P7-DOCS-ROOT-EXISTS
+        print(f"ERROR: --docs-root {args.docs_root} is not a directory", file=sys.stderr)
+        return 2
+    docs_root = (args.docs_root if args.docs_root is not None  # M:P7-DOCS-ROOT
+                 else resolve_docs_root(None, args.state_file))
+    analysis = resolve_analysis_path(args.analysis, args.state_file, args.feature,
+                                     docs_root=docs_root)
     result = check(record, analysis, args.mutation_specs_dir,
-                   docs_root=resolve_docs_root(None, args.state_file), feature=args.feature)
+                   docs_root=docs_root, feature=args.feature)
 
     verdict = "READY" if result["ready"] else "BLOCKED"
     print(f"PHASE7: {verdict} blockers={len(result['blockers'])}")
