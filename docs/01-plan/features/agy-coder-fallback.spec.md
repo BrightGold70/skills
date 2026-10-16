@@ -546,22 +546,51 @@ One real task is staged with `--agent agy` and dispatched headless through
     (`grep -n 'red_wrong_reason' h-mad/references/failure-recovery.md`.)
 
   **The surfaces of this rule, closed.** Today the rule "a missing-symbol RED on a `WIRE-PIN` is
-  invalid" is stated on four surfaces:
+  invalid" is stated on five surfaces:
   1. prompt RED item 1;
   2. the prompt's WIRE-PIN paragraph;
   3. the SKILL.md 5d bullet;
-  4. the `failure-recovery.md` 5d row.
+  4. the `failure-recovery.md` 5d row;
+  5. the wiring-task header that `h-mad/scripts/h_mad_assemble_tdd.py` `assemble()` emits under
+     `if shape == "wiring":` ("Its RED must be an assertion about the CALLER's observable
+     behaviour, never a missing symbol."). It is written as adjacent Python string literals split
+     between `missing ` and `symbol.`.
 
-  The carve-out reaches all four, and the prompt's GREEN variant gains it as a fifth. Sweep:
-  `git ls-files h-mad | xargs grep -ln -i 'missing.symbol\|tests the callee\|ImportError.*AttributeError\|AttributeError.*ImportError'`.
-  At `17d73037` it hits SKILL.md, `codex-implementer-prompt.md` and `failure-recovery.md`, and
-  otherwise only two tests and one fixture log. None of those three states the rule. Two tests pin
-  literals on these surfaces, and the edit keeps those literals:
+  The carve-out reaches all five, worded identically, and the prompt's GREEN variant gains it as a
+  sixth. In the assembler header the carve-out is appended after the existing sentence, so the
+  literal `never a missing` stays.
+
+  **Census method.** A line-oriented `grep` cannot see a phrase that is split across lines.
+  Surface 5 was missed that way: its phrase spans two adjacent string literals. The axis is
+  "a phrase split across a physical line break", and it has two members in this corpus:
+  - Python adjacent string literals. The sweep joins them by reading every `str` constant from
+    `ast.parse` (the parser concatenates adjacent literals into one constant).
+  - Hard-wrapped markdown. The sweep collapses all whitespace runs to one space before matching.
+
+  The sweep runs the regex
+  `missing.symbol|tests the callee|ImportError.*AttributeError|AttributeError.*ImportError`
+  (case-insensitive) over `git ls-files h-mad`: the joined `str` constants of each `.py` file, and
+  the whitespace-collapsed text of every other file. At `9c3b799d` it hits these files:
+  - `SKILL.md`, `codex-implementer-prompt.md`, `failure-recovery.md`, `h_mad_assemble_tdd.py`;
+  - otherwise only `test_h_mad_agent_definitions.py`, `test_h_mad_wire_pin_gate.py` and the
+    fixture log `h-mad/tests/fixtures/codex-text-8-exec.log`. None of those three states the rule.
+
+  The line grep
+  `git ls-files h-mad | xargs grep -ln -i 'missing.symbol\|tests the callee\|ImportError.*AttributeError\|AttributeError.*ImportError'`
+  hits the same set without `h_mad_assemble_tdd.py`. The pins of each surface are found by
+  grepping the surface's own literal, not the regex. Three tests pin literals on these surfaces,
+  and the edit keeps those literals:
   - `test_h_mad_agent_definitions.py` `test_implementer_scopes_the_import_error_red_rule_to_wiring_tasks`
     pins item 1's sentences;
-  - `HALT_TOKENS` pins the token.
+  - `HALT_TOKENS` pins the token;
+  - `test_h_mad_assemble_tdd.py` `TestWiringShape.test_the_pin_is_told_what_its_red_must_be` pins
+    `never a missing` (`git ls-files h-mad | xargs grep -ln "never a missing"` hits only the
+    assembler and this test).
 
-  Residual: a later surface that restates the rule is not covered until this sweep is re-run.
+  Residual: a later surface that restates the rule is not covered until this sweep is re-run. A
+  phrase built at run time (an f-string field, `%`/`.format` interpolation, or a `+` join of names
+  rather than literals) is not a `str` constant, so the joined-literal sweep does not see it.
+  Such a surface is found only by reading the code that builds the dispatch text.
 
 - **The relaxation is shown to be exactly the intended case (differential corpus).** The carve-out
   makes the 5d RED check accept a RED it used to halt, so `h-mad/invariants.base.md` §"Guard
@@ -598,18 +627,43 @@ One real task is staged with `--agent agy` and dispatched headless through
     wire-cut evidence: M4.1, M5.1 and the WIRE 2 inline revert;
   - the same directory's `notebooklm-integration-interface.impl-plan.md`, whose WIRE-PIN table
     maps each case to its pin and mutation row;
-  - `hematology-paper-writer/tests/test_notebooklm_resolver.py`;
-  - the task commits, located by subject (`git log --oneline --grep='Task 4 FR-1 resolver'`,
-    `--grep='Task 5 FR-5 initialize'` and `--grep='Task 6 CLI surface'`). Each one's parent is
-    its RED base.
+  - the three pins, each in `hematology-paper-writer/tests/` at its task commit:
 
-  For each of the three cases (T4 WIRE-PIN 1, T5 WIRE-PIN 1, T6 WIRE-PIN 2), the replay:
-  1. reproduces the pin's RED at the RED base, with the pin from the task commit;
-  2. applies the new rule and records its verdict, which must be **valid**;
-  3. records that the old rule's verdict is halt;
-  4. re-executes the wire-cut at the task commit: delete the call only, keep the caller and the
-     callee, and confirm the pin fails. It also locates the original evidence (M4.1, M5.1, the
-     WIRE 2 revert) and cites it beside the re-run.
+    | case | pin (test file `::` test) | task commit (subject locator) |
+    |---|---|---|
+    | T4 WIRE-PIN 1 | `test_notebooklm_resolver.py::test_resolver_calls_registry_arm_notebook_id_once` | `531a6296b` (`git log --all --oneline --grep='Task 4 FR-1 resolver'`) |
+    | T5 WIRE-PIN 1 | `test_notebooklm_initialize.py::test_initialize_entry_point_resolves_through_registry_arm` | `7aa0d9dec` (`--grep='Task 5 FR-5 initialize'`) |
+    | T6 WIRE-PIN 2 | `test_notebooklm_status_report.py::test_status_entry_point_resolves_through_registry_arm` | `c2d671f6b` (`--grep='Task 6 CLI surface'`) |
+
+    Each task commit's parent is its RED base. The pin names come from the impl-plan's
+    `**WIRE-PIN N**:` lines, and each file was checked with `git show --stat <commit>`.
+
+  **Which form of the pin the replay evaluates.** The committed pins do not share one form:
+  - T4 looks the new caller up with two-argument `getattr(integration, "resolve_registry_notebook")`.
+    At the RED base this raises `AttributeError`, so the committed pin's RED is a missing symbol.
+  - T5 and T6 use the impl-plan's "WIRE-PIN RED scaffold". It is a three-argument
+    `getattr(..., None)` (T5: `getattr(integration, "initialize_project_notebook", None)`; T6:
+    `getattr(integration.NotebookLMIntegration(), "generate_setup_report", None)`) inside
+    `except (Exception, SystemExit)`, followed by an assertion on the spy. Their committed RED is
+    an `AssertionError`, which the old rule already accepts.
+
+  So for T5 and T6 the replay evaluates the **direct-call form** of the pin: the scaffold is
+  replaced by a two-argument `getattr` on the same name (or a direct call), the `try`/`except` is
+  removed, and the spy assertion is unchanged. That is the form whose RED is the missing caller,
+  and it is the form the carve-out is about. The replay also records each committed pin's own RED,
+  for the record. For T4 the committed pin is already in the direct-call form.
+
+  For each of the three cases, the replay:
+  1. reproduces the direct-call form's RED at the RED base, with the pin from the task commit
+     (rewritten as above for T5 and T6). The RED must be `AttributeError`/`ImportError` on the
+     caller, and the callee must resolve at the RED base (shown by import);
+  2. applies the new rule to that RED and records its verdict, which must be **valid**;
+  3. records the old rule's verdict on that RED, which must be halt. For T5 and T6 it also records
+     the committed scaffolded pin's RED (`AssertionError`) and the old verdict on it, which is
+     **valid**: the scaffold is how those tasks avoided the halt;
+  4. re-executes the wire-cut at the task commit with the committed pin: delete the call only, keep
+     the caller and the callee, and confirm the pin fails. It also locates the original evidence
+     (M4.1, M5.1, the WIRE 2 revert) and cites it beside the re-run.
 
   - The replay is a committed probe under `docs/03-analysis/probes/agy-coder-fallback/`, stamped
     with this repository's sha and the HemaSuite sha it read.
@@ -631,6 +685,21 @@ One real task is staged with `--agent agy` and dispatched headless through
   FR-9.
 - **SKILL.md, Phase 7 closure step:** the report carries every `WARNING` line that
   `h_mad_phase7_preconditions.py` prints, the FR-7 warnings included.
+- **SKILL.md §"Teammate audit leg — when codex is unavailable"**, the bullet that begins
+  `- **It does not license Claude to write Phase 5 production code`. Today it says "but the
+  declaration you just made does". Under FR-2 that is false when agy is available: the
+  declaration routes the audit leg, but it moves Phase-5 authorship to agy, and FR-3 refuses
+  Claude (`agy-authorship`). The rewrite keeps the anchor prefix, which
+  `test_h_mad_tdd_gate_docs.py` `_skill_gate_bullet` requires exactly once, and the tokens
+  `ACTIVE`, `every`, `unavailable` and `exhausted`, which
+  `test_skill_gate_bullet_states_the_every_record_rule` requires. It states two things separately:
+  - **Audit-leg selection.** `codex_status` alone routes the 5b audit to the teammate leg.
+  - **Resolved authorship.** Claude may write Phase-5 production code only when FR-2's `resolved`
+    is `claude` for every ACTIVE `step5` record on the chain. That means both peers are
+    unavailable and `fallback_agent` is absent, `null` or `claude`.
+  The replaced condition is "the `codex_status` declaration licenses Claude". The new condition is
+  "`resolved` = `claude`", and the bullet names `h_mad_tdd_judge.py implementer` as the way to read
+  it.
 - **Audit legs in Phases 3/4/5b are unchanged.** `codex_status` still routes the second audit
   surface to the teammate leg (SKILL.md §"Teammate audit leg — when codex is unavailable").
   `agy_status` has no audit-routing consumer.
@@ -714,20 +783,35 @@ One real task is staged with `--agent agy` and dispatched headless through
   called verified.
 - **AC-9.1:** The prompt contains no implementer-specific opening. `test_prompt_file_is_agent_independent`
   covers `codex`, `grok` and `agy`. The new-caller rule appears in RED item 1, in the WIRE-PIN
-  paragraph, in the GREEN variant, in the SKILL.md 5d halt text and in the `failure-recovery.md`
-  `step5d:red_wrong_reason:<module>` row. `test_h_mad_wiring_task_shape_docs.py` and
-  `test_h_mad_agent_definitions.py` stay green.
+  paragraph, in the GREEN variant, in the SKILL.md 5d halt text, in the `failure-recovery.md`
+  `step5d:red_wrong_reason:<module>` row and in the wiring-task header that `h_mad_assemble_tdd.py`
+  emits. `test_h_mad_wiring_task_shape_docs.py`, `test_h_mad_agent_definitions.py` and
+  `test_h_mad_assemble_tdd.py` stay green. FR-9's joined-literal sweep, re-run on the shipped tree,
+  hits no file that states the rule without the carve-out.
 - **AC-9.2:** The FR-9 differential corpus runs all four cases (`new-caller`, `missing-callee`,
   `both-missing`, `unrelated-import`) as fixture repositories with real pytest REDs. For each case
   it records the RED's exception line, whether the callee resolves at the RED base (by import) and
   both verdicts. The set of cases whose verdict changed is exactly `{new-caller}`.
 - **AC-9.3:** The FR-9 incident replay covers HemaSuite `notebooklm-integration-interface` T4
-  WIRE-PIN 1, T5 WIRE-PIN 1 and T6 WIRE-PIN 2. For each case the committed probe holds the RED
-  reproduced at the task commit's parent, the new rule's verdict **valid**, the old rule's
-  verdict halt, a wire-cut re-run at the task commit in which the pin fails, and a citation of the
-  original evidence (M4.1, M5.1, WIRE 2 revert). It is stamped with both repositories' shas. A case
-  that cannot be reproduced is recorded with its failing command and counted. It does not satisfy
-  the AC.
+  WIRE-PIN 1 (`test_notebooklm_resolver.py` at `531a6296b`), T5 WIRE-PIN 1
+  (`test_notebooklm_initialize.py` at `7aa0d9dec`) and T6 WIRE-PIN 2
+  (`test_notebooklm_status_report.py` at `c2d671f6b`). For each case the committed probe holds:
+  - the direct-call form's RED reproduced at the task commit's parent: `AttributeError`/
+    `ImportError` on the caller, with the callee resolving by import. For T4 this is the committed
+    pin; for T5 and T6 it is the pin with the scaffold replaced, per FR-9;
+  - on that RED, the new rule's verdict **valid** and the old rule's verdict halt;
+  - for T5 and T6 only, the committed scaffolded pin's RED (`AssertionError`) and the old rule's
+    verdict on it, which is valid;
+  - a wire-cut re-run at the task commit in which the committed pin fails;
+  - a citation of the original evidence (M4.1, M5.1, WIRE 2 revert).
+
+  It is stamped with both repositories' shas. A case that cannot be reproduced is recorded with
+  its failing command and counted. It does not satisfy the AC.
+- **AC-9.4:** The six copies of the new-caller rule (FR-9 surfaces 1–5 and the GREEN variant) are
+  bound to one authority. Either every surface is generated from or checked against one shared
+  source, or one test asserts that the carve-out text is equal across all six copies. A control
+  that changes the carve-out in any single copy makes that check fail, and it is run once per
+  copy. The plan names which mechanism.
 - **AC-X:** Every new guard carries a mutation row that bites (`MUTATION: ALL_CAUGHT` with a `test`
   per row). The full suite passes per task.
 
@@ -821,3 +905,4 @@ None of these are edited by this spec.
 - v1.2: Operator decision 2026-10-16 -> D-11: FR-7 review_independence_unrecorded widened from agy-only to every implementer (codex|agy|grok|claude), matching D-9; warning only. Trigger pinned to a 6a-prime leg that ran (archreview READY_TO_MERGE|WITH_FIXES|NO) with no leg=6a-prime entry; other archreview values already surface. Pre-existing features settled: no grandfather rule, archived features untouched (no batch caller). AC-7.2 added.
 - v1.3: Plan-author findings against v1.2 (2026-10-16). FR-3: a missing state-line field refuses judge-error (tree precedent: missing-field fixture), so the two gate stub-line fixtures are re-shaped with assertions byte-identical — the AC-3.2 exception; test_h_mad_tdd_judge.py ACTIVE_RE and line-quoting mutation rows follow the line. FR-7: writer has no append (--set replaces); add-without-loss is a requirement, mechanism a design obligation; AC-7.1 gains the two-entry fixture. FR-6: rows re-pointed to the shared module, then ALL_CAUGHT; moved names stay bound on the Codex gate module. FR-9/AC-9.1/FR-10: failure-recovery.md red_wrong_reason row; rule surfaces closed with sweep. FR-1/FR-10/AC-1.1: fallback_agent description on schema JSON and state-schema.md, pinned literals named. Owed: second SessionStart surface (Construct-mapping hook-event row). All ACs reformatted to the h_mad_ac_census.py grammar (- **AC-n.m:**).
 - v1.4: Plan audit cycle 1 findings owned by the spec (2026-10-16). F1 -> FR-5 exit-code table: AGY-GATE WIRED/UNWIRED (all seven reasons, no-hooks-file included) exit 0 and the assembler's agy_tdd_hook_unverified verdict HALT exits 0; UNREADABLE and a no-token check exit 2; existing assembler HALTs keep exit 2 (residual); AC-5.2. F2 -> FR-1: .ts is RFC 3339 date-time; neither validator path enforces format today (probed), so refusal on both paths is the requirement and the mechanism a design obligation; rfc3339-validator hazard; residual for started_ts/owner_heartbeat_ts/halt_ts; AC-1.2. F3 -> FR-9 differential corpus over four missing-symbol cases, changed set == {new-caller}; AC-9.2. F4 -> FR-9 incident replay of HemaSuite notebooklm F-3 (T4/T5 WIRE-PIN 1, T6 WIRE-PIN 2) with wire-cut re-run; AC-9.3. F5 -> FR-8 step 2a forced handler timeout with four classified outcomes; step 2 now settles two unknowns; FR-5 re-run trigger includes it; AC-8.2. F6 -> no contradiction; FR-3 now lists the real-line assertions (two in test_h_mad_tdd_gate_fallback_agent.py, four tests in test_h_mad_tdd_judge.py) as placement constraints; AC-3.2 extended.
+- v1.5: Plan audit cycle 2 findings owned by the spec, final corrective revision after the round cap (2026-10-16). B -> FR-10 adds the SKILL.md teammate-audit bullet: audit-leg selection vs resolved authorship (Claude only when resolved=claude), anchor prefix and the four pinned tokens kept. C -> FR-9 surface census gains surface 5, the h_mad_assemble_tdd.py assemble() wiring header (split string literals), and its pin test_h_mad_assemble_tdd.py TestWiringShape.test_the_pin_is_told_what_its_red_must_be; the census method now joins Python adjacent literals via ast and collapses markdown whitespace, measured at 9c3b799d; residual: run-time-built strings. AC-9.1 lists the header. D -> FR-9 replay and AC-9.3 name all three pins with files and commits (531a6296b, 7aa0d9dec, c2d671f6b); T5/T6 replay evaluates the direct-call / two-argument getattr form; the committed scaffolded RED (AssertionError) is recorded as old-verdict valid, correcting the false old-verdict=halt claim. A -> new AC-9.4: the six rule copies bound to one authority, with a per-copy control.
