@@ -81,7 +81,7 @@ change and records written before this feature stay valid:
     (`h_mad_state_write.py` `_utc_now` is `datetime.now(timezone.utc).strftime(...)`), and
     `datetime` cannot hold second 60 (`datetime(2016,12,31,23,59,60)` and
     `datetime.fromisoformat('2016-12-31T23:59:60+00:00')` both raise `ValueError: second must be
-    in 0..59, not 60`). So the narrowing refuses no value the writer can produce. Residual: a
+    in 0..59`; the message's tail varies by Python version and is not part of this claim). So the narrowing refuses no value the writer can produce. Residual: a
     hand-supplied `.ts` (for example through `--set`) that names a real leap second is refused,
     and that is intended.
   - **Mechanism: a design obligation.** The design picks one and cites the probe output: extend
@@ -296,16 +296,45 @@ and exits 0. An internal exception produces `deny` with `kind=judge-error` whene
 names a tool in classes (b)–(d) below. Stdout that is not JSON blocks nothing in agy, so
 **no path may exit without printing**.
 
+**Every deny carries a kind (S1, v1.8).** Rule over the axis of deny paths: every path that
+prints `deny` ends its `reason` with exactly one `kind=<kind>`, and `<kind>` is a member of one
+closed list that the design enumerates (design §"FR-4"). This spec owns three sources of members
+and names no others: `judge-error` (fail-closed: an exception, an unreadable or unresolvable
+input, a missing path), `tool-not-admitted` (class (d)), and the kind the judge returns when
+`judge` does not allow (the `kind` of its `Verdict`, passed through unchanged). Any further
+member — for example a kind for an out-of-root target, the shell-allowance file, or a refused
+shell command — is the design's to name; it must be in the design's list, not invented at a call
+site. A deny with no `kind=` token, or with a kind outside the list, is a defect, and AC-4.2 pins
+it. This is a deliberate difference from the Codex gate: at `cff71b49`, 6 of the 13 `_deny(`
+call sites in `h-mad/hooks/h-mad-codex-tdd-gate.py` carry no `kind=` token (counted by parsing
+each call's argument text, the `def _deny` line excluded). The agy gate does not inherit those
+kindless denies.
+
+**The activity reading (S4/E1, v1.8).** The gate decides "active step5" (§"Terms") in two
+layers, as the Codex gate does. The first is a root-wide scan, the Codex gate's three-valued
+`_any_phase5_status(root)`: `active` when any `docs/.bkit-memory.json` under the root has a record
+with `phase == "step5"`; otherwise `unknown` when at least one cannot be read, is not JSON, or has
+a non-object `orchestrator_state`; otherwise `inactive`. **Every deny this FR attaches to active
+step5 also fires when the scan reads `unknown`**; only `inactive` stands it down. That covers the
+`workspacePaths` cross-check, the class-(b) path-key and target denies, class (c) and class (d).
+The second layer is the §"Terms" predicate itself: `inactive` does not prove the chain inactive
+(the scan's `rglob` skips a directory it cannot search), so a class-(b) production `.py` target is
+read through `read_chain` whatever the scan reads, and an `unreadable` chain denies
+`kind=judge-error` and an `active` one sends the target to the judge. Residual: a state file that
+neither the scan nor the target's chain reaches is invisible to the gate, as it is to the Codex
+gate.
+
 **Project root.** The gate is wired per project (FR-5, decision D-2), and agy runs a handler with
 its working directory set to the directory that holds `hooks.json`. The root is therefore
 `git -C <handler cwd>/.. rev-parse --show-toplevel`, canonicalised the same way the Codex gate
 canonicalises its root. `workspacePaths` is a cross-check only. When `workspacePaths` is present
-and none of its entries resolves inside the root, the gate denies with `kind=judge-error` during
-active step5 and stands down otherwise. This closes the payload-cwd open question: the root never
+and none of its entries resolves inside the root, the gate denies with `kind=judge-error` when the
+scan (above) reads `active` or `unknown`, and stands down when it reads `inactive`. This closes the payload-cwd open question: the root never
 depends on a payload field.
 
-**Tool classes.** The matcher is `*`, so every tool reaches the gate. While no step5 is active on
-the root's state, every tool is allowed. During active step5:
+**Tool classes.** The matcher is `*`, so every tool reaches the gate. With the scan reading `inactive`, every
+tool is allowed except a class-(b) production `.py` target, whose chain is still read (above).
+With it `active` or `unknown`:
 
 | class | members | rule |
 |---|---|---|
@@ -313,6 +342,23 @@ the root's state, every tool is allowed. During active step5:
 | (b) path-write | `write_to_file`, `replace_file_content`, `multi_replace_file_content`, `sed_file`, `notebook_edit` | resolve each target; judge it with the same rules as the Codex gate (production `.py` → test-first judge; test/doc/config paths and the `docs/` first-component rule → allow; out-of-root → deny, except a non-`.py` under `/tmp` and a non-`.py` under the payload's `artifactDirectoryPath`) |
 | (c) shell | `run_command` | the Codex gate's shell policy (FR-6) |
 | (d) everything else | every tool not in (a)–(c), including tools added in later agy versions | deny, `kind=tool-not-admitted` |
+
+**Deliberate differences from the Codex gate (S4, v1.8: all adopted).** Class (b)'s "same rules
+as the Codex gate" holds except for exactly these, which design §"FR-4" lists under the same
+name. Each fails toward refusal or is forced by agy's payload:
+1. A relative path resolves against the root, never a payload cwd. Forced: agy sends none.
+2. The out-of-root allowance admits a non-`.py` under `artifactDirectoryPath` as well as `/tmp`.
+   Forced: agy writes its artifacts there (the table above already says so).
+3. The out-of-root `.py` test checks every same-directory name of the target, where the Codex
+   gate checks only the spelled path's resolved name. Toward refusal: the agy refusal set
+   contains the Codex one.
+4. A root that cannot be canonicalised denies `kind=judge-error` whatever the scan would read;
+   the Codex gate allows when its scan reads `inactive`. Toward refusal.
+5. Every deny carries a kind (above); the Codex gate has kindless denies. Toward legibility; it
+   changes no decision.
+Residual: a rule the Codex gate gains later is not inherited, because each gate writes its own
+composition. The target differential test (AC-4.1) is what catches that drift. A difference not
+in this list is a defect in whichever gate it appears in.
 
 Class (d) closes the class over agy's tool inventory, which is open-ended and changes between
 versions. The inventory observed in
@@ -325,8 +371,10 @@ as a list of names would have missed them.
 `tool_info.parameters` (`docs/03-analysis/probes/multi-host-runtime/rehearsal/agy-G7-tool-write-then-link-read.log`).
 The key in the hook payload's `toolCall.args`, and the keys of the other four path-write tools,
 have not been observed. The tracer's payload capture (FR-8 step 1) fixes them. Until then the
-rule is fail-closed: a class-(b) tool during active step5 whose args carry no recognised path key
-is denied with `kind=judge-error`.
+rule is fail-closed: a class-(b) tool whose args carry no recognised path key is denied with
+`kind=judge-error` when the scan reads `active` or `unknown`. A recognised key whose value is not
+a non-empty string (`""`, `null`, a number) counts as no path key (E5); `""` is never
+canonicalised to the root.
 
 **Hook timeout.** agy's default handler timeout is 30 s
 (`~/.gemini/antigravity-cli/builtin/skills/agy-customizations/docs/hooks.md`, §"Hook Handler
@@ -391,8 +439,10 @@ the floor moves when the budget does.
 
 During active step5, the agy gate judges `run_command`'s command line (`CommandLine`, the key
 shown in hooks.md and observed in
-`docs/03-analysis/probes/grok-codex-fallback/plan-audit-v1-p2-agy.log`). It applies the **same
-shell policy** as `h-mad-codex-tdd-gate.py`:
+`docs/03-analysis/probes/grok-codex-fallback/plan-audit-v1-p2-agy.log`). When FR-4's scan reads
+`unknown`, every `run_command` is denied without judging its command, as the Codex gate denies
+every shell command then (its `if command and phase5_status == "unknown"` branch, at `cff71b49`).
+It applies the **same shell policy** as `h-mad-codex-tdd-gate.py`:
 - the operator allowance file `.h-mad/phase5-shell-allow`, which the agy gate also refuses to let
   agy write;
 - a refusal message that tells agy to use the class-(b) write tools.
@@ -450,6 +500,28 @@ The revert test, the independent re-run and the mutation pass still cover all fo
   `.to` still says `agy`. Attributing from it would mark a Codex reviewer of Codex-written code as
   independent. When the reviewed code came from more than one agent's dispatch, `independent` is
   `false` if the reviewer is any of them, and `implementer` names that agent.
+  - **Which dispatches are implementation dispatches (E4, v1.8).** A module's authors are the
+    agents of its accepted 5e GREEN dispatch and of every later fix dispatch for that module the
+    orchestrator accepted. A 5d RED dispatch is never an implementation dispatch (it writes tests,
+    not the reviewed code), and a dispatch that halted, timed out or was rejected authored nothing.
+    The 5d/5e assignment is SKILL.md §"Phase 5 (Implementation) sub-steps"'s (`5d` RED, `5e` GREEN); if that numbering moves,
+    the rule follows the GREEN and fix dispatches, not the step number.
+  - **The reviewer is none of the authors (S5, v1.8: adopted from design v1.1).** `independent` is
+    `true` and `implementer` names the author of the module's latest accepted implementation
+    dispatch. Reason: the schema holds one agent, the choice changes no `independent` value, and
+    "latest" is decidable from the dispatch order the orchestrator already holds.
+  - **The author set is complete, never a projection (E2, v1.8).** Whatever the orchestrator reads
+    authorship back from after it has lost its dispatch context (for example a resumed 6a-prime
+    leg), it recovers every author of the module, not one per earlier entry. Reading the
+    `implementer` values of earlier entries alone is not enough: a module written by agy and then
+    fixed by Codex, reviewed at 5e by grok and verified by Codex, stores `implementer=codex` in both
+    5e entries, and an agy 6a-prime reviewer would then read as independent. The design names where
+    the complete set is kept. If it needs a field in the `review_independence` entry, that is an
+    FR-1 schema change this revision does not make (owed; see §"Owed by other documents"). When the
+    set cannot be recovered, the leg gets no entry for that module rather than an
+    `independent=true` one. Residual: `review_independence_unrecorded` fires only when no
+    `leg=6a-prime` entry exists at all, so one module missing among several recorded ones has no
+    warning of its own, like a missing 5e entry (§"Record").
 - **Record.** After each leg, the orchestrator adds one `review_independence` entry (FR-1) to the
   record through `h_mad_state_write.py`'s write path, so the claim and session rules apply. No
   verdict word changes, and `h_mad_extract_verdict.py` output is untouched (it prints only
@@ -807,15 +879,26 @@ One real task is staged with `--agent agy` and dispatched headless through
   `test_h_mad_tdd_gate_*.py` is unmodified. A new fixture shows that a line in today's shape now
   refuses `judge-error`. In `test_h_mad_tdd_judge.py`, `ACTIVE_RE` is the only changed literal, and
   the real-line assertions FR-3 lists stay byte-identical and green (checked by the same diff).
-- **AC-4.1:** With step5 inactive, the agy gate allows every tool. With step5 active, it covers:
+- **AC-4.1:** With the scan reading `inactive`, the agy gate allows every tool, except that a
+  class-(b) production `.py` target whose chain reads `unreadable` still denies (the `chmod 000`
+  `docs/` chain fixture). With it `active`, it covers:
   - each class with at least one member;
   - an unknown tool name → class (d) deny;
-  - a class-(b) payload with no path key → deny;
+  - a class-(b) payload with no path key → deny, and the same with the key's value `""` → deny;
   - a production `.py` without a failing test → deny, with a judge kind;
   - with a failing test → allow;
   - `/tmp` and `artifactDirectoryPath` non-`.py` → allow, and `.py` there → deny.
+  With the scan reading `unknown` (a `docs/.bkit-memory.json` that is not JSON), each deny above
+  that does not need the judge still fires (class (d), no path key, `""`, out-of-root `.py`, a
+  `run_command` FR-6 refuses, and the `workspacePaths` cross-check), each from its own fixture.
+  The **target differential** runs one corpus of target shapes through both gates and shows they
+  agree on every shape except those FR-4's §"Deliberate differences" names, where the agy gate
+  refuses.
 - **AC-4.2:** Every exit path prints exactly one JSON object: malformed stdin, an internal
-  exception and an unreadable state each still yield parseable stdout.
+  exception and an unreadable state each still yield parseable stdout. Every deny path the design
+  enumerates is driven by its own fixture, and each fixture asserts that `reason` ends with
+  exactly one `kind=<kind>` whose value is in the design's closed list (FR-4 §"Every deny carries
+  a kind"); a deny path with no fixture, or a kind outside the list, fails the AC.
 - **AC-5.1:** The wiring check emits each `UNWIRED` reason from its own fixture. `--agent agy`
   writes no prompt and halts on each of them.
 - **AC-5.2:** Each row of FR-5's exit-code table is pinned by its own fixture, and each fixture
@@ -842,6 +925,22 @@ One real task is staged with `--agent agy` and dispatched headless through
   fixture (`grok` and `claude` through `implementer_switch.to`, the only FR-1 field that takes them), and for each `archreview` value `READY_TO_MERGE`, `WITH_FIXES` and `NO`. It does not fire
   when a `leg=6a-prime` entry exists, nor when `archreview` is absent, `SKIPPED_NO_PANE` or
   `SKIPPED_OPERATOR_OVERRIDE`.
+- **AC-7.3 (v1.8):** FR-7 §"Attribution" is pinned by fixtures, each RED against the mutant it
+  names and GREEN on the rule:
+  - **routing is not authorship:** `implementer_switch.to=agy` stored, the module's code from a
+    Codex dispatch, a Codex reviewer → `implementer=codex`, `independent=false`, and
+    `review_non_independent` fires. Mutant: attribution read from `implementer_switch.to`.
+  - **multi-author, recovered (E2):** authors agy then Codex; a grok 5e-review →
+    `implementer=codex`, `independent=true`; a Codex 5e-verify → `implementer=codex`,
+    `independent=false`; then, with the dispatch context discarded, an agy 6a-prime →
+    `implementer=agy`, `independent=false`. Mutant: authors recovered from earlier entries'
+    `implementer` values only.
+  - **RED is not authorship (E4):** an agy 5d RED dispatch then a Codex 5e GREEN; an agy reviewer →
+    `independent=true`, `implementer=codex`. Mutant: a 5d RED dispatch counted as an author.
+  - **unaccepted dispatches author nothing:** a rejected agy GREEN then an accepted Codex GREEN;
+    an agy reviewer → `independent=true`.
+  If the design leaves attribution as orchestrator prose with no code to drive, this AC has no
+  surface to run on; that is owed to the impl-plan as an OPEN-DECISION, not waived.
 - **AC-8.1:** The probe directory holds the payload capture, the real refusal, and the RED/GREEN
   readings with re-run, revert and mutation results, each stamped with the sha and the
   `agy --version`. The default timeout in `h_mad_assemble_tdd.py` equals FR-8's formula over
@@ -1004,6 +1103,14 @@ None of these are edited by this spec.
   (`grep -n 'SessionStart' h-mad/references/agy-runtime.md` at `200ffd52`: 2 matching lines, one
   under each heading.) Residual: this is a content predicate, so a third restatement added later
   is found only by re-running the grep.
+- **Design (v1.8 items).** FR-4: enumerate the closed kind list and give every deny path a member
+  (E6); its claim that `unknown` "denies `kind=judge-error`, as the Codex gate does for a shell
+  command" is false at `cff71b49` — the Codex gate's `unknown` shell deny carries no `kind=`
+  token. FR-7: name where the complete author set is kept (E2) and correct "the GREEN dispatch the
+  orchestrator accepted at 5d" to 5e (E4). If E2's mechanism needs a new `review_independence`
+  field, FR-1 here must gain it in a later spec revision; this one adds none.
+- **Impl-plan.** AC-7.3's surface (FR-7 §"Attribution" must have code to drive, or the AC is an
+  OPEN-DECISION); AC-4.1's `unknown` fixtures and AC-4.2's per-deny-path kind fixtures.
 
 ## Version History
 - v1.0: Initial spec (2026-10-16) from brainstorm v1.1. Settles 8 open questions (D-1..D-8): run_command takes the Codex command-shape rule, not a stated residual; per-project .agents/hooks.json; root from handler cwd; provisional 1500 s timeout then tracer formula; PATH+status+env availability; feature-only implementer; flag in state; audit legs unchanged. Folds brief fix 3 (#8) WIRE-PIN new-caller RED case as FR-9. OQ-1 (Codex-reviews-Codex flag), OQ-2 (.agents exclude) for the operator.
@@ -1014,3 +1121,4 @@ None of these are edited by this spec.
 - v1.5: Plan audit cycle 2 findings owned by the spec, final corrective revision after the round cap (2026-10-16). B -> FR-10 adds the SKILL.md teammate-audit bullet: audit-leg selection vs resolved authorship (Claude only when resolved=claude), anchor prefix and the four pinned tokens kept. C -> FR-9 surface census gains surface 5, the h_mad_assemble_tdd.py assemble() wiring header (split string literals), and its pin test_h_mad_assemble_tdd.py TestWiringShape.test_the_pin_is_told_what_its_red_must_be; the census method now joins Python adjacent literals via ast and collapses markdown whitespace, measured at 9c3b799d; residual: run-time-built strings. AC-9.1 lists the header. D -> FR-9 replay and AC-9.3 name all three pins with files and commits (531a6296b, 7aa0d9dec, c2d671f6b); T5/T6 replay evaluates the direct-call / two-argument getattr form; the committed scaffolded RED (AssertionError) is recorded as old-verdict valid, correcting the false old-verdict=halt claim. A -> new AC-9.4: the six rule copies bound to one authority, with a per-copy control.
 - v1.6: Advisory delta review of plan v1.3 (608e430), spec-owned parts (2026-10-16). Should-fix 3 -> FR-9: the joined reading (ast str constants) is blind to non-str text in a .py file; axis named with three members (comments, files ast.parse rejects, bytes literals). The sweep is now the union of the line grep and the joined reading, which adds joined .py comment tokens; parse failures are reported as unparsed=N and read by hand; residual: run-time-built strings and a bytes literal split across lines. Measured at 5f72c2f3: union 7 files, line-grep-minus-joined 0, comment hits 0 (incidental), unparsed=0. AC-9.1 re-run is the union and reports unparsed=N. Must-fix 1 (spec side) and Should-fix 4 -> AC-9.4: the carve-out text is the whole three-sentence FR-9 block; each copy is read from its own source location, never from the assembled prompt or a file-level contains-check over a file holding more than one copy; a locator matching zero or several spans fails the test; the control mutates exactly one copy, runs once per copy and once per sentence in at least one copy, with a find unique in its file (mutation harness anchor_status), the .py find written against source bytes including the literal split.
 - v1.7: Design audit cycle 1, spec-owned items (2026-10-16). S1 (codex C1) -> FR-1/AC-1.1/AC-1.2 + D-14: .ts narrowed to seconds 00-59, a leap second (2016-12-31T23:59:60Z) refused on both paths; reason: every .ts comes from Python datetime via the writer, which cannot hold second 60 (orchestrator decision). S2 (codex C6) -> FR-7 Attribution: an entry's implementer is the author of the reviewed code, from its successful implementation dispatch, never implementer_switch.to (historical) or the implementer field; multi-author code is non-independent if the reviewer is any author. S3 -> FR-1/FR-10/AC-1.1: codex_status schema description and state-schema.md row rewritten to FR-2 authorship (no test pins the text; the fallback_agent-after-codex_status order pin stated); FR-8 Version: 1.4.0 at 200ffd52, each reading stamps its version; Owed SessionStart re-check re-stamped 1.4.0 at 200ffd52; FR-6/AC-6.1 shared module = h_mad_target_identity.py (D-12, OQ-A); FR-8/AC-8.1 post-merge stage, COMPLETE only after it (D-13, OQ-B). Open questions: OQ-A/OQ-B settled.
+- v1.8: Design audit cycle 2, final corrective revision after the round cap, not re-audited (2026-10-16). S1/E6 -> FR-4 'Every deny carries a kind': rule over every deny path, closed list owned by the design, spec names only judge-error, tool-not-admitted and the judge's Verdict kind; Codex gate has 6 of 13 kindless _deny call sites at cff71b49. E1 -> FR-4 'The activity reading': three-valued scan (active/unknown/inactive), every step5-gated deny also fires on unknown, class-(b) production .py still read through read_chain under inactive; workspacePaths and Tool classes sentences re-worded. E5 -> FR-4 Target keys: a non-empty-string value counts as no path key. S4 -> FR-4 'Deliberate differences from the Codex gate': design's four adopted plus the kind rule as a fifth. S2/E2/E4 -> FR-7 Attribution sub-bullets (5e GREEN + accepted fixes, never 5d RED; complete author set, never a projection) and new AC-7.3. S5 -> adopted: reviewer none of the authors names the latest accepted dispatch's author. S3 -> leap-second ValueError quote drops the version-dependent tail. AC-4.1/AC-4.2 extended; FR-6 states the unknown-scan shell deny; Owed gains design and impl-plan items.
