@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-16 · gotcha · [0.5] · `h-mad,handoff:2026-10-16-agy-coder-fallback-p2-5c,agy,audit-timeout` — agy design audit on ~270KB prompt hit 1800s timeout mid-read (rc=124, no report); re-dispatch on a fresh assembled prompt with --timeout 3300 succeeded
+- 2026-10-16 · pattern · [0.7] · `h-mad,handoff:2026-10-16-agy-coder-fallback-p2-5c,subagents,done-gate` — Author subagents often end with a bare 'No change.' message after finishing; gate on the REPORT file line 1 + h_mad_done_gate.py, never on the chat message
+- 2026-10-16 · gotcha · [0.7] · `h-mad,handoff:2026-10-16-agy-coder-fallback-p2-5c,worktree,tdd-gate` — h-mad state docs/.bkit-memory.json is gitignored, so a fresh feature git worktree has no state and the TDD gates stand down there; provision state before 5d
 - 2026-10-16 · gotcha · [0.7] · `h-mad,mutation,anchors,handoff:2026-10-16-agy-peer-implementer-p1` — New code can break EXISTING mutation anchors by duplicating their text or rewriting the anchored line; run --check-anchors on all specs after the change.
 - 2026-10-16 · gotcha · [0.7] · `h-mad,pytest,interpreter,handoff:2026-10-16-agy-peer-implementer-p1` — Only /opt/anaconda3/bin/python3 has pytest here; no xdist (-n auto errors). rtk rewrites bare pytest --version. Never '|| true' a background suite; log RC=$? and read the summary.
 - 2026-10-16 · gotcha · [0.7] · `h-mad,test-count,handoff:2026-10-16-agy-peer-implementer-p1` — A new script grows test counts OUTSIDE its own test file: test_h_mad_portable_timeout parametrizes per scanned script (+2 each). Diff --collect-only IDs, not totals.
