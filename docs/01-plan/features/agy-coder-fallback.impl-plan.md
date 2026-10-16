@@ -22,7 +22,7 @@ after the merge (spec D-13), and the feature is recorded COMPLETE only after Tas
 | 1 | new-behaviour | five schema properties, `rfc3339_datetime`, `_semantic_ok` in `classify`, `property_valid`, the four description rewrites | FR-1 |
 | 2 | new-behaviour | `Record` fields, `_implementer_tag`, `Implementer`, `resolve_implementer`, the `implementer` verb | FR-2 |
 | 3 | wiring | the author field on `TDD-STATE:`, the hook's FR-3 precedence, the stub re-shape, re-anchoring | FR-3 |
-| 4 | refactor | the 25 names move into `h_mad_target_identity.py`; the guarded import; 31 rows re-pointed | FR-6 |
+| 4 | new-behaviour | the 25 names move into `h_mad_target_identity.py`; the guarded import; 31 rows re-pointed; the Codex `--self-check` verdicts `FAIL parser` and `FAIL shell-policy` on stdout with exit 0 | FR-6 |
 | 5 | new-behaviour | agy gate: contract, payload, root, activity, step 5, classes (a) and (d), `--self-check` | FR-4 |
 | 6 | new-behaviour | agy gate: class (b), T1–T7 | FR-4 |
 | 7 | new-behaviour | agy gate: class (c) | FR-4, FR-6 |
@@ -42,9 +42,9 @@ after the merge (spec D-13), and the feature is recorded COMPLETE only after Tas
 | 21 | operational | post-merge: FR-8 steps 2, 2a and 3 in a fixture project | FR-8 |
 | 22 | new-behaviour | post-merge: this repository's `.agents/hooks.json`, the derived timeout, the AC-8.1 formula probe | FR-8 steps 4–5 |
 
-Shapes: `wiring` 2 (Tasks 3, 10); `new-behaviour` 14 (Tasks 1, 2, 5, 6, 7, 9, 11, 12, 13, 15,
-16, 17, 20, 22); `refactor` 1 (Task 4); `gate` 5 (Tasks 0, 8, 14, 18, 19); `operational` 1
-(Task 21). 2 + 14 + 1 + 5 + 1 = 23.
+Shapes: `wiring` 2 (Tasks 3, 10); `new-behaviour` 15 (Tasks 1, 2, 4, 5, 6, 7, 9, 11, 12, 13,
+15, 16, 17, 20, 22); `gate` 5 (Tasks 0, 8, 14, 18, 19); `operational` 1 (Task 21).
+2 + 15 + 5 + 1 = 23.
 
 **Rules every Task follows.**
 - **Full suite per Task**, never a scoped selection: `rtk proxy /opt/anaconda3/bin/python3 -m
@@ -557,9 +557,11 @@ to the class M-3 counts, so it moves by construction).
 
 **Production files**: `h-mad/scripts/h_mad_target_identity.py`, `h-mad/hooks/h-mad-codex-tdd-gate.py`
 **Test files**: `h-mad/tests/test_h_mad_shared_gate_policy.py` (new)
-**Task shape**: `refactor` — a move with no change to the Codex gate's decisions. The binding is
-pinned by the existing Codex gate tests, unmodified, and by the location tests below; there is no
-WIRE because the callee and the caller are the same code before and after.
+**Task shape**: `new-behaviour` — a move with no change to the Codex gate's hook decisions, plus
+one behaviour correction to its `--self-check` (the `FAIL parser` and `FAIL shell-policy` verdicts, below; orchestrator
+decision I4, impl-plan audit cycle 2). The move's binding is pinned by the existing Codex gate
+tests, unmodified, and by the location tests below; there is no WIRE because the callee and the
+caller are the same code before and after.
 
 **Description**: Design §"FR-6". Move the 17 functions (`_contained_venv_executable`,
 `_cwd_escapes_root`, `_load_judge`, `_option_value`, `_path_within`, `_payload_cwd_base`,
@@ -582,9 +584,34 @@ level inside a `try:` block whose `except Exception as exc:` handler assigns
 return is added between `main`'s entry and that `try`. The `--self-check` branch prints
 `CODEX-TDD-GATE: FAIL policy-import` to stderr and returns 2 when `_POLICY_IMPORT_ERROR` is set,
 before it calls `_safe_shell_command`. Exit 2 is the operational-error exit: the gate cannot import
-its policy (design §"FR-6"). The Codex gate's existing `FAIL shell-policy` branch also returns 2.
-That is behaviour from before this feature, and this Task does not change it (see the residual
-under §"Residuals carried from the design").
+its policy (design §"FR-6").
+
+**The two self-check FAILs (orchestrator decision I4; design v1.4's class rule: a verdict FAIL
+prints its token on stdout and exits 0, a could-not-run FAIL exits 2).** At `84ec2133` the Codex
+gate's `--self-check` branch in `main` has two FAILs, both `print(..., file=sys.stderr)` followed
+by `return 2`:
+- `CODEX-TDD-GATE: FAIL parser`, when `_patch_header_paths` returns anything but
+  `(["src/prod.py"], "")` for one of its three fixed headers. **A verdict**: the self-check ran its
+  probe and found the header parser wrong, the same class as `shell-policy`. Read in-process at
+  `84ec2133` with `_patch_header_paths` forced to return `(["wrong.py"], "")`: `rc=2`, stdout
+  empty, stderr `CODEX-TDD-GATE: FAIL parser`.
+- `CODEX-TDD-GATE: FAIL shell-policy`, when `_safe_shell_command` admits one of the four `unsafe`
+  commands. **A verdict.** Read in-process at `84ec2133` with `_safe_shell_command` forced to
+  return `True`: `rc=2`, stdout empty, stderr `CODEX-TDD-GATE: FAIL shell-policy`; unforced:
+  `rc=0`, stdout `CODEX-TDD-GATE: PASS`.
+
+This Task changes both branches to print the token on stdout (no `file=sys.stderr`) followed by
+`return 0`, the contract Task 5 gives the agy gate's verdict FAILs. `FAIL policy-import` keeps
+stderr and exit 2: the gate could not import its policy, so the self-check could not run.
+Regression provenance: no existing test pins exit 2 for either verdict. At `84ec2133`,
+`grep -rn 'FAIL parser' h-mad/tests` gives 0 matching lines, and `grep -rn 'shell-policy'
+h-mad/tests` gives 3 (in `test_h_mad_codex_tdd_gate_judge.py` lines 787 and 953 and
+`tdd_gate_support.py` line 195), all naming the shell-policy differential corpus and none the
+`--self-check` branch. The one existing `--self-check` test,
+`tests/test_h_mad_codex_runtime.py::test_codex_hook_self_check_reports_machine_readable_pass`,
+pins the `PASS` path and stays unmodified. The defect was unpinned, not pinned, and no existing
+test changes. No existing mutation row anchors on either branch (`grep -n 'CODEX-TDD-GATE'
+h-mad/tests/mutation-specs/*.json`: 0 matching lines).
 
 **Tests** (all in `h-mad/tests/test_h_mad_shared_gate_policy.py`):
 1. `tests/test_h_mad_shared_gate_policy.py::test_each_moved_function_has_one_definition_in_the_identity_module`
@@ -599,8 +626,22 @@ under §"Residuals carried from the design").
 4. `tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_reports_a_policy_import_failure`
    — the gate copied beside a real judge and no identity module; `--self-check` prints
    `CODEX-TDD-GATE: FAIL policy-import` on stderr and exits 2. 1 node, F.
+5. `tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_shell_policy_fail_is_a_verdict_with_exit_0`
+   — the gate loaded in-process from its path with `importlib` (as item 3 loads it);
+   `monkeypatch.setattr(gate, "_safe_shell_command", lambda *a, **k: True)` and
+   `monkeypatch.setattr(sys, "argv", ["h-mad-codex-tdd-gate.py", "--self-check"])`; `rc =
+   gate.main()`, then `capsys.readouterr()`. Asserts, separately, stdout stripped equals
+   `CODEX-TDD-GATE: FAIL shell-policy`, stderr is empty, and `rc == 0`. `main` reads
+   `_safe_shell_command` from the gate's globals both before the move (its own `def`) and after
+   (the imported binding), so the patch reaches it at RED and at GREEN. 1 node, F: at RED the
+   reading above gives stdout empty and `rc=2`, an assertion failure, not an import error.
+6. `tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_parser_fail_is_a_verdict_with_exit_0`
+   — as item 5, with `monkeypatch.setattr(gate, "_patch_header_paths", lambda patch:
+   (["wrong.py"], ""))` instead (`_patch_header_paths` is not moved, so it stays the gate's own
+   global). Asserts, separately, stdout stripped equals `CODEX-TDD-GATE: FAIL parser`, stderr is
+   empty, and `rc == 0`. 1 node, F: at RED the reading above gives stdout empty and `rc=2`.
 
-**RED split**: 27 nodes, 27 F, 0 P (17 + 8 + 1 + 1).
+**RED split**: 29 nodes, 29 F, 0 P (17 + 8 + 1 + 1 + 1 + 1).
 
 **Regression guards**: every existing Codex gate test unmodified, notably
 `tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[judge-error]` (the import-failure
@@ -612,11 +653,13 @@ fixture: its tree has no identity module),
 `docs/03-analysis/probes/agy-coder-fallback/fr6_import_failure_pair.py` is re-run after GREEN and
 must print `PROBE: PASS`.
 
-**Mutation rows** — new spec `h-mad/tests/mutation-specs/shared_gate_policy.json`, 2 rows:
+**Mutation rows** — new spec `h-mad/tests/mutation-specs/shared_gate_policy.json`, 4 rows:
 | name | mutant | test |
 |---|---|---|
 | `fr6-import-guard-dropped` | the guarded import replaced by a bare top-level import | `tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_gate_kind[judge-error]` |
 | `fr6-self-check-policy-import-branch-dropped` | the `FAIL policy-import` branch removed | `tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_reports_a_policy_import_failure` |
+| `codex-selfcheck-shell-policy-exits-2` (signal discipline, I4) | the `FAIL shell-policy` branch's `return 0` → `return 2` | `tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_shell_policy_fail_is_a_verdict_with_exit_0` |
+| `codex-selfcheck-parser-exits-2` (signal discipline, I4) | the `FAIL parser` branch's `return 0` → `return 2` | `tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_parser_fail_is_a_verdict_with_exit_0` |
 
 Row `G2` stays killed through the re-raise; no row removes the re-raise (design: an equivalent
 mutant in decision).
@@ -661,7 +704,9 @@ which does not move, so both stay valid.
 - [ ] AC-6.1 (re-pointed rows): each of the 7 specs → `MUTATION: ALL_CAUGHT` against
   `h_mad_target_identity.py`; `CX-FOLD` and `CX-FORCE-SCRIPT` each killed by an assertion of its
   `test`, not by an exception.
-- [ ] AC-X: `shared_gate_policy.json` → `MUTATION: ALL_CAUGHT`.
+- [ ] Signal discipline (I4): items 5 and 6 pass; `test_codex_hook_self_check_reports_machine_readable_pass`
+  passes unmodified.
+- [ ] AC-X: `shared_gate_policy.json` (4 rows) → `MUTATION: ALL_CAUGHT`.
 
 **Dependencies on other tasks**: Task 3 (both re-anchor rows of `tdd_gate_differential.json`,
 which names the Claude hook, the Codex gate and the identity module; Task 4 starts from Task 3's
@@ -698,9 +743,9 @@ canonicalised with `canonical_directory`; then `os.chdir(root)` once.
   class (d)) or `AGY-TDD-GATE: FAIL shell-policy` (`_safe_shell_command` admits
   `python3 -c "open('x','w').write('x')"`), each with **exit 0**. These are ordinary verdicts, and
   the token carries them (the base invariant on audit-gate signal discipline).
-Design §"FR-4" `--self-check` says "a nonzero exit" for every `FAIL`. The exit 0 on the two
-verdict `FAIL`s is the orchestrator's cycle-1 decision, and the design owes a line recording it
-(this plan's report). Task 9's check is unaffected: it requires the exact line
+The exit 0 on the two verdict `FAIL`s is the orchestrator's cycle-1 decision, recorded in design
+v1.4 (`2cd5d7f1`) §"FR-4" `--self-check` as the rule: a verdict FAIL exits 0, a could-not-run
+FAIL exits 2. Task 9's check is unaffected: it requires the exact line
 `AGY-TDD-GATE: PASS` and exit 0, so a `FAIL` line with exit 0 reads as `self-check-failed`.
 
 **Code structure**:
@@ -805,14 +850,29 @@ existing directory, a symlink to one included) denies `judge-error` under `S` an
 judge. The check is **T2a**, right after T2: `Path(resolved.target).is_dir()` → `judge-error` under
 `S` (the reason names the directory target), allow under `inactive`. It runs before T3, so an
 out-of-root directory under `S` also denies `judge-error`. Residual: a target ending in `/` that
-names no existing directory is not covered by T2a and goes through T3–T7 as a file name. The spec
-and the design owe a line recording OD-2 (this plan's report).
+names no existing directory is not covered by T2a and goes through T3–T7 as a file name. Spec v1.10
+(`c283bb63`) records OD-2 as D-16 and design v1.4 (`2cd5d7f1`) as T2a, between T2 and T3.
 
 **Tests** (in `h-mad/tests/test_h_mad_agy_tdd_gate.py`):
 1. `tests/test_h_mad_agy_tdd_gate.py::test_class_b_no_target` — `no-key-unknown`,
    `no-key-inactive`, `empty-active`, `empty-unknown`, `empty-inactive`, `null-active`,
-   `number-active`, `list-active`; deny `judge-error` under `S`, allow under `inactive`. 8 nodes:
-   4 P (the two `unknown` and two `inactive` ids match class (d)'s rule), 4 F.
+   `number-active`, `list-active`, `number-inactive` (`TargetFile: 5`), `list-inactive`
+   (`TargetFile: ["x"]`); deny `judge-error` under `S`, allow under `inactive`. 10 nodes: 6 P (the
+   two `unknown` and four `inactive` ids match class (d)'s rule), 4 F.
+   The two truthy non-`str` `inactive` ids are the discriminators for row
+   `fr4-class-b-target-presence-only` (audit cycle 2, I1). Under that mutant the value reaches T1,
+   and `canonicalise(root, 5, root)` raises `TypeError` (`os.path.isabs(5)`; also without the
+   `cwd` argument), which design §"FR-4" "Every deny" row "an exception after step 2" denies
+   `judge-error` whatever the status; the correct gate has no target and allows under `inactive`.
+   The other eight ids cannot separate the two: `""`, `None` and an absent key are falsy, and
+   `canonicalise`'s `if not target:` returns the root directory, which T2a refuses under `S` and
+   allows under `inactive`, the same as the no-target rule; the truthy non-`str` `active` ids
+   raise into the same `judge-error` deny. `null-inactive` (the cycle-2 report's suggestion) does
+   not discriminate for that reason. Controlled pair, run at `84ec2133` on a scratch model (the
+   class-(b) target selection, T1 with the live `canonicalise`, T2, T2a, and the exception row),
+   value guard against key presence over the 8 ids above plus `null-inactive`, `number-inactive`
+   and `list-inactive`: 9 same, 2 differ (`number-inactive` and `list-inactive`: value guard
+   `allow`, key presence `deny judge-error` from `TypeError`). The scratch was deleted.
 2. `tests/test_h_mad_agy_tdd_gate.py::test_class_b_tools_without_a_recorded_key_deny_under_active`
    — `replace_file_content`, `multi_replace_file_content`, `sed_file`, `notebook_edit`; deny
    `judge-error`. 4 nodes, F.
@@ -827,9 +887,10 @@ and the design owe a line recording OD-2 (this plan's report).
    — a production `.py` whose chain holds a `chmod 000` `docs/`. 1 node, F.
 8. `tests/test_h_mad_agy_tdd_gate.py::test_out_of_root_py_denies_under_unknown` →
    `target-outside-root`. 1 node, F.
-9. `tests/test_h_mad_agy_tdd_gate.py::test_deny_row_kind` gains 6 ids: `class-b-no-target`,
-   `t2-unresolvable`, `t4-outside-root`, `t5-allowance-file`, `t7-chain-unreadable`,
-   `t7-judge-non-allow`, all under `active`. 6 nodes, F.
+9. `tests/test_h_mad_agy_tdd_gate.py::test_deny_row_kind` gains 7 ids: `class-b-no-target`,
+   `t2-unresolvable`, `t2a-directory` (`TargetFile` `.`; design v1.4's seventeenth row),
+   `t4-outside-root`, `t5-allowance-file`, `t7-chain-unreadable`, `t7-judge-non-allow`, all under
+   `active`. 7 nodes, F (`t2a-directory` at RED gets class (d)'s `tool-not-admitted`).
 10. `tests/test_h_mad_agy_tdd_gate.py::test_class_b_directory_target` — OD-2. `write_to_file` with
     `TargetFile` `.` and with `src/` (an existing directory in the fixture root), each under
     `active`, `unknown` and `inactive`: ids `dot-active`, `dot-unknown`, `dot-inactive`,
@@ -838,11 +899,12 @@ and the design owe a line recording OD-2 (this plan's report).
     (d)'s rule denies `tool-not-admitted` there), 4 P (class (d)'s rule already gives `judge-error`
     under `unknown` and allow under `inactive`; these pin T2a at GREEN).
 
-**RED split**: 32 nodes; 23 F, 9 P (8 + 4 + 1 + 3 + 1 + 1 + 1 + 1 + 6 + 6 = 32; P = 4 in item 1,
+**RED split**: 35 nodes; 24 F, 11 P (10 + 4 + 1 + 3 + 1 + 1 + 1 + 1 + 7 + 6 = 35; P = 6 in item 1,
 1 in item 4 and 4 in item 10). At the RED base class (b) takes class (d)'s rule (Task 5), which
 fixes every value above.
 
-**Mutation rows** — `agy_tdd_gate.json`, 11 rows here (10 design rows and 1 OD-2 row):
+**Mutation rows** — `agy_tdd_gate.json`, 11 rows here, all design rows (design v1.4 lists the
+OD-2 row `od2-directory-target-check-dropped` as its "T2a removed" bullet):
 | name | mutant | test |
 |---|---|---|
 | `od2-directory-target-check-dropped` (OD-2) | T2a removed | `tests/test_h_mad_agy_tdd_gate.py::test_class_b_directory_target` |
@@ -864,8 +926,10 @@ T4's empty-string arm has no row: the design declares it an equivalent mutant at
 - [ ] AC-4.1 (class (b) no key and `""` under each status, production `.py` with and without a
   failing test, `/tmp` and `artifactDirectoryPath`, the `chmod 000` chain, out-of-root `.py`
   under `unknown`): items 1–8 pass.
-- [ ] AC-4.2 (this Task's 6 deny rows): item 9 passes.
+- [ ] AC-4.2 (this Task's 7 deny rows): item 9 passes.
 - [ ] OD-2: item 10 passes, and under `od2-directory-target-check-dropped` its `active` ids fail.
+- [ ] I1: under `fr4-class-b-target-presence-only`, item 1's `number-inactive` and `list-inactive`
+  ids fail by assertion (deny `judge-error` where allow is expected).
 - [ ] AC-X: the 11 rows → `MUTATION: ALL_CAUGHT`.
 
 **Dependencies on other tasks**: Task 5.
@@ -930,15 +994,15 @@ item 1, 3 in item 2, 1 in item 11).
 | `fr4-class-c-bad-cwd-judge-error` | a `cwd` that is not an existing directory denies `judge-error` | `tests/test_h_mad_agy_tdd_gate.py::test_ls_under_each_bad_cwd_is_allowed` |
 | `fr4-class-c-cwd-joined-to-handler-dir` | a relative `Cwd` joined against the handler's directory | `tests/test_h_mad_agy_tdd_gate.py::test_relative_cwd_is_joined_against_the_root` |
 
-`agy_tdd_gate.json` holds 5 + 11 + 4 = 20 rows after this Task: the design's FR-4 count of 18
-(4 + 10 + 4), plus Task 5's signal-discipline row and Task 6's OD-2 row. The step-5 row (Task 5)
+`agy_tdd_gate.json` holds 5 + 11 + 4 = 20 rows after this Task: the design's FR-4 count of 19
+(4 + 11 + 4, design v1.4), plus Task 5's signal-discipline row. The step-5 row (Task 5)
 also bites item 2's `inactive-allows`.
 
 **Acceptance Criteria**:
 - [ ] AC-4.1 (class (c) member, `run_command` refused under `unknown`, the `workspacePaths=[]`
   trio): items 1–3, 9 and 11 pass.
-- [ ] AC-4.2 (this Task's 4 deny rows): item 11 passes; `test_deny_row_kind` now has 16 ids, one
-  per row of design §"FR-4" "Every deny".
+- [ ] AC-4.2 (this Task's 4 deny rows): item 11 passes; `test_deny_row_kind` now has 17 ids
+  (6 + 7 + 4), one per row of design v1.4 §"FR-4" "Every deny" (17 rows).
 - [ ] AC-6.1 (`unsafe` parity): item 4 passes.
 - [ ] AC-X: `agy_tdd_gate.json` (20 rows) → `MUTATION: ALL_CAUGHT`.
 
@@ -1005,6 +1069,11 @@ absent timeout reads as agy's 30), `self-check-failed` (the gate's `--self-check
 AGY_HOOK_COMMAND = ["python3", "~/.gemini/config/skills/h-mad/hooks/h-mad-agy-tdd-gate.py"]
 def check_agy(project_root: Path) -> tuple[str, int]: ...
 ```
+`check_agy` reads the budget at call time as an attribute of the module imported by name,
+`import h_mad_tdd_judge` (the scripts directory is already on `sys.path` beside
+`h_mad_hook_wiring.py`), then `math.ceil(h_mad_tdd_judge.JUDGE_BUDGET_S + 20)`. It does not copy
+the value at import (`from h_mad_tdd_judge import JUDGE_BUDGET_S`) and does not load the judge
+by path under another module name. Either would leave item 4's patched budget unread.
 
 **Tests** (all in `h-mad/tests/test_h_mad_hook_wiring_agy.py`; `HOME` points at a fixture holding
 `.gemini/config/skills/h-mad/hooks/h-mad-agy-tdd-gate.py` as a symlink to the gate under test):
@@ -1019,17 +1088,36 @@ def check_agy(project_root: Path) -> tuple[str, int]: ...
    with exit 2. 2 nodes.
 3. `tests/test_h_mad_hook_wiring_agy.py::test_wired`. 1 node.
 4. `tests/test_h_mad_hook_wiring_agy.py::test_timeout_floor_is_derived_from_the_judge_budget` —
-   `59` (`timeout-below-floor`), `60` (`WIRED`). 2 nodes.
+   in-process: `import h_mad_hook_wiring as hw` and `import h_mad_tdd_judge` (as
+   `test_h_mad_hook_wiring.py` imports `hw`), `hw.check_agy(root)` called directly and its line's
+   reason asserted. Ids: `budget-40-timeout-59` (`timeout-below-floor`), `budget-40-timeout-60`
+   (`WIRED`), and, with `monkeypatch.setattr(h_mad_tdd_judge, "JUDGE_BUDGET_S", 41.1)` (floor
+   `math.ceil(61.1)` = 62), `budget-41.1-timeout-61` (`timeout-below-floor`) and
+   `budget-41.1-timeout-62` (`WIRED`). 4 nodes. The two `budget-41.1` ids are the connection pin
+   (audit cycle 2, I3): a floor hardcoded to 60 gives `WIRED` at timeout 61. Controlled pair, run at
+   `84ec2133` on a scratch model (the formula reading `h_mad_tdd_judge.JUDGE_BUDGET_S` live against
+   a hardcoded 60, timeouts 59–62, budgets 40.0 and 41.1): at 40.0 all four timeouts agree; at 41.1
+   timeouts 60 and 61 differ (formula `timeout-below-floor`, hardcoded `WIRED`), 59 and 62 agree.
+   The scratch was deleted.
 5. `tests/test_h_mad_hook_wiring_agy.py::test_empty_matcher_counts_as_wide`. 1 node.
 
-**RED split**: 16 nodes, 16 F, 0 P (10 + 2 + 1 + 2 + 1).
+**RED split**: 18 nodes, 18 F, 0 P (10 + 2 + 1 + 4 + 1). Item 4 fails at RED because
+`hw.check_agy` does not exist (`AttributeError` inside the test body; a `new-behaviour` Task, not a
+WIRE-PIN).
 
 **Regression guards**: the existing `h_mad_hook_wiring.py` tests, unmodified.
 
-**Mutation rows** — new spec `h-mad/tests/mutation-specs/hook_wiring_agy.json`, 7 rows, one per
+**Mutation rows** — new spec `h-mad/tests/mutation-specs/hook_wiring_agy.json`: 7 rows, one per
 reason check removed (`fr5-no-hooks-file`, `fr5-no-entry`, `fr5-disabled`, `fr5-matcher-narrow`,
 `fr5-bad-command`, `fr5-timeout-below-floor`, `fr5-self-check-failed`), each with `test`
-`tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason`. `--check-anchors` also over
+`tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason`, plus 1 connection row (I3), 8 rows in
+all:
+
+| name | mutant | test |
+|---|---|---|
+| `fr5-timeout-floor-hardcoded-60` (connection, I3) | `math.ceil(h_mad_tdd_judge.JUDGE_BUDGET_S + 20)` → `60` | `tests/test_h_mad_hook_wiring_agy.py::test_timeout_floor_is_derived_from_the_judge_budget` |
+
+`--check-anchors` also over
 `hook_wiring.json`, which holds 12 rows: the 10 Task 0's M-2 counts for
 `scripts/h_mad_hook_wiring.py`, plus 2 on `SKILL.md` (`docs-lose-the-no-halt-rule`,
 `docs-lose-a-detail-line`). The `--agy` branch is added to `main` before its `root =` line. The
@@ -1039,7 +1127,7 @@ is left byte for byte. That makes it the only existing row near this Task's edit
 **Acceptance Criteria**:
 - [ ] AC-5.1 (each reason from its own fixture): item 1 passes.
 - [ ] AC-5.2 (the check's half of each row): items 1–3 pass.
-- [ ] AC-X: `hook_wiring_agy.json` → `MUTATION: ALL_CAUGHT`; `ANCHORS: ANCHORS_OK` over
+- [ ] AC-X: `hook_wiring_agy.json` (8 rows) → `MUTATION: ALL_CAUGHT`; `ANCHORS: ANCHORS_OK` over
   `hook_wiring.json`.
 
 **Dependencies on other tasks**: Task 7 (a `WIRED` reading runs the gate's real `--self-check`).
@@ -1567,9 +1655,8 @@ and nowhere at `4e4b5ded`. It states:
   its `[H-MAD]` marker;
 - `no-record` or `unreadable`: halt `step5:implementer_unresolved` and print its `[H-MAD]`
   marker. The feature name or root is wrong, or the state file cannot be read.
-The spec says "halt" and "never dispatch" for the last three rows but names no halt. The names
-`step5:implementer_invalid` and `step5:implementer_unresolved` are this plan's. The spec and
-design owe a line adopting them (this plan's report).
+The names `step5:implementer_invalid` and `step5:implementer_unresolved` originated in this plan;
+spec v1.10 (`c283bb63`) FR-2 and design v1.4 (`2cd5d7f1`) §"FR-2" adopt them.
 
 **Tests** (all in `h-mad/tests/test_h_mad_agy_authorship_docs.py`; section locators are
 `docsections.titled_section`, and the bullet locator is `test_h_mad_tdd_gate_docs.py`
@@ -1796,10 +1883,16 @@ record and FR-5's exact `.agents/hooks.json` entry, a temporary capture hook rec
 per `run_command`"). It also records `init.tools` and `agy --version`. Each sample is the hook's
 whole stdin as received, unedited, committed under `h-mad/tests/fixtures/agy-payloads/` as six
 files named by the tool: `write_to_file.json`, `replace_file_content.json`,
-`multi_replace_file_content.json`, `sed_file.json`, `notebook_edit.json`, `run_command.json`. The capture
-record `docs/03-analysis/probes/agy-coder-fallback/fr8_payload_capture.md` holds, per tool: the
+`multi_replace_file_content.json`, `sed_file.json`, `notebook_edit.json`, `run_command.json`.
+Beside them, `h-mad/tests/fixtures/agy-payloads/capture.json` holds the metadata the suite reads
+(audit cycle 2, I5): one object per tool, keyed by tool name, with `workspacePaths_present`
+(`true` or `false`), `path_keys` (the class-(b) key or keys naming the target, for the five
+class-(b) tools), and, for `run_command`, `command_key` and `workdir_key` (the envelope keys
+naming the command and its working directory). The human-readable capture record
+`docs/03-analysis/probes/agy-coder-fallback/fr8_payload_capture.md` holds, per tool: the
 instruction given to agy that produced the call, the stream-json line showing it, and whether
-`workspacePaths` is present in the envelope. It also holds the sha, `agy --version`, and the
+`workspacePaths` is present in the envelope. No suite test reads the probe directory, so
+archiving it cannot break the suite (as Task 22 keeps its formula probe out of the suite). It also holds the sha, `agy --version`, and the
 `ls` reading showing the capture hook removed (probe-then-delete). The fixture project's
 `notebook_edit` sample needs an `.ipynb` file in the project, which the fixture creates.
 
@@ -1811,19 +1904,38 @@ instructions. The capture does not pass on a subset.
 `PATH_KEYS` gains each class-(b) key the capture shows that it does not already hold. If
 `run_command`'s envelope names its command or workdir under a key other than `CommandLine` or
 `Cwd`, class (c)'s reads change to the captured keys, and that is a finding against design
-§"FR-4", reported before GREEN. `class_inventory.py` (Task 0) is re-run with the capture as its
+§"FR-4", reported before GREEN. If the `run_command` sample carries no workdir key at all,
+`capture.json`'s `workdir_key` is `null`, item 3's `workdir-outside` id cannot be built, and that
+is reported as a finding against design §"FR-4" before the RED dispatch. `class_inventory.py` (Task 0) is re-run with the capture as its
 second log.
 
 **Tests**:
 1. `tests/test_h_mad_agy_tdd_gate.py::test_capture_holds_every_required_sample` — one id per
    required tool (6): the fixture file exists, parses as JSON, names that tool in its `toolCall`,
-   and the capture record states `workspacePaths` present or absent for it. 6 nodes.
+   and `h-mad/tests/fixtures/agy-payloads/capture.json` holds a boolean `workspacePaths_present`
+   for it that agrees with the sample (the key is in the envelope exactly when it is `true`).
+   6 nodes.
 2. `tests/test_h_mad_agy_tdd_gate.py::test_captured_payload_is_judged_by_its_recorded_key` — one id
    per class-(b) tool (5): the captured payload, with its path values aimed at a production `.py`
    without a failing test under `active`, denies with the judge's kind (not `judge-error`). 5 nodes.
 3. `tests/test_h_mad_agy_tdd_gate.py::test_captured_run_command_is_judged_by_its_recorded_keys` —
-   the captured `run_command` envelope with its command set to `ls`, under `active`: allowed.
-   1 node.
+   the captured `run_command` envelope, `active`, in a fixture root holding `.venv/bin/python` (a
+   regular file) and `.venv/pyvenv.cfg` (Task 7 item 6's root-venv fixture), and an existing
+   directory `elsewhere` beside the root, outside it. The value under the captured `command_key`
+   is set to `.venv/bin/python -m pytest tests/test_x.py`; the value under the captured
+   `workdir_key` is set per id (audit cycle 2, I2):
+   - `workdir-root`: `str(root)` → allowed;
+   - `workdir-outside`: `str(elsewhere)` → deny `kind=shell-not-admitted` (a relative venv
+     interpreter under a `cwd` outside the root, design §"FR-4" class (c), `M:F2-ESCAPE`).
+   2 nodes. A reader that misses the captured workdir key falls back to the root, so
+   `workdir-outside` allows and fails; a reader that misses the captured command key denies
+   `judge-error` (`CommandLine` missing), so both ids fail. `ls` (v1.1's fixture) cannot do this:
+   the shared policy admits `ls` under every `cwd`. Controlled pair, run at `84ec2133` against the
+   live `_safe_shell_command` loaded from `h-mad/hooks/h-mad-codex-tdd-gate.py`, on a scratch root
+   with that `.venv` and an outside directory, a reader on the captured key against one that
+   ignores it (`cwd` defaulting to the root): the venv command under `workdir-outside` gives
+   `False` read against `True` ignored, the other three cells (venv under `workdir-root`, `ls`
+   under both) agree at `True`. The scratch was deleted.
 4. `tests/test_h_mad_agy_tdd_gate.py::test_class_a_names_are_in_the_recaptured_inventory`. 1 node.
 
 **RED split**, derived from the committed capture before the RED dispatch, and stated in it:
@@ -1832,19 +1944,22 @@ second log.
   base. Only `write_to_file` → `TargetFile` is there, from Task 5. So `write_to_file` is P when
   its captured key is `TargetFile`, and F otherwise; each of the other four is F when its captured
   key is new and P when the capture shows a key already mapped;
-- item 3: P when the captured keys are `CommandLine` and `Cwd` (Task 7's reads), F otherwise;
+- item 3: both ids P when the captured `command_key` and `workdir_key` are `CommandLine` and
+  `Cwd` (Task 7's reads). When `command_key` differs, both F. When only `workdir_key` differs,
+  `workdir-outside` F and `workdir-root` P;
 - item 4: P, unless the re-capture drops a class-(a) name, which is a finding for the design.
-Total 13 nodes. F is the number of genuinely new mappings, in items 2 and 3 together, and P is
-13 minus F. When F is 0, the Task is **capture-only**: no production change, the RED dispatch's
-gate is "0 F, 13 P", and GREEN is the RED tree.
+Total 14 nodes (6 + 5 + 2 + 1). F is the number of item-2 and item-3 ids the rules above mark F, and P is 14 minus F.
+When F is 0, the Task is **capture-only**: no production change, the RED dispatch's gate is
+"0 F, 14 P", and GREEN is the RED tree.
 
 **Mutation rows**: none new. A `PATH_KEYS` entry is data: removing one fails its own item-2 node,
 and the no-target guard keeps its Task 6 row.
 
 **Acceptance Criteria**:
-- [ ] AC-8.1 (the payload capture, stamped with the sha and `agy --version`): all six samples are
-  committed under `h-mad/tests/fixtures/agy-payloads/`, and the capture record, with the capture
-  hook's removal, under `docs/03-analysis/probes/agy-coder-fallback/`. Item 1 passes.
+- [ ] AC-8.1 (the payload capture, stamped with the sha and `agy --version`): all six samples and
+  `capture.json` are committed under `h-mad/tests/fixtures/agy-payloads/`, and the capture record,
+  with the capture hook's removal, under `docs/03-analysis/probes/agy-coder-fallback/`. Item 1
+  passes.
 - [ ] Items 2–4 pass; the inventory partition and its difference from Task 0's are recorded.
 
 **Dependencies on other tasks**: the merge of Tasks 0–19.
@@ -1928,21 +2043,22 @@ and no test, and records that.
 
 ## Mutation-row ledger
 
-Design §"Mutation rows (AC-X)" lists 59 new rows, counted from its list: FR-1 3; FR-2 4 (3 `_cause`
-branches and the other-peer step); FR-3 4; FR-6 2; FR-4 18 (13 single bullets, 3 kinds, 2 class-(c)
-`cwd` rows); FR-5 8 (7 reasons and `UNWIRED` returning 2); FR-7 10 (3 append rows, 2 `APPEND_ONLY`,
-5 warning and `property_valid` rows); FR-9 10 (8 + 2). 3 + 4 + 4 + 2 + 18 + 8 + 10 + 10 = 59.
+Design v1.4 (`2cd5d7f1`) §"Mutation rows (AC-X)" lists 60 new rows, counted from its list: FR-1 3;
+FR-2 4 (3 `_cause` branches and the other-peer step); FR-3 4; FR-6 2; FR-4 19 (14 single bullets,
+v1.4's "T2a removed" among them, 3 kinds, 2 class-(c) `cwd` rows); FR-5 8 (7 reasons and `UNWIRED`
+returning 2); FR-7 10 (3 append rows, 2 `APPEND_ONLY`, 5 warning and `property_valid` rows); FR-9
+10 (8 + 2). 3 + 4 + 4 + 2 + 19 + 8 + 10 + 10 = 60.
 
 | Task | design rows | wire rows (cut + converse) | doc-pin rows (plan §"Success Criteria") | discipline and decision rows |
 |---|---|---|---|---|
 | 1 | 4 (FR-1 3, FR-7 1) | 0 | 0 | 0 |
 | 2 | 4 | 0 | 0 | 0 |
 | 3 | 4 | 3 (2 + 1) | 0 | 0 |
-| 4 | 2 | 0 | 0 | 0 |
+| 4 | 2 | 0 | 0 | 2 (signal discipline, I4) |
 | 5 | 4 | 0 | 0 | 1 (signal discipline) |
-| 6 | 10 | 0 | 0 | 1 (OD-2) |
+| 6 | 11 | 0 | 0 | 0 |
 | 7 | 4 | 0 | 0 | 0 |
-| 9 | 7 | 0 | 0 | 0 |
+| 9 | 7 | 0 | 0 | 1 (connection, I3) |
 | 10 | 1 | 2 (1 + 1) | 0 | 1 (marker discipline) |
 | 11 | 5 | 0 | 0 | 0 |
 | 12 | 4 | 0 | 0 | 0 |
@@ -1951,12 +2067,14 @@ branches and the other-peer step); FR-3 4; FR-6 2; FR-4 18 (13 single bullets, 3
 | 15 | 0 | 0 | 4 | 0 |
 | 16 | 0 | 0 | 8 | 0 |
 | 17 | 0 | 0 | 6 | 0 |
-| total | 59 | 5 | 18 | 3 |
+| total | 60 | 5 | 18 | 5 |
 
-Design rows: 4 + 4 + 4 + 2 + 4 + 10 + 4 + 7 + 1 + 5 + 4 + 8 + 2 = 59, equal to the design's
-list. Wire rows: 3 + 2 = 5. Doc-pin rows: 4 + 8 + 6 = 18. Discipline and decision rows:
-1 + 1 + 1 = 3, none of them in the design's list (the cycle-1 audit's signal-discipline and
-marker findings, and the operator's OD-2). All new rows: 59 + 5 + 18 + 3 = 85. Existing rows
+Design rows: 4 + 4 + 4 + 2 + 4 + 11 + 4 + 7 + 1 + 5 + 4 + 8 + 2 = 60, equal to the design's
+list. Wire rows: 3 + 2 = 5. Doc-pin rows: 4 + 8 + 6 = 18. Discipline and connection rows:
+2 + 1 + 1 + 1 = 5, none of them in the design's list (Task 4's two Codex self-check verdict rows
+and Task 9's budget-connection row from audit cycle 2, Task 5's signal-discipline and Task 10's
+marker rows from cycle 1). OD-2's row is now a design row (design v1.4). All new rows:
+60 + 5 + 18 + 5 = 88. Existing rows
 changed, not new: the 31 re-pointed in Task 4, of which `CX-FOLD` also takes a new `find` and
 `CX-FORCE-SCRIPT` a new `replace`; and the re-anchors of Tasks 2, 3 and 10 (`w10a-grok-by-default`
 named; the others as `--check-anchors` finds them). Each Task states which existing rows its
@@ -1968,8 +2086,8 @@ edits touch.
   written procedure. Spec FR-1 and design FR-7 stand unchanged.
 - **OD-2 (Task 6)**, closed 2026-10-16. Operator: a class-(b) target naming an existing directory
   is refused with `kind=judge-error` under `S` (`active`, `unknown`) and allowed under `inactive`.
-  Task 6 implements it as T2a, with item 10 and row `od2-directory-target-check-dropped`. The spec
-  and the design owe a line recording it.
+  Task 6 implements it as T2a, with item 10 and row `od2-directory-target-check-dropped`. Spec v1.10
+  (`c283bb63`) records it as D-16, design v1.4 (`2cd5d7f1`) as T2a.
 
 No decision is open.
 
@@ -1984,9 +2102,6 @@ prose application, a seventh surface (Tasks 13, 18); a later `KINDS` member (Tas
 reads `KINDS` live); T4's empty-string arm (Task 6); the author-before-review ordering (Task 17).
 
 Added by this plan, not by the design:
-- The Codex gate's existing `--self-check` `FAIL shell-policy` returns 2 for a verdict, against
-  the signal-discipline rule Task 5 applies to the agy gate. This feature does not change it
-  (Task 4).
 - OD-2's T2a covers an existing directory only. A target ending in `/` that names no existing
   directory goes through T3–T7 as a file name (Task 6).
 - The staging step is prose that the orchestrator follows. Task 16's tests pin its words, not its
@@ -1995,3 +2110,4 @@ Added by this plan, not by the design:
 ## Version History
 - v1.0: Initial implementation plan draft (2026-10-16), Phase 5a, from design v1.3 (4e4b5ded), spec v1.9 (4bef0e76), plan v1.6 (8e242d06); tree read at 4e4b5ded. 23 Tasks (0-19 pre-merge, 20-22 post-merge per D-13); wiring Tasks 3 and 10 with WIRE/WIRE-PIN; 59 design mutation rows plus 3 wire-cut and 14 doc-pin rows; OD-1 (AC-7.3 surface vs spec FR-1 "no script reads it") and OD-2 (directory target).
 - v1.1: Impl-plan audit cycle 1 (2026-10-16), answering codex p1 (9 must, 3 should) and agy p2 (2 must, 2 should) against v1.0 (fc6b497e), tree at 683777df. Grammar probe fr3_state_line_grammar.py updated (derived/shipped modes, --control, --hook) so Task 3's post-GREEN re-run passes. Harness cwd convention (scripts/ from h-mad/). agy --self-check: verdict FAILs exit 0, policy-import exit 2. Task 16 staging step with record=failed halt step5:implementer_switch_unrecorded and its discriminating control. Task 20 requires all six samples (5 class-(b) + run_command), RED split derived from captured keys, capture-only gate. Task 10 converse wire row, [H-MAD] halt marker. Task 3 converse wire row. Task 11, 9, 10 RED assertions on refusal text, not argparse exit 2. Task 2 status fixtures expect reason=status. Task 22 two timeout tests. Task 4 CX-FOLD find and CX-FORCE-SCRIPT replace. Task 15 FR-9 prompt bullets. hook_wiring.json 12 rows. OD-1 closed (A); OD-2 closed: directory target judge-error under S (Task 6 T2a). Rows: 59 design + 5 wire + 18 doc-pin + 3 discipline/decision = 85.
+- v1.2: Impl-plan audit cycle 2, final corrective revision, not re-audited (2026-10-16), answering codex p1 (4 must, 1 should; agy p2 clean) against v1.1 (fc92becf), tree at 84ec2133, design v1.4 (2cd5d7f1), spec v1.10 (c283bb63). I1: Task 6 item 1 gains number-inactive and list-inactive, the discriminators for fr4-class-b-target-presence-only (null-inactive does not discriminate: canonicalise treats a falsy target as the root); 34->35 nodes with the t2a-directory deny-row id. I2: Task 20 item 3 uses the root .venv interpreter under the captured workdir key, workdir-root and workdir-outside (ls cannot discriminate); 14 nodes. I3: Task 9 item 4 patches h_mad_tdd_judge.JUDGE_BUDGET_S to 41.1 (timeouts 61 and 62), check_agy reads the module attribute at call time, row fr5-timeout-floor-hardcoded-60; 18 nodes. I4: Task 4 fixes both Codex --self-check verdict FAILs (parser, shell-policy) to stdout with exit 0, policy-import keeps exit 2; no existing test pinned exit 2; 2 tests, 2 rows; Task 4 shape new-behaviour; residual removed. I5: Task 20 suite metadata in h-mad/tests/fixtures/agy-payloads/capture.json. Design v1.4 alignment: FR-4 19 design rows (T2a), deny table 17 rows, owed lines marked recorded. Rows: 60 design + 5 wire + 18 doc-pin + 5 discipline/connection = 88.
