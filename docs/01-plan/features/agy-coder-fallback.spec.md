@@ -567,10 +567,11 @@ One real task is staged with `--agent agy` and dispatched headless through
     `ast.parse` (the parser concatenates adjacent literals into one constant).
   - Hard-wrapped markdown. The sweep collapses all whitespace runs to one space before matching.
 
-  The sweep runs the regex
+  The joined reading runs the regex
   `missing.symbol|tests the callee|ImportError.*AttributeError|AttributeError.*ImportError`
   (case-insensitive) over `git ls-files h-mad`: the joined `str` constants of each `.py` file, and
-  the whitespace-collapsed text of every other file. At `9c3b799d` it hits these files:
+  the whitespace-collapsed text of every other file. (The full sweep adds the line grep and the
+  `.py` comment text; see below.) At `9c3b799d` it hits these files:
   - `SKILL.md`, `codex-implementer-prompt.md`, `failure-recovery.md`, `h_mad_assemble_tdd.py`;
   - otherwise only `test_h_mad_agent_definitions.py`, `test_h_mad_wire_pin_gate.py` and the
     fixture log `h-mad/tests/fixtures/codex-text-8-exec.log`. None of those three states the rule.
@@ -587,10 +588,34 @@ One real task is staged with `--agent agy` and dispatched headless through
     `never a missing` (`git ls-files h-mad | xargs grep -ln "never a missing"` hits only the
     assembler and this test).
 
+  **What the joined reading does not see in a `.py` file, and how the sweep covers it.** `ast.parse`
+  yields `str` constants only, so the joined reading is blind to text that is not one. The line
+  grep reads that text. So the joined reading is not a superset of the line grep by construction,
+  even though it is one at this sha. The axis is "text in a `.py` file that is not a `str` constant".
+  It has three members, and each one is handled:
+  - **Comments.** The line grep sees a comment on one line. A phrase hard-wrapped across two
+    consecutive `#` lines is seen only when the comment text is joined. So the sweep also reads
+    each `.py` file's comment tokens (`tokenize`, with the `#` stripped), joined and
+    whitespace-collapsed.
+  - **A file that `ast.parse` rejects.** It is never skipped silently. The sweep reports it by name
+    with a count (`unparsed=N`), its line-grep and comment readings still apply, and a nonzero
+    count means the file is read by hand before the sweep counts as clean.
+  - **Bytes literals** (`b"…"`) are not `str` constants. The line grep covers them on one line.
+    A bytes literal split across lines is the residual of this axis.
+
+  **The sweep is therefore the union** of the line grep over every tracked file and the joined
+  reading (the `.py` `str` constants, the joined `.py` comment text, and the whitespace-collapsed
+  text of every other file). One measurement at `5f72c2f3` (h-mad last changed at `083a8233`):
+  joined reading 7 files, line grep 6 files, line grep minus joined reading 0 files, union
+  7 files; comment-token hits 0 files, joined-comment hits 0 files, `unparsed=0`. The comment
+  zero is incidental: no comment in `h-mad/` restates the rule today. It is not a property of the
+  sweep, and it does not license dropping the comment reading.
+
   Residual: a later surface that restates the rule is not covered until this sweep is re-run. A
   phrase built at run time (an f-string field, `%`/`.format` interpolation, or a `+` join of names
-  rather than literals) is not a `str` constant, so the joined-literal sweep does not see it.
-  Such a surface is found only by reading the code that builds the dispatch text.
+  rather than literals) is not a `str` constant, so no reading in the sweep sees it.
+  Such a surface is found only by reading the code that builds the dispatch text. A bytes literal
+  split across lines is the other residual, as stated above.
 
 - **The relaxation is shown to be exactly the intended case (differential corpus).** The carve-out
   makes the 5d RED check accept a RED it used to halt, so `h-mad/invariants.base.md` §"Guard
@@ -786,8 +811,11 @@ One real task is staged with `--agent agy` and dispatched headless through
   paragraph, in the GREEN variant, in the SKILL.md 5d halt text, in the `failure-recovery.md`
   `step5d:red_wrong_reason:<module>` row and in the wiring-task header that `h_mad_assemble_tdd.py`
   emits. `test_h_mad_wiring_task_shape_docs.py`, `test_h_mad_agent_definitions.py` and
-  `test_h_mad_assemble_tdd.py` stay green. FR-9's joined-literal sweep, re-run on the shipped tree,
-  hits no file that states the rule without the carve-out.
+  `test_h_mad_assemble_tdd.py` stay green. FR-9's sweep, re-run on the shipped tree, hits no file
+  that states the rule without the carve-out. The sweep is the union FR-9 defines: the line grep
+  over every tracked file and the joined reading, which takes in `.py` comment text. The re-run
+  reports `unparsed=N`. A nonzero `N` does not satisfy this AC until each unparsed file has been
+  read by hand.
 - **AC-9.2:** The FR-9 differential corpus runs all four cases (`new-caller`, `missing-callee`,
   `both-missing`, `unrelated-import`) as fixture repositories with real pytest REDs. For each case
   it records the RED's exception line, whether the callee resolves at the RED base (by import) and
@@ -809,9 +837,25 @@ One real task is staged with `--agent agy` and dispatched headless through
   its failing command and counted. It does not satisfy the AC.
 - **AC-9.4:** The six copies of the new-caller rule (FR-9 surfaces 1–5 and the GREEN variant) are
   bound to one authority. Either every surface is generated from or checked against one shared
-  source, or one test asserts that the carve-out text is equal across all six copies. A control
-  that changes the carve-out in any single copy makes that check fail, and it is run once per
-  copy. The plan names which mechanism.
+  source, or one test asserts that the carve-out text is equal across all six copies. The plan
+  names which mechanism. Whichever it is:
+  - **The carve-out text is the whole quoted block in FR-9**, all three sentences: the validity
+    condition, "The RED report must name both.", and the wire-cut obligation. A check that binds
+    only the first sentence does not meet this AC.
+  - **Each copy is read from its own source location.** The span read for one copy contains no
+    other copy. Three readings do not meet this AC, because a healthy copy in the same span
+    masks a sick one: a contains-check over the whole assembled prompt (the template's copies
+    1, 2 and 6 are filled into it beside the header copy); a file-level contains-check over
+    `codex-implementer-prompt.md`, which holds three copies; and a file-level check over any
+    file that holds more than one copy. The design names each copy's locator. A locator states
+    what it does not pin, and the test fails, rather than passing, when a locator matches
+    nothing or more than one span.
+  - **The control is a mutation of exactly one copy, and it makes the check fail.** It is run
+    once per copy, so six times, and once per sentence of the block in at least one copy. Each
+    mutation row's `find` is unique in its file, because `h_mad_mutation_harness.py`
+    `anchor_status` refuses a `find` that does not occur exactly once. A `find` therefore carries
+    copy-specific context, and the `.py` copy's `find` is written against the source bytes,
+    including the adjacent-literal split. A row the harness refuses is not a control.
 - **AC-X:** Every new guard carries a mutation row that bites (`MUTATION: ALL_CAUGHT` with a `test`
   per row). The full suite passes per task.
 
@@ -906,3 +950,4 @@ None of these are edited by this spec.
 - v1.3: Plan-author findings against v1.2 (2026-10-16). FR-3: a missing state-line field refuses judge-error (tree precedent: missing-field fixture), so the two gate stub-line fixtures are re-shaped with assertions byte-identical — the AC-3.2 exception; test_h_mad_tdd_judge.py ACTIVE_RE and line-quoting mutation rows follow the line. FR-7: writer has no append (--set replaces); add-without-loss is a requirement, mechanism a design obligation; AC-7.1 gains the two-entry fixture. FR-6: rows re-pointed to the shared module, then ALL_CAUGHT; moved names stay bound on the Codex gate module. FR-9/AC-9.1/FR-10: failure-recovery.md red_wrong_reason row; rule surfaces closed with sweep. FR-1/FR-10/AC-1.1: fallback_agent description on schema JSON and state-schema.md, pinned literals named. Owed: second SessionStart surface (Construct-mapping hook-event row). All ACs reformatted to the h_mad_ac_census.py grammar (- **AC-n.m:**).
 - v1.4: Plan audit cycle 1 findings owned by the spec (2026-10-16). F1 -> FR-5 exit-code table: AGY-GATE WIRED/UNWIRED (all seven reasons, no-hooks-file included) exit 0 and the assembler's agy_tdd_hook_unverified verdict HALT exits 0; UNREADABLE and a no-token check exit 2; existing assembler HALTs keep exit 2 (residual); AC-5.2. F2 -> FR-1: .ts is RFC 3339 date-time; neither validator path enforces format today (probed), so refusal on both paths is the requirement and the mechanism a design obligation; rfc3339-validator hazard; residual for started_ts/owner_heartbeat_ts/halt_ts; AC-1.2. F3 -> FR-9 differential corpus over four missing-symbol cases, changed set == {new-caller}; AC-9.2. F4 -> FR-9 incident replay of HemaSuite notebooklm F-3 (T4/T5 WIRE-PIN 1, T6 WIRE-PIN 2) with wire-cut re-run; AC-9.3. F5 -> FR-8 step 2a forced handler timeout with four classified outcomes; step 2 now settles two unknowns; FR-5 re-run trigger includes it; AC-8.2. F6 -> no contradiction; FR-3 now lists the real-line assertions (two in test_h_mad_tdd_gate_fallback_agent.py, four tests in test_h_mad_tdd_judge.py) as placement constraints; AC-3.2 extended.
 - v1.5: Plan audit cycle 2 findings owned by the spec, final corrective revision after the round cap (2026-10-16). B -> FR-10 adds the SKILL.md teammate-audit bullet: audit-leg selection vs resolved authorship (Claude only when resolved=claude), anchor prefix and the four pinned tokens kept. C -> FR-9 surface census gains surface 5, the h_mad_assemble_tdd.py assemble() wiring header (split string literals), and its pin test_h_mad_assemble_tdd.py TestWiringShape.test_the_pin_is_told_what_its_red_must_be; the census method now joins Python adjacent literals via ast and collapses markdown whitespace, measured at 9c3b799d; residual: run-time-built strings. AC-9.1 lists the header. D -> FR-9 replay and AC-9.3 name all three pins with files and commits (531a6296b, 7aa0d9dec, c2d671f6b); T5/T6 replay evaluates the direct-call / two-argument getattr form; the committed scaffolded RED (AssertionError) is recorded as old-verdict valid, correcting the false old-verdict=halt claim. A -> new AC-9.4: the six rule copies bound to one authority, with a per-copy control.
+- v1.6: Advisory delta review of plan v1.3 (608e430), spec-owned parts (2026-10-16). Should-fix 3 -> FR-9: the joined reading (ast str constants) is blind to non-str text in a .py file; axis named with three members (comments, files ast.parse rejects, bytes literals). The sweep is now the union of the line grep and the joined reading, which adds joined .py comment tokens; parse failures are reported as unparsed=N and read by hand; residual: run-time-built strings and a bytes literal split across lines. Measured at 5f72c2f3: union 7 files, line-grep-minus-joined 0, comment hits 0 (incidental), unparsed=0. AC-9.1 re-run is the union and reports unparsed=N. Must-fix 1 (spec side) and Should-fix 4 -> AC-9.4: the carve-out text is the whole three-sentence FR-9 block; each copy is read from its own source location, never from the assembled prompt or a file-level contains-check over a file holding more than one copy; a locator matching zero or several spans fails the test; the control mutates exactly one copy, runs once per copy and once per sentence in at least one copy, with a find unique in its file (mutation harness anchor_status), the .py find written against source bytes including the literal split.
