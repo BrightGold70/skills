@@ -61,7 +61,8 @@ change and records written before this feature stay valid:
 
 - `implementer_switch.from` and `.to` take `codex|agy|grok|claude`. `.reason` takes one of the
   closed set of switch reasons in FR-2. `.ts` is an ISO-8601 timestamp in the RFC 3339
-  `date-time` profile (`YYYY-MM-DDTHH:MM:SS[.fraction]` then `Z` or `±HH:MM`). The form the
+  `date-time` profile (`YYYY-MM-DDTHH:MM:SS[.fraction]` then `Z` or `±HH:MM`), narrowed to
+  seconds `00`–`59` (D-14, below). The form the
   writer already emits, `%Y-%m-%dT%H:%M:%SZ` (`h_mad_state_write.py` `_utc_now`), is one instance.
 - **An invalid `.ts` is refused on both validator paths.** The store is validated by
   `jsonschema.Draft7Validator` when it imports and by the bundled `_MiniDraft7` in
@@ -73,6 +74,16 @@ change and records written before this feature stay valid:
   itself: a `.ts` that is not an RFC 3339 `date-time` is refused whichever path runs. That covers
   a non-date string, a date with no time (`2026-10-16`), and a calendar-invalid date
   (`2026-02-30T00:00:00Z`).
+  - **A leap second is refused too (D-14).** RFC 3339 admits a seconds field of `60`. This spec
+    narrows `.ts` to seconds `00`–`59`: a `.ts` whose seconds field is `60`, with or without a
+    fraction and whatever its offset, is refused on both paths like any other invalid value.
+    Reason: every `.ts` h-mad writes comes from Python `datetime` through the writer
+    (`h_mad_state_write.py` `_utc_now` is `datetime.now(timezone.utc).strftime(...)`), and
+    `datetime` cannot hold second 60 (`datetime(2016,12,31,23,59,60)` and
+    `datetime.fromisoformat('2016-12-31T23:59:60+00:00')` both raise `ValueError: second must be
+    in 0..59, not 60`). So the narrowing refuses no value the writer can produce. Residual: a
+    hand-supplied `.ts` (for example through `--set`) that names a real leap second is refused,
+    and that is intended.
   - **Mechanism: a design obligation.** The design picks one and cites the probe output: extend
     `_MiniDraft7` and its differential corpus; or pass a format checker on the library path and
     match it in the bundled one; or check on the writer side before validation. One hazard binds
@@ -106,6 +117,22 @@ change and records written before this feature stay valid:
   - **Residual.** The `fallback-grok` refusal text in `h-mad-tdd-gate.sh` says "while codex is
     out". FR-3 keeps it byte-identical. It stays true, because codex is out whenever the refusal
     fires, but it does not mention agy. That is accepted as the price of byte-identity.
+- **The existing `codex_status` description changes on both surfaces that state it, for the same
+  reason.** Its `description` in `h_mad_state_schema.json` says a production write in step5 "is
+  blocked when Codex is available" and that `exhausted`/`unavailable` records that Codex cannot
+  author, "permitting Claude to write the fallback". Its `state-schema.md` row says "An unavailable
+  or exhausted status permits a Phase-5 authoring fallback". Under FR-2 both are false when agy is
+  available: the declaration moves authorship to agy, and FR-3 refuses Claude. Both are rewritten
+  so that authorship is stated as FR-2's resolution (Claude only when `resolved` = `claude`). The
+  audit-routing half (consumer 2, the teammate leg) is unchanged, per FR-10. (`grep -n
+  'codex_status' h-mad/scripts/h_mad_state_schema.json h-mad/references/state-schema.md`.)
+  - **Pinned.** No test pins the `codex_status` description text: at `200ffd52`, `git ls-files
+    h-mad/tests | xargs grep -l 'permitting Claude to write the fallback\|permits a Phase-5
+    authoring fallback\|One switch, both effects\|blocked when Codex is available'` lists 0 files.
+    The zero is load-bearing only for this rewrite; a test added later that quotes the text is
+    found by re-running the grep. One test pins the property ORDER:
+    `test_fallback_agent_description_states_the_four_facts` asserts `fallback_agent`'s index is
+    `codex_status`'s index + 1. The FR-1 fields are therefore never inserted between those two.
 
 **Failure modes.** The schema validates only the values that `h_mad_state_write.py` writes. A
 hand-edited record can still hold anything, so the judge treats values as follows:
@@ -371,7 +398,8 @@ shell policy** as `h-mad-codex-tdd-gate.py`:
 - a refusal message that tells agy to use the class-(b) write tools.
 
 There is **one implementation** of the policy. The design moves it to a shared module that both
-gates import. The hyphenated hook filename cannot be imported directly, and two copies would
+gates import: the existing `h-mad/scripts/h_mad_target_identity.py`, which the Codex gate already
+imports (D-12, operator decision on the design's OQ-A). Below, "the shared module" means that file. The hyphenated hook filename cannot be imported directly, and two copies would
 drift. The Codex gate's behaviour is unchanged, and its existing tests pass unmodified.
 - **Tests reach the policy through the Codex gate module.** `test_h_mad_codex_tdd_gate_judge.py`
   calls `module._safe_shell_command(...)` on the loaded Codex gate. So after the move, each moved
@@ -414,6 +442,14 @@ The revert test, the independent re-run and the mutation pass still cover all fo
   The rule covers every implementer, Codex included: a Codex reviewer on Codex-written code (for
   example the 5e anti-gaming verifier dispatched to Codex) is flagged exactly as agy on agy is
   (operator decision D-9). The flag is a warning, never a block.
+- **Attribution: the implementer is the author of the reviewed code.** An entry's `implementer` is
+  the agent whose successful implementation dispatch produced the code the leg reviews, read from
+  that dispatch. It is never read from `implementer_switch.to` or from the `implementer` field,
+  which record routing, not authorship. `implementer_switch` is historical: Codex out → agy
+  dispatched → switch stored; Codex back → Codex dispatched with `switch=none`, and the stored
+  `.to` still says `agy`. Attributing from it would mark a Codex reviewer of Codex-written code as
+  independent. When the reviewed code came from more than one agent's dispatch, `independent` is
+  `false` if the reviewer is any of them, and `implementer` names that agent.
 - **Record.** After each leg, the orchestrator adds one `review_independence` entry (FR-1) to the
   record through `h_mad_state_write.py`'s write path, so the claim and session rules apply. No
   verdict word changes, and `h_mad_extract_verdict.py` output is untouched (it prints only
@@ -459,6 +495,14 @@ The revert test, the independent re-run and the mutation pass still cover all fo
 One real task is staged with `--agent agy` and dispatched headless through
 `hmad-dispatch exec agy`. Every reading goes to a committed probe under
 `docs/03-analysis/probes/agy-coder-fallback/`, stamped with the sha and with `agy --version`.
+- **Version.** This spec fixes no agy version. At `200ffd52`, `agy --version` prints `1.4.0`
+  (earlier readings in this feature saw `1.3.6`). Each FR-8 reading stamps the version it ran
+  against, and a reading taken under a different version than the gate's other readings is
+  re-taken, never carried.
+- **When it runs (D-13, operator decision on the design's OQ-B).** FR-8 is a post-merge stage: it
+  runs after Phase 7's integrate, against the gate installed from main, and the feature is recorded
+  COMPLETE only after the stage passes. Until then the feature is not COMPLETE, and
+  `step5:agy_tdd_hook_unverified` stands.
 
 1. **Payload capture.** A temporary capture hook records one real `toolCall` per class-(b) tool
    and per `run_command`. It establishes the arg keys FR-4 leaves open, and whether `workspacePaths`
@@ -704,8 +748,9 @@ One real task is staged with `--agent agy` and dispatched headless through
   dispatch beside its review role.
 - **`h-mad/references/agy-runtime.md`** §"The TDD gate" names the new gate and FR-5's check, and keeps
   the halt.
-- **`h-mad/references/state-schema.md`** gains the FR-1 rows. Its existing `fallback_agent` row
-  is rewritten, and so is the schema JSON's `fallback_agent` `description`, both per FR-1.
+- **`h-mad/references/state-schema.md`** gains the FR-1 rows. Its existing `fallback_agent` and
+  `codex_status` rows are rewritten, and so are the schema JSON's `fallback_agent` and
+  `codex_status` `description`s, all four per FR-1.
 - **`h-mad/references/failure-recovery.md`** gets the 5d `red_wrong_reason` row carve-out per
   FR-9.
 - **SKILL.md, Phase 7 closure step:** the report carries every `WARNING` line that
@@ -733,10 +778,13 @@ One real task is staged with `--agent agy` and dispatched headless through
 
 - **AC-1.1:** The schema accepts each FR-1 field at each listed value and rejects a value outside
   it. A record with none of the fields validates unchanged. The `fallback_agent` description in
-  the schema JSON and its `state-schema.md` row state FR-2's both-peers condition, and
-  `test_h_mad_state_fallback_agent.py` stays green.
-- **AC-1.2:** A record whose `implementer_switch.ts` is `not-a-date`, `2026-10-16` or
-  `2026-02-30T00:00:00Z` is refused on the library path and, under the test seam that forces it,
+  the schema JSON and its `state-schema.md` row state FR-2's both-peers condition. The
+  `codex_status` description and row no longer say that an unavailable Codex permits Claude to
+  author, and state authorship as FR-2's resolution. `test_h_mad_state_fallback_agent.py` stays
+  green. For `implementer_switch.ts`, "the listed value" is FR-1's narrowed profile, leap second
+  excluded (D-14); its fixtures are AC-1.2's.
+- **AC-1.2:** A record whose `implementer_switch.ts` is `not-a-date`, `2026-10-16`,
+  `2026-02-30T00:00:00Z` or the leap second `2016-12-31T23:59:60Z` (D-14) is refused on the library path and, under the test seam that forces it,
   on the bundled path. Each value is its own fixture, run once per path. A `.ts` in the writer's
   form `%Y-%m-%dT%H:%M:%SZ` is accepted on both paths. If the mechanism uses the library's format
   checker, one fixture runs with `rfc3339_validator` made unimportable and still refuses
@@ -783,7 +831,7 @@ One real task is staged with `--agent agy` and dispatched headless through
   A mutation that returns 2 on `UNWIRED` is killed.
 - **AC-6.1:** The shell policy is imported, not copied: one definition in the tree. The Codex gate's
   existing shell tests pass unmodified. Every mutation row re-pointed under FR-6 runs
-  `MUTATION: ALL_CAUGHT` against the shared module. The agy gate refuses each `unsafe` command in the Codex
+  `MUTATION: ALL_CAUGHT` against the shared module, `h_mad_target_identity.py` (D-12). The agy gate refuses each `unsafe` command in the Codex
   gate's `--self-check` list.
 - **AC-7.1:** `h_mad_phase7_preconditions.py` emits each of the three FR-7 warnings from its own
   fixture, and none of them moves `ready`. Adding a `review_independence` entry to a record that
@@ -797,7 +845,8 @@ One real task is staged with `--agent agy` and dispatched headless through
 - **AC-8.1:** The probe directory holds the payload capture, the real refusal, and the RED/GREEN
   readings with re-run, revert and mutation results, each stamped with the sha and the
   `agy --version`. The default timeout in `h_mad_assemble_tdd.py` equals FR-8's formula over
-  those readings.
+  those readings. The readings come from FR-8's post-merge stage (D-13), and the feature is not
+  recorded COMPLETE before AC-8.1 and AC-8.2 pass.
 - **AC-8.2:** The probe directory holds the forced-handler-timeout reading from FR-8 step 2a,
   stamped with the sha, `agy --version` and the T it used. The reading has three parts: whether
   the file exists, the wall time and agy's message. It names exactly one outcome from step 2a's
@@ -915,10 +964,22 @@ One real task is staged with `--agent agy` and dispatched headless through
     — absence of `review_independence` — is the skip itself, so any such rule would also silence
     the case the warning exists for. A warning on an in-flight feature costs one backfilled entry
     or one report line.
+- **D-12 Shared shell-policy module (was the design's OQ-A; operator decision, 2026-10-16):** the
+  FR-6 policy moves into the existing `h-mad/scripts/h_mad_target_identity.py`, not a new module.
+  The design's reason: `test_h_mad_codex_tdd_gate_judge.py` `test_codex_gate_judge_timeout_reason`
+  builds a tree by copying only the Codex gate, a judge stub and `h_mad_target_identity.py`
+  (`grep -n -A12 'def test_codex_gate_judge_timeout_reason' h-mad/tests/test_h_mad_codex_tdd_gate_judge.py`),
+  so a new module would be missing there, and FR-6 forbids editing that test.
+- **D-13 FR-8 timing (was the design's OQ-B; operator decision, 2026-10-16):** FR-8 runs as a
+  post-merge stage after Phase 7's integrate, and the feature is recorded COMPLETE only after it.
+  Reason: the tracer must run the gate at its installed path, which is main.
+- **D-14 Leap-second `.ts` refused (orchestrator decision, design audit cycle 1, 2026-10-16):**
+  FR-1 narrows `implementer_switch.ts` to seconds `00`–`59`. Reason: state timestamps are written
+  by h-mad's own writer through Python `datetime`, which cannot produce a seconds field of `60`.
 
 ## Open questions for the operator
 
-None — OQ-1/OQ-2 settled 2026-10-16.
+None — OQ-1/OQ-2 settled 2026-10-16; the design's OQ-A/OQ-B settled 2026-10-16 (D-12, D-13).
 
 ## Non-goals
 
@@ -938,8 +999,9 @@ None of these are edited by this spec.
   - the §"Construct mapping" table's `hook-event` row ("there is no `SessionStart`").
 
   agy's current hooks.md lists `SessionStart` as a supported event. Both surfaces need a re-check
-  against the installed agy (1.3.6 at this reading), and they are corrected together.
-  (`grep -n 'SessionStart' h-mad/references/agy-runtime.md` at `17d73037`: 2 matching lines, one
+  against the installed agy (`agy --version` prints 1.4.0 at `200ffd52`), they are corrected
+  together, and the correction stamps the version it was checked against.
+  (`grep -n 'SessionStart' h-mad/references/agy-runtime.md` at `200ffd52`: 2 matching lines, one
   under each heading.) Residual: this is a content predicate, so a third restatement added later
   is found only by re-running the grep.
 
@@ -951,3 +1013,4 @@ None of these are edited by this spec.
 - v1.4: Plan audit cycle 1 findings owned by the spec (2026-10-16). F1 -> FR-5 exit-code table: AGY-GATE WIRED/UNWIRED (all seven reasons, no-hooks-file included) exit 0 and the assembler's agy_tdd_hook_unverified verdict HALT exits 0; UNREADABLE and a no-token check exit 2; existing assembler HALTs keep exit 2 (residual); AC-5.2. F2 -> FR-1: .ts is RFC 3339 date-time; neither validator path enforces format today (probed), so refusal on both paths is the requirement and the mechanism a design obligation; rfc3339-validator hazard; residual for started_ts/owner_heartbeat_ts/halt_ts; AC-1.2. F3 -> FR-9 differential corpus over four missing-symbol cases, changed set == {new-caller}; AC-9.2. F4 -> FR-9 incident replay of HemaSuite notebooklm F-3 (T4/T5 WIRE-PIN 1, T6 WIRE-PIN 2) with wire-cut re-run; AC-9.3. F5 -> FR-8 step 2a forced handler timeout with four classified outcomes; step 2 now settles two unknowns; FR-5 re-run trigger includes it; AC-8.2. F6 -> no contradiction; FR-3 now lists the real-line assertions (two in test_h_mad_tdd_gate_fallback_agent.py, four tests in test_h_mad_tdd_judge.py) as placement constraints; AC-3.2 extended.
 - v1.5: Plan audit cycle 2 findings owned by the spec, final corrective revision after the round cap (2026-10-16). B -> FR-10 adds the SKILL.md teammate-audit bullet: audit-leg selection vs resolved authorship (Claude only when resolved=claude), anchor prefix and the four pinned tokens kept. C -> FR-9 surface census gains surface 5, the h_mad_assemble_tdd.py assemble() wiring header (split string literals), and its pin test_h_mad_assemble_tdd.py TestWiringShape.test_the_pin_is_told_what_its_red_must_be; the census method now joins Python adjacent literals via ast and collapses markdown whitespace, measured at 9c3b799d; residual: run-time-built strings. AC-9.1 lists the header. D -> FR-9 replay and AC-9.3 name all three pins with files and commits (531a6296b, 7aa0d9dec, c2d671f6b); T5/T6 replay evaluates the direct-call / two-argument getattr form; the committed scaffolded RED (AssertionError) is recorded as old-verdict valid, correcting the false old-verdict=halt claim. A -> new AC-9.4: the six rule copies bound to one authority, with a per-copy control.
 - v1.6: Advisory delta review of plan v1.3 (608e430), spec-owned parts (2026-10-16). Should-fix 3 -> FR-9: the joined reading (ast str constants) is blind to non-str text in a .py file; axis named with three members (comments, files ast.parse rejects, bytes literals). The sweep is now the union of the line grep and the joined reading, which adds joined .py comment tokens; parse failures are reported as unparsed=N and read by hand; residual: run-time-built strings and a bytes literal split across lines. Measured at 5f72c2f3: union 7 files, line-grep-minus-joined 0, comment hits 0 (incidental), unparsed=0. AC-9.1 re-run is the union and reports unparsed=N. Must-fix 1 (spec side) and Should-fix 4 -> AC-9.4: the carve-out text is the whole three-sentence FR-9 block; each copy is read from its own source location, never from the assembled prompt or a file-level contains-check over a file holding more than one copy; a locator matching zero or several spans fails the test; the control mutates exactly one copy, runs once per copy and once per sentence in at least one copy, with a find unique in its file (mutation harness anchor_status), the .py find written against source bytes including the literal split.
+- v1.7: Design audit cycle 1, spec-owned items (2026-10-16). S1 (codex C1) -> FR-1/AC-1.1/AC-1.2 + D-14: .ts narrowed to seconds 00-59, a leap second (2016-12-31T23:59:60Z) refused on both paths; reason: every .ts comes from Python datetime via the writer, which cannot hold second 60 (orchestrator decision). S2 (codex C6) -> FR-7 Attribution: an entry's implementer is the author of the reviewed code, from its successful implementation dispatch, never implementer_switch.to (historical) or the implementer field; multi-author code is non-independent if the reviewer is any author. S3 -> FR-1/FR-10/AC-1.1: codex_status schema description and state-schema.md row rewritten to FR-2 authorship (no test pins the text; the fallback_agent-after-codex_status order pin stated); FR-8 Version: 1.4.0 at 200ffd52, each reading stamps its version; Owed SessionStart re-check re-stamped 1.4.0 at 200ffd52; FR-6/AC-6.1 shared module = h_mad_target_identity.py (D-12, OQ-A); FR-8/AC-8.1 post-merge stage, COMPLETE only after it (D-13, OQ-B). Open questions: OQ-A/OQ-B settled.
