@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-16 · gotcha · [0.7] · `h-mad,mutation,anchors,handoff:2026-10-16-agy-peer-implementer-p1` — New code can break EXISTING mutation anchors by duplicating their text or rewriting the anchored line; run --check-anchors on all specs after the change.
+- 2026-10-16 · gotcha · [0.7] · `h-mad,pytest,interpreter,handoff:2026-10-16-agy-peer-implementer-p1` — Only /opt/anaconda3/bin/python3 has pytest here; no xdist (-n auto errors). rtk rewrites bare pytest --version. Never '|| true' a background suite; log RC=$? and read the summary.
+- 2026-10-16 · gotcha · [0.7] · `h-mad,test-count,handoff:2026-10-16-agy-peer-implementer-p1` — A new script grows test counts OUTSIDE its own test file: test_h_mad_portable_timeout parametrizes per scanned script (+2 each). Diff --collect-only IDs, not totals.
 - 2026-10-16 · gotcha · [0.5] · `markdown,reconciliation,handoff:2026-10-16-branch-evidence-flake-recon` — Copying verdict text out of a markdown table: unescape '\|' → '|', or grep -E alternations become literal pipes.
 - 2026-10-16 · gotcha · [0.5] · `suite-lock,handoff:2026-10-16-branch-evidence-flake-recon` — Editing the tree during a full-suite run voids it (SUITE: TREE_MOVED) and a scoped run is refused BUSY while it holds the lock — batch edits, then run the suite once.
 - 2026-10-16 · gotcha · [0.7] · `claude-binary,pins,handoff:2026-10-16-branch-evidence-flake-recon` — Binary pin 'var \w+=VALUE,' matched an unrelated constant for 3 CC versions; 2.1.301 renamed it $Po and it broke. Anchor on a semantic neighbour: '"MEMORY.md",x=200,y=25000,'.
