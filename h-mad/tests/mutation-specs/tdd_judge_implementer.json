@@ -1,0 +1,43 @@
+{
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_tdd_judge_implementer.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "fr2-cause-env-dropped",
+      "_mechanism": "Remove the environment cause; the isolated env fixture must reject resolving codex instead of agy.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "resolve_implementer._cause",
+      "find": "        if env.get(f\"HMAD_{peer.upper()}_UNAVAILABLE\", \"\") != \"\":\n            return \"env\"\n",
+      "replace": "",
+      "test": "tests/test_h_mad_tdd_judge_implementer.py::test_each_cause_alone"
+    },
+    {
+      "name": "fr2-cause-status-dropped",
+      "_mechanism": "Remove the status cause; each isolated unavailable/exhausted fixture must reject resolving codex.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "resolve_implementer._cause",
+      "find": "        if status in ESCAPE_STATUSES:\n            return \"status\"\n",
+      "replace": "",
+      "test": "tests/test_h_mad_tdd_judge_implementer.py::test_each_cause_alone"
+    },
+    {
+      "name": "fr2-cause-cli-absent-dropped",
+      "_mechanism": "Remove the CLI-absence cause; the isolated cli-absent fixture must reject resolving an absent codex.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "resolve_implementer._cause",
+      "find": "        if which(peer) is None:\n            return \"cli-absent\"\n",
+      "replace": "",
+      "test": "tests/test_h_mad_tdd_judge_implementer.py::test_each_cause_alone"
+    },
+    {
+      "name": "fr2-other-peer-dropped",
+      "_mechanism": "Remove the other-peer step; the availability matrix must reject falling back while the other peer is available.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "resolve_implementer",
+      "find": "    if _cause(other) is None:\n        return Implementer(other, chosen, reason, None, \"\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_tdd_judge_implementer.py::test_resolve_implementer_matrix"
+    }
+  ]
+}

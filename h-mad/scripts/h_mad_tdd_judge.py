@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import signal
 import stat
 import subprocess
@@ -36,6 +37,16 @@ class Record(NamedTuple):
     codex_status: str
     state_file: Path
     fallback: str
+    implementer: str = "absent"
+    agy_status: str = "available"
+
+
+class Implementer(NamedTuple):
+    resolved: str
+    chosen: Optional[str]
+    reason: Optional[str]
+    invalid_field: Optional[str]
+    invalid_value: str
 
 
 class Chain(NamedTuple):
@@ -119,10 +130,55 @@ def _fallback_tag(state: dict) -> str:
     return "invalid:" + json.dumps(value, separators=(",", ":"))
 
 
+def _implementer_tag(state: dict) -> str:
+    if "implementer" not in state:
+        return "absent"
+    value = state["implementer"]
+    if isinstance(value, str):
+        if value in ("codex", "agy"):
+            return value
+    elif value is None:
+        return "null"
+    return "invalid:" + json.dumps(value, separators=(",", ":"))
+
+
+def resolve_implementer(record: Record, env=None, which=None) -> Implementer:
+    env = os.environ if env is None else env
+    which = shutil.which if which is None else which
+    if record.implementer.startswith("invalid:"):
+        return Implementer("invalid", None, None, "implementer",
+                           record.implementer[len("invalid:"):])
+    chosen = "agy" if record.implementer == "agy" else "codex"
+
+    def _cause(peer):
+        if env.get(f"HMAD_{peer.upper()}_UNAVAILABLE", "") != "":
+            return "env"
+        status = record.codex_status if peer == "codex" else record.agy_status
+        if status in ESCAPE_STATUSES:
+            return "status"
+        if which(peer) is None:
+            return "cli-absent"
+        return None
+
+    reason = _cause(chosen)
+    if reason is None:
+        return Implementer(chosen, chosen, None, None, "")
+    other = "codex" if chosen == "agy" else "agy"
+    if _cause(other) is None:
+        return Implementer(other, chosen, reason, None, "")
+    if record.fallback.startswith("invalid:"):
+        return Implementer("invalid", chosen, reason, "fallback_agent",
+                           record.fallback[len("invalid:"):])
+    resolved = "grok" if record.fallback == "grok" else "claude"
+    return Implementer(resolved, chosen, reason, None, "")
+
+
 def _active_records(data: dict, path: Path) -> Tuple[Record, ...]:
     states = data.get("orchestrator_state", {})
     return tuple(Record(str(key), "available" if value.get("codex_status") is None
-                        else str(value["codex_status"]), path, _fallback_tag(value))
+                        else str(value["codex_status"]), path, _fallback_tag(value),
+                        _implementer_tag(value), "available" if value.get("agy_status") is None
+                        else str(value["agy_status"]))
                  for key, value in states.items()
                  if isinstance(value, dict) and value.get("phase") == "step5")
 
@@ -430,10 +486,55 @@ def main(argv: Optional[list] = None) -> int:
         command = commands.add_parser(name)
         command.add_argument("--root", required=True)
         command.add_argument("--target")
+    implementer = commands.add_parser("implementer")
+    implementer.add_argument("--root", required=True)
+    implementer.add_argument("--feature", required=True)
+    implementer.add_argument("--record", action="store_true")
     args = parser.parse_args(argv)
     if not args.root or not Path(args.root).is_dir():
         parser.error("--root must name a directory")
     root = Path(os.path.realpath(args.root))
+    if args.command == "implementer":
+        state_file = root / "docs" / ".bkit-memory.json"
+        status, data = _state_at(state_file)
+        if status == "unreadable":
+            line = f"unreadable file={_enc(str(state_file))} error={data}"
+        elif status == "absent" or args.feature not in data.get("orchestrator_state", {}):
+            line = f"no-record feature={_enc(args.feature)}"
+        else:
+            state = data["orchestrator_state"][args.feature]
+            if not isinstance(state, dict):
+                line = f"unreadable file={_enc(str(state_file))} error=not-an-object"
+            else:
+                record = Record(args.feature, "available" if state.get("codex_status") is None
+                                else str(state["codex_status"]), state_file, _fallback_tag(state),
+                                _implementer_tag(state), "available" if state.get("agy_status") is None
+                                else str(state["agy_status"]))
+                result = resolve_implementer(record)
+                if result.invalid_field is not None:
+                    line = f"invalid field={result.invalid_field} value={_enc(result.invalid_value)}"
+                else:
+                    switch = ("none" if result.resolved == result.chosen else
+                              f"{result.chosen}->{result.resolved}" if result.resolved in ("codex", "agy")
+                              else "peers-out")
+                    line = f"{result.resolved} chosen={result.chosen} switch={switch}"
+                    if switch != "none":
+                        line += f" reason={result.reason}"
+                        if args.record:
+                            import h_mad_state_write
+
+                            fields = {"from": result.chosen, "to": result.resolved,
+                                      "reason": result.reason}
+                            stored = state.get("implementer_switch")
+                            if not isinstance(stored, dict) or any(stored.get(k) != v for k, v in fields.items()):
+                                try:
+                                    h_mad_state_write.merge_fields(state_file, args.feature, {
+                                        "implementer_switch": {**fields, "ts": h_mad_state_write._utc_now()},
+                                    })
+                                except (h_mad_state_write.StateWriteError, OSError):
+                                    line += " record=failed"
+        print("TDD-IMPLEMENTER: " + line)
+        return 0
     target = root / args.target if args.target else None
     try:
         chain = read_chain(root, target)

@@ -62,7 +62,8 @@ def _root(tmp_path):
 
 
 def _verb(root, *, available=("codex", "agy"), record=False, cwd=None):
-    bindir = root / "controlled-bin"
+    # A POSIX PATH entry cannot hold ':', and HOSTILE does; the stubs live beside the hostile root.
+    bindir = root.parent / "controlled-bin"
     bindir.mkdir(exist_ok=True)
     for peer in ("codex", "agy"):
         stub = bindir / peer
