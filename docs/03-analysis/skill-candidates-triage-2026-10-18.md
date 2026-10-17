@@ -82,3 +82,17 @@ The #5 line numbers were stale in the handoffs that carried them, not only now. 
 8. **2549 regression-guard scope note** (S): a one-line template change in `h_mad_assemble_tdd.py:517-523` and `codex-implementer-prompt.md:70`.
 
 Kept off the list: trigger-deferred rows 1269, 2369, 2402, 2491, 2508 (no trigger fired); 2538 (CANNOT-JUDGE).
+
+## Addendum — carried task #22 reconciled (2026-10-18, after shortlist 1–8 landed)
+
+| carried item | verdict | evidence |
+|---|---|---|
+| OPEN=13 triage, dups 2595/2598, deferred/maybe rows | DONE | this triage; census now `OPEN=6` (5 trigger-deferred + 2538 CANNOT-JUDGE) |
+| memory index >17500 | DONE | 17443 B / 123 lines (shared `-Users-kimhawk-orca/memory`) |
+| HemaSuite canonical 1/1 diverged | RESOLVED | `refs/heads/main...refs/remotes/origin/main` = `0 0`; the checkout is now on another lane's `feature/claim-verdict-lineage` (108 dirty lines) — not ours, untouched |
+| `.git/info/exclude` narrowed | INTENDED, keep | live file has `/.agents/skills/` vs backup `/.agents/` (D-10); `.agents/hooks.json` is now committed and relies on it |
+| #56 residue, V-11.1, graft statusline, tdd-gate-fail-opens | DROP | see table above (convention / by design / landed / landed `9e1d21c4`) |
+| pass-log rotation | STILL-OPEN, low | no prune/cap; HemaSuite 41 files / 20M |
+| Bash pin blast radius | STILL-OPEN, inert | probe `regex_hits=0` on HemaSuite |
+| HemaSuite feature/204 no-mutation-spec | HemaSuite's call | — |
+| foreign `stash@{0}` (`resolved-model`) | do not touch | still present; owner's decision |
