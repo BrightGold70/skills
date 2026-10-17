@@ -39,6 +39,11 @@ READY = {
     "archreview": "READY_TO_MERGE",
 }
 
+# FR-7: a READY record whose 6a-prime review is recorded, for guards that pin an exact warning set
+# unrelated to review independence (review_independence_unrecorded would otherwise fire).
+REVIEWED = dict(READY, review_independence=[{"leg": "6a-prime", "module": None, "reviewer": "agy",
+                                            "implementer": "codex", "independent": True}])
+
 ANALYSIS = "# Analysis: demo\n\n## Match Rate: 96%\n\n## Verdict\nAdvance.\n"
 
 
@@ -349,7 +354,7 @@ class TestParkedMutationSpecs:
 
     def test_a_parked_spec_with_a_live_twin_is_provenance_not_a_blocker(self, tmp_path):
         a, _, docs = self._tree(tmp_path, parked=["x"], live=["x"])
-        result = p7.check(READY, a, docs_root=docs)
+        result = p7.check(REVIEWED, a, docs_root=docs)
         assert "pending_mutation_spec_not_restored" not in codes(result)
         assert result["ready"] and not result["warnings"]
 
@@ -363,7 +368,7 @@ class TestParkedMutationSpecs:
 
     def test_no_pending_dir_is_silent(self, tmp_path):
         a, _, docs = self._tree(tmp_path)
-        result = p7.check(READY, a, docs_root=docs)
+        result = p7.check(REVIEWED, a, docs_root=docs)
         assert result["ready"] and not result["warnings"]
 
     def test_no_specs_dir_at_all_is_a_warning_not_a_verdict(self, tmp_path):
@@ -374,13 +379,13 @@ class TestParkedMutationSpecs:
         (pend / "x.json.pending").write_text("{}", encoding="utf-8")
         a = docs / "03-analysis" / "demo.analysis.md"
         a.write_text(ANALYSIS, encoding="utf-8")
-        result = p7.check(READY, a, docs_root=docs)
+        result = p7.check(REVIEWED, a, docs_root=docs)
         assert "pending_mutation_spec_not_restored" not in codes(result)
         assert {w["code"] for w in result["warnings"]} == {"pending_specs_unverified"}
 
     def test_no_docs_root_skips_with_a_warning_never_derives_from_the_analysis_path(self, tmp_path):
         a, _, _ = self._tree(tmp_path, parked=["x"], live=[])
-        result = p7.check(READY, a)
+        result = p7.check(REVIEWED, a)
         assert "pending_mutation_spec_not_restored" not in codes(result)
         assert {w["code"] for w in result["warnings"]} == {"pending_specs_unverified",
                                                           "analysis_versions_unverified"}
@@ -487,7 +492,7 @@ class TestVersionedAnalysis:
     def test_a_versioned_analysis_is_ready(self, tmp_path):
         """Positive control: the fixture can produce READY at all."""
         a, docs = self._tree(tmp_path, versions=(1,))
-        result = p7.check(READY, a, docs_root=docs, feature="demo")
+        result = p7.check(REVIEWED, a, docs_root=docs, feature="demo")
         assert result["ready"], result
         assert not result["warnings"]
 
