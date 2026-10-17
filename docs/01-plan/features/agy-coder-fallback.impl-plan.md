@@ -247,7 +247,8 @@ In `h-mad/tests/test_h_mad_state_schema_fr1_docs.py` (new):
 14. `tests/test_h_mad_state_schema_fr1_docs.py::test_fallback_agent_schema_description_names_both_peers`
     — contains `agy is out too`. F.
 15. `tests/test_h_mad_state_schema_fr1_docs.py::test_fallback_agent_reference_row_names_both_peers`
-    — the row contains `agy`. F.
+    — the row contains `agy is out too` (D5d-1: the bare `agy` literal already held via
+    `--surfaces agy,grok`). F.
 16. `tests/test_h_mad_state_schema_fr1_docs.py::test_reference_rows_exist_for_the_five_fields` —
     one table row per new field. F.
 17. `tests/test_h_mad_state_schema_fr1_docs.py::test_new_properties_follow_fallback_agent_in_order`
@@ -1425,6 +1426,11 @@ and item 9).
 none. The call is added immediately before `check`'s line starting `return {"ready": not blockers`,
 on which no row sits. The 4 rows inside `check` and the 3 inside `main` are not on the edited
 lines.
+
+**Regression guards** (D5d-5, `acf_5d_task12_decisions.md`): five existing
+`test_h_mad_phase7_preconditions.py` tests assert no warnings or the exact pre-FR-7 set on the
+shared `READY` record, which carries no `review_independence`; they read a `REVIEWED` fixture
+(a recorded independent 6a-prime entry) so FR-7's `review_independence_unrecorded` does not fire.
 
 **Acceptance Criteria**:
 - [ ] AC-7.1 (each warning from its own fixture; none moves `ready`): items 1, 2, 3 and 9 pass.
