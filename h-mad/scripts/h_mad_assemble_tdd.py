@@ -71,7 +71,7 @@ from h_mad_assemble_audit import fill_slots  # noqa: E402
 
 TOKEN = "ASSEMBLE-TDD"
 TEMPLATE = SKILL_DIR / "references" / "codex-implementer-prompt.md"
-TIMEOUT_DEFAULTS = {"codex": 900, "grok": 1500, "agy": 1500}
+TIMEOUT_DEFAULTS = {"codex": 900, "grok": 1500, "agy": 900}
 AGY_WIRING_CHECK = str(Path(__file__).resolve().parent / "h_mad_hook_wiring.py")
 AGY_WIRING_TIMEOUT_S = 60
 # No model/effort default: an unpinned dispatch inherits the codex CLI's own

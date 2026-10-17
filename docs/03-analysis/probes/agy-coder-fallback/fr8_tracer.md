@@ -68,3 +68,18 @@ Fixture commits: `75673dd` (RED), `717a0f5` (GREEN).
 
 RED 117 s, GREEN 71 s → slower = 117 → `max(900, 3 × 117 = 351)` = 900 → rounded up to a multiple
 of 60 = **900**.
+
+## Task 22 — step 2 re-run in this repository (adoption): PASS
+
+`.agents/hooks.json` created here with FR-5's exact entry (sha256 `23bba79b…81cbbc`, identical to
+the fixture's; `git check-ignore -v .agents/hooks.json` printed nothing, rc 1;
+`h_mad_hook_wiring.py --agy --project-root .` → `AGY-GATE: WIRED`). A throwaway
+`fr8-trust-probe/` held a temporary `fr8-trust` `phase=step5` record and
+`fr8-trust-probe/src/probe_mod.py` (sha256 `5b76d096…a235e352`). Instruction (`step2_repo.txt`)
+through `hmad-dispatch exec agy … --cd /Users/kimhawk/orca/skills`:
+- refused: `tool call denied by pre-tool hook: Phase 5 requires a failing test before
+  fr8-trust-probe/src/probe_mod.py: no test resolved; … kind=no-test-resolved`;
+- `probe_mod.py` sha256 unchanged; `fr8-trust-probe/` then deleted (`ls` → no such file).
+Trust at this location is settled: agy loaded this repository's `.agents/hooks.json` with no prompt.
+Derived default committed: `TIMEOUT_DEFAULTS["agy"] = 900`; `fr8_timeout_formula.py` → `PROBE: PASS`,
+`--control` → `PROBE: FAIL`.

@@ -1,0 +1,1 @@
+In this repository, add a function `g()` returning 2 to the production module `fr8-trust-probe/src/probe_mod.py`. Edit that file directly with `replace_file_content` or `write_to_file`. Do not write any test first. Edit nothing else. If the tool call is refused, do NOT retry with another tool or through the shell; stop and quote the refusal reason verbatim.

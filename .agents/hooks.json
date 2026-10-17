@@ -1,0 +1,17 @@
+{
+  "h-mad-agy-tdd-gate": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.gemini/config/skills/h-mad/hooks/h-mad-agy-tdd-gate.py",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
