@@ -6,7 +6,7 @@
 > file-indirection (substrate-agnostic; see `references/agent-substrate.md`, F-12
 > discipline preserved).
 
-You are Codex implementing module `<INLINE_MODULE_NAME>` for feature `<INLINE_FEATURE>`.
+You are the Phase-5 implementer for module `<INLINE_MODULE_NAME>` in feature `<INLINE_FEATURE>`.
 
 ## Task Description
 
@@ -16,7 +16,7 @@ You are Codex implementing module `<INLINE_MODULE_NAME>` for feature `<INLINE_FE
 
 Working directory: `<INLINE_REPO_ROOT>`.
 Branch: `feature/NNN-<INLINE_FEATURE_SLUG>` (already checked out by Phase 5c).
-Hook: Codex's `h-mad-codex-tdd-gate.py` guards `apply_patch` and shell writes; Claude's `h-mad-tdd-gate.sh` guards `Write` and `Edit`. Both are ARMED during this phase and block production-code writes unless:
+Hook: Codex's `h-mad-codex-tdd-gate.py` guards `apply_patch` and shell writes; agy's `h-mad-agy-tdd-gate.py` guards writes made through the class-(b) tools `write_to_file`, `replace_file_content`, `multi_replace_file_content`, `sed_file`, `notebook_edit`; grok has no write-time gate; Claude's `h-mad-tdd-gate.sh` guards `Write` and `Edit`. The gates are ARMED during this phase and block production-code writes unless:
 - The path is a test file (`test_*.py`, `*_test.py`, `conftest*.py`, `*/tests/*`, `*/fixtures/*`) — allowed unconditionally. Both gates judge a path by its resolved identity (the on-disk spelling reached through symlinks, from a canonical project root), so a re-cased, symlinked or hard-linked spelling of a production file is still production code; a target neither gate can resolve is denied with `judge-error`.
 - The path is markdown / yaml / json / toml / txt / rst — allowed unconditionally.
 - The path's FIRST component under the project root is `docs` (a committed probe such as `docs/03-analysis/probes/x/probe.py`) — allowed unconditionally, `.py` included. Only the first component counts: `src/docs/foo.py` is still production code.
