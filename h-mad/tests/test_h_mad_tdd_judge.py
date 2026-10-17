@@ -549,6 +549,8 @@ def test_judge_timeout_has_priority(tmp_path, monkeypatch):
     second = _plan_test(root, "tests/test_second.py", red=False)
     _task_plan(root, "**Production file**: `tools/w.py`\n**Test file**: `tests/test_first.py`",
                "**Production file**: `tools/w.py`\n**Test file**: `tests/test_second.py`")
+    # The judge tries the newest test first; keep test_first newest so both run.
+    os.utime(second, (time.time() - 60, time.time() - 60))
     pidfile = tmp_path / "priority-detached.pid"
     script = detaching_sleeper(tmp_path / "interpreter", pidfile, 12)
     monkeypatch.setattr(judge, "select_interpreter",
@@ -1012,3 +1014,67 @@ def test_three_nine_floor(name):
         env=hermetic_env(), timeout=60.0, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_judge_mtime_newest_red_avoids_guard_starvation(tmp_path):
+    """RED: the fresh task's failing test must run before an older slow guard."""
+    root = _root(tmp_path)
+    target = _target(root)
+    older_green = _plan_test(root, "tests/test_older_slow_guard.py", red=False)
+    older_green.write_text(
+        "import time\n\ndef test_slow_guard():\n    time.sleep(3.0)\n    assert True\n",
+        encoding="utf-8",
+    )
+    newer_red = _plan_test(root, "tests/test_newer_red.py")
+    _task_plan(root,
+               "**Production file**: `tools/w.py`\n**Test file**: `tests/test_older_slow_guard.py`",
+               "**Production file**: `tools/w.py`\n**Test file**: `tests/test_newer_red.py`")
+    os.utime(older_green, (1_700_000_000, 1_700_000_000))
+    os.utime(newer_red, (1_700_000_010, 1_700_000_010))
+
+    verdict = judge.judge(root, target, _records(root), budget_s=2.0,
+                          fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.kind, verdict.source, verdict.test) == (
+        "ALLOW", "red-measured", "impl-plan", newer_red,
+    ), f"the newest RED must be reached before the older guard consumes the budget: {verdict!r}"
+
+
+def test_judge_mtime_guard_equal_mtimes_preserve_plan_order(tmp_path):
+    """GUARD 2: equal mtimes keep the first plan task ahead of the second."""
+    root = _root(tmp_path)
+    target = _target(root)
+    first_red = _plan_test(root, "tests/test_z_first_red.py")
+    second_red = _plan_test(root, "tests/test_a_second_red.py")
+    _task_plan(root,
+               "**Production file**: `tools/w.py`\n**Test file**: `tests/test_z_first_red.py`",
+               "**Production file**: `tools/w.py`\n**Test file**: `tests/test_a_second_red.py`")
+    for candidate in (first_red, second_red):
+        os.utime(candidate, (1_700_000_000, 1_700_000_000))
+
+    verdict = judge.judge(root, target, _records(root), budget_s=10.0,
+                          fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.kind, verdict.source, verdict.test) == (
+        "ALLOW", "red-measured", "impl-plan", first_red,
+    ), f"tied mtimes must preserve plan order: {verdict!r}"
+
+
+def test_judge_mtime_guard_older_red_still_allows_after_newer_green(tmp_path):
+    """GUARD 3: a newer passing test must not hide an older failing test."""
+    root = _root(tmp_path)
+    target = _target(root)
+    older_red = _plan_test(root, "tests/test_older_red.py")
+    newer_green = _plan_test(root, "tests/test_newer_green.py", red=False)
+    _task_plan(root,
+               "**Production file**: `tools/w.py`\n**Test file**: `tests/test_older_red.py`",
+               "**Production file**: `tools/w.py`\n**Test file**: `tests/test_newer_green.py`")
+    os.utime(older_red, (1_700_000_000, 1_700_000_000))
+    os.utime(newer_green, (1_700_000_010, 1_700_000_010))
+
+    verdict = judge.judge(root, target, _records(root), budget_s=10.0,
+                          fallback_interpreter=sys.executable)
+
+    assert (verdict.decision, verdict.kind, verdict.source, verdict.test) == (
+        "ALLOW", "red-measured", "impl-plan", older_red,
+    ), f"the older RED must still allow when the newer candidate passes: {verdict!r}"
