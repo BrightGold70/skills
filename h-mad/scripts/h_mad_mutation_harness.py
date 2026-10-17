@@ -170,9 +170,11 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 # Loaded by path, without sys.path, into EVERY pytest session over this repo
@@ -2076,6 +2078,109 @@ def _sweep(spec_paths: list[Path]) -> int:
     return 0 if swept and not counts["unmeasured"] else 2
 
 
+def _isolate(argv: list[str], spec_paths: list[Path]) -> int:
+    """Run the dirty tree's harness in a disposable detached worktree."""
+    cwd = Path.cwd().resolve()
+    git_cwd = cwd
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(git_cwd), *args], check=True,
+            capture_output=True, text=True,
+        ).stdout
+
+    try:
+        top = Path(git("rev-parse", "--show-toplevel").strip()).resolve()
+    except (OSError, subprocess.CalledProcessError):
+        print("MUTATION: UNREADABLE reason=isolate-no-repo")
+        return 2
+    git_cwd = top
+
+    rewrites = {}
+    for spec in spec_paths:
+        try:
+            rewrites[str(spec)] = spec.resolve().relative_to(top)
+        except ValueError:
+            print("MUTATION: UNREADABLE reason=isolate-spec-outside-repo")
+            return 2
+    try:
+        script = Path(__file__).resolve().relative_to(top)
+    except ValueError:
+        print("MUTATION: UNREADABLE reason=isolate-script-outside-repo")
+        return 2
+
+    worktree = None
+    child = None
+    handlers = {}
+    status = 2
+
+    def on_signal(signum, _frame):
+        if child is not None and child.poll() is None:
+            child.send_signal(signum)
+        raise SystemExit(128 + signum)
+
+    try:
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            handlers[signum] = signal.signal(signum, on_signal)
+        base = git("rev-parse", "--short", "HEAD").strip()
+        worktree = Path(tempfile.mkdtemp(
+            prefix=".h-mad-isolate-", dir=top.parent,
+        )).resolve()
+        git("worktree", "add", "--detach", str(worktree), "HEAD")
+        paths = set(git("diff", "--name-only", "-z", "HEAD").split("\0"))
+        paths.update(git("ls-files", "--others", "--exclude-standard", "-z").split("\0"))
+        copied = 0
+        for name in sorted(paths - {""}):
+            source, destination = top / name, worktree / name
+            if source.is_file() or source.is_symlink():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if destination.is_symlink():
+                    destination.unlink()
+                shutil.copy2(source, destination, follow_symlinks=False)
+                copied += 1
+            elif not source.exists():
+                destination.unlink(missing_ok=True)
+        child_args = []
+        positional = False
+        for arg in argv:
+            if arg == "--":
+                positional = True
+            elif arg == "--isolate" and not positional:
+                continue
+            child_args.append(str(worktree / rewrites[arg]) if arg in rewrites else arg)
+        print(f"ISOLATE: worktree={worktree} base={base} copied={copied}", flush=True)
+        child = subprocess.Popen(
+            [sys.executable, str(worktree / script), *child_args],
+            cwd=worktree / cwd.relative_to(top),
+        )
+        status = child.wait()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"MUTATION: UNREADABLE reason=isolate-error error={exc}")
+    finally:
+        try:
+            if child is not None and child.poll() is None:
+                child.wait()
+            if worktree is not None:
+                removed = True
+                try:
+                    git("worktree", "remove", "--force", str(worktree))
+                except (OSError, subprocess.CalledProcessError):
+                    removed = False
+                try:
+                    if worktree.exists():
+                        shutil.rmtree(worktree)
+                except OSError:
+                    removed = False
+                if not removed or worktree.exists():
+                    print(f"MUTATION: UNREADABLE reason=isolate-not-removed path={worktree}")
+                    return 2
+                print("ISOLATE: removed=yes", flush=True)
+        finally:
+            for signum, handler in handlers.items():
+                signal.signal(signum, handler)
+    return status
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="H-MAD Phase-5e mutation harness")
     parser.add_argument(
@@ -2094,7 +2199,13 @@ def main(argv: list[str] | None = None) -> int:
         help="check every mutation's anchor still matches exactly once; "
              "applies nothing and runs no tests",
     )
+    parser.add_argument(
+        "--isolate", action="store_true",
+        help="run in a temporary detached worktree with dirty files copied in",
+    )
     args = parser.parse_args(argv)
+    if args.isolate:
+        return _isolate(list(sys.argv[1:] if argv is None else argv), args.spec)
 
     if args.check_anchors:
         if args.spec:

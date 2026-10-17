@@ -2619,6 +2619,7 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
   `grep -nE 'worktree|isolat|detach' h-mad/scripts/h_mad_mutation_harness.py` returns nothing.
   — recurrence: 5 — candidate: yes
   — **RE-PROBED 2026-10-18: OPEN** — `grep -nE 'worktree|isolat|detach' h-mad/scripts/h_mad_mutation_harness.py` → 0 hits. A reusable pattern now exists: `h_mad_failure_diff.py` creates a detached control worktree and removes only its own entry on every exit path, signals included.
+  — **LANDED 2026-10-18** — `h_mad_mutation_harness.py --isolate` (run, `--sweep`, `--check-anchors`): detached worktree of HEAD beside the repo, dirty + untracked files copied in, spec paths rewritten, worktree removed on every exit path; `ISOLATE:` lines. 15 tests in `test_h_mad_mutation_harness.py`, rows in `mutation_harness.json`. Dogfooded: `--isolate --check-anchors` copied=3, removed=yes, original tree unchanged.
 - **assembler `gate`-shape path** (2026-10-17, agy-coder-fallback): `h_mad_assemble_tdd.py` stages only
   RED/GREEN; a `gate` task (no tests, probes only) was hand-prompted five times (Tasks 0, 8, 14, 18, 19),
   and each hand prompt re-typed the same rules (measure-never-tune, PROBE token, control, no commit).

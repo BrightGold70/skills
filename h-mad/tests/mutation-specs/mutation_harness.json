@@ -415,6 +415,42 @@
       "find": "            if (before and after and before != after) or paths:",
       "replace": "            if False:",
       "test": "tests/test_h_mad_mutation_harness.py::TestTheTreeMustNotMoveUnderTheRun::test_a_commit_mid_run_invalidates_the_verdict"
+    },
+    {
+      "name": "isolate-dirty-file-copy-skipped",
+      "_mechanism": "Skip the dirty overlay bytes; the isolated verdict and binary-file checks must fail against HEAD content.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_isolate",
+      "find": "                shutil.copy2(source, destination, follow_symlinks=False)",
+      "replace": "                pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_measures_dirty_files_and_preserves_original_tree"
+    },
+    {
+      "name": "isolate-worktree-removal-skipped",
+      "_mechanism": "Skip git worktree removal; rmtree alone leaves the registered worktree and the original registry snapshot changes.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_isolate",
+      "find": "                    git(\"worktree\", \"remove\", \"--force\", str(worktree))",
+      "replace": "                    pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_measures_dirty_files_and_preserves_original_tree"
+    },
+    {
+      "name": "isolate-spec-path-rewrite-skipped",
+      "_mechanism": "Forward original spec arguments; the child argv must name the copied spec for both absolute and relative inputs.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_isolate",
+      "find": "            child_args.append(str(worktree / rewrites[arg]) if arg in rewrites else arg)",
+      "replace": "            child_args.append(arg)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_reruns_its_dirty_script_with_rebased_cwd_and_original_arguments"
+    },
+    {
+      "name": "isolate-outside-repo-refusal-dropped",
+      "_mechanism": "Permit an outside spec instead of refusing it before worktree creation; the refusal token and unchanged outside bytes are pinned.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_isolate",
+      "find": "        except ValueError:\n            print(\"MUTATION: UNREADABLE reason=isolate-spec-outside-repo\")\n            return 2",
+      "replace": "        except ValueError:\n            rewrites[str(spec)] = spec.resolve()",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_refuses_a_spec_outside_the_repo_without_leaking"
     }
   ]
 }
