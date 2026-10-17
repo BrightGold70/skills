@@ -54,6 +54,9 @@ from h_mad_state_ownership import liveness_evidence, owner_is_live  # noqa: E402
 from h_mad_state_validate import classify, undeclared_keys  # noqa: E402
 
 
+APPEND_ONLY = ("review_independence", "implementation_authors")
+
+
 class StateWriteError(Exception):
     """The write was refused. The store is unchanged."""
 
@@ -193,7 +196,8 @@ def create_feature(state_file: Path, feature: str, started_ts: str | None = None
 
 
 def merge_fields(state_file: Path, feature: str, fields: dict[str, Any], *,
-                 session_id: str | None = None, now: str | None = None) -> dict:
+                 session_id: str | None = None, now: str | None = None,
+                 appends: list[tuple[str, Any]] | None = None) -> dict:
     """Merge `fields` into an existing record, validating before writing.
 
     A phase write by the session that HOLDS the claim is a sign of life, so when
@@ -208,6 +212,12 @@ def merge_fields(state_file: Path, feature: str, fields: dict[str, Any], *,
     the very window #126 exists for) and `--set session_id=x` raised a TypeError
     at exit 1, both bypassing the undeclared-key refusal that exits 2.
     """
+    for key in fields:
+        if key in APPEND_ONLY:
+            raise StateWriteError(f"{key} is append-only: use --append")
+    for key, _ in appends or []:
+        if key in fields:
+            raise StateWriteError(f"--set and --append name the same key: {key}")
 
     def apply(records: dict):
         if feature not in records:
@@ -215,6 +225,11 @@ def merge_fields(state_file: Path, feature: str, fields: dict[str, Any], *,
         record = {**records[feature], **fields}
         if session_id and records[feature].get("owner_session_id") == session_id:
             record["owner_heartbeat_ts"] = now or _utc_now()
+        for key, value in appends or []:
+            current = record.get(key, [])
+            if not isinstance(current, list):
+                raise StateWriteError(f"{key}: cannot append to a non-array value")
+            record[key] = [*current, value]
         return record
 
     return _mutate(state_file, feature, apply)
@@ -460,6 +475,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Field to set. Values are parsed as JSON when possible, else kept "
         "as strings — so phase=null writes null and current_phase=5 writes 5.",
     )
+    parser.add_argument(
+        "--append", action="append", default=[], metavar="KEY=JSON",
+        help="Append a JSON value to an array field (repeatable).",
+    )
     parser.add_argument("--started-ts", help="started_ts for --create")
     parser.add_argument(
         "--drop-undeclared", action="store_true",
@@ -520,13 +539,24 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             key, _, raw = item.partition("=")
             fields[key.strip()] = _parse_value(raw)
-        if fields:
-            merge_fields(args.state_file, args.feature, fields, session_id=args.session_id)
+        appends = []
+        for item in args.append:
+            if "=" not in item:
+                raise StateWriteError(f"--append expects KEY=JSON, got {item!r}")
+            key, _, raw = item.partition("=")
+            try:
+                value = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise StateWriteError(f"--append expects KEY=JSON, got {item!r}: {exc}") from exc
+            appends.append((key.strip(), value))
+        if fields or appends:
+            merge_fields(args.state_file, args.feature, fields,
+                         session_id=args.session_id, appends=appends)
     except StateWriteError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
-    written = sorted(f.partition("=")[0].strip() for f in args.set)
+    written = sorted(f.partition("=")[0].strip() for f in [*args.set, *args.append])
     print(
         f"STATE-WRITE: OK feature={args.feature} "
         f"keys={len(written)}{' ' + ','.join(written) if written else ''}"
