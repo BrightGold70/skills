@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 from h_mad_cycle_counts import analysis_artifacts, iterate_cycles
+from h_mad_state_validate import property_valid
 from h_mad_telemetry import resolve_docs_root
 
 MATCH_RATE_THRESHOLD = 90.0
@@ -103,6 +104,46 @@ def parked_specs(docs_root: Path, feature: str, spec_dirs: list[Path] | None = N
     restored, unrestored = split_parked(pending_dir, spec_dirs)
     return {"parked": restored + unrestored, "restored": restored, "unrestored": unrestored,
             "spec_dirs": list(spec_dirs), "pending_dir": pending_dir}
+
+
+def _review_independence_warnings(record: dict) -> list[dict[str, str]]:
+    """Describe missing or inconsistent review evidence without changing readiness."""
+    warnings: list[dict[str, str]] = []
+    entries = record.get("review_independence", [])
+    if not isinstance(entries, list):
+        warnings.append({
+            "code": "review_independence_malformed",
+            "detail": "review_independence is not a list",
+        })
+        entries = []
+
+    well_formed = []
+    for index, entry in enumerate(entries):
+        if (not property_valid("review_independence", [entry])
+                or entry["independent"] != (entry["reviewer"] != entry["implementer"])):
+            warnings.append({
+                "code": "review_independence_malformed",
+                "detail": f"review_independence[{index}] is malformed or inconsistent",
+            })
+            continue
+        well_formed.append(entry)
+        if not entry["independent"]:
+            warnings.append({
+                "code": "review_non_independent",
+                "detail": (f"{entry['leg']} module={entry['module']} "
+                           f"was implemented and reviewed by {entry['implementer']}"),
+            })
+
+    if (record.get("archreview") in ("READY_TO_MERGE", "WITH_FIXES", "NO")
+            and not any(entry["leg"] == "6a-prime" for entry in well_formed)):
+        authors = sorted({entry["implementer"] for entry in well_formed
+                          if entry["leg"] in ("5e-review", "5e-verify")})
+        author_detail = ",".join(authors) if authors else "unrecorded"
+        warnings.append({
+            "code": "review_independence_unrecorded",
+            "detail": f"6a-prime review independence is unrecorded; authors={author_detail}",
+        })
+    return warnings
 
 
 def check(record: dict, analysis_path: Path, spec_dirs: list[Path] | None = None,
@@ -281,6 +322,7 @@ def check(record: dict, analysis_path: Path, spec_dirs: list[Path] | None = None
                     ),
                 })
 
+    warnings.extend(_review_independence_warnings(record))
     return {"ready": not blockers, "blockers": blockers, "warnings": warnings}
 
 

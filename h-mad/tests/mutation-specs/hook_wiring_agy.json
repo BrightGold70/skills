@@ -1,0 +1,79 @@
+{
+  "root": "../..",
+  "command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "tests/test_h_mad_hook_wiring_agy.py", "-q"],
+  "target_command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "fr5-no-hooks-file",
+      "_mechanism": "Remove the absent hooks-file guard.",
+      "file": "scripts/h_mad_hook_wiring.py",
+      "symbol": "check_agy",
+      "find": "    if not path.exists():",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason"
+    },
+    {
+      "name": "fr5-no-entry",
+      "_mechanism": "Remove the required top-level object entry guard.",
+      "file": "scripts/h_mad_hook_wiring.py",
+      "symbol": "check_agy",
+      "find": "    if not isinstance(entry, dict):\n        return \"AGY-GATE: UNWIRED reason=no-entry\", 0",
+      "replace": "    if False:\n        return \"AGY-GATE: UNWIRED reason=no-entry\", 0",
+      "test": "tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason"
+    },
+    {
+      "name": "fr5-disabled",
+      "_mechanism": "Accept disabled entries.",
+      "file": "scripts/h_mad_hook_wiring.py",
+      "symbol": "check_agy",
+      "find": "    if entry.get(\"enabled\", True) is not True:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason"
+    },
+    {
+      "name": "fr5-matcher-narrow",
+      "_mechanism": "Remove the wide PreToolUse matcher guard.",
+      "file": "scripts/h_mad_hook_wiring.py",
+      "symbol": "check_agy",
+      "find": "    if not wide:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason"
+    },
+    {
+      "name": "fr5-bad-command",
+      "_mechanism": "Remove the exact command guard.",
+      "file": "scripts/h_mad_hook_wiring.py",
+      "symbol": "check_agy",
+      "find": "    if not handlers:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason"
+    },
+    {
+      "name": "fr5-timeout-below-floor",
+      "_mechanism": "Accept a handler whose timeout is absent or below the floor.",
+      "file": "scripts/h_mad_hook_wiring.py",
+      "symbol": "check_agy",
+      "find": "    if not any(type(handler.get(\"timeout\", 30)) is int\n               and handler.get(\"timeout\", 30) >= floor for handler in handlers):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason"
+    },
+    {
+      "name": "fr5-self-check-failed",
+      "_mechanism": "Accept a self-check that returns a FAIL verdict.",
+      "file": "scripts/h_mad_hook_wiring.py",
+      "symbol": "check_agy",
+      "find": "    if result.returncode != 0 or result.stdout not in (\"AGY-TDD-GATE: PASS\", \"AGY-TDD-GATE: PASS\\n\"):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_hook_wiring_agy.py::test_unwired_reason"
+    },
+    {
+      "name": "fr5-timeout-floor-hardcoded-60",
+      "_mechanism": "Sever the live connection to h_mad_tdd_judge.JUDGE_BUDGET_S (I3).",
+      "file": "scripts/h_mad_hook_wiring.py",
+      "symbol": "check_agy",
+      "find": "math.ceil(h_mad_tdd_judge.JUDGE_BUDGET_S + 20)",
+      "replace": "60",
+      "test": "tests/test_h_mad_hook_wiring_agy.py::test_timeout_floor_is_derived_from_the_judge_budget"
+    }
+  ]
+}

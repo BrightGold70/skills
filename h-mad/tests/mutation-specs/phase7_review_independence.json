@@ -1,0 +1,46 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11", "-m", "pytest",
+    "tests/test_h_mad_phase7_preconditions.py::TestReviewIndependence", "-q"
+  ],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "fr7-consistency-check-dropped",
+      "_mechanism": "Schema-valid booleans that contradict the two agents are accepted as well-formed review evidence.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "symbol": "_review_independence_warnings",
+      "find": "                or entry[\"independent\"] != (entry[\"reviewer\"] != entry[\"implementer\"])):",
+      "replace": "                or False):",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestReviewIndependence::test_malformed_entry_warns"
+    },
+    {
+      "name": "fr7-unrecorded-agy-only",
+      "_mechanism": "The unrecorded warning becomes conditional on current routing and disappears for other implementers or an absent routing field.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "symbol": "_review_independence_warnings",
+      "find": "    if (record.get(\"archreview\") in (\"READY_TO_MERGE\", \"WITH_FIXES\", \"NO\")",
+      "replace": "    if (record.get(\"implementer\") == \"agy\" and record.get(\"archreview\") in (\"READY_TO_MERGE\", \"WITH_FIXES\", \"NO\")",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestReviewIndependence::test_unrecorded_fires_for_each_implementer"
+    },
+    {
+      "name": "fr7-malformed-6a-prime-counted",
+      "_mechanism": "A malformed 6a-prime entry suppresses the unrecorded warning even though it cannot attest to independence.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "symbol": "_review_independence_warnings",
+      "find": "            and not any(entry[\"leg\"] == \"6a-prime\" for entry in well_formed)):",
+      "replace": "            and not any(entry.get(\"leg\") == \"6a-prime\" for entry in entries if isinstance(entry, dict))):",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestReviewIndependence::test_malformed_6a_prime_entry_is_not_recorded"
+    },
+    {
+      "name": "fr7-detail-reads-switch",
+      "_mechanism": "The detail names the current routing destination rather than the distinct authors attested by well-formed 5e entries.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "symbol": "_review_independence_warnings",
+      "find": "        author_detail = \",\".join(authors) if authors else \"unrecorded\"",
+      "replace": "        author_detail = record.get(\"implementer_switch\", {}).get(\"to\", \"unrecorded\")",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestReviewIndependence::test_unrecorded_detail_names_entry_authors_not_routing"
+    }
+  ]
+}

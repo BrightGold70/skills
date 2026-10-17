@@ -1,0 +1,55 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_state_validate_fallback.py",
+    "tests/test_h_mad_state_schema_fr1_docs.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "fr1-semantic-check-dropped",
+      "_mechanism": "Removing the pre-tier semantic refusal lets an invalid switch timestamp validate as strict because both schema backends treat format as an annotation.",
+      "file": "scripts/h_mad_state_validate.py",
+      "symbol": "classify",
+      "find": "    if not _semantic_ok(record):\n        return \"invalid\"\n",
+      "replace": "",
+      "test": "tests/test_h_mad_state_validate_fallback.py::test_switch_ts_refused"
+    },
+    {
+      "name": "fr1-datetime-construction-dropped",
+      "_mechanism": "Dropping calendar construction admits February 30 and second 60 despite matching the timestamp grammar.",
+      "file": "scripts/h_mad_state_validate.py",
+      "symbol": "rfc3339_datetime",
+      "find": "        datetime(*(int(match.group(i)) for i in range(1, 7)))",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_state_validate_fallback.py::test_switch_ts_refused"
+    },
+    {
+      "name": "fr1-fullmatch-to-match",
+      "_mechanism": "A prefix match admits a valid timestamp followed by junk; the zjunk fixture must refuse it.",
+      "file": "scripts/h_mad_state_validate.py",
+      "symbol": "rfc3339_datetime",
+      "find": "    match = re.fullmatch(",
+      "replace": "    match = re.match(",
+      "test": "tests/test_h_mad_state_validate_fallback.py::test_switch_ts_refused"
+    },
+    {
+      "name": "fr7-property-valid-dict-guard-dropped",
+      "_mechanism": "Indexing ts without the shared dict guard makes the schema-valid null switch return False through the exception handler instead of True.",
+      "file": "scripts/h_mad_state_validate.py",
+      "symbol": "property_valid",
+      "find": "            return _semantic_ok({\"implementer_switch\": value})",
+      "replace": "            return rfc3339_datetime(value[\"ts\"])",
+      "test": "tests/test_h_mad_state_validate_fallback.py::test_property_valid_implementer_switch_none_does_not_raise"
+    }
+  ]
+}

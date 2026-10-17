@@ -1,0 +1,54 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_implementer_neutral_prompt.py",
+    "-v"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "-v"
+  ],
+  "mutations": [
+    {
+      "name": "fr10-prompt-opening-names-codex",
+      "_mechanism": "Restoring the Codex-specific opening must fail the implementer-neutral opening assertion.",
+      "file": "references/codex-implementer-prompt.md",
+      "symbol": "Codex Implementer Prompt Template — /h-mad Phase 5d / 5e",
+      "find": "You are the Phase-5 implementer for module",
+      "replace": "You are Codex implementing module",
+      "test": "tests/test_h_mad_implementer_neutral_prompt.py::test_prompt_opening_names_no_implementer"
+    },
+    {
+      "name": "fr10-hook-line-drops-agy-gate",
+      "_mechanism": "Deleting the agy gate filename must fail the Hook-line gate assertion.",
+      "file": "references/codex-implementer-prompt.md",
+      "symbol": "Context",
+      "find": "h-mad-agy-tdd-gate.py",
+      "replace": "",
+      "test": "tests/test_h_mad_implementer_neutral_prompt.py::test_hook_line_names_the_agy_gate"
+    },
+    {
+      "name": "fr10-hook-line-drops-agy-write-tools",
+      "_mechanism": "Deleting the class-(b) write-tools clause must fail the Hook-line tool assertions while leaving the agy gate named.",
+      "file": "references/codex-implementer-prompt.md",
+      "symbol": "Context",
+      "find": " guards writes made through the class-(b) tools `write_to_file`, `replace_file_content`, `multi_replace_file_content`, `sed_file`, `notebook_edit`",
+      "replace": "",
+      "test": "tests/test_h_mad_implementer_neutral_prompt.py::test_hook_line_names_the_agy_write_tools"
+    },
+    {
+      "name": "fr10-hook-line-drops-grok",
+      "_mechanism": "Deleting the grok clause must fail the Hook-line no-write-time-gate assertion.",
+      "file": "references/codex-implementer-prompt.md",
+      "symbol": "Context",
+      "find": " grok has no write-time gate;",
+      "replace": "",
+      "test": "tests/test_h_mad_implementer_neutral_prompt.py::test_hook_line_says_grok_has_no_write_time_gate"
+    }
+  ]
+}

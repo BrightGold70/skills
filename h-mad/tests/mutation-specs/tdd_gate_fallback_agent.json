@@ -31,8 +31,8 @@
     {
       "name": "g3-reads-another-feature",
       "file": "scripts/h_mad_tdd_judge.py",
-      "find": "path, _fallback_tag(value))",
-      "replace": "path, _fallback_tag(next(iter(states.values()))))",
+      "find": "path, _fallback_tag(value),",
+      "replace": "path, _fallback_tag(next(iter(states.values()))),",
       "test": "tests/test_h_mad_tdd_gate_fallback_agent.py::test_gate_matrix"
     },
     {

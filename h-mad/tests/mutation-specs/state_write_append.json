@@ -1,0 +1,64 @@
+{
+  "root": "../..",
+  "_why": "FR-7: append preserves prior entries and call order, refuses set/append overlap, and protects append-only histories from replacement.",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_state_write.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "fr7-append-from-empty",
+      "_mechanism": "Building each append from an empty list silently discards every earlier entry.",
+      "file": "scripts/h_mad_state_write.py",
+      "symbol": "merge_fields.apply",
+      "find": "            record[key] = [*current, value]",
+      "replace": "            record[key] = [value]",
+      "test": "tests/test_h_mad_state_write.py::TestAppend::test_append_keeps_both_earlier_entries"
+    },
+    {
+      "name": "fr7-append-reads-prior",
+      "_mechanism": "Reading the prior record instead of the updated record loses earlier appends to the same key within one call.",
+      "file": "scripts/h_mad_state_write.py",
+      "symbol": "merge_fields.apply",
+      "find": "            current = record.get(key, [])",
+      "replace": "            current = records[feature].get(key, [])",
+      "test": "tests/test_h_mad_state_write.py::TestAppend::test_two_appends_in_one_call_keep_order"
+    },
+    {
+      "name": "fr7-same-key-refusal-dropped",
+      "_mechanism": "Dropping the overlap guard permits a set and append on the same key to reach schema validation instead of the explicit conflict refusal.",
+      "file": "scripts/h_mad_state_write.py",
+      "symbol": "merge_fields",
+      "find": "        if key in fields:\n            raise StateWriteError(f\"--set and --append name the same key: {key}\")",
+      "replace": "        if False:\n            raise StateWriteError(f\"--set and --append name the same key: {key}\")",
+      "test": "tests/test_h_mad_state_write.py::TestAppend::test_set_and_append_on_the_same_key_are_refused"
+    },
+    {
+      "name": "fr7-append-only-drops-review-independence",
+      "_mechanism": "Removing review_independence from APPEND_ONLY lets a set replace the review history.",
+      "file": "scripts/h_mad_state_write.py",
+      "symbol": "<module>",
+      "find": "APPEND_ONLY = (\"review_independence\", \"implementation_authors\")",
+      "replace": "APPEND_ONLY = (\"implementation_authors\",)",
+      "test": "tests/test_h_mad_state_write.py::TestAppend::test_append_only_key_refuses_set[review_independence]"
+    },
+    {
+      "name": "fr7-append-only-drops-implementation-authors",
+      "_mechanism": "Removing implementation_authors from APPEND_ONLY lets a set replace the authorship history.",
+      "file": "scripts/h_mad_state_write.py",
+      "symbol": "<module>",
+      "find": "APPEND_ONLY = (\"review_independence\", \"implementation_authors\")",
+      "replace": "APPEND_ONLY = (\"review_independence\",)",
+      "test": "tests/test_h_mad_state_write.py::TestAppend::test_append_only_key_refuses_set[implementation_authors]"
+    }
+  ]
+}

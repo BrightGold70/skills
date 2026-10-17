@@ -1,0 +1,78 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_gate_peers.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "fr3-implementer-invalid-dropped",
+      "_mechanism": "Remove the invalid-implementer refusal so an invalid author falls through.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "if [ -n \"$INVALID_RECORD\" ]; then\n  KEY=$(_pct_decode \"${INVALID_RECORD%%,*}\")\n  FILE=${INVALID_RECORD#*,}; FILE=${FILE#*,}; FILE=$(_pct_decode \"${FILE%%,*}\")\n  VALUE=${INVALID_RECORD#*,}; VALUE=${VALUE#*,}; VALUE=${VALUE#*,}; VALUE=${VALUE%%,*}\n  VALUE=$(_pct_decode \"${VALUE#invalid:}\")\n  _refuse implementer-invalid \"implementer=$VALUE is not valid (valid: codex|agy|null) — refusing the write, fail-closed.\n  Fix it: python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $KEY --set implementer=codex|agy|null \\\"$FILE\\\"\"\nfi\n",
+      "replace": "",
+      "test": "tests/test_h_mad_tdd_gate_peers.py::test_implementer_invalid_refused"
+    },
+    {
+      "name": "fr3-invalid-scan-first-record-only",
+      "_mechanism": "Inspect invalid authors only in the first record; a later invalid record must still outrank a peer.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_state",
+      "find": "        invalid:*) [ -n \"$INVALID_RECORD\" ] || INVALID_RECORD=$record ;;",
+      "replace": "        invalid:*) if [ \"$count\" = 1 ]; then INVALID_RECORD=$record; fi ;;",
+      "test": "tests/test_h_mad_tdd_gate_peers.py::test_implementer_invalid_outranks_codex_authorship"
+    },
+    {
+      "name": "fr3-agy-arm-dropped",
+      "_mechanism": "Remove the agy refusal arm so a resolved agy author falls through.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "    agy)\n      _refuse agy-authorship \"Phase 5 implementation must be authored by agy, not Claude.\nDispatch this module to agy: hmad-dispatch exec agy <promptfile>  (stage it with h_mad_assemble_tdd.py --agent agy).\nagy looks available (agy on PATH). If it is out of quota, record it —\n  python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $PEER_KEY --set agy_status=exhausted \\\"$PEER_FILE\\\"\nthen Claude may author the fallback (still test-first). Or export HMAD_AGY_UNAVAILABLE=1 for a one-off.\nUse h_mad_tdd_judge.py implementer to see who resolves.\" ;;\n",
+      "replace": "",
+      "test": "tests/test_h_mad_tdd_gate_peers.py::test_agy_authorship_refused_when_agy_resolves"
+    },
+    {
+      "name": "fr3-peers-out-alternative-dropped",
+      "_mechanism": "Reject the peers-out author by removing its grammar alternative.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "(codex|agy|peers-out|invalid:[^ ,]+)",
+      "replace": "(codex|agy|invalid:[^ ,]+)",
+      "test": "tests/test_h_mad_tdd_gate_peers.py::test_hook_reads_authorship_from_the_state_line_not_the_environment"
+    },
+    {
+      "name": "wire1-author-not-from-resolver",
+      "_mechanism": "Wire cut: hard-code codex with the resolver left intact instead of propagating its result.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "format_state_line",
+      "find": "        implementer = resolve_implementer(record, env=env, which=which)\n        if implementer.invalid_field == \"implementer\":\n            author = \"invalid:\" + _enc(implementer.invalid_value)\n        else:\n            author = implementer.resolved if implementer.resolved in (\"codex\", \"agy\") else \"peers-out\"\n",
+      "replace": "        author = \"codex\"\n",
+      "test": "tests/test_h_mad_tdd_gate_peers.py::test_format_state_line_takes_the_author_from_resolve_implementer"
+    },
+    {
+      "name": "wire2-hook-rederives-from-env",
+      "_mechanism": "Wire cut: rederive authorship from the environment and codex executable instead of reading the state author.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_state",
+      "find": "      rest=${record#*,}; rest=${rest#*,}; rest=${rest#*,}; author=${rest%%,*}\n",
+      "replace": "      if [ -z \"${HMAD_CODEX_UNAVAILABLE:-}\" ] && [ \"$ESCAPE\" = no ] && command -v codex >/dev/null 2>&1; then\n        author=codex\n      else\n        author=peers-out\n      fi\n",
+      "test": "tests/test_h_mad_tdd_gate_peers.py::test_hook_reads_authorship_from_the_state_line_not_the_environment"
+    },
+    {
+      "name": "wire2-every-author-is-a-peer",
+      "_mechanism": "Converse: force the first record to select codex whatever its author, unconditionally reaching codex-authorship.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_state",
+      "find": "      case \"$author\" in\n        invalid:*) [ -n \"$INVALID_RECORD\" ] || INVALID_RECORD=$record ;;\n        codex|agy)\n          if [ -z \"$PEER_RECORD\" ]; then PEER_RECORD=$record; PEER=$author; fi ;;\n      esac\n",
+      "replace": "      if [ -z \"$PEER_RECORD\" ]; then PEER_RECORD=$record; PEER=codex; fi\n",
+      "test": "tests/test_h_mad_tdd_gate_peers.py::test_hook_reads_authorship_from_the_state_line_not_the_environment"
+    }
+  ]
+}

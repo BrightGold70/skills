@@ -49,7 +49,7 @@
     {
       "name": "DIFF-DOCS-CX-OFF",
       "_mechanism": "docs/ first-component exemption disabled in the Codex gate: the committed probe under docs/ must be admitted, so the gates must disagree.",
-      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "file": "scripts/h_mad_target_identity.py",
       "find": "    if path.parts[:1] == (\"docs\",):  # M:G-DOCS",
       "replace": "    if False:  # M:G-DOCS",
       "test": "tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[docs/03-analysis/probes/x/m17_reach_probe.py]"
@@ -65,7 +65,7 @@
     {
       "name": "DIFF-DOCS-CX-ANYPART",
       "_mechanism": "Codex gate widened from the FIRST component to any part named docs: a real package src/docs/ must stay gated.",
-      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "file": "scripts/h_mad_target_identity.py",
       "find": "    if path.parts[:1] == (\"docs\",):  # M:G-DOCS",
       "replace": "    if \"docs\" in path.parts:  # M:G-DOCS",
       "test": "tests/test_h_mad_tdd_gate_differential.py::test_differential_cell[src/docs/foo.py]"

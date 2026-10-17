@@ -37,14 +37,13 @@ load-bearing:
 1. **Each top-level key is a hook NAME**, not an event. Events nest one level in, so entries from
    different names merge per event rather than colliding. A Claude-shaped `{"hooks": {...}}` block
    pasted here is silently inert.
-2. **The event vocabulary is `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`,
-   `Stop`.** There is **no `SessionStart`**. `PreInvocation` is the nearest thing and fires before
-   *every* model call, not once per session — so a once-per-session advisory cannot be expressed
-   faithfully, and must either become idempotent or be dropped rather than fired every turn.
+2. **Re-checked against installed agy `1.4.0` (`agy --version`) and its bundled `hooks.md`: the event vocabulary includes `SessionStart`, `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop`.**
+   `SessionStart` fires once when a new conversation session starts and takes a flat handler
+   list; use it for once-per-session advisories. `PreInvocation` fires before *every* model call.
 3. **`matcher` targets agy tool names**, not Claude's `Write|Edit`. Observed write-capable tools
    are `write_to_file`, `replace_file_content`, `multi_replace_file_content`, and `run_command`
    (a shell can write anything). `PreToolUse`/`PostToolUse` wrap handlers in a `matcher` + `hooks`
-   group; `PreInvocation`, `PostInvocation` and `Stop` take a flat handler list.
+   group; `SessionStart`, `PreInvocation`, `PostInvocation` and `Stop` take a flat handler list.
 
 A handler runs via `sh -c` with its working directory set to the directory containing `hooks.json`,
 receives a **camelCase** JSON payload on stdin, and must print a JSON object on stdout. For
@@ -56,13 +55,19 @@ optional `reason` shown to the user and agent.
 `hooks/h-mad-tdd-gate.sh` uses Claude Code's `permissionDecision` JSON deny on rc 0;
 `hooks/h-mad-codex-tdd-gate.py` uses Codex's hook contract. **Neither speaks agy's stdout-JSON contract**, so
 wiring either one here produces a hook that runs, emits nothing agy understands, and blocks
-nothing. An agy gate must read the `toolCall.name`/`toolCall.args` payload and emit
-`{"decision": "deny", "reason": "..."}` to refuse a production-code write during active `step5`,
-matching on the four tools above.
+nothing. Use `hooks/h-mad-agy-tdd-gate.py`, which reads the `toolCall.name`/`toolCall.args`
+payload and emits `{"decision": "deny", "reason": "..."}` for a refused production-code write
+during active `step5`. Wire it to `PreToolUse` with a matcher covering every tool so its
+classification also guards shell commands and tools outside the admitted inventory.
 
-Until such a gate exists and has been verified against a real refusal, **halt with
-`step5:agy_tdd_hook_unverified`** rather than claiming mechanical enforcement. An unverified gate
-is the one failure mode that makes a RED phase indistinguishable from a passing one.
+Before an agy implementer dispatch, run `python3 "$HMAD_SKILL_ROOT/scripts/h_mad_hook_wiring.py" --agy --project-root <project-root>` and require `AGY-GATE: WIRED`.
+Read the `AGY-GATE:` token, never `$?`: `UNWIRED` exits 0, while `UNREADABLE` exits 2.
+`h_mad_assemble_tdd.py --agent agy` runs this check before assembling. Anything other than
+`WIRED`, including a missing token, must **halt with `step5:agy_tdd_hook_unverified`**.
+The wiring check does not replace verification against a real refusal (FR-8 step 2) or the
+forced-handler-timeout probe (step 2a). Until that live proof exists, keep the same halt
+rather than claiming mechanical enforcement. An unverified gate is the one failure mode
+that makes a RED phase indistinguishable from a passing one.
 
 ## Author and reviewer roles
 
@@ -151,7 +156,7 @@ and design references behind each mapping.
 | `skill-call` | mapped | Load the installed agy skill under `~/.gemini/config/skills`. | agy `skills.md`. |
 | `advisor` | not-applicable | agy has no advisor tool; use `hmad-dispatch exec` for codex\|grok, or `define_subagent` and `invoke_subagent` with review context in the prompt. | Observed agy tools; design D9.3. |
 | `send-message` | not-applicable | `send_message` target semantics are undocumented; dispatch a fresh author with the previous report path. | Observed agy tools; design D9.3. |
-| `hook-event` | mapped | Use `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop`; there is no `SessionStart`. | agy `hooks.md`. |
+| `hook-event` | mapped | Use `SessionStart` (once per new conversation), `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop`. | Re-checked against installed agy `1.4.0` (`agy --version`) and its bundled `hooks.md`. |
 | `session-id-env` | not-applicable | agy has no documented session id variable; mint the file id with `uuid.uuid4()` and pass it to the oracle, which may return `owned_elsewhere`. | F13; FR-9 minted-id procedure. |
 | `claude-config-dir` | not-applicable | Claude's settings scope does not apply because agy's config root is `~/.gemini/config`. | agy `hooks.md`. |
 | `claude-md` | mapped | Read workspace rules from `.agents/`. | agy `rules.md`. |

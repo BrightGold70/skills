@@ -193,7 +193,7 @@ def _stub_outcome(tmp_path, state_line):
 
 
 PREFIX = "TDD-STATE: active codex-escape=yes blocker=0 records=1"
-RECORD = " record=feat,exhausted,/x/docs/.bkit-memory.json,"
+RECORD = " record=feat,exhausted,/x/docs/.bkit-memory.json,peers-out,"
 
 
 @pytest.mark.parametrize("field", ["", " fallback=codex:1", " fallback=grok:0"],

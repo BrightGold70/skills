@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 class _MiniDraft7:
@@ -164,9 +166,52 @@ def _validator(path: Path):
     return _validators[key]
 
 
+def rfc3339_datetime(value: object) -> bool:
+    """Validate the switch timestamp's RFC 3339 profile (seconds 00–59)."""
+    if not isinstance(value, str):
+        return False
+    match = re.fullmatch(
+        r"([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]([0-9]{2}):([0-9]{2}):([0-9]{2})"
+        r"(\.[0-9]+)?([Zz]|[+-]([0-9]{2}):([0-9]{2}))",
+        value, re.ASCII,
+    )
+    if match is None:
+        return False
+    try:
+        datetime(*(int(match.group(i)) for i in range(1, 7)))
+    except ValueError:
+        return False
+    return match.group(9) is None or (
+        int(match.group(9)) <= 23 and int(match.group(10)) <= 59
+    )
+
+
+def _semantic_ok(record: object) -> bool:
+    """Refuse an object switch whose timestamp fails the shared predicate."""
+    if not isinstance(record, dict):
+        return True
+    switch = record.get("implementer_switch")
+    return not isinstance(switch, dict) or rfc3339_datetime(switch.get("ts"))
+
+
+def property_valid(name: str, value: object) -> bool:
+    """Validate one strict-schema property; malformed input returns False."""
+    try:
+        validator = _make_validator(_schema(STRICT_SCHEMA)["properties"][name])
+        if not validator.is_valid(value):
+            return False
+        if name == "implementer_switch":
+            return _semantic_ok({"implementer_switch": value})
+        return True
+    except Exception:
+        return False
+
+
 def classify(record: object) -> str:
     """Return 'strict', 'historical', or 'invalid' for one feature record."""
     if not isinstance(record, dict):
+        return "invalid"
+    if not _semantic_ok(record):
         return "invalid"
     if _validator(STRICT_SCHEMA).is_valid(record):
         return "strict"

@@ -1,0 +1,109 @@
+{
+  "_why": "FR-9: six canonical new-caller carve-out copies, plus independent second- and third-sentence guards on the recovery copy. Run each mutation alone.",
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_new_caller_carveout_copies.py",
+    "-v"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "-v"
+  ],
+  "mutations": [
+    {
+      "name": "fr9-copy-L1",
+      "_mechanism": "Removing the exclusive new-caller condition from L1 must break its canonical-block guard.",
+      "file": "references/codex-implementer-prompt.md",
+      "symbol": "Your Job",
+      "find": "Say which case each failing test is. A missing-symbol RED on the pin is valid **only** when",
+      "replace": "Say which case each failing test is. A missing-symbol RED on the pin is valid when",
+      "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
+    },
+    {
+      "name": "fr9-copy-L2",
+      "_mechanism": "Removing the exclusive new-caller condition from L2 must break its canonical-block guard.",
+      "file": "references/codex-implementer-prompt.md",
+      "symbol": "Your Job",
+      "find": "report that and stop rather than accepting it. A missing-symbol RED on the pin is valid **only** when",
+      "replace": "report that and stop rather than accepting it. A missing-symbol RED on the pin is valid when",
+      "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
+    },
+    {
+      "name": "fr9-copy-L3",
+      "_mechanism": "Removing the exclusive new-caller condition from L3 must break its canonical-block guard.",
+      "file": "SKILL.md",
+      "symbol": "Phase 5 (Implementation) sub-steps",
+      "find": "halt `step5d:red_wrong_reason:<module>`. A missing-symbol RED on the pin is valid **only** when",
+      "replace": "halt `step5d:red_wrong_reason:<module>`. A missing-symbol RED on the pin is valid when",
+      "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
+    },
+    {
+      "name": "fr9-copy-L4",
+      "_mechanism": "Removing the exclusive new-caller condition from L4 must break its canonical-block guard.",
+      "file": "references/failure-recovery.md",
+      "symbol": "Per-phase failure routes (v2.2)",
+      "find": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when",
+      "replace": "only the failure mode can. A missing-symbol RED on the pin is valid when",
+      "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
+    },
+    {
+      "name": "fr9-copy-L5",
+      "_mechanism": "Removing the exclusive new-caller condition from L5 must break its canonical-block guard.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "assemble",
+      "find": "The WIRE-PIN is this task's single load-bearing test. Its RED must be \"\n            \"an assertion about the CALLER's observable behaviour, never a missing \"\n            \"symbol. \"\n            \"A missing-symbol RED on the pin is valid **only** when",
+      "replace": "The WIRE-PIN is this task's single load-bearing test. Its RED must be \"\n            \"an assertion about the CALLER's observable behaviour, never a missing \"\n            \"symbol. \"\n            \"A missing-symbol RED on the pin is valid when",
+      "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
+    },
+    {
+      "name": "fr9-copy-L6",
+      "_mechanism": "Removing the exclusive new-caller condition from L6 must break its canonical-block guard.",
+      "file": "references/codex-implementer-prompt.md",
+      "symbol": "Your Job",
+      "find": "keeping tests green. A missing-symbol RED on the pin is valid **only** when",
+      "replace": "keeping tests green. A missing-symbol RED on the pin is valid when",
+      "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
+    },
+    {
+      "name": "fr9-L4-sentence-2",
+      "_mechanism": "Removing the requirement to name caller and callee must break the L4 canonical-block guard.",
+      "file": "references/failure-recovery.md",
+      "symbol": "Per-phase failure routes (v2.2)",
+      "find": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. GREEN must prove the wire by a wire-cut: delete the call only, keep the caller and the callee, and confirm the pin fails.",
+      "replace": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. GREEN must prove the wire by a wire-cut: delete the call only, keep the caller and the callee, and confirm the pin fails.",
+      "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
+    },
+    {
+      "name": "fr9-L4-sentence-3",
+      "_mechanism": "Replacing the wire-cut with callee deletion must break the L4 canonical-block guard.",
+      "file": "references/failure-recovery.md",
+      "symbol": "Per-phase failure routes (v2.2)",
+      "find": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. GREEN must prove the wire by a wire-cut: delete the call only, keep the caller and the callee, and confirm the pin fails.",
+      "replace": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. GREEN must prove the wire by a wire-cut: delete the callee only, keep the caller, and confirm the pin fails.",
+      "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
+    },
+    {
+      "name": "fr9-corpus-drops-callee-condition",
+      "_mechanism": "Dropping callee resolution incorrectly changes both-missing as well as new-caller.",
+      "file": "tests/test_h_mad_wire_pin_new_caller_corpus.py",
+      "symbol": "new_rule",
+      "find": "return \"valid\" if missing_is_caller and callee_resolves else \"halt\"",
+      "replace": "return \"valid\" if missing_is_caller else \"halt\"",
+      "test": "tests/test_h_mad_wire_pin_new_caller_corpus.py::test_changed_verdicts_are_exactly_new_caller"
+    },
+    {
+      "name": "fr9-corpus-drops-caller-condition",
+      "_mechanism": "Dropping the missing-caller role incorrectly changes unrelated-import and other-symbol.",
+      "file": "tests/test_h_mad_wire_pin_new_caller_corpus.py",
+      "symbol": "new_rule",
+      "find": "return \"valid\" if missing_is_caller and callee_resolves else \"halt\"",
+      "replace": "return \"valid\" if callee_resolves else \"halt\"",
+      "test": "tests/test_h_mad_wire_pin_new_caller_corpus.py::test_changed_verdicts_are_exactly_new_caller"
+    }
+  ]
+}

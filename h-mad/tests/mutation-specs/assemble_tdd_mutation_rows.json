@@ -42,7 +42,7 @@
     {
       "name": "CX-MUT-ANCHORS",
       "_mechanism": "drop the --check-anchors requirement; a full harness run (which writes mutants into production code) would pass the Phase-5 gate.",
-      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "file": "scripts/h_mad_target_identity.py",
       "find": "        return (\"--check-anchors\" in args and bool(specs)  # M:CX-MUT-ANCHORS",
       "replace": "        return (True and bool(specs)  # M:CX-MUT-ANCHORS",
       "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_admits_mutation_harness_only_for_check_anchors"
@@ -50,7 +50,7 @@
     {
       "name": "CX-MUT-WITHIN",
       "_mechanism": "drop the inside-the-project check on spec paths.",
-      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "file": "scripts/h_mad_target_identity.py",
       "find": "                and all(_path_within(spec, root) for spec in specs))",
       "replace": "                and True)",
       "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_admits_mutation_harness_only_for_check_anchors"

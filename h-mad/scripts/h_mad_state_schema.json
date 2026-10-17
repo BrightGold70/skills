@@ -142,7 +142,7 @@
       "additionalProperties": false
     },
     "codex_status": {
-      "description": "Availability of Codex, as the Phase-5 implementer AND as the audit gate's second surface. OPTIONAL and additive (not in `required`; absent means 'available'). Two consumers read it. (1) The TDD-gate hook: while a feature is in step5, a production write reaching the hook is Claude self-implementing, which is blocked when Codex is available. (2) The orchestrator, when choosing the second audit surface -- see SKILL.md section 'Teammate audit leg': 'unavailable'/'exhausted' routes that surface to the doc-auditor teammate leg, which then GATES. No script reads the field for this purpose; it is prose-enforced. Set to 'exhausted' or 'unavailable' to record — auditably — that Codex cannot author or audit, permitting Claude to write the fallback (still test-first) and a teammate to hold the second leg. One switch, both effects: 5b runs inside step5, so a declaration made to route a document audit is live for 5d/5e production authoring on the same feature. Flip it back to 'available' when Codex returns.",
+      "description": "Optional Codex availability declaration; absent/null means available. Phase-5 authoring is resolved by h_mad_tdd_judge.py implementer using both Codex and agy availability. Codex being out alone does not permit Claude to author: fallback_agent is read only when both peers are out. The orchestrator separately uses unavailable/exhausted to route the second audit surface; that routing is prose-enforced by SKILL.md, not read automatically by the audit script. Set back to available when Codex returns.",
       "enum": [
         "available",
         "unavailable",
@@ -151,8 +151,57 @@
       ]
     },
     "fallback_agent": {
-      "description": "Who covers Phase-5 authoring when Codex is out. The field is read only when codex is out: HMAD_CODEX_UNAVAILABLE non-empty, codex_status unavailable|exhausted, or codex not on PATH. Absent, null and 'claude' are equivalent: Claude covers, test-first, as before. HMAD_CODEX_UNAVAILABLE does not override 'grok'; a one-off Claude escape needs --set fallback_agent=claude. Audit-leg routing to grok (audit-cycle --surfaces agy,grok) is prose-enforced by SKILL.md, and no script reads this field for it.",
+      "description": "Who covers Phase-5 authoring when both peers are out. The field is read only when codex is out and agy is out too: each peer is out when its HMAD_CODEX_UNAVAILABLE/HMAD_AGY_UNAVAILABLE flag is non-empty, its codex_status/agy_status is unavailable|exhausted, or its CLI is not on PATH. Absent, null and 'claude' are equivalent: Claude covers, test-first. HMAD_CODEX_UNAVAILABLE does not override 'grok'; a one-off Claude escape needs --set fallback_agent=claude. Audit-leg routing to grok (audit-cycle --surfaces agy,grok) is prose-enforced by SKILL.md, and no script reads this field for it.",
       "enum": ["grok", "claude", null]
+    },
+    "implementer": {
+      "description": "Optional preferred Phase-5 implementer; absent/null uses the resolver's default order.",
+      "enum": ["codex", "agy", null]
+    },
+    "agy_status": {
+      "description": "Optional agy availability declaration; absent/null means available.",
+      "enum": ["available", "unavailable", "exhausted", null]
+    },
+    "implementer_switch": {
+      "description": "Last implementer switch; ts is checked semantically before either schema tier.",
+      "type": ["object", "null"],
+      "properties": {
+        "from": {"enum": ["codex", "agy", "grok", "claude"]},
+        "to": {"enum": ["codex", "agy", "grok", "claude"]},
+        "reason": {"enum": ["env", "status", "cli-absent"]},
+        "ts": {"type": "string", "format": "date-time"}
+      },
+      "required": ["from", "to", "reason", "ts"],
+      "additionalProperties": false
+    },
+    "review_independence": {
+      "description": "Review-leg attribution entries.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "leg": {"enum": ["5e-review", "5e-verify", "6a-prime"]},
+          "module": {"type": ["string", "null"]},
+          "reviewer": {"enum": ["codex", "agy", "grok", "claude"]},
+          "implementer": {"enum": ["codex", "agy", "grok", "claude"]},
+          "independent": {"type": "boolean"}
+        },
+        "required": ["leg", "module", "reviewer", "implementer", "independent"],
+        "additionalProperties": false
+      }
+    },
+    "implementation_authors": {
+      "description": "Accepted implementation dispatch log, preserving duplicates and acceptance order.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "module": {"type": "string", "minLength": 1},
+          "agent": {"enum": ["codex", "agy", "grok", "claude"]}
+        },
+        "required": ["module", "agent"],
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false

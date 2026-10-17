@@ -165,12 +165,19 @@ _read_state() {
   RECORDS=${BASH_REMATCH[3]}
   FALLBACK=${BASH_REMATCH[4]}  # M:F3
   FALLBACK_POS=${BASH_REMATCH[6]:-0}
-  local word count=0 record="" frecord=""
+  local word count=0 record="" frecord="" rest author
+  INVALID_RECORD= PEER_RECORD= PEER=
   set -f
   for word in $SOUT; do
     case "$word" in record=*)
       count=$((count + 1))
-      if [ "$count" = "$BLOCKER" ]; then record=${word#record=}; fi
+      record=${word#record=}
+      rest=${record#*,}; rest=${rest#*,}; rest=${rest#*,}; author=${rest%%,*}
+      case "$author" in
+        invalid:*) [ -n "$INVALID_RECORD" ] || INVALID_RECORD=$record ;;
+        codex|agy)
+          if [ -z "$PEER_RECORD" ]; then PEER_RECORD=$record; PEER=$author; fi ;;
+      esac
       if [ "$count" = "$FALLBACK_POS" ]; then frecord=${word#record=}; fi
       ;;
     esac
@@ -184,7 +191,6 @@ _read_state() {
   fi
   [ "$BLOCKER" -le "$RECORDS" ] || _refuse judge-error "state blocker out of range"
   [ "$FALLBACK_POS" -le "$RECORDS" ] || _refuse judge-error "state fallback position out of range"  # M:F4
-  BLOCKER_RECORD=$record
   FALLBACK_RECORD=$frecord
 }
 
@@ -245,7 +251,7 @@ IN_ROOT=no
 if [ -n "$ROOT_ABS" ]; then case "$TARGET_PATH" in "$R"/*) IN_ROOT=yes ;; esac; fi  # M:H18
 
 STATE_UNREADABLE_RE='^TDD-STATE: unreadable file=([^ ]+) error=([A-Za-z_-][A-Za-z0-9_-]*)$'
-STATE_ACTIVE_RE='^TDD-STATE: active codex-escape=(yes|no) blocker=(0|[1-9][0-9]*) records=([1-9][0-9]*) fallback=(none|(grok|invalid):([1-9][0-9]*))( record=[^ ,]+,[^ ,]+,[^ ,]+,(absent|null|grok|claude|invalid:[^ ,]+))+$'
+STATE_ACTIVE_RE='^TDD-STATE: active codex-escape=(yes|no) blocker=(0|[1-9][0-9]*) records=([1-9][0-9]*) fallback=(none|(grok|invalid):([1-9][0-9]*))( record=[^ ,]+,[^ ,]+,[^ ,]+,(codex|agy|peers-out|invalid:[^ ,]+),(absent|null|grok|claude|invalid:[^ ,]+))+$'
 JUDGE_ALLOW_RE='^TDD-JUDGE: ALLOW kind=red-measured source=(impl-plan|name-map) test=[^ ]+$'
 JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-timeout|judge-error) reason=(.+)$'
 
@@ -321,19 +327,37 @@ TARGET_PATH=$PRODUCTION_TARGET
 
 _find_judge
 _read_state --target "$TARGET_PATH"  # M:H3
-if [ -z "${HMAD_CODEX_UNAVAILABLE:-}" ] && [ "$ESCAPE" = no ] && command -v codex >/dev/null 2>&1; then
-  BLOCKER_KEY=${BLOCKER_RECORD%%,*}
-  BLOCKER_FILE=${BLOCKER_RECORD#*,}; BLOCKER_FILE=${BLOCKER_FILE#*,}; BLOCKER_FILE=${BLOCKER_FILE%%,*}
-  BLOCKER_KEY=$(_pct_decode "$BLOCKER_KEY")
-  BLOCKER_FILE=$(_pct_decode "$BLOCKER_FILE")
+if [ -n "$INVALID_RECORD" ]; then
+  KEY=$(_pct_decode "${INVALID_RECORD%%,*}")
+  FILE=${INVALID_RECORD#*,}; FILE=${FILE#*,}; FILE=$(_pct_decode "${FILE%%,*}")
+  VALUE=${INVALID_RECORD#*,}; VALUE=${VALUE#*,}; VALUE=${VALUE#*,}; VALUE=${VALUE%%,*}
+  VALUE=$(_pct_decode "${VALUE#invalid:}")
+  _refuse implementer-invalid "implementer=$VALUE is not valid (valid: codex|agy|null) — refusing the write, fail-closed.
+  Fix it: python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $KEY --set implementer=codex|agy|null \"$FILE\""
+fi
+if [ -n "$PEER_RECORD" ]; then
+  PEER_KEY=${PEER_RECORD%%,*}
+  PEER_FILE=${PEER_RECORD#*,}; PEER_FILE=${PEER_FILE#*,}; PEER_FILE=${PEER_FILE%%,*}
+  PEER_KEY=$(_pct_decode "$PEER_KEY")
+  PEER_FILE=$(_pct_decode "$PEER_FILE")
+  case "$PEER" in
+    codex)
   _refuse codex-authorship "Phase 5 implementation must be authored by Codex, not Claude.
 Dispatch this module to Codex: hmad-dispatch exec codex <promptfile>  (or: send codex).
 Codex looks available (codex on PATH). If it is out of quota, record it —
-  python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $BLOCKER_KEY --set codex_status=exhausted \"$BLOCKER_FILE\"
-then Claude may author the fallback (still test-first). Or export HMAD_CODEX_UNAVAILABLE=1 for a one-off."
+  python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $PEER_KEY --set codex_status=exhausted \"$PEER_FILE\"
+then Claude may author the fallback (still test-first). Or export HMAD_CODEX_UNAVAILABLE=1 for a one-off." ;;
+    agy)
+      _refuse agy-authorship "Phase 5 implementation must be authored by agy, not Claude.
+Dispatch this module to agy: hmad-dispatch exec agy <promptfile>  (stage it with h_mad_assemble_tdd.py --agent agy).
+agy looks available (agy on PATH). If it is out of quota, record it —
+  python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $PEER_KEY --set agy_status=exhausted \"$PEER_FILE\"
+then Claude may author the fallback (still test-first). Or export HMAD_AGY_UNAVAILABLE=1 for a one-off.
+Use h_mad_tdd_judge.py implementer to see who resolves." ;;
+  esac
 fi
 
-# fallback_agent (FR-2): codex-authorship has already refused every case where codex is available.
+# fallback_agent (FR-2): codex-authorship and agy-authorship have already refused resolved peers.
 if [ "$FALLBACK" != none ]; then
   FB_KEY=$(_pct_decode "${FALLBACK_RECORD%%,*}")
   FB_FILE=${FALLBACK_RECORD#*,}; FB_FILE=${FB_FILE#*,}; FB_FILE=$(_pct_decode "${FB_FILE%%,*}")

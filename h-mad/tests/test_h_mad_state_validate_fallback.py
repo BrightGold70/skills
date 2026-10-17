@@ -25,6 +25,7 @@ would reject records the real validator accepts, which is a regression wearing
 the costume of an improvement.
 """
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +37,7 @@ SCRIPTS = REPO_ROOT / "h-mad" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import h_mad_state_validate as SV  # noqa: E402
+import h_mad_state_write as SW  # noqa: E402
 
 STRICT = json.loads((SCRIPTS / "h_mad_state_schema.json").read_text())
 HISTORICAL = json.loads((SCRIPTS / "h_mad_state_schema_historical.json").read_text())
@@ -230,3 +232,220 @@ def test_state_scripts_run_without_jsonschema():
                        capture_output=True, text=True)
     assert "jsonschema is required" not in r.stderr, r.stderr
     assert "STATE:" in r.stdout, f"no verdict emitted: {r.stdout!r} {r.stderr!r}"
+
+
+# FR-1: exercise the public verdict on each backend, not just schema leaves.
+@pytest.fixture(params=["library", "bundled"])
+def path(request, monkeypatch):
+    if request.param == "library":
+        assert SV._Draft7Validator is not None, "library path requires jsonschema"
+    SV._validators.clear()
+    monkeypatch.setattr(SV, "_FORCE_FALLBACK", request.param == "bundled")
+    try:
+        yield request.param
+    finally:
+        SV._validators.clear()
+
+
+@pytest.fixture(scope="session")
+def fr1_hostile_module():
+    """Use the agent-input stub's real hostile knob for free-form module names."""
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith("HMAD_STUB_")}
+    env["HMAD_STUB_HOSTILE"] = "all"
+    result = subprocess.run(
+        ["bash", str(Path(__file__).parent / "stubs" / "orca"),
+         "worktree", "set", "--comment", "module fixture"],
+        capture_output=True, text=True, env=env, timeout=10, check=True,
+    )
+    module = json.loads(result.stdout)["result"]["worktree"]["comment"]
+    assert "\n" in module and "[a](b)" in module and "⟦/h-mad⟧" in module
+    return module
+
+
+def _fr1_switch(**over):
+    return {"from": "codex", "to": "agy", "reason": "status",
+            "ts": "2026-10-16T07:05:09Z", **over}
+
+
+def _fr1_review_entry(module, **over):
+    return {"leg": "5e-review", "module": module, "reviewer": "codex",
+            "implementer": "agy", "independent": True, **over}
+
+
+@pytest.mark.parametrize("name,value", [
+    pytest.param("implementer", "codex", id="implementer-codex"),
+    pytest.param("implementer", "agy", id="implementer-agy"),
+    pytest.param("implementer", None, id="implementer-null"),
+    pytest.param("agy_status", "available", id="agy_status-available"),
+    pytest.param("agy_status", "unavailable", id="agy_status-unavailable"),
+    pytest.param("agy_status", "exhausted", id="agy_status-exhausted"),
+    pytest.param("agy_status", None, id="agy_status-null"),
+    pytest.param("implementer_switch", None, id="implementer_switch-null"),
+    pytest.param("implementer_switch", _fr1_switch(), id="implementer_switch-object"),
+    pytest.param("review_independence", [], id="review_independence-empty"),
+    pytest.param("review_independence", "one-entry", id="review_independence-one-entry"),
+])
+def test_fr1_value_accepted(path, name, value, fr1_hostile_module):
+    if name == "review_independence" and value == "one-entry":
+        value = [_fr1_review_entry(fr1_hostile_module)]
+    record = _valid_record(**{name: value})
+    assert SV.classify(record) == "strict", f"{path}: {name} must accept {value!r}"
+
+
+@pytest.mark.parametrize("case", [
+    "implementer-grok", "implementer-empty-string", "agy_status-quota",
+    "implementer_switch-missing-ts", "implementer_switch-extra-key",
+    "implementer_switch-reason-unknown", "implementer_switch-to-gemini",
+    "review_independence-not-array", "review_independence-leg-unknown",
+    "review_independence-missing-independent", "review_independence-independent-string",
+    "review_independence-extra-key",
+])
+def test_fr1_value_refused(path, case, fr1_hostile_module):
+    name, variant = case.split("-", 1)
+    if name == "implementer":
+        value = "grok" if variant == "grok" else ""
+    elif name == "agy_status":
+        value = "quota"
+    elif name == "implementer_switch":
+        value = _fr1_switch()
+        if variant == "missing-ts":
+            value.pop("ts")
+        elif variant == "extra-key":
+            value["extra"] = fr1_hostile_module
+        elif variant == "reason-unknown":
+            value["reason"] = "unknown"
+        else:
+            value["to"] = "gemini"
+    else:
+        entry = _fr1_review_entry(fr1_hostile_module)
+        if variant == "leg-unknown":
+            entry["leg"] = "5e-unknown"
+        elif variant == "missing-independent":
+            entry.pop("independent")
+        elif variant == "independent-string":
+            entry["independent"] = "true"
+        elif variant == "extra-key":
+            entry["extra"] = fr1_hostile_module
+        value = entry if variant == "not-array" else [entry]
+    record = _valid_record(**{name: value})
+    classification = SV.classify(record)
+    assert SV.undeclared_keys(record) == [], f"{path}: {name} must be declared before testing refusal"
+    assert classification != "strict", f"{path}: {case} must refuse strict validation"
+
+
+def test_fr1_record_without_new_fields_unchanged(path):
+    record = _valid_record()
+    assert not set(record).intersection({
+        "implementer", "agy_status", "implementer_switch",
+        "review_independence", "implementation_authors",
+    })
+    assert SV.classify(record) == "strict", f"{path}: records without FR-1 fields remain strict"
+
+
+@pytest.mark.parametrize("ts", [
+    pytest.param("not-a-date", id="not-a-date"),
+    pytest.param("2026-10-16", id="date-only"),
+    pytest.param("2026-02-30T00:00:00Z", id="feb-30"),
+    pytest.param("2026-10-16T00:00:00Zjunk", id="zjunk"),
+    pytest.param("2016-12-31T23:59:60Z", id="leap-60"),
+    pytest.param("2026-10-16T00:00:00+24:00", id="offset-24"),
+])
+def test_switch_ts_refused(path, ts):
+    record = _valid_record(implementer_switch=_fr1_switch(ts=ts))
+    classification = SV.classify(record)
+    assert SV.undeclared_keys(record) == [], f"{path}: implementer_switch must be declared"
+    assert classification == "invalid", f"{path}: implementer_switch.ts must refuse {ts!r} before either tier"
+
+
+@pytest.mark.parametrize("ts", [
+    pytest.param(SW._utc_now(), id="writer-form"),
+    pytest.param("2016-12-31T23:59:59Z", id="leap-59"),
+    pytest.param("2026-10-16T07:05:09Z", id="zone-upper-z"),
+    pytest.param("2026-10-16T07:05:09z", id="zone-lower-z"),
+    pytest.param("2026-10-16T07:05:09+09:00", id="zone-offset"),
+])
+def test_switch_ts_accepted(path, ts):
+    record = _valid_record(implementer_switch=_fr1_switch(ts=ts))
+    assert SV.classify(record) == "strict", f"{path}: implementer_switch.ts must accept {ts!r}"
+
+
+@pytest.mark.parametrize("value", [
+    pytest.param(5, id="int-5"),
+    pytest.param(None, id="none"),
+    pytest.param(SW._utc_now() + "\n", id="trailing-newline"),
+    pytest.param("２０２６-１０-１６T０７:０５:０９Z", id="fullwidth-digits"),
+])
+def test_rfc3339_datetime_refuses_non_strings_and_lookalikes(value):
+    assert SV.rfc3339_datetime(value) is False, f"rfc3339_datetime must refuse {value!r}"
+
+
+@pytest.mark.parametrize("case", [
+    "empty", "agent-codex", "agent-agy", "agent-grok", "agent-claude", "three-entry-log",
+])
+def test_implementation_authors_accepted(path, case, fr1_hostile_module):
+    if case == "empty":
+        value = []
+    elif case == "three-entry-log":
+        value = [{"module": fr1_hostile_module, "agent": agent}
+                 for agent in ("agy", "codex", "agy")]
+    else:
+        value = [{"module": fr1_hostile_module, "agent": case.removeprefix("agent-")}]
+    record = _valid_record(implementation_authors=value)
+    assert SV.classify(record) == "strict", f"{path}: implementation_authors must accept {case}"
+    # Classification must not normalize the acceptance log into a set or reorder it.
+    if case == "three-entry-log":
+        assert record["implementation_authors"] == [
+            {"module": fr1_hostile_module, "agent": agent}
+            for agent in ("agy", "codex", "agy")
+        ]
+
+
+@pytest.mark.parametrize("case", [
+    "agent-gemini", "missing-agent", "missing-module", "module-empty",
+    "extra-key", "non-object-entry", "non-array",
+])
+def test_implementation_authors_refused(path, case, fr1_hostile_module):
+    entry = {"module": fr1_hostile_module, "agent": "agy"}
+    if case == "agent-gemini":
+        entry["agent"] = "gemini"
+    elif case == "missing-agent":
+        entry.pop("agent")
+    elif case == "missing-module":
+        entry.pop("module")
+    elif case == "module-empty":
+        entry["module"] = ""
+    elif case == "extra-key":
+        entry["extra"] = fr1_hostile_module
+    value = entry if case == "non-array" else [fr1_hostile_module if case == "non-object-entry" else entry]
+    record = _valid_record(implementation_authors=value)
+    classification = SV.classify(record)
+    assert SV.undeclared_keys(record) == [], f"{path}: implementation_authors must be declared"
+    assert classification != "strict", f"{path}: implementation_authors must refuse {case}"
+
+
+def test_property_valid_implementer_switch_none_does_not_raise(path):
+    assert SV.property_valid("implementer_switch", None) is True, (
+        f"{path}: property_valid must accept null implementer_switch without indexing ts"
+    )
+
+
+@pytest.mark.parametrize("ts,expected", [
+    pytest.param("not-a-date", False, id="bad-ts"),
+    pytest.param("2026-10-16T07:05:09Z", True, id="good-ts"),
+])
+def test_property_valid_applies_the_ts_predicate(path, ts, expected):
+    assert SV.property_valid("implementer_switch", _fr1_switch(ts=ts)) is expected, (
+        f"{path}: property_valid implementer_switch.ts={ts!r} must be {expected}"
+    )
+
+
+@pytest.mark.parametrize("leg,expected", [
+    pytest.param("5e-review", True, id="well-formed"),
+    pytest.param("5e-unknown", False, id="bad-leg"),
+])
+def test_property_valid_review_independence_entry(path, leg, expected, fr1_hostile_module):
+    value = [_fr1_review_entry(fr1_hostile_module, leg=leg)]
+    assert SV.property_valid("review_independence", value) is expected, (
+        f"{path}: property_valid review_independence leg={leg!r} must be {expected}"
+    )

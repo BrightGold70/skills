@@ -25,8 +25,8 @@
     {
       "name": "w10a-grok-by-default",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "ap.add_argument(\"--agent\", choices=(\"codex\", \"grok\"), default=\"codex\")",
-      "replace": "ap.add_argument(\"--agent\", choices=(\"codex\", \"grok\"), default=\"grok\")",
+      "find": "ap.add_argument(\"--agent\", choices=(\"codex\", \"grok\", \"agy\"), default=\"codex\")",
+      "replace": "ap.add_argument(\"--agent\", choices=(\"codex\", \"grok\", \"agy\"), default=\"grok\")",
       "test": "tests/test_h_mad_assemble_tdd.py::TestCli::test_a_clean_assembly_prints_pass_and_the_command_block"
     }
   ]

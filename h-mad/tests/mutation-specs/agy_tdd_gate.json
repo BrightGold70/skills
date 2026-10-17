@@ -1,0 +1,188 @@
+{
+  "root": "../..",
+  "_why": "FR-4 Task 5: classifier, fail-closed output, workspace activity gating, and self-check signal discipline.",
+  "command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "tests/test_h_mad_agy_tdd_gate.py", "-q"],
+  "target_command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "selfcheck-verdict-fail-exits-2",
+      "_mechanism": "A shell-policy verdict FAIL is misreported as an operational failure through exit 2.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                check_result = \"AGY-TDD-GATE: FAIL shell-policy\"\n                return 0",
+      "replace": "                check_result = \"AGY-TDD-GATE: FAIL shell-policy\"\n                return 2",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_self_check_policy_fail_is_a_verdict_with_exit_0"
+    },
+    {
+      "name": "fr4-class-a-name-moved",
+      "_mechanism": "Removing view_file from class (a) makes a read-only call depend on root and state discovery.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "<module>",
+      "find": "    \"view_file\", \"list_dir\",",
+      "replace": "    \"list_dir\",",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_class_a_allowed_before_state_is_read"
+    },
+    {
+      "name": "fr4-class-d-default-allows",
+      "_mechanism": "The active class-(d) default admits unknown and unlisted tools.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "            decision = {\"decision\": \"deny\", \"reason\": \"Tool is not admitted during Phase 5. kind=tool-not-admitted\"}",
+      "replace": "            decision = {\"decision\": \"allow\"}",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_unknown_tool_is_class_d"
+    },
+    {
+      "name": "fr4-finally-deny-dropped",
+      "_mechanism": "An undecided or malformed call emits null instead of the required fail-closed JSON decision.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "            if decision is None:\n                decision = {\"decision\": \"deny\", \"reason\": \"Gate could not reach a judgement. kind=judge-error\"}",
+      "replace": "            if decision is None:\n                pass",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_every_exit_prints_one_json_object"
+    },
+    {
+      "name": "fr4-step5-s-dropped",
+      "_mechanism": "The workspace check runs under inactive state and refuses a call that must be allowed.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "        if phase5_status in {\"active\", \"unknown\"} and isinstance(workspace_paths, list):",
+      "replace": "        if isinstance(workspace_paths, list):",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_workspace_paths_cross_check"
+    },
+    {
+      "name": "od2-directory-target-check-dropped",
+      "_mechanism": "Remove T2a so existing directory targets fall through to an empty production-name set and allow under active.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                if Path(resolved.target).is_dir():",
+      "replace": "                if False and Path(resolved.target).is_dir():",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_class_b_directory_target"
+    },
+    {
+      "name": "fr4-no-path-key-deny-dropped",
+      "_mechanism": "Remove the class-(b) no-target refusal, admitting tools whose path keys have not been recorded.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "            if not targets:",
+      "replace": "            if False and not targets:",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_class_b_tools_without_a_recorded_key_deny_under_active"
+    },
+    {
+      "name": "fr4-artifact-py-refusal-dropped",
+      "_mechanism": "Remove the all-name Python-suffix refusal from T4, admitting a Python write beneath artifactDirectoryPath.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                        not any(Path(identity.fold_py_suffix(name)).suffix == \".py\" for name in resolved.names)",
+      "replace": "                        True",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_artifact_directory_path"
+    },
+    {
+      "name": "fr4-t3-after-t5",
+      "_mechanism": "Move T5 before T3 so the allowance helper raises on an outside target before T4 can admit a /tmp non-Python write.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                # T3–T4: containment must precede the allowance-file helper.\n                try:\n                    Path(resolved.target).relative_to(root)\n                except ValueError:\n                    outside_allowed = (\n                        not any(Path(identity.fold_py_suffix(name)).suffix == \".py\" for name in resolved.names)\n                        and (_path_within(resolved.target, Path(\"/tmp\"))\n                             or (artifact is not None and _path_within(resolved.target, artifact)))\n                    )\n                    if not outside_allowed and phase5_status in {\"active\", \"unknown\"}:\n                        decision = {\"decision\": \"deny\", \"reason\": \"Write target is outside the root. kind=target-outside-root\"}\n                        return 0\n                    continue\n                # T5: only the operator may declare shell allowances.\n                if phase5_status in {\"active\", \"unknown\"} and _is_shell_allowance(root, resolved):\n                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=allowance-file-write\"}\n                    return 0\n",
+      "replace": "                # T5: only the operator may declare shell allowances.\n                if phase5_status in {\"active\", \"unknown\"} and _is_shell_allowance(root, resolved):\n                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=allowance-file-write\"}\n                    return 0\n                # T3–T4: containment must precede the allowance-file helper.\n                try:\n                    Path(resolved.target).relative_to(root)\n                except ValueError:\n                    outside_allowed = (\n                        not any(Path(identity.fold_py_suffix(name)).suffix == \".py\" for name in resolved.names)\n                        and (_path_within(resolved.target, Path(\"/tmp\"))\n                             or (artifact is not None and _path_within(resolved.target, artifact)))\n                    )\n                    if not outside_allowed and phase5_status in {\"active\", \"unknown\"}:\n                        decision = {\"decision\": \"deny\", \"reason\": \"Write target is outside the root. kind=target-outside-root\"}\n                        return 0\n                    continue\n",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_tmp_non_py_write_allowed_under_active"
+    },
+    {
+      "name": "fr4-t6-target-only",
+      "_mechanism": "Inspect only the canonical target's basename, missing a production hard-link name behind a test-file spelling.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                for name in resolved.names:",
+      "replace": "                for name in (Path(resolved.target).name,):",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_hardlinked_production_name_is_judged"
+    },
+    {
+      "name": "fr4-t6-t7-skipped-when-inactive",
+      "_mechanism": "Trust an inactive workspace scan and skip chain discovery, missing unreadable state on the production target's chain.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                production = []",
+      "replace": "                if phase5_status == \"inactive\":\n                    continue\n                production = []",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_unsearchable_chain_denies_although_the_scan_is_inactive"
+    },
+    {
+      "name": "fr4-t7-unreadable-dropped",
+      "_mechanism": "Remove T7's unreadable refusal so the following non-active-chain branch allows the write.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                if chain.value == \"unreadable\":",
+      "replace": "                if False and chain.value == \"unreadable\":",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_unsearchable_chain_denies_although_the_scan_is_inactive"
+    },
+    {
+      "name": "fr4-t4-artifact-str-check",
+      "_mechanism": "Pass a non-string artifactDirectoryPath to Path before consulting activity, turning an inactive allow into a judge-error deny.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "        artifact = Path(adp) if isinstance(adp, str) and adp else None",
+      "replace": "        artifact = Path(adp) if adp is not None else None",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_artifact_directory_path"
+    },
+    {
+      "name": "fr4-class-b-target-presence-only",
+      "_mechanism": "Treat any present path key as a target; truthy numbers and lists raise during T1 even under inactive.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                       if key in args and isinstance(args[key], str) and args[key]]",
+      "replace": "                       if key in args]",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_class_b_no_target"
+    },
+    {
+      "name": "fr4-kind-target-outside-root",
+      "_mechanism": "Replace T4's required target-outside-root kind with judge-error.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                        decision = {\"decision\": \"deny\", \"reason\": \"Write target is outside the root. kind=target-outside-root\"}",
+      "replace": "                        decision = {\"decision\": \"deny\", \"reason\": \"Write target is outside the root. kind=judge-error\"}",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_deny_row_kind"
+    },
+    {
+      "name": "fr4-kind-allowance-file-write",
+      "_mechanism": "Replace T5's required allowance-file-write kind with judge-error.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=allowance-file-write\"}",
+      "replace": "                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=judge-error\"}",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_deny_row_kind"
+    },
+    {
+      "name": "fr4-class-c-command-s-dropped",
+      "_mechanism": "Deny a missing or non-string CommandLine even when Phase 5 is inactive.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                if phase5_status in {\"active\", \"unknown\"}:\n                    decision = {\"decision\": \"deny\", \"reason\": \"Shell call has no string CommandLine. kind=judge-error\"}",
+      "replace": "                if True:\n                    decision = {\"decision\": \"deny\", \"reason\": \"Shell call has no string CommandLine. kind=judge-error\"}",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_run_command_missing_command_line"
+    },
+    {
+      "name": "fr4-kind-shell-not-admitted",
+      "_mechanism": "Report a shell policy refusal with judge-error instead of shell-not-admitted.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "f\"The operator may list command prefixes in {SHELL_ALLOW_FILE}. kind=shell-not-admitted\"",
+      "replace": "f\"The operator may list command prefixes in {SHELL_ALLOW_FILE}. kind=judge-error\"",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_deny_row_kind"
+    },
+    {
+      "name": "fr4-class-c-bad-cwd-judge-error",
+      "_mechanism": "Deny a malformed or nonexistent command directory with judge-error before the shell policy can admit ls.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                if not _safe_shell_command(command, root, cwd):",
+      "replace": "                if not isinstance(cwd, str) or not Path(cwd).is_dir():\n                    decision = {\"decision\": \"deny\", \"reason\": \"Shell directory is invalid. kind=judge-error\"}\n                    return 0\n                if not _safe_shell_command(command, root, cwd):",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_ls_under_each_bad_cwd_is_allowed"
+    },
+    {
+      "name": "fr4-class-c-cwd-joined-to-handler-dir",
+      "_mechanism": "Resolve a relative Cwd against the hook handler's directory rather than the session root.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                    cwd = str(root / path if not path.is_absolute() else path)",
+      "replace": "                    cwd = str(Path(__file__).resolve().parent / path if not path.is_absolute() else path)",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_relative_cwd_is_joined_against_the_root"
+    }
+  ]
+}
