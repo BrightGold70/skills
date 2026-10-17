@@ -19,7 +19,7 @@ CLASS_A: frozenset[str] = frozenset({
 CLASS_B: frozenset[str] = frozenset({
     "write_to_file", "replace_file_content", "multi_replace_file_content", "sed_file", "notebook_edit",
 })
-PATH_KEYS: dict[str, tuple[str, ...]] = {"write_to_file": ("TargetFile",)}
+PATH_KEYS: dict[str, tuple[str, ...]] = {"write_to_file": ("TargetFile",), "replace_file_content": ("TargetFile",)}
 GATE_KINDS: frozenset[str] = frozenset({
     "judge-error", "tool-not-admitted", "target-outside-root", "allowance-file-write", "shell-not-admitted",
 })
