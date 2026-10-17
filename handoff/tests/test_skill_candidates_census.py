@@ -657,3 +657,309 @@ class TestListOpen:
         r = run_flag("--list-open")
         assert r.returncode == 1
         assert "usage:" in r.stderr and "--list-open" in r.stderr
+
+
+# --- committed reads and insert-only reconciliation ------------------------
+
+@pytest.fixture
+def committed_store(tmp_path: Path) -> tuple[Path, str]:
+    # Nest the store so REF:path must be relative to the git root, not its cwd.
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    store = _store(docs)
+    for args in (
+        ["init", "-q"],
+        ["add", "docs/skill-candidates.md"],
+        ["-c", "user.name=Census Test", "-c", "user.email=census@example.invalid",
+         "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+         "commit", "-qm", "fixture"],
+    ):
+        r = subprocess.run(
+            ["git", "-C", str(tmp_path), *args],
+            capture_output=True, text=True, check=False,
+        )
+        assert r.returncode == 0, r.stderr
+    ref = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return store, ref
+
+
+def reconciliation_table(tmp_path: Path, *rows: tuple[str, str]) -> Path:
+    table = tmp_path / "reconcile.md"
+    table.write_text(
+        "| open-line | status-line |\n| --- | --- |\n"
+        + "".join(f"| {name} | {status} |\n" for name, status in rows),
+        encoding="utf-8",
+    )
+    return table
+
+
+@pytest.mark.parametrize("ref_kind", ["HEAD", "commit"])
+def test_rev_reads_committed_content_despite_dirty_worktree(
+    committed_store: tuple[Path, str], ref_kind: str,
+) -> None:
+    store, commit = committed_store
+    expected = run(store)
+    before = store.read_bytes()
+    store.write_text(
+        "# Skill Candidates\n\n- **working tree only**: candidate: no\n",
+        encoding="utf-8",
+    )
+    dirty = store.read_bytes()
+    assert dirty != before
+    assert counts(run(store))["OPEN"] == 0
+
+    r = run_flag("--rev", commit if ref_kind == "commit" else "HEAD", str(store))
+
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == expected  # Includes verdict totals AND coverage.
+    assert r.stderr == ""
+    assert store.read_bytes() == dirty
+
+
+def test_rev_combines_with_list_open_using_committed_names_and_line_numbers(
+    committed_store: tuple[Path, str],
+) -> None:
+    store, ref = committed_store
+    expected = run_flag("--list-open", str(store)).stdout
+    store.write_text(
+        "# Skill Candidates\n\n\n\n- **uncommitted open row**: candidate: yes\n",
+        encoding="utf-8",
+    )
+
+    r = run_flag("--list-open", "--rev", ref, str(store))
+
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == expected
+    assert "an open one" in r.stdout and "a maybe one" in r.stdout
+    assert "uncommitted open row" not in r.stdout
+
+
+@pytest.mark.parametrize("failure", ["bad-ref", "uncommitted-path"])
+def test_rev_unreadable_blob_exits_two_with_git_diagnostic_and_no_fallback(
+    committed_store: tuple[Path, str], failure: str,
+) -> None:
+    store, ref = committed_store
+    if failure == "bad-ref":
+        ref = "census-ref-that-does-not-exist"
+    else:
+        store = store.with_name("untracked-candidates.md")
+        store.write_text("- **working tree fallback**: candidate: yes\n", encoding="utf-8")
+    # Match git's own diagnostic rather than pinning version-specific wording.
+    git_result = subprocess.run(
+        ["git", "-C", str(store.parent), "show", f"{ref}:docs/{store.name}"],
+        capture_output=True, text=True, check=False,
+    )
+    assert git_result.returncode != 0
+    before = store.read_bytes()
+
+    r = run_flag("--rev", ref, str(store))
+
+    assert r.returncode == 2, r.stderr
+    assert r.stderr.strip() == (
+        f"census: cannot read {store} at {ref}: {git_result.stderr.splitlines()[0]}"
+    )
+    assert r.stdout == ""
+    assert store.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "following",
+    ["- **next row**: candidate: maybe\n", "## Next section\n", "\nA note outside the row.\n", ""],
+    ids=["next-row", "heading", "blank", "eof"],
+)
+def test_apply_inserts_after_last_continuation_before_row_boundary(
+    committed_store: tuple[Path, str], tmp_path: Path, following: str,
+) -> None:
+    store, _ = committed_store
+    prefix = (
+        "# Skill Candidates\n\n"
+        "- **wrapped candidate**: description\n"
+        "  — candidate: yes\n"
+        "  final continuation that must stay ahead of the insertion\n"
+    )
+    store.write_text(prefix + following, encoding="utf-8")
+    table = reconciliation_table(tmp_path, ("wrapped candidate", "reviewed; still open"))
+    table_before = table.read_bytes()
+
+    r = run_flag("--apply", str(table), str(store))
+
+    assert r.returncode == 0, r.stderr
+    assert store.read_bytes() == (
+        prefix + "  — reviewed; still open\n" + following
+    ).encode("utf-8")
+    assert table.read_bytes() == table_before
+
+
+def test_apply_reports_insertions_and_census_open_delta_for_all_table_rows(
+    committed_store: tuple[Path, str], tmp_path: Path,
+) -> None:
+    store, _ = committed_store
+    before = store.read_text(encoding="utf-8")
+    table = reconciliation_table(
+        tmp_path,
+        ("a maybe one", "reviewed; remains a maybe"),
+        ("an open one", "**LANDED 2026-10-18** shipped"),
+    )
+
+    r = run_flag("--apply", str(table), str(store))
+
+    assert r.returncode == 0, r.stderr
+    assert "APPLY: inserted=2 OPEN 2→1" in r.stdout.splitlines()
+    expected = before.replace(
+        "- **a maybe one**:",
+        "  — **LANDED 2026-10-18** shipped\n- **a maybe one**:",
+    ).replace(
+        "- **a landed one**:",
+        "  — reviewed; remains a maybe\n- **a landed one**:",
+    )
+    assert store.read_text(encoding="utf-8") == expected
+    assert counts(run(store))["OPEN"] == 1
+
+
+def test_apply_unescapes_pipes_in_both_cells_before_matching_and_inserting(
+    committed_store: tuple[Path, str], tmp_path: Path,
+) -> None:
+    store, _ = committed_store
+    write(store.parent, "- **tool | tree**: candidate: yes\n")
+    before = store.read_text(encoding="utf-8")
+    table = reconciliation_table(
+        tmp_path, (r"tool \| tree", r"**LANDED 2026-10-18** `src/a \| src/b`"),
+    )
+
+    r = run_flag("--apply", str(table), str(store))
+
+    assert r.returncode == 0, r.stderr
+    assert store.read_text(encoding="utf-8") == (
+        before + "  — **LANDED 2026-10-18** `src/a | src/b`\n"
+    )
+    assert "APPLY: inserted=1 OPEN 1→0" in r.stdout.splitlines()
+
+
+@pytest.mark.parametrize("name", ["absent row", "a landed one", "a no one", "bump only"])
+def test_apply_no_match_refuses_entire_table_without_writing(
+    committed_store: tuple[Path, str], tmp_path: Path, name: str,
+) -> None:
+    store, _ = committed_store
+    with store.open("a", encoding="utf-8") as stream:
+        stream.write("- **bump only** (recurrence, not a new row): candidate: yes\n")
+    table = reconciliation_table(
+        tmp_path,
+        ("an open one", "**LANDED 2026-10-18** must not be partially applied"),
+        (name, "**LANDED 2026-10-18** invalid target"),
+    )
+    before, table_before = store.read_bytes(), table.read_bytes()
+
+    r = run_flag("--apply", str(table), str(store))
+
+    assert store.read_bytes() == before
+    assert table.read_bytes() == table_before
+    assert r.returncode == 2, r.stderr
+    assert f"APPLY: REFUSED reason=no-match line={name}" in r.stdout.splitlines()
+    assert "APPLY: inserted=" not in r.stdout
+
+
+@pytest.mark.parametrize("second_verdict", ["yes", "maybe"])
+def test_apply_ambiguous_open_name_refuses_whole_table_without_writing(
+    committed_store: tuple[Path, str], tmp_path: Path, second_verdict: str,
+) -> None:
+    store, _ = committed_store
+    write(
+        store.parent,
+        "- **unique row**: candidate: yes\n"
+        "- **same name**: candidate: yes\n"
+        f"- **same name**: candidate: {second_verdict}\n",
+    )
+    table = reconciliation_table(
+        tmp_path,
+        ("unique row", "**LANDED 2026-10-18** must not be partially applied"),
+        ("same name", "**LANDED 2026-10-18** ambiguous"),
+    )
+    before, table_before = store.read_bytes(), table.read_bytes()
+
+    r = run_flag("--apply", str(table), str(store))
+
+    assert store.read_bytes() == before
+    assert table.read_bytes() == table_before
+    assert r.returncode == 2, r.stderr
+    assert "APPLY: REFUSED reason=ambiguous line=same name" in r.stdout.splitlines()
+    assert "APPLY: inserted=" not in r.stdout
+
+
+def test_apply_matches_normalized_open_name_and_ignores_closed_duplicate(
+    committed_store: tuple[Path, str], tmp_path: Path,
+) -> None:
+    store, _ = committed_store
+    prefix = "# Skill Candidates\n\n- **same\n  name**: candidate: maybe\n"
+    closed = "- **same name**: candidate: yes — **LANDED 2026-10-17** done\n"
+    store.write_text(prefix + closed, encoding="utf-8")
+    table = reconciliation_table(tmp_path, ("same name", "reviewed; remains open"))
+
+    r = run_flag("--apply", str(table), str(store))
+
+    assert r.returncode == 0, r.stderr
+    assert store.read_text(encoding="utf-8") == (
+        prefix + "  — reviewed; remains open\n" + closed
+    )
+    assert "APPLY: inserted=1 OPEN 1→1" in r.stdout.splitlines()
+
+
+@pytest.mark.parametrize("rev_first", [True, False])
+def test_apply_rejects_rev_combination_as_usage_error_without_writing(
+    committed_store: tuple[Path, str], tmp_path: Path, rev_first: bool,
+) -> None:
+    store, ref = committed_store
+    table = reconciliation_table(tmp_path, ("an open one", "**LANDED 2026-10-18** done"))
+    before, table_before = store.read_bytes(), table.read_bytes()
+    options = (["--rev", ref, "--apply", str(table)] if rev_first
+               else ["--apply", str(table), "--rev", ref])
+
+    r = run_flag(*options, str(store))
+
+    assert store.read_bytes() == before
+    assert table.read_bytes() == table_before
+    assert r.returncode == 1, r.stderr
+    assert "usage:" in r.stderr
+    assert "--rev" in r.stderr and "--apply" in r.stderr
+
+
+@pytest.mark.parametrize("store_count", [0, 2])
+def test_apply_requires_exactly_one_store_and_writes_nothing_on_usage_error(
+    committed_store: tuple[Path, str], tmp_path: Path, store_count: int,
+) -> None:
+    store, _ = committed_store
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    other = _store(other_dir)
+    table = reconciliation_table(tmp_path, ("an open one", "**LANDED 2026-10-18** done"))
+    before = {p: p.read_bytes() for p in (store, other, table)}
+    paths = [str(store), str(other)] if store_count == 2 else []
+
+    r = run_flag("--apply", str(table), *paths)
+
+    assert {p: p.read_bytes() for p in before} == before
+    assert r.returncode == 1, r.stderr
+    assert "usage:" in r.stderr and "--apply" in r.stderr
+
+
+def test_apply_landed_status_removes_only_that_row_from_open_listing(
+    committed_store: tuple[Path, str], tmp_path: Path,
+) -> None:
+    store, _ = committed_store
+    before = counts(run(store))
+    table = reconciliation_table(tmp_path, ("an open one", "**LANDED 2026-10-18** shipped"))
+
+    applied = run_flag("--apply", str(table), str(store))
+
+    assert applied.returncode == 0, applied.stderr
+    listed = run_flag("--list-open", str(store))
+    assert listed.returncode == 0, listed.stderr
+    after = counts(listed.stdout)
+    assert after["OPEN"] == before["OPEN"] - 1
+    assert after["LANDED"] == before["LANDED"] + 1
+    assert after["candidates"] == before["candidates"]
+    assert "an open one" not in listed.stdout
+    assert "a maybe one" in listed.stdout
+    assert "APPLY: inserted=1 OPEN 2→1" in applied.stdout.splitlines()
