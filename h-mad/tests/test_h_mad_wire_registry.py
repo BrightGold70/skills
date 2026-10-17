@@ -646,6 +646,39 @@ def test_register_cli_requires_all_record_fields(tmp_path: Path) -> None:
     assert exc.value.code == 2
 
 
+@pytest.mark.parametrize(
+    "pin_file",
+    ["tests/test_wire.py", "h-mad/tests/test_wire.py"],
+    ids=["suffix-only", "repo-relative"],
+)
+def test_register_cli_warns_only_for_non_repo_relative_pin(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], pin_file: str
+) -> None:
+    repo = _git_repo(tmp_path)
+    test_file = repo / "h-mad" / "tests" / "test_wire.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text("def test_wire():\n    assert True\n", encoding="utf-8")
+    path = repo / ".h-mad" / "wires.jsonl"
+    pin = f"{pin_file}::test_wire"
+
+    exit_code = registry.main([
+        "register", "--registry", str(path), "--repo", str(repo),
+        "--id", "cli-wire", "--caller", "engine.run", "--callee", "tools.measure",
+        "--pin", pin, "--feature", "feature-x",
+    ])
+
+    output = capsys.readouterr()
+    assert exit_code == 0
+    assert registry.load(path)[0]["pin"] == pin
+    assert output.out == f"WIREREG: REGISTER registered=1 registry={path.resolve()}\n"
+    expected_warning = (
+        f"WARNING: pin is not repo-relative: {pin} "
+        "(did you mean h-mad/tests/test_wire.py::test_wire?)\n"
+        if pin_file == "tests/test_wire.py" else ""
+    )
+    assert output.err == expected_warning
+
+
 def test_verify_uses_custom_registry_path_for_base_lookup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1199,6 +1232,48 @@ def test_main_collection_failure_is_cannot_judge_exit_2_not_fail(
     assert exit_code == 2
     assert "[H-MAD]" in output
     assert "WIREREG: FAIL" not in output
+
+
+def test_main_verify_without_pytest_reports_interpreter_before_running_pins(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _git_repo(tmp_path)
+    test_file = repo / "h-mad" / "tests" / "test_wire.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text("def test_wire():\n    assert True\n", encoding="utf-8")
+    path = repo / ".h-mad" / "wires.jsonl"
+    registry.register([_entry(pin="h-mad/tests/test_wire.py::test_wire")], path)
+    _commit_registry(repo, registry.load(path))
+    before = path.read_bytes()
+    python = tmp_path / "python-without-pytest"
+    python.write_text(
+        '#!/bin/sh\n'
+        'printf "%s\\n" "$*" >> "$0.calls"\n'
+        'if [ "$1" = "-c" ] && [ "$2" = "import pytest" ]; then\n'
+        '    exit 1\n'
+        'fi\n'
+        'printf "%s\\n" "unexpected pytest invocation: $*" >&2\n'
+        'exit 1\n',
+        encoding="utf-8",
+    )
+    python.chmod(0o755)
+
+    exit_code = registry.main([
+        "verify", "--registry", str(path), "--base", "HEAD",
+        "--rootdir", str(repo), "--repo", str(repo), "--python", str(python),
+    ])
+
+    output = capsys.readouterr()
+    assert exit_code == 2
+    assert (
+        f"WIREREG: UNREADABLE reason=interpreter-has-no-pytest python={python}"
+        in output.out.splitlines()
+    )
+    assert sys.executable in output.out + output.err
+    assert Path(f"{python}.calls").read_text().splitlines() == ["-c import pytest"]
+    assert "WIREREG: FAIL" not in output.out
+    assert "step5f:" not in output.out
+    assert path.read_bytes() == before
 
 
 class TestFeatureScopedKey:
