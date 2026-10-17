@@ -451,7 +451,7 @@
       "symbol": "assemble",
       "find": "    if guards and phase != \"gate\":  # M:AT-GUARD-SCOPE\n",
       "replace": "    if False:  # M:AT-GUARD-SCOPE\n",
-      "test": "tests/test_h_mad_assemble_tdd.py::TestAssemble::test_guards_are_scoped_to_behaviour_existing_at_the_red_base"
+      "test": "tests/test_h_mad_assemble_tdd.py::TestAssembles::test_guards_are_scoped_to_behaviour_existing_at_the_red_base"
     }
   ],
   "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."
