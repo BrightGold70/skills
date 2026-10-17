@@ -2552,6 +2552,7 @@ drop the line.
   demands (HemaSuite `failed-round-diagnostic-letter`, 2026-10-05). Needs either a guard scope ("guards
   that exist before this 5d") or a sequencing note in the template. recurrence: 1 — candidate: maybe
   — **RE-PROBED 2026-10-18: OPEN** — `h_mad_assemble_tdd.py:517-523` still renders every `--guard` as "must pass from the first run" with no scope for a guard an earlier task's 5e has not yet created, and `references/codex-implementer-prompt.md:70` repeats it; no sequencing note in the template.
+  — **LANDED 2026-10-18** — `h_mad_assemble_tdd.py` emits a `**Guard scope:**` line with any guards (behaviour existing at this RED base; a guard on an earlier task's not-yet-GREEN code is `guard-not-yet-built`, reported, never weakened or implemented); same sentence in `references/codex-implementer-prompt.md`. Test + `assemble_tdd.json` row AT-GUARD-SCOPE-DROPPED.
 - **(e) the TDD judge's 40 s budget starves a later task's RED**: `h-mad/scripts/h_mad_tdd_judge.py:28`
   `JUDGE_BUDGET_S = 40.0` is spent across EVERY task's Test-file list for a production file, in plan
   order. Listing green guard files under Task 6 starved Task 7's RED, and every write was refused

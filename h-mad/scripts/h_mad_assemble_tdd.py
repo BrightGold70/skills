@@ -537,6 +537,15 @@ def assemble(
         )
     elif phase != "gate":
         lines.append("**Regression guards:** none in this task.")
+    # Every 5d runs before any 5e, so a guard naming an earlier task's code that
+    # is not GREEN yet is red by construction (HemaSuite 2026-10-05).
+    if guards and phase != "gate":  # M:AT-GUARD-SCOPE
+        lines.append(
+            "**Guard scope:** a guard is behaviour that exists at this RED base. A listed "
+            "guard that fails only because an earlier task's GREEN has not built its code "
+            "yet is `guard-not-yet-built`: report it with its failure; do not weaken it "
+            "and do not implement it."
+        )
     if phase != "gate":
         lines.append("")
         lines.append(f"**Run the tests as:** `{python} -m pytest {' '.join(test_paths)} -v`")

@@ -33,7 +33,7 @@
     },
     {
       "name": "hardcode-a-model-into-the-block",
-      "_mechanism": "A pin emitted here outranks the codex CLI's own config, so the model the TUI shows and the model 5d/5e actually runs drift apart silently — the block still looks right and the dispatch still passes.",
+      "_mechanism": "A pin emitted here outranks the codex CLI's own config, so the model the TUI shows and the model 5d/5e actually runs drift apart silently \u2014 the block still looks right and the dispatch still passes.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "        f\"hmad-dispatch exec codex {q(str(prompt))}{over} \\\\\",",
       "replace": "        f\"hmad-dispatch exec codex {q(str(prompt))}{over} --model gpt-5.6-sol \\\\\",",
@@ -75,7 +75,7 @@
       "name": "drop-the-scope-warning",
       "_mechanism": "Mistake 5. Without it the agent widens the run and collects the sibling project. NOTE: the first version of this mutation was a SYNTAX ERROR, so pytest died at collection and the run was credited as `killed by its named test` -- a FAKE KILL, caught only once scoring started requiring the named test to actually fail.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "            \"That path is the scope. Do not widen it — an unscoped run collects the \"\n            \"sibling project and dies on pre-existing errors.\"",
+      "find": "            \"That path is the scope. Do not widen it \u2014 an unscoped run collects the \"\n            \"sibling project and dies on pre-existing errors.\"",
       "replace": "            \"\"",
       "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_5_the_scoped_test_path_is_stated_and_bounded"
     },
@@ -89,7 +89,7 @@
     },
     {
       "name": "let-the-task-body-run-past-the-next-task",
-      "_mechanism": "The dispatch would carry the following tasks too, so the agent implements out of scope. Since `_body_end` landed, this bound only bites on a plan that MIXES heading levels (a `### Task 2` under a `## Task 1` is deeper, so the heading bound reads it as Task 1's own sub-heading) — which is why the killer test is the mixed-level one and not the same-level slicing test that used to name it.",
+      "_mechanism": "The dispatch would carry the following tasks too, so the agent implements out of scope. Since `_body_end` landed, this bound only bites on a plan that MIXES heading levels (a `### Task 2` under a `## Task 1` is deeper, so the heading bound reads it as Task 1's own sub-heading) \u2014 which is why the killer test is the mixed-level one and not the same-level slicing test that used to name it.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "        next_task = starts[position + 1] if position + 1 < len(starts) else len(lines)",
       "replace": "        next_task = len(lines)",
@@ -145,7 +145,7 @@
     },
     {
       "name": "unquote-the-interpolated-paths",
-      "_mechanism": "A path with a space becomes two shell arguments and the pasted block silently runs the wrong thing. Re-anchored 2026-09-21 when the re-run line gained its project-root subshell — the project_root interpolation is now a third unquoted path on the same line, and the mutation must unquote all three or it stops being the mistake it names.",
+      "_mechanism": "A path with a space becomes two shell arguments and the pasted block silently runs the wrong thing. Re-anchored 2026-09-21 when the re-run line gained its project-root subshell \u2014 the project_root interpolation is now a third unquoted path on the same line, and the mutation must unquote all three or it stops being the mistake it names.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "            f\"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in test_paths)} -v)\",",
       "replace": "            f\"(cd {project_root} && {python} -m pytest {' '.join(test_paths)} -v)\",",
@@ -177,7 +177,7 @@
     },
     {
       "name": "a-fence-comment-truncates-the-task",
-      "_mechanism": "Impl-plans are full of shell blocks whose comments start at column 0, so `# do the thing` inside one would cut the task off at its own example — the same reason section_bounds in h_mad_version_history.py tracks fences.",
+      "_mechanism": "Impl-plans are full of shell blocks whose comments start at column 0, so `# do the thing` inside one would cut the task off at its own example \u2014 the same reason section_bounds in h_mad_version_history.py tracks fences.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "        if line.lstrip().startswith(\"```\"):\n            fenced = not fenced\n            continue\n        if fenced:\n            continue",
       "replace": "        if line.lstrip().startswith(\"```\"):\n            continue",
@@ -209,18 +209,18 @@
     },
     {
       "name": "collapse-the-guards-back-into-the-else-arm",
-      "_mechanism": "The filed defect, restored exactly: the WIRE lines REPLACE the guards block instead of preceding it, so --guard is parsed, validated and then dropped on every wiring task with no warning and an ASSEMBLE-TDD: PASS. An implementer told by the template that guards are labelled, and then shown no labels, has the impl-plan's count as its only authority — the manufactured-failure path the template's own paragraph exists to close.",
+      "_mechanism": "The filed defect, restored exactly: the WIRE lines REPLACE the guards block instead of preceding it, so --guard is parsed, validated and then dropped on every wiring task with no warning and an ASSEMBLE-TDD: PASS. An implementer told by the template that guards are labelled, and then shown no labels, has the impl-plan's count as its only authority \u2014 the manufactured-failure path the template's own paragraph exists to close.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "    if guards and phase != \"gate\":\n        lines.append(\n            \"**Regression guards (must pass from the first run — do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    elif phase != \"gate\":\n        lines.append(\"**Regression guards:** none in this task.\")\n",
-      "replace": "    if shape != \"wiring\" and phase != \"gate\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run — do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
+      "find": "    if guards and phase != \"gate\":\n        lines.append(\n            \"**Regression guards (must pass from the first run \u2014 do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    elif phase != \"gate\":\n        lines.append(\"**Regression guards:** none in this task.\")\n",
+      "replace": "    if shape != \"wiring\" and phase != \"gate\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run \u2014 do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_wiring_task_states_its_guard_labels"
     },
     {
       "name": "emit-the-guards-only-for-wiring",
-      "_mechanism": "The over-correction. A repair that moved the guards block under the wiring arm instead of out of the conditional would pass every wiring-shaped test and silently drop the labels for new-behaviour and refactor tasks — the same defect with the shapes exchanged, which is why both directions are pinned.",
+      "_mechanism": "The over-correction. A repair that moved the guards block under the wiring arm instead of out of the conditional would pass every wiring-shaped test and silently drop the labels for new-behaviour and refactor tasks \u2014 the same defect with the shapes exchanged, which is why both directions are pinned.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "    if guards and phase != \"gate\":\n        lines.append(\n            \"**Regression guards (must pass from the first run — do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    elif phase != \"gate\":\n        lines.append(\"**Regression guards:** none in this task.\")\n",
-      "replace": "    if shape == \"wiring\" and phase != \"gate\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run — do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
+      "find": "    if guards and phase != \"gate\":\n        lines.append(\n            \"**Regression guards (must pass from the first run \u2014 do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    elif phase != \"gate\":\n        lines.append(\"**Regression guards:** none in this task.\")\n",
+      "replace": "    if shape == \"wiring\" and phase != \"gate\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run \u2014 do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_new_behaviour_task_still_states_its_guard_labels"
     },
     {
@@ -233,7 +233,7 @@
     },
     {
       "name": "emit-the-counts-line-unconditionally",
-      "_mechanism": "The pre-fix emission, which was unconditional inside the else arm. Counts are not required for a GREEN dispatch or for a wiring task, so with none supplied the prompt shipped the literal `**Expected after this dispatch:** None failing, None passing.` — a stated split that states nothing, and worse than an absent line because it reads as an answer.",
+      "_mechanism": "The pre-fix emission, which was unconditional inside the else arm. Counts are not required for a GREEN dispatch or for a wiring task, so with none supplied the prompt shipped the literal `**Expected after this dispatch:** None failing, None passing.` \u2014 a stated split that states nothing, and worse than an absent line because it reads as an answer.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "    if expect_fail is not None and expect_pass is not None:\n",
       "replace": "    if True:\n",
@@ -243,16 +243,16 @@
       "name": "drop-the-wiring-counts-rider",
       "_mechanism": "Without the rider the counts read as the bar on a task the exemption deliberately does not gate on counts, so the implementer treats the split as what must be hit and the WIRE-PIN as decoration. Stating a number and stating what it means are different acts.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "        if shape == \"wiring\":\n            lines.append(\n                \"These counts are informational for a wiring task — the WIRE-PIN, \"\n",
-      "replace": "        if False:\n            lines.append(\n                \"These counts are informational for a wiring task — the WIRE-PIN, \"\n",
+      "find": "        if shape == \"wiring\":\n            lines.append(\n                \"These counts are informational for a wiring task \u2014 the WIRE-PIN, \"\n",
+      "replace": "        if False:\n            lines.append(\n                \"These counts are informational for a wiring task \u2014 the WIRE-PIN, \"\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_wiring_tasks_counts_are_marked_informational"
     },
     {
       "name": "call-every-shapes-counts-informational",
       "_mechanism": "The other over-correction. On a non-wiring RED the counts ARE the bar and step5d:red_not_all_failing is enforced against them; telling that implementer they are informational licenses exactly the unlabelled immediate pass the counts exist to catch.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "        if shape == \"wiring\":\n            lines.append(\n                \"These counts are informational for a wiring task — the WIRE-PIN, \"\n",
-      "replace": "        if True:\n            lines.append(\n                \"These counts are informational for a wiring task — the WIRE-PIN, \"\n",
+      "find": "        if shape == \"wiring\":\n            lines.append(\n                \"These counts are informational for a wiring task \u2014 the WIRE-PIN, \"\n",
+      "replace": "        if True:\n            lines.append(\n                \"These counts are informational for a wiring task \u2014 the WIRE-PIN, \"\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_new_behaviour_task_is_not_told_its_counts_are_informational"
     },
     {
@@ -273,7 +273,7 @@
     },
     {
       "name": "write-the-half-split-guard-on-truthiness",
-      "_mechanism": "`0` is falsy and is a real answer — the repo already has treat-zero-counts-as-absent for the sibling check. On truthiness, `--expect-fail 0 --expect-pass 4` reads as half a split and a correct dispatch is refused, which reads as strictness rather than as a bug.",
+      "_mechanism": "`0` is falsy and is a real answer \u2014 the repo already has treat-zero-counts-as-absent for the sibling check. On truthiness, `--expect-fail 0 --expect-pass 4` reads as half a split and a correct dispatch is refused, which reads as strictness rather than as a bug.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "    if (expect_fail is None) != (expect_pass is None):\n",
       "replace": "    if (not expect_fail) != (not expect_pass):\n",
@@ -281,7 +281,7 @@
     },
     {
       "name": "skip-the-test-path-rooting-probe",
-      "_mechanism": "The filed sibling defect restored. --test-path goes verbatim into the prompt and the operator's re-run line with no check that it resolves under --project-root. Subproject-relative, pytest exits 4 on the missing file or 5 when a same-named directory exists at the root — and 5 RUNS, collects nothing and reports no error, which is a dispatch that measured nothing wearing the shape of a clean one. The interpreter was probed; the path was not.",
+      "_mechanism": "The filed sibling defect restored. --test-path goes verbatim into the prompt and the operator's re-run line with no check that it resolves under --project-root. Subproject-relative, pytest exits 4 on the missing file or 5 when a same-named directory exists at the root \u2014 and 5 RUNS, collects nothing and reports no error, which is a dispatch that measured nothing wearing the shape of a clean one. The interpreter was probed; the path was not.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "    for test_path in test_paths:\n",
       "replace": "    for test_path in []:\n",
@@ -289,7 +289,7 @@
     },
     {
       "name": "refuse-a-test-path-that-exists-nowhere",
-      "_mechanism": "The expensive over-correction: refusing on ABSENCE rather than on existing-elsewhere. A 5d RED names the test file the agent is about to write, so absence is the normal case — this halts every legitimate RED in the workflow, and reads as strictness rather than as a bug.",
+      "_mechanism": "The expensive over-correction: refusing on ABSENCE rather than on existing-elsewhere. A 5d RED names the test file the agent is about to write, so absence is the normal case \u2014 this halts every legitimate RED in the workflow, and reads as strictness rather than as a bug.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "        if elsewhere:\n",
       "replace": "        if True:\n",
@@ -321,7 +321,7 @@
     },
     {
       "name": "always-fall-back-to-the-unfiltered-walk",
-      "_mechanism": "Ignoring a good `git ls-files` costs both properties at once. Speed: the walk crossed 88349 HemaSuite entries in 4.6s against git's 9734 in 0.11s, on the COMMON path because a RED names a file that does not exist yet. Correctness: the walk's prune list is a guess at what is uninteresting, while `.gitignore` is the project's own answer — so the walk offers a path inside ignored runtime state as the fix and sends the caller there.",
+      "_mechanism": "Ignoring a good `git ls-files` costs both properties at once. Speed: the walk crossed 88349 HemaSuite entries in 4.6s against git's 9734 in 0.11s, on the COMMON path because a RED names a file that does not exist yet. Correctness: the walk's prune list is a guess at what is uninteresting, while `.gitignore` is the project's own answer \u2014 so the walk offers a path inside ignored runtime state as the fix and sends the caller there.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "    if proc is not None and proc.returncode == 0:\n",
       "replace": "    if False:\n",
@@ -353,7 +353,7 @@
     },
     {
       "name": "resolve-another-documents-citation",
-      "_mechanism": "`design §\"D8\"` resolved against a same-named impl-plan heading pastes the wrong document's section.",
+      "_mechanism": "`design \u00a7\"D8\"` resolved against a same-named impl-plan heading pastes the wrong document's section.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "            if qualifier in _FOREIGN_QUALIFIERS:",
       "replace": "            if False:",
@@ -443,6 +443,15 @@
       "find": "    if phase != \"gate\" and not interpreter_has_pytest(python):",
       "replace": "    if not interpreter_has_pytest(python):",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGatePhaseSpec::test_gate_skips_the_pytest_interpreter_probe"
+    },
+    {
+      "name": "AT-GUARD-SCOPE-DROPPED",
+      "_mechanism": "skill-candidates row (d): the guard-scope line is not emitted, so a guard on an earlier task's not-yet-GREEN code is again demanded to pass at RED.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "assemble",
+      "find": "    if guards and phase != \"gate\":  # M:AT-GUARD-SCOPE\n",
+      "replace": "    if False:  # M:AT-GUARD-SCOPE\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestAssemble::test_guards_are_scoped_to_behaviour_existing_at_the_red_base"
     }
   ],
   "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."

@@ -137,10 +137,10 @@ class TestAssembles:
         # Every 5d runs before any 5e, so a guard naming an earlier task's
         # not-yet-GREEN code is red by construction (HemaSuite 2026-10-05).
         filled, _ = call(plan, tmp_path, guards=["test_a"])
-        assert "exists at this RED base" in filled
+        assert "**Guard scope:** a guard is behaviour that exists at this RED base" in filled
         assert "guard-not-yet-built" in filled
         filled, _ = call(plan, tmp_path, guards=[])
-        assert "guard-not-yet-built" not in filled
+        assert "**Guard scope:**" not in filled
 
     def test_no_guards_says_so_rather_than_omitting_the_line(
         self, plan: Path, tmp_path: Path
