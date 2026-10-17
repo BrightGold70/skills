@@ -2645,5 +2645,6 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
 - **wire registry `verify` interpreter** (2026-10-17): `h_mad_wire_registry.py verify` runs pytest via the
   PATH `python3` (3.15, no pytest here) and answers `UNREADABLE`; a `--python` option or probing like the
   assembler does. Same session: pins registered `tests/...` read as missing (also `106421f0`) — `register`
+  — **LANDED 2026-10-18** — `h_mad_wire_registry.py verify` probes its interpreter for pytest first (`interpreter-has-no-pytest`, cannot-judge, names a working interpreter); `register` warns `pin is not repo-relative … did you mean …`. 3 tests in `test_h_mad_wire_registry.py`, rows in `wire_registry_key.json`.
   could warn when a pin is not repo-relative. — recurrence: 2 — candidate: yes
   — **RE-PROBED 2026-10-18: OPEN, narrowed** — `verify --python` already exists (`h_mad_wire_registry.py:775`, since `198a1a14` 2026-08-21) but defaults to `sys.executable`; missing are a pytest probe on that default (as the assembler's `--python` refuses one without pytest) and a `register` warning for a pin that is not repo-relative.

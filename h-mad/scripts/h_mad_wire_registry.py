@@ -697,6 +697,8 @@ def verify(
     repo: Path,
     testpaths: tuple[Path, ...] | list[Path] = DEFAULT_TESTPATHS,
     python: str = sys.executable,
+    *,
+    probe_interpreter: bool = False,
 ) -> dict:
     if not registry.exists():
         return {
@@ -704,6 +706,19 @@ def verify(
             "missing": 0, "ambiguous": 0, "unverified_renames": 0, "undeclared_removals": 0,
             "token": "WIREREG: PASS registered=0 verified=0 broken=0 missing=0 ambiguous=0 unverified_renames=0 undeclared_removals=0",
             "remedy": None,
+        }
+    if probe_interpreter and not _interpreter_has_pytest(python):
+        # Mirror assemble_tdd's candidates, bounding every probe here.
+        suggestions = [
+            candidate for candidate in (
+                sys.executable, "python3.13", "python3.12", "python3.11",
+                "/opt/homebrew/bin/python3", "/usr/bin/python3",
+            ) if candidate != python and _interpreter_has_pytest(candidate)
+        ]
+        return {
+            "verdict": "UNREADABLE",
+            "token": f"WIREREG: UNREADABLE reason=interpreter-has-no-pytest python={python}",
+            "remedy": f"Hint: use --python {suggestions[0]}" if suggestions else None,
         }
     tracked, remedy = trackedness(registry, repo)
     head = load(registry)
@@ -755,6 +770,15 @@ def verify(
     }
 
 
+def _interpreter_has_pytest(python: str) -> bool:
+    try:
+        return subprocess.run(
+            [python, "-c", "import pytest"], capture_output=True, timeout=30,
+        ).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -804,6 +828,8 @@ def main(argv: list[str] | None = None) -> int:
             print(detail)
         return 0
     if args.command == "register":
+        from h_mad_assemble_tdd import misrooted_candidates
+
         try:
             stored = register([{
                 "kind": "wire", "id": args.id, "caller": args.caller,
@@ -814,6 +840,16 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, RegistryError) as exc:
             print(f"[H-MAD] wire_registry UNREADABLE: {exc}")
             return 2
+        for pin in args.pin:
+            pin_file, separator, test = pin.partition("::")
+            if separator and not (args.repo / pin_file).exists():
+                candidates = misrooted_candidates(args.repo, pin_file)
+                if candidates:
+                    print(
+                        f"WARNING: pin is not repo-relative: {pin} "
+                        f"(did you mean {candidates[0]}::{test}?)",
+                        file=sys.stderr,
+                    )
         used, warning = registry_notice(args.registry, args.repo)
         if warning:
             print(warning)
@@ -833,6 +869,7 @@ def main(argv: list[str] | None = None) -> int:
             args.registry, args.base, args.rootdir, args.repo,
             args.testpaths if args.testpaths is not None else DEFAULT_TESTPATHS,
             python=args.python,
+            probe_interpreter=True,
         )
     except (OSError, RegistryError) as exc:
         print(f"[H-MAD] wire_registry UNREADABLE: {exc}")
@@ -840,7 +877,7 @@ def main(argv: list[str] | None = None) -> int:
     print(result["token"])
     if result.get("remedy"):
         print(result["remedy"])
-    return 0
+    return 2 if result["verdict"] == "UNREADABLE" else 0
 
 
 if __name__ == "__main__":

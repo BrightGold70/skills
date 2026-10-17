@@ -16,6 +16,22 @@
   ],
   "mutations": [
     {
+      "name": "verify-interpreter-probe-skipped",
+      "_mechanism": "Skip the interpreter preflight so a missing pytest installation reaches collection and loses the actionable interpreter diagnosis.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    if probe_interpreter and not _interpreter_has_pytest(python):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_wire_registry.py::test_main_verify_without_pytest_reports_interpreter_before_running_pins"
+    },
+    {
+      "name": "non-repo-relative-pin-warning-dropped",
+      "_mechanism": "Keep registration successful but suppress the suffix-only pin warning, leaving the operator unaware that its file path is rooted at the wrong directory.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "                if candidates:\n                    print(",
+      "replace": "                if False:\n                    print(",
+      "test": "tests/test_h_mad_wire_registry.py::test_register_cli_warns_only_for_non_repo_relative_pin[suffix-only]"
+    },
+    {
       "name": "identity-drops-the-owning-feature",
       "_mechanism": "The defect at its source. Every consumer keeps calling the right helper and the helper answers with the wrong identity, so registration, comparison and the halt reasons all regress together \u2014 which is exactly why the key is one function rather than four expressions.",
       "file": "scripts/h_mad_wire_registry.py",
