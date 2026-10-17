@@ -34,10 +34,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
+import shlex
+import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
+
+import h_mad_tdd_judge
+
+
+AGY_HOOK_COMMAND = ["python3", "~/.gemini/config/skills/h-mad/hooks/h-mad-agy-tdd-gate.py"]
 
 #: hook basename -> tool names its matcher must be able to fire on.
 #:
@@ -189,10 +198,73 @@ def check(project_root: Path | None = None,
     return issues, True
 
 
+def check_agy(project_root: Path) -> tuple[str, int]:
+    """Return the first FR-5 wiring verdict, or an unreadable-file error."""
+    path = project_root / ".agents" / "hooks.json"
+    if not path.exists():
+        return "AGY-GATE: UNWIRED reason=no-hooks-file", 0
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return f"AGY-GATE: UNREADABLE file={quote(str(path), safe='')} error={type(exc).__name__}", 2
+    if not isinstance(data, dict):
+        return f"AGY-GATE: UNREADABLE file={quote(str(path), safe='')} error=not-an-object", 2
+
+    entry = data.get("h-mad-agy-tdd-gate")
+    if not isinstance(entry, dict):
+        return "AGY-GATE: UNWIRED reason=no-entry", 0
+    if entry.get("enabled", True) is not True:
+        return "AGY-GATE: UNWIRED reason=disabled", 0
+    groups = entry.get("PreToolUse", [])
+    groups = groups if isinstance(groups, list) else []
+    wide = [group for group in groups
+            if isinstance(group, dict) and group.get("matcher") in ("*", "")]
+    if not wide:
+        return "AGY-GATE: UNWIRED reason=matcher-narrow", 0
+
+    handlers = []
+    for group in wide:
+        hooks = group.get("hooks", [])
+        if not isinstance(hooks, list):
+            continue
+        for handler in hooks:
+            if not isinstance(handler, dict) or not isinstance(handler.get("command"), str):
+                continue
+            try:
+                command = shlex.split(handler["command"])
+            except ValueError:
+                continue
+            if command == AGY_HOOK_COMMAND:
+                handlers.append(handler)
+    if not handlers:
+        return "AGY-GATE: UNWIRED reason=bad-command", 0
+    floor = math.ceil(h_mad_tdd_judge.JUDGE_BUDGET_S + 20)
+    if not any(type(handler.get("timeout", 30)) is int
+               and handler.get("timeout", 30) >= floor for handler in handlers):
+        return "AGY-GATE: UNWIRED reason=timeout-below-floor", 0
+
+    try:
+        result = subprocess.run(
+            [AGY_HOOK_COMMAND[0], _expand(AGY_HOOK_COMMAND[1]), "--self-check"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "AGY-GATE: UNWIRED reason=self-check-failed", 0
+    if result.returncode != 0 or result.stdout not in ("AGY-TDD-GATE: PASS", "AGY-TDD-GATE: PASS\n"):
+        return "AGY-GATE: UNWIRED reason=self-check-failed", 0
+    return "AGY-GATE: WIRED", 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="verify h-mad hooks are wired")
     ap.add_argument("--project-root", default=os.getcwd())
+    ap.add_argument("--agy", action="store_true")
     args = ap.parse_args(argv)
+
+    if args.agy:
+        line, code = check_agy(Path(args.project_root).expanduser())
+        print(line)
+        return code
 
     root = Path(args.project_root).expanduser()
     issues, read_anything = check(root if str(root).strip() else None)
