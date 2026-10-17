@@ -47,7 +47,8 @@ would quietly pick one.
 A global impl-plan section the task cites by `§"…"` is inlined after the task
 (`referenced_sections`); a citation it cannot place is listed, never a halt.
 
-exit 0 on PASS, 2 on any HALT. Stdlib-only.
+exit 0 on PASS and on HALT agy_tdd_hook_unverified after AGY-GATE: UNWIRED;
+2 on every other HALT. Stdlib-only.
 """
 from __future__ import annotations
 
@@ -70,6 +71,9 @@ from h_mad_assemble_audit import fill_slots  # noqa: E402
 
 TOKEN = "ASSEMBLE-TDD"
 TEMPLATE = SKILL_DIR / "references" / "codex-implementer-prompt.md"
+TIMEOUT_DEFAULTS = {"codex": 900, "grok": 1500, "agy": 1500}
+AGY_WIRING_CHECK = str(Path(__file__).resolve().parent / "h_mad_hook_wiring.py")
+AGY_WIRING_TIMEOUT_S = 60
 # No model/effort default: an unpinned dispatch inherits the codex CLI's own
 # config, so the model the TUI shows is the model 5d/5e runs. See mistake 1.
 DEFAULT_MODEL = None
@@ -661,7 +665,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--log", type=Path)
     ap.add_argument("--prompt", type=Path)
     ap.add_argument("--report-file", default="")
-    ap.add_argument("--agent", choices=("codex", "grok"), default="codex")
+    ap.add_argument("--agent", choices=("codex", "grok", "agy"), default="codex")
     ap.add_argument("--timeout", type=int, default=None)
     ap.add_argument("--model", default=DEFAULT_MODEL,
                     help="OVERRIDE; unset inherits the codex CLI's own configured model")
@@ -671,7 +675,27 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sandbox", help="passed through; read-only is refused for a phase that runs pytest")
     ap.add_argument("--template", type=Path, default=TEMPLATE)
     args = ap.parse_args(argv)
-    timeout = args.timeout if args.timeout is not None else (1500 if args.agent == "grok" else 900)
+    timeout = args.timeout if args.timeout is not None else TIMEOUT_DEFAULTS[args.agent]
+
+    if args.agent == "agy":
+        try:
+            check = subprocess.run(
+                [sys.executable, AGY_WIRING_CHECK, "--agy", "--project-root", str(args.project_root)],
+                capture_output=True, text=True, timeout=AGY_WIRING_TIMEOUT_S,
+            )
+            check_line = next((line for line in check.stdout.splitlines()
+                               if line.startswith("AGY-GATE: ")), "")
+        except (subprocess.TimeoutExpired, OSError):
+            check_line = ""
+        verdict = check_line.removeprefix("AGY-GATE: ").split(" ", 1)[0]
+        if verdict != "WIRED":
+            if verdict in ("UNWIRED", "UNREADABLE"):
+                print(f"{TOKEN}: HALT agy_tdd_hook_unverified")
+                print(f"  {check_line}")
+            else:
+                print(f"{TOKEN}: HALT agy_tdd_hook_unverified check=no-token")
+            print(f"[H-MAD] {args.feature} tdd-assemble halt agy_tdd_hook_unverified {args.task}")
+            return 0 if verdict == "UNWIRED" else 2
 
     slug = _filename_slug(args.feature, args.module, args.phase)
     impl_plan = args.impl_plan or (

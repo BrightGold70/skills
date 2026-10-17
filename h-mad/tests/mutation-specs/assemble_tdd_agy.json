@@ -1,0 +1,43 @@
+{
+  "root": "../..",
+  "command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "tests/test_h_mad_assemble_tdd_agent.py", "tests/test_h_mad_assemble_tdd.py", "-q"],
+  "target_command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "fr5-unwired-exits-2",
+      "_mechanism": "Turn the UNWIRED verdict into an operational failure by returning 2.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "main",
+      "find": "            return 0 if verdict == \"UNWIRED\" else 2",
+      "replace": "            return 2",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_unwired_halts_with_exit_0"
+    },
+    {
+      "name": "wire-check-not-run",
+      "_mechanism": "Cut the checker subprocess call while retaining verdict handling and assembly.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "main",
+      "find": "            check = subprocess.run(\n                [sys.executable, AGY_WIRING_CHECK, \"--agy\", \"--project-root\", str(args.project_root)],\n                capture_output=True, text=True, timeout=AGY_WIRING_TIMEOUT_S,\n            )",
+      "replace": "            check = subprocess.CompletedProcess([], 0, stdout=\"AGY-GATE: WIRED\\n\")",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_runs_the_wiring_check_before_assembling"
+    },
+    {
+      "name": "wire-check-runs-for-every-agent",
+      "_mechanism": "Force the agy-only checker to run for codex and grok as well.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "main",
+      "find": "    if args.agent == \"agy\":",
+      "replace": "    if True:",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_agent_grok_block_names_exec_grok_with_1500"
+    },
+    {
+      "name": "halt-marker-dropped",
+      "_mechanism": "Drop the H-MAD halt marker following the checker verdict.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "main",
+      "find": "            print(f\"[H-MAD] {args.feature} tdd-assemble halt agy_tdd_hook_unverified {args.task}\")",
+      "replace": "",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_agent_agy_unwired_halts_with_exit_0"
+    }
+  ]
+}
