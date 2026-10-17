@@ -138,3 +138,45 @@ def test_never_matches_its_own_process_or_an_ancestor_that_names_the_marker(tmp_
     self_pid, parent_pid = ids
     assert self_pid not in found, f"matched its own process: {result.stdout}"
     assert parent_pid not in found, f"matched its own marker-carrying parent: {result.stdout}"
+
+
+def test_listing_denied_raises_process_listing_denied(monkeypatch):
+    import leak_reaper
+    import pytest
+
+    def denied_listing(*args, **kwargs):
+        raise PermissionError(1, "Operation not permitted", "ps")
+
+    monkeypatch.setattr(leak_reaper.subprocess, "run", denied_listing)
+    with pytest.raises(leak_reaper.ProcessListingDenied) as exc_info:
+        leak_reaper.find_leaked(["/x"])
+    assert isinstance(exc_info.value.__cause__, PermissionError)
+
+
+def test_conftest_finalizer_reports_a_denied_listing_and_does_not_error(tmp_path):
+    import shutil
+    import sys
+
+    here = Path(__file__).resolve().parent
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    for name in ("conftest.py", "leak_reaper.py"):
+        shutil.copy(here / name, suite / name)
+    (suite / "test_passes.py").write_text(
+        "def test_passes():\n"
+        "    assert True\n",
+        encoding="utf-8")
+    nops = tmp_path / "nops"
+    nops.mkdir()
+    ps = nops / "ps"
+    ps.write_text("process listing denied\n", encoding="utf-8")
+    ps.chmod(0o644)
+    env = os.environ.copy()
+    env["PATH"] = str(nops)
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(suite),
+         "--basetemp", str(tmp_path / "bt")],
+        capture_output=True, text=True, cwd=suite, env=env, timeout=120, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "[leak-reaper] SKIPPED: process listing not permitted" in result.stdout, result.stdout
+    assert "PermissionError" in result.stdout, result.stdout
