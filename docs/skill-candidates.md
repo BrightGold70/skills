@@ -2607,3 +2607,20 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
   A harness `--isolate` flag (or an `hmad-dispatch` verb) would make that one command. Absence:
   `grep -nE 'worktree|isolat|detach' h-mad/scripts/h_mad_mutation_harness.py` returns nothing.
   — recurrence: 5 — candidate: yes
+- **assembler `gate`-shape path** (2026-10-17, agy-coder-fallback): `h_mad_assemble_tdd.py` stages only
+  RED/GREEN; a `gate` task (no tests, probes only) was hand-prompted five times (Tasks 0, 8, 14, 18, 19),
+  and each hand prompt re-typed the same rules (measure-never-tune, PROBE token, control, no commit).
+  A `--phase gate` that cuts §Task N and emits that block would make it one command. — recurrence: 5 —
+  candidate: yes
+- **assembler multi-path `--test-path`** (2026-10-17): a Task whose tests span two files took a
+  space-joined `--test-path`; the prompt read correctly but the printed operator re-run line
+  shell-quotes the pair as ONE path and breaks. Repeatable `--test-path`. — recurrence: 2 — candidate: yes
+- **declarable sandbox teardown artefact** (2026-10-17): Codex `workspace-write` blocks the leak-reaper's
+  `ps`, so every scoped pytest exits 1 on a session-teardown ERROR and the mutation harness refuses its
+  baseline; `--env-known-failure` takes node ids only, so the note was hand-appended to ~20 prompts and
+  Codex still returned BLOCKED on it 3 times before it was. A template line (or an env opt-out for
+  `find_leaked` under the sandbox) would close it. — recurrence: 20 — candidate: yes
+- **wire registry `verify` interpreter** (2026-10-17): `h_mad_wire_registry.py verify` runs pytest via the
+  PATH `python3` (3.15, no pytest here) and answers `UNREADABLE`; a `--python` option or probing like the
+  assembler does. Same session: pins registered `tests/...` read as missing (also `106421f0`) — `register`
+  could warn when a pin is not repo-relative. — recurrence: 2 — candidate: yes
