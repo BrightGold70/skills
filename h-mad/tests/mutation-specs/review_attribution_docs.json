@@ -1,0 +1,72 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_review_attribution_docs.py",
+    "-v"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "-v"
+  ],
+  "mutations": [
+    {
+      "name": "fr7-docs-warning-lines",
+      "_mechanism": "Remove the requirement to carry every Phase-7 warning and its three warning codes.",
+      "file": "SKILL.md",
+      "symbol": "Per-phase actions",
+      "find": "Carry every `WARNING` line into the Phase-7 report, including `review_non_independent`, `review_independence_unrecorded` and `review_independence_malformed`; warnings do not change readiness.",
+      "replace": "",
+      "test": "tests/test_h_mad_review_attribution_docs.py::test_closure_step_carries_every_warning_line"
+    },
+    {
+      "name": "fr7-docs-review-append",
+      "_mechanism": "Remove the instruction to append review independence after each review leg for every implementer.",
+      "file": "SKILL.md",
+      "symbol": "Per-phase actions",
+      "find": "After each 5e-review, 5e-verify and 6a-prime leg, run `h_mad_state_write.py docs/.bkit-memory.json --feature <feature> --session-id <owner-session-id> --append review_independence='{\"leg\":\"<leg>\",\"module\":\"<module>\",\"reviewer\":\"<reviewer>\",\"implementer\":\"<implementer>\",\"independent\":false}'` for every implementer, applying the attribution rule below and replacing the example boolean with the computed value: `independent` is `reviewer != implementer`.",
+      "replace": "",
+      "test": "tests/test_h_mad_review_attribution_docs.py::test_closure_step_appends_review_independence_for_every_implementer"
+    },
+    {
+      "name": "fr7-docs-dispatch-source",
+      "_mechanism": "Remove the accepted dispatch as the implementer source and the prohibition on routing-field attribution.",
+      "file": "SKILL.md",
+      "symbol": "Per-phase actions",
+      "find": "`implementer` is read from the dispatch that authored the reviewed code, never read from `implementer_switch.to` or from the `implementer` field, which describe routing.",
+      "replace": "",
+      "test": "tests/test_h_mad_review_attribution_docs.py::test_attribution_step_names_the_dispatch_as_the_source"
+    },
+    {
+      "name": "fr7-docs-5e-author-append",
+      "_mechanism": "Remove the accepted GREEN author append before spec review.",
+      "file": "SKILL.md",
+      "symbol": "Phase 5 (Implementation) sub-steps",
+      "find": "**Record authors before review:** when the orchestrator accepts a module's GREEN dispatch (reads `STATUS: DONE` or `STATUS: DONE_WITH_CONCERNS` and stops re-dispatching GREEN), run `h_mad_state_write.py docs/.bkit-memory.json --feature <feature> --session-id <owner-session-id> --append implementation_authors='{\"module\":\"<module>\",\"agent\":\"<agent>\"}'` before the module's 5e spec-review leg runs.",
+      "replace": "",
+      "test": "tests/test_h_mad_review_attribution_docs.py::test_5e_bullet_appends_the_author_at_green_acceptance"
+    },
+    {
+      "name": "fr7-docs-6a-prime-author-append",
+      "_mechanism": "Remove the accepted WITH_FIXES author append before the next review.",
+      "file": "SKILL.md",
+      "symbol": "Phase 6 (Verification) sub-steps",
+      "find": "**After `WITH_FIXES`:** for each accepted fix dispatch, run `h_mad_state_write.py docs/.bkit-memory.json --feature <feature> --session-id <owner-session-id> --append implementation_authors='{\"module\":\"<module>\",\"agent\":\"<agent>\"}'` before the next leg that reviews the fixed code.",
+      "replace": "",
+      "test": "tests/test_h_mad_review_attribution_docs.py::test_6a_prime_fix_appends_the_author"
+    },
+    {
+      "name": "fr7-docs-transcription-words",
+      "_mechanism": "Remove the durable author field as the only author-set source, breaking the transcription's tie to the procedure.",
+      "file": "SKILL.md",
+      "symbol": "Per-phase actions",
+      "find": "The author set is read from `implementation_authors` only, never from earlier `review_independence` entries or an in-context dispatch list.",
+      "replace": "",
+      "test": "tests/test_h_mad_review_attribution_docs.py::test_transcription_is_tied_to_the_skill_text"
+    }
+  ]
+}
