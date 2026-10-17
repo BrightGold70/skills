@@ -86,6 +86,24 @@
       "find": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. GREEN must prove the wire by a wire-cut: delete the call only, keep the caller and the callee, and confirm the pin fails.",
       "replace": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. GREEN must prove the wire by a wire-cut: delete the callee only, keep the caller, and confirm the pin fails.",
       "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
+    },
+    {
+      "name": "fr9-corpus-drops-callee-condition",
+      "_mechanism": "Dropping callee resolution incorrectly changes both-missing as well as new-caller.",
+      "file": "tests/test_h_mad_wire_pin_new_caller_corpus.py",
+      "symbol": "new_rule",
+      "find": "return \"valid\" if missing_is_caller and callee_resolves else \"halt\"",
+      "replace": "return \"valid\" if missing_is_caller else \"halt\"",
+      "test": "tests/test_h_mad_wire_pin_new_caller_corpus.py::test_changed_verdicts_are_exactly_new_caller"
+    },
+    {
+      "name": "fr9-corpus-drops-caller-condition",
+      "_mechanism": "Dropping the missing-caller role incorrectly changes unrelated-import and other-symbol.",
+      "file": "tests/test_h_mad_wire_pin_new_caller_corpus.py",
+      "symbol": "new_rule",
+      "find": "return \"valid\" if missing_is_caller and callee_resolves else \"halt\"",
+      "replace": "return \"valid\" if callee_resolves else \"halt\"",
+      "test": "tests/test_h_mad_wire_pin_new_caller_corpus.py::test_changed_verdicts_are_exactly_new_caller"
     }
   ]
 }
