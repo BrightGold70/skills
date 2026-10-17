@@ -415,12 +415,12 @@ def test_agent_agy_wired_writes_the_prompt(
     assert first_dispatch_line(proc).startswith("hmad-dispatch exec agy "), (
         "WIRED must dispatch the selected agy agent"
     )
-    assert "--timeout 1500" in proc.stdout, "agy must default to 1500 seconds"
+    assert "--timeout 900" in proc.stdout, "agy must default to 900 seconds"
 
 
 @pytest.mark.parametrize("agent, timeout", [
-    ("codex", 900), ("grok", 1500), ("agy", 1500),
-], ids=["codex-900", "grok-1500", "agy-1500"])
+    ("codex", 900), ("grok", 1500), ("agy", 900),
+], ids=["codex-900", "grok-1500", "agy-900"])
 def test_agent_default_timeouts(
     plan: Path, tmp_path: Path, agy_env: dict[str, str], agent: str, timeout: int,
 ) -> None:
