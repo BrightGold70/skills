@@ -20,7 +20,7 @@ Two things make a naive grep wrong, both measured 2026-08-20:
      generalisable bug was never "pipe tables are unsupported", it was "an
      unsupported shape reads as an empty backlog".
 """
-import re, collections, sys
+import re, collections, sys, subprocess
 from pathlib import Path
 def _label(p):
     parts = Path(p).resolve().parts
@@ -81,8 +81,12 @@ BUMP = re.compile(r'recurrence, not a new row|no new recurrence|existing row, re
 OPEN = ("yes", "maybe")
 
 def rows(p):
+    return _rows(open(p).read())
+
+
+def _rows(text):
     cur=None; out=[]
-    for i,ln in enumerate(open(p).read().split("\n"),1):
+    for i,ln in enumerate(text.split("\n"),1):
         if OPENER.match(ln):
             if cur: out.append(cur)
             cur=(i,[ln])
@@ -138,6 +142,76 @@ def is_monitoring(text):
     return any("Skill Monitoring" in ln for ln in text.split("\n")[:5])
 
 
+def read_store(path, rev):
+    if rev is None:
+        return open(path).read()
+    p = Path(path).absolute()
+    command = ["git", "-C", str(p.parent)]
+    root = subprocess.run(command + ["rev-parse", "--show-toplevel"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    return subprocess.run(command + ["show", f"{rev}:{p.relative_to(root).as_posix()}"],
+                          capture_output=True, text=True, check=True).stdout
+
+
+def open_candidates(text):
+    out = []
+    for ln, body in _rows(text):
+        name, tail = row_name(body)
+        blob = "\n".join(body)
+        if name is None or BUMP.search(tail) or TERM.search(blob):
+            continue
+        match = CAND.search(blob)
+        if match and match.group(1).lower() in OPEN:
+            out.append((ln, body, name[:104]))
+    return out
+
+
+def apply_table(store, table):
+    # Preserve existing bytes, including line endings; only insert new lines.
+    with open(store, encoding="utf-8", newline="") as stream:
+        text = stream.read()
+    candidates = open_candidates(text)
+    insertions = collections.defaultdict(list)
+    header = True
+    for line in Path(table).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not (line.startswith("|") and line.endswith("|")):
+            continue
+        cells = [cell.strip().replace(r"\|", "|")
+                 for cell in re.split(r"(?<!\\)\|", line[1:-1])]
+        if len(cells) != 2:
+            continue
+        if header:
+            header = False
+            continue
+        if all(re.fullmatch(r":?-+:?", cell) for cell in cells):
+            continue
+        name, status = cells
+        matches = [(ln, body) for ln, body, candidate in candidates if candidate == name]
+        if len(matches) != 1:
+            reason = "no-match" if not matches else "ambiguous"
+            print(f"APPLY: REFUSED reason={reason} line={name}")
+            return 2
+        ln, body = matches[0]
+        end = ln - 1
+        for part in body:
+            if not part.strip():
+                break
+            end += 1
+        insertions[end].append(f"  — {status}\n")
+
+    lines = text.splitlines(keepends=True)
+    for end, additions in sorted(insertions.items(), reverse=True):
+        if end and not lines[end - 1].endswith(("\n", "\r")):
+            additions = ["\n"] + additions
+        lines[end:end] = additions
+    updated = "".join(lines)
+    Path(store).write_bytes(updated.encode("utf-8"))
+    count = sum(len(additions) for additions in insertions.values())
+    print(f"APPLY: inserted={count} OPEN {len(candidates)}→{len(open_candidates(updated))}")
+    return 0
+
+
 def main(argv=None):
     """Run the census over the store paths in `argv` (default `sys.argv[1:]`).
 
@@ -155,15 +229,41 @@ def main(argv=None):
     # by other consumers.
     list_open = "--list-open" in paths
     paths = [a for a in paths if a != "--list-open"]
+    rev = table = None
+    for flag in ("--rev", "--apply"):
+        if flag not in paths:
+            continue
+        index = paths.index(flag)
+        if index + 1 == len(paths) or paths[index + 1].startswith("--"):
+            print(f"usage: {flag} requires a value", file=sys.stderr)
+            return 1
+        value = paths[index + 1]
+        del paths[index:index + 2]
+        if flag == "--rev":
+            rev = value
+        else:
+            table = value
+    if table is not None and (rev is not None or len(paths) != 1):
+        print("usage: --apply <table.md> requires one store and cannot combine with --rev",
+              file=sys.stderr)
+        return 1
     if not paths:
         print("usage: skill_candidates_census.py [--list-open] <skill-candidates.md> [more...]",
               file=sys.stderr)
         return 1
 
+    if table is not None:
+        return apply_table(paths[0], table)
+
     grand=collections.Counter(); bumps_all=[]; coverage=[]
     for f in paths:
         tag=_label(f)
-        text=open(f).read()
+        try:
+            text = read_store(f, rev)
+        except subprocess.CalledProcessError as exc:
+            detail = exc.stderr.splitlines()[0]
+            print(f"census: cannot read {f} at {rev}: {detail}", file=sys.stderr)
+            return 2
 
         if is_monitoring(text):
             entries=jrows(text)
@@ -205,7 +305,7 @@ def main(argv=None):
 
         c=collections.Counter(); bumps=[]; declined=collections.Counter(); unclosed=[]
         open_rows=[]
-        for ln,body in rows(f):
+        for ln,body in _rows(text):
             name,tail=row_name(body)                    # matched ACROSS a wrap
             if name is None:
                 unclosed.append(f"{tag}:{ln} {body[0][:70]}")
@@ -254,7 +354,7 @@ def main(argv=None):
         # Counted with OPENER, NOT with ROW. A coverage metric derived from the same
         # pattern as the reader it audits can only ever report agreement with itself;
         # these two numbers must be able to DISAGREE or the check is decoration.
-        rowish=sum(1 for ln in open(f).read().split("\n") if OPENER.match(ln))
+        rowish=sum(1 for ln in text.split("\n") if OPENER.match(ln))
         # `unclosed` is deliberately NOT added to `parsed`: an opener the reader
         # could not turn into a row is a line it did not understand, and counting it
         # as parsed would restore the ratio to N/N — which is the exact tautology

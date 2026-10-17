@@ -2586,6 +2586,7 @@ the commits since touches what they ask for. `2a03ca2b` changes only `h-mad-advi
   shared doc (J52/J53 in `docs/skill-monitoring.md`). Telling "my change broke it" from "their WIP
   broke it" took `git show HEAD:<file> > tmp` plus a census on the copy. A `--rev HEAD` flag, or
   a test-side read of the committed blob, would make that one command and stop the pins flapping on
+  — **LANDED 2026-10-18** — `skill_candidates_census.py --rev <ref>` reads each store via `git show <ref>:<path>`; unreadable ref/path exits 2, never falls back. Tests in `test_skill_candidates_census.py`.
   a neighbour's edit. — recurrence: 1 — candidate: maybe
   — **RE-PROBED 2026-10-18: OPEN** — `skill_candidates_census.py:156-159` still parses `--list-open` only; no `--rev`. Recurrence is now 2: the 2026-10-17 note (row 2595, folded into this row) read `origin/main` through `git show … > tmp`.
 - **apply a reconciliation decisions table to a store, by census open-line**: applying 53 status
@@ -2593,6 +2594,7 @@ the commits since touches what they ask for. `2a03ca2b` changes only `h-mad-advi
   declined reinforcement row, and what held was "insert under the exact line `--list-open`
   reports". A `skill_candidates_census.py --apply <table>` (insert-only, refuse on ambiguity, print
   the OPEN delta) would make the next pass (22 rows remain) mechanical. — recurrence: 1 (3 tries in
+  — **LANDED 2026-10-18** — `skill_candidates_census.py --apply <table.md> <store>`: insert-only after the row's last line, `|` unescaped, refuses no-match/ambiguous writing nothing, prints `APPLY: inserted=N OPEN a→b`. Dogfooded on this row.
   one task) — candidate: maybe
   — **RE-PROBED 2026-10-18: OPEN** — no `--apply` in `skill_candidates_census.py` (`:156-159` parse `--list-open` only). Recurrence is now 2 and the duplicate row 2598 (folded into this row) rated it `yes`; it adds two requirements: unescape `\|` in table cells before matching, and print the OPEN delta (68 → 62 on that pass).
 

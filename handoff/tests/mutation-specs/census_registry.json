@@ -203,8 +203,8 @@
       "name": "coverage-is-derived-from-the-reader-it-audits-again",
       "_mechanism": "Computing `rowish` with `ROW` restores the tautology: an unparsed row is missing from BOTH sides of the ratio, which stays a reassuring N/N. A coverage metric derived from the same pattern as the thing it audits can only ever report agreement with itself — and this is the check whose whole purpose is that 'an unsupported shape reads as an empty backlog'.",
       "file": "scripts/skill_candidates_census.py",
-      "find": "        rowish=sum(1 for ln in open(f).read().split(\"\\n\") if OPENER.match(ln))",
-      "replace": "        rowish=sum(1 for ln in open(f).read().split(\"\\n\") if ROW.match(ln))",
+      "find": "        rowish=sum(1 for ln in text.split(\"\\n\") if OPENER.match(ln))",
+      "replace": "        rowish=sum(1 for ln in text.split(\"\\n\") if ROW.match(ln))",
       "test": "tests/test_skill_candidates_census.py::test_coverage_DISAGREES_when_a_bold_name_never_closes"
     },
     {
@@ -222,6 +222,38 @@
       "find": "|^\\s*\\(\\*already open above, recurrence raised\\*\\)')",
       "replace": "|\\(\\*already open above, recurrence raised\\*\\)')",
       "test": "tests/test_skill_candidates_census.py::test_one_row_one_trap"
+    },
+    {
+      "name": "rev-reads-the-working-tree-instead-of-the-committed-blob",
+      "_mechanism": "A dirty store must not replace the requested committed census, including its coverage.",
+      "file": "scripts/skill_candidates_census.py",
+      "find": "    return subprocess.run(command + [\"show\", f\"{rev}:{p.relative_to(root).as_posix()}\"],\n                          capture_output=True, text=True, check=True).stdout",
+      "replace": "    return open(path).read()",
+      "test": "tests/test_skill_candidates_census.py::test_rev_reads_committed_content_despite_dirty_worktree"
+    },
+    {
+      "name": "apply-accepts-an-ambiguous-open-name",
+      "_mechanism": "Picking the first open duplicate must refuse the whole table before any write.",
+      "file": "scripts/skill_candidates_census.py",
+      "find": "        if len(matches) != 1:",
+      "replace": "        if not matches:",
+      "test": "tests/test_skill_candidates_census.py::test_apply_ambiguous_open_name_refuses_whole_table_without_writing"
+    },
+    {
+      "name": "apply-inserts-before-the-last-row-line",
+      "_mechanism": "The status must follow every continuation line rather than interrupt the row body.",
+      "file": "scripts/skill_candidates_census.py",
+      "find": "        lines[end:end] = additions",
+      "replace": "        lines[end - 1:end - 1] = additions",
+      "test": "tests/test_skill_candidates_census.py::test_apply_inserts_after_last_continuation_before_row_boundary"
+    },
+    {
+      "name": "apply-keeps-escaped-pipes-in-table-cells",
+      "_mechanism": "Both the lookup name and inserted status must unescape markdown pipes.",
+      "file": "scripts/skill_candidates_census.py",
+      "find": "        cells = [cell.strip().replace(r\"\\|\", \"|\")",
+      "replace": "        cells = [cell.strip()",
+      "test": "tests/test_skill_candidates_census.py::test_apply_unescapes_pipes_in_both_cells_before_matching_and_inserting"
     }
   ]
 }
