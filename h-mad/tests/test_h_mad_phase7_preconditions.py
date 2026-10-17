@@ -18,6 +18,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 SCRIPT = SCRIPTS / "h_mad_phase7_preconditions.py"
 sys.path.insert(0, str(SCRIPTS))
@@ -525,3 +527,209 @@ class TestVersionedAnalysis:
                            capture_output=True, text=True, cwd=str(tmp_path))
         assert "PHASE7: BLOCKED" in r.stdout, r.stdout
         assert "analysis_unversioned" in r.stdout
+
+
+class TestReviewIndependence:
+    """FR-7 warnings describe recorded reviews without changing the verdict."""
+
+    @pytest.fixture
+    def hostile_module(self, hermetic_env):
+        env = {key: value for key, value in hermetic_env().items()
+               if not key.startswith("HMAD_STUB_")}
+        env["HMAD_STUB_HOSTILE"] = "all"
+        result = subprocess.run(
+            ["bash", str(Path(__file__).parent / "stubs" / "orca"),
+             "worktree", "set", "--comment", "module fixture"],
+            capture_output=True, text=True, env=env, timeout=10, check=True,
+        )
+        module = json.loads(result.stdout)["result"]["worktree"]["comment"]
+        assert "\n" in module and "[a](b)" in module and "⟦/h-mad⟧" in module
+        return module
+
+    @pytest.fixture
+    def analysis_tree(self, tmp_path):
+        docs = tmp_path / "docs"
+        analysis = docs / "03-analysis" / "demo.analysis.v1.md"
+        analysis.parent.mkdir(parents=True)
+        analysis.write_text(ANALYSIS, encoding="utf-8")
+        specs = tmp_path / "tests" / "mutation-specs"
+        specs.mkdir(parents=True)
+        return analysis, docs, specs
+
+    def _entry(self, module, **overrides):
+        return {"leg": "5e-review", "module": module, "reviewer": "agy",
+                "implementer": "codex", "independent": True, **overrides}
+
+    def _check(self, record, analysis_tree):
+        analysis, docs, specs = analysis_tree
+        return p7.check(record, analysis, spec_dirs=[specs],
+                        docs_root=docs, feature="demo")
+
+    def test_non_independent_entry_warns(self, analysis_tree, hostile_module):
+        entries = [
+            self._entry(hostile_module, reviewer="codex", independent=False),
+            self._entry(hostile_module + " second", leg="6a-prime",
+                        implementer="agy", independent=False),
+        ]
+        result = self._check(dict(READY, review_independence=entries), analysis_tree)
+        warnings = [w for w in result["warnings"] if w["code"] == "review_non_independent"]
+        assert len(warnings) == 2, "review_non_independent must warn once per non-independent entry"
+        for entry in entries:
+            assert any(all(entry[key] in w["detail"]
+                           for key in ("leg", "module", "implementer"))
+                       for w in warnings), "review_non_independent must name leg, hostile module and agent"
+        assert {w["code"] for w in result["warnings"]} == {"review_non_independent"}
+        assert result["ready"] is True and result["blockers"] == []
+
+    @pytest.mark.parametrize("case", ["bad-leg", "lying-boolean", "field-not-a-list"])
+    def test_malformed_entry_warns(self, case, analysis_tree, hostile_module):
+        if case == "bad-leg":
+            value = [self._entry(hostile_module, leg="bad-leg"),
+                     self._entry(hostile_module, leg="bad-leg")]
+        elif case == "lying-boolean":
+            value = [self._entry(hostile_module, reviewer="codex", independent=True),
+                     self._entry(hostile_module, independent=False)]
+        else:
+            value = hostile_module
+        record = dict(READY, archreview="SKIPPED_OPERATOR_OVERRIDE", review_independence=value)
+        result = self._check(record, analysis_tree)
+        malformed = [w for w in result["warnings"]
+                     if w["code"] == "review_independence_malformed"]
+        expected = 1 if case == "field-not-a-list" else 2
+        assert len(malformed) == expected, (
+            f"review_independence_malformed must warn {expected} times for {case}"
+        )
+        assert "review_non_independent" not in {w["code"] for w in result["warnings"]}, (
+            "malformed entries must never be interpreted as well-formed non-independent reviews"
+        )
+        assert result["ready"] is True and result["blockers"] == []
+
+    @pytest.mark.parametrize("routing", [
+        pytest.param({}, id="codex-field-absent"),
+        pytest.param({"implementer": "codex"}, id="codex"),
+        pytest.param({"implementer": "agy"}, id="agy"),
+        pytest.param({"implementer_switch": {"to": "grok"}}, id="grok"),
+        pytest.param({"implementer_switch": {"to": "claude"}}, id="claude"),
+    ])
+    def test_unrecorded_fires_for_each_implementer(self, routing, analysis_tree, hostile_module):
+        record = dict(READY, review_independence=[self._entry(hostile_module)], **routing)
+        result = self._check(record, analysis_tree)
+        warnings = [w for w in result["warnings"]
+                    if w["code"] == "review_independence_unrecorded"]
+        assert len(warnings) == 1, (
+            f"review_independence_unrecorded must fire independently of routing {routing!r}"
+        )
+        assert result["ready"] is True and result["blockers"] == []
+
+    @pytest.mark.parametrize("archreview", ["READY_TO_MERGE", "WITH_FIXES", "NO"])
+    def test_unrecorded_fires_for_each_archreview_value(self, archreview, analysis_tree, hostile_module):
+        record = dict(READY, archreview=archreview,
+                      review_independence=[self._entry(hostile_module)])
+        result = self._check(record, analysis_tree)
+        warnings = [w for w in result["warnings"]
+                    if w["code"] == "review_independence_unrecorded"]
+        assert len(warnings) == 1, (
+            f"review_independence_unrecorded must fire for archreview={archreview}"
+        )
+
+    @pytest.mark.parametrize("case", [
+        "has-6a-prime-entry", "archreview-absent",
+        "SKIPPED_NO_PANE", "SKIPPED_OPERATOR_OVERRIDE",
+    ])
+    def test_unrecorded_is_quiet(self, case, analysis_tree, hostile_module):
+        record = dict(READY, review_independence=[self._entry(hostile_module)])
+        if case == "has-6a-prime-entry":
+            record["review_independence"].append(self._entry(hostile_module, leg="6a-prime"))
+        elif case == "archreview-absent":
+            record.pop("archreview")
+        else:
+            record["archreview"] = case
+        result = self._check(record, analysis_tree)
+        assert "review_independence_unrecorded" not in {w["code"] for w in result["warnings"]}, (
+            f"review_independence_unrecorded must stay quiet for {case}"
+        )
+        assert not any(w["code"].startswith("review_") for w in result["warnings"]), (
+            "well-formed independent entries must produce no review warnings when unrecorded is quiet"
+        )
+
+    def test_malformed_6a_prime_entry_is_not_recorded(self, analysis_tree, hostile_module):
+        entry = self._entry(hostile_module, leg="6a-prime", reviewer="codex", independent=True)
+        result = self._check(dict(READY, review_independence=[entry]), analysis_tree)
+        warning_codes = [w["code"] for w in result["warnings"]]
+        assert sorted(warning_codes) == sorted([
+            "review_independence_malformed", "review_independence_unrecorded",
+        ]), "a malformed 6a-prime must warn as malformed AND leave review independence unrecorded"
+        assert result["ready"] is True and result["blockers"] == []
+
+    def test_unrecorded_detail_names_entry_authors_not_routing(self, analysis_tree, hostile_module):
+        record = dict(READY, implementer="agy", implementer_switch={"to": "agy"},
+                      implementation_authors=[{"module": hostile_module, "agent": "agy"}],
+                      review_independence=[self._entry(hostile_module)])
+        result = self._check(record, analysis_tree)
+        warnings = [w for w in result["warnings"]
+                    if w["code"] == "review_independence_unrecorded"]
+        assert len(warnings) == 1, "review_independence_unrecorded must expose entry authors"
+        detail = warnings[0]["detail"]
+        assert "codex" in detail and "agy" not in detail, (
+            "unrecorded detail must name codex from 5e entries, never agy from routing or author logs"
+        )
+        record["review_independence"] = [self._entry(hostile_module, implementer=agent)
+                                         for agent in ("grok", "codex", "grok")]
+        result = self._check(record, analysis_tree)
+        warnings = [w for w in result["warnings"]
+                    if w["code"] == "review_independence_unrecorded"]
+        assert len(warnings) == 1, "unrecorded author detail must also handle multiple entries"
+        detail = warnings[0]["detail"]
+        assert detail.count("codex") == 1 and detail.count("grok") == 1, (
+            "unrecorded detail must name distinct entry authors only once"
+        )
+        assert detail.index("codex") < detail.index("grok"), "entry authors must be sorted"
+
+    def test_unrecorded_detail_without_5e_entries_says_unrecorded(self, analysis_tree):
+        record = dict(READY, implementer="agy", implementer_switch={"to": "grok"},
+                      review_independence=[])
+        result = self._check(record, analysis_tree)
+        warnings = [w for w in result["warnings"]
+                    if w["code"] == "review_independence_unrecorded"]
+        assert len(warnings) == 1, "review_independence_unrecorded must warn when the entry list is empty"
+        assert "authors=unrecorded" in warnings[0]["detail"], (
+            "unrecorded detail without well-formed 5e entries must say authors=unrecorded"
+        )
+
+    def test_warnings_never_move_ready(self, analysis_tree, hostile_module):
+        values = [
+            [self._entry(hostile_module, reviewer="codex", independent=False)],
+            [self._entry(hostile_module, leg="bad-leg")],
+            hostile_module,
+            [],
+        ]
+        for base in (dict(READY), dict(READY, last_completed_phase=5)):
+            before = self._check(base, analysis_tree)
+            assert before["ready"] is (base["last_completed_phase"] == 6)
+            for value in values:
+                after = self._check(dict(base, review_independence=value), analysis_tree)
+                assert after["ready"] is before["ready"], "review warnings must never move ready"
+                assert after["blockers"] == before["blockers"], "review warnings must never touch blockers"
+
+    def test_warning_lines_print_through_main(self, analysis_tree, hostile_module, capsys):
+        analysis, docs, specs = analysis_tree
+        record = dict(READY, review_independence=[
+            self._entry(hostile_module, reviewer="codex", independent=False),
+            self._entry(hostile_module, leg="6a-prime", reviewer="codex", independent=True),
+        ])
+        state = docs / ".bkit-memory.json"
+        state.write_text(json.dumps({"orchestrator_state": {"demo": record}}), encoding="utf-8")
+        rc = p7.main([str(state), "--feature", "demo", "--analysis", str(analysis),
+                      "--mutation-specs-dir", str(specs)])
+        output = capsys.readouterr().out
+        for code in ("review_non_independent", "review_independence_malformed",
+                     "review_independence_unrecorded"):
+            assert f"  WARNING {code}: " in output, f"main must print WARNING {code}: <detail>"
+        result = self._check(record, analysis_tree)
+        for warning in result["warnings"]:
+            assert f"  WARNING {warning['code']}: {warning['detail']}" in output, (
+                "main must preserve each warning detail, including hostile module input"
+            )
+        assert rc == 0 and "PHASE7: READY blockers=0" in output, (
+            "main must keep the READY verdict and exit code when only review warnings are present"
+        )
