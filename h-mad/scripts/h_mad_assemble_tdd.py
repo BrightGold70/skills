@@ -370,7 +370,7 @@ def assemble(
     impl_plan: Path,
     project_root: Path,
     module: str,
-    test_path: str,
+    test_path: str | list[str],
     python: str,
     expect_fail: int | None,
     expect_pass: int | None,
@@ -402,6 +402,15 @@ def assemble(
         raise Halt("task_not_found", f"task={task_id}")
     body = task_body(plan_text, task_id)
     shape = meta["shape"] or "undeclared"
+    test_paths = [test_path] if isinstance(test_path, str) else list(test_path)
+    if phase == "gate":
+        if shape != "gate":
+            raise Halt("phase_shape_mismatch", f"task={task_id} shape={shape}; gate required")
+        if expect_fail is not None or expect_pass is not None:
+            raise Halt("counts_not_applicable", "gate tasks do not take --expect-fail/--expect-pass")
+        test_paths = []
+    elif not test_paths:
+        raise Halt("test_path_required", "RED/GREEN requires at least one --test-path")
 
     # A wiring task ships a connection, and counts cannot gate it — the RED/GREEN
     # split returns identically whether or not the wire exists. Its pin is the
@@ -428,7 +437,7 @@ def assemble(
             "half a split states nothing, and the half given would be dropped",
         )
 
-    if not interpreter_has_pytest(python):
+    if phase != "gate" and not interpreter_has_pytest(python):
         suggestions = find_interpreters_with_pytest()
         raise Halt(
             "interpreter_has_no_pytest",
@@ -442,7 +451,9 @@ def assemble(
     # closes. Absence is NOT the refusal — a 5d RED names a file that does not
     # exist yet. A path that exists somewhere ELSE is, because that is a
     # subproject-relative path given where a root-relative one was needed.
-    if not (project_root / test_path).exists():
+    for test_path in test_paths:
+        if (project_root / test_path).exists():
+            continue
         elsewhere = misrooted_candidates(project_root, test_path)
         if elsewhere:
             raise Halt(
@@ -461,6 +472,11 @@ def assemble(
                "Do not modify production code.",
         "green": "**THIS DISPATCH IS PHASE 5e (GREEN).** Make the failing tests "
                  "pass with minimal production code. Do not weaken a test.",
+        "gate": "**THIS DISPATCH IS A GATE TASK (no RED/GREEN).** Do not modify "
+                "production code or tests. Run every probe the task names, each "
+                "with its control, and quote every `PROBE:` line verbatim. Measure, "
+                "never tune: a FAIL is a reading to report, not a defect to fix. "
+                "Do not commit.",
     }[phase]
 
     lines = [directive, "", body, ""]
@@ -514,19 +530,20 @@ def assemble(
             "with STATUS: BLOCKED. The orchestrator re-runs this scope outside the sandbox, "
             "and that run is the gate."
         )
-    if guards:
+    if guards and phase != "gate":
         lines.append(
             "**Regression guards (must pass from the first run — do NOT manufacture "
             "a failure):** " + ", ".join(guards)
         )
-    else:
+    elif phase != "gate":
         lines.append("**Regression guards:** none in this task.")
-    lines.append("")
-    lines.append(f"**Run the tests as:** `{python} -m pytest {test_path} -v`")
-    lines.append(
-        "That path is the scope. Do not widen it — an unscoped run collects the "
-        "sibling project and dies on pre-existing errors."
-    )
+    if phase != "gate":
+        lines.append("")
+        lines.append(f"**Run the tests as:** `{python} -m pytest {' '.join(test_paths)} -v`")
+        lines.append(
+            "That path is the scope. Do not widen it — an unscoped run collects the "
+            "sibling project and dies on pre-existing errors."
+        )
     # GREEN is where the guards come into existence, so it is where their
     # mutation rows are cheapest to write: the author knows the exact line that
     # enforces each one. RED has no guard yet. Scoring stays with the
@@ -575,13 +592,14 @@ def assemble(
 
 def command_block(
     *, feature: str, module: str, phase: str, prompt: Path, out: Path,
-    log: Path, timeout: int, python: str, test_path: str,
+    log: Path, timeout: int, python: str, test_path: str | list[str],
     project_root: Path, model: str | None = None, effort: str | None = None,
     agent: str = "codex",
 ) -> str:
     key = "STATUS"
-    step = "5d" if phase == "red" else "5e"
+    step = "5e" if phase == "green" else "5d"
     q = shlex.quote
+    test_paths = [test_path] if isinstance(test_path, str) else test_path
     # Overrides only. Unset means "whatever the codex CLI is configured to use",
     # which is the point — see mistake 1.
     over = ""
@@ -589,7 +607,7 @@ def command_block(
         over += f" --model {q(model)}"
     if effort:
         over += f" --effort {q(effort)}"
-    block = "\n".join([
+    lines = [
         f"hmad-dispatch exec codex {q(str(prompt))}{over} \\",
         f"  --cd {q(str(project_root))} \\",
         f"  --out {q(str(out))} --log {q(str(log))} --timeout {q(str(timeout))} &",
@@ -602,13 +620,19 @@ def command_block(
         'if [ "$rc" -ne 0 ]; then echo "dispatch failed rc=$rc" >&2; exit "$rc"; fi',
         f"python3 {q(str(SKILL_DIR / 'scripts' / 'h_mad_extract_verdict.py'))} \\",
         f"  {q(str(out))} --key {key} --feature {q(feature)} --phase {step}",
-        "# The verdict says what the agent claims. Re-run the tests yourself:",
+    ]
+    if phase == "gate":
+        lines.append("# A gate task: re-run its probes yourself; the PROBE: lines are claims.")
+    else:
         # A subshell: the dispatch above is `--cd`'d to the project root but
         # this line was not, so a correct root-relative path still failed for
         # an operator whose shell was elsewhere. The parens keep the `cd` from
         # leaking into whatever they run next.
-        f"(cd {q(str(project_root))} && {q(python)} -m pytest {q(test_path)} -v)",
-    ])
+        lines += [
+            "# The verdict says what the agent claims. Re-run the tests yourself:",
+            f"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in test_paths)} -v)",
+        ]
+    block = "\n".join(lines)
     prefix = "hmad-dispatch exec codex "
     if agent != "codex":
         if not block.startswith(prefix):
@@ -646,10 +670,10 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Stage a Phase-5d/5e Codex dispatch")
     ap.add_argument("--feature", required=True)
     ap.add_argument("--task", required=True, help='e.g. "Task 3" or "M2"')
-    ap.add_argument("--phase", required=True, choices=("red", "green"))
+    ap.add_argument("--phase", required=True, choices=("red", "green", "gate"))
     ap.add_argument("--project-root", required=True, type=Path)
     ap.add_argument("--module", required=True)
-    ap.add_argument("--test-path", required=True,
+    ap.add_argument("--test-path", action="append", default=[],
                     help="scoped pytest path — an unscoped run measures the wrong tree")
     ap.add_argument("--impl-plan", type=Path,
                     help="default: <project-root>/docs/01-plan/features/<feature>.impl-plan.md")

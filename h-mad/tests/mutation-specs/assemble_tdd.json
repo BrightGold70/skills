@@ -51,7 +51,7 @@
       "name": "skip-the-interpreter-probe",
       "_mechanism": "Mistake 2. A bare python3 is 3.14 here and the independent re-run errors instead of measuring.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "    if not interpreter_has_pytest(python):",
+      "find": "    if phase != \"gate\" and not interpreter_has_pytest(python):",
       "replace": "    if False:",
       "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_2_an_interpreter_without_pytest_is_refused_with_a_suggestion"
     },
@@ -75,8 +75,8 @@
       "name": "drop-the-scope-warning",
       "_mechanism": "Mistake 5. Without it the agent widens the run and collects the sibling project. NOTE: the first version of this mutation was a SYNTAX ERROR, so pytest died at collection and the run was credited as `killed by its named test` -- a FAKE KILL, caught only once scoring started requiring the named test to actually fail.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "        \"That path is the scope. Do not widen it — an unscoped run collects the \"\n        \"sibling project and dies on pre-existing errors.\"",
-      "replace": "        \"\"",
+      "find": "            \"That path is the scope. Do not widen it — an unscoped run collects the \"\n            \"sibling project and dies on pre-existing errors.\"",
+      "replace": "            \"\"",
       "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_5_the_scoped_test_path_is_stated_and_bounded"
     },
     {
@@ -147,8 +147,8 @@
       "name": "unquote-the-interpolated-paths",
       "_mechanism": "A path with a space becomes two shell arguments and the pasted block silently runs the wrong thing. Re-anchored 2026-09-21 when the re-run line gained its project-root subshell — the project_root interpolation is now a third unquoted path on the same line, and the mutation must unquote all three or it stops being the mistake it names.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "        f\"(cd {q(str(project_root))} && {q(python)} -m pytest {q(test_path)} -v)\",",
-      "replace": "        f\"(cd {project_root} && {python} -m pytest {test_path} -v)\",",
+      "find": "            f\"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in test_paths)} -v)\",",
+      "replace": "            f\"(cd {project_root} && {python} -m pytest {' '.join(test_paths)} -v)\",",
       "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_a_path_with_spaces_is_quoted_in_the_block"
     },
     {
@@ -211,16 +211,16 @@
       "name": "collapse-the-guards-back-into-the-else-arm",
       "_mechanism": "The filed defect, restored exactly: the WIRE lines REPLACE the guards block instead of preceding it, so --guard is parsed, validated and then dropped on every wiring task with no warning and an ASSEMBLE-TDD: PASS. An implementer told by the template that guards are labelled, and then shown no labels, has the impl-plan's count as its only authority — the manufactured-failure path the template's own paragraph exists to close.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "    if guards:\n        lines.append(\n            \"**Regression guards (must pass from the first run — do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    else:\n        lines.append(\"**Regression guards:** none in this task.\")\n",
-      "replace": "    if shape != \"wiring\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run — do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
+      "find": "    if guards and phase != \"gate\":\n        lines.append(\n            \"**Regression guards (must pass from the first run — do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    elif phase != \"gate\":\n        lines.append(\"**Regression guards:** none in this task.\")\n",
+      "replace": "    if shape != \"wiring\" and phase != \"gate\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run — do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_wiring_task_states_its_guard_labels"
     },
     {
       "name": "emit-the-guards-only-for-wiring",
       "_mechanism": "The over-correction. A repair that moved the guards block under the wiring arm instead of out of the conditional would pass every wiring-shaped test and silently drop the labels for new-behaviour and refactor tasks — the same defect with the shapes exchanged, which is why both directions are pinned.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "    if guards:\n        lines.append(\n            \"**Regression guards (must pass from the first run — do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    else:\n        lines.append(\"**Regression guards:** none in this task.\")\n",
-      "replace": "    if shape == \"wiring\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run — do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
+      "find": "    if guards and phase != \"gate\":\n        lines.append(\n            \"**Regression guards (must pass from the first run — do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    elif phase != \"gate\":\n        lines.append(\"**Regression guards:** none in this task.\")\n",
+      "replace": "    if shape == \"wiring\" and phase != \"gate\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run — do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_new_behaviour_task_still_states_its_guard_labels"
     },
     {
@@ -283,8 +283,8 @@
       "name": "skip-the-test-path-rooting-probe",
       "_mechanism": "The filed sibling defect restored. --test-path goes verbatim into the prompt and the operator's re-run line with no check that it resolves under --project-root. Subproject-relative, pytest exits 4 on the missing file or 5 when a same-named directory exists at the root — and 5 RUNS, collects nothing and reports no error, which is a dispatch that measured nothing wearing the shape of a clean one. The interpreter was probed; the path was not.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "    if not (project_root / test_path).exists():\n",
-      "replace": "    if False:\n",
+      "find": "    for test_path in test_paths:\n",
+      "replace": "    for test_path in []:\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_a_subproject_relative_path_is_refused"
     },
     {
@@ -315,8 +315,8 @@
       "name": "drop-the-rerun-subshell-root",
       "_mechanism": "The half the handover brief did not name. The dispatch is --cd'd to the project root but the operator's re-run line was not, so one path string had to be correct against two different working directories. Measured from $HOME: rooted rc=0, unrooted rc=4 on the identical correct path.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "        f\"(cd {q(str(project_root))} && {q(python)} -m pytest {q(test_path)} -v)\",\n",
-      "replace": "        f\"{q(python)} -m pytest {q(test_path)} -v\",\n",
+      "find": "            f\"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in test_paths)} -v)\",\n",
+      "replace": "            f\"{q(python)} -m pytest {' '.join(q(path) for path in test_paths)} -v\",\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_the_operator_rerun_line_is_rooted_at_the_project_root"
     },
     {
@@ -398,6 +398,51 @@
       "find": "    if meta[\"unresolved_refs\"]:",
       "replace": "    if False:",
       "test": "tests/test_h_mad_assemble_tdd.py::TestReferencedGlobalSections::test_the_cli_reports_inlined_and_unresolved_under_the_pass_line"
+    },
+    {
+      "name": "quote-all-test-paths-as-one-argument",
+      "_mechanism": "Quoting the joined scope merges separate pytest paths into one nonexistent path when the operator reruns the dispatch.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "command_block",
+      "find": "{' '.join(q(path) for path in test_paths)}",
+      "replace": "{q(' '.join(test_paths))}",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestRepeatableTestPathSpec::test_rerun_quotes_each_path_as_its_own_argument[red]"
+    },
+    {
+      "name": "allow-red-green-without-a-test-path",
+      "_mechanism": "Removing the path requirement permits a dispatch with an empty pytest scope, which measures the wrong tree.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "assemble",
+      "find": "    elif not test_paths:\n",
+      "replace": "    elif False:\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestRepeatableTestPathSpec::test_no_cli_path_halts_with_the_domain_reason[red]"
+    },
+    {
+      "name": "allow-gate-on-a-non-gate-task",
+      "_mechanism": "Skipping the declared-shape check stages a probe-only prompt for a production task.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "assemble",
+      "find": "        if shape != \"gate\":\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGatePhaseSpec::test_cli_gate_shape_mismatch_exits_two_without_writing_a_prompt"
+    },
+    {
+      "name": "allow-counts-on-a-gate-task",
+      "_mechanism": "Skipping the gate counts refusal admits even a zero-valued split into a task that has no RED/GREEN counts.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "assemble",
+      "find": "        if expect_fail is not None or expect_pass is not None:\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGatePhaseSpec::test_cli_gate_refuses_any_supplied_counts_even_zero[both]"
+    },
+    {
+      "name": "probe-pytest-for-a-gate-task",
+      "_mechanism": "Requiring pytest on a probe-only gate refuses valid gate dispatches and runs an interpreter probe the task never needs.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "assemble",
+      "find": "    if phase != \"gate\" and not interpreter_has_pytest(python):",
+      "replace": "    if not interpreter_has_pytest(python):",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGatePhaseSpec::test_gate_skips_the_pytest_interpreter_probe"
     }
   ],
   "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."

@@ -2625,10 +2625,12 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
   A `--phase gate` that cuts §Task N and emits that block would make it one command. — recurrence: 5 —
   candidate: yes
   — **RE-PROBED 2026-10-18: OPEN** — `h_mad_assemble_tdd.py:649` `--phase` choices are still `("red", "green")`.
+  — **LANDED 2026-10-18** — `h_mad_assemble_tdd.py`: repeatable `--test-path` (each path quoted separately in the re-run line, `test_path_required`) and `--phase gate` (gate directive, no pytest probe/counts, `phase_shape_mismatch`, `counts_not_applicable`); 25 new tests in `test_h_mad_assemble_tdd.py`, rows in `assemble_tdd.json`.
 - **assembler multi-path `--test-path`** (2026-10-17): a Task whose tests span two files took a
   space-joined `--test-path`; the prompt read correctly but the printed operator re-run line
   shell-quotes the pair as ONE path and breaks. Repeatable `--test-path`. — recurrence: 2 — candidate: yes
   — **RE-PROBED 2026-10-18: OPEN** — `h_mad_assemble_tdd.py:652` `--test-path` is still one `required=True` value, not `action="append"`.
+  — **LANDED 2026-10-18** — `h_mad_assemble_tdd.py`: repeatable `--test-path` (each path quoted separately in the re-run line, `test_path_required`) and `--phase gate` (gate directive, no pytest probe/counts, `phase_shape_mismatch`, `counts_not_applicable`); 25 new tests in `test_h_mad_assemble_tdd.py`, rows in `assemble_tdd.json`.
 - **declarable sandbox teardown artefact** (2026-10-17): Codex `workspace-write` blocks the leak-reaper's
   `ps`, so every scoped pytest exits 1 on a session-teardown ERROR and the mutation harness refuses its
   baseline; `--env-known-failure` takes node ids only, so the note was hand-appended to ~20 prompts and
