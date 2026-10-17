@@ -19,6 +19,7 @@ from tdd_gate_support import build_venv, hermetic_env, write_plan, write_state
 
 
 ROOT = Path(__file__).resolve().parents[2]
+PAYLOADS = ROOT / "h-mad/tests/fixtures/agy-payloads"
 GATE = ROOT / "h-mad/hooks/h-mad-agy-tdd-gate.py"
 SCRIPTS = ROOT / "h-mad/scripts"
 INVENTORY = ROOT / "docs/03-analysis/probes/multi-host-runtime/rehearsal/live-agy-2026-10-01.log"
@@ -339,6 +340,63 @@ def test_self_check_fails_on_a_policy_import_failure(tmp_path):
     assert process.returncode == 2, "a self-check that could not import policy must exit 2"
 
 
+@pytest.mark.parametrize("name", ["write_to_file", "replace_file_content", "run_command"])
+def test_capture_holds_every_required_sample(name):
+    sample_path = PAYLOADS / f"{name}.json"
+    assert sample_path.is_file(), f"required captured sample is missing: {name}"
+    sample = json.loads(sample_path.read_text(encoding="utf-8"))
+    capture = json.loads((PAYLOADS / "capture.json").read_text(encoding="utf-8"))
+    assert sample["toolCall"]["name"] == name
+    present = capture[name]["workspacePaths_present"]
+    assert isinstance(present, bool), "workspacePaths presence must be recorded as a boolean"
+    assert present == ("workspacePaths" in sample)
+
+
+@pytest.mark.parametrize("name", ["write_to_file", "replace_file_content"])
+def test_captured_payload_is_judged_by_its_recorded_key(tmp_path, name):
+    root = _root(tmp_path, "active", name="repo Ω *? 'q'")
+    production = _production_with_test(root, failing=False)
+    sample = json.loads((PAYLOADS / f"{name}.json").read_text(encoding="utf-8"))
+    capture = json.loads((PAYLOADS / "capture.json").read_text(encoding="utf-8"))
+    if "workspacePaths" in sample:
+        sample["workspacePaths"] = [str(root)]
+    for key in capture[name]["path_keys"]:
+        sample["toolCall"]["args"][key] = str(production)
+    decision = _decide(root, sample)
+    _expect(decision, "deny", because=f"captured {name} must reach the production judge")
+    kind = decision["reason"].rsplit("kind=", 1)[1]
+    judge = importlib.import_module("h_mad_tdd_judge")
+    assert kind != "judge-error", f"captured {name} must use its recorded path key: {decision!r}"
+    assert kind in judge.KINDS, f"captured {name} must return a judge kind: {decision!r}"
+
+
+@pytest.mark.parametrize("outside, verdict, kind", [
+    (False, "allow", None),
+    (True, "deny", "shell-not-admitted"),
+], ids=["workdir-root", "workdir-outside"])
+def test_captured_run_command_is_judged_by_its_recorded_keys(tmp_path, outside, verdict, kind):
+    root = _root(tmp_path, "active")
+    build_venv(root / ".venv", with_pytest=True)
+    elsewhere = root.parent / "elsewhere"
+    elsewhere.mkdir()
+    sample = json.loads((PAYLOADS / "run_command.json").read_text(encoding="utf-8"))
+    capture = json.loads((PAYLOADS / "capture.json").read_text(encoding="utf-8"))["run_command"]
+    args = sample["toolCall"]["args"]
+    args[capture["command_key"]] = ".venv/bin/python -m pytest tests/test_x.py"
+    args[capture["workdir_key"]] = str(elsewhere if outside else root)
+    sample["workspacePaths"] = [str(root)]
+    _expect(_decide(root, sample), verdict, kind,
+            because="captured command and workdir keys must control shell admission")
+
+
+def test_class_a_names_are_in_the_recaptured_inventory():
+    inventory = ROOT / "docs/03-analysis/agy-coder-fallback.authoring/fr8_capture_attempts/capture1.log"
+    with inventory.open(encoding="utf-8") as stream:
+        first_init = next(event for line in stream if line.strip()
+                          if (event := json.loads(line)).get("event") == "init")
+    assert CLASS_A <= set(first_init["init"]["tools"]), "recaptured inventory must retain every class (a) name"
+
+
 def test_classification_table_is_the_recorded_inventory(monkeypatch):
     gate = _load_gate(monkeypatch)
     with INVENTORY.open(encoding="utf-8") as stream:
@@ -350,7 +408,9 @@ def test_classification_table_is_the_recorded_inventory(monkeypatch):
     assert gate.CLASS_A == CLASS_A, "CLASS_A must contain exactly the 11 FR-4 read-only names"
     assert gate.CLASS_B == CLASS_B, "CLASS_B must contain exactly the five FR-4 path-write names"
     assert isinstance(gate.CLASS_A, frozenset) and isinstance(gate.CLASS_B, frozenset)
-    assert gate.PATH_KEYS == {"write_to_file": ("TargetFile",)}, "path keys must stay limited to the observed contract"
+    assert gate.PATH_KEYS == {
+        "write_to_file": ("TargetFile",), "replace_file_content": ("TargetFile",),
+    }, "path keys must stay limited to the observed contract"
     assert gate.GATE_KINDS == GATE_KINDS, "gate deny kinds must match FR-4's five-name closed set"
     assert isinstance(gate.GATE_KINDS, frozenset)
     admitted = CLASS_A | CLASS_B | {"run_command"}
@@ -409,7 +469,7 @@ def test_class_b_no_target(tmp_path, status, args):
 
 
 @pytest.mark.parametrize("name", [
-    "replace_file_content", "multi_replace_file_content", "sed_file", "notebook_edit",
+    "multi_replace_file_content", "sed_file", "notebook_edit",
 ])
 def test_class_b_tools_without_a_recorded_key_deny_under_active(tmp_path, name):
     root = _root(tmp_path, "active")

@@ -1887,8 +1887,12 @@ the capture. Tests, as amended:
 - item 2: one id per captured class-(b) tool, `write_to_file` and `replace_file_content` (2 nodes);
 - item 3: unchanged (2 nodes); item 4: unchanged (1 node).
 Total 8 nodes. Captured keys: `write_to_file` → `TargetFile`, `replace_file_content` →
-`TargetFile`, `run_command` → `CommandLine` / `Cwd`. **RED split: 1 F, 7 P** — the
-`replace_file_content` item-2 id is F (its key is not in `PATH_KEYS` at the RED base); the rest P.
+`TargetFile`, `run_command` → `CommandLine` / `Cwd`. **RED split: 1 F, 7 P** over the 8 new
+nodes — the `replace_file_content` item-2 id is F (its key is not in `PATH_KEYS` at the RED base);
+the rest P. Two existing expectations move in the same RED commit:
+`test_classification_table_is_the_recorded_inventory`'s `PATH_KEYS` equality gains
+`replace_file_content` (a second F), and `test_class_b_tools_without_a_recorded_key_deny_under_active`
+drops its `replace_file_content` id. Module RED reading: 2 failed, 101 passed.
 GREEN adds `"replace_file_content": ("TargetFile",)` to `PATH_KEYS`. AC-8.1 reads "all three
 samples" for "all six samples".
 
