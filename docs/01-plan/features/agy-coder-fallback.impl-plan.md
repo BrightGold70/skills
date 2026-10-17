@@ -1874,6 +1874,24 @@ with its failing command and counted.
 **Test files**: `h-mad/tests/test_h_mad_agy_tdd_gate.py`
 **Task shape**: `new-behaviour`
 
+**v1.3 amendment (D-FR8-1, operator decision 2026-10-17) — supersedes the six-tool scope below.**
+The capture gate stopped at 3 of 6: on agy `1.4.0`, `multi_replace_file_content`, `sed_file` and
+`notebook_edit` are listed in `init.tools` but were never declared to the model across the initial
+instruction and three re-instructions on three model families
+(`docs/03-analysis/agy-coder-fallback.authoring/fr8_capture_attempts/README.md`, `b7d34327`).
+The required set becomes the three captured tools: `write_to_file`, `replace_file_content`,
+`run_command`. The three uncaptured class-(b) tools keep no `PATH_KEYS` entry, so under active
+step5 they still deny `kind=judge-error` (fail-closed); a later agy that declares them reopens
+the capture. Tests, as amended:
+- item 1: one id per captured tool (3 nodes);
+- item 2: one id per captured class-(b) tool, `write_to_file` and `replace_file_content` (2 nodes);
+- item 3: unchanged (2 nodes); item 4: unchanged (1 node).
+Total 8 nodes. Captured keys: `write_to_file` → `TargetFile`, `replace_file_content` →
+`TargetFile`, `run_command` → `CommandLine` / `Cwd`. **RED split: 1 F, 7 P** — the
+`replace_file_content` item-2 id is F (its key is not in `PATH_KEYS` at the RED base); the rest P.
+GREEN adds `"replace_file_content": ("TargetFile",)` to `PATH_KEYS`. AC-8.1 reads "all three
+samples" for "all six samples".
+
 **Description**: Design §"FR-8" step 1, on main after the merge. In a throwaway fixture project
 created beside this checkout (never under `/tmp`), with its own `docs/.bkit-memory.json` step5
 record and FR-5's exact `.agents/hooks.json` entry, a temporary capture hook records one real

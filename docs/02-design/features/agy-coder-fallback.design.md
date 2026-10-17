@@ -1045,6 +1045,10 @@ the installed gate. A hand edit of the symlink would also change every live sess
    `init.tools` with `agy --version`. They land as one commit on main that fills `PATH_KEYS` and
    re-checks the class-(a) inventory. That commit carries tests built from the captured payloads,
    written RED then GREEN, and it lands before step 2. The capture hook is then deleted.
+   **D-FR8-1 (2026-10-17):** on agy `1.4.0` only `write_to_file`, `replace_file_content` and
+   `run_command` are declared to the model; `multi_replace_file_content`, `sed_file` and
+   `notebook_edit` appear in `init.tools` only. Step 1 captures the three declared tools; the
+   other three keep no `PATH_KEYS` entry and deny under active step5 (impl-plan Task 20 v1.3).
 3. **Steps 2, 2a and 3** in the fixture project, as FR-8 states them. Step 2a's delay hook is
    added to, and removed from, the fixture's `hooks.json`, and the before and after
    `shasum -a 256` are recorded.

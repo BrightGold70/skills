@@ -1,0 +1,19 @@
+{
+  "write_to_file": {
+    "workspacePaths_present": true,
+    "path_keys": [
+      "TargetFile"
+    ]
+  },
+  "replace_file_content": {
+    "workspacePaths_present": true,
+    "path_keys": [
+      "TargetFile"
+    ]
+  },
+  "run_command": {
+    "workspacePaths_present": true,
+    "command_key": "CommandLine",
+    "workdir_key": "Cwd"
+  }
+}
