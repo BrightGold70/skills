@@ -1354,3 +1354,261 @@ class TestReferencedGlobalSections:
         assert lines[2] == (
             '  referenced-not-inlined: "Not a heading anywhere", "Retry", "Task 2"'
         )
+
+
+# --- Repeatable --test-path and gate-shaped dispatches (assembler spec A/B) ---
+
+MULTI_TEST_PATHS = ["tests/first scope/test alpha.py", "tests/second scope/test beta.py"]
+GATE_DIRECTIVE = (
+    "**THIS DISPATCH IS A GATE TASK (no RED/GREEN).** Do not modify production "
+    "code or tests. Run every probe the task names, each with its control, and "
+    "quote every `PROBE:` line verbatim. Measure, never tune: a FAIL is a reading "
+    "to report, not a defect to fix. Do not commit."
+)
+GATE_RERUN_COMMENT = (
+    "# A gate task: re-run its probes yourself; the PROBE: lines are claims."
+)
+
+
+@pytest.fixture()
+def gate_plan(plan: Path) -> Path:
+    plan.write_text(
+        PLAN + '\n## Probe controls\n\nGATE-CONTROL: disable the signal, then repeat.\n'
+        '\n## Task 4: measure only\n\n- **Task shape**: gate\n\n'
+        'Run the latency probe with its control from §"Probe controls".\n'
+        'PROBE: latency=12ms control=0ms\n',
+        encoding="utf-8",
+    )
+    return plan
+
+
+def assembler_spec_cli(
+    plan: Path, tmp_path: Path, phase: str, *extra: str, task: str = "Task 1"
+) -> subprocess.CompletedProcess[str]:
+    return run_cli(
+        "--feature", "f", "--task", task, "--phase", phase,
+        "--project-root", str(tmp_path), "--module", "m",
+        "--impl-plan", str(plan), "--python", PYTHON,
+        "--prompt", str(tmp_path / "spec prompt.txt"), *extra,
+    )
+
+
+def assembler_spec_block(tmp_path: Path, phase: str, test_path):
+    return command_block(
+        feature="f", module="m", phase=phase,
+        prompt=tmp_path / "spec prompt.txt", out=tmp_path / "spec output.txt",
+        log=tmp_path / "spec log.txt", timeout=900,
+        python="/opt/my python/bin/python3", test_path=test_path,
+        project_root=tmp_path / "My Projects",
+    )
+
+
+class TestRepeatableTestPathSpec:
+    @pytest.mark.parametrize("phase", ["red", "green"])
+    def test_list_paths_reach_the_prompt_in_order(
+        self, plan: Path, tmp_path: Path, phase: str
+    ) -> None:
+        filled, _ = call(plan, tmp_path, phase=phase, test_path=MULTI_TEST_PATHS)
+        assert (
+            f"**Run the tests as:** `{PYTHON} -m pytest "
+            f"{' '.join(MULTI_TEST_PATHS)} -v`"
+        ) in filled
+
+    @pytest.mark.parametrize("phase", ["red", "green"])
+    def test_rerun_quotes_each_path_as_its_own_argument(
+        self, tmp_path: Path, phase: str
+    ) -> None:
+        import shlex
+
+        block = assembler_spec_block(tmp_path, phase, MULTI_TEST_PATHS)
+        rerun = next(line for line in block.splitlines() if "-m pytest" in line)
+        assert rerun == (
+            f"(cd {shlex.quote(str(tmp_path / 'My Projects'))} && "
+            "'/opt/my python/bin/python3' -m pytest "
+            "'tests/first scope/test alpha.py' 'tests/second scope/test beta.py' -v)"
+        )
+        assert shlex.quote(" ".join(MULTI_TEST_PATHS)) not in rerun
+        assert shlex.split(rerun[1:-1]) == [
+            "cd", str(tmp_path / "My Projects"), "&&",
+            "/opt/my python/bin/python3", "-m", "pytest", *MULTI_TEST_PATHS, "-v",
+        ]
+
+    @pytest.mark.parametrize("phase", ["red", "green"])
+    def test_singleton_list_prompt_is_byte_identical_to_the_legacy_string(
+        self, plan: Path, tmp_path: Path, phase: str
+    ) -> None:
+        path = "tests/single scope/test one.py"
+        legacy, legacy_meta = call(plan, tmp_path, phase=phase, test_path=path)
+        filled, meta = call(plan, tmp_path, phase=phase, test_path=[path])
+        assert filled.encode("utf-8") == legacy.encode("utf-8")
+        assert meta == legacy_meta
+        assert f"**Run the tests as:** `{PYTHON} -m pytest {path} -v`" in filled
+
+    @pytest.mark.parametrize("phase", ["red", "green"])
+    def test_singleton_list_command_is_byte_identical_to_the_legacy_string(
+        self, tmp_path: Path, phase: str
+    ) -> None:
+        path = "tests/single scope/test one.py"
+        legacy = assembler_spec_block(tmp_path, phase, path)
+        block = assembler_spec_block(tmp_path, phase, [path])
+        assert block.encode("utf-8") == legacy.encode("utf-8")
+        assert "-m pytest 'tests/single scope/test one.py' -v)" in block
+
+    @pytest.mark.parametrize("phase", ["red", "green"])
+    def test_repeated_cli_flags_keep_both_paths_in_prompt_and_rerun(
+        self, plan: Path, tmp_path: Path, phase: str
+    ) -> None:
+        import shlex
+
+        proc = assembler_spec_cli(
+            plan, tmp_path, phase,
+            "--test-path", MULTI_TEST_PATHS[0], "--test-path", MULTI_TEST_PATHS[1],
+            "--expect-fail", "3", "--expect-pass", "1",
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        filled = (tmp_path / "spec prompt.txt").read_text(encoding="utf-8")
+        assert (
+            f"**Run the tests as:** `{PYTHON} -m pytest "
+            f"{' '.join(MULTI_TEST_PATHS)} -v`"
+        ) in filled
+        rerun = next(line for line in proc.stdout.splitlines() if "-m pytest" in line)
+        assert shlex.split(rerun[1:-1]) == [
+            "cd", str(tmp_path), "&&", PYTHON, "-m", "pytest", *MULTI_TEST_PATHS, "-v",
+        ]
+        assert shlex.quote(" ".join(MULTI_TEST_PATHS)) not in rerun
+
+    @pytest.mark.parametrize("offending_index", [0, 1], ids=["first", "second"])
+    def test_every_path_is_checked_for_misrooting(
+        self, plan: Path, tmp_path: Path, offending_index: int
+    ) -> None:
+        relative = "tests/test misplaced.py"
+        actual = tmp_path / "sub project" / relative
+        actual.parent.mkdir(parents=True)
+        actual.write_text("def test_control():\n    assert True\n", encoding="utf-8")
+        paths = ["tests/test not written yet.py"]
+        paths.insert(offending_index, relative)
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, test_path=paths)
+        assert exc.value.reason == "test_path_misrooted"
+        assert f"--test-path {relative} does not exist" in exc.value.detail
+        assert "sub project/tests/test misplaced.py" in exc.value.detail
+
+    @pytest.mark.parametrize("phase", ["red", "green"])
+    def test_no_cli_path_halts_with_the_domain_reason(
+        self, plan: Path, tmp_path: Path, phase: str
+    ) -> None:
+        proc = assembler_spec_cli(
+            plan, tmp_path, phase, "--expect-fail", "3", "--expect-pass", "1",
+        )
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "ASSEMBLE-TDD: HALT test_path_required" in proc.stdout
+        assert not (tmp_path / "spec prompt.txt").exists()
+
+
+class TestGatePhaseSpec:
+    def test_cli_gate_needs_no_path_or_counts_and_emits_a_gate_dispatch(
+        self, gate_plan: Path, tmp_path: Path
+    ) -> None:
+        proc = assembler_spec_cli(gate_plan, tmp_path, "gate", task="Task 4")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        token = next(line for line in proc.stdout.splitlines()
+                     if line.startswith("ASSEMBLE-TDD: PASS "))
+        assert "phase=gate" in token
+        assert token.endswith("task=Task 4 shape=gate")
+        filled = (tmp_path / "spec prompt.txt").read_text(encoding="utf-8")
+        assert GATE_DIRECTIVE in filled
+        assert "PROBE: latency=12ms control=0ms" in filled
+        assert "GATE-CONTROL: disable the signal, then repeat." in filled
+        assert filled.index(GATE_DIRECTIVE) < filled.index("PROBE: latency=12ms")
+        assert "Run the tests as" not in filled
+        assert "Regression guards" not in filled
+        assert "**Mutation rows" not in filled
+        assert "**Expected after this dispatch:**" not in filled
+        assert "hmad-dispatch exec codex" in proc.stdout
+        assert "h_mad_extract_verdict.py" in proc.stdout
+        assert "--key STATUS --feature f --phase 5d" in proc.stdout
+        assert GATE_RERUN_COMMENT in proc.stdout.splitlines()
+        assert "-m pytest" not in proc.stdout
+
+    @pytest.mark.parametrize("paths", [[], MULTI_TEST_PATHS], ids=["absent", "ignored"])
+    def test_gate_prompt_omits_test_instructions_even_when_options_are_supplied(
+        self, gate_plan: Path, tmp_path: Path, paths: list[str]
+    ) -> None:
+        # A supplied misrooted path must not turn a probe-only task into pytest.
+        actual = tmp_path / "sub project" / MULTI_TEST_PATHS[0]
+        actual.parent.mkdir(parents=True)
+        actual.write_text("", encoding="utf-8")
+        filled, meta = call(
+            gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=paths,
+            expect_fail=None, expect_pass=None, guards=["GUARD_GATE_SENTINEL"],
+            mutation_spec="specs/gate mutations.json",
+        )
+        assert meta["shape"] == "gate"
+        assert GATE_DIRECTIVE in filled
+        assert meta["inlined_sections"] == ["Probe controls"]
+        assert "PROBE: latency=12ms control=0ms" in filled
+        assert "GATE-CONTROL: disable the signal, then repeat." in filled
+        for forbidden in (
+            "Run the tests as", "Regression guards", "GUARD_GATE_SENTINEL",
+            "**Mutation rows", "--check-anchors", "specs/gate mutations.json",
+            *MULTI_TEST_PATHS,
+        ):
+            assert forbidden not in filled
+
+    def test_gate_skips_the_pytest_interpreter_probe(
+        self, gate_plan: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def unexpected_probe(python: str) -> bool:
+            pytest.fail(f"gate must not probe the pytest interpreter: {python}")
+
+        monkeypatch.setattr("h_mad_assemble_tdd.interpreter_has_pytest", unexpected_probe)
+        filled, _ = call(
+            gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+            python="/no such interpreter/python3", expect_fail=None, expect_pass=None,
+        )
+        assert GATE_DIRECTIVE in filled
+
+    @pytest.mark.parametrize("task, shape", [("Task 1", "new-behaviour"), ("Task 2", "wiring")])
+    def test_gate_requires_the_selected_tasks_gate_shape(
+        self, plan: Path, tmp_path: Path, task: str, shape: str
+    ) -> None:
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, task_id=task, phase="gate", expect_fail=None, expect_pass=None)
+        assert exc.value.reason == "phase_shape_mismatch"
+        assert task in exc.value.detail
+        assert shape in exc.value.detail
+
+    def test_cli_gate_shape_mismatch_exits_two_without_writing_a_prompt(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        proc = assembler_spec_cli(plan, tmp_path, "gate")
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "ASSEMBLE-TDD: HALT phase_shape_mismatch" in proc.stdout
+        assert "Task 1" in proc.stdout and "new-behaviour" in proc.stdout
+        assert not (tmp_path / "spec prompt.txt").exists()
+
+    @pytest.mark.parametrize(
+        "counts",
+        [("--expect-fail", "0"), ("--expect-pass", "0"),
+         ("--expect-fail", "0", "--expect-pass", "0")],
+        ids=["fail-only", "pass-only", "both"],
+    )
+    def test_cli_gate_refuses_any_supplied_counts_even_zero(
+        self, gate_plan: Path, tmp_path: Path, counts: tuple[str, ...]
+    ) -> None:
+        proc = assembler_spec_cli(gate_plan, tmp_path, "gate", *counts, task="Task 4")
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "ASSEMBLE-TDD: HALT counts_not_applicable" in proc.stdout
+        assert not (tmp_path / "spec prompt.txt").exists()
+
+    def test_gate_command_keeps_dispatch_and_status_extraction_but_reruns_probes(
+        self, tmp_path: Path
+    ) -> None:
+        block = assembler_spec_block(tmp_path, "gate", "tests/ignored scope.py")
+        assert block.startswith("hmad-dispatch exec codex ")
+        assert "hmad-dispatch progress" in block
+        assert "h_mad_extract_verdict.py" in block
+        assert "--key STATUS --feature f --phase 5d" in block
+        assert GATE_RERUN_COMMENT in block.splitlines()
+        assert "-m pytest" not in block
+        assert "tests/ignored scope.py" not in block
