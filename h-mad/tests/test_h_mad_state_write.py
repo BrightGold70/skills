@@ -483,3 +483,183 @@ class TestHeartbeatBeats:
         assert r.returncode == 2, (r.returncode, r.stderr)
         assert "Traceback" not in r.stderr
         assert p.read_bytes() == before
+
+
+class TestAppend:
+    """FR-7: additions preserve history and validate the whole write atomically."""
+
+    @pytest.fixture(scope="class")
+    def hostile_module(self):
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith("HMAD_STUB_")}
+        env["HMAD_STUB_HOSTILE"] = "all"
+        result = subprocess.run(
+            ["bash", str(Path(__file__).parent / "stubs" / "orca"),
+             "worktree", "set", "--comment", "module fixture"],
+            capture_output=True, text=True, env=env, timeout=10, check=True,
+        )
+        module = json.loads(result.stdout)["result"]["worktree"]["comment"]
+        assert "\n" in module and "[a](b)" in module and "⟦/h-mad⟧" in module
+        return module
+
+    @staticmethod
+    def _review(module, **overrides):
+        return {"leg": "5e-review", "module": module, "reviewer": "codex",
+                "implementer": "agy", "independent": True, **overrides}
+
+    def test_append_keeps_both_earlier_entries(self, tmp_path, hostile_module):
+        earlier = [self._review(hostile_module + " / first"),
+                   self._review(hostile_module + " / second", leg="5e-verify")]
+        earlier_text = [json.dumps(entry) for entry in earlier]
+        added = self._review(hostile_module, leg="6a-prime")
+        p = store(tmp_path, {"demo": dict(VALID, review_independence=earlier)})
+
+        r = run(p, "--feature", "demo", "--append",
+                "review_independence=" + json.dumps(added))
+
+        assert r.returncode == 0, f"append must preserve both earlier entries: {r.stderr}"
+        entries = read(p)["demo"]["review_independence"]
+        assert [json.dumps(entry) for entry in entries[:2]] == earlier_text
+        assert entries == [*earlier, added]
+
+    def test_two_appends_in_one_call_keep_order(self, tmp_path, hostile_module):
+        prior = self._review(hostile_module, leg="6a-prime")
+        first = self._review(hostile_module + " / first")
+        second = self._review(hostile_module + " / second", leg="5e-verify")
+        p = store(tmp_path, {"demo": dict(VALID, review_independence=[prior])})
+
+        r = run(p, "--feature", "demo", "--append",
+                "review_independence=" + json.dumps(first), "--append",
+                "review_independence=" + json.dumps(second))
+
+        assert r.returncode == 0, f"repeated appends must accumulate in order: {r.stderr}"
+        assert read(p)["demo"]["review_independence"] == [prior, first, second]
+
+    def test_set_and_append_on_the_same_key_are_refused(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        before = p.read_bytes()
+
+        r = run(p, "--feature", "demo", "--set",
+                "production_paths_needing_red_tests=[]", "--append",
+                'production_paths_needing_red_tests=["a"]')
+
+        assert "--set and --append name the same key: production_paths_needing_red_tests" in r.stderr
+        assert "unrecognized arguments" not in r.stderr
+        assert r.returncode == 2, r.stderr
+        assert p.read_bytes() == before, "same-key refusal must leave the store byte-identical"
+
+    @pytest.mark.parametrize("key", ["review_independence", "implementation_authors"])
+    def test_append_only_key_refuses_set(self, tmp_path, key, hostile_module):
+        entry = (self._review(hostile_module) if key == "review_independence"
+                 else {"module": hostile_module, "agent": "codex"})
+        p = store(tmp_path, {"demo": dict(VALID, **{key: [entry]})})
+        before = p.read_bytes()
+
+        r = run(p, "--feature", "demo", "--set", f"{key}=[]")
+
+        assert f"{key} is append-only: use --append" in r.stderr
+        assert r.returncode == 2, r.stderr
+        assert p.read_bytes() == before, "--set must never replace append-only history"
+
+    def test_append_only_refusal_applies_to_library_callers(self, tmp_path, hostile_module):
+        p = store(tmp_path, {"demo": dict(
+            VALID, review_independence=[self._review(hostile_module)],
+            implementation_authors=[{"module": hostile_module, "agent": "codex"}],
+        )})
+        before = p.read_bytes()
+
+        for key in ("review_independence", "implementation_authors"):
+            with pytest.raises(sw.StateWriteError, match=f"{key} is append-only: use --append"):
+                sw.merge_fields(p, "demo", {key: []})
+            assert p.read_bytes() == before, "library refusal must preserve append-only history"
+
+    def test_append_value_is_strict_json(self, tmp_path, hostile_module):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        before = p.read_bytes()
+        item = "review_independence=" + hostile_module
+
+        r = run(p, "--feature", "demo", "--set", "iterate_cycles=1", "--append", item)
+
+        assert r.stderr.startswith("ERROR: "), "invalid --append JSON must use the writer's ERROR line"
+        assert "--append" in r.stderr and (item in r.stderr or repr(item) in r.stderr), r.stderr
+        assert "unrecognized arguments" not in r.stderr
+        assert r.returncode == 2, r.stderr
+        assert p.read_bytes() == before, "strict JSON refusal must also roll back the --set"
+
+    def test_append_to_non_array_refused(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID, current_phase=5)})
+        before = p.read_bytes()
+
+        r = run(p, "--feature", "demo", "--set", "iterate_cycles=1",
+                "--append", "current_phase=6")
+
+        assert "cannot append to a non-array value" in r.stderr
+        assert "unrecognized arguments" not in r.stderr
+        assert r.returncode == 2, r.stderr
+        assert p.read_bytes() == before, "non-array refusal must also roll back the --set"
+
+    @pytest.mark.parametrize("case", [
+        pytest.param("review_independence", id="review-independence-bad-leg"),
+        pytest.param("implementation_authors", id="implementation-authors-gemini"),
+    ])
+    def test_refused_entry_leaves_store_byte_identical(self, tmp_path, case, hostile_module):
+        prior = (self._review(hostile_module) if case == "review_independence"
+                 else {"module": hostile_module, "agent": "codex"})
+        invalid = (self._review(hostile_module, leg="bad-leg") if case == "review_independence"
+                   else {"module": hostile_module, "agent": "gemini"})
+        p = store(tmp_path, {"demo": dict(VALID, **{case: [prior]})})
+        before = p.read_bytes()
+
+        r = run(p, "--feature", "demo", "--set", "iterate_cycles=1",
+                "--append", case + "=" + json.dumps(prior),
+                "--append", case + "=" + json.dumps(invalid))
+
+        assert "would not validate" in r.stderr, "invalid append must reach the writer's schema refusal"
+        assert "unrecognized arguments" not in r.stderr
+        assert r.returncode == 2, r.stderr
+        assert p.read_bytes() == before, "schema refusal must roll back every append and set"
+
+    def test_ok_line_lists_appended_keys(self, tmp_path, hostile_module):
+        review = self._review(hostile_module)
+        author = {"module": hostile_module, "agent": "codex"}
+        p = store(tmp_path, {"demo": dict(VALID)})
+
+        r = run(p, "--feature", "demo", "--set", "iterate_cycles=1",
+                "--append", "review_independence=" + json.dumps(review),
+                "--append", "implementation_authors=" + json.dumps(author))
+
+        expected = ("STATE-WRITE: OK feature=demo keys=3 "
+                    "implementation_authors,iterate_cycles,review_independence")
+        assert expected in r.stdout.splitlines(), f"OK line must list appended and set keys: {r.stdout!r} {r.stderr}"
+        assert r.returncode == 0, r.stderr
+        record = read(p)["demo"]
+        assert record["iterate_cycles"] == 1
+        assert record["review_independence"] == [review]
+        assert record["implementation_authors"] == [author]
+
+    def test_owner_append_refreshes_the_heartbeat(self, tmp_path, hostile_module):
+        old_heartbeat = "2026-07-22T00:00:00Z"
+        review = self._review(hostile_module)
+        p = store(tmp_path, {"demo": dict(
+            VALID, owner_session_id=hostile_module, owner_heartbeat_ts=old_heartbeat,
+        )})
+
+        r = run(p, "--feature", "demo", "--session-id", hostile_module,
+                "--append", "review_independence=" + json.dumps(review))
+
+        assert r.returncode == 0, f"an owner's append must refresh the heartbeat: {r.stderr}"
+        record = read(p)["demo"]
+        assert record["owner_heartbeat_ts"] != old_heartbeat
+        assert datetime.fromisoformat(record["owner_heartbeat_ts"].replace("Z", "+00:00")) > datetime.fromisoformat(old_heartbeat.replace("Z", "+00:00"))
+        assert record["owner_session_id"] == hostile_module
+        assert record["review_independence"] == [review]
+
+    def test_append_implementation_authors_entry(self, tmp_path, hostile_module):
+        author = {"module": hostile_module, "agent": "codex"}
+        p = store(tmp_path, {"demo": dict(VALID, implementation_authors=[author])})
+
+        r = run(p, "--feature", "demo", "--append",
+                "implementation_authors=" + json.dumps(author))
+
+        assert r.returncode == 0, f"implementation author append must keep duplicate accepted entries: {r.stderr}"
+        assert read(p)["demo"]["implementation_authors"] == [author, author]
