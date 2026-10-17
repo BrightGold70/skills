@@ -175,18 +175,25 @@ def _reap_processes_leaked_by_this_run(tmp_path_factory, request):
     every wrapper and stub at a tmp_path, and nothing outside the run does.
     Reaped processes are reported, not hidden — each one is a test that leaked.
     """
-    from leak_reaper import find_leaked, reap
+    from leak_reaper import ProcessListingDenied, find_leaked, reap
 
     yield
     base = tmp_path_factory.getbasetemp()
     markers = sorted({str(base), str(base.resolve())})
-    leaked = find_leaked(markers)
-    if not leaked:
-        return
-    reap([pid for pid, _ in leaked])
     reporter = request.config.pluginmanager.get_plugin("terminalreporter")
-    lines = [f"[leak-reaper] reaped {len(leaked)} process(es) leaked under {base}:"]
-    lines += [f"[leak-reaper]   pid {pid}: {command[:200]}" for pid, command in leaked]
+    try:
+        leaked = find_leaked(markers)
+    except ProcessListingDenied as exc:
+        # A sandbox that forbids `ps` (Codex workspace-write) cannot be reaped in;
+        # say so on every run instead of failing a correct one at teardown.
+        leaked, lines = [], [f"[leak-reaper] SKIPPED: process listing not permitted ({exc}); "
+                             f"leaks under {base} were not checked"]
+    else:
+        if not leaked:
+            return
+        reap([pid for pid, _ in leaked])
+        lines = [f"[leak-reaper] reaped {len(leaked)} process(es) leaked under {base}:"]
+        lines += [f"[leak-reaper]   pid {pid}: {command[:200]}" for pid, command in leaked]
     for line in lines:
         if reporter is not None:
             reporter.write_line(line, yellow=True)

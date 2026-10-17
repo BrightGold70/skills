@@ -26,14 +26,25 @@ def _ancestry() -> set[int]:
     return pids
 
 
+class ProcessListingDenied(Exception):
+    """`ps` could not be executed (a sandbox such as Codex `workspace-write`).
+
+    Leaks were NOT checked. The caller reports that, rather than raising a
+    session-teardown error that turns every correct run into exit 1.
+    """
+
+
 def find_leaked(markers: list[str]) -> list[tuple[int, str]]:
     """(pid, command) of every process whose argv contains any marker."""
     markers = [m for m in markers if m]
     if not markers:
         return []
-    listing = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True,
-                             text=True, check=False).stdout
-    skip = _ancestry()
+    try:
+        listing = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True,
+                                 text=True, check=False).stdout
+        skip = _ancestry()
+    except PermissionError as exc:
+        raise ProcessListingDenied(f"{type(exc).__name__}: {exc}") from exc
     leaked = []
     for line in listing.splitlines():
         pid_text, _, command = line.strip().partition(" ")

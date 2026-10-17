@@ -37,6 +37,33 @@
       "find": "        if not pid_text.isdigit() or int(pid_text) in skip:\n",
       "replace": "        if not pid_text.isdigit():\n",
       "test": "tests/test_leak_reaper.py::test_never_matches_its_own_process_or_an_ancestor_that_names_the_marker"
+    },
+    {
+      "name": "LR-DENIED-UNWRAPPED",
+      "_mechanism": "skill-candidates 'declarable sandbox teardown artefact': a denied ps listing escapes find_leaked as a raw PermissionError, so the sandboxed session errors at teardown again.",
+      "file": "tests/leak_reaper.py",
+      "symbol": "find_leaked",
+      "find": "    except PermissionError as exc:\n",
+      "replace": "    except ProcessLookupError as exc:\n",
+      "test": "tests/test_leak_reaper.py::test_conftest_finalizer_reports_a_denied_listing_and_does_not_error"
+    },
+    {
+      "name": "LR-DENIED-SILENT",
+      "_mechanism": "the denial is swallowed without the SKIPPED line, so an unchecked run reads like a clean one.",
+      "file": "tests/conftest.py",
+      "symbol": "_reap_processes_leaked_by_this_run",
+      "find": "        leaked, lines = [], [f\"[leak-reaper] SKIPPED",
+      "replace": "        return\n        leaked, lines = [], [f\"[leak-reaper] SKIPPED",
+      "test": "tests/test_leak_reaper.py::test_conftest_finalizer_reports_a_denied_listing_and_does_not_error"
+    },
+    {
+      "name": "LR-DENIED-NOCAUSE",
+      "_mechanism": "the wrapper drops its cause, hiding which OS error the sandbox raised.",
+      "file": "tests/leak_reaper.py",
+      "symbol": "find_leaked",
+      "find": "{exc}\") from exc\n",
+      "replace": "{exc}\") from None\n",
+      "test": "tests/test_leak_reaper.py::test_listing_denied_raises_process_listing_denied"
     }
   ]
 }

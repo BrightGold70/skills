@@ -2635,6 +2635,7 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
   Codex still returned BLOCKED on it 3 times before it was. A template line (or an env opt-out for
   `find_leaked` under the sandbox) would close it. — recurrence: 20 — candidate: yes
   — **RE-PROBED 2026-10-18: OPEN** — `h-mad/tests/leak_reaper.py:34` still runs `ps -axo` with no env opt-out (one commit ever, `4affd9e0`); `--env-known-failure` (`h_mad_assemble_tdd.py:662`) still takes node ids only; no template line names the teardown artefact.
+  — **LANDED 2026-10-18** — `h-mad/tests/leak_reaper.py` `ProcessListingDenied` wraps a `PermissionError` from `ps`; `conftest.py` `_reap_processes_leaked_by_this_run` prints `[leak-reaper] SKIPPED: process listing not permitted (...)` instead of a teardown ERROR. Pinned by `test_leak_reaper.py` (2 new) + `leak_reaper.json` rows LR-DENIED-* (6/6 ALL_CAUGHT). No prompt note needed any more.
 - **wire registry `verify` interpreter** (2026-10-17): `h_mad_wire_registry.py verify` runs pytest via the
   PATH `python3` (3.15, no pytest here) and answers `UNREADABLE`; a `--python` option or probing like the
   assembler does. Same session: pins registered `tests/...` read as missing (also `106421f0`) — `register`
