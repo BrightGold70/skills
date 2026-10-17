@@ -476,7 +476,11 @@ def assemble(
         lines.append(
             "The WIRE-PIN is this task's single load-bearing test. Its RED must be "
             "an assertion about the CALLER's observable behaviour, never a missing "
-            "symbol."
+            "symbol. "
+            "A missing-symbol RED on the pin is valid **only** when the missing symbol is "
+            "the caller the task creates, and the callee resolves at the RED base. "
+            "The RED report must name both. GREEN must prove the wire by a wire-cut: "
+            "delete the call only, keep the caller and the callee, and confirm the pin fails."
         )
     # Counts are STATED whenever they were supplied, whatever the shape. The
     # exemption above is about not REQUIRING them on a wiring task; it was
