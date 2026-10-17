@@ -93,6 +93,15 @@
       "find": "    kind = next((name for name in (\"judge-timeout\", \"timeout\", \"pytest-missing\", \"pytest-error\", \"no-summary\",\n                                   \"no-tests-ran\", \"test-passing\") if name in kinds), \"no-summary\")",
       "replace": "    kind = next((name for name in (\"timeout\", \"pytest-missing\", \"pytest-error\", \"no-summary\",\n                                   \"no-tests-ran\", \"test-passing\", \"judge-timeout\") if name in kinds), \"no-summary\")",
       "test": "tests/test_h_mad_tdd_judge.py::test_judge_timeout_has_priority"
+    },
+    {
+      "name": "J-NEWEST-PLAN-ORDER",
+      "_mechanism": "skill-candidates row (e): candidates run in plan order again, so an earlier task's slow green guards spend the shared budget and the active RED is refused kind=timeout.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "judge",
+      "find": "sorted(resolution.present, key=_newest_first)",
+      "replace": "resolution.present",
+      "test": "tests/test_h_mad_tdd_judge.py::test_judge_mtime_newest_red_avoids_guard_starvation"
     }
   ]
 }

@@ -2559,6 +2559,7 @@ drop the line.
   Remedies proposed there: order the files by the active task, or a per-write budget override.
   recurrence: 1 — candidate: maybe
   — **RE-PROBED 2026-10-18: OPEN** — `h_mad_tdd_judge.py:29` `JUDGE_BUDGET_S = 40.0` unchanged; `resolve()` (`:288-332`) still gathers every task's test files for the target in plan order (not the active task first), and `main()` exposes no budget override.
+  — **LANDED 2026-10-18** — `h_mad_tdd_judge.py` `judge()` tries candidates newest-mtime first (`_newest_first`, stable for ties, unreadable last), so the active RED is reached before older guards spend the budget. `test_judge_mtime_*` (3) + `tdd_judge_scoring.json` row J-NEWEST-PLAN-ORDER. No budget override added.
 - **(f) `h_mad_version_history.py` crashes on U+2028/U+2029**: Edit/Write turn ` `/` `
   escapes into raw characters. Then `splitlines()` and `split("\n")` (`:220`, `:308`) disagree on line
   count, and the tool dies with `IndexError: list index out of range` instead of refusing.

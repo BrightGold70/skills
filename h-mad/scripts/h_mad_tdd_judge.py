@@ -421,6 +421,14 @@ def _output_entry(output: str, error: str) -> str:
     return summary or last
 
 
+def _newest_first(candidate: Tuple[Path, Path]) -> Tuple[int, float]:
+    """Sort key: newest mtime first; an unreadable mtime sorts last. Stable for ties."""
+    try:
+        return (0, -candidate[0].stat().st_mtime)
+    except OSError:
+        return (1, 0.0)
+
+
 def judge(root: Path, target: Path, records: Sequence[Record], *, budget_s: float = JUDGE_BUDGET_S,
           fallback_interpreter: str = sys.executable) -> Verdict:
     deadline = time.monotonic() + budget_s
@@ -428,7 +436,10 @@ def judge(root: Path, target: Path, records: Sequence[Record], *, budget_s: floa
     if resolution.verdict is not None:
         return resolution.verdict
     outcomes = []
-    for test, cwd in resolution.present:
+    # One budget covers every candidate, and ALLOW comes at the first red. The
+    # active task's RED is the file just written, so try the newest first; an
+    # earlier task's slow green guards otherwise spend the budget (kind=timeout).
+    for test, cwd in sorted(resolution.present, key=_newest_first):  # M:J-NEWEST
         interpreter = select_interpreter(test, root, fallback_interpreter)
         if isinstance(interpreter, Verdict):
             return interpreter._replace(reason=interpreter.reason + _notes(resolution.notes))
