@@ -3906,3 +3906,319 @@ def test_sweep_forwards_each_hollow_kill_with_its_mutation(tmp_path: Path) -> No
 
     assert (f"  kill: {spec} :: unbind the printed name :: hollow: NameError at guard.py:13 "
             in proc.stdout), proc.stdout
+
+
+# --- --isolate: measure the dirty tree in a disposable detached worktree ----
+
+
+def _isolate_git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True,
+        capture_output=True, text=True,
+    ).stdout
+
+
+def _isolate_project(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Reuse the real-test fixture, but commit HEAD before changing its guard."""
+    import shutil
+
+    repo = _repo(tmp_path).resolve()
+    suite = repo / "nested project"
+    suite.mkdir()
+    spec = _pytest_project(suite, [{
+        "name": "raise the dirty threshold", "file": "guard.py",
+        "find": "return n > 6", "replace": "return n > 9",
+    }], targeted=False)
+    data = json.loads(spec.read_text(encoding="utf-8"))
+    data["root"] = "."  # A copied spec must resolve to the copied suite.
+    data["command"] += ["-p", "no:cacheprovider"]
+    spec.write_text(json.dumps(data), encoding="utf-8")
+    script = repo / "h-mad" / "scripts" / HARNESS.name
+    script.parent.mkdir(parents=True)
+    shutil.copy2(HARNESS, script)
+    (repo / ".gitignore").write_text(
+        "__pycache__/\n.pytest_cache/\nignored.bin\n", encoding="utf-8",
+    )
+    (suite / "obsolete.txt").write_text("present only in HEAD\n", encoding="utf-8")
+    (suite / "staged.bin").write_bytes(b"HEAD\x00\xff")
+    _isolate_git(repo, "add", "-A")
+    _isolate_git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "fixture")
+
+    # HEAD has neither the dirty anchor nor the tests of that threshold. Merely
+    # checking out HEAD must produce a different verdict from the requested run.
+    (suite / "guard.py").write_text(
+        REAL_GUARD.replace("return n > 5", "return n > 6"), encoding="utf-8",
+    )
+    checks = REAL_TESTS.replace("over(6) and not over(5)", "over(7) and not over(6)")
+    checks += '''
+
+def test_the_dirty_overlay_is_in_a_detached_worktree():
+    import subprocess
+    from pathlib import Path
+    here = Path(__file__).resolve().parent
+    assert (here / "untracked bytes.bin").read_bytes() == b"untracked\\x00\\xff"
+    assert (here / "staged.bin").read_bytes() == b"staged\\x00\\xfe"
+    assert not (here / "obsolete.txt").exists()
+    assert not (here / "ignored.bin").exists()
+    branch = subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=here,
+                            capture_output=True)
+    assert branch.returncode == 1
+'''
+    (suite / "test_guard.py").write_text(checks, encoding="utf-8")
+    (suite / "staged.bin").write_bytes(b"staged\x00\xfe")
+    _isolate_git(repo, "add", "nested project/staged.bin")
+    (suite / "untracked bytes.bin").write_bytes(b"untracked\x00\xff")
+    (suite / "ignored.bin").write_bytes(b"must stay in the original tree")
+    (suite / "obsolete.txt").unlink()
+    return repo, spec, script
+
+
+def _isolate_snapshot(repo: Path) -> tuple[str, dict[str, bytes], str]:
+    return (
+        _isolate_git(repo, "status", "--porcelain", "-uall"),
+        {str(p.relative_to(repo)): p.read_bytes() for p in repo.rglob("*")
+         if ".git" not in p.relative_to(repo).parts and p.is_file()},
+        _isolate_git(repo, "worktree", "list", "--porcelain"),
+    )
+
+
+def _isolate_cli(script: Path, cwd: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(script), "--isolate", *args],
+        cwd=cwd, capture_output=True, text=True, timeout=60,
+    )
+
+
+def _isolate_started(proc: subprocess.CompletedProcess, repo: Path) -> Path:
+    lines = [line for line in proc.stdout.splitlines()
+             if line.startswith("ISOLATE: worktree=")]
+    assert len(lines) == 1, proc.stdout + proc.stderr
+    match = re.fullmatch(r"ISOLATE: worktree=(.+) base=([0-9a-f]+) copied=(\d+)", lines[0])
+    assert match is not None, lines
+    worktree = Path(match[1])
+    assert worktree.is_absolute() and worktree == worktree.resolve(), worktree
+    assert worktree.parent == repo.parent, worktree
+    assert worktree.name.startswith(".h-mad-isolate-"), worktree
+    assert match[2] == _isolate_git(repo, "rev-parse", "--short", "HEAD").strip()
+    # Deleted paths have no bytes to copy, so they are not counted as copies.
+    copied = _isolate_git(repo, "diff", "--name-only", "HEAD").splitlines()
+    copied += _isolate_git(repo, "ls-files", "--others", "--exclude-standard").splitlines()
+    assert int(match[3]) == sum((repo / name).is_file() for name in set(copied)), lines
+    return worktree
+
+
+def _isolate_assert_cleaned(repo: Path, before: tuple[str, dict[str, bytes], str]) -> None:
+    assert _isolate_snapshot(repo) == before, "isolation changed the original tree or worktree registry"
+    assert not list(repo.parent.glob(".h-mad-isolate-*")), "isolation left a temporary directory"
+
+
+@pytest.mark.parametrize("mode", ["single", "sweep", "anchors"])
+@pytest.mark.parametrize("absolute", [False, True], ids=["relative-spec", "absolute-spec"])
+def test_isolate_measures_dirty_files_and_preserves_original_tree(
+    tmp_path: Path, mode: str, absolute: bool,
+) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+    before = _isolate_snapshot(repo)
+    args = [] if mode == "single" else ["--sweep" if mode == "sweep" else "--check-anchors"]
+    # Starting below the git top-level pins both top discovery and cwd rebasing.
+    args.append(str(spec) if absolute else spec.name)
+
+    proc = _isolate_cli(script, spec.parent, *args)
+
+    _isolate_assert_cleaned(repo, before)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    worktree = _isolate_started(proc, repo)
+    assert not worktree.exists()
+    assert proc.stdout.splitlines()[0].startswith("ISOLATE: worktree="), proc.stdout
+    assert proc.stdout.splitlines()[-1] == "ISOLATE: removed=yes", proc.stdout
+    token = {"single": "MUTATION: ALL_CAUGHT", "sweep": "SWEEP: ALL_CAUGHT specs=1",
+             "anchors": "ANCHORS: ANCHORS_OK"}[mode]
+    assert token in proc.stdout, proc.stdout
+    if mode == "sweep":
+        assert str(worktree / spec.relative_to(repo)) in proc.stdout, proc.stdout
+
+
+@pytest.mark.parametrize("relative", [False, True], ids=["absolute", "relative"])
+def test_isolate_refuses_a_spec_outside_the_repo_without_leaking(
+    tmp_path: Path, relative: bool,
+) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+    outside = _project(tmp_path / "outside", [_kills_the_guard()])
+    outside_before = {p.name: p.read_bytes() for p in outside.parent.iterdir() if p.is_file()}
+    before = _isolate_snapshot(repo)
+    argument = os.path.relpath(outside, spec.parent) if relative else str(outside)
+
+    proc = _isolate_cli(script, spec.parent, "--sweep", str(spec), argument)
+
+    _isolate_assert_cleaned(repo, before)
+    assert {p.name: p.read_bytes() for p in outside.parent.iterdir() if p.is_file()} == outside_before
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "MUTATION: UNREADABLE reason=isolate-spec-outside-repo" in proc.stdout, proc.stdout + proc.stderr
+    assert "SWEEP: ALL_CAUGHT" not in proc.stdout, proc.stdout
+
+
+def test_isolate_outside_git_reports_no_repo(tmp_path: Path) -> None:
+    spec = _project(tmp_path / "not-a-repo", [_kills_the_guard()])
+    before = {p.name: p.read_bytes() for p in spec.parent.iterdir() if p.is_file()}
+
+    proc = _isolate_cli(HARNESS, spec.parent, str(spec))
+
+    assert {p.name: p.read_bytes() for p in spec.parent.iterdir() if p.is_file()} == before
+    assert not list(tmp_path.glob(".h-mad-isolate-*"))
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "MUTATION: UNREADABLE reason=isolate-no-repo" in proc.stdout, proc.stdout + proc.stderr
+
+
+def test_isolate_preserves_child_error_output_and_exit_code(tmp_path: Path) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+    spec.write_text("{", encoding="utf-8")
+    before = _isolate_snapshot(repo)
+    plain = subprocess.run([sys.executable, str(script), str(spec)], cwd=spec.parent,
+                           capture_output=True, text=True, timeout=20)
+
+    proc = _isolate_cli(script, spec.parent, str(spec))
+
+    _isolate_assert_cleaned(repo, before)
+    assert plain.returncode == proc.returncode == 2, proc.stdout + proc.stderr
+    _isolate_started(proc, repo)
+    assert proc.stderr == plain.stderr, proc.stderr
+    assert proc.stdout == proc.stdout.splitlines()[0] + "\n" + plain.stdout + "ISOLATE: removed=yes\n"
+
+
+def test_isolate_reruns_its_dirty_script_with_rebased_cwd_and_original_arguments(tmp_path: Path) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+    record = tmp_path / "child.json"
+    # Only the isolated child executes this probe. Keeping the outer harness
+    # intact proves that it launches its copied, dirty script as a new process.
+    probe = (
+        "\nimport sys as _iso_sys\n"
+        "if '--isolate' not in _iso_sys.argv[1:]:\n"
+        "    import json as _iso_json, os as _iso_os\n"
+        f"    with open({str(record)!r}, 'w') as _iso_record:\n"
+        "        _iso_json.dump({'argv': _iso_sys.argv, 'cwd': _iso_os.getcwd(), "
+        "'pid': _iso_os.getpid()}, _iso_record)\n"
+        "    _iso_sys.stdout.write('child stdout: café\\n')\n"
+        "    _iso_sys.stderr.write('child stderr: café\\n')\n"
+        "    raise SystemExit(37)\n"
+    )
+    source = script.read_text(encoding="utf-8")
+    future = "from __future__ import annotations\n"
+    assert source.count(future) == 1
+    script.write_text(source.replace(future, future + probe, 1), encoding="utf-8")
+    before = _isolate_snapshot(repo)
+
+    proc = _isolate_cli(script, spec.parent, "--sweep", str(spec), spec.name)
+
+    _isolate_assert_cleaned(repo, before)
+    assert proc.returncode == 37, proc.stdout + proc.stderr
+    worktree = _isolate_started(proc, repo)
+    child = json.loads(record.read_text(encoding="utf-8"))
+    rebased_spec = str(worktree / spec.relative_to(repo))
+    assert child["argv"] == [str(worktree / script.relative_to(repo)), "--sweep", rebased_spec, rebased_spec]
+    assert Path(child["cwd"]) == worktree / spec.parent.relative_to(repo)
+    assert child["pid"] != os.getpid()
+    assert proc.stdout == proc.stdout.splitlines()[0] + "\nchild stdout: café\nISOLATE: removed=yes\n"
+    assert proc.stderr == "child stderr: café\n"
+
+
+def test_isolate_cleans_the_worktree_when_copying_dirty_files_raises(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import shutil
+
+    repo, spec, script = _isolate_project(tmp_path)
+    before = _isolate_snapshot(repo)
+    copies = []
+
+    def fail_copy(source, destination, *args, **kwargs):
+        copies.append((Path(source), Path(destination)))
+        raise OSError("injected isolate copy failure")
+
+    monkeypatch.chdir(spec.parent)
+    monkeypatch.setattr(h_mad_mutation_harness, "__file__", str(script))
+    monkeypatch.setattr(shutil, "copy2", fail_copy)
+    try:
+        h_mad_mutation_harness.main(["--isolate", str(spec)])
+    except (OSError, SystemExit):
+        pass  # Either error propagation or a CLI error status may carry the failure.
+
+    _isolate_assert_cleaned(repo, before)
+    assert copies, "--isolate must try copying dirty files before the injected failure"
+
+
+@pytest.mark.parametrize("mode, token", [
+    ("--sweep", "SWEEP: ALL_CAUGHT specs=1"),
+    ("--check-anchors", "ANCHORS: ANCHORS_OK"),
+])
+def test_isolate_discovers_committed_specs_without_explicit_paths(
+    tmp_path: Path, mode: str, token: str,
+) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+    before = _isolate_snapshot(repo)
+
+    proc = _isolate_cli(script, spec.parent, mode)
+
+    _isolate_assert_cleaned(repo, before)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    _isolate_started(proc, repo)
+    assert token in proc.stdout, proc.stdout
+    assert proc.stdout.splitlines()[-1] == "ISOLATE: removed=yes", proc.stdout
+
+
+def test_isolate_failed_removal_is_the_last_error_and_overrides_the_child_status(
+    tmp_path: Path, monkeypatch, capfd,
+) -> None:
+    import shutil
+
+    repo, spec, script = _isolate_project(tmp_path)
+    before = _isolate_snapshot(repo)
+    real_popen = subprocess.Popen
+    real_rmtree = shutil.rmtree
+    removals = []
+    fallbacks = []
+
+    def refuse_git_removal(args, *popen_args, **kwargs):
+        if isinstance(args, (list, tuple)):
+            argv = [str(part) for part in args]
+            if Path(argv[0]).name == "git" and "worktree" in argv:
+                index = argv.index("worktree")
+                if argv[index + 1:index + 3] == ["remove", "--force"]:
+                    removals.append(Path(argv[-1]))
+                    return real_popen([sys.executable, "-c", "raise SystemExit(1)"],
+                                      *popen_args, **kwargs)
+        return real_popen(args, *popen_args, **kwargs)
+
+    def refuse_fallback(path, *args, **kwargs):
+        if Path(path).name.startswith(".h-mad-isolate-"):
+            fallbacks.append(Path(path))
+            raise OSError("injected isolate removal failure")
+        return real_rmtree(path, *args, **kwargs)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.chdir(spec.parent)
+            patch.setattr(h_mad_mutation_harness, "__file__", str(script))
+            patch.setattr(subprocess, "Popen", refuse_git_removal)
+            patch.setattr(shutil, "rmtree", refuse_fallback)
+            try:
+                status = h_mad_mutation_harness.main(["--isolate", "--check-anchors", str(spec)])
+            except SystemExit as exc:
+                status = exc.code
+        output = capfd.readouterr()
+        assert removals, "--isolate never attempted git worktree remove --force"
+        assert len(removals) == 1, removals
+        assert fallbacks == removals, "failed git removal must try rmtree for exactly the same path"
+        assert status == 2, output.out + output.err
+        assert output.out.splitlines()[-1] == (
+            f"MUTATION: UNREADABLE reason=isolate-not-removed path={removals[0]}"
+        ), output.out + output.err
+        assert "ISOLATE: removed=yes" not in output.out, output.out
+    finally:
+        # This test deliberately prevents cleanup. Restore only its own recorded
+        # path, with the real git/shutil implementations, even if an assertion fails.
+        for worktree in set(removals):
+            assert worktree.parent == repo.parent and worktree.name.startswith(".h-mad-isolate-")
+            _isolate_git(repo, "worktree", "remove", "--force", str(worktree))
+            if worktree.exists():
+                real_rmtree(worktree)
+    _isolate_assert_cleaned(repo, before)
