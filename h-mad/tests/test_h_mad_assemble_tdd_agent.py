@@ -7,7 +7,10 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
+from unittest.mock import Mock
+from urllib.parse import quote
 
 import pytest
 
@@ -16,6 +19,7 @@ SCRIPT = SKILL_DIR / "scripts" / "h_mad_assemble_tdd.py"
 sys.path.insert(0, str(SCRIPT.parent))
 
 from h_mad_assemble_tdd import command_block  # noqa: E402
+import h_mad_assemble_tdd as assemble_mod  # noqa: E402
 
 BASE_SHA = "8ef6009f"
 PLAN = """# Feature implementation plan
@@ -30,6 +34,64 @@ Human text: **[brackets]** `$(printf unsafe)` ===HMAD-DISPATCH-BOUNDARY===
 FEATURE = "feature '$(printf unsafe)' [x]"
 MODULE = 'pkg/agent "quoted".py'
 TEST_PATH = "tests/test [x]$(printf unsafe).py"
+AGY_COMMAND = "python3 ~/.gemini/config/skills/h-mad/hooks/h-mad-agy-tdd-gate.py"
+AGY_HALT = "ASSEMBLE-TDD: HALT agy_tdd_hook_unverified"
+AGY_MARKER = f"[H-MAD] {FEATURE} tdd-assemble halt agy_tdd_hook_unverified Task 1"
+
+
+@pytest.fixture()
+def agy_env(tmp_path: Path) -> dict[str, str]:
+    stub_env = {k: v for k, v in os.environ.items() if not k.startswith("HMAD_STUB_")}
+    stub_env["HMAD_STUB_HOSTILE"] = "all"
+    result = subprocess.run(
+        ["/bin/bash", str(SKILL_DIR / "tests/stubs/orca"),
+         "worktree", "set", "--comment", "fixture"],
+        env=stub_env, capture_output=True, text=True, timeout=10, check=True,
+    )
+    hostile = json.loads(result.stdout)["result"]["worktree"]["comment"]
+    component = hostile.replace("/", "_").replace(":", "-")
+    home = tmp_path / ("home " + component)
+    gate = home / ".gemini/config/skills/h-mad/hooks/h-mad-agy-tdd-gate.py"
+    gate.parent.mkdir(parents=True)
+    gate.symlink_to(SKILL_DIR / "hooks/h-mad-agy-tdd-gate.py")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    (bindir / "python3").symlink_to(sys.executable)
+    return {
+        "HOME": str(home),
+        "PATH": os.pathsep.join((str(bindir), "/usr/bin", "/bin")),
+        "HMAD_STUB_HOSTILE": "all",
+    }
+
+
+def agy_hooks() -> dict:
+    return {"h-mad-agy-tdd-gate": {
+        "enabled": True,
+        "PreToolUse": [{"matcher": "*", "hooks": [{
+            "type": "command", "command": AGY_COMMAND, "timeout": 60,
+        }]}],
+    }}
+
+
+def write_agy_hooks(root: Path, config: dict) -> Path:
+    hooks = root / ".agents/hooks.json"
+    hooks.parent.mkdir(exist_ok=True)
+    hooks.write_text(json.dumps(config), encoding="utf-8")
+    return hooks
+
+
+def run_main(plan: Path, root: Path, prompt: Path) -> int:
+    try:
+        return assemble_mod.main([
+            "--feature", FEATURE, "--task", "Task 1", "--phase", "red",
+            "--project-root", str(root), "--module", MODULE,
+            "--test-path", TEST_PATH, "--impl-plan", str(plan),
+            "--expect-fail", "9", "--expect-pass", "2",
+            "--python", sys.executable, "--prompt", str(prompt),
+            "--agent", "agy",
+        ])
+    except SystemExit as exc:
+        return exc.code
 
 
 @pytest.fixture()
@@ -40,10 +102,13 @@ def plan(tmp_path: Path) -> Path:
 
 
 def run_cli(
-    script: Path, plan: Path, root: Path, prompt: Path, *extra: str
+    script: Path, plan: Path, root: Path, prompt: Path, *extra: str,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    env = os.environ.copy()
-    env["HMAD_STUB_HOSTILE"] = "all"
+    run_env = os.environ.copy()
+    run_env["HMAD_STUB_HOSTILE"] = "all"
+    if env is not None:
+        run_env.update(env)
     return subprocess.run(
         [
             sys.executable, str(script),
@@ -56,7 +121,7 @@ def run_cli(
             "--log", str(root / "dispatch.log"),
             *extra,
         ],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, env=run_env,
     )
 
 
@@ -141,16 +206,21 @@ def test_agent_codex_default_timeout_is_900(plan: Path, tmp_path: Path) -> None:
     )
 
 
-def test_prompt_file_is_agent_independent(plan: Path, tmp_path: Path) -> None:
+def test_prompt_file_is_agent_independent(
+    plan: Path, tmp_path: Path, agy_env: dict[str, str]
+) -> None:
+    write_agy_hooks(tmp_path, agy_hooks())
     hashes = []
-    for agent in ("codex", "grok"):
+    for agent in ("codex", "grok", "agy"):
         prompt = tmp_path / f"{agent}.prompt.txt"
-        proc = run_cli(SCRIPT, plan, tmp_path, prompt, "--agent", agent)
+        proc = run_cli(SCRIPT, plan, tmp_path, prompt, "--agent", agent, env=agy_env)
         assert prompt.is_file(), (
             f"--agent {agent} must stage a prompt independently: {proc.stderr or proc.stdout}"
         )
         hashes.append(hashlib.sha256(prompt.read_bytes()).hexdigest())
-    assert hashes[0] == hashes[1], "agent selection must not alter prompt file bytes"
+    assert len(hashes) == 3 and len(set(hashes)) == 1, (
+        "codex, grok and agy must produce identical prompt file bytes"
+    )
 
 
 def test_unknown_agent_exits_2_and_writes_no_prompt(plan: Path, tmp_path: Path) -> None:
@@ -196,3 +266,184 @@ def test_command_block_derives_grok_from_the_codex_line(tmp_path: Path) -> None:
     assert grok_lines[1:] == codex_lines[1:], (
         "command_block must leave every line after the dispatch line unchanged"
     )
+
+
+def test_agent_agy_runs_the_wiring_check_before_assembling(
+    plan: Path, tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    record = tmp_path / "check.argv.json"
+    stub = tmp_path / "wiring-check.py"
+    stub.write_text(
+        "import json, sys\nfrom pathlib import Path\n"
+        f"Path({str(record)!r}).write_text(json.dumps(sys.argv[1:]))\n"
+        "print('AGY-GATE: UNWIRED reason=no-entry')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    monkeypatch.setattr(assemble_mod, "AGY_WIRING_CHECK", str(stub), raising=False)
+    assemble_spy = Mock(wraps=assemble_mod.assemble)
+    monkeypatch.setattr(assemble_mod, "assemble", assemble_spy)
+    prompt = tmp_path / "prompt.txt"
+
+    code = run_main(plan, tmp_path, prompt)
+    stdout = capsys.readouterr().out
+
+    assert record.is_file(), "main must run the agy wiring check before assembling"
+    assert json.loads(record.read_text()) == ["--agy", "--project-root", str(tmp_path)], (
+        "main must pass --agy and the selected project root to the wiring checker"
+    )
+    assert not assemble_spy.called, "main must halt on UNWIRED before calling assemble"
+    assert stdout.splitlines() == [
+        AGY_HALT, "  AGY-GATE: UNWIRED reason=no-entry", AGY_MARKER,
+    ], "main must print the HALT, indented check token and marker in order"
+    assert not prompt.exists(), "UNWIRED must halt before staging a prompt"
+    assert code == 0, "UNWIRED is a verdict and must exit 0"
+
+
+@pytest.mark.parametrize("reason", [
+    "no-hooks-file", "no-entry", "disabled", "matcher-narrow", "bad-command",
+    "timeout-below-floor", "self-check-failed",
+])
+def test_agent_agy_unwired_halts_with_exit_0(
+    plan: Path, tmp_path: Path, agy_env: dict[str, str], reason: str,
+) -> None:
+    config = agy_hooks()
+    entry = config["h-mad-agy-tdd-gate"]
+    group = entry["PreToolUse"][0]
+    handler = group["hooks"][0]
+    if reason == "no-entry":
+        config = {}
+    elif reason == "disabled":
+        entry["enabled"] = False
+    elif reason == "matcher-narrow":
+        group["matcher"] = "write_to_file"
+    elif reason == "bad-command":
+        handler["command"] = AGY_COMMAND + " ; " + FEATURE
+    elif reason == "timeout-below-floor":
+        handler["timeout"] = 59
+    elif reason == "self-check-failed":
+        python = tmp_path / "bin/python3"
+        python.unlink()
+        python.write_text(
+            "#!/bin/sh\nprintf '%s\\n' 'AGY-TDD-GATE: FAIL classification'\nexit 0\n",
+            encoding="utf-8",
+        )
+        python.chmod(0o755)
+    if reason != "no-hooks-file":
+        write_agy_hooks(tmp_path, config)
+    prompt = tmp_path / "prompt.txt"
+
+    proc = run_cli(SCRIPT, plan, tmp_path, prompt, "--agent", "agy", env=agy_env)
+
+    lines = proc.stdout.splitlines()
+    assert lines[:1] == [AGY_HALT], f"{reason} must print the agy wiring HALT first"
+    assert lines[1:2] == [f"  AGY-GATE: UNWIRED reason={reason}"], (
+        f"main must preserve and indent the {reason} checker verdict"
+    )
+    assert lines[2:] == [AGY_MARKER], "the halt marker must follow the check token"
+    assert proc.returncode == 0, f"UNWIRED {reason} must exit 0"
+    assert not prompt.exists(), f"UNWIRED {reason} must not stage a prompt"
+
+
+def test_agent_agy_unreadable_halts_with_exit_2(
+    plan: Path, tmp_path: Path, agy_env: dict[str, str],
+) -> None:
+    hooks = write_agy_hooks(tmp_path, agy_hooks())
+    hooks.write_text("{not JSON", encoding="utf-8")
+    prompt = tmp_path / "prompt.txt"
+
+    proc = run_cli(SCRIPT, plan, tmp_path, prompt, "--agent", "agy", env=agy_env)
+
+    lines = proc.stdout.splitlines()
+    assert lines[:1] == [AGY_HALT], "unreadable hooks must print the agy wiring HALT"
+    assert lines[1:2] == [
+        f"  AGY-GATE: UNREADABLE file={quote(str(hooks), safe='')} error=JSONDecodeError",
+    ], "main must preserve and indent the UNREADABLE checker token"
+    assert lines[2:] == [AGY_MARKER], "the halt marker must follow the unreadable token"
+    assert proc.returncode == 2, "UNREADABLE must exit 2"
+    assert not prompt.exists(), "UNREADABLE must not stage a prompt"
+
+
+def test_agent_agy_no_token_halts_with_exit_2(
+    plan: Path, tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    stub = tmp_path / "silent-check.py"
+    stub.write_text("pass\n", encoding="utf-8")
+    monkeypatch.setattr(assemble_mod, "AGY_WIRING_CHECK", str(stub), raising=False)
+    prompt = tmp_path / "prompt.txt"
+
+    code = run_main(plan, tmp_path, prompt)
+
+    assert capsys.readouterr().out.splitlines() == [
+        AGY_HALT + " check=no-token", AGY_MARKER,
+    ], "a checker with no token must print the no-token HALT then the marker"
+    assert code == 2, "a checker with no token must exit 2"
+    assert not prompt.exists(), "a checker with no token must not stage a prompt"
+
+
+def test_agent_agy_check_timeout_halts_with_exit_2(
+    plan: Path, tmp_path: Path, monkeypatch, capsys,
+) -> None:
+    stub = tmp_path / "slow-check.py"
+    stub.write_text("import time\ntime.sleep(5)\n", encoding="utf-8")
+    monkeypatch.setattr(assemble_mod, "AGY_WIRING_CHECK", str(stub), raising=False)
+    monkeypatch.setattr(assemble_mod, "AGY_WIRING_TIMEOUT_S", 1, raising=False)
+    prompt = tmp_path / "prompt.txt"
+    started = time.monotonic()
+
+    code = run_main(plan, tmp_path, prompt)
+
+    assert capsys.readouterr().out.splitlines() == [
+        AGY_HALT + " check=no-token", AGY_MARKER,
+    ], "a checker timeout must print the no-token HALT then the marker"
+    assert code == 2, "a checker timeout must exit 2"
+    assert time.monotonic() - started < 4, "main must enforce the 1 second check bound"
+    assert not prompt.exists(), "a checker timeout must not stage a prompt"
+
+
+def test_agent_agy_wired_writes_the_prompt(
+    plan: Path, tmp_path: Path, agy_env: dict[str, str],
+) -> None:
+    write_agy_hooks(tmp_path, agy_hooks())
+    prompt = tmp_path / "prompt.txt"
+
+    proc = run_cli(SCRIPT, plan, tmp_path, prompt, "--agent", "agy", env=agy_env)
+
+    assert proc.stdout.startswith("ASSEMBLE-TDD: PASS "), "WIRED must allow assembly"
+    assert proc.returncode == 0, "WIRED assembly must exit 0"
+    assert prompt.is_file(), "WIRED must stage the prompt"
+    assert first_dispatch_line(proc).startswith("hmad-dispatch exec agy "), (
+        "WIRED must dispatch the selected agy agent"
+    )
+    assert "--timeout 1500" in proc.stdout, "agy must default to 1500 seconds"
+
+
+@pytest.mark.parametrize("agent, timeout", [
+    ("codex", 900), ("grok", 1500), ("agy", 1500),
+], ids=["codex-900", "grok-1500", "agy-1500"])
+def test_agent_default_timeouts(
+    plan: Path, tmp_path: Path, agy_env: dict[str, str], agent: str, timeout: int,
+) -> None:
+    write_agy_hooks(tmp_path, agy_hooks())
+    proc = run_cli(
+        SCRIPT, plan, tmp_path, tmp_path / "prompt.txt", "--agent", agent, env=agy_env,
+    )
+
+    assert f"--timeout {timeout}" in proc.stdout, (
+        f"main must select the {timeout} second default for {agent}: {proc.stderr}"
+    )
+    assert proc.returncode == 0, f"the {agent} default timeout must allow assembly"
+
+
+def test_docstring_states_the_agy_halt_exit_rule() -> None:
+    doc = " ".join(assemble_mod.__doc__.split())
+    expected = (
+        "exit 0 on PASS and on HALT agy_tdd_hook_unverified after AGY-GATE: UNWIRED; "
+        "2 on every other HALT"
+    )
+    assert expected in doc, "the module docstring must state the agy UNWIRED exit-0 rule"
+
+
+def test_docstring_drops_the_any_halt_rule() -> None:
+    doc = " ".join(assemble_mod.__doc__.split())
+    assert "2 on any HALT" not in doc, "the docstring must drop the obsolete any-HALT exit rule"
