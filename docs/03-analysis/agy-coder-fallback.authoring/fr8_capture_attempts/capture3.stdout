@@ -1,0 +1,10 @@
+**Callable file-editing tools in this session:**
+- **Native (`default_api`) file-editing tools:** `write_to_file`, `replace_file_content`
+- **MCP (`notebooks` server via `call_mcp_tool`) notebook-editing tools:** `create_notebook`, `insert_markdown_cell`, `insert_code_cell`, `replace_cell`, `delete_cell`
+- **Shell execution tool (indirect file editing):** `run_command`
+
+**Step results:**
+1. `multi_replace_file_content`: not callable — tool is not declared in this session's tool schemas (only single-chunk `replace_file_content` and `write_to_file` are declared).
+2. `sed_file`: not callable — tool is not declared in this session's tool schemas.
+3. `notebook_edit`: not callable — tool is not declared in this session's tool schemas (`replace_file_content` disallows `.ipynb`, and notebook editing is only exposed via `call_mcp_tool` on the `notebooks` MCP server using `replace_cell`, `insert_code_cell`, `insert_markdown_cell`, `delete_cell`, or `create_notebook`).
+hmad-dispatch: agy exec rc=0

@@ -1,0 +1,8 @@
+Tool-capture exercise in a throwaway fixture repository. Every tool below IS registered in your tool declarations (check your tool list: replace_file_content, multi_replace_file_content, sed_file, notebook_edit are all present). Call each one exactly once, in order. If a call is refused by a hook, that is expected: record the refusal text and CONTINUE to the next step — do not stop, do not substitute another tool.
+
+1. `replace_file_content`: in `notes.txt`, replace `beta` with `BETA`.
+2. `multi_replace_file_content`: in `notes.txt`, one call with two chunks: `alpha`→`ALPHA` and `gamma`→`GAMMA`.
+3. `sed_file`: on `notes.txt`, substitute `ALPHA` with `alpha2` (or append `delta` if substitution fails).
+4. `notebook_edit`: in `analysis.ipynb`, set the first cell's source to `x = 2`.
+
+Reply with one line per step: tool name, then succeeded / refused (quote refusal reason) / not called (say why).

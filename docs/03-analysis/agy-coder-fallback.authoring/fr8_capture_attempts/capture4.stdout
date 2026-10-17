@@ -1,0 +1,14 @@
+**File-editing tools I can actually call in this session:**
+- `write_to_file`
+- `replace_file_content`
+- Notebook editing only goes through the `notebooks` MCP server, called with `call_mcp_tool`: `create_notebook`, `insert_code_cell`, `insert_markdown_cell`, `replace_cell`, `delete_cell`
+
+`multi_replace_file_content`, `sed_file` and `notebook_edit` are not among the functions I can call. The Phase 5 pre-tool hook's refusal message names them as allowed write tools, but this session doesn't actually have them.
+
+**Steps:**
+1. `multi_replace_file_content`: **not callable**. It isn't one of my available functions, so I made no call and `notes.txt` is unchanged.
+2. `sed_file`: **not callable**. Same reason; I made no call.
+3. `notebook_edit`: **not callable**. Same reason. The nearest tool is the MCP `replace_cell`, but I didn't use it because that would be a different tool from the one the test asks for. `analysis.ipynb` is unchanged.
+
+I didn't use `replace_file_content` or `write_to_file` in place of the missing tools, since that would change what the test measures. My only call was one read-only shell command (a `grep` of the h-mad skill for `worker_done` and an `ls` of the fixture), and the pre-tool hook refused it: `kind=shell-not-admitted` ("Phase 5 permits only explicit test, read-only, and H-MAD control commands"). Because of that refusal, I couldn't confirm the `worker_done` protocol, so I haven't sent a signal to the coordinator handle `term_3c66c020-1e63-4701-92ff-69a3a1f196e0`.
+hmad-dispatch: agy exec rc=0

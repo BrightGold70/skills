@@ -1,0 +1,7 @@
+Tool-capture exercise in a throwaway fixture repository. Your session's tool inventory lists `multi_replace_file_content`, `sed_file` and `notebook_edit`. Before anything else, list the exact names of every file-editing tool you can call right now. Then call each of these three exactly once, in order; a hook refusal is expected and fine — record it and continue:
+
+1. `multi_replace_file_content`: in `notes.txt`, one call with two chunks: `alpha`→`ALPHA`, `gamma`→`GAMMA`.
+2. `sed_file`: on `notes.txt`, substitute `beta` with `BETA`.
+3. `notebook_edit`: in `analysis.ipynb`, set the first cell's source to `x = 2`.
+
+Reply: first the list of editing tools you can call, then one line per step (succeeded / refused + reason / not callable + why).

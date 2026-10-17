@@ -1,0 +1,5 @@
+1. `replace_file_content`: refused (`Encountered error in tool execution: tool call denied by pre-tool hook: Write has no recognised string target. kind=judge-error`)
+2. `multi_replace_file_content`: not called (tool is not present in `default_api` tool declarations; only `write_to_file` and `replace_file_content` are registered write/edit tools)
+3. `sed_file`: not called (tool is not present in `default_api` tool declarations)
+4. `notebook_edit`: not called (tool is not present in `default_api` tool declarations; notebook operations are only exposed as lazy MCP tools under `notebooks` such as `replace_cell`)
+hmad-dispatch: agy exec rc=0

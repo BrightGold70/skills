@@ -1,0 +1,10 @@
+This is a tool-capture exercise in a throwaway fixture repository. Perform EXACTLY these six steps, in order, each with the named tool and no other tool for that step. Do not skip any. Do not ask questions.
+
+1. Use the `write_to_file` tool to create the file `tests/test_extra.py` containing exactly: `def test_extra():\n    assert True\n`
+2. Use the `replace_file_content` tool to change the line `beta` to `BETA` in `notes.txt`.
+3. Use the `multi_replace_file_content` tool to change `alpha` to `ALPHA` AND `gamma` to `GAMMA` in `notes.txt` in a single call with two replacement chunks.
+4. Use the `sed_file` tool on `notes.txt` to append the line `delta` at the end of the file.
+5. Use the `notebook_edit` tool to change the first cell of `analysis.ipynb` so its source is `x = 2`.
+6. Use the `run_command` tool to run `ls -la` with the working directory set to this repository root.
+
+Then reply with one line per step: the tool you used and whether it succeeded or was refused (quote any refusal reason).
