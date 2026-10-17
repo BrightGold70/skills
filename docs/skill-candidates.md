@@ -1270,6 +1270,7 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   — **RE-PROBED 2026-10-03: OPEN** — `h_mad_archreview_cycle.py` `score()` takes no `git status` snapshot before the dispatch.
   — **DEFERRED 2026-10-05 (triage, calibrated)** — Codable and cheap, but 0 incidents in the roughly 197 handoffs (72 skills, 125 HemaSuite) since the prompt rule `6bdcf3f7` (2026-09-02) landed; the two pre-rule incidents were the 5b audit channel (HemaSuite 2026-08-28) and 6a-prime probe files (skills 2026-09-02), and the `.done` noise that made an absolute delta useless was removed by gitignoring `*.done`. Reopen when any archreview or audit cycle after `6bdcf3f7` is found to have changed the tree; then build it in `hmad-dispatch exec` behind a `--read-only` flag, not in `score()`, so the audit and archreview channels share it.
   — **RE-EVALUATED 2026-10-12: still deferred** — the trigger (an audit or archreview cycle that changed the tree) has not fired: 0 hits in the 14 skills+HemaSuite handoffs dated 2026-10-05 onward.
+  — **RE-PROBED 2026-10-18: OPEN (still deferred)** — trigger not fired: `grep -liE "audit.{0,40}(modified|mutated|changed|wrote).{0,30}(tree|file)|tree delta: [1-9]" docs/handoffs/2026-10-1[2-8]-*.md` → 0 files (rc=1). `h_mad_archreview_cycle.py` has no `git status` snapshot; `hmad-dispatch exec` still prints only an absolute `tree delta:` count (`hmad-dispatch.sh:3457`), with no pre/post diff and no `--read-only` flag.
 - **execute a doc's fenced bash block as a test**: the Task 5 recipe's four review-cycle defects were only visible by EXTRACTING the fenced block and RUNNING it against fixtures (phase-hardcoded path, unimplemented halt, whitespace truncation, shell-killing exit); the extract+substitute+run harness was hand-written in the test — recurrence: 4 — candidate: maybe (a `h_mad_doc_block_exec.py` helper: extract the Nth `bash` fence under a heading, substitute `<placeholders>` from a map, run under `bash -euo pipefail` in a tmp cwd, return rc+stdout+stderr) — **LANDED** (`h-mad/scripts/h_mad_doc_block_exec.py`, 788 lines, latest `92ae93a`). Every mechanic this row asked for is present and was verified in the file rather than taken from the name: `bash -euo pipefail -c` at `:413`, a private cwd with verified cleanup at `:386`, placeholder substitution, and rc+stdout+stderr returned. **One deliberate deviation from the row, and it is the safer direction:** blocks are selected by an EXPLICIT tag in the info string, not by "the Nth `bash` fence under a heading" — an ordinal selector silently re-points at a different block when someone inserts a fence above it, which is the same drift class as a mutation anchor. Ambiguity is an error (`AmbiguousBlock`, `AmbiguousHeading`), never a first-match
 - **probe the rungs below a changed branch**: after a fix on one rung of a fall-through ladder, the rung below regressed and only the next review cycle caught it; a checklist-style "enumerate every later rung and run one input through each" was done by hand — recurrence: 2 — candidate: no (discipline, captured in learnings; not a script)
 ## 2026-09-01 — pin-agents-tail-banner phase 5 (scout)
@@ -2369,6 +2370,7 @@ Rows re-read for relevance to this session's work (the crash-kill/`--sweep` pair
   — **RE-PROBED 2026-10-03: OPEN** — no delete-line reachability probe; mutations are a single `source.replace`.
   — **DEFERRED 2026-10-05 (triage, calibrated)** — No delete-line or reachability probe exists (mutations are a single `source.replace`), and `coverage`/`pytest-cov` are not installed, so a coverage check adds a dependency while a delete-line probe costs one more targeted run per mutation (1498 mutations, 1371 with a `test` key). Both incidents behind the row ended SURVIVED (loud, correct); the 2026-10-04 sweep at `cfbd2517` forwarded 24 kills (18 crashes, 5 timeouts) and the only hollow kills were 2 `IndentationError`s, now refused by tier 1 (`:1414-1420`); no documented CAUGHT mutation targets a line its named test never executes. Fold into row 2125 (hollow-kill, already deferred), and note row 2302 (host-equivalent mutants) as the host-scoped case sharing a home. Reopen when one CAUGHT mutation is shown, by re-scoring with the line deleted or by review, to target a line its named `test` never executes.
   — **RE-EVALUATED 2026-10-12: still deferred** — no caught mutation has been shown to target a line its test never runs. The crash half of this row is now covered by `hollow_kills=` (`96e43e19`, row 2214).
+  — **RE-PROBED 2026-10-18: OPEN (still deferred)** — `grep -niE 'reachab|delete.line' h-mad/scripts/h_mad_mutation_harness.py` finds no reachability probe (only unrelated prose at `:575`); the reopen trigger (a caught mutation shown to target a line its test never runs) is not reported in the 2026-10-12..17 handoffs.
 
 ## 2026-09-14 — backlog-drain-25-through-30 (fifth session, same day)
 
@@ -2400,6 +2402,7 @@ Rows re-read for relevance to this session's work (the crash-kill/`--sweep` pair
 - **a mutation row can be EQUIVALENT on one host and discriminating on another**: the first full `--sweep` reported `grok_env_scrub_and_beat_boundary.json :: scrub-enumerates-compgen` SURVIVED. Not a weak test: on this Mac the only bash is /bin/bash 3.2, whose `compgen -e` lists non-identifier names like `CLAUDE-HYPHEN`, so swapping `env -0` for `compgen -e` changes nothing here; the D3 leak exists only under bash 4+. The spec format has no way to say so, so the corpus can never read ALL_CAUGHT on this host and the survivor is indistinguishable from a real hole until someone re-derives the shell semantics. Mechanical half: a per-mutation `requires` probe (a command whose exit says the mutant is observable here) and a `HOST_EQUIVALENT` verdict distinct from SURVIVED, counted on the token line — recurrence: 1 — candidate: maybe
   — **DEFERRED 2026-10-05 (triage, calibrated)** — `h_mad_mutation_harness.py` has no `requires` field and no `HOST_EQUIVALENT` verdict (`_sweep` at `:1756-1804` counts only `all_caught`, `survived`, `unmeasured`); the single case is prose on the spec row `h-mad/tests/mutation-specs/grok_env_scrub_and_beat_boundary.json` `_mechanism` (`5089bb92`). The full `--sweep` has run once ever (145 specs, 142 ALL_CAUGHT, 3 SURVIVED; 1 of the 3 host-bound, the other 2 real test defects, fixed); the corpus now holds 152 specs and 1498 mutations, so host-bound mutants are 1 of 1498, HemaSuite has 0, and nothing gates on the sweep token. A `requires` probe would relabel 1 of 3 survivors correctly but fails open if wrong, and the cheaper remedy for the one row is a spec edit (make its test discriminate on bash 3.2, or retire the row), not a harness feature. Reopen when a second host-bound mutant is measured, when `--sweep` is wired into a gate (pre-push or CI), or when the sweep runs on a second host (bash 4+ or Linux). Same family as the hollow-kill row (deferred) and the reachability row (deferred 2026-10-05): if any of the three is built, build one per-mutation precondition field serving all three, not three verdicts.
   — **RE-EVALUATED 2026-10-12: still deferred** — none of the three triggers fired: no second host-bound mutant, `--sweep` is not in any gate (pre-push runs `--check-anchors` only), and no second host. The hollow-kill work (`96e43e19`) is a classification, not a precondition field, so the note above still holds.
+  — **RE-PROBED 2026-10-18: OPEN (still deferred)** — `grep -nE 'requires|HOST_EQUIV' h-mad/scripts/h_mad_mutation_harness.py` finds no `requires` field and no `HOST_EQUIVALENT` verdict; no trigger fired (pre-push still runs the harness for anchors only, no second host-bound mutant reported).
 
 ## 2026-09-29 — tdd-gate closure loop (filed mid-session)
 
@@ -2488,6 +2491,7 @@ above, all unverified here.
 - **pin agreement-check mutants to a stubbed-oracle test when a new reader makes them redundant**: twice now (round 10, when the backstop masked the lexer rows; round 12, when bash masked the reader-agreement rows), adding a reader turned existing rows into survivors. The fix both times was to port or re-pin the rows, not to add end-to-end tests. The mutation harness could recognise this case: when a row SURVIVES and its named test still passes because a later guard refuses the same input, it could say so. — recurrence: 2 — candidate: maybe (a harness hint, not a skill)
   — **RECURRED 2026-10-06 (third time, still open)**: round 15's `x\` quoted-body probe made `backstop-skips-unquoted-bodies` SURVIVE, because bash now refuses an unquoted body on its own. It was re-pinned to `test_an_unquoted_heredoc_body_is_counted_without_bash`, a test through `_hits_if_bash_vouches`, which also had to start stubbing `body_code_at`. Recurrence: 3.
   — **RE-EVALUATED 2026-10-12: unchanged, maybe** — 0 recurrences since 2026-10-06, and all 3 came from one feature's review rounds. Adding the BashParse sweep (`8b5de835`) made no existing row a survivor.
+  — **RE-PROBED 2026-10-18: OPEN, maybe** — `grep -niE 'redundan|masked|later guard' h-mad/scripts/h_mad_mutation_harness.py` → 0 hits; `grep -E 'SURVIVED|survivor' docs/handoffs/2026-10-1[2-8]-*.md` shows no new recurrence (the only hit is the 10-12 todo line naming this row).
 
 ## 2026-10-06 — bashparse-positive-evidence
 
@@ -2503,6 +2507,7 @@ Reconciled first: the census reads OPEN=8 (yes=3, maybe=5). All three `yes` rows
   — **LANDED 2026-10-12** — `handoff/scripts/local_only_commits.py` (token `LOCAL_ONLY:`, exit 0/2). It fetches by default and compares against the DEFAULT branch, never `@{u}`. Tiers, cheapest first: ancestor gives `MERGED`; `git cherry` gives `ON_BASE via=patch`; per-path blob equality gives `ON_BASE via=tree`, the squash case `git cherry` cannot see; otherwise `PARTIAL` or `UNIQUE`. Unique commits are listed with a `(subject on base)` hint. Detached linked-worktree HEADs are read by sha. A failed fetch, an unresolved base, or a git error is `UNREADABLE`. Tests: 11, including the incident (a stale `origin/main` reads `UNIQUE fetched=no`, and a default run reads `MERGED fetched=yes`). `handoff/tests/mutation-specs/local_only_commits.json` ALL_CAUGHT 8/8. Live on HemaSuite: 21 refs in 5.6 s (12 MERGED, 1 ON_BASE, 8 UNIQUE). Pointer added to handoff SKILL.md READ Step 3.
 - **a flake reproducer that varies load AND signal disposition**: the 2026-10-06 "load-only" flakes were two different causes, and the second only appeared once the run varied foreground vs `&`-backgrounded (SIGINT SIG_IGN) as well as CPU and fork load, all serially because the suite lock refuses parallel pytest. A `reproduce-flake <node>` that runs that matrix and keeps the failing logs would turn "load-only" into a named cause — recurrence: 2 (the 10-06 label, this session's root-cause) — candidate: maybe
   — **RE-EVALUATED 2026-10-12: unchanged, maybe** — 0 flake mentions in handoffs since 2026-10-08. Two full h-mad runs today (5970 and 5972 tests) showed none.
+  — **RE-PROBED 2026-10-18: OPEN, maybe, narrowed** — `grep -rniE 'reproduce.flake' h-mad handoff` → 0 hits. Partial overlap only: `h_mad_failure_diff.py run --repeat N` interleaves subject/control runs and labels `FLAKY` (docstring `:43`), but varies neither CPU/fork load nor foreground-vs-`&` signal disposition.
 
 ## 2026-10-08 — token-weather-memory-probes
 
@@ -2546,12 +2551,14 @@ drop the line.
   because no 5e has run yet. So the guard cannot "pass from the first run", as the assembled prompt
   demands (HemaSuite `failed-round-diagnostic-letter`, 2026-10-05). Needs either a guard scope ("guards
   that exist before this 5d") or a sequencing note in the template. recurrence: 1 — candidate: maybe
+  — **RE-PROBED 2026-10-18: OPEN** — `h_mad_assemble_tdd.py:517-523` still renders every `--guard` as "must pass from the first run" with no scope for a guard an earlier task's 5e has not yet created, and `references/codex-implementer-prompt.md:70` repeats it; no sequencing note in the template.
 - **(e) the TDD judge's 40 s budget starves a later task's RED**: `h-mad/scripts/h_mad_tdd_judge.py:28`
   `JUDGE_BUDGET_S = 40.0` is spent across EVERY task's Test-file list for a production file, in plan
   order. Listing green guard files under Task 6 starved Task 7's RED, and every write was refused
   `kind=timeout` (HemaSuite `preflight-command-aware`, 2026-10-05; carried in 4 handoffs, 1 incident).
   Remedies proposed there: order the files by the active task, or a per-write budget override.
   recurrence: 1 — candidate: maybe
+  — **RE-PROBED 2026-10-18: OPEN** — `h_mad_tdd_judge.py:29` `JUDGE_BUDGET_S = 40.0` unchanged; `resolve()` (`:288-332`) still gathers every task's test files for the target in plan order (not the active task first), and `main()` exposes no budget override.
 - **(f) `h_mad_version_history.py` crashes on U+2028/U+2029**: Edit/Write turn ` `/` `
   escapes into raw characters. Then `splitlines()` and `split("\n")` (`:220`, `:308`) disagree on line
   count, and the tool dies with `IndexError: list index out of range` instead of refusing.
@@ -2579,12 +2586,14 @@ the commits since touches what they ask for. `2a03ca2b` changes only `h-mad-advi
   broke it" took `git show HEAD:<file> > tmp` plus a census on the copy. A `--rev HEAD` flag, or
   a test-side read of the committed blob, would make that one command and stop the pins flapping on
   a neighbour's edit. — recurrence: 1 — candidate: maybe
+  — **RE-PROBED 2026-10-18: OPEN** — `skill_candidates_census.py:156-159` still parses `--list-open` only; no `--rev`. Recurrence is now 2: the 2026-10-17 note (row 2595, folded into this row) read `origin/main` through `git show … > tmp`.
 - **apply a reconciliation decisions table to a store, by census open-line**: applying 53 status
   lines to HemaSuite took three attempts. Name matching refused on a recurrence bump, then on a
   declined reinforcement row, and what held was "insert under the exact line `--list-open`
   reports". A `skill_candidates_census.py --apply <table>` (insert-only, refuse on ambiguity, print
   the OPEN delta) would make the next pass (22 rows remain) mechanical. — recurrence: 1 (3 tries in
   one task) — candidate: maybe
+  — **RE-PROBED 2026-10-18: OPEN** — no `--apply` in `skill_candidates_census.py` (`:156-159` parse `--list-open` only). Recurrence is now 2 and the duplicate row 2598 (folded into this row) rated it `yes`; it adds two requirements: unescape `\|` in table cells before matching, and print the OPEN delta (68 → 62 on that pass).
 
 ## 2026-10-16 — branch-evidence-flake-recon (scout)
 
@@ -2595,11 +2604,13 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
 - **census `--rev <ref>`** (see 2026-10-15): recurrence +1. The second HemaSuite reconciliation read
   `origin/main` with `git show origin/main:docs/skill-candidates.md > tmp`, then ran the census on the copy,
   so as not to read a working tree other lanes are using. — recurrence: 2 — candidate: maybe
+  — **SUPERSEDED 2026-10-18** — duplicate of row 2576 (`census --rev <ref>`); its recurrence is carried on that row.
 - **apply a reconciliation decisions table by census open-line** (see 2026-10-15): recurrence +1. The
   second pass (23 lines into HemaSuite `001656eb3`) was hand-scripted again. It hit a new trap: table cells
   escape `|` as `\|`, and 13 status lines carried the escape into `grep -E` patterns until a check caught it.
   An `--apply` mode should unescape cells and print the OPEN delta (it was 68 → 62 here). — recurrence: 2 —
   candidate: yes
+  — **SUPERSEDED 2026-10-18** — duplicate of row 2582 (apply a reconciliation decisions table); its recurrence, the `\|`-unescape trap and the `yes` rating are carried on that row.
 - **mutation sweep in an isolated worktree**: `h_mad_mutation_harness.py` mutates scripts in place, and a
   live HemaSuite session executes the same files through the skills symlink. So every sweep this session
   (4 of them) was hand-run as: `git worktree add --detach <scratch> HEAD`, copy the changed files in, run
@@ -2607,20 +2618,25 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
   A harness `--isolate` flag (or an `hmad-dispatch` verb) would make that one command. Absence:
   `grep -nE 'worktree|isolat|detach' h-mad/scripts/h_mad_mutation_harness.py` returns nothing.
   — recurrence: 5 — candidate: yes
+  — **RE-PROBED 2026-10-18: OPEN** — `grep -nE 'worktree|isolat|detach' h-mad/scripts/h_mad_mutation_harness.py` → 0 hits. A reusable pattern now exists: `h_mad_failure_diff.py` creates a detached control worktree and removes only its own entry on every exit path, signals included.
 - **assembler `gate`-shape path** (2026-10-17, agy-coder-fallback): `h_mad_assemble_tdd.py` stages only
   RED/GREEN; a `gate` task (no tests, probes only) was hand-prompted five times (Tasks 0, 8, 14, 18, 19),
   and each hand prompt re-typed the same rules (measure-never-tune, PROBE token, control, no commit).
   A `--phase gate` that cuts §Task N and emits that block would make it one command. — recurrence: 5 —
   candidate: yes
+  — **RE-PROBED 2026-10-18: OPEN** — `h_mad_assemble_tdd.py:649` `--phase` choices are still `("red", "green")`.
 - **assembler multi-path `--test-path`** (2026-10-17): a Task whose tests span two files took a
   space-joined `--test-path`; the prompt read correctly but the printed operator re-run line
   shell-quotes the pair as ONE path and breaks. Repeatable `--test-path`. — recurrence: 2 — candidate: yes
+  — **RE-PROBED 2026-10-18: OPEN** — `h_mad_assemble_tdd.py:652` `--test-path` is still one `required=True` value, not `action="append"`.
 - **declarable sandbox teardown artefact** (2026-10-17): Codex `workspace-write` blocks the leak-reaper's
   `ps`, so every scoped pytest exits 1 on a session-teardown ERROR and the mutation harness refuses its
   baseline; `--env-known-failure` takes node ids only, so the note was hand-appended to ~20 prompts and
   Codex still returned BLOCKED on it 3 times before it was. A template line (or an env opt-out for
   `find_leaked` under the sandbox) would close it. — recurrence: 20 — candidate: yes
+  — **RE-PROBED 2026-10-18: OPEN** — `h-mad/tests/leak_reaper.py:34` still runs `ps -axo` with no env opt-out (one commit ever, `4affd9e0`); `--env-known-failure` (`h_mad_assemble_tdd.py:662`) still takes node ids only; no template line names the teardown artefact.
 - **wire registry `verify` interpreter** (2026-10-17): `h_mad_wire_registry.py verify` runs pytest via the
   PATH `python3` (3.15, no pytest here) and answers `UNREADABLE`; a `--python` option or probing like the
   assembler does. Same session: pins registered `tests/...` read as missing (also `106421f0`) — `register`
   could warn when a pin is not repo-relative. — recurrence: 2 — candidate: yes
+  — **RE-PROBED 2026-10-18: OPEN, narrowed** — `verify --python` already exists (`h_mad_wire_registry.py:775`, since `198a1a14` 2026-08-21) but defaults to `sys.executable`; missing are a pytest probe on that default (as the assembler's `--python` refuses one without pytest) and a `register` warning for a pin that is not repo-relative.
