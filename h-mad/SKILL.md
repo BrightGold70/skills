@@ -527,34 +527,39 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
 
   **After the LAST edit of a rename or removal, sweep the old identifier across every surface** — `python3 ~/.claude/skills/h-mad/scripts/h_mad_identifier_sweep.py <old-name>… --root <repo> [--allow <path>]…`, reading the `SWEEP:` token, never `$?`. It reports each remaining hit with its surface (code · comment · doc · test · mutation-anchor), so the surfaces that get missed unevenly are visible rather than remembered. `LEFTOVERS` is **not** a verdict that the hits are wrong: deciding explanation-vs-leftover is yours, and a deliberate one is passed with `--allow` rather than edited away — which is why the allowlist is an input and never inferred. Hits on the *stem* of a renamed file (`advisor-gate` after `advisor-gate.sh` is gone) are reported as `related:` and do not move the verdict, because prose naming the concept is both real signal and the sweep's main source of noise. The timing is the property: `a311385` renamed `hooks/h-mad-advisor-gate.sh` and shipped three stale references to a file the same commit deletes, after the sweep was started by hand mid-work and abandoned when more edits followed. Run at the end it costs a second; run during, it is unreliable in exactly the way that produced the defect. **Give every mutation a `test`** (plus a spec-level `target_command`) unless there is a reason not to: `ALL_CAUGHT` only says something went red, and a mutant killed by a crash, a timeout, or an unrelated assertion looks exactly the same as one killed by the guard. With a `test`, only that test counts as a kill and a wrong-catcher is reported as a SURVIVOR naming what actually bit. `SURVIVED` → halt `step5e:mutation_survived:<module>`: the guard does not bite, so write the discriminating test rather than weakening the mutation. `REFUSED` / `BASELINE_NOT_GREEN` / `UNREADABLE` → halt `step5e:mutation_unverified:<module>`: **nothing was measured**, which is not a pass — treat it exactly as you would a cannot-judge from any other gate.
 
-Phase 5 implementation is **Codex's job**; Claude orchestrates, verifies, and gates,
-but does not write the production code itself while a feature is in `step5`. This is
-now enforced mechanically, not left to discipline:
+Phase 5 implementation is **Codex's job** by default; FR-2 resolves the implementer
+for each record, and Claude orchestrates, verifies, and gates while a peer authors.
+Read the resolution with `h_mad_tdd_judge.py implementer`; stage it before dispatch
+as described below. Authorship is enforced mechanically:
 
-- The `Write|Edit` PreToolUse hook (`hooks/h-mad-tdd-gate.sh`) blocks Claude's own
-  production-`.py` write during `step5`. Codex's writes — whether via `hmad-dispatch
-  exec codex` (subprocess) or its pane (`send`) — go through Codex's process, **not**
-  Claude's Write/Edit tool, so they never reach the hook. A prod write that *does*
-  reach the hook is therefore Claude self-implementing, and is refused.
-- Codex availability is checked first: when the CLI is on PATH and the chain has
-  no unavailable declaration, the hook refuses Claude's production write as
-  `codex-authorship`. Record `codex_status=exhausted` or `unavailable` with
-  `h_mad_state_write.py --feature <feat> --set codex_status=exhausted <state_file>`,
-  or export `HMAD_CODEX_UNAVAILABLE=1` for a one-off outage.
-- When Codex is unavailable, `fallback_agent` selects its author. The gate folds
-  **every** `step5` record on the target's state chain, not just one `ACTIVE`
-  feature: any invalid value blocks as `fallback-invalid`; otherwise any `grok`
-  blocks Claude as `fallback-grok`. The hook emits these kinds in a JSON
-  `permissionDecision: deny` response with exit 0, never an "exit 1" contract.
-  Absent, `null`, or `claude` on all those
-  records retains Claude's test-first fallback. Set a valid value with
-  `h_mad_state_write.py --feature <feat> --set fallback_agent=grok|claude|null <state_file>`.
-  `HMAD_CODEX_UNAVAILABLE` does not override `fallback_agent=grok`; change that
-  recorded value to `claude` for a one-off Claude escape.
-- Codex writes pass `h-mad/hooks/h-mad-codex-tdd-gate.py`. Grok writes pass
+- **FR-2 — resolved implementer.** `implementer=codex|agy` selects the peer;
+  absent or `null` selects `codex`. Use that peer if available, else the other peer.
+  Availability requires its CLI on PATH, an empty `HMAD_<PEER>_UNAVAILABLE`, and
+  its `<peer>_status` outside the escape statuses (`unavailable` or `exhausted`).
+  A switch reports the first cause in order: `env`, `status`, `cli-absent`.
+  Record an outage with `h_mad_state_write.py --feature <feat> --set codex_status=exhausted <state_file>`
+  (or `agy_status=exhausted`), or export `HMAD_CODEX_UNAVAILABLE=1` or
+  `HMAD_AGY_UNAVAILABLE=1` for a one-off outage. Only when **both** peers are out
+  does `fallback_agent` select grok or Claude; absent, `null`, or `claude` means Claude.
+- **FR-3 — Claude-side authorship.** The `Write|Edit` PreToolUse hook
+  (`hooks/h-mad-tdd-gate.sh`) folds **every** `step5` record on the target's state
+  chain, not just one `ACTIVE` feature. Any invalid `implementer` refuses first
+  as `implementer-invalid`; otherwise the first resolved peer refuses Claude's
+  production-`.py` write as `codex-authorship` or `agy-authorship`. Only with no
+  resolved peer does the existing fallback fold apply: `fallback-invalid` outranks
+  `fallback-grok`; absent, `null`, or `claude` everywhere admits Claude's test-first
+  fallback. These refusals use JSON `permissionDecision: deny` with exit 0.
+  Set the fallback with `h_mad_state_write.py --feature <feat> --set fallback_agent=grok|claude|null <state_file>`.
+  `HMAD_CODEX_UNAVAILABLE` alone does not license Claude while agy is available,
+  and does not override `fallback_agent=grok` when both peers are out.
+- Peer writes run through their own processes and gates: Codex uses
+  `h-mad/hooks/h-mad-codex-tdd-gate.py`; agy uses `h-mad/hooks/h-mad-agy-tdd-gate.py`
+  with the wiring check and halt in `references/agy-runtime.md`. Grok writes pass
   **no write-time test-first gate**; the RED/GREEN dispatch and independent
   verification still carry the test-first obligation. A false availability or
   fallback declaration remains visible in the state record.
+
+After any agy upgrade, re-run FR-8 step 2 and step 2a and re-take the class-(a) inventory.
 
 Test files, docs, config, and shell are never gated; only production `.py`. A
 `.py` counts as docs, and is not gated, only when the FIRST component of its
@@ -572,10 +577,20 @@ to reap and no exit code. `exec` instead runs the agent headless as a real
 subprocess and returns the agent's own exit code with no idle poll. **It is the
 default for a one-shot 5d/5e dispatch** (see the guidance below), because the exit
 code is a hard completion signal and it sidesteps most of the pane failure class —
-tui-idle false-idle, scrape, identity resolution. Both agents are
-supported, on their natural side of 5d/5e:
+tui-idle false-idle, scrape, identity resolution. Dispatch roles follow the
+resolved implementer and the independent review assignment:
 
-- **`exec codex`** — the RED/GREEN IMPLEMENTER dispatch (writes tests + impl). Prompt
+- **Stage the implementer.** Before every 5d and 5e dispatch, run from the project root:
+  `python3 ~/.claude/skills/h-mad/scripts/h_mad_tdd_judge.py implementer --root . --feature "$FEATURE" --record`.
+  Read the `TDD-IMPLEMENTER:` token, never `$?`, because the verb always exits 0.
+  Check a line ending ` record=failed` first, whatever precedes it, before reading any other fields: **do not dispatch.** Halt `step5:implementer_switch_unrecorded` and print `[H-MAD] <feature> halt step5:implementer_switch_unrecorded`, because a switch that is not in state is the silent switch the operator decision forbids (FR-2).
+  For `switch=none`, stage `h_mad_assemble_tdd.py --agent` with the resolved peer (`codex` or `agy`).
+  For `switch=codex->agy` or `switch=agy->codex`, with `reason=`, stage the resolved peer and print the token line on the dispatch.
+  For `switch=peers-out`, use today's fallback path (grok or Claude), unchanged.
+  For `invalid field=`, fix the record and never dispatch: halt `step5:implementer_invalid` and print `[H-MAD] <feature> halt step5:implementer_invalid`.
+  For `no-record` or `unreadable`, never dispatch: halt `step5:implementer_unresolved` and print `[H-MAD] <feature> halt step5:implementer_unresolved`; the feature name or root is wrong, or the state file cannot be read.
+
+- **`exec codex`** — a resolved RED/GREEN IMPLEMENTER dispatch (writes tests + impl). Prompt
   via stdin; final message via `--output-last-message`; default `--sandbox workspace-write`.
   **Pass no `--model`/`--effort` unless you mean to override.** Unset, codex
   resolves both from its own `$CODEX_HOME/config.toml` (`model`,
@@ -593,12 +608,12 @@ supported, on their natural side of 5d/5e:
   instead, labelled as such — a config says what will run, never what did. That check matters because a model can be configured that
   **cannot execute a single tool** (`gpt-5.6-luna`, measured): it still writes
   prose, so it comes back as a well-formed `STATUS: BLOCKED`, not as an error.
-- **`exec grok`** — an explicit RED/GREEN implementer fallback when Codex is out
+- **`exec grok`** — an explicit RED/GREEN implementer fallback when both peers are out
   and `fallback_agent=grok`. Stage with `h_mad_assemble_tdd.py --agent grok`;
   its default timeout is 1500 seconds. Grok's GREEN, mutation, wiring, and audit
   precision are **unmeasured** (D4), so its verdict remains a claim until the
   independent checks run.
-- **`exec agy`** — the 5e-review (and Phase 3/4/5b audit) dispatch. Runs `agy --print`
+- **`exec agy`** — a resolved RED/GREEN implementer dispatch, or the independent 5e-review (and Phase 3/4/5b audit) dispatch. Runs `agy --print`
   under `--output-format stream-json`, so the transcript is a live NDJSON event stream
   and the wrapper lifts the final response out of the stream's `result` event. A
   headless replacement for the agy `ask` scrape. Because it is a subprocess, it needs
@@ -3105,17 +3120,15 @@ Read the `COLLECT:` token exactly as the codex leg does — anything but `COLLEC
   becomes available again, run one round with the real leg on the current tree *before* stamping.
   It is the cheapest available check on the escalation decision, and skipping it converts a
   documented workaround into an undocumented standard.
-- **It does not license Claude to write Phase 5 production code — but the declaration you just
-  made does, and that is one switch with two effects.** This section covers phase *documents*. The
-  TDD gate hook (`hooks/h-mad-tdd-gate.sh`) reads the **same** `codex_status` for whichever feature
-  is in `step5`, and 5b *is* inside `step5` — 5a writes that phase before the audit loop starts. So
-  when several ACTIVE records appear on the chain, every one must declare `unavailable` or
-  `exhausted` before the gate permits fallback. Thus
-  a declaration made to route a 5b document audit is live for 5d/5e production authoring on the
-  same feature. The two conditions do not normally diverge (a codex exhausted for auditing is
-  exhausted for authoring), which is why this is a note rather than a hazard. **Flip it back to
-  `available` before 5d if codex has returned**, or the fallback silently outlives the outage it
-  was declared for.
+- **It does not license Claude to write Phase 5 production code — audit-leg selection and
+  resolved authorship are separate.** For phase *documents*, `codex_status` alone routes the
+  5b audit to the teammate leg; `agy_status` does not route audits. For production authoring,
+  read `h_mad_tdd_judge.py implementer`: Claude may write only when FR-2 resolves `claude`
+  for every ACTIVE `step5` record on the chain. Both peers must be unavailable for each
+  record (through PATH, the environment, or status `unavailable` or `exhausted`), with
+  `fallback_agent` absent, `null`, or `claude`. A Codex outage with agy available resolves
+  agy, so FR-3 refuses Claude as `agy-authorship`. **Flip `codex_status` back to `available`
+  before 5d if codex has returned**, and re-stage the resolved implementer before dispatch.
 
 **Do not drop the agy leg while running this one.** agy is not uniformly hollow, and its evidence
 count sorts it: in one round its design pass ran **58** tool calls and found a real defect both

@@ -1,0 +1,90 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_agy_authorship_docs.py",
+    "-v"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "-v"
+  ],
+  "mutations": [
+    {
+      "name": "fr10-authorship-section",
+      "_mechanism": "Delete the authorship resolver instruction so the Phase 5 section no longer names the shared implementer verb.",
+      "file": "SKILL.md",
+      "symbol": "Codex authors Phase 5 — enforced, not just instructed",
+      "find": "Read the resolution with `h_mad_tdd_judge.py implementer`; stage it before dispatch\nas described below.",
+      "replace": "",
+      "test": "tests/test_h_mad_agy_authorship_docs.py::test_phase5_authorship_section_names_the_resolver_and_agy_authorship"
+    },
+    {
+      "name": "fr10-upgrade-trigger",
+      "_mechanism": "Delete the agy upgrade re-verification sentence so neither FR-8 re-run nor the renewed class-(a) inventory is required here.",
+      "file": "SKILL.md",
+      "symbol": "Codex authors Phase 5 — enforced, not just instructed",
+      "find": "After any agy upgrade, re-run FR-8 step 2 and step 2a and re-take the class-(a) inventory.",
+      "replace": "",
+      "test": "tests/test_h_mad_agy_authorship_docs.py::test_phase5_authorship_section_states_the_agy_upgrade_trigger"
+    },
+    {
+      "name": "fr10-exit-code-exec-agy",
+      "_mechanism": "Delete the sentence assigning exec agy an implementer role while leaving its review example and staging procedure intact.",
+      "file": "SKILL.md",
+      "symbol": "Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot",
+      "find": "**`exec agy`** — a resolved RED/GREEN implementer dispatch, or the independent 5e-review (and Phase 3/4/5b audit) dispatch.",
+      "replace": "",
+      "test": "tests/test_h_mad_agy_authorship_docs.py::test_exit_code_dispatch_section_lists_exec_agy_as_an_implementer"
+    },
+    {
+      "name": "fr10-teammate-bullet",
+      "_mechanism": "Delete the separate resolved-authorship instruction from the teammate bullet while preserving its audit-routing statement and anchor.",
+      "file": "SKILL.md",
+      "symbol": "What this leg does NOT license",
+      "find": "For production authoring,\n  read `h_mad_tdd_judge.py implementer`: Claude may write only when FR-2 resolves `claude`\n  for every ACTIVE `step5` record on the chain.",
+      "replace": "",
+      "test": "tests/test_h_mad_agy_authorship_docs.py::test_teammate_bullet_separates_audit_selection_from_authorship"
+    },
+    {
+      "name": "fr10-agy-runtime-tdd-gate",
+      "_mechanism": "Delete the agy-specific gate sentence while preserving the wiring token and halt, exposing a missing gate identity.",
+      "file": "references/agy-runtime.md",
+      "symbol": "The TDD gate",
+      "find": "Use `hooks/h-mad-agy-tdd-gate.py`, which reads the `toolCall.name`/`toolCall.args`\npayload and emits `{\"decision\": \"deny\", \"reason\": \"...\"}` for a refused production-code write\nduring active `step5`.",
+      "replace": "",
+      "test": "tests/test_h_mad_agy_authorship_docs.py::test_agy_runtime_tdd_gate_names_the_agy_gate_and_keeps_the_halt"
+    },
+    {
+      "name": "fr10-sessionstart-stamp",
+      "_mechanism": "Delete only the Construct mapping version-stamp sentence so the second SessionStart surface loses its installed-version evidence.",
+      "file": "references/agy-runtime.md",
+      "symbol": "Construct mapping",
+      "find": "Re-checked against installed agy `1.4.0` (`agy --version`) and its bundled `hooks.md`.",
+      "replace": "",
+      "test": "tests/test_h_mad_agy_authorship_docs.py::test_agy_runtime_sessionstart_claim_is_rechecked_and_stamped"
+    },
+    {
+      "name": "fr10-staging-drops-record-flag",
+      "_mechanism": "Delete --record from the staging command so a peer switch can be dispatched without durable switch evidence.",
+      "file": "SKILL.md",
+      "symbol": "Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot",
+      "find": "python3 ~/.claude/skills/h-mad/scripts/h_mad_tdd_judge.py implementer --root . --feature \"$FEATURE\" --record",
+      "replace": "python3 ~/.claude/skills/h-mad/scripts/h_mad_tdd_judge.py implementer --root . --feature \"$FEATURE\"",
+      "test": "tests/test_h_mad_agy_authorship_docs.py::test_staging_step_runs_the_verb_with_record_and_names_every_branch"
+    },
+    {
+      "name": "fr10-staging-dispatches-after-record-failed",
+      "_mechanism": "Replace the failed-record refusal and halt with staging the peer; the ordered branch guard must reject dispatch after an unrecorded switch.",
+      "file": "SKILL.md",
+      "symbol": "Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot",
+      "find": "**do not dispatch.** Halt `step5:implementer_switch_unrecorded` and print `[H-MAD] <feature> halt step5:implementer_switch_unrecorded`, because a switch that is not in state is the silent switch the operator decision forbids (FR-2).",
+      "replace": "stage the resolved peer",
+      "test": "tests/test_h_mad_agy_authorship_docs.py::test_staging_step_halts_on_record_failed_before_any_dispatch"
+    }
+  ]
+}
