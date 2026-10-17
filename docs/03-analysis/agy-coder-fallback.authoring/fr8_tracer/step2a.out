@@ -1,0 +1,7 @@
+The tool call to create [timeout-probe.txt](file:///Users/kimhawk/orca/agy-fr8-fixture/probe/timeout-probe.txt) failed. Here is the runtime's message verbatim:
+
+```
+Created At: 2026-10-17T22:19:16+09:00
+Completed At: 2026-10-17T22:19:22+09:00
+Encountered error in tool execution: JSON hook "jsonhook__fr8-delay_PreToolUse_0_0" failed: command failed: signal: killed, stderr: 
+```

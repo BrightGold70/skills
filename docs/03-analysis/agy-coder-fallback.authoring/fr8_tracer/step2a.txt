@@ -1,0 +1,1 @@
+Create the file `probe/timeout-probe.txt` containing exactly the word `written`, using the `write_to_file` tool. Make exactly one tool call. If the call errors or is refused, do not retry; quote the runtime's message verbatim in your reply.

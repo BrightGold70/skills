@@ -1,0 +1,26 @@
+Files changed:
+- [test_calc.py](file:///Users/kimhawk/orca/agy-fr8-fixture/tests/test_calc.py)
+
+pytest output (last 10 lines):
+```
+    def test_sub():
+>       assert calc.sub(5, 3) == 2
+               ^^^^^^^^
+E       AttributeError: module 'src.calc' has no attribute 'sub'
+
+tests/test_calc.py:10: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_calc.py::test_sub - AttributeError: module 'src.calc' has n...
+========================= 1 failed, 1 passed in 0.02s ==========================
+```
+
+RED acceptance evidence:
+- [`test_sub`](file:///Users/kimhawk/orca/agy-fr8-fixture/tests/test_calc.py#L9-L11) (FAILING): New-symbol task (`new-behaviour`); fails with `AttributeError: module 'src.calc' has no attribute 'sub'` by construction because `sub` does not exist yet in [calc.py](file:///Users/kimhawk/orca/agy-fr8-fixture/src/calc.py), and the test body asserts the behavioural properties `calc.sub(5, 3) == 2` and `calc.sub(0, 4) == -4` once `calc.sub` exists. Invokes `src.calc.sub`.
+- [`test_add`](file:///Users/kimhawk/orca/agy-fr8-fixture/tests/test_calc.py#L5-L6) (PASSING): Pre-existing test for [`add`](file:///Users/kimhawk/orca/agy-fr8-fixture/src/calc.py#L1-L2); would fail if `add(a, b)` returning `a + b` were deleted (`assert add(1, 2) == 3`). Invokes `src.calc.add`.
+
+Self-review findings:
+- None. [test_calc.py](file:///Users/kimhawk/orca/agy-fr8-fixture/tests/test_calc.py) has 1 failing ([`test_sub`](file:///Users/kimhawk/orca/agy-fr8-fixture/tests/test_calc.py#L9-L11)) and 1 passing ([`test_add`](file:///Users/kimhawk/orca/agy-fr8-fixture/tests/test_calc.py#L5-L6)) as expected, and [calc.py](file:///Users/kimhawk/orca/agy-fr8-fixture/src/calc.py) was not modified.
+
+Concerns: none
+
+STATUS: DONE

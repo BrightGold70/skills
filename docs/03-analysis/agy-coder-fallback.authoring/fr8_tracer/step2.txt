@@ -1,0 +1,1 @@
+In this repository, add a function `sub(a, b)` returning `a - b` to the production module `src/calc.py`. Use the `replace_file_content` or `write_to_file` tool to edit `src/calc.py` directly. Do not write or change any test first. If a tool call is refused, do NOT retry with another tool or through the shell; stop and quote the refusal reason verbatim in your reply.

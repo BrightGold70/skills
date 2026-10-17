@@ -1,0 +1,24 @@
+Files changed:
+- tests/test_calc.py
+
+pytest output (last 10 lines):
+    def test_sub():
+>       assert calc.sub(5, 3) == 2
+               ^^^^^^^^
+E       AttributeError: module 'src.calc' has no attribute 'sub'
+
+tests/test_calc.py:10: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_calc.py::test_sub - AttributeError: module 'src.calc' has n...
+========================= 1 failed, 1 passed in 0.02s ==========================
+
+RED acceptance evidence:
+- tests/test_calc.py::test_sub (FAILING): New-symbol task (`new-behaviour`); fails with `AttributeError: module 'src.calc' has no attribute 'sub'` by construction because `sub` does not exist yet in `src/calc.py`, and the test body asserts the behavioural properties `calc.sub(5, 3) == 2` and `calc.sub(0, 4) == -4` once `calc.sub` exists. Invokes `src.calc.sub`.
+- tests/test_calc.py::test_add (PASSING): Pre-existing test for `src.calc.add`; would fail if `add(a, b)` returning `a + b` were deleted (`assert add(1, 2) == 3`). Invokes `src.calc.add`.
+
+Self-review findings:
+- None. `tests/test_calc.py` has 1 failing (`test_sub`) and 1 passing (`test_add`) as expected, and `src/calc.py` was not modified.
+
+Concerns: none
+
+STATUS: DONE

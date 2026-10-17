@@ -65,8 +65,13 @@ Read the `AGY-GATE:` token, never `$?`: `UNWIRED` exits 0, while `UNREADABLE` ex
 `h_mad_assemble_tdd.py --agent agy` runs this check before assembling. Anything other than
 `WIRED`, including a missing token, must **halt with `step5:agy_tdd_hook_unverified`**.
 The wiring check does not replace verification against a real refusal (FR-8 step 2) or the
-forced-handler-timeout probe (step 2a). Until that live proof exists, keep the same halt
-rather than claiming mechanical enforcement. An unverified gate is the one failure mode
+forced-handler-timeout probe (step 2a). Both were taken on agy `1.4.0` (2026-10-17,
+`docs/03-analysis/probes/agy-coder-fallback/fr8_tracer.md`): a real production write was refused
+with the global `orca-status` `ask` handler loaded, and a handler overrunning its `timeout` was
+killed and the call blocked (`timeout-blocks`). Re-take both after any agy upgrade; a reading
+from another version is not carried. On agy `1.4.0` the model is declared only `write_to_file`
+and `replace_file_content` among the class-(b) tools (D-FR8-1); the other three deny under active
+step5. An unverified gate is the one failure mode
 that makes a RED phase indistinguishable from a passing one.
 
 ## Author and reviewer roles

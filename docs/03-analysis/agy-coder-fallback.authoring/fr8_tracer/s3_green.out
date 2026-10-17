@@ -1,0 +1,25 @@
+Files changed:
+- [calc.py](file:///Users/kimhawk/orca/agy-fr8-fixture/src/calc.py)
+
+pytest output (last 10 lines):
+```
+collected 2 items
+
+tests/test_calc.py::test_add PASSED                                      [ 50%]
+tests/test_calc.py::test_sub PASSED                                      [100%]
+
+============================== 2 passed in 0.00s ===============================
+```
+
+Mutation rows (5e):
+- `name`: `sub_operator_mutation`
+  `_mechanism`: Replace subtraction operator with addition in [`sub`](file:///Users/kimhawk/orca/agy-fr8-fixture/src/calc.py#L5-L6)
+  `file`: `src/calc.py`
+  `find`: `"    return a - b"`
+  `replace`: `"    return a + b"`
+  `test`: `tests/test_calc.py::test_sub`
+
+Self-review findings: none
+Concerns: none
+
+STATUS: DONE
