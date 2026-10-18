@@ -6,3 +6,27 @@
 {"phase": "plan", "cycle": 3, "leg": "doc-auditor-delta", "item": "absent AUDITCYCLE line (wrapper exit 4) has no fail-closed reason", "origin": "fix-introduced", "by_cycle": 2, "verified_by_execution": true}
 {"phase": "plan", "cycle": 3, "leg": "codex", "item": "plan restates AC-2.6 exclusion list narrower than spec", "origin": "propagation-gap", "by_cycle": 2, "verified_by_execution": true}
 {"phase": "plan", "cycle": 3, "leg": "codex", "item": "plan moved AC-3.2 authority to wrapper; spec still requires probe prompt diff", "origin": "fix-introduced", "by_cycle": 2, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-1.3 D11 narrows delivery to report-file only", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-1.6 root acceptance inherits narrow D11 predicate", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-2.2 D4 omits one-of-each class check per doc", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-2.7 main leak check unreachable on smoke failure", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-3.6 no capture of agent versions/resolved-model lines", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-4.3 duplicate label records per id not rejected", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-4.5 no publication path for should-fix seed hits", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-5.1 unmapped exception exits with no token", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-5.3 seeds_undetected precedence unstated in spec", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-5.4 cycle_token/seed_rebuild expanded beyond spec", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-6.1 measurement doc residual (transfer limit) absent", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-6.3 INCONCLUSIVE SKILL.md text branch absent", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-7.2 availability fallback text/test absent", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "D1 vs D9 refusal-token grammar contradiction", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "smoke ordering fixture unsatisfiable (no_delivery implies root_refused)", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "M4 opposed fixtures check gate, delivery decided by collect", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "persisted key can reassign finding surface undetected", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "root provenance ROOT line has no recording input", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "classify->extractor connection not discrimination-tested", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "FR-6 per-phase/per-class breakdowns have no producer", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "agy", "item": "auditcycle.txt excluded from AC-2.7 but carries findings", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "agy", "item": "extract has no exported tree with s2/; quote paths unmapped", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "agy", "item": "D1 single refusal vocab vs D9 COMMIT/RECORD tokens", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "agy", "item": "AC-4.5 should-fix hits + FR-6 splits omitted in D12/D13", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
