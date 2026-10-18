@@ -4222,3 +4222,234 @@ def test_isolate_failed_removal_is_the_last_error_and_overrides_the_child_status
             if worktree.exists():
                 real_rmtree(worktree)
     _isolate_assert_cleaned(repo, before)
+
+
+# r2402: host-bound rows can be equivalent here and discriminating elsewhere.
+# RED coverage only; production, committed specs and documentation change in GREEN.
+class TestHostBoundMutationRows:
+    @pytest.mark.parametrize("caught", [True, False], ids=["caught", "survived"])
+    def test_successful_requires_runs_before_mutating_in_spec_root_as_literal_argv(
+        self, tmp_path: Path, caught: bool,
+    ) -> None:
+        from h_mad_mutation_harness import run_spec
+
+        root = tmp_path / "project"
+        sentinel = tmp_path / "shell-expanded"
+        literal = f"$(touch {sentinel}); $HOME *"
+        probe = [sys.executable, "-c", (
+            "import json, pathlib, sys; "
+            "pathlib.Path('probe.json').write_text(json.dumps({"
+            "'cwd': str(pathlib.Path.cwd()), "
+            "'source': pathlib.Path('guard.py').read_text(), 'argv': sys.argv[1:]}))"
+        ), literal]
+        row = _kills_the_guard() if caught else _untested_line()
+        row["requires"] = probe
+        spec = _project(root, [row])
+        # The caller's cwd is deliberately neither the root nor the spec dir.
+        result = run_spec(spec)
+
+        assert (root / "probe.json").exists(), "requires was never executed"
+        observation = json.loads((root / "probe.json").read_text())
+        assert observation == {"cwd": str(root.resolve()), "source": GUARD, "argv": [literal]}
+        assert not sentinel.exists(), "requires argv was interpreted by an implicit shell"
+        assert result["verdict"] == ("ALL_CAUGHT" if caught else "SURVIVED"), result
+        assert result["caught"] == int(caught), result
+        assert result["survived"] == ([] if caught else [row["name"]]), result
+        assert result["refused"] == [], result
+        assert (root / "guard.py").read_text() == GUARD
+
+    def test_requires_may_explicitly_invoke_a_shell(self, tmp_path: Path) -> None:
+        from h_mad_mutation_harness import run_spec
+
+        row = {**_kills_the_guard(), "requires": ["/bin/sh", "-c", "printf ready > shell-probe"]}
+        spec = _project(tmp_path, [row])
+
+        result = run_spec(spec)
+
+        assert (tmp_path / "shell-probe").exists(), "explicit shell probe was ignored"
+        assert (tmp_path / "shell-probe").read_text() == "ready"
+        assert result["verdict"] == "ALL_CAUGHT", result
+        assert result["caught"] == 1, result
+
+    @pytest.mark.parametrize("failure", ["nonzero", "timeout", "missing"])
+    def test_failed_requires_is_bounded_host_skipped_and_never_applied(
+        self, tmp_path: Path, monkeypatch, capsys, failure: str,
+    ) -> None:
+        import h_mad_mutation_harness as harness
+
+        probe = ([str(tmp_path / "no-such-probe-executable")] if failure == "missing"
+                 else [sys.executable, "-c", "raise SystemExit(7)"])
+        row = {**_kills_the_guard(), "requires": probe}
+        spec = _project(tmp_path, [row])
+        guard = tmp_path / "guard.py"
+        real_run = harness.subprocess.run
+        real_write = Path.write_text
+        probes = []
+        guard_writes = []
+
+        def observe_probe(argv, *args, **kwargs):
+            if argv == probe:
+                probes.append(argv)
+                assert Path(kwargs["cwd"]).resolve() == tmp_path.resolve()
+                assert kwargs.get("timeout") == 30, "requires must have a 30-second bound"
+                assert kwargs.get("shell", False) is False, "requires must execute argv directly"
+                assert guard.read_text() == GUARD, "the probe must precede mutation"
+                if failure == "timeout":
+                    raise subprocess.TimeoutExpired(argv, 30)
+            return real_run(argv, *args, **kwargs)
+
+        def observe_write(path, data, *args, **kwargs):
+            if path.resolve() == guard.resolve():
+                guard_writes.append(data)
+            return real_write(path, data, *args, **kwargs)
+
+        monkeypatch.setattr(harness.subprocess, "run", observe_probe)
+        monkeypatch.setattr(Path, "write_text", observe_write)
+
+        rc = harness.main([str(spec)])
+        output = capsys.readouterr().out
+
+        assert probes == [probe], "requires must run exactly once for the row"
+        assert guard_writes == [], "host-skipped rows must never be applied, even temporarily"
+        assert guard.read_text() == GUARD
+        assert rc == 2, output
+        summary = next(line for line in output.splitlines() if line.startswith("MUTATION:"))
+        assert summary.startswith("MUTATION: UNREADABLE mutations=1 caught=0 survived=0 refused=0 "), output
+        assert summary.endswith(" host_skipped=1"), output
+        reason = "7" if failure == "nonzero" else failure
+        detail = f"  host-skipped: {row['name']} (requires {' '.join(probe)} rc={reason})"
+        assert detail in output.splitlines(), output
+        assert "  caught:" not in output and "  survived:" not in output and "  refused:" not in output
+
+    @pytest.mark.parametrize(
+        ("measured", "verdict", "caught", "survived"),
+        [(True, "ALL_CAUGHT", 1, 0), (False, "SURVIVED", 0, 1)],
+        ids=["every-measured-row-caught", "measured-survivor-still-reported"],
+    )
+    def test_host_skipped_row_does_not_change_the_measured_verdict(
+        self, tmp_path: Path, measured: bool, verdict: str, caught: int, survived: int,
+    ) -> None:
+        skipped = {**_untested_line(), "name": "unavailable host", "requires": [
+            sys.executable, "-c", "raise SystemExit(7)",
+        ]}
+        row = _kills_the_guard() if measured else _untested_line()
+        spec = _project(tmp_path, [skipped, row])
+
+        proc = _run_cli(spec)
+
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        summary = next(line for line in proc.stdout.splitlines() if line.startswith("MUTATION:"))
+        assert summary.startswith(
+            f"MUTATION: {verdict} mutations=2 caught={caught} survived={survived} refused=0 "
+        ), proc.stdout
+        assert summary.endswith(" host_skipped=1"), proc.stdout
+        assert f"  host-skipped: unavailable host (requires {' '.join(skipped['requires'])} rc=7)" in proc.stdout.splitlines()
+        assert "  survived: unavailable host" not in proc.stdout
+
+    @pytest.mark.parametrize(
+        "requires", [None, "echo ready", [], {}, 0, True, ["echo", 4], [["echo"]]],
+        ids=["null", "string", "empty-list", "object", "number", "boolean", "non-string-part", "nested-list"],
+    )
+    def test_malformed_requires_refuses_only_its_row_and_names_the_field(
+        self, tmp_path: Path, requires,
+    ) -> None:
+        malformed = {**_untested_line(), "name": "malformed host probe", "requires": requires}
+        spec = _project(tmp_path, [malformed, _kills_the_guard()])
+
+        proc = _run_cli(spec)
+
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        summary = next(line for line in proc.stdout.splitlines() if line.startswith("MUTATION:"))
+        assert summary.startswith("MUTATION: REFUSED mutations=2 caught=1 survived=0 refused=1 "), proc.stdout
+        assert summary.endswith(" host_skipped=0"), proc.stdout
+        refusal = [line for line in proc.stdout.splitlines() if line.startswith("  refused:")]
+        assert len(refusal) == 1, proc.stdout
+        assert "malformed host probe" in refusal[0] and "requires" in refusal[0], proc.stdout
+        assert (tmp_path / "guard.py").read_text() == GUARD
+
+    def test_summary_appends_host_skipped_after_every_existing_field_even_without_requires(
+        self, tmp_path: Path,
+    ) -> None:
+        spec = _project(tmp_path, [_kills_the_guard()])
+
+        proc = _run_cli(spec)
+
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        summaries = [line for line in proc.stdout.splitlines() if line.startswith("MUTATION:")]
+        assert summaries == [
+            "MUTATION: ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0 unreadable=0 "
+            "crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=1/1 hollow_kills=0 host_skipped=0"
+        ], proc.stdout
+
+    @pytest.mark.parametrize("drifted", [False, True], ids=["matching-anchor", "drifted-anchor"])
+    def test_check_anchors_checks_host_bound_rows_without_running_the_probe_existing_guard(
+        self, tmp_path: Path, monkeypatch, capsys, drifted: bool,
+    ) -> None:
+        """Existing guard: --check-anchors stays read-only even when a host cannot discriminate."""
+        import h_mad_mutation_harness as harness
+
+        sentinel = tmp_path / "probe-ran"
+        row = {**_kills_the_guard(), "requires": [sys.executable, "-c", (
+            f"from pathlib import Path; Path({str(sentinel)!r}).touch(); raise SystemExit(7)"
+        )]}
+        if drifted:
+            row["find"] = "ABSENT HOST-BOUND ANCHOR"
+        spec = _project(tmp_path, [row])
+
+        def no_commands(*args, **kwargs):
+            pytest.fail("--check-anchors must not run requires or the test command")
+
+        monkeypatch.setattr(harness.subprocess, "run", no_commands)
+        rc = harness.main(["--check-anchors", str(spec)])
+        output = capsys.readouterr().out
+
+        assert rc == (2 if drifted else 0), output
+        verdict = "ANCHORS_DRIFTED" if drifted else "ANCHORS_OK"
+        assert f"ANCHORS: {verdict} specs=1 mutations=1 ok={int(not drifted)} drifted={int(drifted)}" in output
+        assert not sentinel.exists()
+        assert (tmp_path / "guard.py").read_text() == GUARD
+        assert "host-skipped:" not in output
+
+    @pytest.mark.parametrize("all_skipped", [False, True], ids=["mixed", "all-skipped"])
+    def test_sweep_preserves_per_spec_host_summary_and_unchanged_corpus_fields(
+        self, tmp_path: Path, all_skipped: bool,
+    ) -> None:
+        skip = {**_untested_line(), "requires": [sys.executable, "-c", "raise SystemExit(7)"]}
+        host = _project(tmp_path / "host", [skip] if all_skipped else [_kills_the_guard(), skip])
+        ordinary = _project(tmp_path / "ordinary", [_kills_the_guard()])
+
+        proc = _sweep(host, ordinary)
+
+        lines = [line for line in proc.stdout.splitlines() if line.startswith("SWEEP:")]
+        assert len(lines) == 3, proc.stdout + proc.stderr
+        verdict = "UNREADABLE" if all_skipped else "ALL_CAUGHT"
+        assert lines[0].startswith(f"SWEEP: {host} {verdict} mutations={1 if all_skipped else 2} "), proc.stdout
+        assert lines[0].endswith(" host_skipped=1"), proc.stdout
+        ordinary_summary = (
+            f"SWEEP: {ordinary} ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0 unreadable=0 "
+            "crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=1/1 hollow_kills=0 host_skipped=0"
+        )
+        assert lines[1] == ordinary_summary, proc.stdout
+        assert lines[-1] == (
+            "SWEEP: NOT_ALL_CAUGHT specs=2 all_caught=1 survived=0 unmeasured=1" if all_skipped
+            else "SWEEP: ALL_CAUGHT specs=2 all_caught=2 survived=0 unmeasured=0"
+        ), proc.stdout
+        assert proc.returncode == (2 if all_skipped else 0), proc.stdout + proc.stderr
+
+    def test_committed_compgen_row_requires_bash_four_or_newer(self) -> None:
+        spec = _live_skill_dir() / "tests/mutation-specs/grok_env_scrub_and_beat_boundary.json"
+        rows = json.loads(spec.read_text(encoding="utf-8"))["mutations"]
+        row = next(row for row in rows if row["name"] == "scrub-enumerates-compgen")
+
+        assert row.get("requires") == ["bash", "-c", '[ "${BASH_VERSINFO[0]}" -ge 4 ]'], row
+
+    def test_skill_harness_bullet_documents_requires_and_host_skipped_in_a_sentence(self) -> None:
+        skill = (_live_skill_dir() / "SKILL.md").read_text(encoding="utf-8")
+        lines = skill.splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith("- `h_mad_mutation_harness.py`"))
+        end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith(("- ", "#"))), len(lines))
+        bullet = "\n".join(lines[start:end])
+        sentences = re.split(r"(?<=[.!?])\s+", bullet)
+
+        assert any("requires" in sentence and "host_skipped" in sentence for sentence in sentences), \
+            "The harness bullet must explain requires / host_skipped together in one sentence"
