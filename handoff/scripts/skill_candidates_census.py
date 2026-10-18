@@ -173,17 +173,18 @@ def apply_table(store, table):
     candidates = open_candidates(text)
     insertions = collections.defaultdict(list)
     header = True
-    for line in Path(table).read_text(encoding="utf-8").splitlines():
+    for line_number, line in enumerate(Path(table).read_text(encoding="utf-8").splitlines(), 1):
         line = line.strip()
-        if not (line.startswith("|") and line.endswith("|")):
+        if not line.startswith("|"):
             continue
         cells = [cell.strip().replace(r"\|", "|")
                  for cell in re.split(r"(?<!\\)\|", line[1:-1])]
-        if len(cells) != 2:
-            continue
         if header:
             header = False
             continue
+        if len(cells) != 2 or not line.endswith("|"):
+            print(f"APPLY: REFUSED reason=malformed-row line={line_number}")
+            return 2
         if all(re.fullmatch(r":?-+:?", cell) for cell in cells):
             continue
         name, status = cells
@@ -199,6 +200,10 @@ def apply_table(store, table):
                 break
             end += 1
         insertions[end].append(f"  — {status}\n")
+
+    if not insertions:
+        print("APPLY: REFUSED reason=empty-table")
+        return 2
 
     lines = text.splitlines(keepends=True)
     for end, additions in sorted(insertions.items(), reverse=True):

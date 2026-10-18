@@ -254,6 +254,42 @@
       "find": "        cells = [cell.strip().replace(r\"\\|\", \"|\")",
       "replace": "        cells = [cell.strip()",
       "test": "tests/test_skill_candidates_census.py::test_apply_unescapes_pipes_in_both_cells_before_matching_and_inserting"
+    },
+    {
+      "name": "apply-silently-skips-malformed-cell-counts",
+      "_mechanism": "Restores the silent skip for malformed data rows, reporting a successful no-op rather than refusing the whole apply.",
+      "file": "scripts/skill_candidates_census.py",
+      "symbol": "apply_table",
+      "find": "        if len(cells) != 2 or not line.endswith(\"|\"):\n            print(f\"APPLY: REFUSED reason=malformed-row line={line_number}\")\n            return 2",
+      "replace": "        if len(cells) != 2 or not line.endswith(\"|\"):\n            continue",
+      "test": "tests/test_skill_candidates_census.py::test_apply_only_malformed_data_row_is_not_a_successful_noop"
+    },
+    {
+      "name": "apply-skips-rows-without-a-closing-pipe",
+      "_mechanism": "Restores the old closing-pipe prefilter, hiding a malformed row from validation and allowing the other row to be written.",
+      "file": "scripts/skill_candidates_census.py",
+      "symbol": "apply_table",
+      "find": "        if not line.startswith(\"|\"):",
+      "replace": "        if not (line.startswith(\"|\") and line.endswith(\"|\")):",
+      "test": "tests/test_skill_candidates_census.py::test_apply_malformed_row_refuses_whole_table_with_physical_line_number[after-valid-missing-closing-pipe]"
+    },
+    {
+      "name": "apply-accepts-an-empty-table",
+      "_mechanism": "Removing the zero-data guard makes empty files and header-only tables report inserted=0 success and reach the store write.",
+      "file": "scripts/skill_candidates_census.py",
+      "symbol": "apply_table",
+      "find": "    if not insertions:\n        print(\"APPLY: REFUSED reason=empty-table\")\n        return 2\n",
+      "replace": "",
+      "test": "tests/test_skill_candidates_census.py::test_apply_zero_data_rows_refuses_empty_table_without_writing"
+    },
+    {
+      "name": "apply-reports-zero-based-malformed-line-number",
+      "_mechanism": "A zero-based enumeration reports the wrong physical table line even though the apply is refused.",
+      "file": "scripts/skill_candidates_census.py",
+      "symbol": "apply_table",
+      "find": "    for line_number, line in enumerate(Path(table).read_text(encoding=\"utf-8\").splitlines(), 1):",
+      "replace": "    for line_number, line in enumerate(Path(table).read_text(encoding=\"utf-8\").splitlines(), 0):",
+      "test": "tests/test_skill_candidates_census.py::test_apply_malformed_row_refuses_whole_table_with_physical_line_number[before-valid-unescaped-status-pipe]"
     }
   ]
 }
