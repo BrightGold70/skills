@@ -1623,3 +1623,134 @@ class TestGatePhaseSpec:
         assert GATE_RERUN_COMMENT in block.splitlines()
         assert "-m pytest" not in block
         assert "tests/ignored scope.py" not in block
+
+
+# --- Gate probes refused by the Phase-5 shell gate (r2538) ---
+
+GATE_PROBE_HANDOFF_PARAGRAPH = (
+    "During Phase 5 the shell gate may refuse a probe command "
+    "(`kind=shell-not-admitted`). That is expected for a gate task: do not "
+    "work around it. List every probe command you could not run, one per "
+    "line, under a line `PROBE-COMMANDS:` (exact argv as you would have run "
+    "it), and finish with `STATUS: DONE_WITH_CONCERNS`; the orchestrator "
+    "runs them and records the readings."
+)
+GATE_PROBE_HANDOFF_COMMENT = (
+    "# Gate task: run any PROBE-COMMANDS: the dispatch lists, outside the "
+    "sandbox, and record each PROBE: line."
+)
+
+
+class TestGateProbeHandoffSpec:
+    @pytest.mark.parametrize("entrypoint", ["assemble", "cli"])
+    def test_blocked_probe_paragraph_immediately_follows_the_gate_directive(
+        self, gate_plan: Path, tmp_path: Path, entrypoint: str
+    ) -> None:
+        if entrypoint == "cli":
+            proc = assembler_spec_cli(gate_plan, tmp_path, "gate", task="Task 4")
+            assert proc.returncode == 0, proc.stdout + proc.stderr
+            filled = (tmp_path / "spec prompt.txt").read_text(encoding="utf-8")
+        else:
+            filled, _ = call(
+                gate_plan, tmp_path, task_id="Task 4", phase="gate",
+                test_path=[], expect_fail=None, expect_pass=None,
+            )
+
+        assert (
+            GATE_DIRECTIVE + "\n\n" + GATE_PROBE_HANDOFF_PARAGRAPH + "\n\n"
+        ) in filled
+        assert filled.count(GATE_PROBE_HANDOFF_PARAGRAPH) == 1
+        assert filled.index(GATE_PROBE_HANDOFF_PARAGRAPH) < filled.index(
+            "## Task 4: measure only"
+        )
+
+    def test_gate_command_tells_the_orchestrator_to_run_and_record_blocked_probes(
+        self, tmp_path: Path
+    ) -> None:
+        block = assembler_spec_block(tmp_path, "gate", [])
+        assert GATE_PROBE_HANDOFF_COMMENT in block.splitlines()
+
+    @pytest.mark.parametrize(
+        "filename", ["dispatch.out", "dispatch output's $(probe); result.txt"],
+        ids=["plain-path", "shell-quoted-path"],
+    )
+    def test_gate_command_extracts_all_probe_argv_with_the_multiline_sed_fallback(
+        self, tmp_path: Path, filename: str
+    ) -> None:
+        import shlex
+
+        from h_mad_assemble_tdd import command_block
+
+        out = tmp_path / filename
+        block = command_block(
+            feature="f", module="m", phase="gate",
+            prompt=tmp_path / "prompt.txt", out=out, log=tmp_path / "log.txt",
+            timeout=900, python=PYTHON, test_path=[], project_root=tmp_path,
+        )
+        # The shipped verdict extractor reads only the value on the key's line;
+        # it cannot recover argv on subsequent lines, so the spec requires sed.
+        extraction = f"sed -n '/^PROBE-COMMANDS:/,/^STATUS:/p' {shlex.quote(str(out))}"
+        assert extraction in block.splitlines()
+        assert "--key PROBE-COMMANDS" not in block
+        assert shlex.split(extraction) == [
+            "sed", "-n", "/^PROBE-COMMANDS:/,/^STATUS:/p", str(out),
+        ]
+        report = (
+            "PROBE-COMMANDS:\n"
+            "python3 'probes/latency control.py' --mode 'signal on'\n"
+            "python3 'probes/latency control.py' --mode 'signal off'\n"
+            "STATUS: DONE_WITH_CONCERNS\n"
+        )
+        out.write_text("Dispatch commentary\n" + report + "Trailing text\n", encoding="utf-8")
+        proc = subprocess.run(shlex.split(extraction), capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout == report
+
+    @pytest.mark.parametrize("phase", ["red", "green"])
+    def test_guard_red_green_prompt_bytes_are_unchanged(
+        self, plan: Path, tmp_path: Path, phase: str
+    ) -> None:
+        """GUARD: RED/GREEN rendering already holds at the RED base."""
+        body = (
+            "## Task 1: unchanged\n\n"
+            "- **Task shape**: new-behaviour\n\nKeep the task."
+        )
+        plan.write_text(body + "\n", encoding="utf-8")
+        template = tmp_path / "task-only-template.md"
+        template.write_text("<INLINE_TASK_FROM_IMPL_PLAN>", encoding="utf-8")
+        filled, _ = call(plan, tmp_path, phase=phase, template=template)
+        directive = {
+            "red": "**THIS DISPATCH IS PHASE 5d (RED).** Write failing tests only. "
+                   "Do not modify production code.",
+            "green": "**THIS DISPATCH IS PHASE 5e (GREEN).** Make the failing tests "
+                     "pass with minimal production code. Do not weaken a test.",
+        }[phase]
+        expected = (
+            directive + "\n\n" + body + "\n\n"
+            "**Expected after this dispatch:** 3 failing, 1 passing.\n"
+            "**Regression guards:** none in this task.\n\n"
+            f"**Run the tests as:** `{PYTHON} -m pytest tests/test_mod.py -v`\n"
+            "That path is the scope. Do not widen it — an unscoped run collects the "
+            "sibling project and dies on pre-existing errors."
+        )
+        if phase == "green":
+            expected += (
+                "\n\n**Mutation rows (5e):** list one mutation row per guard this "
+                "task adds or changes — `name`, `_mechanism`, `file`, `find` "
+                "(must match exactly once), `replace` (the smallest edit that "
+                "disables the guard), `test` (the test that must catch it), in "
+                "your final message. Do not run the mutation harness; the "
+                "orchestrator scores the rows."
+            )
+        assert filled.encode("utf-8") == expected.encode("utf-8")
+
+    @pytest.mark.parametrize("phase", ["red", "green"])
+    def test_guard_red_green_command_blocks_do_not_offer_gate_probe_handoff(
+        self, tmp_path: Path, phase: str
+    ) -> None:
+        """GUARD: the probe handoff remains exclusive to gate dispatches."""
+        block = assembler_spec_block(tmp_path, phase, "tests/test_mod.py")
+        assert "PROBE-COMMANDS:" not in block
+        assert GATE_PROBE_HANDOFF_COMMENT not in block
+        assert "/^PROBE-COMMANDS:/,/^STATUS:/p" not in block
+        assert "-m pytest tests/test_mod.py -v)" in block
