@@ -2543,6 +2543,7 @@ drop the line.
   the allowlist goes only at 5g (HemaSuite `failed-round-diagnostic-letter`, 2026-10-05). Related:
   the resume-call row above (`SAFE_HMAD_SCRIPT_OPTIONS`, folded into tdd-gate-fail-opens FR-8).
   recurrence: 1 — candidate: maybe
+  — **LANDED 2026-10-18** — allowlist deliberately NOT widened (probe scripts during step5 would be a fail-open). `h_mad_assemble_tdd.py --phase gate` prompt now tells the implementer to list refused probes under `PROBE-COMMANDS:` and finish `DONE_WITH_CONCERNS`; the command block prints how to extract and run them outside the sandbox. 9 tests; `assemble_tdd.json` ALL_CAUGHT. Built on operator override of the deferral.
 - **(c) the 5d template should request a labelled `Concerns:` line** (HemaSuite 2026-10-05) — the
   premise was already false when filed. `h-mad/references/codex-implementer-prompt.md:121-139` has
   asked for a labelled `Concerns:` line (`Concern:`/`Blockers:` accepted) since `322a1793`

@@ -452,6 +452,60 @@
       "find": "    if guards and phase != \"gate\":  # M:AT-GUARD-SCOPE\n",
       "replace": "    if False:  # M:AT-GUARD-SCOPE\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestAssembles::test_guards_are_scoped_to_behaviour_existing_at_the_red_base"
+    },
+    {
+      "name": "drop-gate-blocked-probe-handoff",
+      "_mechanism": "Suppressing the gate paragraph loses the explicit refusal handoff and DONE_WITH_CONCERNS instruction.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "assemble",
+      "find": "    if phase == \"gate\":  # M:AT-GATE-PROBE-HANDOFF\n",
+      "replace": "    if False:  # M:AT-GATE-PROBE-HANDOFF\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateProbeHandoffSpec::test_blocked_probe_paragraph_immediately_follows_the_gate_directive[assemble]"
+    },
+    {
+      "name": "leak-gate-probe-paragraph-into-red-green",
+      "_mechanism": "Making the probe handoff unconditional changes the existing RED/GREEN prompt bytes.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "assemble",
+      "find": "    if phase == \"gate\":  # M:AT-GATE-PROBE-HANDOFF\n",
+      "replace": "    if True:  # M:AT-GATE-PROBE-HANDOFF\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateProbeHandoffSpec::test_guard_red_green_prompt_bytes_are_unchanged[red]"
+    },
+    {
+      "name": "drop-gate-probe-operator-instructions",
+      "_mechanism": "Removing the operator comment loses the instruction to run refused commands outside the sandbox and record every reading.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "command_block",
+      "find": "        lines.append(\"# Gate task: run any PROBE-COMMANDS: the dispatch lists, outside the sandbox, and record each PROBE: line.\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateProbeHandoffSpec::test_gate_command_tells_the_orchestrator_to_run_and_record_blocked_probes"
+    },
+    {
+      "name": "drop-gate-multiline-probe-extraction",
+      "_mechanism": "Removing the sed fallback leaves blocked probe argv unavailable to the orchestrator.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "command_block",
+      "find": "        lines.append(f\"sed -n '/^PROBE-COMMANDS:/,/^STATUS:/p' {q(str(out))}\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateProbeHandoffSpec::test_gate_command_extracts_all_probe_argv_with_the_multiline_sed_fallback[plain-path]"
+    },
+    {
+      "name": "unquote-gate-probe-output-path",
+      "_mechanism": "Printing the output path without shell quoting breaks paths containing spaces, apostrophes, or shell syntax.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "command_block",
+      "find": "        lines.append(f\"sed -n '/^PROBE-COMMANDS:/,/^STATUS:/p' {q(str(out))}\")\n",
+      "replace": "        lines.append(f\"sed -n '/^PROBE-COMMANDS:/,/^STATUS:/p' {str(out)}\")\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateProbeHandoffSpec::test_gate_command_extracts_all_probe_argv_with_the_multiline_sed_fallback[shell-quoted-path]"
+    },
+    {
+      "name": "leak-gate-probe-commands-into-red-green",
+      "_mechanism": "Making the gate branch unconditional emits the probe handoff in RED/GREEN command blocks and drops their pytest rerun.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "symbol": "command_block",
+      "find": "    if phase == \"gate\":\n        lines.append(\"# A gate task: re-run its probes yourself; the PROBE: lines are claims.\")\n",
+      "replace": "    if True:\n        lines.append(\"# A gate task: re-run its probes yourself; the PROBE: lines are claims.\")\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateProbeHandoffSpec::test_guard_red_green_command_blocks_do_not_offer_gate_probe_handoff[red]"
     }
   ],
   "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."

@@ -479,7 +479,18 @@ def assemble(
                 "Do not commit.",
     }[phase]
 
-    lines = [directive, "", body, ""]
+    lines = [directive, ""]
+    if phase == "gate":  # M:AT-GATE-PROBE-HANDOFF
+        lines += [
+            "During Phase 5 the shell gate may refuse a probe command "
+            "(`kind=shell-not-admitted`). That is expected for a gate task: do not "
+            "work around it. List every probe command you could not run, one per "
+            "line, under a line `PROBE-COMMANDS:` (exact argv as you would have run "
+            "it), and finish with `STATUS: DONE_WITH_CONCERNS`; the orchestrator "
+            "runs them and records the readings.",
+            "",
+        ]
+    lines += [body, ""]
     sections, unresolved_refs = referenced_sections(plan_text, task_id)
     if sections:  # M:AT-REF-INLINE
         lines.append("**Referenced impl-plan sections (inlined — the task above cites "
@@ -632,6 +643,9 @@ def command_block(
     ]
     if phase == "gate":
         lines.append("# A gate task: re-run its probes yourself; the PROBE: lines are claims.")
+        lines.append("# Gate task: run any PROBE-COMMANDS: the dispatch lists, outside the sandbox, and record each PROBE: line.")
+        # The verdict extractor reads only the key's line, not multiline argv.
+        lines.append(f"sed -n '/^PROBE-COMMANDS:/,/^STATUS:/p' {q(str(out))}")
     else:
         # A subshell: the dispatch above is `--cd`'d to the project root but
         # this line was not, so a correct root-relative path still failed for
