@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from collections import namedtuple
 from pathlib import Path
 
@@ -603,6 +604,23 @@ def measure_effort(log_path: Path | None, project_root: Path | None = None) -> d
 
 EFFORT_SUFFIX = ".effort.json"
 PASS_LOG_DIR = Path(".h-mad") / "pass-logs"
+PASS_LOG_KEEP_DAYS = 60
+
+
+def prune_pass_logs(directory: Path, *, keep_days: float = PASS_LOG_KEEP_DAYS,
+                    now: float | None = None, keep: Path | None = None) -> int:
+    """Delete expired direct log files, preserving `keep` and ignoring file errors."""
+    cutoff = (time.time() if now is None else now) - keep_days * 86400
+    deleted = 0
+    for path in directory.glob("*.log"):  # M:TGT-PRUNELOG
+        if path == keep:  # M:TGT-PRUNEKEEP
+            continue
+        with contextlib.suppress(OSError):  # M:TGT-PRUNEFILEERR
+            if path.is_file() and not path.is_symlink():
+                if path.stat().st_mtime < cutoff:  # M:TGT-PRUNEAGE
+                    path.unlink()
+                    deleted += 1
+    return deleted
 
 
 def retain_pass_log(log_path: Path | None, project_root: Path,
@@ -638,6 +656,8 @@ def retain_pass_log(log_path: Path | None, project_root: Path,
             ignore.write_text("*\n", encoding="utf-8")  # M:TGT-SELFIGNORE
         staging.write_bytes(data)
         os.replace(staging, dest)  # M:TGT-ATOMIC
+        with contextlib.suppress(OSError):  # M:TGT-PRUNEERR
+            prune_pass_logs(dest.parent, keep=dest)
     except OSError as exc:  # M:TGT-RETAINOSERR
         with contextlib.suppress(OSError):
             staging.unlink()

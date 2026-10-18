@@ -2045,7 +2045,7 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   unmeasured until codex transcripts are captured as `--json`; `cd` inside a command and paths
   quoted inside inline `-c` scripts are not followed (a known undercount: `code=` is a floor); and
   `.h-mad/pass-logs/` is never pruned. HemaSuite's `.gitignore` does not cover the directory, so
-  the driver writes a `*` ignore file into it (review fix, follow-up commit).
+  the driver writes a `*` ignore file into it (review fix, follow-up commit). — **LANDED 2026-10-18 (pass-log half)** — `h_mad_audit_cycle.prune_pass_logs` deletes `*.log` older than `PASS_LOG_KEEP_DAYS=60` after each retain (never the file just written, advisory); 12 tests, `evidence_targets.json` 49/49.
   — **Review residuals, recorded at merge 2026-10-05** — two fresh-context rounds: must=0 should=0 at `5aa4817d`; 12 hand-applied fix reverts all caught; the three re-anchored grok rows each caught by their own property assertion. Two nits stay open: no size cap on the scanned transcript, and heredoc bodies are tokenized for path candidates (paths only count when they exist, so this inflates nothing that is absent). Retained pass logs under `.h-mad/pass-logs/` have no rotation yet.
 - **`HARD_KINDS` is defined and read by nothing, while two tests spell the same set as literals**:
   `h_mad_precheck_doc.py:93` declares `HARD_KINDS = ("PLACEHOLDER", "LINEPIN", "PINDRIFT",

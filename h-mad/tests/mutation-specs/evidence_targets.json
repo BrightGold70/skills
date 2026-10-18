@@ -354,6 +354,54 @@
       "test": "tests/test_h_mad_audit_cycle.py::test_log_retained_is_absolute_for_a_relative_root"
     },
     {
+      "name": "pass-log-prune-age-inverted",
+      "_mechanism": "Inverting the age comparison deletes recent logs and preserves expired logs.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                if path.stat().st_mtime < cutoff:  # M:TGT-PRUNEAGE",
+      "replace": "                if path.stat().st_mtime > cutoff:  # M:TGT-PRUNEAGE",
+      "test": "tests/test_h_mad_audit_cycle.py::test_prune_pass_logs_only_removes_expired_direct_log_files"
+    },
+    {
+      "name": "pass-log-prune-age-removed",
+      "_mechanism": "Removing the age comparison deletes recent logs and logs exactly at the retention boundary.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                if path.stat().st_mtime < cutoff:  # M:TGT-PRUNEAGE",
+      "replace": "                if True:  # M:TGT-PRUNEAGE",
+      "test": "tests/test_h_mad_audit_cycle.py::test_prune_pass_logs_only_removes_expired_direct_log_files"
+    },
+    {
+      "name": "pass-log-prune-keep-dropped",
+      "_mechanism": "Dropping the keep exemption deletes the retained destination when its mtime is old.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if path == keep:  # M:TGT-PRUNEKEEP",
+      "replace": "        if False:  # M:TGT-PRUNEKEEP",
+      "test": "tests/test_h_mad_audit_cycle.py::test_prune_pass_logs_keeps_the_retained_destination_even_with_an_old_mtime"
+    },
+    {
+      "name": "pass-log-prune-log-filter-dropped",
+      "_mechanism": "Dropping the *.log filter deletes old ignore files, notes, and staging files.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    for path in directory.glob(\"*.log\"):  # M:TGT-PRUNELOG",
+      "replace": "    for path in directory.glob(\"*\"):  # M:TGT-PRUNELOG",
+      "test": "tests/test_h_mad_audit_cycle.py::test_prune_pass_logs_only_removes_expired_direct_log_files"
+    },
+    {
+      "name": "pass-log-prune-file-error-escapes",
+      "_mechanism": "An unlink PermissionError or OSError escapes instead of allowing the remaining logs to be pruned.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        with contextlib.suppress(OSError):  # M:TGT-PRUNEFILEERR",
+      "replace": "        with contextlib.suppress(FileNotFoundError):  # M:TGT-PRUNEFILEERR",
+      "test": "tests/test_h_mad_audit_cycle.py::test_prune_pass_logs_swallows_unlink_errors_and_continues"
+    },
+    {
+      "name": "pass-log-prune-error-loses-retention-success",
+      "_mechanism": "A pruning error reaches the copy error handler and changes a successful retention result to failure.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        with contextlib.suppress(OSError):  # M:TGT-PRUNEERR",
+      "replace": "        with contextlib.suppress(FileNotFoundError):  # M:TGT-PRUNEERR",
+      "test": "tests/test_h_mad_audit_cycle.py::test_retain_pass_log_prune_failure_preserves_success_dict"
+    },
+    {
       "name": "codex-effort-label-dropped",
       "_mechanism": "Review N5: measured codex targets print straight after `not measured (...)`, contradicting it.",
       "file": "scripts/h_mad_audit_cycle.py",
