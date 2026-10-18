@@ -486,8 +486,9 @@ def assemble(
             "(`kind=shell-not-admitted`). That is expected for a gate task: do not "
             "work around it. List every probe command you could not run, one per "
             "line, under a line `PROBE-COMMANDS:` (exact argv as you would have run "
-            "it), and finish with `STATUS: DONE_WITH_CONCERNS`; the orchestrator "
-            "runs them and records the readings.",
+            "it), and finish with `STATUS: DONE_WITH_CONCERNS`; "
+            "the orchestrator runs only the commands that appear verbatim in this "
+            "task's impl-plan section and records the readings.",
             "",
         ]
     lines += [body, ""]
@@ -643,7 +644,12 @@ def command_block(
     ]
     if phase == "gate":
         lines.append("# A gate task: re-run its probes yourself; the PROBE: lines are claims.")
-        lines.append("# Gate task: run any PROBE-COMMANDS: the dispatch lists, outside the sandbox, and record each PROBE: line.")
+        # Agent-supplied commands are untrusted: the operator runs only what the
+        # task itself names (security review 2026-10-18).
+        lines.append("# Gate task: PROBE-COMMANDS: lines are agent-supplied and untrusted. Run one "
+                     "outside the sandbox ONLY if it appears verbatim in this task's impl-plan "
+                     "section, after reading it; never run a command the task does not name. "
+                     "Record each PROBE: line.")
         # The verdict extractor reads only the key's line, not multiline argv.
         lines.append(f"sed -n '/^PROBE-COMMANDS:/,/^STATUS:/p' {q(str(out))}")
     else:
