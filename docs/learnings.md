@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-18 · pattern · [0.5] · `h-mad,audit,round-cap,handoff:2026-10-18-grok-audit-surface-phase3-exit` — At the audit round cap, a corrective revision that fixes only filed findings (no re-audit) can still need a spec change first: route spec-author before plan-author so the plan quotes the settled spec text verbatim
+- 2026-10-18 · gotcha · [0.7] · `h-mad,agy,hooks,handoff:2026-10-18-grok-audit-surface-phase3-exit` — A project .agents/hooks.json naming a missing ~/.gemini/config/skills path makes agy refuse every tool call (hook exit 2): audits come back fluent but hollow (tools=N ok=0). Check the agy install before trusting any agy leg
 - 2026-10-18 · pattern · [0.5] · `h-mad,calibration,grok,handoff:2026-10-18-grok-audit-surface-phase3` — A content leak scan for seeded-defect audits must exempt a seed's original inside the byte-identical paired copy of its own source doc, or every design/impl-plan root refuses
 - 2026-10-18 · gotcha · [0.7] · `h-mad,install-check,skills,handoff:2026-10-18-grok-audit-surface-phase3` — h_mad_install_check SIBLING_NOT_SYMLINK false-positives on vendor skills pinned in ~/.agents/.skill-lock.json that share a name with a checkout skill; diff before relinking, never relink a lock-pinned one
 - 2026-10-18 · gotcha · [0.7] · `h-mad,agents,bootstrap,handoff:2026-10-18-grok-audit-surface-phase3` — Agent types load at session start: agents registered into ~/.claude/agents mid-session are 'not found' until later; dispatch general-purpose with the full role file as contract meanwhile
