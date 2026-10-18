@@ -1455,6 +1455,7 @@ def _run_spec_holding_the_tree(
         "caught": 0,
         "survived": [],
         "refused": [],
+        "host_skipped": [],
         # A SUBSET of `caught`, never a verdict of its own: a caught mutation
         # whose named test failed on a traceback out of the mutated file. Tier 2
         # is printed for the author, not acted on.
@@ -1583,6 +1584,28 @@ def _run_spec_holding_the_tree(
 
     try:
         for mutation in mutations:
+            if "requires" in mutation:
+                requires = mutation["requires"]
+                if (not isinstance(requires, list) or not requires
+                        or not all(isinstance(part, str) for part in requires)):
+                    result["refused"].append(
+                        f"{mutation['name']}: requires must be a non-empty argv list of strings"
+                    )
+                    continue
+                try:
+                    rc = subprocess.run(
+                        requires, cwd=root, timeout=30, shell=False, capture_output=True
+                    ).returncode
+                except subprocess.TimeoutExpired:
+                    rc = "timeout"
+                except FileNotFoundError:
+                    rc = "missing"
+                if rc != 0:
+                    result["host_skipped"].append(
+                        f"{mutation['name']} (requires {' '.join(requires)} rc={rc})"
+                    )
+                    continue
+
             target = (root / mutation["file"]).resolve()
             try:
                 source = target.read_text(encoding="utf-8")
@@ -1831,6 +1854,8 @@ def _run_spec_holding_the_tree(
         result["verdict"] = "REFUSED"
     elif result["survived"]:
         result["verdict"] = "SURVIVED"
+    elif len(result["host_skipped"]) == len(mutations):
+        result["verdict"] = "UNREADABLE"
     return result
 
 
@@ -2344,8 +2369,11 @@ def main(argv: list[str] | None = None) -> int:
             # Appended last, as every field before it: a SUBSET of
             # `crash_kills` — crashes raised inside the replacement's own lines.
             f" hollow_kills={result.get('hollow_kills', 0)}"
+            f" host_skipped={len(result.get('host_skipped', []))}"
         )
     _print_skipped_precheck_entries(result)
+    for entry in result.get("host_skipped", []):
+        print(f"  host-skipped: {entry}")
     mechanism = result.get("mechanism") or {}
     hints = result.get("hints") or {}
     for name in result.get("survived", []):

@@ -451,6 +451,132 @@
       "find": "        except ValueError:\n            print(\"MUTATION: UNREADABLE reason=isolate-spec-outside-repo\")\n            return 2",
       "replace": "        except ValueError:\n            rewrites[str(spec)] = spec.resolve()",
       "test": "tests/test_h_mad_mutation_harness.py::test_isolate_refuses_a_spec_outside_the_repo_without_leaking"
+    },
+    {
+      "name": "host-requires-probe-ignored",
+      "_mechanism": "Ignore a declared probe; its observation file must exist before mutation and scoring.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "            if \"requires\" in mutation:",
+      "replace": "            if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_successful_requires_runs_before_mutating_in_spec_root_as_literal_argv"
+    },
+    {
+      "name": "host-requires-malformed-argv-accepted",
+      "_mechanism": "Drop row-level argv validation; malformed probes must refuse only their row while the valid row is still caught.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                if (not isinstance(requires, list) or not requires\n                        or not all(isinstance(part, str) for part in requires)):",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_malformed_requires_refuses_only_its_row_and_names_the_field"
+    },
+    {
+      "name": "host-requires-wrong-cwd",
+      "_mechanism": "Probe outside the resolved spec root; the probe must observe the original guard and literal arguments in that root.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                        requires, cwd=root, timeout=30, shell=False, capture_output=True",
+      "replace": "                        requires, cwd=root.parent, timeout=30, shell=False, capture_output=True",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_successful_requires_runs_before_mutating_in_spec_root_as_literal_argv"
+    },
+    {
+      "name": "host-requires-unbounded-probe",
+      "_mechanism": "Remove the 30-second bound; the probe observer asserts the timeout before any command is run.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                        requires, cwd=root, timeout=30, shell=False, capture_output=True",
+      "replace": "                        requires, cwd=root, timeout=None, shell=False, capture_output=True",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_failed_requires_is_bounded_host_skipped_and_never_applied"
+    },
+    {
+      "name": "host-requires-implicit-shell",
+      "_mechanism": "Interpret probe argv through an implicit shell; literal argv and the recorded observation must remain intact.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                        requires, cwd=root, timeout=30, shell=False, capture_output=True",
+      "replace": "                        requires, cwd=root, timeout=30, shell=True, capture_output=True",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_successful_requires_runs_before_mutating_in_spec_root_as_literal_argv"
+    },
+    {
+      "name": "host-requires-success-skipped",
+      "_mechanism": "Treat exit zero as unavailable; both caught and surviving successful probes must retain their ordinary score.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                if rc != 0:",
+      "replace": "                if rc == 0:",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_successful_requires_runs_before_mutating_in_spec_root_as_literal_argv"
+    },
+    {
+      "name": "host-requires-failure-scored",
+      "_mechanism": "Ignore a failed probe and apply its row; the test observes every guard write and requires no mutation at all.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                if rc != 0:",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_failed_requires_is_bounded_host_skipped_and_never_applied"
+    },
+    {
+      "name": "host-requires-timeout-scored",
+      "_mechanism": "Collapse timeout into success; an unavailable host must measure no row and print the timeout reason.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                except subprocess.TimeoutExpired:\n                    rc = \"timeout\"",
+      "replace": "                except subprocess.TimeoutExpired:\n                    rc = 0",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_failed_requires_is_bounded_host_skipped_and_never_applied"
+    },
+    {
+      "name": "host-requires-missing-executable-scored",
+      "_mechanism": "Collapse a missing executable into success; it must instead skip without touching the guard.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                except FileNotFoundError:\n                    rc = \"missing\"",
+      "replace": "                except FileNotFoundError:\n                    rc = 0",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_failed_requires_is_bounded_host_skipped_and_never_applied"
+    },
+    {
+      "name": "host-skipped-row-still-applied",
+      "_mechanism": "Record the skip but fall through to mutation; even a temporary write to the guard must be detected.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                        f\"{mutation['name']} (requires {' '.join(requires)} rc={rc})\"\n                    )\n                    continue",
+      "replace": "                        f\"{mutation['name']} (requires {' '.join(requires)} rc={rc})\"\n                    )",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_failed_requires_is_bounded_host_skipped_and_never_applied"
+    },
+    {
+      "name": "host-skipped-rows-block-measured-verdict",
+      "_mechanism": "Let any skipped row override a measured caught or surviving row; only an entirely skipped run is unreadable.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "    elif len(result[\"host_skipped\"]) == len(mutations):",
+      "replace": "    elif result[\"host_skipped\"]:",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_host_skipped_row_does_not_change_the_measured_verdict"
+    },
+    {
+      "name": "host-all-skipped-reported-as-caught",
+      "_mechanism": "Leave ALL_CAUGHT after measuring nothing; all-skipped runs must report UNREADABLE and exit two.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "    elif len(result[\"host_skipped\"]) == len(mutations):",
+      "replace": "    elif False:",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_failed_requires_is_bounded_host_skipped_and_never_applied"
+    },
+    {
+      "name": "host-skipped-summary-field-dropped",
+      "_mechanism": "Drop the appended field; ordinary summaries must preserve all earlier fields and end in host_skipped=0.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "            f\" host_skipped={len(result.get('host_skipped', []))}\"",
+      "replace": "",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_summary_appends_host_skipped_after_every_existing_field_even_without_requires"
+    },
+    {
+      "name": "host-skipped-detail-dropped",
+      "_mechanism": "Hide the unavailable host and probe reason; a summary alone cannot explain which mutation measured nothing.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "        print(f\"  host-skipped: {entry}\")",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_failed_requires_is_bounded_host_skipped_and_never_applied"
     }
   ]
 }
