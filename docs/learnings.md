@@ -9,6 +9,12 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-18 · gotcha · [0.5] · `census,skill-monitoring,handoff:2026-10-18-backlog-drained-to-zero` — Census live-count pins break when another session adds J entries; bump the pins in the same commit as the J entry
+- 2026-10-18 · gotcha · [0.7] · `census,markdown,handoff:2026-10-18-backlog-drained-to-zero` — Unescaped | in a markdown table cell splits the row; census --apply now refuses malformed rows — escape \| in status text
+- 2026-10-18 · pattern · [0.5] · `mutation,testing,handoff:2026-10-18-backlog-drained-to-zero` — A mutant surviving because a later guard also refuses the input is fixed by pinning the test to the specific refusal reason, not the generic verdict
+- 2026-10-18 · pattern · [0.7] · `pytest,mutation,worktree,handoff:2026-10-18-backlog-drained-to-zero` — Run full suites and mutation sweeps in a detached worktree (--isolate) so the main tree stays editable; committing mid-suite yields TREE_MOVED
+- 2026-10-18 · gotcha · [0.7] · `agy,hooks,handoff:2026-10-18-backlog-drained-to-zero` — agy hooks.json: an earlier handler's deny short-circuits later handlers (put capture hooks first); a handler past its timeout is killed and the call blocked (timeout-blocks)
+- 2026-10-18 · gotcha · [0.7] · `agy,hooks,tdd-gate,handoff:2026-10-18-backlog-drained-to-zero` — agy 1.4.0 init.tools lists multi_replace_file_content/sed_file/notebook_edit but never declares them to the model; only write_to_file, replace_file_content (TargetFile), run_command are callable
 - 2026-10-17 · gotcha · [0.7] · `h-mad,wire-registry,5f,handoff:2026-10-17-agy-coder-fallback-merged` — h_mad_wire_registry verify collects from the repo root: pins must be repo-relative (h-mad/tests/...), and run it with the pytest interpreter (/opt/anaconda3/bin/python3) — PATH python3 answers UNREADABLE
 - 2026-10-17 · gotcha · [0.5] · `h-mad,phase7,regression-guards,handoff:2026-10-17-agy-coder-fallback-merged` — Adding a warning/verdict code breaks guards that assert 'no warnings' or an exact set; grep tests for not result['warnings'] and exact-set equality before adding one
 - 2026-10-17 · gotcha · [0.7] · `testing,hostile-fixtures,path,handoff:2026-10-17-agy-coder-fallback-merged` — A PATH entry cannot contain ':' — a hostile-payload root with ':' blinds shutil.which to its stub bin; put hostile bytes in args/file contents, never in a dir placed on PATH
