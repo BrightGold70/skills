@@ -2451,6 +2451,237 @@ def test_log_retained_is_absolute_for_a_relative_root(
     assert Path(got["log_retained"]).is_absolute(), got
 
 
+# --- retained pass-log pruning (skill-candidates row 1937 residual) ---
+
+
+def _pass_log_with_age(path: Path, *, days: float, now: float) -> Path:
+    import os
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"retained transcript\n")
+    timestamp = now - days * 86400
+    os.utime(path, (timestamp, timestamp))
+    return path
+
+
+def test_pass_log_keep_days_defaults_to_sixty() -> None:
+    audit_cycle()
+    from h_mad_audit_cycle import PASS_LOG_KEEP_DAYS
+
+    assert PASS_LOG_KEEP_DAYS == 60
+
+
+def test_prune_pass_logs_only_removes_expired_direct_log_files(tmp_path: Path) -> None:
+    import os
+
+    audit_cycle()
+    from h_mad_audit_cycle import prune_pass_logs
+
+    now = 2_000_000_000.0
+    old = _pass_log_with_age(tmp_path / "old.log", days=90, now=now)
+    preserved = [
+        _pass_log_with_age(tmp_path / name, days=days, now=now)
+        for name, days in (
+            ("recent.log", 10), ("boundary.log", 60),
+            (".gitignore", 90), ("notes.txt", 90), ("partial.log.tmp", 90),
+            ("nested/old.log", 90),
+        )
+    ]
+    log_directory = tmp_path / "directory.log"
+    log_directory.mkdir()
+    os.utime(log_directory, (now - 90 * 86400,) * 2)
+    contents = {path: path.read_bytes() for path in preserved}
+
+    assert prune_pass_logs(tmp_path, now=now) == 1
+    assert not old.exists()
+    assert {path: path.read_bytes() for path in preserved} == contents
+    assert log_directory.is_dir()
+
+
+def test_prune_pass_logs_accepts_fractional_keep_days(tmp_path: Path) -> None:
+    audit_cycle()
+    from h_mad_audit_cycle import prune_pass_logs
+
+    now = 2_000_000_000.0
+    old = _pass_log_with_age(tmp_path / "old.log", days=1, now=now)
+    recent = _pass_log_with_age(tmp_path / "recent.log", days=0.25, now=now)
+
+    assert prune_pass_logs(tmp_path, keep_days=0.5, now=now) == 1
+    assert not old.exists()
+    assert recent.exists()
+
+
+def test_prune_pass_logs_defaults_now_to_current_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    audit_cycle()
+    from h_mad_audit_cycle import prune_pass_logs
+
+    now = 2_000_000_000.0
+    old = _pass_log_with_age(tmp_path / "old.log", days=90, now=now)
+    recent = _pass_log_with_age(tmp_path / "recent.log", days=10, now=now)
+    monkeypatch.setattr(time, "time", lambda: now)
+
+    assert prune_pass_logs(tmp_path) == 1
+    assert not old.exists()
+    assert recent.exists()
+
+
+def test_prune_pass_logs_keeps_the_retained_destination_even_with_an_old_mtime(
+    tmp_path: Path,
+) -> None:
+    import os
+
+    ac = audit_cycle()
+    from h_mad_audit_cycle import prune_pass_logs
+
+    root = tmp_path / "proj"
+    source = tmp_path / "source.log"
+    source.write_bytes(b"new transcript\n")
+    retained = ac.retain_pass_log(source, root, root / "docs" / "pass.md")
+    dest = Path(retained["log_retained"])
+    now = 2_000_000_000.0
+    os.utime(dest, (now - 90 * 86400,) * 2)
+    old = _pass_log_with_age(dest.parent / "old.log", days=90, now=now)
+
+    assert prune_pass_logs(dest.parent, now=now, keep=dest) == 1
+    assert dest.read_bytes() == source.read_bytes()
+    assert not old.exists()
+
+
+def test_prune_pass_logs_missing_directory_returns_zero(tmp_path: Path) -> None:
+    audit_cycle()
+    from h_mad_audit_cycle import prune_pass_logs
+
+    missing = tmp_path / "missing"
+    assert prune_pass_logs(missing) == 0
+    assert not missing.exists()
+
+
+@pytest.mark.parametrize("error_type", [PermissionError, OSError])
+def test_prune_pass_logs_swallows_unlink_errors_and_continues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error_type: type[OSError]
+) -> None:
+    audit_cycle()
+    from h_mad_audit_cycle import prune_pass_logs
+
+    now = 2_000_000_000.0
+    logs = [_pass_log_with_age(tmp_path / name, days=90, now=now)
+            for name in ("first.log", "second.log", "third.log")]
+    original_unlink = Path.unlink
+    attempted = []
+
+    def fail_first_unlink(path, *args, **kwargs):
+        attempted.append(path)
+        if len(attempted) == 1:
+            raise error_type("injected unlink failure")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_first_unlink)
+
+    assert prune_pass_logs(tmp_path, now=now) == 2
+    assert set(attempted) == set(logs)
+    assert attempted[0].exists()
+    assert all(not path.exists() for path in attempted[1:])
+
+
+def test_retain_pass_log_prunes_after_replace_and_preserves_return_dict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hashlib
+    import time
+
+    ac = audit_cycle()
+    from h_mad_audit_cycle import prune_pass_logs
+
+    root = tmp_path / "proj"
+    directory = root / ".h-mad" / "pass-logs"
+    now = time.time()
+    old = _pass_log_with_age(directory / "old.log", days=90, now=now)
+    recent = _pass_log_with_age(directory / "recent.log", days=10, now=now)
+    source = tmp_path / "source.log"
+    data = b"new transcript\n"
+    source.write_bytes(data)
+    collected = root / "docs" / "pass.md"
+    dest = directory / "pass.md.log"
+    dest.write_bytes(b"previous transcript\n")
+    calls = []
+
+    def observe_prune(directory_arg, *, keep=None, **kwargs):
+        assert Path(directory_arg) == directory
+        assert keep == dest
+        assert dest.read_bytes() == data, "pruning must follow successful replacement"
+        calls.append(keep)
+        return prune_pass_logs(directory_arg, keep=keep, **kwargs)
+
+    monkeypatch.setattr(ac, "prune_pass_logs", observe_prune)
+
+    assert ac.retain_pass_log(source, root, collected) == {
+        "log_retained": str(dest), "log_sha256": hashlib.sha256(data).hexdigest(),
+    }
+    assert calls == [dest]
+    assert not old.exists()
+    assert recent.exists()
+    assert source.read_bytes() == dest.read_bytes() == data
+
+
+@pytest.mark.parametrize("error_type", [PermissionError, OSError])
+def test_retain_pass_log_prune_failure_preserves_success_dict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error_type: type[OSError]
+) -> None:
+    import hashlib
+
+    ac = audit_cycle()
+    source = tmp_path / "source.log"
+    data = b"new transcript\n"
+    source.write_bytes(data)
+    root = tmp_path / "proj"
+    dest = root / ".h-mad" / "pass-logs" / "pass.md.log"
+    calls = []
+
+    def fail_prune(directory, *, keep=None, **kwargs):
+        assert dest.read_bytes() == data
+        calls.append((directory, keep))
+        raise error_type("injected pruning failure")
+
+    monkeypatch.setattr(ac, "prune_pass_logs", fail_prune)
+
+    assert ac.retain_pass_log(source, root, root / "docs" / "pass.md") == {
+        "log_retained": str(dest), "log_sha256": hashlib.sha256(data).hexdigest(),
+    }
+    assert calls == [(dest.parent, dest)]
+    assert dest.read_bytes() == data
+
+
+def test_retain_pass_log_does_not_prune_when_replace_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ac = audit_cycle()
+    source = tmp_path / "source.log"
+    source.write_bytes(b"transcript\n")
+    calls = []
+
+    def observe_prune(*args, **kwargs):
+        calls.append((args, kwargs))
+        return 0
+
+    def fail_replace(*args, **kwargs):
+        raise OSError("injected replace failure")
+
+    monkeypatch.setattr(ac, "prune_pass_logs", observe_prune)
+    monkeypatch.setattr(ac.os, "replace", fail_replace)
+    root = tmp_path / "proj"
+
+    got = ac.retain_pass_log(source, root, root / "docs" / "pass.md")
+
+    assert got["log_retained"] is None
+    assert got["log_sha256"] is None
+    assert "injected replace failure" in got["log_retained_reason"]
+    assert calls == []
+
+
 def _cycle_with_log(monkeypatch, root: Path, capsys, log_text: str):
     ac = audit_cycle()
     report = root / "dispatch" / "p1.report.md"
