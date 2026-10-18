@@ -163,7 +163,9 @@ def test_green_refuses_nothing_to_commit_on_an_unchanged_path(layout) -> None:
 
 
 def _cycle_through_green(layout, row: str, *impl: tuple[str, str]) -> None:
-    assert _red(layout, row, "tests/test_cycle.py").returncode == 0
+    # One test file per row: a second cycle rewriting the first one's committed
+    # file with identical bytes would be refused as nothing-to-commit.
+    assert _red(layout, row, f"tests/test_{row.split()[0]}.py").returncode == 0
     for rel, text in impl:
         (layout["repo"] / rel).write_text(text)
     green = _run(layout, "green", "--row", row, "--paths", *[rel for rel, _ in impl])

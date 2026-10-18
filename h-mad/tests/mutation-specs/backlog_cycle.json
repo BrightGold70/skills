@@ -1,0 +1,88 @@
+{
+  "root": "../..",
+  "target_command": ["python3.11", "-m", "pytest", "-q", "-p", "no:cacheprovider"],
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_backlog_cycle.py", "-q", "-p", "no:cacheprovider"],
+  "mutations": [
+    {
+      "name": "commit-sweeps-the-whole-tree",
+      "_mechanism": "The commit is no longer pathspec-scoped, so an unrelated dirty tracked file rides along (gap 1).",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "commit",
+      "find": "git(repo, \"commit\", \"-q\", \"-m\", message, \"--\", *paths)",
+      "replace": "git(repo, \"commit\", \"-q\", \"-a\", \"-m\", message)",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_red_commits_only_declared_tests_and_forwards_passthrough"
+    },
+    {
+      "name": "claim-check-disabled",
+      "_mechanism": "A path declared by another open cycle is committed anyway (gap 1).",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "check_claims",
+      "find": "if path in claimed:",
+      "replace": "if False:",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_green_refuses_a_path_claimed_by_another_active_cycle"
+    },
+    {
+      "name": "unchanged-path-not-refused",
+      "_mechanism": "An unchanged declared path no longer refuses, so an empty or partial commit is made.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "commit",
+      "find": "if not git(repo, \"status\", \"--porcelain\", \"--\", path).stdout.strip():",
+      "replace": "if False:",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_green_refuses_nothing_to_commit_on_an_unchanged_path"
+    },
+    {
+      "name": "no-documents-still-runs-consumers",
+      "_mechanism": "With no changed documents the consumers --run is invoked anyway, whose UNREADABLE no-documents was read as a result (gap 3).",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "run_consumers",
+      "find": "    if not docs:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_land_with_no_changed_documents_skips_consumers_explicitly"
+    },
+    {
+      "name": "consumers-failure-ignored",
+      "_mechanism": "A non-zero consumers verdict is folded into success and land proceeds to the census (gap 3).",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "run_consumers",
+      "find": "raise Refused(f\"consumers-rc={rc}\")",
+      "replace": "pass",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_land_halts_before_census_when_consumers_are_unreadable"
+    },
+    {
+      "name": "pipe-not-escaped",
+      "_mechanism": "A | in the status splits the table cell and the census refuses the row.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "apply_status.cell",
+      "find": "return text.replace(\"|\", r\"\\|\")",
+      "replace": "return text",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_pipe_in_status_is_escaped_and_accepted_by_the_real_census"
+    },
+    {
+      "name": "ambiguous-row-accepted",
+      "_mechanism": "A row name matching two open rows is accepted instead of refused.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "check_row",
+      "find": "if len(matches) != 1:",
+      "replace": "if not matches:",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_row_must_match_exactly_one_open_row"
+    },
+    {
+      "name": "push-forced",
+      "_mechanism": "A forced push overwrites a remote that moved ahead.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "cmd_land",
+      "find": "push = git(repo, \"push\", check=False)",
+      "replace": "push = git(repo, \"push\", \"--force\", check=False)",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_no_push_leaves_the_remote_and_default_push_never_forces"
+    },
+    {
+      "name": "no-push-ignored",
+      "_mechanism": "--no-push still pushes.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "cmd_land",
+      "find": "if args.no_push:",
+      "replace": "if False:",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_no_push_leaves_the_remote_and_default_push_never_forces"
+    }
+  ]
+}
