@@ -401,7 +401,8 @@ def test_missing_pytest_is_unreadable_instead_of_a_reproduced_failure(tmp_path):
 def test_nodeid_collecting_nothing_is_unreadable(tmp_path):
     result = _run(tmp_path, mode="empty")
     assert result.returncode == 2, result.stdout + result.stderr
-    assert "reason=" in _verdict(result, "UNREADABLE")
+    # The collection probe must refuse it, not a later per-run exit-code check.
+    assert "reason=collection_failed" in _verdict(result, "UNREADABLE")
     assert not _rows(result)
     assert not list((tmp_path / "logs").glob("*.log"))
 

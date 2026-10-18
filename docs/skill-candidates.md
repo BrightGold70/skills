@@ -2512,6 +2512,7 @@ Reconciled first: the census reads OPEN=8 (yes=3, maybe=5). All three `yes` rows
 - **a flake reproducer that varies load AND signal disposition**: the 2026-10-06 "load-only" flakes were two different causes, and the second only appeared once the run varied foreground vs `&`-backgrounded (SIGINT SIG_IGN) as well as CPU and fork load, all serially because the suite lock refuses parallel pytest. A `reproduce-flake <node>` that runs that matrix and keeps the failing logs would turn "load-only" into a named cause — recurrence: 2 (the 10-06 label, this session's root-cause) — candidate: maybe
   — **RE-EVALUATED 2026-10-12: unchanged, maybe** — 0 flake mentions in handoffs since 2026-10-08. Two full h-mad runs today (5970 and 5972 tests) showed none.
   — **RE-PROBED 2026-10-18: OPEN, maybe, narrowed** — `grep -rniE 'reproduce.flake' h-mad handoff` → 0 hits. Partial overlap only: `h_mad_failure_diff.py run --repeat N` interleaves subject/control runs and labels `FLAKY` (docstring `:43`), but varies neither CPU/fork load nor foreground-vs-`&` signal disposition.
+  — **LANDED 2026-10-18** — `h-mad/scripts/h_mad_reproduce_flake.py <nodeid>`: serial matrix {fg, bg(SIGINT ignored)} × {idle, cpu, fork} load, N runs per cell, keeps failing-run logs, `FLAKE: <cell> fails=k/N` + `FLAKE-VERDICT: REPRODUCED|NOT_REPRODUCED|UNREADABLE`; load helpers killed by process group on every path. 26 tests; `reproduce_flake.json` 28/28. Built on operator override of the deferral.
 
 ## 2026-10-08 — token-weather-memory-probes
 

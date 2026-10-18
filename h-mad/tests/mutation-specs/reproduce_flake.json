@@ -1,0 +1,274 @@
+{
+  "root": "../..",
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_reproduce_flake.py",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "mutations": [
+    {
+      "name": "background-disposition-lost",
+      "_mechanism": "The bg child no longer inherits SIGINT ignored, so the real signal-sensitive test stops reproducing.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_ignore_sigint",
+      "find": "signal.signal(signal.SIGINT, signal.SIG_IGN)",
+      "replace": "signal.signal(signal.SIGINT, signal.SIG_DFL)",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_real_pytest_fails_only_when_bg_inherits_sigint_ignored"
+    },
+    {
+      "name": "disposition-not-applied",
+      "_mechanism": "The preexec disposition hook is disconnected from subprocess creation.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_run",
+      "find": "preexec_fn=_ignore_sigint if background else None,",
+      "replace": "preexec_fn=None,",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_real_pytest_fails_only_when_bg_inherits_sigint_ignored"
+    },
+    {
+      "name": "default-matrix-narrowed",
+      "_mechanism": "The default matrix silently drops five cells.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "main",
+      "find": "default=\",\".join(CELLS)",
+      "replace": "default=\"fg-idle\"",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_defaults_cover_all_six_cells_with_five_runs"
+    },
+    {
+      "name": "default-repeat-count-reduced",
+      "_mechanism": "Defaults measure one repeat instead of five.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "main",
+      "find": "parser.add_argument(\"--runs\", type=int, default=5)",
+      "replace": "parser.add_argument(\"--runs\", type=int, default=1)",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_defaults_cover_all_six_cells_with_five_runs"
+    },
+    {
+      "name": "cell-selection-ignored",
+      "_mechanism": "An explicit cell subset is widened back to the entire matrix.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "main",
+      "find": "cells = args.cells.split(\",\")",
+      "replace": "cells = list(CELLS)",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_cells_option_runs_only_the_selected_cells"
+    },
+    {
+      "name": "requested-interpreter-ignored",
+      "_mechanism": "The selected executable wrapper is bypassed.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "pytest = [args.python, \"-m\", \"pytest\"]",
+      "replace": "pytest = [sys.executable, \"-m\", \"pytest\"]",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_runs_are_serial_use_requested_python_cwd_and_exact_pytest_selection"
+    },
+    {
+      "name": "requested-cwd-ignored",
+      "_mechanism": "Pytest runs in the parent directory instead of the requested scratch working directory.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_run",
+      "find": "command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,",
+      "replace": "command, cwd=None, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_runs_are_serial_use_requested_python_cwd_and_exact_pytest_selection"
+    },
+    {
+      "name": "repeat-loop-truncated",
+      "_mechanism": "Only the first serial repetition is executed.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "for index in range(1, args.runs + 1):",
+      "replace": "for index in range(1, 2):",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_runs_are_serial_use_requested_python_cwd_and_exact_pytest_selection"
+    },
+    {
+      "name": "pytest-selection-altered",
+      "_mechanism": "Measured invocations omit the required cacheprovider suppression.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "pytest + [args.nodeid, \"-q\", \"-p\", \"no:cacheprovider\"],",
+      "replace": "pytest + [args.nodeid, \"-q\"],",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_runs_are_serial_use_requested_python_cwd_and_exact_pytest_selection"
+    },
+    {
+      "name": "cpu-helper-count-reduced",
+      "_mechanism": "CPU load starts one busy-loop helper instead of one per logical CPU.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "count = (os.cpu_count() or 1) if load == \"cpu\" else int(load == \"fork\")",
+      "replace": "count = 1 if load == \"cpu\" else int(load == \"fork\")",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_load_starts_the_required_helpers_and_reaps_their_groups[fg-cpu-2]"
+    },
+    {
+      "name": "fork-load-disabled",
+      "_mechanism": "The fork cell runs without its persistent spawn-and-reap helper.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "else int(load == \"fork\")",
+      "replace": "else 0",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_load_starts_the_required_helpers_and_reaps_their_groups[fg-fork-1]"
+    },
+    {
+      "name": "fork-generator-replaced-by-cpu",
+      "_mechanism": "The fork helper remains alive but never launches /usr/bin/true, losing the distinct load mechanism.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "CPU_LOAD if load == \"cpu\" else FORK_LOAD",
+      "replace": "CPU_LOAD",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_load_starts_the_required_helpers_and_reaps_their_groups[fg-fork-1]"
+    },
+    {
+      "name": "helpers-stopped-before-measurement",
+      "_mechanism": "Helpers are reaped before pytest starts, so no load overlaps the measured run.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "            failures = 0",
+      "replace": "            for helper in helpers:\n                _stop(helper)\n            failures = 0",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_load_starts_the_required_helpers_and_reaps_their_groups[fg-cpu-2]"
+    },
+    {
+      "name": "cleanup-only-kills-leader",
+      "_mechanism": "Cleanup kills only the leader, losing the process-group boundary needed to stop descendants.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_stop",
+      "find": "os.killpg(child.pid, signal.SIGKILL)",
+      "replace": "child.kill()",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_load_starts_the_required_helpers_and_reaps_their_groups[fg-cpu-2]"
+    },
+    {
+      "name": "cleanup-skipped-on-interrupt",
+      "_mechanism": "Exceptional cell cleanup bypasses group termination even though the direct helper is reaped.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "            for helper in helpers:\n                _stop(helper)",
+      "replace": "            for helper in helpers:\n                helper.kill()\n                helper.wait()",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_load_helpers_are_reaped_on_failure_interruption_and_empty_probe[cpu-interrupt]"
+    },
+    {
+      "name": "per-run-timeout-replaced-by-fixed-deadline",
+      "_mechanism": "The requested timeout is replaced by a fixed tiny deadline; the experiment cannot measure the sleeping target and preserve its output. A short mutant deadline avoids leaking helpers after an outer test timeout.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_run",
+      "find": "child.communicate(timeout=timeout)",
+      "replace": "child.communicate(timeout=0.001)",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_timeout_is_per_run_keeps_output_and_cleans_up_load"
+    },
+    {
+      "name": "timeout-output-discarded",
+      "_mechanism": "Timed-out failures lose their already-emitted diagnostics.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_run",
+      "find": "return 1, output + \"\\nFLAKE timeout\\n\"",
+      "replace": "return 1, \"FLAKE timeout\\n\"",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_timeout_is_per_run_keeps_output_and_cleans_up_load"
+    },
+    {
+      "name": "stderr-not-combined",
+      "_mechanism": "Failure artifacts silently omit stderr.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_run",
+      "find": "stderr=subprocess.STDOUT,",
+      "replace": "stderr=subprocess.DEVNULL,",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_only_failed_runs_keep_combined_stdout_and_stderr_logs"
+    },
+    {
+      "name": "passing-runs-counted-as-failures",
+      "_mechanism": "Passing repetitions create failure logs and a false reproduced verdict.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "                if code != 0:",
+      "replace": "                if True:",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_passing_runs_leave_no_logs"
+    },
+    {
+      "name": "failure-count-not-incremented",
+      "_mechanism": "Logs exist but failures disappear from cell counts and the final verdict.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "                    failures += 1",
+      "replace": "                    failures += 0",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_only_failed_runs_keep_combined_stdout_and_stderr_logs"
+    },
+    {
+      "name": "failed-log-overwritten",
+      "_mechanism": "Every repeat overwrites the same cell log, losing earlier failures.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "f\"{cell}-{index}.log\"",
+      "replace": "f\"{cell}-1.log\"",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_each_failed_repeat_gets_a_distinct_indexed_log"
+    },
+    {
+      "name": "default-log-directory-not-new",
+      "_mechanism": "Default logs are written into the existing working directory instead of a fresh temp directory.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "main",
+      "find": "Path(tempfile.mkdtemp(prefix=\"h-mad-flake-\"))",
+      "replace": "Path(args.cwd)",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_default_log_directory_is_new_and_printed"
+    },
+    {
+      "name": "missing-pytest-treated-as-measurable",
+      "_mechanism": "A failed availability probe returns a false reproduced verdict instead of refusing measurement.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "if code != 0:\n        raise Unreadable(\"pytest_missing\")",
+      "replace": "if code != 0:\n        print(\"FLAKE-VERDICT: REPRODUCED cells=fg-idle\")\n        return",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_missing_pytest_is_unreadable_instead_of_a_reproduced_failure"
+    },
+    {
+      "name": "empty-probe-admitted",
+      "_mechanism": "A collection probe selecting nothing no longer stops the experiment before cell rows appear.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "if code != 0 or \"no tests collected\" in output.lower():",
+      "replace": "if False:",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_nodeid_collecting_nothing_is_unreadable"
+    },
+    {
+      "name": "passing-run-classified-unreadable",
+      "_mechanism": "The exit-code guard rejects valid passing measurements as unreadable.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "_measure",
+      "find": "if code not in (0, 1):",
+      "replace": "if code == 0:",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_passing_runs_leave_no_logs"
+    },
+    {
+      "name": "interrupt-exit-status-success",
+      "_mechanism": "The interrupted experiment prints unreadable but exits successfully.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "main",
+      "find": "print(\"FLAKE-VERDICT: UNREADABLE reason=interrupted\")\n        return 2",
+      "replace": "print(\"FLAKE-VERDICT: UNREADABLE reason=interrupted\")\n        return 0",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_interrupted_run_is_unreadable"
+    },
+    {
+      "name": "positive-inputs-rejected",
+      "_mechanism": "The numeric guard rejects a valid run count, preventing a normal experiment.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "main",
+      "find": "if args.runs < 1 or not math.isfinite(args.timeout) or args.timeout <= 0:",
+      "replace": "if args.runs >= 1 or not math.isfinite(args.timeout) or args.timeout <= 0:",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_passing_runs_leave_no_logs"
+    },
+    {
+      "name": "known-cells-rejected",
+      "_mechanism": "The cell guard rejects valid cell names, preventing explicitly selected experiments.",
+      "file": "scripts/h_mad_reproduce_flake.py",
+      "symbol": "main",
+      "find": "if any(cell not in CELLS for cell in cells) or len(set(cells)) != len(cells):",
+      "replace": "if any(cell in CELLS for cell in cells) or len(set(cells)) != len(cells):",
+      "test": "tests/test_h_mad_reproduce_flake.py::test_cells_option_runs_only_the_selected_cells"
+    }
+  ]
+}
