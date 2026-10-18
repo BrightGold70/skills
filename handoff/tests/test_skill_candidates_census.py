@@ -963,3 +963,128 @@ def test_apply_landed_status_removes_only_that_row_from_open_listing(
     assert "an open one" not in listed.stdout
     assert "a maybe one" in listed.stdout
     assert "APPLY: inserted=1 OPEN 2→1" in applied.stdout.splitlines()
+
+
+# --- malformed reconciliation tables: refuse the whole apply (spec 2026-10-18) ---
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        pytest.param("| a maybe one | reviewed | still open |", id="unescaped-status-pipe"),
+        pytest.param("| a maybe | one | reviewed |", id="unescaped-name-pipe"),
+        pytest.param("| a maybe one |", id="one-cell"),
+        pytest.param("|", id="zero-cells"),
+        pytest.param("| a maybe one | reviewed | |", id="empty-extra-cell"),
+        pytest.param("| a maybe one", id="missing-closing-pipe"),
+        pytest.param(
+            r"| a maybe one | reviewed \| quoted | unescaped |",
+            id="escaped-pipe-does-not-hide-extra-cell",
+        ),
+    ],
+)
+@pytest.mark.parametrize("malformed_first", [True, False], ids=["before-valid", "after-valid"])
+def test_apply_malformed_row_refuses_whole_table_with_physical_line_number(
+    tmp_path: Path, malformed: str, malformed_first: bool,
+) -> None:
+    """Spec 1: neither an earlier nor a later valid row may be applied."""
+    store = _store(tmp_path)
+    valid = "| an open one | **LANDED 2026-10-18** must not be applied |"
+    data = [malformed, valid] if malformed_first else [valid, malformed]
+    # Prose, header, separator and blank lines all count toward the diagnostic's
+    # physical line number; none is a data row.
+    lines = ["# Reconciliation", "", "| open-line | status-line |", "| --- | --- |", ""]
+    lines.extend(data)
+    table = tmp_path / "reconcile.md"
+    table.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    before = {p: p.read_bytes() for p in (store, table)}
+    expected_line = 6 if malformed_first else 7
+
+    result = run_flag("--apply", str(table), str(store))
+
+    assert {p: p.read_bytes() for p in before} == before, "refusal must be atomic"
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.stdout.splitlines() == [
+        f"APPLY: REFUSED reason=malformed-row line={expected_line}"
+    ]
+    assert result.stderr == ""
+
+
+def test_apply_only_malformed_data_row_is_not_a_successful_noop(tmp_path: Path) -> None:
+    """Spec 1: reproduce the silent inserted=0 success reported in the defect."""
+    store = _store(tmp_path)
+    table = reconciliation_table(tmp_path, ("an open one", "reviewed | still open | extra"))
+    before = {p: p.read_bytes() for p in (store, table)}
+
+    result = run_flag("--apply", str(table), str(store))
+
+    assert {p: p.read_bytes() for p in before} == before
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.stdout.splitlines() == ["APPLY: REFUSED reason=malformed-row line=3"]
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("", id="empty-file"),
+        pytest.param(" \n\t\n", id="whitespace-only"),
+        pytest.param("# Reconciliation\n\nNo decisions yet.\n", id="prose-only"),
+        pytest.param("| open-line | status-line |\n", id="header-only"),
+        pytest.param("| open-line | status-line |\n| --- | --- |\n", id="header-and-separator"),
+        pytest.param(
+            "# Reconciliation\n\n| open-line | status-line |\n| :--- | ---: |\n\n",
+            id="header-and-aligned-separator-with-prose",
+        ),
+    ],
+)
+def test_apply_zero_data_rows_refuses_empty_table_without_writing(
+    tmp_path: Path, text: str,
+) -> None:
+    """Spec 2: empty input must not be reported as a successful no-op."""
+    store = _store(tmp_path)
+    table = tmp_path / "reconcile.md"
+    table.write_text(text, encoding="utf-8")
+    before = {p: p.read_bytes() for p in (store, table)}
+
+    result = run_flag("--apply", str(table), str(store))
+
+    assert {p: p.read_bytes() for p in before} == before
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.stdout.splitlines() == ["APPLY: REFUSED reason=empty-table"]
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize("separator", ["| --- | --- |", "| :--- | ---: |"])
+def test_apply_valid_table_guard_preserves_escaped_cells_and_all_insertions(
+    tmp_path: Path, separator: str,
+) -> None:
+    """Spec 3 — existing-behavior guard (expected PASS during RED)."""
+    store = write(
+        tmp_path,
+        "- **tool | tree**: candidate: yes\n"
+        "- **another**: candidate: maybe\n",
+    )
+    table = tmp_path / "reconcile.md"
+    table.write_text(
+        "# Reconciliation\n\n| open-line | status-line |\n"
+        + separator + "\n\n"
+        + r"| tool \| tree | **LANDED 2026-10-18** src/a \| src/b \| src/c |" + "\n"
+        + "| another | reviewed; remains open |\n",
+        encoding="utf-8",
+    )
+    table_before = table.read_bytes()
+
+    result = run_flag("--apply", str(table), str(store))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines() == ["APPLY: inserted=2 OPEN 2→1"]
+    assert result.stderr == ""
+    assert store.read_bytes() == (
+        "# Skill Candidates\n\n"
+        "- **tool | tree**: candidate: yes\n"
+        "  — **LANDED 2026-10-18** src/a | src/b | src/c\n"
+        "- **another**: candidate: maybe\n"
+        "  — reviewed; remains open\n"
+    ).encode("utf-8")
+    assert table.read_bytes() == table_before
