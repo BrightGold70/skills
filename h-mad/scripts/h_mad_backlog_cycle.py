@@ -29,7 +29,6 @@ CONSUMERS = HERE / "h_mad_doc_consumers.py"
 HARNESS = HERE / "h_mad_mutation_harness.py"
 CENSUS = HERE.parents[1] / "handoff" / "scripts" / "skill_candidates_census.py"
 RECORDS = Path(".h-mad") / "backlog-cycles"
-EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
 class Refused(Exception):
@@ -48,6 +47,15 @@ def tool(path: Path, *args: str) -> int:
     sys.stdout.write(result.stdout)
     sys.stderr.write(result.stderr)
     return result.returncode
+
+
+def repo_relative(repo: Path, path: str) -> str:
+    """A --paths entry as typed (relative to cwd) -> repo-relative POSIX."""
+    absolute = (Path.cwd() / path).resolve()
+    try:
+        return absolute.relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        raise Refused(f"path-outside-repo path={path}") from None
 
 
 def slug(row: str) -> str:
@@ -108,10 +116,11 @@ def cmd_red(repo: Path, args, passthrough: list[str]) -> str:
     check_row(args.store, args.row)
     if load(repo, args.row) is not None:
         raise Refused(f"cycle-active row={args.row}")
-    check_claims(repo, args.row, args.paths)
+    paths = [repo_relative(repo, p) for p in args.paths]
+    check_claims(repo, args.row, paths)
     dispatch("red", passthrough, [])
-    sha = commit(repo, args.paths, f"test: RED — {args.row}")
-    save(repo, {"row": args.row, "red_commit": sha, "paths": args.paths, "specs": []})
+    sha = commit(repo, paths, f"test: RED — {args.row}")
+    save(repo, {"row": args.row, "commits": [sha], "paths": paths, "specs": []})
     return f"CYCLE: RED committed={sha}"
 
 
@@ -120,13 +129,15 @@ def cmd_green(repo: Path, args, passthrough: list[str]) -> str:
     record = load(repo, args.row)
     if record is None:
         raise Refused(f"no-red row={args.row}")
-    check_claims(repo, args.row, args.paths)
+    paths = [repo_relative(repo, p) for p in args.paths]
+    check_claims(repo, args.row, paths)
     extra = ["--mutation-spec", args.mutation_spec] if args.mutation_spec else []
     dispatch("green", passthrough, extra)
-    sha = commit(repo, args.paths, f"feat: GREEN — {args.row}")
-    specs = record["specs"] + ([args.mutation_spec] if args.mutation_spec else [])
-    save(repo, {**record, "paths": sorted({*record["paths"], *args.paths}),
-                "specs": specs})
+    sha = commit(repo, paths, f"feat: GREEN — {args.row}")
+    spec = [repo_relative(repo, args.mutation_spec)] if args.mutation_spec else []
+    save(repo, {**record, "commits": [*record["commits"], sha],
+                "paths": sorted({*record["paths"], *paths}),
+                "specs": record["specs"] + spec})
     return f"CYCLE: GREEN committed={sha}"
 
 
@@ -135,10 +146,20 @@ def is_document(rel: str) -> bool:
     return not rel.endswith(".py") and "tests" not in Path(rel).parts[:-1]
 
 
-def changed_since(repo: Path, red_commit: str) -> list[str]:
-    parent = git(repo, "rev-parse", "--verify", "--quiet", f"{red_commit}^", check=False)
-    base = parent.stdout.strip() or EMPTY_TREE
-    return git(repo, "diff", "--name-only", base, "HEAD").stdout.split()
+def cycle_files(repo: Path, commits: list[str]) -> list[str]:
+    """Files this cycle's own commits touched that still exist.
+
+    Only the recorded commits: the range red^..HEAD would also cover another
+    open cycle's commits and run its consumers and specs.
+    """
+    files: set[str] = set()
+    for sha in commits:
+        if git(repo, "cat-file", "-e", f"{sha}^{{commit}}", check=False).returncode:
+            raise Refused(f"commit-missing sha={sha}")
+        out = git(repo, "diff-tree", "-r", "--root", "--no-commit-id", "--name-only",
+                  "-z", sha).stdout
+        files.update(name for name in out.split("\0") if name)
+    return sorted(rel for rel in files if (repo / rel).exists())
 
 
 def run_consumers(repo: Path, changed: list[str]) -> None:
@@ -184,12 +205,24 @@ def cmd_land(repo: Path, args, passthrough: list[str]) -> str:
     record = load(repo, args.row)
     if record is None:
         raise Refused(f"no-red row={args.row}")
-    changed = changed_since(repo, record["red_commit"])
+    if len(record["commits"]) < 2:
+        raise Refused(f"no-green row={args.row}")
+    store_rel = repo_relative(repo, str(args.store))
+    if git(repo, "status", "--porcelain", "--", store_rel).stdout.strip():
+        # Committing the store would sweep unrelated edits into the LANDED commit.
+        raise Refused(f"store-dirty path={store_rel}")
+    changed = cycle_files(repo, record["commits"])
     run_consumers(repo, changed)
     run_mutation(repo, record, changed)
     apply_status(args.store, args.row, args.status)
-    store_rel = args.store.resolve().relative_to(repo).as_posix()
-    sha = commit(repo, [store_rel], f"docs(candidates): LANDED — {args.row}")
+    try:
+        sha = commit(repo, [store_rel], f"docs(candidates): LANDED — {args.row}")
+    except subprocess.CalledProcessError:
+        # Leave the row OPEN and the record in place, so a retry can land it.
+        # From HEAD, not the index: commit() already staged the edit, and the
+        # store was clean before it, so HEAD is exactly what was there.
+        git(repo, "checkout", "HEAD", "--", store_rel)
+        raise
     (repo / RECORDS / f"{slug(args.row)}.json").unlink()
     if args.no_push:
         return f"CYCLE: LANDED committed={sha} pushed=no"
@@ -230,6 +263,10 @@ def main(argv: list[str] | None = None) -> int:
         verdict = handler(repo, args, passthrough)
     except Refused as exc:
         print(f"CYCLE: REFUSED reason={exc}")
+        return 2
+    except subprocess.CalledProcessError as exc:
+        sys.stderr.write(exc.stderr or "")
+        print(f"CYCLE: REFUSED reason=git-failed command={' '.join(exc.cmd[3:5])}")
         return 2
     print(verdict)
     return 1 if verdict.startswith("PUSH: REJECTED") else 0

@@ -1,7 +1,22 @@
 {
   "root": "../..",
-  "target_command": ["python3.11", "-m", "pytest", "-q", "-p", "no:cacheprovider"],
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_backlog_cycle.py", "-q", "-p", "no:cacheprovider"],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_backlog_cycle.py",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+  ],
   "mutations": [
     {
       "name": "commit-sweeps-the-whole-tree",
@@ -83,6 +98,60 @@
       "find": "if args.no_push:",
       "replace": "if False:",
       "test": "tests/test_h_mad_backlog_cycle.py::test_no_push_leaves_the_remote_and_default_push_never_forces"
+    },
+    {
+      "name": "dirty-store-not-refused",
+      "_mechanism": "Unrelated store edits ride along in the LANDED commit.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "cmd_land",
+      "find": "raise Refused(f\"store-dirty path={store_rel}\")",
+      "replace": "pass",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_land_refuses_a_dirty_store_before_editing_it"
+    },
+    {
+      "name": "store-restored-from-index",
+      "_mechanism": "The restore reads the index, which already holds the staged edit, so the row stays closed but uncommitted.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "cmd_land",
+      "find": "git(repo, \"checkout\", \"HEAD\", \"--\", store_rel)",
+      "replace": "git(repo, \"checkout\", \"--\", store_rel)",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_land_restores_the_store_when_its_commit_fails_and_can_retry"
+    },
+    {
+      "name": "deleted-files-kept",
+      "_mechanism": "A document the cycle deleted is handed to consumers, which refuse it as missing on every retry.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "cycle_files",
+      "find": "return sorted(rel for rel in files if (repo / rel).exists())",
+      "replace": "return sorted(files)",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_land_ignores_a_document_the_cycle_deleted"
+    },
+    {
+      "name": "missing-commit-not-named",
+      "_mechanism": "A vanished recorded commit is not refused by name.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "cycle_files",
+      "find": "raise Refused(f\"commit-missing sha={sha}\")",
+      "replace": "continue",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_land_refuses_when_a_recorded_commit_is_missing"
+    },
+    {
+      "name": "red-only-cycle-lands",
+      "_mechanism": "A cycle with no GREEN commit is closed as LANDED.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "cmd_land",
+      "find": "if len(record[\"commits\"]) < 2:",
+      "replace": "if False:",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_land_refuses_a_cycle_without_green"
+    },
+    {
+      "name": "paths-read-from-repo-root",
+      "_mechanism": "--paths typed relative to a subdirectory resolve against the repo root and name the wrong file.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "repo_relative",
+      "find": "absolute = (Path.cwd() / path).resolve()",
+      "replace": "absolute = (repo / path).resolve()",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_paths_resolve_from_the_working_directory"
     }
   ]
 }

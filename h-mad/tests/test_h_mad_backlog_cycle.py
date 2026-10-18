@@ -263,3 +263,121 @@ def test_no_push_leaves_the_remote_and_default_push_never_forces(layout, tmp_pat
     assert pushed.returncode != 0
     assert "PUSH: REJECTED" in _last(pushed)
     assert _git(remote, "rev-parse", "main") == foreign
+
+
+# Review findings on 6a2de974 (tests 9-15).
+
+def _record(layout, row: str) -> Path:
+    return layout["repo"] / ".h-mad" / "backlog-cycles" / f"{row.replace(' ', '-')}.json"
+
+
+# 9: a store with unrelated edits would be swept into the LANDED commit.
+def test_land_refuses_a_dirty_store_before_editing_it(layout) -> None:
+    repo = layout["repo"]
+    _cycle_through_green(layout, "alpha row", ("src/shared.py", "X = 2\n"))
+    store = repo / "docs" / "skill-candidates.md"
+    store.write_text(store.read_text() + "\nstray edit\n")
+    dirty = store.read_bytes()
+
+    result = _run(layout, "land", "--row", "alpha row",
+                  "--status", "**LANDED** 2026-10-18 done", "--no-push")
+
+    assert result.returncode != 0
+    assert _last(result) == "CYCLE: REFUSED reason=store-dirty path=docs/skill-candidates.md"
+    assert store.read_bytes() == dirty
+    assert _record(layout, "alpha row").exists()
+
+
+# 10: a failed store commit must not leave the row closed-but-uncommitted.
+def test_land_restores_the_store_when_its_commit_fails_and_can_retry(layout) -> None:
+    repo = layout["repo"]
+    _cycle_through_green(layout, "alpha row", ("src/shared.py", "X = 2\n"))
+    store_before = (repo / "docs" / "skill-candidates.md").read_bytes()
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+
+    failed = _run(layout, "land", "--row", "alpha row",
+                  "--status", "**LANDED** 2026-10-18 done", "--no-push")
+
+    assert failed.returncode != 0
+    assert _last(failed).startswith("CYCLE: REFUSED reason=git-failed")
+    assert (repo / "docs" / "skill-candidates.md").read_bytes() == store_before
+    assert _record(layout, "alpha row").exists()
+
+    hook.unlink()
+    retry = _run(layout, "land", "--row", "alpha row",
+                 "--status", "**LANDED** 2026-10-18 done", "--no-push")
+    assert retry.returncode == 0, retry.stdout + retry.stderr
+
+
+# 11: a document the cycle deleted has no consumers to run.
+def test_land_ignores_a_document_the_cycle_deleted(layout) -> None:
+    repo = layout["repo"]
+    assert _red(layout, "alpha row", "tests/test_alpha.py").returncode == 0
+    (repo / "docs" / "guide.md").unlink()
+    green = _run(layout, "green", "--row", "alpha row", "--paths", "docs/guide.md")
+    assert green.returncode == 0, green.stdout + green.stderr
+
+    result = _run(layout, "land", "--row", "alpha row",
+                  "--status", "**LANDED** 2026-10-18 done", "--no-push")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "CONSUMERS: SKIPPED reason=no-documents" in result.stdout
+    assert _calls(layout, "consumers") == []
+
+
+# 12: land checks its own cycle's commits, not another open cycle's.
+def test_land_does_not_check_another_cycles_commits(layout) -> None:
+    _cycle_through_green(layout, "alpha row", ("src/shared.py", "X = 2\n"))
+    _cycle_through_green(layout, "beta row", ("docs/guide.md", "guide v2\n"))
+
+    result = _run(layout, "land", "--row", "alpha row",
+                  "--status", "**LANDED** 2026-10-18 done", "--no-push")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "CONSUMERS: SKIPPED reason=no-documents" in result.stdout
+    assert _calls(layout, "consumers") == []
+
+
+# 13: a red commit that no longer exists must not widen the diff to the repo.
+def test_land_refuses_when_a_recorded_commit_is_missing(layout) -> None:
+    _cycle_through_green(layout, "alpha row", ("src/shared.py", "X = 2\n"))
+    path = _record(layout, "alpha row")
+    record = json.loads(path.read_text())
+    record["commits"] = ["0" * 40, *record["commits"][1:]]
+    path.write_text(json.dumps(record))
+
+    result = _run(layout, "land", "--row", "alpha row",
+                  "--status", "**LANDED** 2026-10-18 done", "--no-push")
+
+    assert result.returncode != 0
+    assert _last(result) == f"CYCLE: REFUSED reason=commit-missing sha={'0' * 40}"
+    assert _calls(layout, "consumers") == []
+
+
+# 14: --paths are relative to where the user runs the command.
+def test_paths_resolve_from_the_working_directory(layout) -> None:
+    repo = layout["repo"]
+    (repo / "tests" / "test_sub.py").write_text("def test_x():\n    assert False\n")
+
+    result = subprocess.run(
+        [sys.executable, str(layout["driver"]), "red", "--row", "alpha row",
+         "--paths", "test_sub.py"],
+        cwd=repo / "tests", capture_output=True, text=True,
+        env={**os.environ, "BCYCLE_TRACE": str(layout["trace"])}, timeout=120)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _committed_paths(repo) == {"tests/test_sub.py"}
+    assert json.loads(_record(layout, "alpha row").read_text())["paths"] == ["tests/test_sub.py"]
+
+
+# 15: a cycle with no GREEN commit has nothing to land.
+def test_land_refuses_a_cycle_without_green(layout) -> None:
+    assert _red(layout, "alpha row", "tests/test_alpha.py").returncode == 0
+
+    result = _run(layout, "land", "--row", "alpha row",
+                  "--status", "**LANDED** 2026-10-18 done", "--no-push")
+
+    assert result.returncode != 0
+    assert _last(result) == "CYCLE: REFUSED reason=no-green row=alpha row"
