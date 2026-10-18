@@ -1,0 +1,4 @@
+{"phase": "plan", "cycle": 2, "leg": "codex+agy", "item": "AC-3.2 prompt-diff predicate duplicated in probe; no single authority", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 2, "leg": "codex+agy", "item": "S0 tests over unchanged FR-8/9/10 behaviour lack mutant RED method", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 2, "leg": "codex+agy", "item": "SMOKE token has no exit-0-on-verdict contract", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 2, "leg": "codex+agy", "item": "seeded-data retention ref/branch undefined vs no-merge-to-main", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
