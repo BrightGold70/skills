@@ -2123,3 +2123,16 @@ print `GAP CLOSED` when upstream catches up.
   posted: `UPSTREAM-FOLLOWUP.md`. `docs/patches/claude-security-guidance-bare-exec/verify.py`
   `KNOWN_GAPS`.
   Status: `MONITORING`.
+
+- 🟡 **J56 — an unwritable `--out` killed the dispatch and swallowed the verdict.** Under
+  `set -e`, a failed write at the end of the `[ -n "$out" ] && _out_clobber_ok … && write` chain
+  aborted `exec`: rc=1, empty stdout, so a typo'd `--out` directory lost a verdict the agent had
+  already produced. First seen 2026-08-09 (byte-identical before and after the J29 guard) and
+  deferred then. It survived the move to `_write_out_atomic`, whose `mktemp` in the destination's
+  directory is the first thing to fail. Every exec write site (grok, codex, agy, recovery) is now
+  `{ write || _out_write_failed "$out"; }`: a `cannot write --out` line goes to stderr, stdout and
+  `--log` still carry the answer, and `rc` stays the agent's own (same contract as J29). The
+  recovery site never crashed (it already ended in `|| true`) but failed silently, so it gets the
+  same line. 4 tests (`unwritable_out`, in `test_hmad_dispatch_exec.py` and
+  `test_hmad_dispatch_exec_grok.py`): all red on upstream `1525a2f6`, green after.
+  Status: `FIXED` `5942ee68`.

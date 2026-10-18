@@ -4,7 +4,7 @@
 **Written:** 2026-10-18 (handoff Next Step 4 from `2026-08-09-main__j29-out-clobber-guard.md`)
 
 ## Executive Summary
-This repo tracks a 239-file copy of `hematology-paper-writer/` that HemaSuite has since developed
+This repo tracks a 195-file copy (239 before upstream `df4a0664` untracked its bytecode) of `hematology-paper-writer/` that HemaSuite has since developed
 far past (1767 commits on that directory there vs 8 here; last change here 2026-03-12). The
 investigation found that the copy here is **almost entirely a stale snapshot, not a fork**: HemaSuite
 deliberately deleted, split or moved nearly everything that exists only here. Exactly one piece of
@@ -58,9 +58,9 @@ h-mad's references are path patterns for the HemaSuite layout
 3. **Retire the copy here:** `git rm -r hematology-paper-writer` in this repo, on a branch, with the
    commit body citing the step 1 rescue commit and the step 2 verification. Git history keeps every byte, so this can
    be undone with `git revert`.
-4. **Verify:** h-mad suite still green
-   (`/opt/homebrew/opt/python@3.14/bin/python3.14 -m pytest h-mad/tests/ -q`; 1216 passed,
-   2 skipped as of 2026-10-18), and `git grep -n hematology-paper-writer` here shows only path
+4. **Verify:** the h-mad suite's failing set is unchanged
+   (`/opt/homebrew/opt/python@3.14/bin/python3.14 -m pytest h-mad/tests/ -q`; on this Mac
+   2026-10-18: 6611 passed, 9 skipped, 30 failed, all 30 environmental, see J56's commit), and `git grep -n hematology-paper-writer` here shows only path
    patterns and prose, with no reads of the removed directory.
 
 ## Out of scope
