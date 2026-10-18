@@ -28,8 +28,9 @@ Spec moved v1.2 → v1.5 and plan v1.1 → v1.3. The last revision of each is a 
 
 ## Next Steps
 
+0. **Commit shas in the phase docs predate a rebase.** The spec, plan and delta review cite pre-rebase shas. Read them through `docs/03-analysis/grok-audit-surface.sha-remap.md`, and tell design-author about the remap.
 1. **Resume the feature.** Run `/h-mad "grok-audit-surface"`; the resume oracle routes to Phase 4. Re-claim with `h_mad_state_write.py docs/.bkit-memory.json --feature grok-audit-surface --claim <sid>`.
-2. **Dispatch `design-author`.** It writes `docs/02-design/features/grok-audit-surface.design.md` from spec v1.5 (`611c299d`) and plan v1.3 (`b085ad7a`). The design owes the items below; the full lists are in the scratchpad reports `author_grok-audit-surface_{spec_v1.3,spec_v1.4,spec_v1.5,plan_v1.2,plan_v1.3}.report.md`.
+2. **Dispatch `design-author`.** It writes `docs/02-design/features/grok-audit-surface.design.md` from spec v1.5 (`2f7bf7ae`) and plan v1.3 (`ab3c9f32`). The design owes the items below; the full lists are in the scratchpad reports `author_grok-audit-surface_{spec_v1.3,spec_v1.4,spec_v1.5,plan_v1.2,plan_v1.3}.report.md`.
    - **Probe:** the probe module name, its modes, and the fixture layout.
    - **Calibration data:** how the probe fetches, checks ancestry and runs `git archive` on `calibration/grok-audit-surface`. Also where each cycle's `AUDITCYCLE:` line is recorded into the calibration directory.
    - **Leak control:** an `HMAD_AUDIT_STEM_DIR` location outside the export roots.
@@ -55,7 +56,7 @@ Spec moved v1.2 → v1.5 and plan v1.1 → v1.3. The last revision of each is a 
 - **grok-audit-surface:** in progress; Phase 3 done, Phase 4 next.
   - Location: repo `/Users/kimhawk/orca/skills` · branch `main` · worktree none.
   - Claim held by session `1f39eb76-d775-4dc8-b33d-b680f83a32ee`; it goes stale after 2h.
-  - Spec v1.5: `611c299d`, sha `d5af08f6…`. Plan v1.3: `b085ad7a`, sha `ebcf8456…`.
+  - Spec v1.5: `2f7bf7ae`, sha `d5af08f6…`. Plan v1.3: `ab3c9f32`, sha `ebcf8456…`.
   - Audit reports: `docs/01-plan/features/grok-audit-surface.plan.audit.v{1,2,3}.*.md` and the delta review `docs/03-analysis/grok-audit-surface.plan.delta-review.5b2df07-20261018T130440Z.md`.
   - Origins ledger: `docs/03-analysis/grok-audit-surface.audit-origins.jsonl` (8 records).
 - **Untracked delta-review prompt** `docs/03-analysis/grok-audit-surface.plan.delta-review.5b2df07-20261018T130440Z.md.txt`: a staging artifact, left untracked. Delete it or commit it as provenance; the report beside it is committed.
