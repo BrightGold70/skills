@@ -32,10 +32,13 @@ minutes-long part, while assembly and scoring are pure and testable. Both halves
 of the skip-prone pair land in the tested halves.
 """
 
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 SCRIPT = SCRIPTS / "h_mad_archreview_cycle.py"
@@ -90,9 +93,9 @@ def _review(tmp_path: Path, body: str) -> Path:
     return p
 
 
-def _run(*args: str) -> subprocess.CompletedProcess:
+def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(SCRIPT), *args],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, cwd=cwd)
 
 
 class TestScoreRecordsOnlyAProvenReview:
@@ -1343,3 +1346,264 @@ def test_a_design_that_quotes_a_slot_token_is_staged_verbatim(tmp_path):
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert quote in prompt.read_text(encoding="utf-8")
+
+
+def _tree_git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True,
+        capture_output=True, text=True,
+    ).stdout.strip()
+
+
+@pytest.fixture
+def archreview_tree(tmp_path):
+    repo = tmp_path / "reviewed repo with spaces"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "docs" / "a design.md").write_text("the design\n", encoding="utf-8")
+    (repo / "dirty file.py").write_bytes(b"committed\n")
+    (repo / "deleted file.py").write_bytes(b"committed too\n")
+    _tree_git(repo, "init", "-q")
+    _tree_git(repo, "config", "user.name", "Archreview Test")
+    _tree_git(repo, "config", "user.email", "archreview@example.invalid")
+    _tree_git(repo, "config", "core.hooksPath", "/dev/null")
+    _tree_git(repo, "add", ".")
+    _tree_git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "baseline")
+    # Hash current bytes, including non-text bytes, rather than HEAD or diff text.
+    (repo / "dirty file.py").write_bytes(b"dirty\x00\xff\n")
+    (repo / "untracked file.py").write_bytes(b"not added\n")
+    (repo / "deleted file.py").unlink()
+    return repo
+
+
+def _tree_snapshot(repo: Path, path: Path) -> Path:
+    """Independent input for score: a missing stage feature must not mask it."""
+    paths = {
+        name: hashlib.sha256((repo / name).read_bytes()).hexdigest()
+        for name in ("dirty file.py", "untracked file.py")
+    }
+    paths["deleted file.py"] = "deleted"
+    path.write_text(json.dumps({"head": _tree_git(repo, "rev-parse", "HEAD"),
+                                "paths": paths}), encoding="utf-8")
+    return path
+
+
+def _tree_score_args(tmp_path: Path, verdict="READY_TO_MERGE", tools=3,
+                     channels: Path | None = None) -> list[str]:
+    channels = channels or tmp_path
+    channels.mkdir(exist_ok=True)
+    return ["score", "--feature", "feat", "--state", str(_state(tmp_path)),
+            "--log", str(_log(channels, tools)), "--review",
+            str(_review(channels, f"ASSESSMENT: {verdict}\n"))]
+
+
+def _assert_tree_line(result, expected: str) -> None:
+    lines = result.stdout.splitlines()
+    assert [line for line in lines if line.startswith("ARCHREVIEW-TREE:")] == [expected], (
+        result.stdout + result.stderr)
+    assert lines[-1] == expected, "tree finding must follow existing verdict output"
+
+
+class TestArchreviewTreeSnapshot:
+    def test_stage_snapshots_the_design_repo_head_and_all_status_paths(
+            self, tmp_path, archreview_tree):
+        repo = archreview_tree
+        # Both prompt and cwd are outside the design's repo. Neither locates it.
+        prompt = tmp_path / "review prompt.txt"
+        result = _run(
+            "stage", "--feature", "feat", "--template", str(TestStage()._tpl(tmp_path)),
+            "--base", "aaa", "--head", "bbb",
+            "--design", str(repo / "docs" / "a design.md"),
+            "--diff-files", "dirty file.py", "--summary", "done",
+            "--prompt", str(prompt), cwd=tmp_path)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert prompt.is_file()
+        snapshot = Path(str(prompt) + ".tree.json")
+        assert snapshot.is_file(), "stage must write <prompt>.tree.json"
+        assert json.loads(snapshot.read_text(encoding="utf-8")) == {
+            "head": _tree_git(repo, "rev-parse", "HEAD"),
+            "paths": {
+                "dirty file.py": hashlib.sha256(b"dirty\x00\xff\n").hexdigest(),
+                "untracked file.py": hashlib.sha256(b"not added\n").hexdigest(),
+                "deleted file.py": "deleted",
+            },
+        }
+
+    @pytest.mark.parametrize("failure", ["outside_git", "snapshot_is_directory"])
+    def test_snapshot_failure_is_advisory(self, tmp_path, archreview_tree, failure):
+        design = archreview_tree / "docs" / "a design.md"
+        if failure == "outside_git":
+            design = tmp_path / "outside design.md"
+            design.write_text("design\n", encoding="utf-8")
+        prompt = tmp_path / "review prompt.txt"
+        if failure == "snapshot_is_directory":
+            Path(str(prompt) + ".tree.json").mkdir()
+        result = _run(
+            "stage", "--feature", "feat", "--template", str(TestStage()._tpl(tmp_path)),
+            "--base", "aaa", "--head", "bbb", "--design", str(design),
+            "--diff-files", "x.py", "--summary", "done", "--prompt", str(prompt),
+            cwd=tmp_path)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert prompt.is_file()
+        assert "ARCHREVIEW: STAGED" in result.stdout
+        assert "exec agy" in result.stdout
+        findings = [line for line in result.stdout.splitlines()
+                    if line.startswith("ARCHREVIEW-TREE:")]
+        assert len(findings) == 1, result.stdout
+        assert findings[0].startswith("ARCHREVIEW-TREE: SNAPSHOT_SKIPPED reason=")
+        assert findings[0].split("reason=", 1)[1].strip()
+        assert "Traceback" not in result.stderr
+
+    def test_score_unchanged_includes_preexisting_dirty_and_untracked_paths(
+            self, tmp_path, archreview_tree):
+        repo = archreview_tree
+        snapshot = _tree_snapshot(repo, repo / "review prompt.tree.json")
+        result = _run(*_tree_score_args(tmp_path), "--tree-snapshot", str(snapshot),
+                      cwd=repo / "docs")
+        assert result.returncode == 0, result.stdout + result.stderr
+        _assert_tree_line(result, "ARCHREVIEW-TREE: UNCHANGED")
+
+    @pytest.mark.parametrize("mutation,expected_path", [
+        ("new", "new file.py"),
+        ("dirty", "dirty file.py"),
+        ("deleted", "dirty file.py"),
+        ("gone", "untracked file.py"),
+        ("clean_again", "dirty file.py"),
+    ])
+    def test_score_reports_each_kind_of_path_change(
+            self, tmp_path, archreview_tree, mutation, expected_path):
+        repo = archreview_tree
+        snapshot = _tree_snapshot(repo, repo / "review prompt.tree.json")
+        if mutation == "new":
+            (repo / expected_path).write_bytes(b"new\n")
+        elif mutation == "dirty":
+            (repo / expected_path).write_bytes(b"different dirty bytes\n")
+        elif mutation in ("deleted", "gone"):
+            (repo / expected_path).unlink()
+        else:
+            _tree_git(repo, "restore", "--", expected_path)
+        result = _run(*_tree_score_args(tmp_path), "--tree-snapshot", str(snapshot),
+                      cwd=repo / "docs")
+        assert result.returncode == 0, result.stdout + result.stderr
+        _assert_tree_line(result, f"ARCHREVIEW-TREE: CHANGED paths=1 {expected_path}")
+
+    @pytest.mark.parametrize("with_paths", [False, True])
+    def test_head_move_is_reported_even_when_the_status_map_is_identical(
+            self, tmp_path, archreview_tree, with_paths):
+        repo = archreview_tree
+        snapshot = _tree_snapshot(repo, repo / "review prompt.tree.json")
+        old_head = _tree_git(repo, "rev-parse", "HEAD")
+        _tree_git(repo, "-c", "commit.gpgsign=false", "commit", "--allow-empty",
+                  "-qm", "move HEAD without changing files")
+        new_head = _tree_git(repo, "rev-parse", "HEAD")
+        assert new_head != old_head
+        if with_paths:
+            for name in ("z new file.py", "a new file.py"):
+                (repo / name).write_bytes(b"new\n")
+        result = _run(*_tree_score_args(tmp_path), "--tree-snapshot", str(snapshot),
+                      cwd=repo / "docs")
+        assert result.returncode == 0, result.stdout + result.stderr
+        path_text = "2 a new file.py,z new file.py" if with_paths else "0 "
+        _assert_tree_line(result, f"ARCHREVIEW-TREE: CHANGED paths={path_text} "
+                                 f"head={old_head}..{new_head}")
+
+    @pytest.mark.parametrize("channel", [
+        "review.md", "report file.md", "run.log",
+        "review.md.done", "report file.md.done", "run.log.done", "snapshot",
+    ])
+    def test_own_channels_are_excluded_from_both_snapshot_and_current_maps(
+            self, tmp_path, archreview_tree, channel):
+        repo = archreview_tree
+        channels = repo / "review channels"
+        args = _tree_score_args(tmp_path, channels=channels)
+        report = channels / "report file.md"
+        report.write_text("ASSESSMENT: READY_TO_MERGE\n", encoding="utf-8")
+        args += ["--report-file", str(report)]
+        for name in ("review.md.done", "report file.md.done", "run.log.done"):
+            (channels / name).write_bytes(b"before\n")
+        snapshot = _tree_snapshot(repo, repo / "review prompt.tree.json")
+        data = json.loads(snapshot.read_text(encoding="utf-8"))
+        # Stage takes every status path; score must filter old entries too.
+        for path in channels.iterdir():
+            data["paths"][path.relative_to(repo).as_posix()] = hashlib.sha256(
+                path.read_bytes()).hexdigest()
+        # A synthetic old self entry makes exclusion on BOTH sides observable.
+        data["paths"][snapshot.relative_to(repo).as_posix()] = "0" * 64
+        snapshot.write_text(json.dumps(data), encoding="utf-8")
+        if channel != "snapshot":
+            with (channels / channel).open("ab") as stream:
+                stream.write(b"changed channel bytes\n")
+        result = _run(*args, "--tree-snapshot", str(snapshot), cwd=repo / "docs")
+        assert result.returncode == 0, result.stdout + result.stderr
+        _assert_tree_line(result, "ARCHREVIEW-TREE: UNCHANGED")
+
+    @pytest.mark.parametrize("bad_snapshot", ["missing", "invalid_json", "bad_schema"])
+    def test_bad_snapshot_prints_one_unreadable_finding(
+            self, tmp_path, archreview_tree, bad_snapshot):
+        snapshot = tmp_path / "bad snapshot.json"
+        if bad_snapshot != "missing":
+            snapshot.write_text("{broken" if bad_snapshot == "invalid_json" else "[]",
+                                encoding="utf-8")
+        result = _run(*_tree_score_args(tmp_path), "--tree-snapshot", str(snapshot),
+                      cwd=archreview_tree / "docs")
+        assert result.returncode == 0, result.stdout + result.stderr
+        findings = [line for line in result.stdout.splitlines()
+                    if line.startswith("ARCHREVIEW-TREE:")]
+        assert len(findings) == 1, result.stdout
+        assert findings[0].startswith("ARCHREVIEW-TREE: UNREADABLE reason=")
+        assert findings[0].split("reason=", 1)[1].strip()
+        _assert_tree_line(result, findings[0])
+        assert "Traceback" not in result.stderr
+
+    @pytest.mark.parametrize("verdict,tools,expected_exit,stored", [
+        ("READY_TO_MERGE", 3, 0, "READY_TO_MERGE"),
+        ("WITH_FIXES", 3, 0, "WITH_FIXES"),
+        ("NO", 3, 0, "NO"),
+        ("READY_TO_MERGE", 0, 2, None),
+    ])
+    @pytest.mark.parametrize("finding", ["changed", "unreadable"])
+    def test_finding_preserves_verdict_recording_and_exit(
+            self, tmp_path, archreview_tree, verdict, tools, expected_exit, stored, finding):
+        repo = archreview_tree
+        snapshot = _tree_snapshot(repo, tmp_path / "review prompt.tree.json")
+        args = _tree_score_args(tmp_path, verdict, tools)
+        baseline = _run(*args, cwd=repo / "docs")
+        baseline_record = json.loads((tmp_path / "bkit.json").read_text())[
+            "orchestrator_state"]["feat"]
+        if finding == "changed":
+            (repo / "dirty file.py").write_bytes(b"review changed the subject\n")
+        else:
+            snapshot.write_text("{broken", encoding="utf-8")
+        _state(tmp_path)
+        result = _run(*args, "--tree-snapshot", str(snapshot), cwd=repo / "docs")
+        record = json.loads((tmp_path / "bkit.json").read_text())[
+            "orchestrator_state"]["feat"]
+        assert baseline.returncode == result.returncode == expected_exit, result.stderr
+        assert baseline_record.get("archreview") == record.get("archreview") == stored
+        tree_lines = [line for line in result.stdout.splitlines(keepends=True)
+                      if line.startswith("ARCHREVIEW-TREE:")]
+        assert len(tree_lines) == 1, result.stdout
+        assert tree_lines[0].startswith(f"ARCHREVIEW-TREE: {finding.upper()}")
+        assert result.stdout == baseline.stdout + tree_lines[0]
+        assert result.stderr == baseline.stderr
+
+    @pytest.mark.parametrize("verdict", ["READY_TO_MERGE", "WITH_FIXES", "NO"])
+    def test_omitting_tree_snapshot_keeps_legacy_output_byte_identical(
+            self, tmp_path, archreview_tree, verdict):
+        repo = archreview_tree
+        args = _tree_score_args(tmp_path, verdict)
+        command = [sys.executable, str(SCRIPT), *args]
+        baseline = subprocess.run(command, cwd=repo / "docs", capture_output=True)
+        # An adjacent snapshot and moved tree have no effect without the opt-in.
+        _tree_snapshot(repo, repo / "review.md.tree.json")
+        (repo / "new file.py").write_bytes(b"new\n")
+        _state(tmp_path)
+        result = subprocess.run(command, cwd=repo / "docs", capture_output=True)
+        expected = (f"ARCHREVIEW: {verdict} tools=3 recorded=yes "
+                    "channel=last-message:not_requested\n")
+        if verdict != "READY_TO_MERGE":
+            expected += ("  halt `step6a-prime:architectural_review_failed` — surface the "
+                         "findings, fix, and re-run ONE more cycle.\n")
+        expected += f"[H-MAD] archreview {verdict}\n"
+        assert baseline.returncode == result.returncode == 0
+        assert baseline.stdout == result.stdout == expected.encode("utf-8")
+        assert baseline.stderr == result.stderr == b""
