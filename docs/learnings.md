@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-18 · gotcha · [0.7] · `git,backlog-cycle,handoff:2026-10-18-backlog-cycle-driver-landed` — Restore a file after a failed commit with 'git checkout HEAD -- path', not 'git checkout -- path': the index already holds the staged edit, so restoring from index is a no-op
+- 2026-10-18 · gotcha · [0.7] · `census,python,unicode,handoff:2026-10-18-backlog-cycle-driver-landed` — str.splitlines() also splits on U+2028/U+2029; any code numbering lines by \n must split with re.findall(r'[^\n]*\n|[^\n]+\Z') or line indices drift past such chars (census --apply bug)
 - 2026-10-18 · gotcha · [0.5] · `census,skill-monitoring,handoff:2026-10-18-backlog-drained-to-zero` — Census live-count pins break when another session adds J entries; bump the pins in the same commit as the J entry
 - 2026-10-18 · gotcha · [0.7] · `census,markdown,handoff:2026-10-18-backlog-drained-to-zero` — Unescaped | in a markdown table cell splits the row; census --apply now refuses malformed rows — escape \| in status text
 - 2026-10-18 · pattern · [0.5] · `mutation,testing,handoff:2026-10-18-backlog-drained-to-zero` — A mutant surviving because a later guard also refuses the input is fixed by pinning the test to the specific refusal reason, not the generic verdict
