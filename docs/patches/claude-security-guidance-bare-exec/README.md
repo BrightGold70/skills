@@ -1,7 +1,15 @@
 # security-guidance — bare `"exec("` substring blocks legitimate edits
 
-**Status:** applied locally on 2026-08-09.
-**Upstream:** filed as [anthropics/claude-plugins-official#5085](https://github.com/anthropics/claude-plugins-official/issues/5085) — drop this patch if it ships.
+**Status:** RETIRED 2026-10-18. Was applied locally on 2026-08-09; dropped on update to
+security-guidance `2.0.14`. Do not re-apply.
+**Upstream:** [anthropics/claude-plugins-official#5085](https://github.com/anthropics/claude-plugins-official/issues/5085)
+— fixed in 2.0.0 (lookbehind regex, rule gated to JS/TS files). All four false positives
+are gone. **Known gap:** upstream's regex is `exec\(`, not `exec\s*\(`, so a bare call
+with a space before the paren is still not flagged. That is the pre-existing false negative
+this patch had closed, not a new regression. `verify.py` tracks it in `KNOWN_GAPS` and now
+reads the live copy from `installed_plugins.json` (2.x returns a list from
+`check_patterns`; both shapes are handled). The rest of this document describes the
+retired patch and is kept as the record of why.
 **Target file:** `~/.claude/plugins/cache/claude-plugins-official/security-guidance/unknown/hooks/security_reminder_hook.py`
 
 ## Why this directory exists

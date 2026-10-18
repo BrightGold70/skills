@@ -2095,3 +2095,31 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   reading the tree delta first. Transcript:
   `/private/tmp/claude-501/-Users-kimhawk-orca-workspaces-HemaSuite-pubmed-shared-rate-limiter/a01be1fe-c7f1-4fb1-9884-6080ffcfcacd/scratchpad/t23g.log`
   (volatile). Status: `MONITORING`.
+
+## Local plugin patches retired; upstream fixes are partial (2026-10-18)
+
+Both local plugin patches (`docs/patches/`) were dropped when their upstream fixes shipped, on
+update to bkit `2.1.40` and security-guidance `2.0.14`. Neither upstream fix covers every case the
+local patch did. Both gaps were **accepted rather than re-patched**: a re-applied patch has to be
+redone after every plugin update, and each gap is narrow. Both verifiers now check the *upstream*
+behaviour, list the accepted misses in `KNOWN_GAPS`, exit 1 only on a regression outside them, and
+print `GAP CLOSED` when upstream catches up.
+
+- 🟡 **J54 — bkit ENH-310 still denies a quoted-tag heredoc body containing a
+  terminator-lookalike line.** bkit#145 was fixed in v2.1.34, but in
+  `python3 - <<'PY'` / `  PY_NOT_REALLY` / `$(cat <<EOF … EOF)` / `PY` the detector still returns
+  `critical`. bash prints that body literally (verified 2026-08-09, the patch README's table), so
+  this is a false positive: a safe command is denied. 8/9 verifier cases pass at 2.1.40.
+  Upstream follow-up drafted, not posted: `UPSTREAM-FOLLOWUP.md`.
+  `docs/patches/bkit-enh310-quoted-heredoc-body/verify.js` `KNOWN_GAPS`.
+  Status: `MONITORING`.
+- 🟡 **J55 — security-guidance 2.x does not flag a bare `exec (` with a space before the paren.**
+  #5085 was fixed in 2.0.0 (lookbehind, JS/TS-only gate) and all four false positives are gone, but
+  the regex is `exec\(`, not `exec\s*\(`. This is the pre-patch false negative the local patch had
+  closed, so it is not a regression, just a detection the update did not carry over. 11/12 verifier
+  cases pass at 2.0.14. The verifier also had to change: it hardcoded the `unknown` cache directory
+  (stale after the update) and assumed the 1.x `(rule, reminder)` return; it now reads the live path
+  from `installed_plugins.json` and handles the 2.x list shape. Upstream follow-up drafted, not
+  posted: `UPSTREAM-FOLLOWUP.md`. `docs/patches/claude-security-guidance-bare-exec/verify.py`
+  `KNOWN_GAPS`.
+  Status: `MONITORING`.

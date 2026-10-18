@@ -1,29 +1,47 @@
 #!/usr/bin/env python3
-"""Verifier for the security-guidance bare-"exec(" patch.
+"""Verifier for security-guidance bare-"exec(" behaviour.
 
-Run AFTER any plugin update to check whether the patch is still applied:
+The local patch is RETIRED: upstream fixed claude-plugins-official#5085 in
+security-guidance 2.0.0, and the local patch was dropped on 2026-10-18 at
+2.0.14. Run AFTER any plugin update to check the upstream hook against the
+same cases:
     python3 docs/patches/claude-security-guidance-bare-exec/verify.py
 
-Exit 0 = patch present and every other rule still fires.
-Exit 1 = patch missing (re-apply) or a rule stopped working.
+Exit 0 = every case correct, except the KNOWN_GAPS upstream has not closed.
+Exit 1 = a case outside KNOWN_GAPS failed - a rule regressed upstream.
 
 Absolute expectations, so it keeps working across plugin versions.
-Set HOOK_PATH to point at a specific copy (used for red-green testing).
+The live copy is resolved from installed_plugins.json. Set HOOK_PATH to
+point at a specific copy (used for red-green testing).
 """
 
 import importlib.util
+import json
 import os
 import sys
 
-DEFAULT_HOOK = os.path.expanduser(
-    "~/.claude/plugins/cache/claude-plugins-official/"
-    "security-guidance/unknown/hooks/security_reminder_hook.py"
-)
-HOOK_PATH = os.environ.get("HOOK_PATH", DEFAULT_HOOK)
+INSTALLED = os.path.expanduser("~/.claude/plugins/installed_plugins.json")
 
-if not os.path.exists(HOOK_PATH):
+
+def live_hook_path():
+    """The hook Claude Code actually executes, per installed_plugins.json."""
+    try:
+        with open(INSTALLED) as f:
+            entries = json.load(f)["plugins"]["security-guidance@claude-plugins-official"]
+        root = entries[0]["installPath"]
+    except (OSError, KeyError, IndexError, ValueError):
+        return None
+    return os.path.join(root, "hooks", "security_reminder_hook.py")
+
+
+HOOK_PATH = os.environ.get("HOOK_PATH") or live_hook_path()
+
+if not HOOK_PATH or not os.path.exists(HOOK_PATH):
     print("SKIP - security_reminder_hook.py not found; nothing to verify.")
     sys.exit(0)
+
+# 2.x splits the hook across sibling modules (patterns.py, extensibility.py).
+sys.path.insert(0, os.path.dirname(HOOK_PATH))
 
 # SourceFileLoader is used explicitly so this works on a copy with any
 # extension (e.g. a saved .orig), which spec_from_file_location alone rejects.
@@ -60,36 +78,46 @@ CASES = [
     ("new-function-rule",      "const f = new Function('a', 'return a');",    "ANY"),
 ]
 
-bad = 0
-patch_present = False
-for pattern in getattr(hook, "SECURITY_PATTERNS", []):
-    if pattern.get("ruleName") == "child_process_exec":
-        patch_present = (
-            "regexes" in pattern and CALL not in pattern.get("substrings", [])
-        )
+# Cases the upstream fix (2.0.0+) still gets wrong. Accepted when the local
+# patch was retired; see docs/skill-monitoring.md. Remove an entry once
+# upstream closes it - this script says when.
+KNOWN_GAPS = {"bare-exec-space"}
 
+
+def matched_rules(file_path, content):
+    """Rule names that fired. 1.x returns (rule, reminder); 2.x returns a list of matches."""
+    result = hook.check_patterns(file_path, content)
+    if isinstance(result, tuple):
+        return [result[0]] if result[0] is not None else []
+    return [m["ruleName"] if isinstance(m, dict) else m[0] for m in result]
+
+
+bad = 0
+gaps = 0
 for name, content, expected in CASES:
-    rule, _ = hook.check_patterns(FILE, content)
+    rules = matched_rules(FILE, content)
     if expected == "ANY":
-        ok, want = rule is not None, "some rule"
+        ok, want = bool(rules), "some rule"
     elif expected is None:
-        ok, want = rule is None, "no rule"
+        ok, want = not rules, "no rule"
     else:
-        ok, want = rule == expected, expected
-    if not ok:
+        ok, want = expected in rules, expected
+    if ok and name in KNOWN_GAPS:
+        print(f"  GAP CLOSED {name}: upstream now gets this right - remove it from KNOWN_GAPS")
+    elif not ok and name in KNOWN_GAPS:
+        gaps += 1
+        print(f"  known gap {name}: expected {want}, got {rules!r}")
+    elif not ok:
         bad += 1
-        print(f"  FAIL {name}: expected {want}, got {rule!r}")
+        print(f"  FAIL {name}: expected {want}, got {rules!r}")
 
 print(
-    f"security-guidance - patch {'PRESENT' if patch_present else 'MISSING'}, "
-    f"{len(CASES) - bad}/{len(CASES)} cases correct"
+    f"security-guidance ({HOOK_PATH.split('/security-guidance/')[-1].split('/')[0]}) - "
+    f"{len(CASES) - bad - gaps}/{len(CASES)} cases correct, {gaps} known gap(s)"
 )
 
-if bad and not patch_present:
-    print("RESULT: patch NOT applied - re-apply security_reminder_hook.patch (see README.md)")
-    sys.exit(1)
 if bad:
-    print("RESULT: FAIL - behaviour is wrong even though the patch appears present")
+    print("RESULT: FAIL - upstream rule behaviour regressed outside the known gaps")
     sys.exit(1)
-print("RESULT: OK - bare-exec false positive fixed, real detections intact")
+print("RESULT: OK - upstream behaviour matches, apart from the known gaps")
 sys.exit(0)

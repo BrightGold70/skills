@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Self-contained verifier for the bkit ENH-310 quoted-heredoc-body patch.
+// Self-contained verifier for bkit ENH-310 quoted-heredoc-body behaviour.
 //
-// Run AFTER any bkit plugin update to check whether the patch is still applied:
+// The local patch is RETIRED: upstream fixed bkit#145 in v2.1.34, and the
+// local patch was dropped on 2026-10-18 at bkit 2.1.40. Run AFTER any bkit
+// plugin update to check the upstream detector against the same cases:
 //   node docs/patches/bkit-enh310-quoted-heredoc-body/verify.js
 //
-// Exit 0 = patch present and the guard is still intact.
-// Exit 1 = patch missing (re-apply) or, worse, the guard was widened.
+// Exit 0 = every case correct, except the KNOWN_GAPS upstream has not closed.
+// Exit 1 = a case outside KNOWN_GAPS failed — the guard regressed upstream.
 //
 // Absolute expectations — deliberately does NOT diff against a saved original,
 // so it keeps working across bkit versions.
@@ -70,27 +72,33 @@ const CASES = [
     `python3 - <<'PY'\n${D}(cat <<EOF\nnever closed`, 'critical'],
 ];
 
+// Cases the upstream fix (v2.1.34+) still gets wrong. Accepted when the local
+// patch was retired; see docs/skill-monitoring.md. Remove an entry once
+// upstream closes it — this script says when.
+const KNOWN_GAPS = new Set(['terminator-lookalike']);
+
 let bad = 0;
-const patchPresent = typeof det.stripQuotedHeredocBodies === 'function';
+let gaps = 0;
 
 for (const [name, cmd, expect] of CASES) {
   const sev = det.detect(cmd).severity;
   const ok = expect === 'critical' ? sev === 'critical' : sev !== 'critical';
-  if (!ok) {
+  if (ok && KNOWN_GAPS.has(name)) {
+    console.log(`  GAP CLOSED ${name}: upstream now gets this right — remove it from KNOWN_GAPS`);
+  } else if (!ok && KNOWN_GAPS.has(name)) {
+    gaps++;
+    console.log(`  known gap ${name}: expected ${expect}, got severity=${sev}`);
+  } else if (!ok) {
     bad++;
     console.log(`  FAIL ${name}: expected ${expect}, got severity=${sev}`);
   }
 }
 
-console.log(`bkit ${found.version} — patch symbol ${patchPresent ? 'PRESENT' : 'MISSING'}, ${CASES.length - bad}/${CASES.length} cases correct`);
+console.log(`bkit ${found.version} — ${CASES.length - bad - gaps}/${CASES.length} cases correct, ${gaps} known gap(s)`);
 
-if (bad > 0 && !patchPresent) {
-  console.log('RESULT: patch NOT applied — re-apply heredoc-detector.patch (see README.md)');
-  process.exit(1);
-}
 if (bad > 0) {
-  console.log('RESULT: FAIL — guard behaviour is wrong even though the patch symbol is present');
+  console.log('RESULT: FAIL — upstream guard behaviour regressed outside the known gaps');
   process.exit(1);
 }
-console.log('RESULT: OK — false positive fixed, guard still intact');
+console.log('RESULT: OK — upstream behaviour matches, apart from the known gaps');
 process.exit(0);

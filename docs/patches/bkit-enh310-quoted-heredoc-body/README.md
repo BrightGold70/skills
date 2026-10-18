@@ -1,7 +1,13 @@
 # bkit ENH-310 — quoted-tag heredoc bodies are inert
 
-**Status:** applied locally to bkit `2.1.19` on 2026-08-09.
-**Upstream:** filed as [popup-studio-ai/bkit-claude-code#145](https://github.com/popup-studio-ai/bkit-claude-code/issues/145) — drop this patch if it ships.
+**Status:** RETIRED 2026-10-18. Was applied locally to bkit `2.1.19` on 2026-08-09; dropped
+on update to bkit `2.1.40`. Do not re-apply.
+**Upstream:** [popup-studio-ai/bkit-claude-code#145](https://github.com/popup-studio-ai/bkit-claude-code/issues/145)
+— fixed in v2.1.34, **partially**: the `terminator-lookalike` case (an indented line that
+merely starts with the tag, e.g. `  PY_NOT_REALLY` inside `<<'PY'`) is still denied as
+critical. Accepted as a known gap; `verify.js` tracks it in `KNOWN_GAPS` and reports when
+upstream closes it. The rest of this document describes the retired patch and is kept as
+the record of why.
 **Target file:** `~/.claude/plugins/cache/bkit-marketplace/bkit/<version>/lib/defense/heredoc-detector.js`
 
 ## Why this directory exists
