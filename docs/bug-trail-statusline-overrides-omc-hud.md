@@ -87,8 +87,13 @@ repo found (`wiring-stamp.json` search).
 
 - `claude plugin list` and similar report a fresh process. A running session keeps the status
   line it started with, so check after a restart.
-- Wanting both bars means writing a wrapper command that runs the HUD and trail's
-  `.trail/statusline.cjs` and joins their output. Claude Code itself takes one `statusLine` only.
+- **Both bars at once** (applied on this Mac 2026-10-18): Claude Code takes one `statusLine`, and
+  the OMC HUD has no hook for another command's output, so the user-level `statusLine` runs a
+  wrapper, `~/.claude/hud/omc-plus-trail.sh`. It reads stdin once, prints the HUD, then, when
+  `${CLAUDE_PROJECT_DIR:-$PWD}/.trail/statusline.cjs` exists, trail's bar on the same input
+  (errors swallowed, so a broken trail never hides the HUD). Repos without trail show the HUD
+  alone. Re-check it after an OMC update or `omc-setup`, which may rewrite `statusLine` back to
+  the plain HUD.
 - The same rewire deleted `.mcp.json` and rebranded `AGENTS.md`/`opencode.json`. That is intended:
   see the next section.
 
