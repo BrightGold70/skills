@@ -411,6 +411,56 @@ def _suite_is_green(command: list[str], root: Path) -> bool:
     return _run(command, root)[0]
 
 
+def _measure_reachability(command: list[str], root: Path, target: Path) -> set[int] | None:
+    """Trace one original-tree pin, including its Python children and threads.
+
+    None means no interpreter flushed the tracer; an empty set is a measured
+    miss. Keep the startup code and environment local to this run.
+    """
+    startup = '''import atexit
+import os
+import sys
+import threading
+
+_target = os.path.realpath(os.environ["HMAD_TRACE_TARGET"])
+_hits_path = os.environ["HMAD_TRACE_HITS"]
+_hits = set()
+
+def _lines(frame, event, arg):
+    if event == "line":
+        _hits.add(frame.f_lineno)
+    return _lines
+
+def _trace(frame, event, arg):
+    if os.path.realpath(frame.f_code.co_filename) == _target:
+        return _lines
+
+def _flush():
+    with open(_hits_path, "a", encoding="utf-8") as stream:
+        stream.write("".join(str(line) + "\\n" for line in sorted(_hits)))
+
+atexit.register(_flush)
+sys.settrace(_trace)
+threading.settrace(_trace)
+'''
+    with tempfile.TemporaryDirectory(prefix="hmad-reachability-") as directory:
+        tracer_dir = Path(directory)
+        (tracer_dir / "sitecustomize.py").write_text(startup, encoding="utf-8")
+        hits_path = tracer_dir / "hits"
+        env = dict(os.environ)
+        env["PYTHONPATH"] = directory + (
+            os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+        )
+        env["HMAD_TRACE_TARGET"] = str(target.resolve())
+        env["HMAD_TRACE_HITS"] = str(hits_path)
+        _purge_bytecode(root)
+        try:
+            subprocess.run(command, cwd=str(root), env=env, capture_output=True, text=True)
+            return {int(line) for line in hits_path.read_text(encoding="utf-8").splitlines()}
+        except (OSError, ValueError):
+            return None
+
+
 FAILED_LINE = re.compile(r"^FAILED\s+(\S+)", re.MULTILINE)
 OUTCOME = re.compile(r"(\d+)\s+(passed|failed|skipped|error|errors|xfailed|xpassed)")
 
@@ -1426,7 +1476,8 @@ def tree_lock(root: Path, spec_path: Path):
 
 
 def _run_spec_holding_the_tree(
-    spec_path: Path, spec: dict | None = None, root: Path | None = None
+    spec_path: Path, spec: dict | None = None, root: Path | None = None,
+    *, reachability: bool = False,
 ) -> dict:
     """Apply each mutation in turn, run the command, always restore.
 
@@ -1507,6 +1558,10 @@ def _run_spec_holding_the_tree(
         "drifted": [],
         "unreadable": [],
     }
+
+    if reachability:
+        result["unreachable_kills"] = []
+        result["reachability_notes"] = []
 
     drifted_specs = []
     unreadable_specs = []
@@ -1667,6 +1722,25 @@ def _run_spec_holding_the_tree(
                         f"would measure nothing"
                     )
                     continue
+
+            reachable = None
+            if reachability:
+                reason = ("non-python-target" if Path(mutation["file"]).suffix != ".py"
+                          else "no-test" if not mutation.get("test") else None)
+                if reason is None:
+                    offset = source.index(mutation["find"])
+                    first = source.count("\n", 0, offset) + 1
+                    last = source.count("\n", 0, offset + len(mutation["find"]) - 1) + 1
+                    executed = _measure_reachability(scoring_command, root, target)
+                    if executed is None:
+                        reason = "tracer-produced-nothing"
+                    else:
+                        reachable = not executed.isdisjoint(range(first, last + 1))
+                if reason is not None:
+                    result["reachability_notes"].append(
+                        f"{mutation['name']} not-measured ({reason})"
+                    )
+            caught_before = result["caught"]
 
             originals.setdefault(target, source)
             span = replacement_span(source, mutation["find"], mutation["replace"])
@@ -1829,6 +1903,10 @@ def _run_spec_holding_the_tree(
                         )
                     result["mechanism"][mutation["name"]] = mechanism
 
+            if reachable is False and result["caught"] > caught_before:
+                result["unreachable_kills"].append(
+                    f"{mutation['name']} (span L{first}-L{last} never executed by {mutation['test']})"
+                )
             target.write_text(source, encoding="utf-8")
     finally:
         result["restore_verified"] = restore_all()
@@ -2002,7 +2080,7 @@ def _check_anchors(spec_paths: list[Path]) -> int:
 
 
 
-def run_spec(spec_path: Path) -> dict:
+def run_spec(spec_path: Path, *, reachability: bool = False) -> dict:
     """`_run_spec_holding_the_tree`, serialised against other runs on this tree."""
     spec_path = Path(spec_path)
     spec = _load_spec(spec_path)
@@ -2022,7 +2100,11 @@ def run_spec(spec_path: Path) -> dict:
             # own mutations are restored before the second read and so cancel out.
             before = _git_head(root)
             digest_before = tree_digest(root)
-            result = _run_spec_holding_the_tree(spec_path, spec=spec, root=root)
+            if reachability:
+                result = _run_spec_holding_the_tree(spec_path, spec=spec, root=root,
+                                                   reachability=True)
+            else:
+                result = _run_spec_holding_the_tree(spec_path, spec=spec, root=root)
             after = _git_head(root)
             paths = moved_paths(digest_before, tree_digest(root))
             # BOTH present AND different. An unavailable read is not a change —
@@ -2054,7 +2136,7 @@ _MEASURED = ("ALL_CAUGHT", "SURVIVED")
 _STOP = ("BUSY", "TREE_MOVED")
 
 
-def _sweep(spec_paths: list[Path]) -> int:
+def _sweep(spec_paths: list[Path], *, reachability: bool = False) -> int:
     """Run every spec, one harness process each, and summarise the corpus.
 
     Completing a hand-rolled loop over the corpus once found 2 SURVIVED and 1
@@ -2070,7 +2152,8 @@ def _sweep(spec_paths: list[Path]) -> int:
     counts = {"all_caught": 0, "survived": 0, "unmeasured": 0}
     stopped = None
     for spec_path in spec_paths:
-        proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), str(spec_path)],
+        extra = ["--reachability"] if reachability else []
+        proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), *extra, str(spec_path)],
                               capture_output=True, text=True)
         line = next((l for l in proc.stdout.splitlines() if l.startswith("MUTATION: ")),
                     "MUTATION: UNREADABLE (no verdict line)")
@@ -2080,6 +2163,8 @@ def _sweep(spec_paths: list[Path]) -> int:
         # needs each exception across the corpus, which the token line drops.
         name = None
         for child in proc.stdout.splitlines():
+            if reachability and child.startswith(("  unreachable-kill:", "  reachability:")):
+                print(child, flush=True)
             if child.startswith("  caught: "):
                 name = child[len("  caught: "):].strip()
             for kind in ("crash", "hollow", "timeout"):
@@ -2225,6 +2310,10 @@ def main(argv: list[str] | None = None) -> int:
              "applies nothing and runs no tests",
     )
     parser.add_argument(
+        "--reachability", action="store_true",
+        help="trace each named Python pin before mutation and report unreachable kills",
+    )
+    parser.add_argument(
         "--isolate", action="store_true",
         help="run in a temporary detached worktree with dirty files copied in",
     )
@@ -2247,7 +2336,7 @@ def main(argv: list[str] | None = None) -> int:
         except SpecError as exc:
             print(f"SWEEP: INCOMPLETE specs=0 — {exc}")
             return 2
-        return _sweep(specs)
+        return _sweep(specs, reachability=True) if args.reachability else _sweep(specs)
     if not args.spec:
         parser.error("a mutation run takes exactly one spec")
     if len(args.spec) != 1:
@@ -2260,7 +2349,10 @@ def main(argv: list[str] | None = None) -> int:
     label = args.spec.name.split(".")[0] or "unknown"
 
     try:
-        result = run_spec(args.spec)
+        if args.reachability:
+            result = run_spec(args.spec, reachability=True)
+        else:
+            result = run_spec(args.spec)
     except SpecError as exc:
         # Same reasoning as the wire-pin gate's UNREADABLE: the caller's contract
         # is to read the token, so an error announced only on stderr is silence.
@@ -2370,7 +2462,13 @@ def main(argv: list[str] | None = None) -> int:
             # `crash_kills` — crashes raised inside the replacement's own lines.
             f" hollow_kills={result.get('hollow_kills', 0)}"
             f" host_skipped={len(result.get('host_skipped', []))}"
+            + (f" unreachable_kills={len(result.get('unreachable_kills', []))}"
+               if args.reachability else "")
         )
+    for entry in result.get("unreachable_kills", []):
+        print(f"  unreachable-kill: {entry}")
+    for entry in result.get("reachability_notes", []):
+        print(f"  reachability: {entry}")
     _print_skipped_precheck_entries(result)
     for entry in result.get("host_skipped", []):
         print(f"  host-skipped: {entry}")

@@ -577,6 +577,312 @@
       "find": "        print(f\"  host-skipped: {entry}\")",
       "replace": "        pass",
       "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_failed_requires_is_bounded_host_skipped_and_never_applied"
+    },
+    {
+      "name": "reachability-cli-flag-missing",
+      "_mechanism": "Remove the public opt-in spelling; help must expose the documented flag.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "        \"--reachability\", action=\"store_true\",",
+      "replace": "        \"--trace-reachability\", action=\"store_true\",",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_flag_is_documented_in_cli_help"
+    },
+    {
+      "name": "reachability-single-run-not-forwarded",
+      "_mechanism": "Parse the flag but leave single-spec execution untraced; a caught unexecuted span must be reported.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "            result = run_spec(args.spec, reachability=True)",
+      "replace": "            result = run_spec(args.spec)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
+    },
+    {
+      "name": "reachability-lock-wrapper-not-forwarded",
+      "_mechanism": "Drop the option at the locked-run boundary; measuring must reach the row runner.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "run_spec",
+      "find": "                                                   reachability=True)",
+      "replace": "                                                   reachability=False)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
+    },
+    {
+      "name": "reachability-sweep-not-forwarded",
+      "_mechanism": "Drop the flag before starting the corpus sweep.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "        return _sweep(specs, reachability=True) if args.reachability else _sweep(specs)",
+      "replace": "        return _sweep(specs)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sweep_forwards_flag_and_per_spec_appended_counts"
+    },
+    {
+      "name": "reachability-sweep-child-not-forwarded",
+      "_mechanism": "Start sweep children without the flag; every per-spec count and detail must survive.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_sweep",
+      "find": "        extra = [\"--reachability\"] if reachability else []",
+      "replace": "        extra = []",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sweep_forwards_flag_and_per_spec_appended_counts"
+    },
+    {
+      "name": "reachability-sweep-details-hidden",
+      "_mechanism": "Keep the per-spec count but swallow its diagnostic detail.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_sweep",
+      "find": "            if reachability and child.startswith((\"  unreachable-kill:\", \"  reachability:\")):",
+      "replace": "            if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sweep_forwards_flag_and_per_spec_appended_counts"
+    },
+    {
+      "name": "reachability-summary-leaks-into-opt-out",
+      "_mechanism": "Append the new field without opting in; single and sweep output must remain byte-identical.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "               if args.reachability else \"\")",
+      "replace": "               if True else \"\")",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_disabled_preserves_exact_output_existing_guard"
+    },
+    {
+      "name": "reachability-summary-count-hidden",
+      "_mechanism": "Keep diagnoses internally but publish zero unreachable kills.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "            + (f\" unreachable_kills={len(result.get('unreachable_kills', []))}\"",
+      "replace": "            + (f\" unreachable_kills={0}\"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
+    },
+    {
+      "name": "reachability-unreachable-detail-hidden",
+      "_mechanism": "A count alone omits the mutation, original span and named test.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "        print(f\"  unreachable-kill: {entry}\")",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
+    },
+    {
+      "name": "reachability-unmeasured-detail-hidden",
+      "_mechanism": "Do not silently treat ineligible rows as measured.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "        print(f\"  reachability: {entry}\")",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_ineligible_rows_are_not_measured_or_counted"
+    },
+    {
+      "name": "reachability-non-python-eligibility-inverted",
+      "_mechanism": "Only Python targets have executable Python line numbers.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "Path(mutation[\"file\"]).suffix != \".py\"",
+      "replace": "Path(mutation[\"file\"]).suffix == \".py\"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_ineligible_rows_are_not_measured_or_counted"
+    },
+    {
+      "name": "reachability-unnamed-row-measured",
+      "_mechanism": "Do not invent a test command for a row with no named pin.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "else \"no-test\" if not mutation.get(\"test\") else None)",
+      "replace": "else \"no-test\" if False else None)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_ineligible_rows_are_not_measured_or_counted"
+    },
+    {
+      "name": "reachability-original-span-start-shifted",
+      "_mechanism": "Original line numbers start at one, including Unicode-prefaced and partial-line anchors.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    first = source.count(\"\\n\", 0, offset) + 1",
+      "replace": "                    first = source.count(\"\\n\", 0, offset) + 2",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
+    },
+    {
+      "name": "reachability-span-uses-replacement-length",
+      "_mechanism": "An expanded replacement must not inflate the span measured on the original tree.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    last = source.count(\"\\n\", 0, offset + len(mutation[\"find\"]) - 1) + 1",
+      "replace": "                    last = first + mutation[\"replace\"].count(\"\\n\")",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
+    },
+    {
+      "name": "reachability-requires-every-span-line",
+      "_mechanism": "One executed original span line is sufficient, including spans with comments.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                        reachable = not executed.isdisjoint(range(first, last + 1))",
+      "replace": "                        reachable = set(range(first, last + 1)).issubset(executed)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_any_executed_original_span_line_is_sufficient"
+    },
+    {
+      "name": "reachability-missing-tracer-claimed-unreachable",
+      "_mechanism": "No hit file means unknown, whereas an existing empty hit file is a measured miss.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                        reason = \"tracer-produced-nothing\"",
+      "replace": "                        reachable = False",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_no_hits_file_is_unknown_not_an_unreachable_kill"
+    },
+    {
+      "name": "reachability-survivor-counted-as-kill",
+      "_mechanism": "Unexecuted survivors must stay outside the caught-only diagnostic.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "            if reachable is False and result[\"caught\"] > caught_before:",
+      "replace": "            if reachable is False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_survivor_is_not_an_unreachable_kill"
+    },
+    {
+      "name": "reachability-runs-suite-instead-of-own-pin",
+      "_mechanism": "A different test may execute the span; every row must measure its own named test.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    executed = _measure_reachability(scoring_command, root, target)",
+      "replace": "                    executed = _measure_reachability(command, root, target)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_measures_each_row_with_its_own_named_test"
+    },
+    {
+      "name": "reachability-traces-mutated-tree",
+      "_mechanism": "The startup observer must see original bytes before the only traced named-test run.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    executed = _measure_reachability(scoring_command, root, target)",
+      "replace": "                    target.write_text(source.replace(mutation[\"find\"], mutation[\"replace\"]), encoding=\"utf-8\")\n                    executed = _measure_reachability(scoring_command, root, target)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
+    },
+    {
+      "name": "reachability-executes-traced-pin-twice",
+      "_mechanism": "Each eligible row must run exactly one traced pin.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "            subprocess.run(command, cwd=str(root), env=env, capture_output=True, text=True)",
+      "replace": "            subprocess.run(command, cwd=str(root), env=env, capture_output=True, text=True)\n            subprocess.run(command, cwd=str(root), env=env, capture_output=True, text=True)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
+    },
+    {
+      "name": "reachability-tracer-not-first-on-pythonpath",
+      "_mechanism": "Preserve the inherited path after the injected startup directory.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "        env[\"PYTHONPATH\"] = directory + (",
+      "replace": "        env[\"PYTHONPATH\"] = \"\" + (",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
+    },
+    {
+      "name": "reachability-environment-leaked",
+      "_mechanism": "Tracer environment must be passed to the child without changing the harness environment.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "        env = dict(os.environ)",
+      "replace": "        env = os.environ",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
+    },
+    {
+      "name": "reachability-hit-file-overwritten",
+      "_mechanism": "Independent interpreter exits must append, preserving child-process coverage.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "    with open(_hits_path, \"a\", encoding=\"utf-8\") as stream:",
+      "replace": "    with open(_hits_path, \"w\", encoding=\"utf-8\") as stream:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
+    },
+    {
+      "name": "reachability-atexit-flush-missing",
+      "_mechanism": "Hits must be persisted when each interpreter exits.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "atexit.register(_flush)",
+      "replace": "# atexit.register(_flush)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
+    },
+    {
+      "name": "reachability-main-thread-hook-missing",
+      "_mechanism": "The injected startup code must enable the current interpreter tracer.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "sys.settrace(_trace)",
+      "replace": "# sys.settrace(_trace)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
+    },
+    {
+      "name": "reachability-new-thread-hook-missing",
+      "_mechanism": "Execution in a newly started thread must be included.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "threading.settrace(_trace)",
+      "replace": "# threading.settrace(_trace)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_traces_children_threads_and_only_the_target_realpath"
+    },
+    {
+      "name": "reachability-tracer-env-not-inherited",
+      "_mechanism": "Python child interpreters need the startup path and hit-file environment.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "            subprocess.run(command, cwd=str(root), env=env, capture_output=True, text=True)",
+      "replace": "            subprocess.run(command, cwd=str(root), capture_output=True, text=True)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_traces_children_threads_and_only_the_target_realpath"
+    },
+    {
+      "name": "reachability-matches-basename-instead-of-realpath",
+      "_mechanism": "A decoy guard.py must not count as execution of the mutation target.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "    if os.path.realpath(frame.f_code.co_filename) == _target:",
+      "replace": "    if os.path.basename(frame.f_code.co_filename) == os.path.basename(_target):",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_traces_children_threads_and_only_the_target_realpath"
+    },
+    {
+      "name": "reachability-symlink-alias-not-resolved",
+      "_mechanism": "Execution through a symlink still belongs to the exact target realpath.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "    if os.path.realpath(frame.f_code.co_filename) == _target:",
+      "replace": "    if os.path.abspath(frame.f_code.co_filename) == _target:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_traces_children_threads_and_only_the_target_realpath"
+    },
+    {
+      "name": "reachability-doc-pin-removed",
+      "_mechanism": "The harness bullet must document the flag and appended count in one sentence.",
+      "file": "SKILL.md",
+      "symbol": "Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)",
+      "find": " Opt-in `--reachability` traces each named Python test on the original tree and appends `unreachable_kills=` for caught mutations whose original span never executed; unmeasured rows are reported separately and verdicts stay unchanged.",
+      "replace": "",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_skill_harness_bullet_documents_flag_and_count_together"
+    },
+    {
+      "name": "reachability-temp-directory-leaked",
+      "_mechanism": "Temporary startup code and hit files must disappear after the named-test run.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "    with tempfile.TemporaryDirectory(prefix=\"hmad-reachability-\") as directory:",
+      "replace": "    with contextlib.nullcontext(tempfile.mkdtemp(prefix=\"hmad-reachability-\")) as directory:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
+    },
+    {
+      "name": "reachability-missing-hit-file-treated-as-empty",
+      "_mechanism": "An unavailable tracer must remain unknown rather than become a measured miss.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "        except (OSError, ValueError):\n            return None",
+      "replace": "        except (OSError, ValueError):\n            return set()",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_no_hits_file_is_unknown_not_an_unreachable_kill"
+    },
+    {
+      "name": "reachability-line-events-not-recorded",
+      "_mechanism": "Only executed line events establish whether a span ran.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "    if event == \"line\":\n        _hits.add(frame.f_lineno)",
+      "replace": "    if event == \"call\":\n        _hits.add(frame.f_lineno)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_any_executed_original_span_line_is_sufficient"
+    },
+    {
+      "name": "reachability-pin-runs-outside-spec-root",
+      "_mechanism": "The traced named test must run with the same resolved root as ordinary scoring.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_measure_reachability",
+      "find": "            subprocess.run(command, cwd=str(root), env=env, capture_output=True, text=True)",
+      "replace": "            subprocess.run(command, cwd=str(root.parent), env=env, capture_output=True, text=True)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
     }
   ]
 }
