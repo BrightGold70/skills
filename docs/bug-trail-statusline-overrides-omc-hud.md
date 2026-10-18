@@ -89,8 +89,34 @@ repo found (`wiring-stamp.json` search).
   line it started with, so check after a restart.
 - Wanting both bars means writing a wrapper command that runs the HUD and trail's
   `.trail/statusline.cjs` and joins their output. Claude Code itself takes one `statusLine` only.
-- Separately, `.mcp.json` was deleted and `AGENTS.md`/`opencode.json` were modified in this repo at
-  12:42:47, 12 minutes after the rewire. Whether trail did that (its MCP server also runs upkeep)
-  was not investigated.
+- The same rewire deleted `.mcp.json` and rebranded `AGENTS.md`/`opencode.json`. That is intended:
+  see the next section.
+
+## Related: the same rewire deletes `.mcp.json` (intended, not a bug)
+
+trail 0.23 gives Claude Code **no MCP server**. It works through hooks and the `trail` command
+(allowlisted as `Bash(trail:*)` in the local settings). Moving a graft repo over therefore takes
+the old server out:
+
+- `claude/init.js` `runTrailInit` → `clearOldLayout` → `dropServer('.mcp.json', ['trail','graft'])`
+  removes those entries and **deletes the file once nothing else is left in it**. This repo's
+  `.mcp.json` held only `graft` (committed in `effe449b`), so the whole file went.
+- `hosts/claude-global.js`: "trail: no server, and the `trail` one an older trail registered here
+  goes." Confirmed here: no `trail`/`graft` server in `~/.claude.json`, user or project scope.
+- Hosts that do still use MCP get the server renamed, not removed: `opencode.json`
+  `mcp.graft` → `mcp.trail`, command `graft mcp` → `trail mcp`. The `AGENTS.md` block is the
+  same rename (`graft:start` → `trail:start`, `graft/` → `.trail/cache/`).
+
+**Timing.** The deletion happened in the 12:30:38 rewire, not later. `git status` showed no
+`.mcp.json` change at 11:53 and showed `D .mcp.json` at 12:32. The 12:42:47 mtimes on
+`AGENTS.md`/`opencode.json` come from a `git rebase --autostash` (reflog `12:42:47`) writing the
+stashed changes back to disk. An autostash restore stamps every stashed file with the restore time,
+so when reconstructing a timeline, read mtimes against `git reflog`.
+
+**Consequence.** These are working-tree changes awaiting a decision: commit them to adopt trail's
+layout for everyone who clones the repo, or restore them (`git checkout -- .mcp.json AGENTS.md
+opencode.json`) to keep graft's. Committing drops the repo's MCP server for a machine that has
+graft but not trail. trail's own handling of that case (`fitTrailServerToMachine`,
+`disableGraftServerIn`) was read but not tested.
 - Upstream fix to propose: `mergeTrailLocal` should consult the effective `statusLine` from user
   and project scopes, not just the file it writes, and print its warning when it defers.
