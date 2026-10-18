@@ -4812,3 +4812,180 @@ def test_reachability_skill_harness_bullet_documents_flag_and_count_together():
     sentences = re.split(r"(?<=[.!?])\s+", "\n".join(lines[start:end]))
     assert any("--reachability" in sentence and "unreachable_kills=" in sentence
                for sentence in sentences), "Harness bullet must document flag / count in one sentence"
+
+
+# r2491: a named survivor needs a concrete hint for finding its replacement pin.
+def _masked_hint_probe(
+    tmp_path, monkeypatch, *, suite_result=(True, "2 passed"),
+    pin_result=(True, "1 passed"), pin_baseline=(True, "1 passed"), targeted=True,
+):
+    import h_mad_mutation_harness as harness
+
+    row = {"name": "masked agreement guard", "file": "guard.py",
+           "find": "return 'stable'", "replace": "return 'moved'"}
+    if targeted:
+        row["test"] = PIN
+    spec = _pytest_project(tmp_path, [row], targeted=targeted)
+    data = json.loads(spec.read_text(encoding="utf-8"))
+    target = tmp_path / "guard.py"
+    original = target.read_bytes()
+    calls = []
+
+    def run(command, root):
+        source = target.read_bytes()
+        calls.append((list(command), root, source))
+        mutated = source != original
+        if command == data["command"]:
+            return suite_result if mutated else (True, "2 passed")
+        assert targeted and command == data["target_command"] + [PIN], command
+        return pin_result if mutated else pin_baseline
+
+    monkeypatch.setattr(harness, "_run", run)
+    return harness, spec, data, original, calls
+
+
+@pytest.mark.parametrize("other_fails", [False, True], ids=["no-test-failed", "other-test-failed"])
+def test_masked_hint_real_named_survivor_prints_actionable_detail(tmp_path, other_fails):
+    import subprocess
+
+    row = {"name": "masked agreement guard", "file": "guard.py", "test": PIN}
+    if other_fails:
+        row.update(find="return 'stable'", replace="return 'moved'")
+        expected = (
+            f"  masked-hint: {row['name']} — other tests failed: {OTHER}; "
+            "consider re-pinning to one of them"
+        )
+    else:
+        row.update(find="def unrelated():", replace="def unrelated():  # noted")
+        expected = (
+            f"  masked-hint: {row['name']} — no test failed; if a later guard now "
+            "refuses the same input, re-pin this row to a test that stubs that guard (row 2491)"
+        )
+    spec = _pytest_project(tmp_path, [row])
+    original = (tmp_path / "guard.py").read_bytes()
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), str(spec)], capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert (tmp_path / "guard.py").read_bytes() == original
+    assert [line for line in proc.stdout.splitlines() if line.startswith("  masked-hint:")] == [expected]
+
+
+@pytest.mark.parametrize("failure_count", [1, 3, 5])
+def test_masked_hint_reports_at_most_three_failing_node_ids(
+    tmp_path, monkeypatch, capsys, failure_count,
+):
+    import h_mad_mutation_harness as harness
+
+    nodes = [f"test_other.py::test_guard_{index}[case]" for index in range(failure_count)]
+    output = "\n".join(f"FAILED {node} - AssertionError: guard refused" for node in nodes)
+    output += f"\n{failure_count} failed, 1 passed\n"
+    _, spec, _, _, _ = _masked_hint_probe(
+        tmp_path, monkeypatch, suite_result=(False, output),
+    )
+
+    assert harness.main([str(spec)]) == 0
+    stdout = capsys.readouterr().out
+
+    assert [line for line in stdout.splitlines() if line.startswith("  masked-hint:")] == [
+        "  masked-hint: masked agreement guard — other tests failed: "
+        + ", ".join(nodes[:3]) + "; consider re-pinning to one of them"
+    ], stdout
+
+
+@pytest.mark.parametrize("suite_result", [
+    (False, ""),
+    (False, "could not launch: [Errno 2] No such file or directory"),
+    (False, "INTERNALERROR: runner stopped before reporting results"),
+    (False, "1 failed"),
+], ids=["empty-output", "launch-failed", "unparseable-output", "no-failing-node-ids"])
+def test_masked_hint_unreadable_extra_run_is_unmeasured_and_does_not_rescore(
+    tmp_path, monkeypatch, capsys, suite_result,
+):
+    import h_mad_mutation_harness as harness
+
+    _, spec, data, original, calls = _masked_hint_probe(
+        tmp_path, monkeypatch, suite_result=suite_result,
+    )
+
+    assert harness.main([str(spec)]) == 0
+    stdout = capsys.readouterr().out
+
+    assert (tmp_path / "guard.py").read_bytes() == original
+    assert sum(command == data["command"] and source != original
+               for command, _, source in calls) == 1
+    assert next(line for line in stdout.splitlines() if line.startswith("MUTATION: ")) == (
+        "MUTATION: SURVIVED mutations=1 caught=0 survived=1 refused=0 unreadable=0 "
+        "crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/1 "
+        "hollow_kills=0 host_skipped=0"
+    ), stdout
+    assert [line for line in stdout.splitlines() if line.startswith("  masked-hint:")] == [
+        "  masked-hint: masked agreement guard — unmeasured"
+    ], stdout
+
+
+@pytest.mark.parametrize("suite_green", [True, False], ids=["suite-passes", "suite-fails"])
+def test_masked_hint_preserves_existing_summary_and_mutation_lifecycle_existing_guard(
+    tmp_path, monkeypatch, capsys, suite_green,
+):
+    """Existing guard: exactly one suite probe runs before restoration; scoring stays fixed."""
+    import h_mad_mutation_harness as harness
+
+    output = "2 passed" if suite_green else f"FAILED {OTHER} - AssertionError\n1 failed, 1 passed"
+    _, spec, data, original, calls = _masked_hint_probe(
+        tmp_path, monkeypatch, suite_result=(suite_green, output),
+    )
+    mutated = original.replace(b"return 'stable'", b"return 'moved'")
+    pin_command = data["target_command"] + [PIN]
+
+    assert harness.main([str(spec)]) == 0
+    stdout = capsys.readouterr().out
+
+    assert calls == [
+        (data["command"], tmp_path.resolve(), original),
+        (pin_command, tmp_path.resolve(), original),
+        (pin_command, tmp_path.resolve(), mutated),
+        (data["command"], tmp_path.resolve(), mutated),
+        (data["command"], tmp_path.resolve(), original),
+    ]
+    assert (tmp_path / "guard.py").read_bytes() == original
+    assert next(line for line in stdout.splitlines() if line.startswith("MUTATION: ")) == (
+        "MUTATION: SURVIVED mutations=1 caught=0 survived=1 refused=0 unreadable=0 "
+        "crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/1 "
+        "hollow_kills=0 host_skipped=0"
+    ), stdout
+    assert stdout.splitlines()[-1] == "[H-MAD] mutations mutation SURVIVED"
+
+
+@pytest.mark.parametrize("kind", [
+    "caught", "refused-before-mutation", "refused-under-mutation", "untargeted-survivor",
+])
+def test_masked_hint_is_never_emitted_for_ineligible_rows_existing_guard(
+    tmp_path, monkeypatch, capsys, kind,
+):
+    """Existing guards: caught/refused rows and survivors without a named pin get no hint."""
+    import h_mad_mutation_harness as harness
+
+    options = {}
+    if kind == "caught":
+        options["pin_result"] = (False, f"FAILED {PIN} - AssertionError\n1 failed")
+    elif kind == "refused-before-mutation":
+        options["pin_baseline"] = (False, "1 failed")
+    elif kind == "refused-under-mutation":
+        options["pin_result"] = (False, "1 error during collection")
+    else:
+        options["targeted"] = False
+    _, spec, data, original, calls = _masked_hint_probe(tmp_path, monkeypatch, **options)
+
+    assert harness.main([str(spec)]) == (2 if kind.startswith("refused") else 0)
+    stdout = capsys.readouterr().out
+
+    verdict = "REFUSED" if kind.startswith("refused") else "ALL_CAUGHT" if kind == "caught" else "SURVIVED"
+    assert f"MUTATION: {verdict} " in stdout, stdout
+    assert "masked-hint:" not in stdout
+    # Untargeted rows already run the suite once to score; none gets a diagnostic rerun.
+    assert sum(command == data["command"] and source != original
+               for command, _, source in calls) == int(kind == "untargeted-survivor")
+    assert (tmp_path / "guard.py").read_bytes() == original
