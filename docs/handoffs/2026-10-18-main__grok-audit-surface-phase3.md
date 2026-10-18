@@ -20,7 +20,15 @@ Started `/h-mad grok-audit-surface`. The goal is to make grok a standing third a
 
 ## Next Steps
 
-1. **Collect plan audit cycle 1.** Read `/private/tmp/claude-501/-Users-kimhawk-orca-skills/1f39eb76-d775-4dc8-b33d-b680f83a32ee/scratchpad/plan_audit_c1.out`. Take the `AUDITCYCLE:` line, the `Effort:` block (low-evidence?) and the `SUITE:` line. Reports are in `docs/01-plan/features/grok-audit-surface.plan.audit.v1.*.md`, collected by the driver; if absent, use `/tmp/audit_grok-audit-surface_plan_cycle1_run20261018T114339Z-60516_p{1,2}.report.md`.
+0. **BLOCKER: plan audit cycle 1 came back `AUDITCYCLE: UNVERIFIED reason=unscorable_report:p2`. Repair agy before re-running.**
+   - **Cause:** project `.agents/hooks.json` (untracked, created 2026-10-18 11:52) registers `python3 ~/.gemini/config/skills/h-mad/hooks/h-mad-agy-tdd-gate.py` on every agy tool call. `~/.gemini/config/skills/` does not exist, so the hook exits 2, agy treats that as a refusal, and every tool call fails.
+   - **Effect:** p2 shows `tools=4 ok=0 failed=4`, so it read nothing. Every agy dispatch in this repo since 11:52 is hollow the same way.
+   - **Remedy** (`h-mad/references/agy-runtime.md` §Install): `mkdir -p ~/.gemini/config/skills && ln -s /Users/kimhawk/orca/skills/h-mad ~/.gemini/config/skills/h-mad && ln -s /Users/kimhawk/orca/skills/handoff ~/.gemini/config/skills/handoff`. Then confirm one agy tool call succeeds.
+   - The operator deferred this repair at close.
+   - **Then re-run cycle 1 and commit nothing while it runs.** This run's `SUITE: FAIL passed=6685 failed=39 tree_moved=HEAD` is invalid, because the handoff commits landed mid-suite.
+   - **Codex p1 did deliver:** `docs/01-plan/features/grok-audit-surface.plan.audit.v1.p1.md`. Read its findings; they stand on their own.
+   - **The slot warning (`prompt carries live template slots <INLINE_PAIRED_*>`) is a false positive.** The plan's own prose names the slots, at assembled-prompt line 341.
+1. **Collect plan audit cycle 1** (superseded by step 0's re-run). Read `/private/tmp/claude-501/-Users-kimhawk-orca-skills/1f39eb76-d775-4dc8-b33d-b680f83a32ee/scratchpad/plan_audit_c1.out`. Take the `AUDITCYCLE:` line, the `Effort:` block (low-evidence?) and the `SUITE:` line. Reports are in `docs/01-plan/features/grok-audit-surface.plan.audit.v1.*.md`, collected by the driver; if absent, use `/tmp/audit_grok-audit-surface_plan_cycle1_run20261018T114339Z-60516_p{1,2}.report.md`.
 2. **Check every must-fix against source** (SKILL.md §"Verifying a review finding"). Tag its origin with `h_mad_audit_origins.py append`. Re-dispatch `plan-author` with the verified must-fix and should-fix bullets. Class rule: build-class drives the loop; measurement-class is acknowledged with its re-run command.
 3. **Read a red suite against the known baseline first.** `SUITE:` red is expected here: 36 SKILL.md consumer tests fail environmentally on this Mac. Compare against that before calling it a regression.
 4. **Run cycle 2.** Same invocation with `--cycle 2`. Per the round cap, revision cycles are codex gating plus a doc-auditor delta review. Cap: 2 gating rounds, then exit with OPEN-DECISIONs on impl-plan tasks.
