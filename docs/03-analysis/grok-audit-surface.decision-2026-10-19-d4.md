@@ -13,3 +13,9 @@ Re-derive:
 which -a grok | sort -u | while read g; do echo "$g: $($g --version 2>&1 | head -1)"; done
 head -1 ~/.grok/CHANGELOG.md
 ```
+
+## Addendum (2026-10-19, later the same day)
+
+The measurement above was true when taken and is now stale: grok **auto-updated**. Re-measured after the spec/plan/design revisions: `~/.grok/bin/grok` and `~/.local/bin/grok` report `grok 1.0.62 (1474f9cbdd91) [stable]`, binary mtime `Oct 19 08:47:31 2026`; `~/.grok/CHANGELOG.md` still heads `1.0.52` (the changelog lags the binary, so it is not a version source). All three authors caught this independently.
+
+This strengthens the decision rather than reversing it: the installed version moved under a live feature within one session, so any document pinning a literal version is stale by construction. The smoke records the version that actually ran; the measurement doc names it.
