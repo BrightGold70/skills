@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-18 · pattern · [0.5] · `h-mad,calibration,grok,handoff:2026-10-18-grok-audit-surface-phase3` — A content leak scan for seeded-defect audits must exempt a seed's original inside the byte-identical paired copy of its own source doc, or every design/impl-plan root refuses
+- 2026-10-18 · gotcha · [0.7] · `h-mad,install-check,skills,handoff:2026-10-18-grok-audit-surface-phase3` — h_mad_install_check SIBLING_NOT_SYMLINK false-positives on vendor skills pinned in ~/.agents/.skill-lock.json that share a name with a checkout skill; diff before relinking, never relink a lock-pinned one
+- 2026-10-18 · gotcha · [0.7] · `h-mad,agents,bootstrap,handoff:2026-10-18-grok-audit-surface-phase3` — Agent types load at session start: agents registered into ~/.claude/agents mid-session are 'not found' until later; dispatch general-purpose with the full role file as contract meanwhile
 - 2026-10-18 · gotcha · [0.7] · `git,backlog-cycle,handoff:2026-10-18-backlog-cycle-driver-landed` — Restore a file after a failed commit with 'git checkout HEAD -- path', not 'git checkout -- path': the index already holds the staged edit, so restoring from index is a no-op
 - 2026-10-18 · gotcha · [0.7] · `census,python,unicode,handoff:2026-10-18-backlog-cycle-driver-landed` — str.splitlines() also splits on U+2028/U+2029; any code numbering lines by \n must split with re.findall(r'[^\n]*\n|[^\n]+\Z') or line indices drift past such chars (census --apply bug)
 - 2026-10-18 · gotcha · [0.5] · `census,skill-monitoring,handoff:2026-10-18-backlog-drained-to-zero` — Census live-count pins break when another session adds J entries; bump the pins in the same commit as the J entry
