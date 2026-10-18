@@ -290,6 +290,15 @@
       "find": "    for line_number, line in enumerate(Path(table).read_text(encoding=\"utf-8\").splitlines(), 1):",
       "replace": "    for line_number, line in enumerate(Path(table).read_text(encoding=\"utf-8\").splitlines(), 0):",
       "test": "tests/test_skill_candidates_census.py::test_apply_malformed_row_refuses_whole_table_with_physical_line_number[before-valid-unescaped-status-pipe]"
+    },
+    {
+      "name": "apply-splits-on-unicode-line-separators",
+      "_mechanism": "splitlines() breaks on U+2028/U+2029 while _rows numbers by newline, so the status lands lines above its row and the row stays open.",
+      "file": "scripts/skill_candidates_census.py",
+      "symbol": "apply_table",
+      "find": "    lines = re.findall(r\"[^\\n]*\\n|[^\\n]+\\Z\", text)",
+      "replace": "    lines = text.splitlines(keepends=True)",
+      "test": "tests/test_skill_candidates_census.py::test_apply_counts_lines_by_newline_only_past_unicode_separators"
     }
   ]
 }

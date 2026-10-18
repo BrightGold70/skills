@@ -766,6 +766,24 @@ def test_rev_unreadable_blob_exits_two_with_git_diagnostic_and_no_fallback(
     assert store.read_bytes() == before
 
 
+def test_apply_counts_lines_by_newline_only_past_unicode_separators(
+    committed_store: tuple[Path, str], tmp_path: Path,
+) -> None:
+    # Rows are numbered by "\n"; str.splitlines also breaks on U+2028/U+2029,
+    # which put the live store's row-2661 status two lines above its row.
+    store, _ = committed_store
+    head = "# Skill Candidates\n\n- **quoted row**: shows ` ` and ` ` — candidate: no\n\n"
+    row = "- **target row**: description — candidate: yes\n"
+    store.write_text(head + row, encoding="utf-8")
+    table = reconciliation_table(tmp_path, ("target row", "**LANDED** done"))
+
+    r = run_flag("--apply", str(table), str(store))
+
+    assert r.returncode == 0, r.stderr
+    assert "APPLY: inserted=1 OPEN 1→0" in r.stdout.splitlines()
+    assert store.read_text(encoding="utf-8") == head + row + "  — **LANDED** done\n"
+
+
 @pytest.mark.parametrize(
     "following",
     ["- **next row**: candidate: maybe\n", "## Next section\n", "\nA note outside the row.\n", ""],

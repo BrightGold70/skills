@@ -205,7 +205,9 @@ def apply_table(store, table):
         print("APPLY: REFUSED reason=empty-table")
         return 2
 
-    lines = text.splitlines(keepends=True)
+    # Split on "\n" only, as `_rows` numbers them: splitlines() also breaks on
+    # U+2028/U+2029 and would shift every insertion below such a line.
+    lines = re.findall(r"[^\n]*\n|[^\n]+\Z", text)
     for end, additions in sorted(insertions.items(), reverse=True):
         if end and not lines[end - 1].endswith(("\n", "\r")):
             additions = ["\n"] + additions
