@@ -2495,6 +2495,7 @@ above, all unverified here.
   — **RECURRED 2026-10-06 (third time, still open)**: round 15's `x\` quoted-body probe made `backstop-skips-unquoted-bodies` SURVIVE, because bash now refuses an unquoted body on its own. It was re-pinned to `test_an_unquoted_heredoc_body_is_counted_without_bash`, a test through `_hits_if_bash_vouches`, which also had to start stubbing `body_code_at`. Recurrence: 3.
   — **RE-EVALUATED 2026-10-12: unchanged, maybe** — 0 recurrences since 2026-10-06, and all 3 came from one feature's review rounds. Adding the BashParse sweep (`8b5de835`) made no existing row a survivor.
   — **RE-PROBED 2026-10-18: OPEN, maybe** — `grep -niE 'redundan|masked|later guard' h-mad/scripts/h_mad_mutation_harness.py` → 0 hits; `grep -E 'SURVIVED|survivor' docs/handoffs/2026-10-1[2-8]-*.md` shows no new recurrence (the only hit is the 10-12 todo line naming this row).
+  — **LANDED 2026-10-18** — on a SURVIVED row with a named test, `h_mad_mutation_harness.py` re-runs the untargeted command under the same mutation and prints `masked-hint:` (no test failed → re-pin past the later guard; or the up-to-3 tests that did fail → re-pin candidates; or unmeasured). Detail lines only; verdict/counts unchanged. 15 tests; sweep ALL_CAUGHT. Built on operator override of the deferral.
 
 ## 2026-10-06 — bashparse-positive-evidence
 

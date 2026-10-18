@@ -883,6 +883,78 @@
       "find": "            subprocess.run(command, cwd=str(root), env=env, capture_output=True, text=True)",
       "replace": "            subprocess.run(command, cwd=str(root.parent), env=env, capture_output=True, text=True)",
       "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned"
+    },
+    {
+      "name": "masked-hint-drop-green-suite-advice",
+      "_mechanism": "A named survivor whose whole suite passes must explain how to stub a later guard and re-pin row 2491.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    if suite_green:\n                        masked_hint = (",
+      "replace": "                    if False:\n                        masked_hint = (",
+      "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_real_named_survivor_prints_actionable_detail[no-test-failed]"
+    },
+    {
+      "name": "masked-hint-drop-other-failing-tests-advice",
+      "_mechanism": "Other failing tests must be named as replacement pins without changing the survivor verdict.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    elif others:",
+      "replace": "                    elif False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_real_named_survivor_prints_actionable_detail[other-test-failed]"
+    },
+    {
+      "name": "masked-hint-remove-three-node-limit",
+      "_mechanism": "The advice is bounded to three failing node ids even when the suite reports more.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                            f\"other tests failed: {', '.join(others[:3])}; \"",
+      "replace": "                            f\"other tests failed: {', '.join(others)}; \"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_reports_at_most_three_failing_node_ids[5]"
+    },
+    {
+      "name": "masked-hint-unreadable-probe-claims-measurement",
+      "_mechanism": "An unreadable suite probe must say unmeasured rather than claim nothing failed.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    masked_hint = \"unmeasured\"",
+      "replace": "                    masked_hint = \"no test failed\"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_unreadable_extra_run_is_unmeasured_and_does_not_rescore[unparseable-output]"
+    },
+    {
+      "name": "masked-hint-missing-node-ids-treated-as-actionable",
+      "_mechanism": "A failure count without failing node ids cannot provide a replacement pin and remains unmeasured.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    elif others:",
+      "replace": "                    else:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_unreadable_extra_run_is_unmeasured_and_does_not_rescore[no-failing-node-ids]"
+    },
+    {
+      "name": "masked-hint-discard-survivor-detail",
+      "_mechanism": "The diagnostic measured under mutation must reach the CLI detail output.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    result.setdefault(\"masked_hints\", {})[mutation[\"name\"]] = masked_hint",
+      "replace": "                    pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_real_named_survivor_prints_actionable_detail[no-test-failed]"
+    },
+    {
+      "name": "masked-hint-cli-omits-detail",
+      "_mechanism": "The CLI must publish the masked-hint detail while preserving the existing summary.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "        if name in result.get(\"masked_hints\", {}):",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_real_named_survivor_prints_actionable_detail[other-test-failed]"
+    },
+    {
+      "name": "masked-hint-runs-suite-twice-under-mutation",
+      "_mechanism": "Reuse the existing suite probe exactly once before restoring the file; diagnostics must not add another run.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                    masked_hint = \"unmeasured\"",
+      "replace": "                    suite_green, suite_output = _run(command, root)\n                    masked_hint = \"unmeasured\"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_preserves_existing_summary_and_mutation_lifecycle_existing_guard[suite-passes]"
     }
   ]
 }

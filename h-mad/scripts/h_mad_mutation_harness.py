@@ -1834,6 +1834,20 @@ def _run_spec_holding_the_tree(
                             f"red elsewhere ({', '.join(others[:3]) or 'unparsed'}) — the "
                             f"mutant is caught by the wrong assertion"
                         )
+                    # Reuse the suite probe while the mutation is still applied;
+                    # this advice never changes how the named test was scored.
+                    masked_hint = "unmeasured"
+                    if suite_green:
+                        masked_hint = (
+                            "no test failed; if a later guard now refuses the same "
+                            "input, re-pin this row to a test that stubs that guard (row 2491)"
+                        )
+                    elif others:
+                        masked_hint = (
+                            f"other tests failed: {', '.join(others[:3])}; "
+                            "consider re-pinning to one of them"
+                        )
+                    result.setdefault("masked_hints", {})[mutation["name"]] = masked_hint
                     # A survivor is where this diagnosis earns its keep: the
                     # harness has just reported "nothing bites", which is
                     # byte-identical to a real coverage gap, and the spec itself
@@ -2478,6 +2492,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  survived: {name}")
         if name in mechanism:
             print(f"    mechanism: {mechanism[name]}")
+        if name in result.get("masked_hints", {}):
+            print(f"  masked-hint: {name} — {result['masked_hints'][name]}")
     for entry in result.get("refused", []):
         print(f"  refused: {entry}")
         name = entry.split(":", 1)[0]
