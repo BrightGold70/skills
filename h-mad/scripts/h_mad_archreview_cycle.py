@@ -69,6 +69,7 @@ is the only thing that can catch a dropped write. Stdlib-only.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -253,6 +254,78 @@ def _extract_assessment(text: str) -> str | None:
         if value in ALLOWED:
             return value
     return None
+
+
+def _tree_git(directory: Path, *args: str) -> bytes:
+    return subprocess.run(["git", "-C", str(directory), *args], check=True,
+                          capture_output=True).stdout
+
+
+def _tree_root(directory: Path) -> Path:
+    return Path(os.fsdecode(_tree_git(directory, "rev-parse", "--show-toplevel"))
+                .rstrip("\n")).resolve()
+
+
+def _tree_snapshot(root: Path) -> dict:
+    head = _tree_git(root, "rev-parse", "HEAD").decode("ascii").strip()
+    entries = iter(_tree_git(root, "status", "--porcelain=v1", "-z",
+                             "--untracked-files=all").split(b"\0"))
+    paths = {}
+    for entry in entries:
+        if not entry:
+            continue
+        names = [entry[3:]]
+        # In -z format a rename/copy has a second, unprefixed source path.
+        if b"R" in entry[:2] or b"C" in entry[:2]:
+            names.append(next(entries))
+        for name in names:
+            relative = os.fsdecode(name)
+            try:
+                paths[relative] = hashlib.sha256((root / relative).read_bytes()).hexdigest()
+            except FileNotFoundError:
+                paths[relative] = "deleted"
+    return {"head": head, "paths": paths}
+
+
+def _stage_tree_snapshot(design: Path, prompt: Path) -> None:
+    try:
+        snapshot = _tree_snapshot(_tree_root(design.resolve().parent))
+        Path(str(prompt) + ".tree.json").write_text(json.dumps(snapshot), encoding="utf-8")
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"ARCHREVIEW-TREE: SNAPSHOT_SKIPPED reason={exc.__class__.__name__}")
+
+
+def _score_tree_snapshot(snapshot_path: Path, log_path: Path, review_path: Path,
+                         report_path: Path | None) -> None:
+    try:
+        old = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        if not (isinstance(old, dict) and isinstance(old.get("head"), str)
+                and isinstance(old.get("paths"), dict)
+                and all(isinstance(p, str) and isinstance(h, str)
+                        and (h == "deleted" or re.fullmatch(r"[0-9a-f]{64}", h))
+                        for p, h in old["paths"].items())):
+            raise ValueError("invalid tree snapshot")
+        root = _tree_root(Path.cwd())
+        current = _tree_snapshot(root)
+        excluded = {snapshot_path.resolve()}
+        for channel in (review_path, report_path, log_path):
+            if channel is not None:
+                excluded.update((channel.resolve(), Path(str(channel) + ".done").resolve()))
+        before, after = (
+            {p: h for p, h in snapshot["paths"].items()
+             if (root / p).resolve() not in excluded}
+            for snapshot in (old, current)
+        )
+        changed = sorted(p for p in before.keys() | after.keys()
+                         if before.get(p) != after.get(p))
+        head = f" head={old['head']}..{current['head']}" if old["head"] != current["head"] else ""
+        if changed or head:
+            finding = f"CHANGED paths={len(changed)} {','.join(changed)}{head}"
+        else:
+            finding = "UNCHANGED"
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        finding = f"UNREADABLE reason={exc.__class__.__name__}"
+    print(f"ARCHREVIEW-TREE: {finding}")
 
 
 def _read_report_channel(report_path: Path | None) -> "tuple[str | None, str]":
@@ -668,6 +741,7 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
     if report_file is not None:
         print(f"#         --report-file {report_file}")
     print("[H-MAD] archreview STAGED")
+    _stage_tree_snapshot(design, prompt)
     return 0
 
 
@@ -708,14 +782,19 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--session-id", default=None,
                    help="this session's id; the owner's archreview write also beats "
                         "the claim heartbeat (#126)")
+    c.add_argument("--tree-snapshot", type=Path, default=None, metavar="PATH",
+                   help="compare the staged tree with the current repository; advisory only")
 
     args = parser.parse_args(argv)
     if args.verb == "stage":
         return stage(args.feature, args.template, args.base, args.head, args.design,
                      args.diff_files, args.summary, args.prompt, args.report_file,
                      vh_tail=args.vh_tail)
-    return score(args.feature, args.state, args.log, args.review,
-                 session_id=args.session_id, report_path=args.report_file)
+    result = score(args.feature, args.state, args.log, args.review,
+                   session_id=args.session_id, report_path=args.report_file)
+    if args.tree_snapshot is not None:
+        _score_tree_snapshot(args.tree_snapshot, args.log, args.review, args.report_file)
+    return result
 
 
 if __name__ == "__main__":

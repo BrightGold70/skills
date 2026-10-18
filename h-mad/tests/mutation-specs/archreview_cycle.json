@@ -62,6 +62,240 @@
       "find": "    if left:",
       "replace": "    if False:",
       "test": "tests/test_h_mad_archreview_cycle.py::TestStage::test_an_unsubstituted_placeholder_is_refused"
+    },
+    {
+      "name": "tree-stage-snapshot-dropped",
+      "_mechanism": "Stage must leave the baseline beside the prompt before review begins.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "stage",
+      "find": "    _stage_tree_snapshot(design, prompt)",
+      "replace": "    pass",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_stage_snapshots_the_design_repo_head_and_all_status_paths"
+    },
+    {
+      "name": "tree-stage-uses-cwd-instead-of-design-repo",
+      "_mechanism": "The design repository supplies the baseline even when cwd and prompt are elsewhere.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_stage_tree_snapshot",
+      "find": "_tree_snapshot(_tree_root(design.resolve().parent))",
+      "replace": "_tree_snapshot(_tree_root(Path.cwd()))",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_stage_snapshots_the_design_repo_head_and_all_status_paths"
+    },
+    {
+      "name": "tree-untracked-paths-omitted",
+      "_mechanism": "Untracked files belong to the measured tree, including filenames with spaces.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_tree_snapshot",
+      "find": "\"--untracked-files=all\"",
+      "replace": "\"--untracked-files=no\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_stage_snapshots_the_design_repo_head_and_all_status_paths"
+    },
+    {
+      "name": "tree-current-bytes-not-hashed",
+      "_mechanism": "The baseline must hash current binary file bytes, not an empty or decoded representation.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_tree_snapshot",
+      "find": "hashlib.sha256((root / relative).read_bytes()).hexdigest()",
+      "replace": "hashlib.sha256(b\"\").hexdigest()",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_stage_snapshots_the_design_repo_head_and_all_status_paths"
+    },
+    {
+      "name": "tree-deletion-tombstone-lost",
+      "_mechanism": "Missing status paths must remain visible as deleted tombstones.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_tree_snapshot",
+      "find": "paths[relative] = \"deleted\"",
+      "replace": "paths[relative] = \"missing\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_stage_snapshots_the_design_repo_head_and_all_status_paths"
+    },
+    {
+      "name": "tree-stage-failure-becomes-fatal",
+      "_mechanism": "Snapshot failure is advisory and must leave the staged prompt and successful exit intact.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_stage_tree_snapshot",
+      "find": "        print(f\"ARCHREVIEW-TREE: SNAPSHOT_SKIPPED reason={exc.__class__.__name__}\")",
+      "replace": "        raise",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_snapshot_failure_is_advisory[outside_git]"
+    },
+    {
+      "name": "tree-score-opt-in-ignored",
+      "_mechanism": "An explicitly requested comparison must run after scoring.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "main",
+      "find": "    if args.tree_snapshot is not None:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_score_unchanged_includes_preexisting_dirty_and_untracked_paths"
+    },
+    {
+      "name": "tree-score-runs-without-opt-in",
+      "_mechanism": "Without the flag the legacy score output must remain byte-identical.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "main",
+      "find": "    if args.tree_snapshot is not None:",
+      "replace": "    if True:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_omitting_tree_snapshot_keeps_legacy_output_byte_identical[READY_TO_MERGE]"
+    },
+    {
+      "name": "tree-new-paths-not-compared",
+      "_mechanism": "Paths introduced after the baseline are changes even if absent from the old map.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "before.keys() | after.keys()",
+      "replace": "before.keys()",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_score_reports_each_kind_of_path_change[new-new file.py]"
+    },
+    {
+      "name": "tree-disappearing-paths-not-compared",
+      "_mechanism": "An untracked path removed after the baseline must still appear in the diff.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "before.keys() | after.keys()",
+      "replace": "after.keys()",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_score_reports_each_kind_of_path_change[gone-untracked file.py]"
+    },
+    {
+      "name": "tree-hash-differences-ignored",
+      "_mechanism": "A dirty path whose current bytes change is a finding even if its status is unchanged.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "if before.get(p) != after.get(p)",
+      "replace": "if False",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_score_reports_each_kind_of_path_change[dirty-dirty file.py]"
+    },
+    {
+      "name": "tree-head-movement-ignored",
+      "_mechanism": "A commit changes the measured revision even when the dirty-path map is identical.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "if old[\"head\"] != current[\"head\"] else \"\"",
+      "replace": "if False else \"\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_head_move_is_reported_even_when_the_status_map_is_identical[False]"
+    },
+    {
+      "name": "tree-head-only-change-silenced",
+      "_mechanism": "HEAD movement alone must choose CHANGED rather than UNCHANGED.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "        if changed or head:",
+      "replace": "        if changed:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_head_move_is_reported_even_when_the_status_map_is_identical[False]"
+    },
+    {
+      "name": "tree-changed-path-order-reversed",
+      "_mechanism": "Findings must list changed paths in sorted order.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "changed = sorted(p for p in before.keys() | after.keys()\n                         if before.get(p) != after.get(p))",
+      "replace": "changed = sorted((p for p in before.keys() | after.keys()\n                          if before.get(p) != after.get(p)), reverse=True)",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_head_move_is_reported_even_when_the_status_map_is_identical[True]"
+    },
+    {
+      "name": "tree-snapshot-self-exclusion-dropped",
+      "_mechanism": "The snapshot is a cycle channel and cannot report its own rewritten bytes.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "excluded = {snapshot_path.resolve()}",
+      "replace": "excluded = set()",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_own_channels_are_excluded_from_both_snapshot_and_current_maps[snapshot]"
+    },
+    {
+      "name": "tree-review-channel-exclusion-dropped",
+      "_mechanism": "The last-message file is review output and excluded from tree findings.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "for channel in (review_path, report_path, log_path):",
+      "replace": "for channel in (report_path, log_path):",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_own_channels_are_excluded_from_both_snapshot_and_current_maps[review.md]"
+    },
+    {
+      "name": "tree-report-channel-exclusion-dropped",
+      "_mechanism": "The report file is review output and excluded from tree findings.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "for channel in (review_path, report_path, log_path):",
+      "replace": "for channel in (review_path, log_path):",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_own_channels_are_excluded_from_both_snapshot_and_current_maps[report file.md]"
+    },
+    {
+      "name": "tree-log-channel-exclusion-dropped",
+      "_mechanism": "The dispatch log is review output and excluded from tree findings.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "for channel in (review_path, report_path, log_path):",
+      "replace": "for channel in (review_path, report_path):",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_own_channels_are_excluded_from_both_snapshot_and_current_maps[run.log]"
+    },
+    {
+      "name": "tree-done-channel-exclusion-dropped",
+      "_mechanism": "Completion markers beside each output channel must also be excluded.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "excluded.update((channel.resolve(), Path(str(channel) + \".done\").resolve()))",
+      "replace": "excluded.add(channel.resolve())",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_own_channels_are_excluded_from_both_snapshot_and_current_maps[review.md.done]"
+    },
+    {
+      "name": "tree-old-map-exclusion-dropped",
+      "_mechanism": "Old channel entries must be filtered as well as newly observed channel entries.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "if (root / p).resolve() not in excluded}",
+      "replace": "if snapshot is old or (root / p).resolve() not in excluded}",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_own_channels_are_excluded_from_both_snapshot_and_current_maps[snapshot]"
+    },
+    {
+      "name": "tree-current-map-exclusion-dropped",
+      "_mechanism": "New channel entries must be filtered as well as old baseline entries.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "if (root / p).resolve() not in excluded}",
+      "replace": "if snapshot is current or (root / p).resolve() not in excluded}",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_own_channels_are_excluded_from_both_snapshot_and_current_maps[run.log]"
+    },
+    {
+      "name": "tree-unreadable-snapshot-silenced",
+      "_mechanism": "An unreadable snapshot must emit one advisory finding, never imply UNCHANGED.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "finding = f\"UNREADABLE reason={exc.__class__.__name__}\"",
+      "replace": "finding = \"UNCHANGED\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_bad_snapshot_prints_one_unreadable_finding[missing]"
+    },
+    {
+      "name": "tree-invalid-json-silenced",
+      "_mechanism": "Malformed JSON must produce an unreadable finding rather than a clean diff.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "finding = f\"UNREADABLE reason={exc.__class__.__name__}\"",
+      "replace": "finding = \"UNCHANGED\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_bad_snapshot_prints_one_unreadable_finding[invalid_json]"
+    },
+    {
+      "name": "tree-invalid-schema-silenced",
+      "_mechanism": "A JSON value without the snapshot schema is unreadable rather than unchanged.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "_score_tree_snapshot",
+      "find": "finding = f\"UNREADABLE reason={exc.__class__.__name__}\"",
+      "replace": "finding = \"UNCHANGED\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_bad_snapshot_prints_one_unreadable_finding[bad_schema]"
+    },
+    {
+      "name": "tree-finding-overrides-score-exit",
+      "_mechanism": "A tree change must not turn a recorded review verdict into an operational failure.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "main",
+      "find": "    return result\n",
+      "replace": "    return 2 if args.tree_snapshot is not None else result\n",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_finding_preserves_verdict_recording_and_exit[changed-READY_TO_MERGE-3-0-READY_TO_MERGE]"
+    },
+    {
+      "name": "tree-finding-skipped-on-score-refusal",
+      "_mechanism": "The comparison must still run when the evidence gate refuses to record a verdict.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "main",
+      "find": "    if args.tree_snapshot is not None:",
+      "replace": "    if args.tree_snapshot is not None and result == 0:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_finding_preserves_verdict_recording_and_exit[changed-READY_TO_MERGE-0-2-None]"
     }
   ]
 }
