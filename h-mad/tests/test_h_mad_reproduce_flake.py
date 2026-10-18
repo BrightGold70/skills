@@ -83,11 +83,24 @@ if mode == "empty":
     raise SystemExit(5)
 trace = pathlib.Path(os.environ["FLAKE_TEST_RUNS"])
 lock = trace.with_suffix(".lock")
+def _holder_alive():
+    try:
+        os.kill(int(lock.read_text() or "0"), 0)
+    except (ValueError, ProcessLookupError, FileNotFoundError):
+        return False
+    except PermissionError:
+        return True
+    return True
+# Like the real suite lock, a lock left by a killed holder is stale and taken over.
 try:
     fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
 except FileExistsError:
-    print("OVERLAPPING_PYTEST")
-    raise SystemExit(7)
+    if _holder_alive():
+        print("OVERLAPPING_PYTEST")
+        raise SystemExit(7)
+    lock.unlink(missing_ok=True)
+    fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+os.write(fd, str(os.getpid()).encode())
 os.close(fd)
 with trace.open("a") as stream:
     stream.write(json.dumps({"argv": args, "cwd": os.getcwd(),
@@ -197,7 +210,7 @@ def _assert_helpers_reaped(tmp_path, *, required=True):
     if required:
         assert helpers, "the requested load never started a helper"
     for helper in helpers:
-        with pytest.raises(ProcessLookupError, match=""):
+        with pytest.raises(ProcessLookupError):
             os.kill(helper["pid"], 0)
     kills = [event for event in _events(tmp_path / "spawn.jsonl") if event["event"] == "killpg"]
     if helpers:
