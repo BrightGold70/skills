@@ -256,6 +256,17 @@ def test_exec_grok_f0_prints_the_final_message(tmp_path):
     assert "stopReason=end_turn" in r.stderr, "exec grok must report the end reason"
 
 
+def test_exec_grok_unwritable_out_still_delivers_the_final_message(tmp_path):
+    """J56 on the grok write site: an --out in a missing directory must not abort the
+    dispatch before the final message reaches stdout."""
+    out = tmp_path / "no-such-dir" / "final.txt"
+    r, _ = _case(tmp_path, options=("--out", str(out)))
+    assert r.returncode == 0, f"an unwritable --out must not fail the dispatch: {r.stderr}"
+    assert r.stdout == "STATUS: DONE\n", "the final message must still reach stdout"
+    assert "cannot write --out" in r.stderr
+    assert not out.exists()
+
+
 @pytest.mark.parametrize("stream", [f_beat, f_spaced], ids=["beat", "spaced"])
 def test_exec_grok_beat_and_spaced_match_f0(tmp_path, stream):
     r, _ = _case(tmp_path, stream=stream())

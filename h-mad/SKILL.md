@@ -838,7 +838,10 @@ reaches stdout and `--log`, a `REFUSING to overwrite --out` line goes to stderr,
 and `rc` is untouched (it answers "did the CLI run", nothing else). A stale
 `--out` left by *this* caller's own failed attempt is unchanged since start and
 so is still overwritten — which is what keeps the `no_verdict` re-dispatch remedy
-(`references/failure-recovery.md`) working against its templated path.
+(`references/failure-recovery.md`) working against its templated path. An
+`--out` that cannot be written at all (e.g. a directory that does not exist) fails
+the same soft way: a `cannot write --out` line on stderr, the answer still on stdout
+and in `--log`, `rc` untouched (J56).
 
 **`rc` and the token are different questions.** `rc` is operational (`0` = the CLI
 completed, `124` = watchdog timeout, non-zero = crash/abort); it does **not** mean

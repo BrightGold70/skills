@@ -1332,3 +1332,43 @@ def test_an_operator_backend_value_is_never_overwritten(tmp_path):
             env=_env(b, HMAD_STUB_ENV_CAPTURE=str(env_cap), HPW_AGENT_BACKEND="claude"))
     assert r.returncode == 0, r.stderr
     assert env_cap.read_text().strip() == "HPW_AGENT_BACKEND=claude"
+
+
+@pytest.mark.parametrize("agent,stub_env", [
+    ("codex", "HMAD_STUB_CODEX_LAST"),
+    ("agy", "HMAD_STUB_AGY_RESP"),
+])
+def test_unwritable_out_still_delivers_the_verdict(tmp_path, agent, stub_env):
+    """An --out that cannot be written must not cost the verdict the agent produced.
+
+    Under `set -e` a failed write at the end of the `_out_clobber_ok && write` chain
+    aborted the whole dispatch: rc=1, empty stdout, so a typo'd directory lost a
+    verdict that was already in hand (J56). The write now fails soft — stderr says
+    so, stdout still carries the verdict, and rc stays the agent's own exit code
+    (same contract as J29).
+    """
+    b = _bindir(tmp_path, [agent])
+    out = tmp_path / "no-such-dir" / "reply.txt"
+    r = run(["exec", agent, str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--out", str(out)],
+            env=_env(b, **{stub_env: "VERDICT: COMPLIANT"}))
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "VERDICT: COMPLIANT"
+    assert "cannot write --out" in r.stderr
+    assert not out.exists()
+
+
+def test_unwritable_out_on_the_recovery_path_is_reported_not_silent(tmp_path):
+    """The recovery write site never crashed (it ends in `|| true`), but it dropped
+    the failure silently. It now says so, like the other write sites (J56)."""
+    b = _bindir(tmp_path, ["codex"])
+    out = tmp_path / "no-such-dir" / "exec_feature_module.txt"
+    r = run(["exec", "codex", str(_prompt(tmp_path, _CONTRACT_BLOCK)),
+             "--cd", str(tmp_path), "--out", str(out)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_ECHO_STDIN="1",
+                     HMAD_STUB_CODEX_STDOUT="ran the task\nSTATUS: BLOCKED"))
+    assert r.returncode == 1, r.stderr
+    assert "verdict recovered from log" in r.stderr
+    assert r.stdout.strip() == "STATUS: BLOCKED"
+    assert "cannot write --out" in r.stderr

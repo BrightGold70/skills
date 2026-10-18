@@ -2780,6 +2780,15 @@ _out_clobber_ok() {  # <file> <fingerprint-at-dispatch-start>
   return 1
 }
 
+# Called as `write || _out_write_failed <file>` at every exec --out write site.
+# Under `set -e` a failed _write_out_atomic at the end of an && chain aborted the
+# dispatch (rc=1, empty stdout), so an unwritable --out -- a typo'd directory --
+# lost a verdict the agent had already produced (J56). Same contract as
+# _out_clobber_ok: rc untouched, verdict still on stdout and in the transcript.
+_out_write_failed() {  # <file>
+  echo "hmad-dispatch: exec: cannot write --out $1 (J56). This dispatch's answer is on stdout and in the transcript." >&2
+}
+
 # Render a bounded digest of an exec transcript. Shared by the `progress` verb
 # and by the auto-log dump at the end of an agy dispatch.
 #
@@ -3199,7 +3208,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
     grok_final="$(_grok_final_message "$log" "$pre_lines")"
     if [ "$grok_state" = complete ] && [ -n "$grok_final" ]; then
       verdict="$grok_final"
-      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$grok_final" | _write_out_atomic "$out"
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && { printf '%s\n' "$grok_final" | _write_out_atomic "$out" || _out_write_failed "$out"; }
       printf '%s\n' "$grok_final"
       echo "hmad-dispatch: exec: grok stopReason=$(_grok_stop_reason "$log" "$pre_lines")" >&2
       [ -n "$auto_log" ] && _render_progress "$log" 40 >&2 || true
@@ -3234,7 +3243,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
     _HMAD_EXEC_BEAT_LOG=""
     if [ -s "$last" ]; then
       verdict="$(cat "$last")"
-      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && _write_out_atomic "$out" "$last"
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && { _write_out_atomic "$out" "$last" || _out_write_failed "$out"; }
       cat "$last"
       [ -n "$auto_log" ] && cat "$log" >&2 || true
       [ -n "$auto_log" ] && rm -f "$log"
@@ -3331,7 +3340,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
     resp="$(_agy_ndjson_response "$log" "$pre_lines")"
     verdict="$resp"
     if [ -n "$resp" ]; then
-      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$resp" | _write_out_atomic "$out"
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && { printf '%s\n' "$resp" | _write_out_atomic "$out" || _out_write_failed "$out"; }
       printf '%s\n' "$resp"
       # An auto-log is dumped as a DIGEST, not raw: the raw stream is NDJSON with
       # full tool payloads embedded, and spraying that at stderr buries the very
@@ -3419,7 +3428,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
       echo "hmad-dispatch: exec: verdict recovered from log ($log)" >&2
       verdict="$recovered"
       printf '%s\n' "$recovered"
-      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$recovered" | _write_out_atomic "$out" || true
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && { printf '%s\n' "$recovered" | _write_out_atomic "$out" || _out_write_failed "$out"; } || true
     fi
     if git -C "$cd_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       local delta
