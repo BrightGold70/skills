@@ -4453,3 +4453,362 @@ class TestHostBoundMutationRows:
 
         assert any("requires" in sentence and "host_skipped" in sentence for sentence in sentences), \
             "The harness bullet must explain requires / host_skipped together in one sentence"
+
+
+# r2369: opt-in, pre-mutation reachability. All targets live in scratch trees.
+def _reachability_project(tmp_path, *, source=None, test=None, rows=None):
+    import json
+
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    source = source if source is not None else "def unused():\n    return 5\n"
+    test = test if test is not None else (
+        "from pathlib import Path\n"
+        "def test_pin():\n"
+        "    assert 'return 5' in Path('guard.py').read_text()\n"
+    )
+    (tmp_path / "guard.py").write_text(source, encoding="utf-8")
+    (tmp_path / "test_pin.py").write_text(test, encoding="utf-8")
+    rows = rows if rows is not None else [{
+        "name": "unexecuted body", "file": "guard.py", "find": "    return 5",
+        "replace": "    return 9", "test": "test_pin.py::test_pin",
+    }]
+    command = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    spec = tmp_path / "mutations.json"
+    spec.write_text(json.dumps({
+        "root": str(tmp_path), "command": command + ["test_pin.py"],
+        "target_command": command, "mutations": rows,
+    }), encoding="utf-8")
+    return spec
+
+
+def _reachability_cli(spec, *flags):
+    import os
+    import subprocess
+
+    env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
+    return subprocess.run(
+        [sys.executable, str(HARNESS), *flags, str(spec)],
+        capture_output=True, text=True, env=env, timeout=90,
+    )
+
+
+@pytest.mark.parametrize("sweep", [False, True], ids=["single", "sweep"])
+def test_reachability_disabled_preserves_exact_output_existing_guard(tmp_path, sweep):
+    """Existing guard (spec 1): the opt-out byte stream stays unchanged."""
+    spec = _project(tmp_path, [_kills_the_guard()])
+    proc = _reachability_cli(spec, *(["--sweep"] if sweep else []))
+    summary = (
+        "ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0 unreadable=0 "
+        "crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=1/1 "
+        "hollow_kills=0 host_skipped=0"
+    )
+    if sweep:
+        expected = (
+            f"SWEEP: {spec} {summary}\n"
+            "SWEEP: ALL_CAUGHT specs=1 all_caught=1 survived=0 unmeasured=0\n"
+        )
+    else:
+        expected = (
+            f"MUTATION: {summary}\n"
+            "  caught: raise the threshold\n"
+            "    mechanism: killed, but the runner's output named no test (unparsed)\n"
+            "[H-MAD] mutations mutation ALL_CAUGHT\n"
+        )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout == expected
+    assert proc.stderr == ""
+
+
+def test_reachability_flag_is_documented_in_cli_help():
+    import subprocess
+
+    proc = subprocess.run([sys.executable, str(HARNESS), "--help"],
+                          capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stderr
+    assert "--reachability" in proc.stdout
+
+
+@pytest.mark.parametrize(
+    ("source", "find", "replace", "span"),
+    [
+        ("def unused():\n    return 5\n", "    return 5", "    return 9", "L2-L2"),
+        ("# préface\ndef unused():\n    # anchor\n    return 5\n",
+         "    # anchor\n    return 5\n", "    return 9\n", "L3-L4"),
+        ("# préface\ndef unused():\n    return 5\n",
+         "return 5", "value = 9\n    return value\n    # added", "L3-L3"),
+    ], ids=["single-line", "multiline-trailing-newline", "original-not-replacement-span"],
+)
+def test_reachability_unexecuted_caught_span_is_reported_but_still_caught(
+    tmp_path, source, find, replace, span,
+):
+    row = {"name": "unreachable", "file": "guard.py", "find": find,
+           "replace": replace, "test": "test_pin.py::test_pin"}
+    spec = _reachability_project(tmp_path, source=source, rows=[row])
+
+    proc = _reachability_cli(spec, "--reachability")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    summary = next(line for line in proc.stdout.splitlines() if line.startswith("MUTATION:"))
+    assert summary.startswith("MUTATION: ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0 "), proc.stdout
+    assert summary.endswith(" host_skipped=0 unreachable_kills=1"), proc.stdout
+    assert (f"  unreachable-kill: unreachable (span {span} never executed by "
+            "test_pin.py::test_pin)") in proc.stdout.splitlines(), proc.stdout
+    assert "not-measured" not in proc.stdout, "An empty hit set is a measured miss"
+    assert (tmp_path / "guard.py").read_text() == source
+
+
+@pytest.mark.parametrize(
+    ("source", "find", "replace", "expression"),
+    [
+        ("# anchor\nVALUE = 5\n# tail\n", "# anchor\nVALUE = 5\n# tail",
+         "# anchor\nVALUE = 9\n# tail", "guard.VALUE"),
+        ("def value():\n    return 5\n", "def value():\n    return 5",
+         "def value():\n    return 9", "guard.value()"),
+        ("VALUE = 5; UNUSED = 0\n", "VALUE = 5", "VALUE = 9", "guard.VALUE"),
+    ], ids=["only-interior-line-ran", "definition-header-in-span", "partial-line-anchor"],
+)
+def test_reachability_any_executed_original_span_line_is_sufficient(
+    tmp_path, source, find, replace, expression,
+):
+    row = {"name": "reachable", "file": "guard.py", "find": find,
+           "replace": replace, "test": "test_pin.py::test_pin"}
+    spec = _reachability_project(tmp_path, source=source, rows=[row], test=(
+        f"import guard\ndef test_pin():\n    assert {expression} == 5\n"
+    ))
+
+    proc = _reachability_cli(spec, "--reachability")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "MUTATION: ALL_CAUGHT mutations=1 caught=1" in proc.stdout, proc.stdout
+    assert " host_skipped=0 unreachable_kills=0\n" in proc.stdout, proc.stdout
+    assert "unreachable-kill:" not in proc.stdout
+    assert "not-measured" not in proc.stdout
+
+
+@pytest.mark.parametrize("execution", ["subprocess", "thread", "symlink", "decoy"],
+                         ids=["child-interpreter", "new-thread", "realpath-alias", "exact-file-only"])
+def test_reachability_traces_children_threads_and_only_the_target_realpath(tmp_path, execution):
+    source = "def value():\n    return 5\n"
+    row = {"name": execution, "file": "guard.py", "find": "    return 5",
+           "replace": "    return 9", "test": "test_pin.py::test_pin"}
+    if execution == "subprocess":
+        test = (
+            "import subprocess, sys\ndef test_pin():\n"
+            "    p = subprocess.run([sys.executable, '-c', 'import guard; print(guard.value())'], "
+            "capture_output=True, text=True)\n"
+            "    assert p.returncode == 0, p.stderr\n    assert p.stdout.strip() == '5'\n"
+        )
+    elif execution == "thread":
+        test = (
+            "import guard, threading\ndef test_pin():\n"
+            "    values = []\n    t = threading.Thread(target=lambda: values.append(guard.value()))\n"
+            "    t.start()\n    t.join()\n    assert values == [5]\n"
+        )
+    elif execution == "symlink":
+        (tmp_path / "alias.py").symlink_to(tmp_path / "guard.py")
+        test = "import alias\ndef test_pin():\n    assert alias.value() == 5\n"
+    else:
+        decoy = tmp_path / "other"
+        decoy.mkdir()
+        (decoy / "guard.py").write_text(source)
+        test = (
+            "from other import guard\nfrom pathlib import Path\ndef test_pin():\n"
+            "    assert guard.value() == 5\n"
+            "    assert 'return 5' in Path('guard.py').read_text()\n"
+        )
+    spec = _reachability_project(tmp_path, source=source, rows=[row], test=test)
+
+    proc = _reachability_cli(spec, "--reachability")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    count = int(execution == "decoy")
+    assert f" host_skipped=0 unreachable_kills={count}\n" in proc.stdout, proc.stdout
+    assert ("unreachable-kill:" in proc.stdout) == bool(count), proc.stdout
+    assert "not-measured" not in proc.stdout
+
+
+def test_reachability_sitecustomize_runs_named_pin_once_before_write_and_is_cleaned(
+    tmp_path, monkeypatch, capsys,
+):
+    import h_mad_mutation_harness as harness
+    import os
+
+    source = "def value():\n    return 5\n"
+    row = {"name": "reachable", "file": "guard.py", "find": "return 5",
+           "replace": "return 9", "test": "test_pin.py::test_pin"}
+    spec = _reachability_project(tmp_path, source=source, rows=[row], test=(
+        "import guard\ndef test_pin():\n    assert guard.value() == 5\n"
+    ))
+    inherited = tmp_path / "inherited-pythonpath"
+    inherited.mkdir()
+    monkeypatch.setenv("PYTHONPATH", str(inherited))
+    monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    before_env = dict(os.environ)
+    real_run = harness.subprocess.run
+    traced = []
+
+    def observe_run(argv, *args, **kwargs):
+        env = dict(os.environ if kwargs.get("env") is None else kwargs["env"])
+        entries = env.get("PYTHONPATH", "").split(os.pathsep)
+        site = Path(entries[0]) / "sitecustomize.py"
+        if not site.is_file():
+            return real_run(argv, *args, **kwargs)
+        assert entries[1:] == [str(inherited)], "tracer must precede the existing PYTHONPATH"
+        assert list(argv) == json.loads(spec.read_text())["target_command"] + [row["test"]]
+        assert (tmp_path / "guard.py").read_text() == source, "trace must precede mutation"
+        assert Path(kwargs["cwd"]).resolve() == tmp_path.resolve()
+        traced.append(site.parent)
+        # Exercise the injected startup code in a second interpreter, including
+        # its thread hook, and require its hit-file path to come from the env.
+        probe = real_run([sys.executable, "-c", (
+            "import sys, threading; "
+            "assert sys.gettrace() is not None; "
+            "assert threading.gettrace() is not None; "
+            "import guard; guard.value()"
+        )], cwd=tmp_path, env=env, capture_output=True, text=True)
+        assert probe.returncode == 0, probe.stdout + probe.stderr
+        hit_paths = [Path(value) for key, value in env.items()
+                     if before_env.get(key) != value and key != "PYTHONPATH"
+                     and value.startswith("/")
+                     and Path(value).resolve() not in {(tmp_path / "guard.py").resolve(), site.resolve()}
+                     and Path(value).is_file()]
+        assert hit_paths, "atexit must write executed lines to a file named by an env var"
+        assert any(path.read_text().strip() for path in hit_paths), "probe hits must be flushed at exit"
+        sizes = {path: path.stat().st_size for path in hit_paths}
+        again = real_run([sys.executable, "-c", "import guard; guard.value()"],
+                         cwd=tmp_path, env=env, capture_output=True, text=True)
+        assert again.returncode == 0, again.stdout + again.stderr
+        assert any(path.stat().st_size > size for path, size in sizes.items()), \
+            "separate interpreter exits must append hits rather than overwrite them"
+        return real_run(argv, *args, **kwargs)
+
+    monkeypatch.setattr(harness.subprocess, "run", observe_run)
+    rc = harness.main(["--reachability", str(spec)])
+    output = capsys.readouterr().out
+
+    assert rc == 0, output
+    assert len(traced) == 1, "each row needs exactly one traced unmutated named-test run"
+    assert all(not directory.exists() for directory in traced), "temporary tracer dirs leaked"
+    assert dict(os.environ) == before_env, "reachability env leaked into later runs"
+    assert (tmp_path / "guard.py").read_text() == source
+
+
+@pytest.mark.parametrize("kind", ["non-python", "no-test"])
+def test_reachability_ineligible_rows_are_not_measured_or_counted(tmp_path, kind):
+    row = {"name": kind, "file": "notes.txt" if kind == "non-python" else "guard.py",
+           "find": "return 5", "replace": "return 9"}
+    if kind == "non-python":
+        row["test"] = "test_pin.py::test_pin"
+        (tmp_path / "notes.txt").write_text("return 5\n")
+    test = (
+        "from pathlib import Path\ndef test_pin():\n"
+        f"    assert 'return 5' in Path({row['file']!r}).read_text()\n"
+    )
+    spec = _reachability_project(tmp_path, rows=[row], test=test)
+
+    proc = _reachability_cli(spec, "--reachability")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "MUTATION: ALL_CAUGHT mutations=1 caught=1" in proc.stdout, proc.stdout
+    details = [line for line in proc.stdout.splitlines()
+               if line.startswith(f"  reachability: {kind} not-measured (")]
+    assert len(details) == 1 and re.search(r"not-measured \([^)]+\)$", details[0]), proc.stdout
+    assert "tracer-produced-nothing" not in details[0], "ineligibility is not tracer failure"
+    assert " unreachable_kills=0\n" in proc.stdout, proc.stdout
+    assert "unreachable-kill:" not in proc.stdout
+
+
+@pytest.mark.parametrize("runner", ["python-without-site", "non-python-process"])
+def test_reachability_no_hits_file_is_unknown_not_an_unreachable_kill(tmp_path, runner):
+    spec = _reachability_project(tmp_path)
+    data = json.loads(spec.read_text())
+    # Both stand-ins genuinely pass on the original and fail on the mutant,
+    # but cannot load sitecustomize. Thus no file differs from an empty file.
+    if runner == "python-without-site":
+        command = [sys.executable, "-S", "-c", (
+            "from pathlib import Path; import sys; "
+            "ok = 'return 5' in Path('guard.py').read_text(); "
+            "print('1 passed' if ok else '1 failed'); sys.exit(0 if ok else 1)"
+        )]
+    else:
+        command = ["/bin/sh", "-c", (
+            "if /usr/bin/grep -q 'return 5' guard.py; then "
+            "printf '1 passed\\n'; else printf '1 failed\\n'; exit 1; fi"
+        )]
+    data["command"] = data["target_command"] = command
+    spec.write_text(json.dumps(data))
+
+    proc = _reachability_cli(spec, "--reachability")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "MUTATION: ALL_CAUGHT mutations=1 caught=1" in proc.stdout, proc.stdout
+    assert ("  reachability: unexecuted body not-measured (tracer-produced-nothing)"
+            in proc.stdout.splitlines()), proc.stdout
+    assert " unreachable_kills=0\n" in proc.stdout, proc.stdout
+    assert "unreachable-kill:" not in proc.stdout
+
+
+def test_reachability_measures_each_row_with_its_own_named_test(tmp_path):
+    source = "def first():\n    return 5\ndef second():\n    return 6\n"
+    rows = [
+        {"name": "reachable", "file": "guard.py", "find": "return 5", "replace": "return 9",
+         "test": "test_pin.py::test_first"},
+        {"name": "unreachable", "file": "guard.py", "find": "return 6", "replace": "return 8",
+         "test": "test_pin.py::test_second"},
+    ]
+    spec = _reachability_project(tmp_path, source=source, rows=rows, test=(
+        "import guard\nfrom pathlib import Path\n"
+        "def test_first():\n    assert guard.first() == 5\n    assert guard.second() == 6\n"
+        "def test_second():\n    assert 'return 6' in Path('guard.py').read_text()\n"
+    ))
+
+    proc = _reachability_cli(spec, "--reachability")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "MUTATION: ALL_CAUGHT mutations=2 caught=2" in proc.stdout, proc.stdout
+    assert " unreachable_kills=1\n" in proc.stdout, proc.stdout
+    details = [line for line in proc.stdout.splitlines() if line.startswith("  unreachable-kill:")]
+    assert details == [
+        "  unreachable-kill: unreachable (span L4-L4 never executed by test_pin.py::test_second)"
+    ], proc.stdout
+
+
+def test_reachability_unexecuted_survivor_is_not_an_unreachable_kill(tmp_path):
+    spec = _reachability_project(tmp_path, test="def test_pin():\n    assert True\n")
+
+    proc = _reachability_cli(spec, "--reachability")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "MUTATION: SURVIVED mutations=1 caught=0 survived=1" in proc.stdout, proc.stdout
+    assert " unreachable_kills=0\n" in proc.stdout, proc.stdout
+    assert "unreachable-kill:" not in proc.stdout
+    assert "not-measured" not in proc.stdout
+
+
+def test_reachability_sweep_forwards_flag_and_per_spec_appended_counts(tmp_path):
+    first = _reachability_project(tmp_path / "first")
+    second = _reachability_project(tmp_path / "second")
+    proc = _reachability_cli(first, "--reachability", "--sweep", str(second))
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    lines = [line for line in proc.stdout.splitlines() if line.startswith("SWEEP:")]
+    assert len(lines) == 3, proc.stdout
+    for spec in (first, second):
+        line = next(line for line in lines if line.startswith(f"SWEEP: {spec} "))
+        assert " ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0 " in line, proc.stdout
+        assert line.endswith(" host_skipped=0 unreachable_kills=1"), proc.stdout
+    detail = ("  unreachable-kill: unexecuted body (span L2-L2 never executed by "
+              "test_pin.py::test_pin)")
+    assert proc.stdout.splitlines().count(detail) == 2, proc.stdout
+    assert lines[-1] == "SWEEP: ALL_CAUGHT specs=2 all_caught=2 survived=0 unmeasured=0"
+
+
+def test_reachability_skill_harness_bullet_documents_flag_and_count_together():
+    import re
+
+    lines = (_live_skill_dir() / "SKILL.md").read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("- `h_mad_mutation_harness.py`"))
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith(("- ", "#"))), len(lines))
+    sentences = re.split(r"(?<=[.!?])\s+", "\n".join(lines[start:end]))
+    assert any("--reachability" in sentence and "unreachable_kills=" in sentence
+               for sentence in sentences), "Harness bullet must document flag / count in one sentence"
