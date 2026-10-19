@@ -896,6 +896,214 @@
         "find": "            if delivery in (\"report-file\", \"out\"):  # M:GAS-EXTRACT-DELIVERED",
         "replace": "            if delivery in (\"report-file\", \"out\", \"none\"):  # M:GAS-EXTRACT-DELIVERED",
         "test": "tests/test_grok_audit_surface_probe.py::test_m4_e1_score_ignores_report_beside_delivered_none"
-      }
+      },
+    {
+      "name": "p-key-id-sets",
+      "_mechanism": "Disable only this GAS-KEY-ID-SETS guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if by_id.keys() != keyed.keys():  # M:GAS-KEY-ID-SETS",
+      "replace": "    if False:  # M:GAS-KEY-ID-SETS",
+      "test": "tests/test_grok_audit_surface_probe.py::test_key_mismatch_id_sets_differ"
+    },
+    {
+      "name": "p-key-dup-findings",
+      "_mechanism": "Disable only this GAS-KEY-DUP-FINDINGS guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if len(by_id) != len(findings):  # M:GAS-KEY-DUP-FINDINGS",
+      "replace": "    if False:  # M:GAS-KEY-DUP-FINDINGS",
+      "test": "tests/test_grok_audit_surface_probe.py::test_key_mismatch_duplicate_id_in_findings"
+    },
+    {
+      "name": "p-key-dup-key",
+      "_mechanism": "Disable only this GAS-KEY-DUP-KEY guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if len(keyed) != len(key):  # M:GAS-KEY-DUP-KEY",
+      "replace": "    if False:  # M:GAS-KEY-DUP-KEY",
+      "test": "tests/test_grok_audit_surface_probe.py::test_key_mismatch_duplicate_id_in_key"
+    },
+    {
+      "name": "p-key-surface",
+      "_mechanism": "Disable only this GAS-KEY-SURFACE guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if surface is None or row[\"surface\"] != surface:  # M:GAS-KEY-SURFACE",
+      "replace": "        if False:  # M:GAS-KEY-SURFACE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_key_mismatch_surface_moved_grok_to_agy"
+    },
+    {
+      "name": "p-key-doc",
+      "_mechanism": "Disable only this GAS-KEY-DOC guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if row[\"doc\"] != doc:  # M:GAS-KEY-DOC",
+      "replace": "        if False:  # M:GAS-KEY-DOC",
+      "test": "tests/test_grok_audit_surface_probe.py::test_key_mismatch_doc_differs"
+    },
+    {
+      "name": "p-key-cycle",
+      "_mechanism": "Disable only this GAS-KEY-CYCLE guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if row[\"cycle\"] != cycle:  # M:GAS-KEY-CYCLE",
+      "replace": "        if False:  # M:GAS-KEY-CYCLE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_key_mismatch_cycle_differs"
+    },
+    {
+      "name": "p-key-report",
+      "_mechanism": "Disable only this GAS-KEY-REPORT guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if row[\"report\"] != report:  # M:GAS-KEY-REPORT",
+      "replace": "        if False:  # M:GAS-KEY-REPORT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_key_mismatch_report_differs"
+    },
+    {
+      "name": "p-key-reextract",
+      "_mechanism": "Disable only this GAS-KEY-REEXTRACT guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if by_id.keys() == keyed.keys() and Counter(mapped) != Counter(extracted):  # M:GAS-KEY-REEXTRACT",
+      "replace": "    if False:  # M:GAS-KEY-REEXTRACT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_key_mismatch_reextraction"
+    },
+    {
+      "name": "p-label-missing",
+      "_mechanism": "Disable only this GAS-LABEL-MISSING guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if identifier not in labelled:  # M:GAS-LABEL-MISSING",
+      "replace": "        if False:  # M:GAS-LABEL-MISSING",
+      "test": "tests/test_grok_audit_surface_probe.py::test_label_unlabelled_finding"
+    },
+    {
+      "name": "p-label-dup-identical",
+      "_mechanism": "Disable only this GAS-LABEL-DUP guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if counts[identifier] > 1:  # M:GAS-LABEL-DUP",
+      "replace": "        if False:  # M:GAS-LABEL-DUP",
+      "test": "tests/test_grok_audit_surface_probe.py::test_label_identical_duplicate"
+    },
+    {
+      "name": "p-label-dup-conflicting",
+      "_mechanism": "Disable only this GAS-LABEL-DUP guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if counts[identifier] > 1:  # M:GAS-LABEL-DUP",
+      "replace": "        if False:  # M:GAS-LABEL-DUP",
+      "test": "tests/test_grok_audit_surface_probe.py::test_label_conflicting_duplicate"
+    },
+    {
+      "name": "p-label-unknown-id",
+      "_mechanism": "Disable only this GAS-LABEL-UNKNOWN-ID guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if identifier not in by_id:  # M:GAS-LABEL-UNKNOWN-ID",
+      "replace": "        if False:  # M:GAS-LABEL-UNKNOWN-ID",
+      "test": "tests/test_grok_audit_surface_probe.py::test_label_unknown_id"
+    },
+    {
+      "name": "p-label-value",
+      "_mechanism": "Disable only this GAS-LABEL-VALUE guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if label not in (\"REAL\", \"FABRICATED\", \"UNDECIDABLE\") and not label.startswith(\"HIT:\"):  # M:GAS-LABEL-VALUE",
+      "replace": "        if False:  # M:GAS-LABEL-VALUE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_label_unknown_value"
+    },
+    {
+      "name": "p-label-why",
+      "_mechanism": "Disable only this GAS-LABEL-WHY guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if label == \"UNDECIDABLE\" and not row.get(\"why\", \"\").strip():  # M:GAS-LABEL-WHY",
+      "replace": "        if False:  # M:GAS-LABEL-WHY",
+      "test": "tests/test_grok_audit_surface_probe.py::test_label_undecidable_without_why"
+    },
+    {
+      "name": "p-label-seed-unknown",
+      "_mechanism": "Disable only this GAS-LABEL-SEED-UNKNOWN guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if seed is None:  # M:GAS-LABEL-SEED-UNKNOWN",
+      "replace": "            if False:  # M:GAS-LABEL-SEED-UNKNOWN",
+      "test": "tests/test_grok_audit_surface_probe.py::test_label_hit_unknown_seed"
+    },
+    {
+      "name": "p-label-seed-doc",
+      "_mechanism": "Disable only this GAS-LABEL-SEED-DOC guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if seed is not None and seed[\"doc\"] != by_id.get(identifier, {}).get(\"doc\"):  # M:GAS-LABEL-SEED-DOC",
+      "replace": "            if False:  # M:GAS-LABEL-SEED-DOC",
+      "test": "tests/test_grok_audit_surface_probe.py::test_label_hit_seed_of_other_doc"
+    },
+    {
+      "name": "p-d3-lower",
+      "_mechanism": "Disable only this GAS-D3-LOWER guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if fg < fa and rg >= ra:  # M:GAS-D3-LOWER",
+      "replace": "    if False:  # M:GAS-D3-LOWER",
+      "test": "tests/test_grok_audit_surface_probe.py::test_d3_strictly_lower_fab_equal_recall_pass"
+    },
+    {
+      "name": "p-d3-equal-greater",
+      "_mechanism": "Disable D3's equal-fabrication, strictly-greater-recall branch.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    return fg == fa and rg > ra  # M:GAS-D3-EQUAL",
+      "replace": "    return False  # M:GAS-D3-EQUAL",
+      "test": "tests/test_grok_audit_surface_probe.py::test_d3_equal_fab_greater_recall_pass"
+    },
+    {
+      "name": "p-d3-equal-tie",
+      "_mechanism": "Accept equal recall at the equal-fabrication tie boundary.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    return fg == fa and rg > ra  # M:GAS-D3-EQUAL",
+      "replace": "    return fg == fa and rg >= ra  # M:GAS-D3-EQUAL",
+      "test": "tests/test_grok_audit_surface_probe.py::test_d3_full_tie_miss"
+    },
+    {
+      "name": "p-d3-equal-lower",
+      "_mechanism": "Accept lower recall when fabrication rates are equal.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    return fg == fa and rg > ra  # M:GAS-D3-EQUAL",
+      "replace": "    return fg == fa and rg != ra  # M:GAS-D3-EQUAL",
+      "test": "tests/test_grok_audit_surface_probe.py::test_d3_equal_fab_lower_recall_miss"
+    },
+    {
+      "name": "p-fab-fraction",
+      "_mechanism": "Shift both worst-case denominators by one while retaining Fraction values; disturb the 1/4 versus 2/8 tie boundary. Fraction normalises on construction, so this row measures that boundary, not representation differences.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        pessimistic, optimistic = (Fraction(f + u, n), Fraction(f, n)) if n else (Fraction(0), Fraction(0))  # M:GAS-FAB-FRACTION",
+      "replace": "        pessimistic, optimistic = (Fraction(f + u, n + 1), Fraction(f, n + 1)) if n else (Fraction(0), Fraction(0))  # M:GAS-FAB-FRACTION",
+      "test": "tests/test_grok_audit_surface_probe.py::test_d3_unreduced_equal_fab_equal_recall_miss"
+    },
+    {
+      "name": "p-verdict-flips",
+      "_mechanism": "Return MISS instead of the final undecidable_flips INCONCLUSIVE.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    return \"INCONCLUSIVE\", \"undecidable_flips\"  # M:GAS-VERDICT-FLIPS",
+      "replace": "    return \"MISS\", \"undecidable_flips\"  # M:GAS-VERDICT-FLIPS",
+      "test": "tests/test_grok_audit_surface_probe.py::test_undecidable_flips_inconclusive"
+    },
+    {
+      "name": "p-verdict-undetected",
+      "_mechanism": "Disable only this GAS-VERDICT-UNDETECTED guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not any(hits for hits, _n, _f, _u in totals.values()):  # M:GAS-VERDICT-UNDETECTED",
+      "replace": "    if False:  # M:GAS-VERDICT-UNDETECTED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_seeds_undetected_inconclusive"
+    },
+    {
+      "name": "p-verdict-undetected-pass",
+      "_mechanism": "Disable only this GAS-VERDICT-UNDETECTED guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not any(hits for hits, _n, _f, _u in totals.values()):  # M:GAS-VERDICT-UNDETECTED",
+      "replace": "    if False:  # M:GAS-VERDICT-UNDETECTED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_seeds_undetected_outranks_a_fabrication_pass"
+    },
+    {
+      "name": "p-verdict-undetected-miss",
+      "_mechanism": "Disable only this GAS-VERDICT-UNDETECTED guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not any(hits for hits, _n, _f, _u in totals.values()):  # M:GAS-VERDICT-UNDETECTED",
+      "replace": "    if False:  # M:GAS-VERDICT-UNDETECTED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_seeds_undetected_outranks_a_fabrication_miss"
+    },
+    {
+      "name": "p-score-effort-malformed",
+      "_mechanism": "Disable only this GAS-SCORE-EFFORT-MALFORMED guard while preserving downstream execution.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if items is None:  # M:GAS-SCORE-EFFORT-MALFORMED",
+      "replace": "            if False:  # M:GAS-SCORE-EFFORT-MALFORMED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_score_maps_a_malformed_effort_block"
+    }
   ]
 }

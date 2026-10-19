@@ -393,3 +393,62 @@ def build_extract_inputs(tmp_path: Path) -> dict:
         write_extract_cycle(case, doc=f"d{index}")
     write_extract_cycle(case, deliveries=("report-file", "none"), reports={1: extract_report_text()})
     return case
+
+
+def write_score_tables(case: dict) -> None:
+    """Persist editable blinded tables without changing the recorded reports."""
+    for name in ("findings", "key", "labels"):
+        (case["tree"] / CALIBRATION / f"{name}.jsonl").write_text(
+            "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in case[name]),
+            encoding="utf-8",
+        )
+
+
+def build_score_inputs(tmp_path: Path, probe, specs=None,
+                       surfaces=("agy", "grok")) -> dict:
+    """Build D13 inputs via the real extractor; specs are (surface, doc, section, label)."""
+    tree = tmp_path / "score tree [a]* ⟦h-mad⟧"
+    sources = build_archive(tree)
+    case = {
+        "tree": tree, "sources": sources, "records": build_ledger(tree, sources),
+        "s2": tree / CALIBRATION / "s2", "probe": probe,
+    }
+    if specs is None:
+        specs = [("grok", "d1", "must", "HIT:d1-s1"),
+                 ("agy", "d1", "must", "REAL")]
+    bodies, labels_by_prefix = {}, {}
+    hostile = _hostile_text().replace("\n", " ")
+    for index, (surface, doc, section, label) in enumerate(specs):
+        prefix = f"score-item-{index:04d}:"
+        bodies.setdefault((doc, surface, section), []).append(f"- {prefix} {hostile}")
+        labels_by_prefix[prefix] = label
+    for number in range(1, 10):
+        doc = f"d{number}"
+        reports = {
+            index: extract_report_text(
+                "\n".join(bodies.get((doc, surface, "must"), [])) or "None",
+                "\n".join(bodies.get((doc, surface, "should"), [])) or "None",
+            ) for index, surface in enumerate(surfaces, 1)
+        }
+        directory = write_extract_cycle(
+            case, doc=doc, deliveries=("report-file",) * len(surfaces),
+            reports=reports, surfaces=surfaces,
+        )
+        effort = []
+        for index, surface in enumerate(surfaces, 1):
+            suffix = " low-evidence (synthetic hollow log)" if doc == "d1" and surface == "grok" else ""
+            effort.append(f"- p{index} tools=1 ok=1 unresolved=0 thinking=0 format=parsed{suffix}")
+        stdout = directory / "auditcycle.txt"
+        stdout.write_text(stdout.read_text(encoding="utf-8") + "Effort:\n"
+                          + "\n".join(effort) + "\nPremise checklist: empty\n", encoding="utf-8")
+    extracted = probe.extract_all(tree, case["s2"], sources)
+    case["findings"], case["key"] = probe.blind(extracted, 1729)
+    case["labels"] = []
+    for finding in case["findings"]:
+        matches = [label for prefix, label in labels_by_prefix.items() if prefix in finding["text"]]
+        assert len(matches) == 1, "each hostile finding must retain its unique fixture identity"
+        case["labels"].append({"id": finding["id"], "label": matches[0],
+                               "why": f"Source checked: {_hostile_text()}."})
+    assert len(extracted) == len(specs), "the real gate must extract every fixture finding exactly once"
+    write_score_tables(case)
+    return case

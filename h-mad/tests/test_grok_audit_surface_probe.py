@@ -3,6 +3,7 @@
 import ast
 from collections import Counter
 import hashlib
+import inspect
 import io
 import json
 import os
@@ -17,6 +18,7 @@ import tarfile
 import tempfile
 import uuid
 from pathlib import Path
+from fractions import Fraction
 
 import pytest
 
@@ -25,6 +27,7 @@ from grokauditfixtures import (
     build_repo, build_root_repo, build_cycle_inputs, build_commit_inputs,
     build_extract_inputs, extract_report_path, extract_report_text,
     write_extract_cycle, commit_root_tree, git, load_probe,
+    build_score_inputs, write_score_tables,
 )
 
 
@@ -1956,3 +1959,417 @@ def test_m5_f2_pass_token_beside_hollow_log_stands(extract_case, capsys):
     _assert_raw_effort(case, high=False)
     _assert_extract_written(case, _run_extract(case, capsys), must=1,
         property_name="recorded PASS must stand despite a hollow raw log")
+
+
+@pytest.fixture
+def score_case(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    return build_score_inputs(tmp_path, load_probe(PROBE))
+
+
+def _run_score(case, capsys, *, shas=None):
+    argv = ["score", "--tree", str(case["tree"]), "--sources",
+            ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items())]
+    if shas is not None:
+        argv += ["--calibration-sha", shas[0], "--score-sha", shas[1]]
+    rc = case["probe"].main(argv)
+    stdout, stderr = capsys.readouterr()
+    return subprocess.CompletedProcess(argv, rc, stdout, stderr)
+
+
+def _assert_score_token(result, verdict, reason=None, *, shas=None, property_name):
+    expected = "SEEDSCORE: " + verdict
+    if reason:
+        expected += f" reason={reason}"
+    if verdict != "UNREADABLE":
+        calibration, score_sha = shas or ("unstated", "unstated")
+        expected += f" calibration={calibration} score={score_sha}"
+    assert result.stdout.splitlines()[-1:] == [expected], (
+        f"{property_name}: expected final token {expected!r}; actual stdout={result.stdout!r}; "
+        f"stderr={result.stderr!r}"
+    )
+    assert result.returncode == (2 if verdict == "UNREADABLE" else 0), (
+        f"{property_name}: only UNREADABLE exits 2; PASS, MISS and INCONCLUSIVE exit 0"
+    )
+    assert "Traceback" not in result.stderr, f"{property_name}: a declared outcome must not traceback"
+    return result.stdout.splitlines()
+
+
+def _score_refusal(case, capsys, reason, property_name):
+    write_score_tables(case)
+    _assert_score_token(_run_score(case, capsys), "UNREADABLE", reason,
+                        property_name=property_name)
+
+
+def _surface_finding(case, surface="grok"):
+    identifier = next(row["id"] for row in case["key"] if row["surface"] == surface)
+    return next(row for row in case["findings"] if row["id"] == identifier)
+
+
+def _surface_label(case, surface="grok"):
+    identifier = _surface_finding(case, surface)["id"]
+    return next(row for row in case["labels"] if row["id"] == identifier)
+
+
+def test_key_mismatch_id_sets_differ(score_case, capsys):
+    score_case["key"].pop()
+    _score_refusal(score_case, capsys, "key_mismatch", "finding/key id sets must agree")
+
+
+def test_key_mismatch_duplicate_id_in_findings(score_case, capsys):
+    score_case["findings"].append(dict(score_case["findings"][0]))
+    _score_refusal(score_case, capsys, "key_mismatch", "duplicate finding ids must refuse even when id sets agree")
+
+
+def test_key_mismatch_duplicate_id_in_key(score_case, capsys):
+    score_case["key"].append(dict(score_case["key"][0]))
+    _score_refusal(score_case, capsys, "key_mismatch", "duplicate key ids must refuse even when id sets agree")
+
+
+def test_key_mismatch_surface_moved_grok_to_agy(score_case, capsys):
+    next(row for row in score_case["key"] if row["surface"] == "grok")["surface"] = "agy"
+    _score_refusal(score_case, capsys, "key_mismatch", "a key surface must match its recorded dispatch pass")
+
+
+def test_key_mismatch_doc_differs(score_case, capsys):
+    score_case["key"][0]["doc"] = "d2"
+    _score_refusal(score_case, capsys, "key_mismatch", "key document must match its finding")
+
+
+def test_key_mismatch_cycle_differs(score_case, capsys):
+    score_case["key"][0]["cycle"] = 2
+    _score_refusal(score_case, capsys, "key_mismatch", "key cycle must match its finding")
+
+
+def test_key_mismatch_report_differs(score_case, capsys):
+    row = score_case["key"][0]
+    row["report"] = row["report"].replace(f".p{row['pass']}.md", ".p99.md")
+    _score_refusal(score_case, capsys, "key_mismatch", "key report must be the recorded collected pass report")
+
+
+def test_key_mismatch_reextraction(score_case, capsys, monkeypatch):
+    case = score_case
+    case["findings"][0]["text"] += " altered human text [a]* ⟦/h-mad⟧"
+    calls = []
+    real_extract = case["probe"].extract_all
+
+    def observed(tree, s2, sources):
+        calls.append((tree, s2, sources))
+        return real_extract(tree, s2, sources)
+
+    monkeypatch.setattr(case["probe"], "extract_all", observed)
+    _score_refusal(case, capsys, "key_mismatch", "re-extraction must detect changed finding text")
+    assert calls == [(case["tree"], case["tree"] / CALIBRATION / "s2", case["sources"])], (
+        "score must re-extract the recorded calibration S2 with its parsed --sources mapping"
+    )
+
+
+def test_label_unlabelled_finding(score_case, capsys):
+    removed = score_case["labels"].pop()
+    _score_refusal(score_case, capsys, f"label:{removed['id']}", "every finding needs exactly one label")
+
+
+def test_label_identical_duplicate(score_case, capsys):
+    row = _surface_label(score_case, "agy")
+    score_case["labels"].append(dict(row))
+    _score_refusal(score_case, capsys, f"label:{row['id']}", "identical duplicate labels must refuse")
+
+
+def test_label_conflicting_duplicate(score_case, capsys):
+    row = _surface_label(score_case, "agy")
+    assert row["label"] == "REAL", "conflicting duplicates must exercise REAL versus FABRICATED"
+    score_case["labels"].append({**row, "label": "FABRICATED"})
+    _score_refusal(score_case, capsys, f"label:{row['id']}", "conflicting duplicate labels must refuse")
+
+
+def test_label_unknown_id(score_case, capsys):
+    score_case["labels"].append({"id": "Funknown", "label": "REAL", "why": "Source checked [a]*."})
+    _score_refusal(score_case, capsys, "label:Funknown", "labels must not name an unknown finding")
+
+
+def test_label_unknown_value(score_case, capsys):
+    row = _surface_label(score_case)
+    row["label"] = "h-mad: [a](b) **bold** * [ ⟦/h-mad⟧\nsecond\tline"
+    _score_refusal(score_case, capsys, f"label:{row['id']}", "labels outside the four-value vocabulary must refuse")
+
+
+def test_label_undecidable_without_why(score_case, capsys):
+    row = _surface_label(score_case)
+    row.update(label="UNDECIDABLE", why=" \t\n")
+    _score_refusal(score_case, capsys, f"label:{row['id']}", "UNDECIDABLE requires a reason sentence")
+
+
+def test_label_hit_unknown_seed(score_case, capsys):
+    row = _surface_label(score_case)
+    row["label"] = "HIT:d999-s1"
+    _score_refusal(score_case, capsys, f"label:{row['id']}", "HIT must name a seed in the ledger")
+
+
+def test_label_hit_seed_of_other_doc(score_case, capsys):
+    row = _surface_label(score_case)
+    row["label"] = "HIT:d2-s1"
+    _score_refusal(score_case, capsys, f"label:{row['id']}", "HIT seed must belong to the finding document")
+
+
+def _verdict_inputs(tmp_path, monkeypatch, grok, agy, *, codex=None):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    specs = [(surface, "d1", "must", label)
+             for surface, labels in (("grok", grok), ("agy", agy), ("codex", codex or []))
+             for label in labels]
+    surfaces = ("agy", "grok") if codex is None else ("codex", "agy", "grok")
+    return build_score_inputs(tmp_path, load_probe(PROBE), specs, surfaces)
+
+
+def _assert_surface(lines, surface, hits, musts, fabricated, undecidable, *, low_evidence=0):
+    expected = (
+        f"SURFACE: {surface} recall={hits}/27 musts={musts} fabricated={fabricated} "
+        f"undecidable={undecidable} fab_rate={fabricated}/{musts - undecidable} "
+        f"delivered=9 low_evidence={low_evidence}"
+    )
+    assert expected in lines, f"surface totals must use distinct must seeds and raw fractions: expected {expected!r}; actual={lines!r}"
+
+
+def test_d3_strictly_lower_fab_equal_recall_pass(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch, ["HIT:d1-s1", "REAL"], ["HIT:d1-s1", "FABRICATED"])
+    assert case["probe"].d3(Fraction(0), 1, Fraction(1, 2), 1), "strictly lower fabrication with equal recall satisfies D3"
+    assert not case["probe"].d3(Fraction(0), 0, Fraction(1, 2), 1), "strictly lower fabrication cannot compensate for lower recall"
+    lines = _assert_score_token(_run_score(case, capsys), "PASS", property_name="lower fabrication, equal recall passes")
+    _assert_surface(lines, "grok", 1, 2, 0, 0, low_evidence=1)
+    _assert_surface(lines, "agy", 1, 2, 1, 0)
+    assert "SURFACE: codex not_run" in lines, "two-surface scores must explicitly report codex not_run"
+
+
+def test_d3_equal_fab_greater_recall_pass(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch, ["HIT:d1-s1", "HIT:d1-s2"], ["HIT:d1-s1", "REAL"])
+    assert case["probe"].d3(Fraction(0), 2, Fraction(0), 1), "equal fabrication requires strictly greater recall"
+    _assert_score_token(_run_score(case, capsys), "PASS", property_name="equal fabrication with greater recall passes")
+
+
+def test_d3_full_tie_miss(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch, ["HIT:d1-s1", "REAL"], ["HIT:d1-s1", "REAL"])
+    assert not case["probe"].d3(Fraction(0), 1, Fraction(0), 1), "a full tie must not satisfy D3"
+    _assert_score_token(_run_score(case, capsys), "MISS", "bar_missed", property_name="full tie misses the strict bar")
+
+
+def test_d3_equal_fab_lower_recall_miss(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch, ["HIT:d1-s1", "REAL"], ["HIT:d1-s1", "HIT:d1-s2"])
+    assert not case["probe"].d3(Fraction(0), 1, Fraction(0), 2), "equal fabrication and lower recall must fail D3"
+    _assert_score_token(_run_score(case, capsys), "MISS", "bar_missed", property_name="equal fabrication with lower recall misses")
+
+
+def test_d3_unreduced_equal_fab_equal_recall_miss(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch,
+        ["HIT:d1-s1", "REAL", "REAL", "FABRICATED"],
+        ["HIT:d1-s1", *(["REAL"] * 5), "FABRICATED", "FABRICATED"])
+    assert Fraction(1, 4) == Fraction(2, 8), "unreduced fractions describe the same fabrication rate"
+    lines = _assert_score_token(_run_score(case, capsys), "MISS", "bar_missed",
+                               property_name="1/4 versus 2/8 with equal recall is a full tie")
+    _assert_surface(lines, "grok", 1, 4, 1, 0, low_evidence=1)
+    _assert_surface(lines, "agy", 1, 8, 2, 0)
+    assert not case["probe"].d3(Fraction(1, 4), 1, Fraction(2, 8), 1), "D3 compares Fraction values rather than raw numerator/denominator pairs"
+
+
+def test_undecidable_flips_inconclusive(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch, ["HIT:d1-s1", "UNDECIDABLE"], ["HIT:d1-s1", "FABRICATED"])
+    _assert_score_token(_run_score(case, capsys), "INCONCLUSIVE", "undecidable_flips",
+                        property_name="opposed decisions for undecidables straddle the D3 bar")
+    other = _verdict_inputs(tmp_path / "agy-undecidable", monkeypatch,
+                            ["HIT:d1-s1", "REAL"], ["HIT:d1-s1", "UNDECIDABLE"])
+    _assert_score_token(_run_score(other, capsys), "INCONCLUSIVE", "undecidable_flips",
+                        property_name="agy undecidables also need optimistic and pessimistic Fraction bounds")
+
+
+def test_seeds_undetected_inconclusive(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch, ["REAL"], ["REAL"])
+    _assert_score_token(_run_score(case, capsys), "INCONCLUSIVE", "seeds_undetected",
+                        property_name="no must hit on any surface is inconclusive")
+    # Codex is included in the precedence check even though it is not compared by D3.
+    ceiling = _verdict_inputs(tmp_path / "ceiling", monkeypatch, ["REAL"], ["REAL"], codex=["HIT:d1-s1"])
+    _assert_score_token(_run_score(ceiling, capsys), "MISS", "bar_missed",
+                        property_name="a codex must hit prevents seeds_undetected")
+
+
+def test_seeds_undetected_outranks_a_fabrication_pass(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch, ["REAL"], ["FABRICATED"])
+    _assert_score_token(_run_score(case, capsys), "INCONCLUSIVE", "seeds_undetected",
+                        property_name="zero hits outrank a strictly lower fabrication PASS")
+
+
+def test_seeds_undetected_outranks_a_fabrication_miss(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch, ["FABRICATED"], ["REAL"])
+    _assert_score_token(_run_score(case, capsys), "INCONCLUSIVE", "seeds_undetected",
+                        property_name="zero hits outrank a strictly higher fabrication MISS")
+
+
+def test_zero_decidable_musts_prints_0_over_0(tmp_path, monkeypatch, capsys):
+    case = _verdict_inputs(tmp_path, monkeypatch, ["UNDECIDABLE"], [])
+    lines = _assert_score_token(_run_score(case, capsys), "INCONCLUSIVE", "seeds_undetected",
+                               property_name="zero decidable musts have a printable 0/0 fabrication rate")
+    _assert_surface(lines, "grok", 0, 1, 0, 1, low_evidence=1)
+    _assert_surface(lines, "agy", 0, 0, 0, 0)
+    assert case["probe"].verdict({"grok": (0, 1, 0, 1), "agy": (0, 0, 0, 0)}) == ("INCONCLUSIVE", "seeds_undetected"), "0/0 must be treated as Fraction(0) without dividing by zero"
+    ceiling = _verdict_inputs(tmp_path / "ceiling", monkeypatch, ["UNDECIDABLE"], [], codex=["HIT:d1-s1"])
+    lines = _assert_score_token(_run_score(ceiling, capsys), "MISS", "bar_missed",
+                               property_name="a zero-must surface must use Fraction(0) when D3 is evaluated")
+    _assert_surface(lines, "agy", 0, 0, 0, 0)
+
+
+def test_score_exit_codes(tmp_path, monkeypatch, capsys):
+    for name, grok, agy, verdict, reason in (
+        ("pass", ["HIT:d1-s1"], ["HIT:d1-s1", "FABRICATED"], "PASS", None),
+        ("miss", ["HIT:d1-s1"], ["HIT:d1-s1"], "MISS", "bar_missed"),
+        ("inconclusive", ["REAL"], ["REAL"], "INCONCLUSIVE", "seeds_undetected"),
+        ("unreadable", ["HIT:d1-s1"], ["REAL"], "UNREADABLE", "key_mismatch"),
+    ):
+        case = _verdict_inputs(tmp_path / name, monkeypatch, grok, agy)
+        if verdict == "UNREADABLE":
+            case["key"].clear()
+            write_score_tables(case)
+        _assert_score_token(_run_score(case, capsys), verdict, reason,
+                            property_name=f"{verdict} exit-code and unstated provenance contract")
+    shas = ("a" * 40, "b" * 40)
+    case = _verdict_inputs(tmp_path / "provenance", monkeypatch, ["HIT:d1-s1"], ["HIT:d1-s1"])
+    _assert_score_token(_run_score(case, capsys, shas=shas), "MISS", "bar_missed", shas=shas,
+                        property_name="explicit provenance shas must reach the final score token")
+    _assert_score_refusal_precedence(tmp_path / "precedence", monkeypatch, capsys)
+
+
+def _assert_score_refusal_precedence(tmp_path, monkeypatch, capsys):
+    """Repair competing defects in order, proving D13's first-applicable rule."""
+    case = _verdict_inputs(tmp_path, monkeypatch, ["HIT:d1-s1"], ["REAL"])
+    label = _surface_label(case)
+    label["label"] = "UNKNOWN [a]* ⟦/h-mad⟧"
+    _surface_finding(case)["text"] += " changed text [a]*"
+    write_score_tables(case)
+    cycle = case["s2"] / "d1/v1/auditcycle.txt"
+    cycle_text = cycle.read_text(encoding="utf-8")
+    cycle.write_text("Human annotation without a token [a]*\n", encoding="utf-8")
+    seeded = case["tree"] / CALIBRATION / "seeded" / Path(case["records"][0]["source"]).name
+    seeded_bytes = seeded.read_bytes()
+    seeded.write_bytes(seeded_bytes + b"changed\n")
+    record = case["records"][0]
+    expected, origin = record.pop("expected"), record["origin"]
+    record["origin"] = "UNKNOWN [a]*"
+    _write_ledger(case["tree"], case["records"])
+    _assert_score_token(_run_score(case, capsys), "UNREADABLE", "ledger_counts",
+                        property_name="ledger_counts outranks origin, rebuild, cycle, key and label defects")
+    record["expected"] = expected
+    _write_ledger(case["tree"], case["records"])
+    _assert_score_token(_run_score(case, capsys), "UNREADABLE", "ledger_origin",
+                        property_name="ledger_origin outranks rebuild, cycle, key and label defects")
+    record["origin"] = origin
+    _write_ledger(case["tree"], case["records"])
+    _assert_score_token(_run_score(case, capsys), "UNREADABLE", "seed_rebuild",
+                        property_name="seed_rebuild outranks cycle, key and label defects")
+    seeded.write_bytes(seeded_bytes)
+    _assert_score_token(_run_score(case, capsys), "UNREADABLE", "cycle_token:d1.v1",
+                        property_name="cycle_token outranks re-extraction, key and label defects")
+    cycle.write_text(cycle_text, encoding="utf-8")
+    with monkeypatch.context() as scoped:
+        _bump_gate_count(case, scoped, "must_count")
+        _assert_score_token(_run_score(case, capsys), "UNREADABLE",
+                            "must_count_mismatch:" + _extract_tree_report(case),
+                            property_name="re-extracted must_count_mismatch outranks key and label defects")
+    _assert_score_token(_run_score(case, capsys), "UNREADABLE", "key_mismatch",
+                        property_name="key_mismatch outranks label defects")
+    _surface_finding(case)["text"] = _surface_finding(case)["text"].removesuffix(" changed text [a]*")
+    write_score_tables(case)
+    _assert_score_token(_run_score(case, capsys), "UNREADABLE", f"label:{label['id']}",
+                        property_name="label validation runs after valid ledger, cycles and key")
+
+
+def test_split_lines_never_move_the_verdict(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = build_score_inputs(tmp_path / "plan", load_probe(PROBE))
+    first = _assert_score_token(_run_score(case, capsys), "PASS", property_name="baseline must totals determine verdict")
+    other = build_score_inputs(tmp_path / "design", load_probe(PROBE),
+        [("grok", "d2", "must", "HIT:d2-s1"), ("agy", "d2", "must", "REAL")])
+    second = _assert_score_token(_run_score(other, capsys), "PASS", property_name="moving hits across phase and class keeps verdict")
+    assert [line for line in first if line.startswith("SPLIT:")] != [line for line in second if line.startswith("SPLIT:")], "phase and class observations must change when the same hit moves"
+    probe = case["probe"]
+    assert list(inspect.signature(probe.verdict).parameters) == ["totals"], "verdict must accept only per-surface totals"
+    for name in ("verdict", "d3"):
+        definition = ast.parse(inspect.getsource(getattr(probe, name)))
+        assert not any(isinstance(node, ast.Call) and
+                       ((isinstance(node.func, ast.Name) and node.func.id == "observational_lines") or
+                        (isinstance(node.func, ast.Attribute) and node.func.attr == "observational_lines"))
+                       for node in ast.walk(definition)), f"{name} must never call observational_lines in any branch"
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("verdict and d3 must never call observational_lines")
+
+    monkeypatch.setattr(probe, "observational_lines", forbidden)
+    assert probe.verdict({"grok": (1, 1, 0, 0), "agy": (0, 1, 0, 0)}) == ("PASS", None), "verdict must decide using only (hits, n, f, u)"
+    assert probe.d3(Fraction(0), 1, Fraction(0), 0), "D3 must remain independent of observational rows"
+
+
+def test_should_hits_never_move_the_verdict(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = build_score_inputs(tmp_path, load_probe(PROBE), [
+        ("grok", "d1", "must", "HIT:d1-s1"), ("agy", "d1", "must", "REAL"),
+        ("grok", "d1", "should", "HIT:d1-s2"), ("agy", "d1", "should", "HIT:d1-s3"),
+    ])
+    first = _assert_score_token(_run_score(case, capsys), "PASS", property_name="should HIT labels cannot add must recall")
+    should_ids = {row["id"] for row in case["findings"] if row["section"] == "should"}
+    for row in case["labels"]:
+        if row["id"] in should_ids:
+            row["label"] = "FABRICATED"
+    write_score_tables(case)
+    second = _assert_score_token(_run_score(case, capsys), "PASS", property_name="should fabrication cannot change must fabrication")
+    assert [line for line in first if line.startswith("SURFACE:")] == [line for line in second if line.startswith("SURFACE:")], "should labels must leave every must surface total unchanged"
+    assert [line for line in first if line.startswith("SHOULD:")] != [line for line in second if line.startswith("SHOULD:")], "the opposed should labels must change the observational counts"
+
+
+def test_should_and_split_lines_are_printed(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = build_score_inputs(tmp_path, load_probe(PROBE), [
+        ("grok", "d1", "must", "HIT:d1-s1"), ("grok", "d1", "must", "HIT:d1-s1"),
+        ("grok", "d2", "must", "FABRICATED"), ("agy", "d1", "must", "REAL"),
+        ("grok", "d1", "should", "HIT:d1-s2"), ("grok", "d1", "should", "HIT:d1-s2"),
+        ("grok", "d2", "should", "FABRICATED"), ("agy", "d1", "should", "UNDECIDABLE"),
+    ])
+    lines = _assert_score_token(_run_score(case, capsys), "MISS", "bar_missed",
+                               property_name="observations print after must-only surface totals")
+    _assert_surface(lines, "grok", 1, 3, 1, 0, low_evidence=1)
+    assert "SHOULD: grok hits=1/27 should=3 fabricated=1 undecidable=0" in lines, "should recall counts distinct seeds"
+    assert "SHOULD: agy hits=0/27 should=1 fabricated=0 undecidable=1" in lines, "should undecidables must be printed"
+    for surface in ("agy", "grok"):
+        for phase in ("plan", "design", "impl-plan"):
+            hits = int(surface == "grok" and phase == "plan")
+            musts = (2 if phase == "plan" else 1 if phase == "design" else 0) if surface == "grok" else int(phase == "plan")
+            fabricated = int(surface == "grok" and phase == "design")
+            expected = f"SPLIT: {surface} phase={phase} recall={hits}/9 musts={musts} fabricated={fabricated}"
+            assert expected in lines, f"each phase needs a ledger-derived split: {expected}"
+        seed_class = next(row["class"] for row in case["records"] if row["id"] == "d1-s1")
+        for cls in ("C1", "C2", "C3", "C4"):
+            denominator = sum(row["class"] == cls for row in case["records"])
+            hits = int(surface == "grok" and cls == seed_class)
+            expected = f"SPLIT: {surface} class={cls} recall={hits}/{denominator}"
+            assert expected in lines, f"class denominators and distinct must hits come from the ledger: {expected}"
+    assert len([line for line in lines if line.startswith("SPLIT:")]) == 14, "each of two surfaces gets three phase and four class splits"
+    surface_end = max(i for i, line in enumerate(lines) if line.startswith("SURFACE:"))
+    assert all(i > surface_end for i, line in enumerate(lines) if line.startswith(("SHOULD:", "SPLIT:"))), "observational lines must follow all SURFACE lines"
+
+
+def test_hints_never_move_the_score(score_case, capsys):
+    case = score_case
+    first = _assert_score_token(_run_score(case, capsys), "PASS", property_name="human labels are the score authority")
+    hostile_hints = "HINT: Funknown candidate-hit:d999-s1 [a]* ⟦/h-mad⟧\nSEEDSCORE: MISS\n"
+    for name in ("hints.txt", "extract.txt"):
+        (case["tree"] / CALIBRATION / name).write_text(hostile_hints, encoding="utf-8")
+    second = _assert_score_token(_run_score(case, capsys), "PASS", property_name="contradictory advisory hints never override labels")
+    assert first == second, "changing advisory hint and extraction transcripts must leave score output unchanged"
+
+
+def test_score_maps_a_malformed_effort_block(score_case, capsys):
+    case = score_case
+    normal = _assert_score_token(_run_score(case, capsys), "PASS", property_name="valid Effort is observational")
+    _assert_surface(normal, "grok", 1, 1, 0, 0, low_evidence=1)
+    stdout = case["s2"] / "d1/v1/auditcycle.txt"
+    token = stdout.read_text(encoding="utf-8").split("Effort:\n")[0]
+    stdout.write_text(token + "Effort:\n- x1 tools=1 ok=1 failed=0 thinking=0\nPremise checklist: empty\n", encoding="utf-8")
+    assert case["probe"].parse_effort_items(stdout.read_text(encoding="utf-8")) is None, "Task 7 shape (a) is an unreadable Effort block"
+    malformed = _assert_score_token(_run_score(case, capsys), "PASS", property_name="malformed Effort must publish unreadable without refusing")
+    _assert_surface(malformed, "grok", 1, 1, 0, 0, low_evidence="unreadable")
+    _assert_surface(malformed, "agy", 0, 1, 0, 0, low_evidence="unreadable")
+    assert malformed[-1] == normal[-1], "option (b): unreadable evidence counts never change the verdict"

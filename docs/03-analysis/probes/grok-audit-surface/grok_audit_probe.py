@@ -2,6 +2,7 @@
 
 import argparse
 from collections import Counter
+from fractions import Fraction
 import errno
 import hashlib
 import importlib.util
@@ -1177,6 +1178,190 @@ def _mode_extract(args: argparse.Namespace) -> int:
 
 
 MODES["extract"] = _mode_extract
+
+
+def d3(fg: Fraction, rg: int, fa: Fraction, ra: int) -> bool:
+    if fg < fa and rg >= ra:  # M:GAS-D3-LOWER
+        return True
+    return fg == fa and rg > ra  # M:GAS-D3-EQUAL
+
+
+def verdict(totals: dict[str, tuple[int, int, int, int]]) -> tuple[str, str | None]:
+    if not any(hits for hits, _n, _f, _u in totals.values()):  # M:GAS-VERDICT-UNDETECTED
+        return "INCONCLUSIVE", "seeds_undetected"
+    bounds = {}
+    for surface in ("grok", "agy"):
+        hits, n, f, u = totals[surface]
+        pessimistic, optimistic = (Fraction(f + u, n), Fraction(f, n)) if n else (Fraction(0), Fraction(0))  # M:GAS-FAB-FRACTION
+        bounds[surface] = (hits, pessimistic, optimistic)
+    rg, pess_g, opt_g = bounds["grok"]
+    ra, pess_a, opt_a = bounds["agy"]
+    if d3(pess_g, rg, opt_a, ra):
+        return "PASS", None
+    if not d3(opt_g, rg, pess_a, ra):
+        return "MISS", "bar_missed"
+    return "INCONCLUSIVE", "undecidable_flips"  # M:GAS-VERDICT-FLIPS
+
+
+def check_key(tree: Path, findings: list[dict], key: list[dict], reextracted: list[dict]) -> None:
+    by_id = {row["id"]: row for row in findings}
+    keyed = {row["id"]: row for row in key}
+    if by_id.keys() != keyed.keys():  # M:GAS-KEY-ID-SETS
+        raise Refusal("key_mismatch")
+    if len(by_id) != len(findings):  # M:GAS-KEY-DUP-FINDINGS
+        raise Refusal("key_mismatch")
+    if len(keyed) != len(key):  # M:GAS-KEY-DUP-KEY
+        raise Refusal("key_mismatch")
+    mapped = []
+    for identifier in by_id.keys() & keyed.keys():
+        finding, row = by_id[identifier], keyed[identifier]
+        doc, cycle = finding["doc"], finding["cycle"]
+        if row["doc"] != doc:  # M:GAS-KEY-DOC
+            raise Refusal("key_mismatch")
+        if row["cycle"] != cycle:  # M:GAS-KEY-CYCLE
+            raise Refusal("key_mismatch")
+        try:
+            command = shlex.split((tree / CALIBRATION / "s2" / doc / f"v{cycle}" / "command.txt").read_text(encoding="utf-8"))
+            surfaces = command[command.index("--surfaces") + 1].split(",")
+            pass_index = row["pass"]
+            surface = dict(enumerate(surfaces, 1)).get(pass_index)
+            feature = command[command.index("--feature") + 1]
+            phase = command[command.index("--phase") + 1]
+        except (OSError, UnicodeError, ValueError, IndexError, TypeError) as exc:
+            raise Refusal("key_mismatch") from exc
+        if surface is None or row["surface"] != surface:  # M:GAS-KEY-SURFACE
+            raise Refusal("key_mismatch")
+        report = f"s2/{doc}/v{cycle}/collected/{feature}.{phase}.audit.v{cycle}.p{pass_index}.md"
+        if row["report"] != report:  # M:GAS-KEY-REPORT
+            raise Refusal("key_mismatch")
+        # Compare content at the independently validated recorded location.
+        mapped.append((report, finding["section"], finding["text"]))
+    extracted = [(row["report"], row["section"], row["text"]) for row in reextracted]
+    # A content comparison is meaningful only for a complete id join.
+    if by_id.keys() == keyed.keys() and Counter(mapped) != Counter(extracted):  # M:GAS-KEY-REEXTRACT
+        raise Refusal("key_mismatch")
+
+
+def check_labels(findings: list[dict], labels: list[dict], ledger: list[dict]) -> dict[str, dict]:
+    by_id = {row["id"]: row for row in findings}
+    counts = Counter(row["id"] for row in labels)
+    labelled = {row["id"]: row for row in labels}
+    seeds = {row["id"]: row for row in ledger}
+    for identifier in by_id:
+        if identifier not in labelled:  # M:GAS-LABEL-MISSING
+            raise Refusal(f"label:{identifier}")
+    for row in labels:
+        identifier, label = row["id"], row["label"]
+        if counts[identifier] > 1:  # M:GAS-LABEL-DUP
+            raise Refusal(f"label:{identifier}")
+        if identifier not in by_id:  # M:GAS-LABEL-UNKNOWN-ID
+            raise Refusal(f"label:{identifier}")
+        if label not in ("REAL", "FABRICATED", "UNDECIDABLE") and not label.startswith("HIT:"):  # M:GAS-LABEL-VALUE
+            raise Refusal(f"label:{identifier}")
+        if label == "UNDECIDABLE" and not row.get("why", "").strip():  # M:GAS-LABEL-WHY
+            raise Refusal(f"label:{identifier}")
+        if label.startswith("HIT:"):
+            seed = seeds.get(label.removeprefix("HIT:"))
+            if seed is None:  # M:GAS-LABEL-SEED-UNKNOWN
+                raise Refusal(f"label:{identifier}")
+            if seed is not None and seed["doc"] != by_id.get(identifier, {}).get("doc"):  # M:GAS-LABEL-SEED-DOC
+                raise Refusal(f"label:{identifier}")
+    return labelled
+
+
+def _score_totals(rows: list[dict]) -> tuple[int, int, int, int]:
+    labels = [row.get("label", "") for row in rows]
+    hits = {label.removeprefix("HIT:") for label in labels if label.startswith("HIT:")}
+    return len(hits), len(rows), labels.count("FABRICATED"), labels.count("UNDECIDABLE")
+
+
+def observational_lines(rows: list[dict], ledger: list[dict]) -> list[str]:
+    """Publish should and split observations from each surface's joined findings."""
+    lines = []
+    for row in rows:
+        surface, findings = row["surface"], row["findings"]
+        hits, n, f, u = _score_totals([item for item in findings if item["section"] == "should"])
+        lines.append(f"SHOULD: {surface} hits={hits}/{len(ledger)} should={n} fabricated={f} undecidable={u}")
+        musts = [item for item in findings if item["section"] == "must"]
+        for phase in ("plan", "design", "impl-plan"):
+            phase_rows = [item for item in musts if item["phase"] == phase]
+            hits, n, f, _u = _score_totals(phase_rows)
+            denominator = sum(seed["phase"] == phase for seed in ledger)
+            lines.append(f"SPLIT: {surface} phase={phase} recall={hits}/{denominator} musts={n} fabricated={f}")
+        hit_ids = {item.get("label", "").removeprefix("HIT:") for item in musts
+                   if item.get("label", "").startswith("HIT:")}
+        for cls in ("C1", "C2", "C3", "C4"):
+            seed_ids = {seed["id"] for seed in ledger if seed["class"] == cls}
+            lines.append(f"SPLIT: {surface} class={cls} recall={len(hit_ids & seed_ids)}/{len(seed_ids)}")
+    return lines
+
+
+def _score_table(tree: Path, name: str, reason: str) -> list[dict]:
+    try:
+        return [json.loads(line) for line in (tree / CALIBRATION / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()]
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise Refusal(reason) from exc
+
+
+def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sha: str | None) -> tuple[list[str], str]:
+    # extract_all validates the ledger, every standing cycle, and must counts first.
+    reextracted = extract_all(tree, tree / CALIBRATION / "s2", sources)
+    findings = _score_table(tree, "findings", "key_mismatch")
+    key = _score_table(tree, "key", "key_mismatch")
+    check_key(tree, findings, key, reextracted)
+    documents = [(Path(directory) / feature / f"{feature}.{phase}.md").as_posix()
+                 for feature, directory in sources.items() for phase in ("plan", "design", "impl-plan")]
+    doc_ids = {source: f"d{index}" for index, source in enumerate(documents, 1)}
+    ledger = [{**seed, "doc": doc_ids[seed["source"]]} for seed in read_ledger(tree)]
+    labelled = check_labels(findings, _score_table(tree, "labels", "label:unknown"), ledger)
+    keyed = {row["id"]: row for row in key}
+    phases = {seed["doc"]: seed["phase"] for seed in ledger}
+    joined = [{**finding, **keyed[finding["id"]], **labelled.get(finding["id"], {}),
+               "phase": phases[finding["doc"]]} for finding in findings if finding["id"] in keyed]
+    delivered_counts = Counter()
+    evidence = {}
+    for doc in doc_ids.values():
+        directory = stands(tree / CALIBRATION / "s2" / doc)
+        text = (directory / "auditcycle.txt").read_text(encoding="utf-8")
+        parsed = _recorded_cycle(directory)
+        command = shlex.split((directory / "command.txt").read_text(encoding="utf-8"))
+        surfaces = command[command.index("--surfaces") + 1].split(",")
+        deliveries = parsed.get("delivered", "").split(",")
+        items = parse_effort_items(text)
+        for index, surface in enumerate(surfaces, 1):
+            delivered_counts[surface] += index <= len(deliveries) and deliveries[index - 1] in ("report-file", "out")
+            evidence.setdefault(surface, 0)
+            if items is None:  # M:GAS-SCORE-EFFORT-MALFORMED
+                evidence[surface] = "unreadable"
+            if evidence[surface] != "unreadable":
+                evidence[surface] += sum(item.startswith(f"p{index} ") and " low-evidence (" in item for item in (items or []))
+    rows, totals, lines = [], {}, []
+    for surface in ("codex", "agy", "grok"):
+        if surface not in evidence:
+            lines.append(f"SURFACE: {surface} not_run")
+            continue
+        surface_rows = [row for row in joined if row["surface"] == surface]
+        rows.append({"surface": surface, "findings": surface_rows})
+        hits, n, f, u = totals[surface] = _score_totals([row for row in surface_rows if row["section"] == "must"])
+        lines.append(f"SURFACE: {surface} recall={hits}/{len(ledger)} musts={n} fabricated={f} "
+                     f"undecidable={u} fab_rate={f}/{n - u} "
+                     f"delivered={delivered_counts[surface]} low_evidence={evidence[surface]}")
+    outcome, reason = verdict(totals)
+    lines.extend(observational_lines(rows, ledger))
+    token = f"SEEDSCORE: {outcome}" + (f" reason={reason}" if reason else "")
+    token += f" calibration={calibration or 'unstated'} score={score_sha or 'unstated'}"
+    return lines, token
+
+
+def _mode_score(args: argparse.Namespace) -> int:
+    lines, token = score(args.tree, args.sources, args.calibration_sha, args.score_sha)
+    for line in lines:
+        print(line)
+    print(token)
+    return 0
+
+
+MODES["score"] = _mode_score
 
 
 def build_parser() -> _TokenArgumentParser:
