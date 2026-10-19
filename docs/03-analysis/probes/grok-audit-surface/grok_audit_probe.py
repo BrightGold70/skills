@@ -8,6 +8,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -536,6 +537,164 @@ def _mode_build_root(args: argparse.Namespace) -> int:
 
 
 MODES["build-root"] = _mode_build_root
+
+
+def record_cycle(args: argparse.Namespace) -> str:
+    """Validate one wrapper run before copying its D3 recording files."""
+    contents = {path: b"" for path in (args.root_record, args.stdout, args.command)}
+    missing = [path for path in (args.stem, args.root) if not path.is_dir()]
+    for path in contents:
+        try:
+            contents[path] = path.read_bytes()
+        except OSError:
+            missing.append(path)
+    if missing:  # M:GAS-RECORD-INPUT
+        raise Refusal(f"input_missing:{missing[0]}")
+
+    lines = [line for line in contents[args.root_record].decode("utf-8", errors="replace").splitlines()
+             if line.startswith("ROOT: READY ")]
+    if len(lines) != 1:  # M:GAS-RECORD-ROOT-LINE
+        raise Refusal("root_record:no_line")
+    root_line = next(iter(lines), "")
+    fields = parse_root_line(root_line)
+    if fields is None:
+        raise Refusal("root_record:no_line")  # M:GAS-RECORD-ROOT-MALFORMED
+    if Path(fields["path"]).resolve() != args.root.resolve():  # M:GAS-RECORD-ROOT-PATH
+        raise Refusal("root_record:path_mismatch")
+    stdout_lines = contents[args.stdout].decode("utf-8", errors="replace").splitlines()
+    if not any(line.startswith("AUDITCYCLE: ") for line in stdout_lines):  # M:GAS-RECORD-AUDITCYCLE
+        raise Refusal(f"no_auditcycle_line:{args.stdout}")
+
+    flags = ("--feature", "--phase", "--cycle")
+    values = dict.fromkeys(flags, "")
+    try:
+        words = shlex.split(contents[args.command].decode("utf-8"))
+        seen = set()
+        for index, word in enumerate(words):
+            flag, separator, value = word.partition("=")
+            if flag not in values:
+                continue
+            if flag in seen:
+                raise ValueError("repeated cycle flag")
+            seen.add(flag)
+            values[flag] = value if separator else words[index + 1]
+    except (ValueError, IndexError, UnicodeError):
+        values = dict.fromkeys(flags, "")
+    feature, phase, cycle = (values[flag] for flag in flags)
+    valid_command = (bool(feature) and not feature.startswith("--")
+                     and phase in ("plan", "design", "impl-plan")
+                     and re.fullmatch(r"[1-9][0-9]*", cycle))
+    if not valid_command:  # M:GAS-RECORD-COMMAND
+        raise Refusal(f"command_unparseable:{args.command}")
+
+    stem_pattern = re.compile(
+        re.escape(f"audit_{feature}_{phase}_cycle{cycle}_run")
+        + r"(.+)_p([1-9][0-9]*)(\.txt|\.asm\.txt|\.out\.txt|\.log|\.report\.md)"
+    )
+    stem_files = [(path, stem_pattern.fullmatch(path.name)) for path in sorted(args.stem.iterdir())
+                  if path.is_file()]
+    prefixes = {match[1] for _path, match in stem_files if match is not None}
+    if len(prefixes) != 1:  # M:GAS-RECORD-STEM-PREFIX
+        raise Refusal(f"stem_prefix:{len(prefixes)}")
+    prefix = next(iter(sorted(prefixes)), "")
+    copies = {}
+    for source, match in stem_files:
+        if match is not None and match[1] == prefix:
+            suffix = ".prompt.txt" if match[3] == ".txt" else match[3]
+            copies[f"p{match[2]}{suffix}"] = source
+
+    report_name = re.escape(f"{feature}.{phase}.audit.v{cycle}") + r"\.p[1-9][0-9]*\.md"
+    report_dir = "docs/02-design/features" if phase == "design" else "docs/01-plan/features"
+    for directory, destination, pattern in (
+        (args.root / report_dir, "collected", report_name + r"(?:\.effort\.json)?"),
+        (args.root / ".h-mad/pass-logs", "pass-logs", report_name + r"\.log"),
+    ):
+        if directory.is_dir():
+            for source in sorted(directory.iterdir()):
+                if source.is_file() and re.fullmatch(pattern, source.name):
+                    copies[f"{destination}/{source.name}"] = source
+
+    # Read every selected source before creating any destination file.
+    recorded = {"root.txt": (root_line + "\n").encode("utf-8"),
+                "command.txt": contents[args.command], "auditcycle.txt": contents[args.stdout]}
+    for destination, source in copies.items():
+        try:
+            recorded[destination] = source.read_bytes()
+        except OSError as exc:
+            raise Refusal(f"input_missing:{source}") from exc
+    args.dest.mkdir(parents=True, exist_ok=True)
+    for relative, data in recorded.items():
+        path = args.dest / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    count = sum(path.is_file() for path in args.dest.rglob("*"))
+    return f"RECORD: OK dest={args.dest.resolve()} files={count}"
+
+
+def _git(repo: Path, *argv: str, env: dict[str, str] | None = None,
+         stdin: bytes | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(repo), *argv], input=stdin, capture_output=True,
+        timeout=15, env=_git_environment() if env is None else env,
+    )
+
+
+def commit_data(args: argparse.Namespace) -> str:
+    """Publish calibration blobs using a private index and an expected-old ref."""
+    ref = "refs/heads/calibration/grok-audit-surface"
+    parent = _git(args.repo, "rev-parse", "--verify", f"{args.parent}^{{commit}}")
+    if parent.returncode != 0:  # M:GAS-COMMIT-PARENT
+        raise Refusal(f"parent_unknown:{args.parent}")
+    parent_oid = parent.stdout.decode().strip()
+    current = _git(args.repo, "rev-parse", "--verify", ref)
+    old = current.stdout.decode().strip() if current.returncode == 0 else ""
+    if old and old != parent_oid:  # M:GAS-COMMIT-REF-MOVED
+        raise Refusal(f"ref_moved:{old}")
+
+    sources = []
+    for path in sorted(args.src.rglob("*")):
+        if not path.resolve().is_relative_to(args.src.resolve()):  # M:GAS-COMMIT-OUTSIDE
+            raise Refusal(f"outside_calibration_dir:{path}")
+        if path.is_file():
+            sources.append((path, CALIBRATION / path.relative_to(args.src)))
+    try:
+        with tempfile.TemporaryDirectory(prefix="gas-commit-") as directory:
+            environment = _git_environment()
+            environment["GIT_INDEX_FILE"] = str(Path(directory) / "index")
+            _git(args.repo, "read-tree", parent_oid, env=environment).check_returncode()
+            for path, destination in sources:
+                blob = _git(args.repo, "hash-object", "-w", "--stdin", stdin=path.read_bytes())
+                blob.check_returncode()
+                _git(args.repo, "update-index", "--add", "--cacheinfo", "100644",
+                     blob.stdout.decode().strip(), destination.as_posix(),
+                     env=environment).check_returncode()
+            tree = _git(args.repo, "write-tree", env=environment)
+            tree.check_returncode()
+            commit = _git(args.repo, "commit-tree", tree.stdout.decode().strip(),
+                          "-p", parent_oid, "-m", args.message)
+            commit.check_returncode()
+            new = commit.stdout.decode().strip()
+            _git(args.repo, "update-ref", ref, new, old).check_returncode()
+    except subprocess.CalledProcessError as exc:
+        raise Refusal("ref_unconfirmed") from exc
+    confirmed = _git(args.repo, "rev-parse", "--verify", ref)
+    if confirmed.returncode != 0 or confirmed.stdout.decode().strip() != new:  # M:GAS-COMMIT-REREAD
+        raise Refusal("ref_unconfirmed")
+    return f"COMMIT: OK sha={new} ref={ref}"
+
+
+def _mode_record_cycle(args: argparse.Namespace) -> int:
+    print(record_cycle(args))
+    return 0
+
+
+def _mode_commit_data(args: argparse.Namespace) -> int:
+    print(commit_data(args))
+    return 0
+
+
+MODES["record-cycle"] = _mode_record_cycle
+MODES["commit-data"] = _mode_commit_data
 
 
 def build_parser() -> _TokenArgumentParser:

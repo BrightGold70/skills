@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -218,3 +219,101 @@ def load_probe(path: Path) -> types.ModuleType:
     sys.modules[module.__name__] = module
     exec(code, module.__dict__)
     return module
+
+
+def build_cycle_inputs(directory: Path, root: Path, ready_line: str) -> dict:
+    """Model the wrapper's exact stem names and D3's cycle-local file map."""
+    directory.mkdir(parents=True)
+    stem = directory / "stem [a]* ⟦h-mad⟧"
+    stem.mkdir()
+    feature, phase, cycle = "paper-lantern", "plan", 2
+    prefix = f"audit_{feature}_{phase}_cycle{cycle}_run20990101T010203Z-314"
+    hostile = _hostile_text()
+    # Include CRLF, NUL and non-UTF8 bytes: copying must never decode/rewrite.
+    payload = hostile.encode("utf-8") + b"\r\n\x00\xff\n"
+    expected = {}
+    stem_sources = {}
+    for index in (1, 2):
+        for suffix, destination_suffix in (
+            (".txt", ".prompt.txt"), (".asm.txt", ".asm.txt"),
+            (".out.txt", ".out.txt"), (".log", ".log"),
+            (".report.md", ".report.md"),
+        ):
+            source = stem / f"{prefix}_p{index}{suffix}"
+            source.write_bytes(f"pass={index} kind={suffix}\n".encode() + payload)
+            destination = f"p{index}{destination_suffix}"
+            stem_sources[destination] = source
+            expected[destination] = source.read_bytes()
+    (stem / f"{prefix}_unmapped.txt").write_bytes(payload)
+    (stem / "audit_copper-kite_plan_cycle2_run20990101T010203Z-314_p1.log").write_bytes(payload)
+    (stem / "audit_paper-lantern_plan_cycle1_run20990101T010203Z-314_p1.log").write_bytes(payload)
+
+    command = directory / "command.txt"
+    command.write_text(shlex.join([
+        "env", "-u", "GIT_DIR", f"HMAD_AUDIT_STEM_DIR={stem}",
+        "h-mad/bin/hmad-dispatch", "audit-cycle", "--feature", feature,
+        "--phase", phase, "--cycle", str(cycle), "--project-root", str(root),
+        "--passes", "2", "--surfaces", "agy,grok", "--timeout", "900",
+    ]) + "\n", encoding="utf-8")
+    stdout = directory / "stdout.txt"
+    stdout.write_text(
+        f"Agent output: {hostile}\n"
+        "AUDITCYCLE: PASS p1=PASS p2=PASS delivered=report-file,report-file "
+        "must=0 should=0 size_status=verified\n", encoding="utf-8",
+    )
+    root_record = directory / "build-root.txt"
+    root_record.write_text("RESET: removed=0 restored=0\n" + ready_line + "\n", encoding="utf-8")
+    expected.update({
+        "command.txt": command.read_bytes(), "auditcycle.txt": stdout.read_bytes(),
+        "root.txt": (ready_line + "\n").encode("utf-8"),
+    })
+
+    report_dir = root / "docs/01-plan/features"
+    log_dir = root / ".h-mad/pass-logs"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    for version in (1, 2, 3, 20):
+        for index in (1, 2):
+            name = f"{feature}.{phase}.audit.v{version}.p{index}.md"
+            content = f"# Report v{version} p{index}\n{hostile}\n".encode("utf-8")
+            report = report_dir / name
+            report.write_bytes(content)
+            sidecar = report.with_name(name + ".effort.json")
+            sidecar.write_text(json.dumps({"comment": hostile, "pass": index}) + "\n", encoding="utf-8")
+            report.with_name(name + ".gated.json").write_text('{"gate":"root-local"}\n', encoding="utf-8")
+            log = log_dir / (name + ".log")
+            log.write_bytes(f"collected pass-log v{version} p{index}\n".encode() + payload)
+            if version == cycle:
+                expected[f"collected/{name}"] = content
+                expected[f"collected/{name}.effort.json"] = sidecar.read_bytes()
+                expected[f"pass-logs/{name}.log"] = log.read_bytes()
+    for name in ("copper-kite.plan.audit.v2.p1.md", "paper-lantern.design.audit.v2.p1.md"):
+        (report_dir / name).write_bytes(payload)
+        (log_dir / (name + ".log")).write_bytes(payload)
+    return {
+        "stem": stem, "prefix": prefix, "root": root, "root_record": root_record,
+        "stdout": stdout, "command": command,
+        "dest": directory / "not-created/data/s1/agy", "ready_line": ready_line,
+        "expected": expected, "stem_sources": stem_sources,
+    }
+
+
+def build_commit_inputs(tmp_path: Path) -> dict:
+    """Keep Git fixtures real; stage and dirty tracked bytes before recording."""
+    repo, _origin = build_repo(tmp_path)
+    tracked = repo / "docs/archive/2099-01/paper-lantern/paper-lantern.spec.md"
+    tracked.write_text(f"Staged human edit: {_hostile_text()}\n", encoding="utf-8")
+    git(repo, "add", tracked.relative_to(repo).as_posix())
+    tracked.write_text(f"Unstaged human edit: {_hostile_text()}\n", encoding="utf-8")
+    (repo / "untracked [a]*.txt").write_text(_hostile_text(), encoding="utf-8")
+    src = tmp_path / "kept data [a]* ⟦h-mad⟧"
+    data = src / "s1/grok/p1.log"
+    data.parent.mkdir(parents=True)
+    data.write_bytes(_hostile_text().encode("utf-8") + b"\r\n\x00\xff\n")
+    (src / "s1/grok/command.txt").write_text(
+        f"Human command annotation: {_hostile_text()}\n", encoding="utf-8",
+    )
+    return {
+        "repo": repo, "src": src, "parent": git(repo, "rev-parse", CALIBRATION_REF),
+        "message": f"Record calibration: {_hostile_text()}",
+    }

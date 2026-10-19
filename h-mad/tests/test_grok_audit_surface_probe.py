@@ -1,4 +1,4 @@
-"""Probe tokens, ledger validation and root isolation/reset (Tasks 2–5)."""
+"""Probe tokens, ledger, roots, cycle recording and data commits (Tasks 2–6)."""
 
 import ast
 from collections import Counter
@@ -20,7 +20,8 @@ import pytest
 
 from grokauditfixtures import (
     CALIBRATION, CALIBRATION_REF, EXCLUSIONS, build_archive, build_ledger,
-    build_repo, build_root_repo, commit_root_tree, git, load_probe,
+    build_repo, build_root_repo, build_cycle_inputs, build_commit_inputs,
+    commit_root_tree, git, load_probe,
 )
 
 
@@ -1036,3 +1037,309 @@ def test_restore_expected_does_not_write_through_a_symlinked_parent_directory(re
     assert victim.read_bytes() == content, "restore_expected must not write through a linked parent directory"
     assert stat.S_ISDIR(parent.lstat().st_mode), "restore_expected must replace the parent link with a real directory"
     assert (case["reset_live"] / relative).read_bytes() == (expected / relative).read_bytes(), "the restored file under the real parent must equal the expected file"
+
+
+@pytest.fixture
+def cycle_case(root_case, tmp_path, capsys):
+    result = _run_root(root_case, capsys)
+    fields = _ready_fields(result, "record-cycle fixtures require a real build-root READY line")
+    case = build_cycle_inputs(
+        tmp_path / "kept cycle [a]* ⟦h-mad⟧", Path(fields["path"]),
+        result.stdout.splitlines()[-1],
+    )
+    case["probe"] = root_case["probe"]
+    return case
+
+
+def _run_record(case, capsys):
+    arguments = ["record-cycle"]
+    for key in ("stem", "root", "root_record", "stdout", "command", "dest"):
+        arguments += ["--" + key.replace("_", "-"), str(case[key])]
+    rc = case["probe"].main(arguments)
+    out, err = capsys.readouterr()
+    return subprocess.CompletedProcess(arguments, rc, out, err)
+
+
+def _record_files(case):
+    return {
+        path.relative_to(case["dest"]).as_posix(): path.read_bytes()
+        for path in case["dest"].rglob("*") if path.is_file()
+    }
+
+
+def _assert_record_ok(case, result, property_name):
+    files = _record_files(case)
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        0, [f"RECORD: OK dest={case['dest'].resolve()} files={len(files)}"],
+    ), f"{property_name}: stdout={result.stdout!r}; stderr={result.stderr!r}"
+    assert files, f"{property_name}: a successful record must write cycle data"
+    return files
+
+
+def _assert_record_refusal(case, result, reason, property_name):
+    # Check state even at RED, before the missing handler fails the token assertion.
+    assert not _record_files(case), f"{property_name}: refusal must not write any destination file"
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, [f"RECORD: REFUSED reason={reason}"],
+    ), f"{property_name}: stdout={result.stdout!r}; stderr={result.stderr!r}"
+    assert "Traceback" not in result.stderr, f"{property_name}: a declared refusal has no traceback"
+
+
+def test_record_cycle_writes_root_txt(cycle_case, capsys):
+    case = cycle_case
+    assert not case["dest"].parent.exists(), "destination parents must begin absent"
+    files = _assert_record_ok(case, _run_record(case, capsys), "persist the selected root's READY line")
+    assert files["root.txt"] == (case["ready_line"] + "\n").encode(), "root.txt must contain only the actual build-root READY line"
+    assert files["command.txt"] == case["command"].read_bytes(), "command.txt must retain the exact dispatch argv"
+    assert files["auditcycle.txt"] == case["stdout"].read_bytes(), "auditcycle.txt must retain the full wrapper stdout"
+
+
+def test_record_cycle_refuses_a_root_record_without_a_line(cycle_case, capsys):
+    case = cycle_case
+    # Both ends of D5's exactly-one requirement, without adding pytest nodes.
+    for content in ("RESET: removed=0 restored=0\n", (case["ready_line"] + "\n") * 2):
+        case["root_record"].write_text(content, encoding="utf-8")
+        _assert_record_refusal(case, _run_record(case, capsys), "root_record:no_line",
+                               "require exactly one ROOT: READY line")
+
+
+def test_record_cycle_refuses_a_root_record_for_another_root(cycle_case, tmp_path, capsys):
+    case = cycle_case
+    another = tmp_path / "other-root"
+    another.mkdir()
+    line = case["ready_line"].replace(f"path={case['root']}", f"path={another.resolve()}")
+    assert line != case["ready_line"], "the mismatched fixture must actually name another root"
+    case["root_record"].write_text(line + "\n", encoding="utf-8")
+    _assert_record_refusal(case, _run_record(case, capsys), "root_record:path_mismatch",
+                           "tie the recorded root to the cycle's actual root")
+
+
+def test_record_cycle_refuses_stdout_without_auditcycle(cycle_case, capsys):
+    case = cycle_case
+    case["stdout"].write_text("ASSEMBLE: HALT p1:preflight\n", encoding="utf-8")
+    _assert_record_refusal(case, _run_record(case, capsys), f"no_auditcycle_line:{case['stdout']}",
+                           "require the wrapper's AUDITCYCLE line")
+
+
+def test_record_cycle_copies_only_its_own_cycle_reports(cycle_case, capsys):
+    case = cycle_case
+    # Existing directories exercise exist_ok=True, while the first success test
+    # requires creation of missing parents.
+    case["dest"].mkdir(parents=True)
+    files = _assert_record_ok(case, _run_record(case, capsys), "copy only cycle 2's D3 file map")
+    assert set(files) == set(case["expected"]), "D3 excludes other features/phases, v1/v3/v20, unmapped stem files and gated stamps"
+    for relative, expected in case["expected"].items():
+        assert files[relative] == expected, f"cycle 2 file must preserve its source: {relative}"
+
+
+def test_record_cycle_refuses_a_root_record_with_a_malformed_ready_line(cycle_case, capsys):
+    case = cycle_case
+    malformed = " ".join(word for word in case["ready_line"].split() if not word.startswith("list_blob="))
+    assert case["probe"].parse_root_line(malformed) is None, "the real build-root line must become malformed when list_blob is removed"
+    case["root_record"].write_text(malformed + "\n", encoding="utf-8")
+    _assert_record_refusal(case, _run_record(case, capsys), "root_record:no_line",
+                           "map a malformed READY line to no_line rather than path_mismatch")
+
+
+def test_record_cycle_copies_stem_files_byte_for_byte(cycle_case, capsys):
+    case = cycle_case
+    files = _assert_record_ok(case, _run_record(case, capsys), "preserve every wrapper stem file byte for byte")
+    for destination, source in case["stem_sources"].items():
+        assert destination in files, f"the D3 stem mapping must copy {source.name} to {destination}"
+        assert hashlib.sha256(files[destination]).digest() == hashlib.sha256(source.read_bytes()).digest(), (
+            f"{destination} must have its exact stem source's sha256, including binary/hostile bytes"
+        )
+    wrapper_log = case["stem"] / f"{case['prefix']}_p1.log"
+    assert files["p1.log"] != files["pass-logs/paper-lantern.plan.audit.v2.p1.md.log"], "the wrapper --log input and collected pass log are distinct fixture files"
+    assert files["p1.log"] == wrapper_log.read_bytes(), "p1.log must be the exact log[$i] path passed as --log (carry 14)"
+
+
+def test_record_cycle_refuses_a_missing_input(cycle_case, capsys):
+    case = cycle_case
+    case["stdout"].unlink()
+    _assert_record_refusal(case, _run_record(case, capsys), f"input_missing:{case['stdout']}",
+                           "identify the missing stdout input before writing")
+
+
+def test_record_cycle_refuses_zero_stem_prefixes(cycle_case, capsys):
+    case = cycle_case
+    for path in case["stem"].glob(case["prefix"] + "*"):
+        path.unlink()
+    _assert_record_refusal(case, _run_record(case, capsys), "stem_prefix:0",
+                           "require a stem prefix matching command feature/phase/cycle")
+
+
+def test_record_cycle_refuses_two_stem_prefixes(cycle_case, capsys):
+    case = cycle_case
+    second = case["prefix"].replace("-314", "-315")
+    for source in case["stem_sources"].values():
+        (case["stem"] / source.name.replace(case["prefix"], second)).write_bytes(source.read_bytes())
+    _assert_record_refusal(case, _run_record(case, capsys), "stem_prefix:2",
+                           "refuse two runs matching the selected cycle")
+
+
+def test_record_cycle_refuses_a_command_without_cycle_flags(cycle_case, capsys):
+    case = cycle_case
+    text = case["command"].read_text(encoding="utf-8")
+    assert "--cycle 2" in text, "the valid command must have the cycle flag before removing it"
+    case["command"].write_text(text.replace("--cycle 2", ""), encoding="utf-8")
+    _assert_record_refusal(case, _run_record(case, capsys), f"command_unparseable:{case['command']}",
+                           "require all feature/phase/cycle flags in the command file")
+
+
+@pytest.fixture
+def commit_case(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+                 "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    case = build_commit_inputs(tmp_path)
+    case["probe"] = load_probe(PROBE)
+    return case
+
+
+def _run_commit(case, capsys):
+    arguments = [
+        "commit-data", "--repo", str(case["repo"]), "--parent", case["parent"],
+        "--src", str(case["src"]), "--message", case["message"],
+    ]
+    rc = case["probe"].main(arguments)
+    out, err = capsys.readouterr()
+    return subprocess.CompletedProcess(arguments, rc, out, err)
+
+
+def _read_calibration_ref(repo):
+    # Real Git, deliberately outside the probe's replaceable _git function.
+    result = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--verify", CALIBRATION_REF],
+        capture_output=True, text=True, timeout=15,
+    )
+    return result.returncode, result.stdout.strip()
+
+
+def _observe_commit_git(case, monkeypatch, *, false_reread=False):
+    """Observe real plumbing; replace only the post-update ref-read response."""
+    real_git = getattr(case["probe"], "_git", None)
+    calls = []
+    state = {"calls": calls, "created": None, "updated": False, "rereads": 0}
+
+    def observed(repo, *argv, env=None, stdin=None):
+        result = real_git(repo, *argv, env=env, stdin=stdin)
+        calls.append((argv, env))
+        if argv[0] == "commit-tree" and result.returncode == 0:
+            state["created"] = result.stdout.strip().decode()
+        if argv[0] == "update-ref" and result.returncode == 0:
+            state["updated"] = True
+        if state["updated"] and argv[0] == "rev-parse" and CALIBRATION_REF in argv:
+            state["rereads"] += 1
+            if false_reread:
+                return subprocess.CompletedProcess(result.args, 0, (case["parent"] + "\n").encode(), result.stderr)
+        return result
+
+    # The helper is new in Task 6; at RED main fails on the missing handler
+    # before this observer runs. It never installs a replacement implementation.
+    monkeypatch.setattr(case["probe"], "_git", observed, raising=False)
+    return state
+
+
+def _assert_commit_prewrite_refusal(case, capsys, monkeypatch, reason, property_name):
+    before = _read_calibration_ref(case["repo"])
+    state = _observe_commit_git(case, monkeypatch)
+    result = _run_commit(case, capsys)
+    assert _read_calibration_ref(case["repo"]) == before, f"{property_name}: the calibration ref must retain its pre-test value/absence"
+    assert not any(argv[0] == "update-ref" for argv, _env in state["calls"]), f"{property_name}: refusal must precede update-ref"
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, [f"COMMIT: REFUSED reason={reason}"],
+    ), f"{property_name}: stdout={result.stdout!r}; stderr={result.stderr!r}"
+    assert "Traceback" not in result.stderr, f"{property_name}: a declared refusal has no traceback"
+
+
+def test_commit_data_never_touches_work_tree_or_index(commit_case, capsys, monkeypatch):
+    case = commit_case
+    repo = case["repo"]
+    # Exercise both D9 expected-old forms: first commit and an existing ref.
+    git(repo, "update-ref", "-d", CALIBRATION_REF)
+    case["parent"] = git(repo, "rev-parse", "HEAD")
+    state = _observe_commit_git(case, monkeypatch)
+    for first in (True, False):
+        previous = case["parent"]
+        status = git(repo, "status", "--porcelain")
+        index_digest = hashlib.sha256((repo / ".git/index").read_bytes()).digest()
+        work_tree = {path.relative_to(repo).as_posix(): path.read_bytes()
+                     for path in repo.rglob("*") if path.is_file() and ".git" not in path.relative_to(repo).parts}
+        start = len(state["calls"])
+        result = _run_commit(case, capsys)
+        assert git(repo, "status", "--porcelain") == status, "commit-data must preserve staged, unstaged and untracked status"
+        assert hashlib.sha256((repo / ".git/index").read_bytes()).digest() == index_digest, "commit-data must leave the real index byte-identical"
+        assert {path.relative_to(repo).as_posix(): path.read_bytes()
+                for path in repo.rglob("*") if path.is_file() and ".git" not in path.relative_to(repo).parts} == work_tree, "commit-data must not alter any work-tree file"
+        created = state["created"]
+        assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+            0, [f"COMMIT: OK sha={created} ref={CALIBRATION_REF}"],
+        ), f"commit-data must publish a plumbing commit without checkout: stdout={result.stdout!r}; stderr={result.stderr!r}"
+        assert re.fullmatch(r"[0-9a-f]{40}", created), "commit-tree must return a full commit oid"
+        assert _read_calibration_ref(repo) == (0, created), "the confirmed ref must point at the new commit"
+        assert git(repo, "rev-parse", f"{created}^") == previous, "the new commit must descend from --parent"
+        assert git(repo, "show", "-s", "--format=%B", created) == case["message"], "commit-tree must preserve the hostile human message"
+        for source in case["src"].rglob("*"):
+            if source.is_file():
+                relative = (CALIBRATION / source.relative_to(case["src"])).as_posix()
+                assert git(repo, "rev-parse", f"{created}:{relative}") == git(repo, "hash-object", str(source)), f"the calibration blob must retain every byte of {source.name}"
+                assert git(repo, "ls-tree", created, "--", relative).startswith("100644 blob "), "new data blobs must use mode 100644"
+        changes = git(repo, "diff", "--name-only", previous, created).splitlines()
+        assert changes and all(path.startswith(CALIBRATION.as_posix() + "/") for path in changes), "the commit must change only calibration paths"
+        calls = state["calls"][start:]
+        assert {"read-tree", "hash-object", "update-index", "write-tree", "commit-tree", "update-ref"} <= {argv[0] for argv, _env in calls}, "D9 must commit through the declared Git plumbing"
+        for argv, environment in calls:
+            if argv[0] in ("read-tree", "update-index", "write-tree"):
+                assert environment and environment.get("GIT_INDEX_FILE"), "tree construction must use a temporary index"
+                assert Path(environment["GIT_INDEX_FILE"]).resolve() != (repo / ".git/index").resolve(), "GIT_INDEX_FILE must not select the real index"
+        updates = [argv for argv, _env in calls if argv[0] == "update-ref"]
+        assert len(updates) == 1 and updates[0][-1] in (("", "0" * 40) if first else (previous,)), "update-ref must compare-and-swap against absence or the exact parent"
+        assert state["rereads"] > 0, "success requires re-reading the ref after update-ref"
+        case["parent"] = created
+        # Make the second commit's data differ while keeping its human input hostile.
+        (case["src"] / "s1/grok/p1.log").write_bytes(case["src"].joinpath("s1/grok/p1.log").read_bytes() + b"next cycle\n")
+
+
+def test_commit_data_refuses_an_unknown_parent(commit_case, capsys, monkeypatch):
+    case = commit_case
+    git(case["repo"], "update-ref", "-d", CALIBRATION_REF)
+    assert _read_calibration_ref(case["repo"])[0] != 0, "the unknown-parent fixture must start with no calibration ref"
+    case["parent"] = "f" * 40
+    _assert_commit_prewrite_refusal(case, capsys, monkeypatch, f"parent_unknown:{case['parent']}",
+                                    "refuse an unknown parent before writing a ref")
+
+
+def test_commit_data_refuses_a_moved_ref(commit_case, capsys, monkeypatch):
+    case = commit_case
+    current = case["parent"]
+    case["parent"] = git(case["repo"], "rev-parse", "HEAD")
+    assert case["parent"] != current, "the supplied parent must be valid but differ from the actual calibration ref"
+    _assert_commit_prewrite_refusal(case, capsys, monkeypatch, f"ref_moved:{current}",
+                                    "refuse an existing ref that differs from --parent")
+
+
+def test_commit_data_refuses_outside_calibration_dir(commit_case, tmp_path, capsys, monkeypatch):
+    case = commit_case
+    outside = tmp_path / "outside [a]*.txt"
+    content = case["src"].joinpath("s1/grok/p1.log").read_bytes()
+    outside.write_bytes(content)
+    escaped = case["src"] / "escape.txt"
+    escaped.symlink_to(outside)
+    _assert_commit_prewrite_refusal(case, capsys, monkeypatch, f"outside_calibration_dir:{escaped}",
+                                    "refuse a source file resolving outside --src")
+    assert outside.read_bytes() == content, "refusing an escaped input must preserve its outside bytes"
+
+
+def test_commit_data_rereads_the_ref(commit_case, capsys, monkeypatch):
+    case = commit_case
+    state = _observe_commit_git(case, monkeypatch, false_reread=True)
+    result = _run_commit(case, capsys)
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["COMMIT: REFUSED reason=ref_unconfirmed"],
+    ), f"a mismatched post-write ref read must refuse confirmation: stdout={result.stdout!r}; stderr={result.stderr!r}"
+    assert state["updated"] and state["rereads"] > 0, "ref_unconfirmed must follow a successful update-ref and a new ref read"
+    assert state["created"] and state["created"] != case["parent"], "the real commit-tree must have made a new commit"
+    assert _read_calibration_ref(case["repo"]) == (0, state["created"]), "D9 does not roll back: real Git must see the commit-tree oid even after ref_unconfirmed"
+    assert "Traceback" not in result.stderr, "a declared ref_unconfirmed refusal has no traceback"
