@@ -1,0 +1,68 @@
+{
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python3.11",
+    "-m",
+    "pytest",
+    "tests/test_grok_audit_surface_probe.py",
+    "tests/test_grok_audit_surface_docs.py",
+    "-q"
+  ],
+  "target_command": ["/opt/anaconda3/bin/python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "p-last-resort-reason",
+      "_mechanism": "Replace the escaping exception's class name with Exception in the refusal token.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "symbol": "refusal_token",
+      "find": "        reason = f\"internal:{type(exc).__name__}\"  # M:GAS-LAST-RESORT",
+      "replace": "        reason = \"internal:Exception\"  # M:GAS-LAST-RESORT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_internal_failure_prints_the_mode_token"
+    },
+    {
+      "name": "p-usage-token",
+      "_mechanism": "Let argparse exit directly on usage errors, bypassing the mode's refusal token.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "symbol": "_TokenArgumentParser.error",
+      "find": "        raise UsageError(message)  # M:GAS-USAGE",
+      "replace": "        argparse.ArgumentParser.error(self, message)  # M:GAS-USAGE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_usage_error_prints_the_mode_token"
+    },
+    {
+      "name": "p-unknown-mode-token",
+      "_mechanism": "Omit the cannot-judge token while preserving unknown-mode usage and exit 2.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "symbol": "main",
+      "find": "        print(\"PROBE: UNREADABLE reason=unknown_mode\")  # M:GAS-UNKNOWN-MODE",
+      "replace": "        pass  # M:GAS-UNKNOWN-MODE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_unknown_mode_prints_the_probe_token"
+    },
+    {
+      "name": "p-no-help",
+      "_mechanism": "Restore argparse's help action, which exits 0 without the mode's token.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "symbol": "_TokenArgumentParser.__init__",
+      "find": "        kwargs[\"add_help\"] = False  # M:GAS-NO-HELP",
+      "replace": "        kwargs[\"add_help\"] = True  # M:GAS-NO-HELP",
+      "test": "tests/test_grok_audit_surface_probe.py::test_help_flag_prints_the_mode_token"
+    },
+    {
+      "name": "p-no-abbrev",
+      "_mechanism": "Accept --tre as --tree instead of reporting a UsageError refusal.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "symbol": "_TokenArgumentParser.__init__",
+      "find": "        kwargs[\"allow_abbrev\"] = False  # M:GAS-NO-ABBREV",
+      "replace": "        kwargs[\"allow_abbrev\"] = True  # M:GAS-NO-ABBREV",
+      "test": "tests/test_grok_audit_surface_probe.py::test_abbreviated_flag_is_a_usage_error"
+    },
+    {
+      "name": "p-traceback-scope",
+      "_mechanism": "Print tracebacks for declared refusals as well as unexpected exceptions.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "symbol": "main",
+      "find": "        if not isinstance(exc, ProbeRefusal):  # M:GAS-TRACEBACK-SCOPE",
+      "replace": "        if True:  # M:GAS-TRACEBACK-SCOPE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_usage_error_prints_the_mode_token"
+    }
+  ]
+}
