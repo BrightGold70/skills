@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch|exec_command|Bash|Shell|shell|shell_command|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.agents/skills/h-mad/hooks/h-mad-codex-tdd-gate.py"
+          }
+        ]
+      }
+    ]
+  }
+}
