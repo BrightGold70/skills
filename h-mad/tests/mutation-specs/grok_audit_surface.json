@@ -6,9 +6,10 @@
     "pytest",
     "tests/test_grok_audit_surface_probe.py",
     "tests/test_grok_audit_surface_smoke.py",
-    "tests/test_grok_audit_surface_wrapper.py",
     "tests/test_grok_audit_surface_gate_pins.py",
+    "tests/test_grok_audit_surface_wrapper.py",
     "tests/test_grok_audit_surface_docs.py",
+    "tests/test_grok_fallback_docs.py",
     "tests/test_hmad_dispatch_audit_cycle.py",
     "-q"
   ],
@@ -1418,6 +1419,30 @@
       "find": "        if result.verdict == \"FAIL\":",
       "replace": "        if True:",
       "test": "tests/test_grok_audit_surface_gate_pins.py::test_union_three_passes_all_clean_pass"
+    },
+    {
+      "name": "teammate-surfaces-pin",
+      "_mechanism": "Replace the documented Grok stand-in with Codex so the teammate fallback guard must fail.",
+      "file": "SKILL.md",
+      "find": "--project-root <root> --passes 2 --surfaces agy,grok",
+      "replace": "--project-root <root> --passes 2 --surfaces agy,codex",
+      "test": "tests/test_grok_fallback_docs.py::test_teammate_section_documents_the_grok_leg"
+    },
+    {
+      "name": "teammate-unmeasured-pin",
+      "_mechanism": "Claim measured audit precision so the teammate evidence caveat guard must fail.",
+      "file": "SKILL.md",
+      "find": "audit precision remain **unmeasured** (D4)",
+      "replace": "audit precision remain **measured** (D4)",
+      "test": "tests/test_grok_fallback_docs.py::test_teammate_section_documents_the_grok_leg"
+    },
+    {
+      "name": "never-gate-surfaces-pin",
+      "_mechanism": "Replace Grok with Codex in the fallback cross-reference so its documentation guard must fail.",
+      "file": "SKILL.md",
+      "find": "When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,grok`",
+      "replace": "When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,codex`",
+      "test": "tests/test_grok_fallback_docs.py::test_never_gate_section_cross_references_the_grok_leg"
     }
   ]
 }
