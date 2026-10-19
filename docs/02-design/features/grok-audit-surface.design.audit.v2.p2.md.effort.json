@@ -1,0 +1,21 @@
+{
+  "agy_events": 126,
+  "collected": "grok-audit-surface.design.audit.v2.p2.md",
+  "failed": 0,
+  "log": "/tmp/audit_grok-audit-surface_design_cycle2_run20261018T235902Z-17314_p2.log",
+  "log_retained": "/Users/kimhawk/orca/skills/.h-mad/pass-logs/grok-audit-surface.design.audit.v2.p2.md.log",
+  "log_sha256": "fada57e30e4da0aa95637b8b2f3a2594942dbdc39d563a07cca132813f0e693a",
+  "ok": 26,
+  "pass": 2,
+  "readable": true,
+  "shape": "parsed",
+  "status": "SUCCESS",
+  "targets": {
+    "code": 8,
+    "other": 10,
+    "paths": 18,
+    "unmeasured": 0
+  },
+  "thinking": 4424,
+  "tools": 26
+}
