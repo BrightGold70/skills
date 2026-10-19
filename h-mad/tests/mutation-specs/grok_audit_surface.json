@@ -183,6 +183,118 @@
       "find": "        reason = exc.reason  # M:GAS-REFUSAL-REASON",
       "replace": "        reason = \"internal:Refusal\"  # M:GAS-REFUSAL-REASON",
       "test": "tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_an_unparseable_line"
+    },
+    {
+      "name": "p-leak-original",
+      "_mechanism": "Disable original-span matching.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if normalise(record[\"original\"].encode(\"utf-8\")) in text:  # M:GAS-LEAK-ORIGINAL",
+      "replace": "            if False:  # M:GAS-LEAK-ORIGINAL",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_original_hit"
+    },
+    {
+      "name": "p-leak-expected",
+      "_mechanism": "Disable expected-finding matching.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if normalise(record[\"expected\"].encode(\"utf-8\")) in text:  # M:GAS-LEAK-EXPECTED",
+      "replace": "            if False:  # M:GAS-LEAK-EXPECTED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_expected_hit"
+    },
+    {
+      "name": "p-leak-normalise",
+      "_mechanism": "Decode without collapsing whitespace, hiding rewrapped needles.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    return re.sub(r\"\\s+\", \" \", data.decode(\"utf-8\", errors=\"replace\"))  # M:GAS-LEAK-NORMALISE",
+      "replace": "    return data.decode(\"utf-8\", errors=\"replace\")  # M:GAS-LEAK-NORMALISE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_hit_only_after_rewrap"
+    },
+    {
+      "name": "p-leak-symlink-file",
+      "_mechanism": "Allow a symlink instead of refusing its root-relative path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if path.is_symlink():  # M:GAS-LEAK-SYMLINK",
+      "replace": "        if False:  # M:GAS-LEAK-SYMLINK",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_symlink_to_file"
+    },
+    {
+      "name": "p-leak-symlink-dir",
+      "_mechanism": "Allow a symlink instead of refusing its root-relative path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if path.is_symlink():  # M:GAS-LEAK-SYMLINK",
+      "replace": "        if False:  # M:GAS-LEAK-SYMLINK",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_symlink_to_dir"
+    },
+    {
+      "name": "p-leak-exempt-sha-paired",
+      "_mechanism": "Exempt originals without checking paired-source identity and SHA.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            exempt = (selected.get(relative) == record[\"source\"] and digest == record.get(\"_source_sha256\"))  # M:GAS-LEAK-EXEMPT-SHA",
+      "replace": "            exempt = True  # M:GAS-LEAK-EXEMPT-SHA",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_original_in_paired_copy_with_other_sha"
+    },
+    {
+      "name": "p-leak-exempt-sha-target",
+      "_mechanism": "Exempt originals without checking paired-source identity and SHA.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            exempt = (selected.get(relative) == record[\"source\"] and digest == record.get(\"_source_sha256\"))  # M:GAS-LEAK-EXEMPT-SHA",
+      "replace": "            exempt = True  # M:GAS-LEAK-EXEMPT-SHA",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_on_the_seeded_target"
+    },
+    {
+      "name": "p-leak-exempt-original-only",
+      "_mechanism": "Extend the paired-original exemption to expected findings.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                raise Refusal(f\"leak:{relative}\")  # M:GAS-LEAK-EXEMPT-ORIGINAL-ONLY",
+      "replace": "                if not exempt: raise Refusal(f\"leak:{relative}\")  # M:GAS-LEAK-EXEMPT-ORIGINAL-ONLY",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_expected_in_byte_identical_paired_copy"
+    },
+    {
+      "name": "p-leak-tar",
+      "_mechanism": "Disable the tar data filter so an escaping member is accepted.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            bundle.extractall(tree, filter=\"data\")  # M:GAS-LEAK-TAR",
+      "replace": "            bundle.extractall(tree, filter=\"fully_trusted\")  # M:GAS-LEAK-TAR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_tar_member_leaving_the_root"
+    },
+    {
+      "name": "p-leak-list-grammar",
+      "_mechanism": "Accept an unknown exclusion kind.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not valid:  # M:GAS-LEAK-LIST-GRAMMAR",
+      "replace": "        if False:  # M:GAS-LEAK-LIST-GRAMMAR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_leak_exclusion_line_outside_the_grammar"
+    },
+    {
+      "name": "p-reach-dotgit-dir",
+      "_mechanism": "Skip the nested .git entry refusal.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if path.name == \".git\":  # M:GAS-REACH-DOTGIT",
+      "replace": "        if False:  # M:GAS-REACH-DOTGIT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_root_git_dot_git_directory"
+    },
+    {
+      "name": "p-reach-dotgit-file",
+      "_mechanism": "Skip the nested .git entry refusal.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if path.name == \".git\":  # M:GAS-REACH-DOTGIT",
+      "replace": "        if False:  # M:GAS-REACH-DOTGIT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_root_git_dot_git_file"
+    },
+    {
+      "name": "p-reach-revparse",
+      "_mechanism": "Ignore successful discovery of an ancestor Git repository.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if result.returncode == 0:  # M:GAS-REACH-REVPARSE",
+      "replace": "    if False:  # M:GAS-REACH-REVPARSE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_root_git_root_nested_in_work_tree"
+    },
+    {
+      "name": "p-parse-root",
+      "_mechanism": "Return incomplete ROOT records instead of rejecting missing fields.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if fields.keys() != required:  # M:GAS-PARSE-ROOT",
+      "replace": "    if False:  # M:GAS-PARSE-ROOT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_root_line_parser_rejects_a_malformed_root_line"
     }
   ]
 }

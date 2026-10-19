@@ -2,9 +2,12 @@
 
 import argparse
 from collections import Counter
+import hashlib
 import io
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -193,6 +196,186 @@ def _mode_check_ledger(args: argparse.Namespace) -> int:
 
 
 MODES["check-ledger"] = _mode_check_ledger
+
+
+def normalise(data: bytes) -> str:
+    return re.sub(r"\s+", " ", data.decode("utf-8", errors="replace"))  # M:GAS-LEAK-NORMALISE
+
+
+def _git_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+                 "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE"):
+        environment.pop(name, None)
+    return environment
+
+
+def _git_bytes(repo: Path, *arguments: str) -> bytes:
+    return subprocess.run(
+        ["git", "-C", str(repo), *arguments], capture_output=True, check=True,
+        timeout=15, env=_git_environment(),
+    ).stdout
+
+
+def read_exclusions(repo: Path, list_commit: str) -> tuple[list[tuple[str, str]], str, str]:
+    path = CALIBRATION.parent / "exclusions.txt"
+    try:
+        commit = _git_bytes(repo, "rev-parse", f"{list_commit}^{{commit}}").decode().strip()
+        blob = _git_bytes(repo, "rev-parse", f"{commit}:{path}").decode().strip()
+        text = _git_bytes(repo, "cat-file", "blob", blob).decode("utf-8")
+    except (OSError, subprocess.SubprocessError, UnicodeError) as exc:
+        raise Refusal(f"leak:{path}") from exc
+    entries = []
+    for line in text.splitlines():
+        line = line.partition("#")[0].strip()
+        if not line:
+            continue
+        words = line.split(maxsplit=1)
+        valid = len(words) == 2 and words[0] in ("dir", "name-contains")
+        if valid and words[0] == "dir":
+            value = Path(words[1])
+            valid = not value.is_absolute() and bool(value.parts) and ".." not in value.parts
+        if not valid:  # M:GAS-LEAK-LIST-GRAMMAR
+            raise Refusal(f"leak:{path}")
+        entries.append((words[0], words[1]))
+    return entries, commit, blob
+
+
+def placements(doc: str, sources: dict[str, str]) -> dict[str, str]:
+    """Map a target and exactly its assembler pairs to their committed blobs."""
+    if not re.fullmatch(r"d[1-9][0-9]*", doc):
+        raise ValueError("unknown document")
+    feature_index, phase_index = divmod(int(doc[1:]) - 1, 3)
+    feature, directory = list(sources.items())[feature_index]
+    phase = ("plan", "design", "impl-plan")[phase_index]
+    name = f"{feature}.{phase}.md"
+    live_directory = "docs/02-design/features" if phase == "design" else "docs/01-plan/features"
+    selected = {f"{live_directory}/{name}": f"{CALIBRATION}/seeded/{name}"}
+    for paired_phase in {"plan": ("spec",), "design": ("spec", "plan"),
+                         "impl-plan": ("design",)}[phase]:
+        paired_directory = "docs/02-design/features" if paired_phase == "design" else "docs/01-plan/features"
+        paired_name = f"{feature}.{paired_phase}.md"
+        selected[f"{paired_directory}/{paired_name}"] = f"{directory}/{feature}/{paired_name}"
+    return selected
+
+
+def _root_entries(root: Path) -> list[Path]:
+    paths = []
+    for directory, directories, files in os.walk(root, followlinks=False):
+        paths.extend(Path(directory) / name for name in directories + files)
+    return sorted(paths, key=lambda path: path.relative_to(root).as_posix())
+
+
+def scan_root(root: Path, ledger: list[dict], sources: dict[str, str], doc: str) -> None:
+    selected = placements(doc, sources)
+    for path in _root_entries(root):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():  # M:GAS-LEAK-SYMLINK
+            raise Refusal(f"leak:{relative}")
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        text = normalise(data)
+        digest = hashlib.sha256(data).hexdigest()
+        for record in ledger:
+            # The digest is captured from the validated archive before exclusions.
+            exempt = (selected.get(relative) == record["source"] and digest == record.get("_source_sha256"))  # M:GAS-LEAK-EXEMPT-SHA
+            if normalise(record["original"].encode("utf-8")) in text:  # M:GAS-LEAK-ORIGINAL
+                if not exempt:
+                    raise Refusal(f"leak:{relative}")
+            if normalise(record["expected"].encode("utf-8")) in text:  # M:GAS-LEAK-EXPECTED
+                raise Refusal(f"leak:{relative}")  # M:GAS-LEAK-EXEMPT-ORIGINAL-ONLY
+
+
+def reach_check(root: Path) -> None:
+    for path in _root_entries(root):
+        if path.name == ".git":  # M:GAS-REACH-DOTGIT
+            raise Refusal(f"root_git:{path.relative_to(root).as_posix()}")
+    result = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--absolute-git-dir"],
+        capture_output=True, text=True, timeout=15, env=_git_environment(),
+    )
+    if result.returncode == 0:  # M:GAS-REACH-REVPARSE
+        raise Refusal(f"root_git:{result.stdout.strip()}")
+
+
+def _extract_archive(archive: bytes, tree: Path) -> None:
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
+            bundle.extractall(tree, filter="data")  # M:GAS-LEAK-TAR
+    except tarfile.FilterError as exc:
+        raise Refusal(f"leak:{exc.tarinfo.name}") from exc
+
+
+def build_root(args: argparse.Namespace) -> str:
+    entries, list_commit, list_blob = read_exclusions(args.repo, args.list_commit)
+    try:
+        calibration = _git_bytes(args.repo, "rev-parse", f"{args.calibration_sha}^{{commit}}").decode().strip()
+        archive = _git_bytes(args.repo, "archive", "--format=tar", calibration)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise Refusal(f"calibration_ref:sha_unknown:{args.calibration_sha}") from exc
+    with tempfile.TemporaryDirectory(prefix="gas-ledger-") as directory:
+        tree = Path(directory)
+        _extract_archive(archive, tree)
+        check_ledger(tree, args.sources)
+        ledger = read_ledger(tree)
+        for record in ledger:
+            record["_source_sha256"] = hashlib.sha256((tree / record["source"]).read_bytes()).hexdigest()
+
+    root = Path(tempfile.mkdtemp(prefix=f"gas-root-{args.doc}-{args.purpose}-",
+                                 dir=args.dest_parent)).resolve()
+    try:
+        _extract_archive(archive, root)
+        absent = 0
+        for kind, value in entries:
+            def matches(path: Path) -> bool:
+                relative = path.relative_to(root).as_posix()
+                return (relative == value or relative.startswith(value + "/")) if kind == "dir" else value in path.name
+
+            paths = [path for path in _root_entries(root) if matches(path)]
+            absent += not bool(paths)
+            for path in paths:
+                if path.is_symlink() or path.is_file():
+                    path.unlink()
+                elif path.is_dir():
+                    shutil.rmtree(path)
+            for path in _root_entries(root):
+                if matches(path):
+                    raise Refusal(f"leak:{path.relative_to(root).as_posix()}")
+        for live, source in placements(args.doc, args.sources).items():
+            path = root / live
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(_git_bytes(args.repo, "cat-file", "blob", f"{calibration}:{source}"))
+        scan_root(root, ledger, args.sources, args.doc)
+        reach_check(root)
+    except Exception:
+        shutil.rmtree(root)
+        raise
+    return (f"ROOT: READY doc={args.doc} purpose={args.purpose} path={root} "
+            f"calibration={calibration} list_commit={list_commit} list_blob={list_blob} absent={absent}")
+
+
+def parse_root_line(line: str) -> dict[str, str] | None:
+    if not line.startswith("ROOT: READY "):
+        return None
+    fields = {}
+    for word in line.split()[2:]:
+        key, separator, value = word.partition("=")
+        if not separator or not value or key in fields:
+            return None
+        fields[key] = value
+    required = {"doc", "purpose", "path", "calibration", "list_commit", "list_blob", "absent"}
+    if fields.keys() != required:  # M:GAS-PARSE-ROOT
+        return None
+    return fields
+
+
+def _mode_build_root(args: argparse.Namespace) -> int:
+    print(build_root(args))
+    return 0
+
+
+MODES["build-root"] = _mode_build_root
 
 
 def build_parser() -> _TokenArgumentParser:

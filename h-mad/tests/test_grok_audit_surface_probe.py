@@ -1,19 +1,23 @@
-"""Probe refusal tokens (Task 2) and ledger validation (Task 3)."""
+"""Probe tokens, ledger validation and fresh-root isolation (Tasks 2–4)."""
 
 import ast
 from collections import Counter
+import hashlib
 import io
 import json
+import re
+import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 from pathlib import Path
 
 import pytest
 
 from grokauditfixtures import (
-    CALIBRATION, CALIBRATION_REF, build_archive, build_ledger, build_repo, git,
-    load_probe,
+    CALIBRATION, CALIBRATION_REF, EXCLUSIONS, build_archive, build_ledger,
+    build_repo, build_root_repo, commit_root_tree, git, load_probe,
 )
 
 
@@ -392,3 +396,339 @@ def test_check_ledger_tree_and_repo_forms_agree(tmp_path, monkeypatch):
         0, 0, expected, expected,
     ), ("tree and repo front doors must both validate the same committed content: "
         f"tree={from_tree.stdout!r} {from_tree.stderr}; repo={from_repo.stdout!r} {from_repo.stderr}")
+
+
+@pytest.fixture
+def root_case(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    # Fixture Git calls must not inherit the invoking agent's Git context.
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+                 "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                 "GIT_INDEX_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    case = build_root_repo(tmp_path)
+    case["probe"] = load_probe(PROBE)
+    return case
+
+
+def _run_root(case, capsys, *, doc="d1", purpose="s1", dest=True, extra=(), sha=None):
+    """Exercise the real mode dispatch, with D4 proven valid before each run."""
+    probe = case["probe"]
+    assert probe.check_ledger(case["tree"], case["sources"])["docs"] == 9
+    if sha is None:
+        sha = commit_root_tree(case)
+    case["sha"] = sha
+    arguments = [
+        "build-root", "--repo", str(case["repo"]), "--calibration-sha", sha,
+        "--doc", doc, "--purpose", purpose, "--sources",
+        ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items()),
+    ]
+    if dest:
+        arguments += ["--dest-parent", str(case["dest"])]
+    arguments += list(extra)
+    rc = probe.main(arguments)
+    out, err = capsys.readouterr()
+    return subprocess.CompletedProcess(arguments, rc, out, err)
+
+
+def _assert_root_refusal(result, reason, property_name):
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, [f"ROOT: UNREADABLE reason={reason}"],
+    ), f"{property_name}: stdout={result.stdout!r}; stderr={result.stderr!r}"
+    assert "Traceback" not in result.stderr, (
+        f"{property_name}: a declared root refusal must not print a traceback"
+    )
+
+
+def _ready_fields(result, property_name):
+    lines = result.stdout.splitlines()
+    assert result.returncode == 0 and lines and lines[-1].startswith("ROOT: READY "), (
+        f"{property_name}: expected exit 0 and a final ROOT: READY line; "
+        f"stdout={result.stdout!r}; stderr={result.stderr!r}"
+    )
+    return dict(word.split("=", 1) for word in lines[-1].split()[2:])
+
+
+def _plant(case, relative, content):
+    path = case["tree"] / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return relative
+
+
+def _append_archive_member(probe, monkeypatch, name, *, directory=False):
+    """Alter only Git's archive response; all blob and reach calls remain real."""
+    real_run = probe.subprocess.run
+
+    def run(command, *args, **kwargs):
+        result = real_run(command, *args, **kwargs)
+        if command[0] == "git" and "archive" in command:
+            output = io.BytesIO()
+            with tarfile.open(fileobj=io.BytesIO(result.stdout)) as source:
+                with tarfile.open(fileobj=output, mode="w") as target:
+                    for member in source.getmembers():
+                        target.addfile(member, source.extractfile(member) if member.isfile() else None)
+                    member = tarfile.TarInfo(name)
+                    member.type = tarfile.DIRTYPE if directory else tarfile.REGTYPE
+                    payload = b"synthetic archive member\n"
+                    member.size = 0 if directory else len(payload)
+                    target.addfile(member, None if directory else io.BytesIO(payload))
+            return subprocess.CompletedProcess(command, result.returncode, output.getvalue(), result.stderr)
+        return result
+
+    monkeypatch.setattr(probe.subprocess, "run", run)
+
+
+def test_leak_original_hit(root_case, capsys):
+    path = _plant(root_case, "notes/original [a]*.txt", root_case["records"][0]["original"])
+    # Also pin sorted first-hit order, independently of directory creation order.
+    _plant(root_case, "z-later.txt", root_case["records"][0]["expected"])
+    _assert_root_refusal(_run_root(root_case, capsys), f"leak:{path}", "original text outside its own paired copy")
+
+
+def test_leak_expected_hit(root_case, capsys):
+    # A different feature/document proves the scan uses every ledger record.
+    path = _plant(root_case, "notes/expected [a]*.txt", root_case["records"][-1]["expected"])
+    _assert_root_refusal(_run_root(root_case, capsys), f"leak:{path}", "expected finding from a non-target document")
+
+
+def test_leak_hit_only_after_rewrap(root_case, capsys):
+    needle = root_case["records"][0]["original"].encode("utf-8")
+    rewrapped = b"\r\n\t".join(needle.split()) + b"\r\n"
+    assert needle not in rewrapped, "fixture must not contain a raw-byte original hit"
+    path = _plant(root_case, "notes/rewrapped.txt", rewrapped.decode("utf-8"))
+    _assert_root_refusal(_run_root(root_case, capsys), f"leak:{path}", "whitespace rewrapping must not hide an original")
+    normalise = root_case["probe"].normalise
+    assert normalise(needle) == normalise(rewrapped), "one normaliser must handle needle and haystack identically"
+    sample = b" \tA\xff\r\nB "
+    assert normalise(sample) == " A\ufffd B ", "D6 replaces invalid UTF-8 and collapses whitespace without strip or case folding"
+
+
+def test_leak_symlink_to_file(root_case, capsys):
+    link = root_case["tree"] / "notes/linked-file"
+    link.symlink_to("keep-me.txt")
+    assert link.is_file() and link.is_symlink()
+    _assert_root_refusal(_run_root(root_case, capsys), "leak:notes/linked-file", "symlink to a harmless regular file")
+
+
+def test_leak_symlink_to_dir(root_case, capsys):
+    link = root_case["tree"] / "notes/linked-dir"
+    link.symlink_to("nested", target_is_directory=True)
+    assert link.is_dir() and link.is_symlink()
+    _assert_root_refusal(_run_root(root_case, capsys), "leak:notes/linked-dir", "symlink directory must be refused without following it")
+
+
+def test_leak_original_in_paired_copy_with_other_sha(root_case, capsys, monkeypatch):
+    source = root_case["records"][0]["source"]
+    name = Path(source).name
+    live = f"docs/01-plan/features/{name}"
+    archive_bytes = (root_case["tree"] / source).read_bytes()
+    changed_bytes = archive_bytes + b"\nextra paired-copy byte\n"
+    assert hashlib.sha256(archive_bytes).digest() != hashlib.sha256(changed_bytes).digest()
+    real_scan = getattr(root_case["probe"], "scan_root", None)
+
+    def scan_root(root, ledger, sources, doc):
+        # Simulate corruption of the placed copy, leaving its archive source intact.
+        path = root / live
+        assert path.read_bytes() == archive_bytes, "fixture must alter an otherwise byte-identical paired source"
+        path.write_bytes(changed_bytes)
+        return real_scan(root, ledger, sources, doc)
+
+    monkeypatch.setattr(root_case["probe"], "scan_root", scan_root, raising=False)
+    _assert_root_refusal(_run_root(root_case, capsys, doc="d2"), f"leak:{live}", "paired original exemption requires byte-identical source SHA")
+
+
+def test_leak_expected_in_byte_identical_paired_copy(root_case, capsys):
+    record = root_case["records"][0]
+    source = root_case["tree"] / record["source"]
+    source.write_text(source.read_text(encoding="utf-8") + record["expected"] + "\n", encoding="utf-8")
+    # Rebuilding makes this the exact original archive blob, not a corrupted copy.
+    root_case["records"] = build_ledger(root_case["tree"], root_case["sources"])
+    live = f"docs/01-plan/features/{source.name}"
+    _assert_root_refusal(_run_root(root_case, capsys, doc="d2"), f"leak:{live}", "expected text is never exempt even in an exact paired-source copy")
+
+
+def test_leak_on_the_seeded_target(root_case, capsys):
+    record = root_case["records"][0]
+    # D4 still reconstructs this exactly; the seeded target retains an original.
+    record["seeded"] = record["original"] + " widened seed still exposes original\n"
+    _rebuild_document(root_case["tree"], root_case["records"], record["source"])
+    live = f"docs/01-plan/features/{Path(record['source']).name}"
+    _assert_root_refusal(_run_root(root_case, capsys), f"leak:{live}", "the seeded target is not a byte-identical paired-source exemption")
+
+
+def test_leak_tar_member_leaving_the_root(root_case, capsys, monkeypatch):
+    _append_archive_member(root_case["probe"], monkeypatch, "../escaped.txt")
+    _assert_root_refusal(_run_root(root_case, capsys), "leak:../escaped.txt", "tar data filter must reject a member leaving the root")
+    assert not (root_case["dest"] / "escaped.txt").exists(), "refused archive must not write outside the root"
+
+
+def test_leak_exclusion_line_outside_the_grammar(root_case, capsys):
+    path = root_case["repo"] / EXCLUSIONS
+    path.write_text("\n".join(root_case["entries"]) + "\nunrecognised policy [a]*\n", encoding="utf-8")
+    git(root_case["repo"], "add", EXCLUSIONS.as_posix())
+    git(root_case["repo"], "commit", "-m", "Malformed synthetic exclusion policy")
+    _assert_root_refusal(_run_root(root_case, capsys), f"leak:{EXCLUSIONS.as_posix()}", "an exclusion outside dir/name-contains grammar names the list's tree path")
+
+
+def test_original_in_byte_identical_own_source_copy_does_not_refuse(root_case, capsys):
+    result = _run_root(root_case, capsys, doc="d2")
+    fields = _ready_fields(result, "original text in its byte-identical own paired plan must be exempt")
+    source = root_case["records"][0]["source"]
+    live = Path(fields["path"]) / "docs/01-plan/features" / Path(source).name
+    assert live.read_bytes() == (root_case["tree"] / source).read_bytes(), "exempt paired copy must retain exact archive bytes"
+    assert root_case["records"][0]["original"].encode("utf-8") in live.read_bytes()
+
+
+def test_root_git_dot_git_directory(root_case, capsys, monkeypatch):
+    _append_archive_member(root_case["probe"], monkeypatch, "nested/.git", directory=True)
+    _assert_root_refusal(_run_root(root_case, capsys), "root_git:nested/.git", "a nested .git directory makes the exported root git-reachable")
+
+
+def test_root_git_dot_git_file(root_case, capsys, monkeypatch):
+    _append_archive_member(root_case["probe"], monkeypatch, "nested/.git")
+    _assert_root_refusal(_run_root(root_case, capsys), "root_git:nested/.git", "a nested .git regular file must be refused regardless of contents")
+
+
+def test_root_git_root_nested_in_work_tree(root_case, capsys):
+    root_case["dest"] = root_case["repo"] / "nested-exports"
+    root_case["dest"].mkdir()
+    expected = git(root_case["repo"], "rev-parse", "--absolute-git-dir")
+    _assert_root_refusal(_run_root(root_case, capsys), f"root_git:{expected}", "rev-parse must detect an ancestor work tree without a .git entry in the root")
+
+
+def test_root_git_ignores_ambient_git_dir_env(root_case, capsys, monkeypatch):
+    actual_run = root_case["probe"].subprocess.run
+    observed = []
+    names = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+             "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES")
+    ambient = {
+        "GIT_DIR": str(root_case["repo"] / ".git"),
+        "GIT_WORK_TREE": str(root_case["repo"]),
+        "GIT_COMMON_DIR": str(root_case["repo"] / ".git"),
+        "GIT_OBJECT_DIRECTORY": str(root_case["repo"] / ".git/objects"),
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES": str(root_case["repo"] / ".git/objects"),
+    }
+
+    def run(command, *args, **kwargs):
+        if command[0] == "git" and "--absolute-git-dir" in command:
+            environment = kwargs.get("env")
+            observed.append(environment)
+            assert environment is not None and all(name not in environment for name in names), (
+                "D7 reach invocation must remove all five ambient Git variables"
+            )
+        return actual_run(command, *args, **kwargs)
+
+    # Build/calibration fixture plumbing must complete before contaminating the env.
+    sha = commit_root_tree(root_case)
+    for name, value in ambient.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(root_case["probe"].subprocess, "run", run)
+    result = _run_root(root_case, capsys, sha=sha)
+    _ready_fields(result, "an ambient GIT_DIR must not make an isolated export git-reachable")
+    assert observed, "the real D7 rev-parse reach check must still run"
+
+
+def test_build_root_places_only_the_phase_pairs(root_case, capsys):
+    expected = {}
+    for index, (feature, directory) in enumerate(root_case["sources"].items()):
+        archive = f"{directory}/{feature}"
+        spec = f"docs/01-plan/features/{feature}.spec.md"
+        plan = f"docs/01-plan/features/{feature}.plan.md"
+        design = f"docs/02-design/features/{feature}.design.md"
+        impl_plan = f"docs/01-plan/features/{feature}.impl-plan.md"
+        expected[f"d{index * 3 + 1}"] = {plan: f"{CALIBRATION}/seeded/{feature}.plan.md", spec: f"{archive}/{feature}.spec.md"}
+        expected[f"d{index * 3 + 2}"] = {design: f"{CALIBRATION}/seeded/{feature}.design.md", spec: f"{archive}/{feature}.spec.md", plan: f"{archive}/{feature}.plan.md"}
+        expected[f"d{index * 3 + 3}"] = {impl_plan: f"{CALIBRATION}/seeded/{feature}.impl-plan.md", design: f"{archive}/{feature}.design.md"}
+    roots = []
+    sha = commit_root_tree(root_case)
+    for index, doc in enumerate(expected):
+        purpose = ("s1", "s2v1", "s2v2", "rescore")[index % 4]
+        result = _run_root(root_case, capsys, doc=doc, purpose=purpose, sha=sha)
+        fields = _ready_fields(result, f"{doc} must place only its target and assembler phase pairs")
+        root = Path(fields["path"])
+        roots.append(root)
+        assert root.is_absolute() and root.parent.resolve() == root_case["dest"].resolve()
+        assert root.name.startswith(f"gas-root-{doc}-{purpose}-")
+        assert (fields["doc"], fields["purpose"], fields["calibration"]) == (doc, purpose, root_case["sha"])
+        actual = {path.relative_to(root).as_posix() for base in (
+            root / "docs/01-plan/features", root / "docs/02-design/features",
+        ) for path in base.rglob("*") if path.is_file()}
+        assert actual == set(expected[doc]), f"{doc} must contain exactly the phase's target and pairs"
+        assert root_case["probe"].placements(doc, root_case["sources"]) == expected[doc]
+        for live, source in expected[doc].items():
+            assert (root / live).read_bytes() == (root_case["tree"] / source).read_bytes(), f"{live} must preserve its selected blob bytes"
+    assert len(set(roots)) == 9, "each fresh-root request must allocate a distinct directory"
+    definitions = [node for node in ast.walk(ast.parse(PROBE.read_text(encoding="utf-8")))
+                   if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "placements"]
+    assert len(definitions) == 1, "placements must be the single document-to-live-path mapping definition"
+
+
+def test_build_root_removes_every_exclusion_entry(root_case, capsys):
+    path = root_case["repo"] / EXCLUSIONS
+    path.write_text(path.read_text(encoding="utf-8") + "dir absent-from-export\n", encoding="utf-8")
+    git(root_case["repo"], "add", EXCLUSIONS.as_posix())
+    git(root_case["repo"], "commit", "-m", "One harmless absent exclusion")
+    fields = _ready_fields(_run_root(root_case, capsys), "every dir and every name-contains match must be removed")
+    root = Path(fields["path"])
+    remaining = {path.relative_to(root).as_posix() for path in root.rglob("*")}
+    for entry in root_case["entries"]:
+        kind, value = entry.split(" ", 1)
+        if kind == "dir":
+            assert not any(path == value or path.startswith(value + "/") for path in remaining), f"excluded subtree survived re-walk: {value}"
+        else:
+            assert not any(value in Path(path).name for path in remaining), f"name-contains match survived re-walk: {value}"
+    assert fields["absent"] == "1", "only the deliberately missing list entry is counted absent"
+    assert (root / "notes/keep-me.txt").read_bytes() == (root_case["tree"] / "notes/keep-me.txt").read_bytes()
+
+
+def test_build_root_reads_the_list_from_the_commit_not_the_work_tree(root_case, capsys):
+    repo = root_case["repo"]
+    selected = git(repo, "rev-parse", "HEAD")
+    selected_blob = git(repo, "rev-parse", f"HEAD:{EXCLUSIONS.as_posix()}")
+    policy = repo / EXCLUSIONS
+    policy.write_text("invalid committed replacement [a]*\n", encoding="utf-8")
+    git(repo, "add", EXCLUSIONS.as_posix())
+    git(repo, "commit", "-m", "Newer list must not override a pinned list commit")
+    policy.write_text("invalid work-tree replacement ⟦/h-mad⟧\n", encoding="utf-8")
+    result = _run_root(root_case, capsys, extra=("--list-commit", selected))
+    fields = _ready_fields(result, "the pinned commit's list must win over both HEAD and work-tree copies")
+    assert (fields["list_commit"], fields["list_blob"]) == (selected, selected_blob)
+    assert not (Path(fields["path"]) / CALIBRATION).exists(), "selected policy must actually remove the calibration subtree"
+
+
+def test_build_root_prints_list_commit_and_blob(root_case, capsys):
+    repo = root_case["repo"]
+    expected_commit = git(repo, "rev-parse", "HEAD")
+    expected_blob = git(repo, "rev-parse", f"HEAD:{EXCLUSIONS.as_posix()}")
+    fields = _ready_fields(_run_root(root_case, capsys), "ROOT: READY must publish the exact committed exclusion-list provenance")
+    assert fields["list_commit"] == expected_commit, "list_commit must be git rev-parse HEAD, not the calibration commit"
+    assert fields["list_blob"] == expected_blob, "list_blob must be git rev-parse HEAD:docs/03-analysis/probes/grok-audit-surface/exclusions.txt"
+    assert re.fullmatch(r"[0-9a-f]{40}", fields["list_commit"])
+    assert re.fullmatch(r"[0-9a-f]{40}", fields["list_blob"])
+
+
+def test_root_line_parser_reads_build_root_output(root_case, capsys):
+    parser = root_case["probe"].parse_root_line
+    result = _run_root(root_case, capsys, dest=False)
+    fields = _ready_fields(result, "parse_root_line must consume a real build-root success token")
+    root = Path(fields["path"])
+    try:
+        assert root.parent.resolve() == Path(tempfile.gettempdir()).resolve(), "default allocation must use tempfile's directory"
+        assert root.name.startswith("gas-root-d1-s1-"), "default allocation must identify its document and purpose"
+        parsed = parser(result.stdout.splitlines()[-1])
+        assert parsed == fields, "ROOT parser must preserve every D2 field from build-root output"
+        assert set(parsed) == {"doc", "purpose", "path", "calibration", "list_commit", "list_blob", "absent"}
+    finally:
+        shutil.rmtree(root)
+
+
+def test_root_line_parser_rejects_a_malformed_root_line(root_case, capsys):
+    parser = root_case["probe"].parse_root_line
+    result = _run_root(root_case, capsys)
+    _ready_fields(result, "malformed parser fixtures must originate in a real build-root token")
+    line = result.stdout.splitlines()[-1]
+    for field in ("list_blob", "doc", "purpose", "path", "calibration", "list_commit", "absent"):
+        malformed = " ".join(word for word in line.split() if not word.startswith(field + "="))
+        assert parser(malformed) is None, f"ROOT parser must reject a success token missing {field}"
+    assert parser("ROOT: UNREADABLE reason=leak:x") is None, "ROOT parser must not accept a refusal token as a ready root"

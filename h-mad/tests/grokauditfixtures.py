@@ -147,6 +147,69 @@ def build_repo(tmp_path: Path) -> tuple[Path, Path]:
     return work, origin
 
 
+EXCLUSIONS = CALIBRATION.parent / "exclusions.txt"
+
+
+def build_root_repo(tmp_path: Path) -> dict:
+    """Prepare editable synthetic calibration inputs and a committed main list."""
+    work, _origin = build_repo(tmp_path)
+    tree = tmp_path / "calibration-input"
+    sources = build_archive(tree)
+    records = build_ledger(tree, sources)
+    entries = [
+        *(f"dir {directory}/{feature}" for feature, directory in sources.items()),
+        f"dir {CALIBRATION.parent.as_posix()}",
+        "dir docs/03-analysis/synthetic.authoring",
+        "name-contains grok-audit-surface",
+    ]
+    exclusion_file = work / EXCLUSIONS
+    exclusion_file.parent.mkdir(parents=True, exist_ok=True)
+    exclusion_file.write_text(
+        "# Synthetic exclusion list; deliberately unrelated feature names.\n\n"
+        + "\n".join(entries) + "\n", encoding="utf-8",
+    )
+    git(work, "add", EXCLUSIONS.as_posix())
+    git(work, "commit", "-m", f"Fixture exclusion policy: {_hostile_text()}")
+    for relative in (
+        "docs/03-analysis/synthetic.authoring/private.txt",
+        "notes/grok-audit-surface.txt",
+        "notes/nested/main__grok-audit-surface-handoff.md",
+        "nested/prefix-grok-audit-surface-suffix/innocent.txt",
+        "notes/keep-me.txt",
+    ):
+        path = tree / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"Synthetic context: {_hostile_text()}\n", encoding="utf-8")
+    destination = tmp_path / "exports"
+    destination.mkdir()
+    return {
+        "repo": work, "tree": tree, "sources": sources, "records": records,
+        "dest": destination, "entries": entries,
+    }
+
+
+def commit_root_tree(case: dict) -> str:
+    """Commit edited export inputs with a temporary index, including symlinks."""
+    work, tree = case["repo"], case["tree"]
+    with tempfile.TemporaryDirectory(prefix="root-index-", dir=tree.parent) as staging:
+        environment = os.environ.copy()
+        environment["GIT_INDEX_FILE"] = str(Path(staging) / "index")
+        git(work, "read-tree", "HEAD", env=environment)
+        for path in sorted(tree.rglob("*")):
+            if path.is_symlink():
+                mode, content = "120000", os.readlink(path)
+            elif path.is_file():
+                mode, content = "100644", path.read_text(encoding="utf-8")
+            else:
+                continue
+            blob = git(work, "hash-object", "-w", "--stdin", input=content)
+            git(work, "update-index", "--add", "--cacheinfo", mode, blob,
+                path.relative_to(tree).as_posix(), env=environment)
+        tree_oid = git(work, "write-tree", env=environment)
+        return git(work, "commit-tree", tree_oid, "-p", "HEAD",
+                   input=f"Root fixture calibration: {_hostile_text()}\n")
+
+
 def load_probe(path: Path) -> types.ModuleType:
     """Compile fresh source so same-size mutations cannot reuse stale bytecode."""
     code = compile(path.read_bytes(), str(path), "exec")
