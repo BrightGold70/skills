@@ -7,6 +7,7 @@
     "tests/test_grok_audit_surface_probe.py",
     "tests/test_grok_audit_surface_smoke.py",
     "tests/test_grok_audit_surface_wrapper.py",
+    "tests/test_grok_audit_surface_gate_pins.py",
     "tests/test_grok_audit_surface_docs.py",
     "tests/test_hmad_dispatch_audit_cycle.py",
     "-q"
@@ -1298,6 +1299,125 @@
       "find": "    if [ -z \"$div\" ] || [ \"$foreign\" -ne 0 ]; then",
       "replace": "    if [ -z \"$div\" ]; then",
       "test": "tests/test_hmad_dispatch_audit_cycle.py::test_verb_prompt_divergence"
+    },
+    {
+      "name": "surf-map-rotate",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "agent[$i]=\"${_surf[$((i - 1))]}\"",
+      "replace": "agent[$i]=\"${_surf[$((i % passes))]}\"",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_three_surfaces_map_pass_index_to_agent"
+    },
+    {
+      "name": "surf-map-fixed",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "agent[$i]=\"${_surf[$((i - 1))]}\"",
+      "replace": "agent[$i]=\"grok\"",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_three_surfaces_map_pass_index_to_agent"
+    },
+    {
+      "name": "surf-map-fixed-warns",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "agent[$i]=\"${_surf[$((i - 1))]}\"",
+      "replace": "agent[$i]=\"grok\"",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_three_surfaces_print_no_repeated_warning"
+    },
+    {
+      "name": "legs-default-dropped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    legs=(\"${_surf[@]}\")",
+      "replace": "    legs=()",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_three_surface_stamps_carry_sorted_legs"
+    },
+    {
+      "name": "legs-default-fixed",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    legs=(\"${_surf[@]}\")",
+      "replace": "    legs=(codex)",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_three_surface_stamps_carry_sorted_legs"
+    },
+    {
+      "name": "surfaces-count-check-dropped",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    [ \"${#_surf[@]}\" -eq \"$passes\" ] || {",
+      "replace": "    true || {",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_two_surfaces_for_three_passes_exit_2"
+    },
+    {
+      "name": "legs-default-dropped-two-surface",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    legs=(\"${_surf[@]}\")",
+      "replace": "    legs=()",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_codex_agy_cycle_stamps_carry_the_legs_that_ran"
+    },
+    {
+      "name": "legs-default-fixed-two-surface",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    legs=(\"${_surf[@]}\")",
+      "replace": "    legs=(codex)",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_codex_agy_cycle_stamps_carry_the_legs_that_ran"
+    },
+    {
+      "name": "leg-key-input-order",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    return sorted({str(name).strip() for name in legs if str(name).strip()})",
+      "replace": "    return list(dict.fromkeys(str(name).strip() for name in legs if str(name).strip()))",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_three_surface_stamps_carry_sorted_legs"
+    },
+    {
+      "name": "legs-changed-dropped",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        if first != second:",
+      "replace": "        if False:",
+      "test": "tests/test_grok_audit_surface_gate_pins.py::test_exit_three_leg_first_gate_then_codex_blocks_legs_changed"
+    },
+    {
+      "name": "legs-disagree-dropped",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        if len(distinct) > 1:",
+      "replace": "        if False:",
+      "test": "tests/test_grok_audit_surface_gate_pins.py::test_exit_mixed_first_gate_legs_disagree"
+    },
+    {
+      "name": "legs-disagree-always",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        if len(distinct) > 1:",
+      "replace": "        if True:",
+      "test": "tests/test_grok_audit_surface_gate_pins.py::test_exit_two_codex_revisions_ready"
+    },
+    {
+      "name": "round-counts-stamps",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        grouped.add(key)",
+      "replace": "        grouped.add((key[0], key[1], (key[2], path.name)))",
+      "test": "tests/test_grok_audit_surface_gate_pins.py::test_round_cap_first_gate_counts_one_cycle"
+    },
+    {
+      "name": "union-drops-p3",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if result.verdict == \"FAIL\":",
+      "replace": "        if result.verdict == \"FAIL\" and result.index != 3:",
+      "test": "tests/test_grok_audit_surface_gate_pins.py::test_union_three_passes_only_grok_must_fails"
+    },
+    {
+      "name": "floor-skips-last-pass",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if result.effort is None:",
+      "replace": "        if result.effort is None or result.index == len(results):",
+      "test": "tests/test_grok_audit_surface_gate_pins.py::test_floor_low_evidence_at_index_3"
+    },
+    {
+      "name": "floor-skips-last-pass-truncated",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if result.effort is None:",
+      "replace": "        if result.effort is None or result.index == len(results):",
+      "test": "tests/test_grok_audit_surface_gate_pins.py::test_floor_truncated_at_index_3"
+    },
+    {
+      "name": "union-always-fails",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if result.verdict == \"FAIL\":",
+      "replace": "        if True:",
+      "test": "tests/test_grok_audit_surface_gate_pins.py::test_union_three_passes_all_clean_pass"
     }
   ]
 }
