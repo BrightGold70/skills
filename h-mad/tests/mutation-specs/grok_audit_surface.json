@@ -6,7 +6,9 @@
     "pytest",
     "tests/test_grok_audit_surface_probe.py",
     "tests/test_grok_audit_surface_smoke.py",
+    "tests/test_grok_audit_surface_wrapper.py",
     "tests/test_grok_audit_surface_docs.py",
+    "tests/test_hmad_dispatch_audit_cycle.py",
     "-q"
   ],
   "target_command": ["/opt/anaconda3/bin/python3.11", "-m", "pytest", "-q"],
@@ -1280,6 +1282,22 @@
       "find": "        if fields is None:  # M:GAS-LIST-MALFORMED",
       "replace": "        if False:  # M:GAS-LIST-MALFORMED",
       "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_malformed_root_record"
+    },
+    {
+      "name": "divergence-empty-branch-dropped",
+      "_mechanism": "Drop the empty-diff refusal so identical prompts reach agent dispatch.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if [ -z \"$div\" ] || [ \"$foreign\" -ne 0 ]; then",
+      "replace": "    if [ \"$foreign\" -ne 0 ]; then",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_identical_prompts_halt_prompt_divergence"
+    },
+    {
+      "name": "divergence-foreign-branch-dropped",
+      "_mechanism": "Drop the foreign-line refusal so unexpected prompt differences reach agent dispatch.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if [ -z \"$div\" ] || [ \"$foreign\" -ne 0 ]; then",
+      "replace": "    if [ -z \"$div\" ]; then",
+      "test": "tests/test_hmad_dispatch_audit_cycle.py::test_verb_prompt_divergence"
     }
   ]
 }
