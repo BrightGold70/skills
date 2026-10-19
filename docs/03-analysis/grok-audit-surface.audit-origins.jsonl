@@ -30,3 +30,6 @@
 {"phase": "design", "cycle": 1, "leg": "agy", "item": "extract has no exported tree with s2/; quote paths unmapped", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
 {"phase": "design", "cycle": 1, "leg": "agy", "item": "D1 single refusal vocab vs D9 COMMIT/RECORD tokens", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
 {"phase": "design", "cycle": 1, "leg": "agy", "item": "AC-4.5 should-fix hits + FR-6 splits omitted in D12/D13", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-1.1 smoke accepts non-grok effort shape (needs format=grok)", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-2.6 shared S1 root not re-checked between dispatches", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-8.3 rejection-ledger instruction absent from PASS text", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
