@@ -39,3 +39,4 @@
 {"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "D11 step-3 positive rule turns drifted grok log into UNREADABLE not FAIL", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
 {"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "build-root --reset deletes before checking its target", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
 {"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "X1/X2 mutation rows describe the removed v1.2 wire", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
+{"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "reset fixtures unsatisfiable: re-walk mismatch fires before step 6", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
