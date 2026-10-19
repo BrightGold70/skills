@@ -40,13 +40,14 @@ publishes; Task 17 is S4 and runs only on `SEEDSCORE: PASS`.
 Shapes: `operational` 2 (Tasks 0, 15); `new-behaviour` 14 (Tasks 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12,
 13, 16, 17); `wiring` 1 (Task 8); `gate` 1 (Task 14). 2 + 14 + 1 + 1 = 18.
 
-Mutation rows at S0 (after Task 13): 171 in `h-mad/tests/mutation-specs/grok_audit_surface.json`.
-Per Task: 6 (T2) + 14 (T3) + 14 (T4) + 13 (T5) + 11 (T6) + 25 (T7) + 20 (T8) + 25 (T9) + 21 (T10) +
-2 (T11) + 17 (T12) + 3 (T13) = 171. Of these, 28 are the design's named rows (W1–W10, G1–G5, C1–C4,
-K1–K3, X1–X6) and 143 are P-rows (one per refusal or non-default-verdict fixture, design §"Mutation
-spec", "P-rows"). Task 16 adds the named row K6 on every outcome, and K4 and K5 only on MISS or
-INCONCLUSIVE, which makes 172 on PASS or a smoke failure and 174 on MISS or INCONCLUSIVE.
-Marker sites in the probe: 117 (per Task: 6 + 13 + 11 + 13 + 10 + 15 + 12 + 20 + 17). The design
+Mutation rows at S0 (after Task 13): 180 in `h-mad/tests/mutation-specs/grok_audit_surface.json`.
+Per Task: 6 (T2) + 15 (T3) + 14 (T4) + 14 (T5) + 12 (T6) + 29 (T7) + 20 (T8) + 26 (T9) + 22 (T10) +
+2 (T11) + 17 (T12) + 3 (T13) = 180. Of these, 28 are the design's named rows (W1–W10, G1–G5, C1–C4,
+K1–K3, X1–X6) and 152 are P-rows (one per refusal or non-default-verdict fixture, design §"Mutation
+spec", "P-rows"). Task 16 adds the named rows K6 and K7 on every outcome, and K4 and K5 only on MISS
+or INCONCLUSIVE, which makes 182 on PASS or a smoke failure and 184 on MISS or INCONCLUSIVE.
+Marker sites in the probe: 125 (per Task: 6 + 14 + 11 + 13 + 11 + 19 + 12 + 21 + 18; Task 5's
+`p-traceback-scope-reset` reuses Task 2's `GAS-TRACEBACK-SCOPE` and adds no site). The design
 carries neither total; Task 14 re-derives both with the design's two commands (carry 11).
 
 ## Rules every Task follows
@@ -84,10 +85,16 @@ carries neither total; Task 14 re-derives both with the design's two commands (c
   mutant-caused `KeyError`, `TypeError` or `NameError` reaches the harness and is counted, whichever
   way the test drives the probe. (3) The only exceptions are the
   tests that inject an exception on purpose or assert on stderr's content
-  (`test_internal_failure_prints_the_mode_token`, and the traceback-absence assertions of
-  `test_usage_error_prints_the_mode_token` and of Task 5's refusal tests): these compute their figures into locals first
-  (`n = r.stderr.count("Traceback")`) and assert on the locals with a fixed message, never echoing
-  stderr. Residual: a mutant whose only effect is that one declared refusal class falls through to
+  (`test_internal_failure_prints_the_mode_token`, `test_smoke_last_resort_names_the_open_input`, and
+  the traceback-absence assertions of `test_usage_error_prints_the_mode_token` and of the Task 5
+  refusal tests AC-T5.1 lists): these compute their figures into locals first
+  (`n = r.stderr.count("Traceback")` for a subprocess, `n = err.count("Traceback")` after
+  `out, err = capsys.readouterr()` in process) and assert on the locals with a fixed message, never
+  echoing stderr. **Order (axis: an assertion whose message withholds stderr).** In every test that
+  has both a token assertion and a traceback-count assertion, the token assertion, with stderr as
+  its message, comes first, and the traceback count second. So a mutant that crashes changes the
+  token, fails the first assertion with its traceback visible, and is counted as a crash kill. The
+  fixed-message count assertion is reached only when the token was right. Residual: a mutant whose only effect is that one declared refusal class falls through to
   another declared class prints no traceback by design. That kill is an assertion kill, which is
   the correct reading. The design's D1 sentence ("prints the traceback on stderr") is read as
   covering only exceptions that escape the declared checks; that reading is owed to the design.
@@ -234,15 +241,25 @@ transitional state of a feature branch, not a shipped one: Task 10's `test_succe
 fails until all nine handlers exist.
 
 **Every argparse exit path ends on the mode's token (carry 12; axis: argparse's exits).** Measured on
-`/opt/anaconda3/bin/python3.11` (3.11.8) and `python3` (3.15.0): argparse's only `sys.exit` is in
+`/opt/anaconda3/bin/python3.11` (3.11.8) and `/opt/homebrew/opt/python@3.15/bin/python3.15` (3.15.0): argparse's only `sys.exit` is in
 `ArgumentParser.exit`, which has three callers: `error()`, the help action and the version action
-(4 `.exit(` sites in the module source on each interpreter). Reproduce:
+(4 `.exit(` sites in the module source on each interpreter: 2 `parser.exit()` in the help and
+version actions, 1 `_sys.exit(status)` in `exit`, 1 `self.exit(2, …)` in `error`). `python3` here
+is pinned by its absolute path, `/opt/homebrew/opt/python@3.15/bin/python3.15`, so the reading does
+not depend on `PATH`. Reproduce:
 
 ```bash
-for py in /opt/anaconda3/bin/python3.11 python3; do $py -c 'import argparse,inspect,re,sys;print(sys.version.split()[0], len(re.findall(r"\.exit\(", inspect.getsource(argparse))))'; done
-# 3.11.8 4
-# 3.15.0 4
-for py in /opt/anaconda3/bin/python3.11 python3; do $py -c '
+P315=/opt/homebrew/opt/python@3.15/bin/python3.15
+for py in /opt/anaconda3/bin/python3.11 $P315; do $py -c 'import argparse,inspect,sys;v=sys.version.split()[0];[print(v, l.strip()) for l in inspect.getsource(argparse).splitlines() if ".exit(" in l]'; done
+# 3.11.8 parser.exit()
+# 3.11.8 parser.exit()
+# 3.11.8 _sys.exit(status)
+# 3.11.8 self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+# 3.15.0 parser.exit()
+# 3.15.0 parser.exit()
+# 3.15.0 _sys.exit(status)
+# 3.15.0 self.exit(2, fmt % args)
+for py in /opt/anaconda3/bin/python3.11 $P315; do $py -c '
 import argparse,sys,io,contextlib
 p=argparse.ArgumentParser(prog="p"); s=p.add_subparsers(dest="m"); s.add_parser("smoke").add_argument("--data")
 o=io.StringIO()
@@ -251,6 +268,33 @@ try:
 except SystemExit as e: print(sys.version.split()[0], "SystemExit", e.code, "stdout_bytes", len(o.getvalue()))'; done
 # 3.11.8 SystemExit 0 stdout_bytes 105
 # 3.15.0 SystemExit 0 stdout_bytes 105
+# a plain top-level parser over a token-raising subparser class: the top level reports the extra flag
+for py in /opt/anaconda3/bin/python3.11 $P315; do $py -c '
+import argparse,sys
+class UE(Exception): pass
+class TP(argparse.ArgumentParser):
+    def error(self, m): raise UE(m)
+p=argparse.ArgumentParser(prog="top"); s=p.add_subparsers(dest="m", parser_class=TP); s.add_parser("smoke").add_argument("--data")
+try: p.parse_args(["smoke","--data","x","--no-such-flag"]); print("parsed")
+except UE: print(sys.version.split()[0], "UsageError")
+except SystemExit as e: print(sys.version.split()[0], "SystemExit", e.code)' 2>&1; done
+# usage: top [-h] {smoke} ...
+# top: error: unrecognized arguments: --no-such-flag
+# 3.11.8 SystemExit 2
+# usage: top [-h] {smoke} ...
+# top: error: unrecognized arguments: --no-such-flag
+# 3.15.0 SystemExit 2
+# allow_abbrev: --tre is read as --tree when on, refused when off
+for py in /opt/anaconda3/bin/python3.11 $P315; do $py -c '
+import argparse,sys
+for ab in (True, False):
+    p=argparse.ArgumentParser(prog="p", allow_abbrev=ab); p.add_argument("--tree")
+    try: print(sys.version.split()[0], "allow_abbrev", ab, vars(p.parse_args(["--tre","t"])))
+    except SystemExit as e: print(sys.version.split()[0], "allow_abbrev", ab, "SystemExit", e.code)' 2>/dev/null; done
+# 3.11.8 allow_abbrev True {'tree': 't'}
+# 3.11.8 allow_abbrev False SystemExit 2
+# 3.15.0 allow_abbrev True {'tree': 't'}
+# 3.15.0 allow_abbrev False SystemExit 2
 ```
 
 The rule:
@@ -278,7 +322,16 @@ every `main` call and assigned by Task 7's `smoke` to each input's path immediat
 opens that input), when it is not `None`; else the word after the first exact `--data` in argv (or
 the `--data=` value); else the empty string. That is D1's order: the input the derivation had
 open, then the `--data` directory. `refusal_token` reads `_OPEN_INPUT` directly; no other channel
-carries it. Residual, stated exactly: a future Python whose argparse
+carries it (`# M:GAS-OPEN-INPUT` marks that arm; its fixture and row are Task 7's, because only
+`smoke` assigns it). `_OPEN_INPUT` is not cleared when an input closes. An exception raised after
+the last input is read therefore names that last input. That is the plan's reading of D1's "the
+input the derivation had open when the exception escaped, or the `--data` directory when none was
+open yet": once any input has been opened, the last one opened is reported. **A `Refusal` reaches
+its token through `refusal_token` (axis: where a declared refusal becomes its token).** Mode
+handlers do not catch `Refusal`; it propagates to `main`'s last resort. `refusal_token` prints
+`reason=` followed by `exc.reason` for a `Refusal` (`# M:GAS-REFUSAL-REASON`; its first fixtures
+and its row are Task 3's), `internal:` and the class name for every other exception except in
+`smoke`, where a non-`Refusal` exception prints `input_unparseable:` and the D1 path above. Residual, stated exactly: a future Python whose argparse
 gains another `exit` caller is not covered. Task 2's tests run under the interpreter the suite
 uses, and the measured site count above is what would change.
 
@@ -432,7 +485,7 @@ def build_repo(tmp_path: Path) -> tuple[Path, Path]: ...   # (work, origin.git)
 
 **RED split**: 16 nodes; 16 F (no `check-ledger` handler: `internal:KeyError`), 0 P.
 
-**Mutation rows** (14; markers 13):
+**Mutation rows** (15; markers 14):
 
 | name | marker | test |
 |---|---|---|
@@ -450,8 +503,11 @@ def build_repo(tmp_path: Path) -> tuple[Path, Path]: ...   # (work, origin.git)
 | `p-rebuild-version-history` | `# M:GAS-REBUILD-VERSION-HISTORY` | `tests/test_grok_audit_surface_probe.py::test_seed_rebuild_refuses_a_seed_under_version_history` |
 | `p-rebuild-section-name` | `# M:GAS-REBUILD-SECTION-NAME` | `tests/test_grok_audit_surface_probe.py::test_seed_rebuild_refuses_a_wrong_section_name` |
 | `p-rebuild-seeded-once` | `# M:GAS-REBUILD-SEEDED-ONCE` | `tests/test_grok_audit_surface_probe.py::test_seed_rebuild_refuses_a_seeded_span_not_once` |
+| `p-refusal-reason` | `# M:GAS-REFUSAL-REASON` | `tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_an_unparseable_line` |
 
-Each `replace` makes its condition never fire.
+Each `replace` makes its condition never fire, except `p-refusal-reason`'s, which prints
+`internal:Refusal` in place of `exc.reason` (Task 2's `refusal_token`; a `Refusal` is a declared
+class, so no traceback is printed and the kill is by assertion).
 
 **Dependencies on other tasks**: Task 2.
 
@@ -674,11 +730,26 @@ def reset_root(args: argparse.Namespace) -> str: ...  # the ROOT: READY line
   planted in the root is unchanged).
 
 **Acceptance Criteria**:
-- [ ] AC-T5.1: Each refusal test asserts its exact token as D5's Test Plan entry states it, that
-  its sentinel is still there with its bytes unchanged (the missing-target test: the path is still
-  absent), and that `n = stderr.count("Traceback")` is 0. Each of these refusals is a declared
-  `ProbeRefusal` class other than `UsageError`, so this is the traceback-absence check for the
-  non-usage refusals.
+- [ ] AC-T5.1: Task 5's refusal tests are these 10:
+  - the precondition and argument refusals (`internal:` and a declared reset class):
+    `test_build_root_reset_and_dest_parent_are_exclusive`,
+    `test_build_root_reset_refuses_a_non_s1_purpose`,
+    `test_build_root_reset_refuses_an_empty_target`,
+    `test_build_root_reset_refuses_a_missing_target`,
+    `test_build_root_reset_refuses_a_target_outside_the_tempdir`,
+    `test_build_root_reset_refuses_another_documents_root`;
+  - `test_build_root_reset_mismatch_is_internal` (`RootResetMismatch`);
+  - the `Refusal`-raising ones: `test_build_root_reset_refuses_a_git_target` (`root_git:`),
+    `test_build_root_reset_rescans_after_removal` (`leak:`),
+    `test_build_root_reset_runs_the_reach_check` (`root_git:`).
+
+  Each asserts, in this order:
+  1. its exact token as D5's Test Plan entry states it, with stderr as the message;
+  2. for the six precondition and argument refusals, that its sentinel is still there with its
+     bytes unchanged (the missing-target test: the path is still absent);
+  3. that the traceback count, computed into a local `n` as rule (3) spells it, is 0.
+
+  So the traceback-absence check covers both a declared reset class and `Refusal`.
 - [ ] AC-T5.2: `test_build_root_reset_removes_by_products_and_restores_placed_files` asserts the path
   set and every sha256 equal a fresh build's, the published line `RESET: removed=` with the planted
   count and `restored=1`, and the original `ROOT: READY` line as the token.
@@ -689,7 +760,10 @@ def reset_root(args: argparse.Namespace) -> str: ...  # the ROOT: READY line
 **RED split**: 15 nodes; 15 F (at RED `--reset` is parsed and ignored, so every end-to-end test sees
 a fresh root's token or no refusal, and the two `restore_expected` tests find no such attribute), 0 P.
 
-**Mutation rows** (13; markers 13). Each `replace` makes its condition never fire, except the three
+**Mutation rows** (14; markers 13, plus the reused `GAS-TRACEBACK-SCOPE`). Each `replace` makes its
+condition never fire, except `p-traceback-scope-reset`'s, which narrows Task 2's traceback scope to
+`UsageError` alone, so a declared reset class prints a traceback and the count assertion of its
+target fails after its token assertion has passed; and except the three
 no-follow rows, whose `replace` follows the link: the unlink becomes removal of the resolved target
 (its target is under `tmp_path`); `O_NOFOLLOW` is dropped from the first open; the ancestor check is
 skipped. Each of those three mutants then writes or deletes through the link that its own fixture
@@ -710,6 +784,7 @@ holds at that moment, so the kill is by assertion on the outside sentinel, never
 | `p-reset-nofollow-write` | `# M:GAS-RESET-NOFOLLOW-WRITE` | `tests/test_grok_audit_surface_probe.py::test_restore_expected_does_not_write_through_a_symlinked_placed_document` |
 | `p-reset-nofollow-remove` | `# M:GAS-RESET-NOFOLLOW-REMOVE` | `tests/test_grok_audit_surface_probe.py::test_build_root_reset_does_not_delete_through_a_symlinked_by_product_dir` |
 | `p-reset-nofollow-parent` | `# M:GAS-RESET-NOFOLLOW-PARENT` | `tests/test_grok_audit_surface_probe.py::test_restore_expected_does_not_write_through_a_symlinked_parent_directory` |
+| `p-traceback-scope-reset` | `# M:GAS-TRACEBACK-SCOPE` | `tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_an_empty_target` |
 
 **Dependencies on other tasks**: Task 4.
 
@@ -732,6 +807,10 @@ the file the wrapper passed as `--log` (`log[$i]="${stem}_p${i}.log"`); that is 
 3's wrong-file guard unreachable on real inputs (carry 14), and a plan-added test pins it. D2 names
 three `record-cycle` reasons the design's Test Plan gives no fixture (`input_missing:`,
 `stem_prefix:`, `command_unparseable:`); each gets one here, plan-added and reported to the design.
+**`parse_root_line`'s `None` (Task 4) maps here to `root_record:no_line`** (`# M:GAS-RECORD-ROOT-MALFORMED`):
+a `--root-record` file whose one `ROOT: READY` line lacks a D2 field (for example `list_blob=`) is
+refused exactly like a file with no such line. D5 defines `root_record:no_line` as "no `ROOT: READY`
+line or more than one"; extending it to a malformed line is a plan extension, owed to the design.
 
 **Code structure**:
 ```python
@@ -742,7 +821,7 @@ def _mode_record_cycle(args: argparse.Namespace) -> int: ...
 def _mode_commit_data(args: argparse.Namespace) -> int: ...
 ```
 
-**Tests** (15):
+**Tests** (16):
 - From D5/D8/D9 (10): `test_record_cycle_writes_root_txt`,
   `test_record_cycle_refuses_a_root_record_without_a_line`,
   `test_record_cycle_refuses_a_root_record_for_another_root`,
@@ -752,7 +831,9 @@ def _mode_commit_data(args: argparse.Namespace) -> int: ...
   `test_commit_data_refuses_a_moved_ref`, `test_commit_data_refuses_outside_calibration_dir`,
   `test_commit_data_rereads_the_ref` (in process: the probe's ref read after `update-ref` replaced to
   return another oid; `COMMIT: REFUSED reason=ref_unconfirmed`).
-- Plan-added (5): `test_record_cycle_copies_stem_files_byte_for_byte` (carry 14: every copied file's
+- Plan-added (6): `test_record_cycle_refuses_a_root_record_with_a_malformed_ready_line` (a
+  `ROOT: READY` line rendered by `build-root` with its `list_blob=` field removed:
+  `RECORD: REFUSED reason=root_record:no_line`), `test_record_cycle_copies_stem_files_byte_for_byte` (carry 14: every copied file's
   sha256 equals its stem source's), `test_record_cycle_refuses_a_missing_input` (`--stdout` absent:
   `RECORD: REFUSED reason=input_missing:` and that path), `test_record_cycle_refuses_zero_stem_prefixes`
   (`reason=stem_prefix:0`), `test_record_cycle_refuses_two_stem_prefixes` (`reason=stem_prefix:2`),
@@ -776,14 +857,17 @@ def _mode_commit_data(args: argparse.Namespace) -> int: ...
 - [ ] AC-T6.2: `test_commit_data_never_touches_work_tree_or_index` asserts `git status --porcelain`
   and the sha256 of `.git/index` are unchanged across the call.
 
-**RED split**: 15 nodes; 15 F (no handlers), 0 P.
+**RED split**: 16 nodes; 16 F (no handlers), 0 P.
 
-**Mutation rows** (11; markers 10):
+**Mutation rows** (12; markers 11). Each `replace` makes its condition never fire, except
+`p-record-root-malformed`'s, which maps `parse_root_line`'s `None` to `root_record:path_mismatch` in place
+of `root_record:no_line` (a declared reason, so the code keeps running and the kill is by assertion):
 
 | name | marker | test |
 |---|---|---|
 | `p-record-root-line` | `# M:GAS-RECORD-ROOT-LINE` | `tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_a_root_record_without_a_line` |
 | `p-record-root-path` | `# M:GAS-RECORD-ROOT-PATH` | `tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_a_root_record_for_another_root` |
+| `p-record-root-malformed` | `# M:GAS-RECORD-ROOT-MALFORMED` | `tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_a_root_record_with_a_malformed_ready_line` |
 | `p-record-auditcycle` | `# M:GAS-RECORD-AUDITCYCLE` | `tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_stdout_without_auditcycle` |
 | `p-record-input` | `# M:GAS-RECORD-INPUT` | `tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_a_missing_input` |
 | `p-record-stem-zero` | `# M:GAS-RECORD-STEM-PREFIX` | `tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_zero_stem_prefixes` |
@@ -854,7 +938,7 @@ AUDITCYCLE_RE = re.compile(r"^AUDITCYCLE: (PASS|FAIL|UNVERIFIED)( \S+)*$")
 GROK_ITEM_RE = re.compile(r"^p1 tools=\d+ ok=\d+ unresolved=\d+ thinking=\d+ format=grok( |$)")
 COUNTS_ITEM_RE = re.compile(r"^p1 tools=\d+ ok=\d+ failed=\d+ thinking=\d+( |$)")
 def parse_auditcycle(text: str) -> dict: ...
-def parse_effort_items(text: str) -> list[str] | None: ...  # None for a malformed Effort block
+def parse_effort_items(text: str) -> list[str] | None: ...  # [] with no Effort: line; None for a malformed block
 def grok_log_types(text: str) -> dict[str, list[dict]]: ...  # type -> its events
 def effort_form(item: str) -> str: ...  # "grok" | "truncated" | "counts" | "wrong-file" | "unknown"
 def vocab_sets(vocab_py: Path, vocab_sh: Path) -> tuple[frozenset[str], frozenset[str]]: ...
@@ -863,7 +947,7 @@ def smoke(data: Path, vocab_py: Path, vocab_sh: Path) -> tuple[list[str], str]: 
 def _mode_smoke(args: argparse.Namespace) -> int: ...
 ```
 
-**Tests** — smoke module (42), each asserting its exit code beside its exact token:
+**Tests** — smoke module (44), each asserting its exit code beside its exact token:
 - PASS and FAIL (11): `test_smoke_pass`, `test_smoke_pass_on_out_delivery`, `test_smoke_truncated`,
   `test_smoke_vocab_split`, `test_smoke_vocab_missing_end`, `test_smoke_vocab_missing_tool_call`,
   `test_smoke_vocab_missing_tool_call_update`, `test_smoke_no_delivery`,
@@ -888,6 +972,22 @@ def _mode_smoke(args: argparse.Namespace) -> int: ...
   `test_smoke_grok_binary_unrecorded_is_not_unreadable`.
 - Ordering and contracts (4): `test_smoke_two_reasons_in_order`, `test_smoke_coupled_reasons_in_order`,
   `test_smoke_unreadable_outranks_fail`, `test_smoke_prints_timeout_derivation`.
+- Caller contracts (2, plan-added, delta review 5f10a1d):
+  - `test_smoke_last_resort_names_the_open_input` (in process, loaded with `load_probe`): a clean
+    S1 fixture in which `grok_log_types` is replaced by a function raising `RuntimeError`. So
+    `smoke` has assigned `_OPEN_INPUT` to the `grok/p1.log` path and opened it when the exception
+    escapes. The last stdout line is `SMOKE: UNREADABLE reason=input_unparseable:` followed by
+    that `grok/p1.log` path, not the `--data` value. It is a rule-(3) member (an exception injected
+    on purpose).
+  - `test_smoke_refuses_a_malformed_effort_block`: a grok cycle that did not reach dispatch (its
+    `AUDITCYCLE:` line has no `delivered=`, so D11 step 3 does not apply) whose
+    `grok/auditcycle.txt` also holds an `Effort:` block of shape (a) below. The smoke reads the
+    block in step 1, and `parse_effort_items` returns `None`. The test asserts
+    `SMOKE: UNREADABLE reason=input_unparseable:` followed by the `grok/auditcycle.txt` path, exit 2.
+    The fixture is chosen so that the mapping is the only guard: on a cycle that reached dispatch,
+    step 3's absent-item check prints the same token, and the mapping's row would survive as an
+    equivalent mutant. With the mapping disarmed, this fixture reaches the reasons and prints
+    `SMOKE: FAIL`.
 - Opposed pairs (7): `test_m3_d1_end_event_beside_truncated_item_is_truncated`,
   `test_m3_d2_no_end_beside_grok_item_is_not_truncated`,
   `test_m4_e1_report_file_inputs_beside_delivered_none_is_no_delivery`,
@@ -899,15 +999,37 @@ def _mode_smoke(args: argparse.Namespace) -> int: ...
   and `grace=0`; `measure_effort` and `combine`) and asserts the verdict opposite to the recorded
   token.
 
-11 + 3 + 11 + 4 + 2 + 4 + 7 = 42.
+11 + 3 + 11 + 4 + 2 + 4 + 2 + 7 = 44.
 
 **Tests** — probe module (4): `test_auditcycle_parser_reads_render_output`,
 `test_auditcycle_parser_rejects_two_lines`, `test_effort_parser_reads_effort_items_output`, and the
-Effort parser's must-not-parse fixture `test_effort_parser_rejects_a_malformed_effort_block`. It
-calls `parse_effort_items` in process on (a) an `Effort:` line followed by an item line without the
-`- ` bullet `render` writes (`lines.extend(f"- {item}" for item in effort)` in
-`h_mad_audit_cycle.render`), and (b) an `Effort:` line followed directly by the `[H-MAD]` line, and
-asserts `None` for each.
+Effort parser's must-not-parse fixture `test_effort_parser_rejects_a_malformed_effort_block`.
+
+**The `Effort:` block grammar (delta review 5f10a1d; axis: what `parse_effort_items` returns).**
+`h_mad_audit_cycle.render` writes `Effort:` only `if effort:`, then one `- {item}` line per item
+(`lines.extend(f"- {item}" for item in effort)`). After the items comes the `[H-MAD]` line on the
+UNVERIFIED branch, or `Premise checklist:` / `Premise checklist: empty` on the other branch. So:
+- Text with no `Effort:` line returns `[]`. That is a halted cycle or a pass with no log, and it is
+  never a refusal by itself. D11 step 3's "absent" check, for a grok cycle that reached dispatch,
+  is what refuses there.
+- An `Effort:` line opens the block, and the block is the run of lines that follow it and begin
+  with `- `. The first line that does not begin with `- ` ends it.
+- The result is `None` exactly when:
+  - (a) an item's text after `- ` does not begin with `p` followed by digits and a space
+    (`# M:GAS-PARSE-EFFORT-ITEM`);
+  - (b) the block holds no item (`# M:GAS-PARSE-EFFORT-EMPTY`);
+  - (c) the text holds more than one `Effort:` line (`# M:GAS-PARSE-EFFORT-TWICE`).
+
+Each of the three is a separate condition. The test calls `parse_effort_items` in process on
+fixtures (a) `Effort:` then `- x1 tools=1 ok=1 failed=0 thinking=0`, (b) `Effort:` followed directly
+by the `[H-MAD]` line, and (c) two complete `Effort:` blocks, and asserts `None` for each. It also
+asserts `[]` on a halted `AUDITCYCLE:` text rendered by `render` with no results (the must-not-refuse
+half).
+
+**Callers of `None`:** `smoke` maps it to `input_unparseable:` and the `grok/auditcycle.txt` path
+(`# M:GAS-SMOKE-EFFORT-MALFORMED`, pinned by `test_smoke_refuses_a_malformed_effort_block`). Task 9's
+`score`, if it reads the block for the `low_evidence=` count, carries its mapping as Task 9's
+OPEN-DECISION. Task 8's `extract` does not call `parse_effort_items`.
 
 **Acceptance Criteria**:
 - [ ] AC-T7.1: Every coupled-reason test asserts the full list, e.g. `test_smoke_no_delivery` reads
@@ -921,9 +1043,10 @@ asserts `None` for each.
 - [ ] AC-T7.5: The smoke module adds `tests/test_grok_audit_surface_smoke.py` to the spec's `command`
   after the probe module.
 
-**RED split**: 46 nodes; 46 F (no `smoke` handler, no parsers), 0 P.
+**RED split**: 48 nodes; 48 F (no `smoke` handler, no parsers), 0 P.
 
-**Mutation rows** (25; markers 15). Each `replace` makes its condition never fire, except the four
+**Mutation rows** (29; markers 19). Each `replace` makes its condition never fire, except `p-open-input`'s, which
+skips the `_OPEN_INPUT` arm so the `--data` value is printed, and except the four
 step-3 refusal rows (`p-smoke-effort-codex-text`, `p-smoke-effort-missing`, `p-smoke-effort-empty`,
 `p-smoke-effort-unknown`): a wrong-file branch that merely stops firing falls to the
 unrecognised-item refusal, which prints the same token, so that mutant is equivalent; these rows
@@ -958,7 +1081,11 @@ and `out`) get one row per alternative, each removing that alternative alone.
 | `p-smoke-effort-empty` | `# M:GAS-SMOKE-EFFORT-UNREADABLE` | `tests/test_grok_audit_surface_smoke.py::test_smoke_effort_empty_item_refuses_as_wrong_file` |
 | `p-smoke-effort-unknown` | `# M:GAS-SMOKE-EFFORT-UNKNOWN` | `tests/test_grok_audit_surface_smoke.py::test_smoke_unrecognised_effort_item_refuses` |
 | `p-parse-auditcycle-one` | `# M:GAS-PARSE-AUDITCYCLE-ONE` | `tests/test_grok_audit_surface_probe.py::test_auditcycle_parser_rejects_two_lines` |
-| `p-parse-effort` | `# M:GAS-PARSE-EFFORT` | `tests/test_grok_audit_surface_probe.py::test_effort_parser_rejects_a_malformed_effort_block` |
+| `p-parse-effort-item` | `# M:GAS-PARSE-EFFORT-ITEM` | `tests/test_grok_audit_surface_probe.py::test_effort_parser_rejects_a_malformed_effort_block` |
+| `p-parse-effort-empty` | `# M:GAS-PARSE-EFFORT-EMPTY` | `tests/test_grok_audit_surface_probe.py::test_effort_parser_rejects_a_malformed_effort_block` |
+| `p-parse-effort-twice` | `# M:GAS-PARSE-EFFORT-TWICE` | `tests/test_grok_audit_surface_probe.py::test_effort_parser_rejects_a_malformed_effort_block` |
+| `p-smoke-effort-malformed` | `# M:GAS-SMOKE-EFFORT-MALFORMED` | `tests/test_grok_audit_surface_smoke.py::test_smoke_refuses_a_malformed_effort_block` |
+| `p-open-input` | `# M:GAS-OPEN-INPUT` | `tests/test_grok_audit_surface_smoke.py::test_smoke_last_resort_names_the_open_input` |
 
 **Dependencies on other tasks**: Task 2.
 
@@ -1089,7 +1216,7 @@ remove one delivery value each (`report-file`, `out`) or, for `p-extract-undeliv
 
 6 + 14 = 20.
 
-**Dependencies on other tasks**: Tasks 4 (placements) and 7 (`parse_auditcycle`, `parse_effort_items`, `delivered`).
+**Dependencies on other tasks**: Tasks 4 (placements) and 7 (`parse_auditcycle`, `delivered`).
 
 ---
 
@@ -1108,6 +1235,23 @@ lines from a function the verdict never calls, and the `SEEDSCORE:` token. Re-ex
 Task 8's `extract_all(tree, tree / "docs/03-analysis/probes/grok-audit-surface/calibration/s2", sources)`, with
 `sources` the mapping `score` parsed (D1).
 
+**OPEN-DECISION: where `SURFACE:`'s `low_evidence=` count comes from, and what a `None` from
+`parse_effort_items` maps to in `score` (delta review 5f10a1d, should-fix 2 (iv); D13 names the
+field but not its source) — resolve in 5d.** Two implementations satisfy it:
+- (a) Count the ` low-evidence (` suffix on the scored passes' `Effort:` items through
+  `parse_effort_items`, with `None` refusing with AC-5.4's `cycle_token:` reason for that cycle. This extends AC-5.4
+  trigger (2) ("a recorded line that does not parse") to the recorded `Effort:` block, so it is owed
+  to the spec and design if chosen.
+- (b) The same count, with `None` publishing `low_evidence=unreadable` on that surface's
+  `SURFACE:` line and never refusing. This needs no AC-5.4 change, because `low_evidence=` never
+  moves the verdict (`verdict` takes `(hits, n, f, u)` only).
+
+Either way the Task carries one more test and one more P-row, both counted below:
+`test_score_maps_a_malformed_effort_block` (a scored cycle whose collected `auditcycle.txt` holds an
+`Effort:` block of Task 7's shape (a); it asserts (a)'s `SEEDSCORE: UNREADABLE` token or (b)'s
+`low_evidence=unreadable` field, whichever 5d picks) and row `p-score-effort-malformed`
+(`# M:GAS-SCORE-EFFORT-MALFORMED`).
+
 **Code structure**:
 ```python
 def d3(fg: Fraction, rg: int, fa: Fraction, ra: int) -> bool: ...
@@ -1119,7 +1263,7 @@ def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sh
 def _mode_score(args: argparse.Namespace) -> int: ...
 ```
 
-**Tests** (31):
+**Tests** (32):
 - `key_mismatch` (8): `test_key_mismatch_id_sets_differ`, `test_key_mismatch_duplicate_id_in_findings`,
   `test_key_mismatch_duplicate_id_in_key`, `test_key_mismatch_surface_moved_grok_to_agy`,
   `test_key_mismatch_doc_differs`, `test_key_mismatch_cycle_differs`, `test_key_mismatch_report_differs`,
@@ -1136,8 +1280,9 @@ def _mode_score(args: argparse.Namespace) -> int: ...
 - Observational (3): `test_split_lines_never_move_the_verdict`, `test_should_hits_never_move_the_verdict`,
   `test_should_and_split_lines_are_printed`.
 - Hints (1): `test_hints_never_move_the_score`.
+- Effort mapping (1, the OPEN-DECISION above): `test_score_maps_a_malformed_effort_block`.
 
-8 + 8 + 11 + 3 + 1 = 31.
+8 + 8 + 11 + 3 + 1 + 1 = 32.
 
 **Acceptance Criteria**:
 - [ ] AC-T9.1: Each `key_mismatch` and `label:` test reads its exact `SEEDSCORE: UNREADABLE` token, exit 2.
@@ -1147,9 +1292,9 @@ def _mode_score(args: argparse.Namespace) -> int: ...
 - [ ] AC-T9.3: `verdict` takes only the per-surface totals (its signature) and `observational_lines`
   is not called from `verdict` or `d3`.
 
-**RED split**: 31 nodes; 31 F (no `score` handler; `d3` and `verdict` absent), 0 P.
+**RED split**: 32 nodes; 32 F (no `score` handler; `d3` and `verdict` absent), 0 P.
 
-**Mutation rows** (25; markers 20). Each `replace` makes its condition never fire, except: the
+**Mutation rows** (26; markers 21). Each `replace` makes its condition never fire, except: the
 `GAS-D3-EQUAL` rows for the full tie and lower recall, which force the recall comparison
 (`rg > ra` to `rg >= ra`, and to `rg != ra`); `p-fab-fraction`, which keeps every value a
 `Fraction` and shifts the worst-case denominator by one (`Fraction(f + u, n)` to
@@ -1161,7 +1306,15 @@ construction (measured: `Fraction(2, 8)` is `1/4`), so no `Fraction`-preserving 
 two sides differ in representation alone. The row therefore shows the test can fail at this
 fixture's tie boundary. That a non-`Fraction` comparison (a string or an unreduced pair) would also
 fail it is pinned by the test's construction, not by a row, because the only mutants that reach it
-change the value's type, which the P-row rule forbids. `test_zero_decidable_musts_prints_0_over_0` and `test_score_exit_codes` are format and
+change the value's type, which the P-row rule forbids.
+Reproduce both `Fraction` readings:
+
+```bash
+/opt/anaconda3/bin/python3.11 -c 'from fractions import Fraction as F; print(F(1,5) < F(2,9), F(2,8), F(1,4) == F(2,8))'
+# True 1/4 True
+```
+
+`test_zero_decidable_musts_prints_0_over_0` and `test_score_exit_codes` are format and
 exit contracts over guards rowed here, and the three observational tests and the hint test are
 invariance tests; none of them gets a row.
 
@@ -1192,8 +1345,9 @@ invariance tests; none of them gets a row.
 | `p-verdict-undetected` | `# M:GAS-VERDICT-UNDETECTED` | `tests/test_grok_audit_surface_probe.py::test_seeds_undetected_inconclusive` |
 | `p-verdict-undetected-pass` | `# M:GAS-VERDICT-UNDETECTED` | `tests/test_grok_audit_surface_probe.py::test_seeds_undetected_outranks_a_fabrication_pass` |
 | `p-verdict-undetected-miss` | `# M:GAS-VERDICT-UNDETECTED` | `tests/test_grok_audit_surface_probe.py::test_seeds_undetected_outranks_a_fabrication_miss` |
+| `p-score-effort-malformed` | `# M:GAS-SCORE-EFFORT-MALFORMED` | `tests/test_grok_audit_surface_probe.py::test_score_maps_a_malformed_effort_block` |
 
-8 + 8 + 9 = 25.
+8 + 8 + 9 + 1 = 26.
 
 **Dependencies on other tasks**: Task 8.
 
@@ -1209,7 +1363,11 @@ invariance tests; none of them gets a row.
 they carry none of (a), (b), (c), with (c)'s needles from Task 8's `report_findings` per line). D9's
 ref and sha checks, drift check, main leak check (triggers i–iii over `git ls-tree -r -z HEAD` read
 through `git cat-file --batch`), `main-leak`, and `rescore`'s eight steps in AC-6.4's order, ending
-in a `finally` that removes and re-lists every temporary directory. The three D2 grammar sweeps land
+in a `finally` that removes and re-lists every temporary directory. **`parse_root_line`'s `None`
+(Task 4) maps here to `list_changed:unrecorded`** (`# M:GAS-LIST-MALFORMED`): a recorded `root.txt`
+whose `ROOT: READY` line lacks a D2 field is treated like an absent record. The spec defines
+`unrecorded` as "a root record that is absent", so extending it to a malformed record is a plan
+extension, owed to the spec and design. The three D2 grammar sweeps land
 here because they need all nine handlers.
 
 **Code structure**:
@@ -1224,7 +1382,7 @@ def _mode_main_leak(args: argparse.Namespace) -> int: ...
 def _mode_rescore(args: argparse.Namespace) -> int: ...
 ```
 
-**Tests** (30 functions, 43 node ids):
+**Tests** (31 functions, 44 node ids):
 - Calibration-data set (4): `test_calibration_data_set_is_the_directory_minus_six_named_files`,
   `test_calibration_data_set_keeps_an_excluded_name_carrying_a_finding_text`,
   `test_calibration_data_set_keeps_an_excluded_name_carrying_a_seeded_span`,
@@ -1240,14 +1398,16 @@ def _mode_rescore(args: argparse.Namespace) -> int: ...
   `test_seeded_span_also_in_its_own_archive_source_does_not_refuse` and
   `test_main_leak_ignores_a_main_blob_equal_to_wall_seconds`, and `test_main_leak_prints_the_scanned_commit`.
 - Ref (4): `test_ref_fetch_failed_no_remote`, `test_ref_absent`, `test_ref_sha_unknown`, `test_ref_not_on_ref`.
-- List (2): `test_list_changed_recorded_blob_differs`, `test_list_changed_unrecorded_root_record`.
+- List (3): `test_list_changed_recorded_blob_differs`, `test_list_changed_unrecorded_root_record`,
+  `test_list_changed_malformed_root_record` (plan-added: one cycle's `root.txt` holds a `ROOT: READY`
+  line without `list_blob=`; `SEEDSCORE: UNREADABLE reason=list_changed:unrecorded`).
 - End to end (2): `test_main_leak_mode_clean_on_a_smoke_failure_branch`,
   `test_rescore_reproduces_the_score_and_removes_its_temp_dirs`.
 - Grammar sweeps (3 functions, 16 ids): `test_success_token_shape_per_mode` (9 ids, one per D2 mode),
   `test_no_published_line_uses_another_modes_prefix` (1), `test_sources_override_reaches_every_ledger_mode`
   (6 ids: `check-ledger`, `build-root`, `extract`, `score`, `rescore`, `main-leak`).
 
-4 + 6 + 9 + 4 + 2 + 2 = 27 functions with one id each, plus 9 + 1 + 6 = 16: 43 ids.
+4 + 6 + 9 + 4 + 3 + 2 = 28 functions with one id each, plus 9 + 1 + 6 = 16: 44 ids.
 
 **Acceptance Criteria**:
 - [ ] AC-T10.1: Every refusal test reads its exact `MAINLEAK: UNREADABLE` or `SEEDSCORE: UNREADABLE`
@@ -1259,16 +1419,17 @@ def _mode_rescore(args: argparse.Namespace) -> int: ...
   calibration-set tests call it.
 - [ ] AC-T10.4: The spec's `command` is unchanged by this Task (no new test file).
 
-**RED split**: 43 ids; 32 F, 11 P. F: the 27 single-id functions (the two modes are absent, and
+**RED split**: 44 ids; 33 F, 11 P. F: the 28 single-id functions (the two modes are absent, and
 `calibration_data_files` is absent); `test_success_token_shape_per_mode[rescore]` and `[main-leak]`;
 `test_no_published_line_uses_another_modes_prefix` (it runs every mode);
 `test_sources_override_reaches_every_ledger_mode[rescore]` and `[main-leak]`. P (regression guards on
 modes Tasks 3–9 built): `test_success_token_shape_per_mode` for `check-ledger`, `build-root`,
 `record-cycle`, `commit-data`, `smoke`, `extract`, `score` (7), and
 `test_sources_override_reaches_every_ledger_mode` for `check-ledger`, `build-root`, `extract`,
-`score` (4). 27 + 2 + 1 + 2 = 32; 7 + 4 = 11.
+`score` (4). 28 + 2 + 1 + 2 = 33; 7 + 4 = 11.
 
-**Mutation rows** (21; markers 17), each `replace` making its condition never fire:
+**Mutation rows** (22; markers 18), each `replace` making its condition never fire (for
+`p-list-malformed`: a malformed record is skipped instead of refused, so the run goes on to score):
 
 | name | marker | test |
 |---|---|---|
@@ -1293,8 +1454,9 @@ modes Tasks 3–9 built): `test_success_token_shape_per_mode` for `check-ledger`
 | `p-ref-not-on-ref` | `# M:GAS-REF-NOT-ON-REF` | `tests/test_grok_audit_surface_probe.py::test_ref_not_on_ref` |
 | `p-list-changed` | `# M:GAS-LIST-CHANGED` | `tests/test_grok_audit_surface_probe.py::test_list_changed_recorded_blob_differs` |
 | `p-list-unrecorded` | `# M:GAS-LIST-UNRECORDED` | `tests/test_grok_audit_surface_probe.py::test_list_changed_unrecorded_root_record` |
+| `p-list-malformed` | `# M:GAS-LIST-MALFORMED` | `tests/test_grok_audit_surface_probe.py::test_list_changed_malformed_root_record` |
 
-3 + 6 + 6 + 4 + 2 = 21.
+3 + 6 + 6 + 4 + 3 = 22.
 
 **Dependencies on other tasks**: Tasks 6 (`commit-data` builds the fixture branch commits), 8, 9.
 
@@ -1483,13 +1645,13 @@ grep -c 'M:GAS-' docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py
 
 **Acceptance Criteria**:
 - [ ] AC-T14.1: The first command prints a pytest version; the full suite's summary line shows no failure.
-- [ ] AC-T14.2: `MUTATION: ALL_CAUGHT` with `untargeted=0/171` and `crash_kills=0`, and
+- [ ] AC-T14.2: `MUTATION: ALL_CAUGHT` with `untargeted=0/180` and `crash_kills=0`, and
   `ANCHORS: ANCHORS_OK`, read from the token lines.
 - [ ] AC-T14.3: The `git ls-files` line prints nothing (the zero holds because every synthetic phase
   document is written under `tmp_path`; it was 0 files at `30917a1a`).
 - [ ] AC-T14.4 (carry 11): the marker-site count (matching lines) and the row count (rows) are
   re-derived by the last two commands at this Task's sha and reported with their units. This plan
-  expects 117 and 171; a different figure is reported against this plan with the Task whose table
+  expects 125 and 180; a different figure is reported against this plan with the Task whose table
   it contradicts, never silently accepted.
 
 **Dependencies on other tasks**: Tasks 1–13.
@@ -1542,7 +1704,7 @@ push is confirmed (at that moment the tip is the calibration sha); `CAL12=${CAL_
 ## Task 16: S3 publish
 
 **Production files**: `docs/03-analysis/grok-audit-surface.measurement.md` (create),
-`h-mad/references/grok-runtime.md`, `h-mad/SKILL.md`, `h-mad/tests/mutation-specs/grok_audit_surface.json` (K2 re-anchor)
+`h-mad/references/grok-runtime.md`, `h-mad/SKILL.md`, `h-mad/tests/mutation-specs/grok_audit_surface.json` (K2 re-anchor; K6 and K7 added on every outcome; K4 and K5 added on MISS or INCONCLUSIVE)
 **Test file**: `h-mad/tests/test_grok_audit_surface_docs.py` (extend)
 **Task shape**: `new-behaviour`
 
@@ -1564,7 +1726,11 @@ change per D14's branch for the outcome. K2's `find` is re-pointed to the S3 tex
 `h-mad/references/grok-runtime.md` with `titled_section`, whitespace collapsed. On a scored
 outcome it asserts the AC-1.5 sentence naming the version read from the measurement doc's
 `GROK-BINARY:` line by D14's slot rule and naming `docs/03-analysis/grok-audit-surface.measurement.md`;
-on a smoke failure it asserts the AC-1.8 sentence instead. On every outcome it asserts that
+on a smoke failure it asserts the AC-1.8 sentence instead. **It also asserts the other branch's
+sentence is absent** (axis: each outcome sentence's presence and its absence). On a scored outcome
+the AC-1.8 smoke-failure sentence is absent; on a smoke failure the AC-1.5 "re-smoked" sentence is
+absent. Spec AC-1.8 says the AC-1.5 sentence "does **not** ship", and AC-1.5 says it ships only
+when the smoke passes and the score is not `UNREADABLE`. On every outcome it asserts that
 "These mappings were checked against grok 1.0.41." is present, unchanged. On MISS or INCONCLUSIVE
 only (1 more): `test_never_gate_section_keeps_two_surface_routing_off_pass`.
 
@@ -1573,8 +1739,8 @@ only (1 more): `test_never_gate_section_keeps_two_surface_routing_off_pass`.
 - [ ] AC-T16.2: `test_unmeasured_sites_match_the_outcome` fails when the doc has no `GROK-BINARY:` line,
   when it reads `GROK-BINARY: unrecorded`, or when D14's slot rule yields no version on a smoke failure.
 - [ ] AC-T16.3: `--check-anchors` reads `ANCHORS: ANCHORS_OK` after the K2 re-anchor, and the spec run
-  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/172` on PASS or a smoke
-  failure (K6 below), or `untargeted=0/174` on MISS or INCONCLUSIVE (K4, K5 and K6 below).
+  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/182` on PASS or a smoke
+  failure (K6 and K7 below), or `untargeted=0/184` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below).
 - [ ] AC-T16.4 (MISS or INCONCLUSIVE only; audit cycle 1): before K4 and K5 are added,
   `test_never_gate_section_keeps_two_surface_routing_off_pass` is observed failing against each of
   the two mutated texts and passing on the restored text. The harness run is that observation: each
@@ -1588,8 +1754,13 @@ section is unchanged at S0), so 5 nodes, 4 F, 1 P; on PASS or a smoke failure, 4
 Because that one test is P at RED, a RED run never shows that it can fail. K4 and K5 show it (axis:
 a test that is P at RED needs a negative run).
 
-**Mutation rows**: on every outcome, 1 new row, K6. Its target's host-mapping assertion passes at
-RED (the 1.0.41 sentence is there at S0), so K6 is the negative observation for that assertion.
+**Mutation rows**: on every outcome, 2 new rows:
+- K6. Its target's host-mapping assertion passes at RED (the 1.0.41 sentence is there at S0), so K6
+  is the negative observation for that assertion.
+- K7. Its `replace` appends the other branch's sentence after the 1.0.41 sentence (the AC-1.8
+  sentence on a scored outcome, the AC-1.5 sentence on a smoke failure), so it is the negative
+  observation for the absence assertion. Its `replace` text is written at Task 16 for the branch
+  that shipped.
 K2 is re-anchored, not added. On MISS or INCONCLUSIVE, 2 more rows, K4 and K5, one per property
 the off-PASS test asserts:
 
@@ -1598,6 +1769,7 @@ the off-PASS test asserts:
 | `never-gate-three-surface-leak` (K4) | `SKILL.md` | ``When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,grok` `` | the same with `--surfaces codex,agy,grok` | `tests/test_grok_audit_surface_docs.py::test_never_gate_section_keeps_two_surface_routing_off_pass` |
 | `never-gate-family-sentence-dropped` (K5) | `SKILL.md` | `that is three reports, of which two share a model family` | `that is three reports, of which two share a vendor` | `tests/test_grok_audit_surface_docs.py::test_never_gate_section_keeps_two_surface_routing_off_pass` |
 | `grok-runtime-host-sentence-changed` (K6) | `references/grok-runtime.md` | `These mappings were checked against grok 1.0.41.` | `These mappings were checked against grok 1.0.40.` | `tests/test_grok_audit_surface_docs.py::test_grok_runtime_states_the_outcome_sentence` |
+| `grok-runtime-other-branch-sentence-added` (K7) | `references/grok-runtime.md` | `These mappings were checked against grok 1.0.41.` | the same followed by one space and the other branch's sentence | `tests/test_grok_audit_surface_docs.py::test_grok_runtime_states_the_outcome_sentence` |
 
 K4's find is K3's (1 matching line in `h-mad/SKILL.md` at `30917a1a`). K6's find has 1 matching line in
 `h-mad/references/grok-runtime.md` at `30917a1a` (`grep -cF`). K5's find is on one line (line
@@ -1679,5 +1851,6 @@ this plan, and neither has a Task.
 ## Version History
 - v1.0: Initial impl-plan draft (Phase 5a, 2026-10-19), from design v1.4 (`a6a1571a`), spec v1.7 and plan v1.5 (`28ec5bfc`); answers no audit cycle (first draft) and places all 15 Phase 5 carry items. 18 Tasks; 165 mutation rows (28 named, 137 P-rows); 111 marker sites. Premises read at `30917a1a`.
 - v1.1: 2026-10-19, answers the operator ruling on the AC-5.1 / D2 unknown-mode gap (no audit cycle): an argv whose first word is not one of the nine modes now prints PROBE: UNREADABLE reason=unknown_mode first, then usage, exit 2; Task 2 adds test_unknown_mode_prints_the_probe_token (2 ids) and row p-unknown-mode-token; RED 20 F; totals 166 rows (138 P-rows), 112 marker sites.
-- v1.2: 2026-10-19, answers impl-plan audit cycle 1 (agy p1: 1 must, 2 should; codex p2: 6 must, 1 should; on v1.1 5490674): every argparse exit path ends on the mode's token (top-level _TokenArgumentParser, add_help=False, allow_abbrev=False, --data read from raw argv; +2 tests, +2 rows); tracebacks only for undeclared exceptions and surfaced in assertion messages (+1 row); in-process loads compile from source (load_probe); Task 5's write and parent no-follow guards tested at restore_expected's boundary; AC-T6.1 split pre-write vs ref_unconfirmed; extract_all takes sources; p-fab-fraction Fraction-preserving; Task 16 adds K4/K5 on MISS/INCONCLUSIVE. Rejected: agy should-fix on Task 17 counts (quoted text absent). Totals 169 rows at S0 (141 P-rows), 171 on MISS/INCONCLUSIVE, 115 marker sites; Task 2 RED 30 F.
-- v1.3: 2026-10-19, corrective revision answering impl-plan audit cycle 2 (agy p1: 0 must, 2 should; codex p2: 3 must, 2 should; on v1.2 4b8400ba): Refusal and the reset classes subclass ProbeRefusal, with a traceback-absence check on Task 5's refusals; in-process main(argv) assertions forward captured stderr; reproduce commands and outputs beside the argparse and O_NOFOLLOW readings; Test 4's smoke token carries input_unparseable plus the --data value; the smoke's open input reaches refusal_token through _OPEN_INPUT; must-not-parse fixtures for the ROOT and Effort parsers (+2 tests, +2 rows); Task 16 pins grok-runtime.md (test_grok_runtime_states_the_outcome_sentence, row K6). Totals 171 rows at S0 (143 P-rows), 172 or 174 after Task 16, 117 marker sites.
+- v1.2: 2026-10-19, answers impl-plan audit cycle 1 (agy p1: 1 must, 2 should; codex p2: 6 must, 1 should; on v1.1, document sha256 5490674): every argparse exit path ends on the mode's token (top-level _TokenArgumentParser, add_help=False, allow_abbrev=False, --data read from raw argv; +2 tests, +2 rows); tracebacks only for undeclared exceptions and surfaced in assertion messages (+1 row); in-process loads compile from source (load_probe); Task 5's write and parent no-follow guards tested at restore_expected's boundary; AC-T6.1 split pre-write vs ref_unconfirmed; extract_all takes sources; p-fab-fraction Fraction-preserving; Task 16 adds K4/K5 on MISS/INCONCLUSIVE. Rejected: agy should-fix on Task 17 counts (quoted text absent). Totals 169 rows at S0 (141 P-rows), 171 on MISS/INCONCLUSIVE, 115 marker sites; Task 2 RED 30 F.
+- v1.3: 2026-10-19, corrective revision answering impl-plan audit cycle 2 (agy p1: 0 must, 2 should; codex p2: 3 must, 2 should; on v1.2, document sha256 4b8400ba): Refusal and the reset classes subclass ProbeRefusal, with a traceback-absence check on Task 5's refusals; in-process main(argv) assertions forward captured stderr; reproduce commands and outputs beside the argparse and O_NOFOLLOW readings; Test 4's smoke token carries input_unparseable plus the --data value; the smoke's open input reaches refusal_token through _OPEN_INPUT; must-not-parse fixtures for the ROOT and Effort parsers (+2 tests, +2 rows); Task 16 pins grok-runtime.md (test_grok_runtime_states_the_outcome_sentence, row K6). Totals 171 rows at S0 (143 P-rows), 172 or 174 after Task 16, 117 marker sites.
+- v1.4: 2026-10-19, answers the advisory delta review of v1.3 (commit 5f10a1d9, document sha256 3015ade9; 0 must, 7 should, 4 nits): _OPEN_INPUT pinned by test_smoke_last_resort_names_the_open_input and p-open-input, with its never-cleared reading stated; the Effort block grammar ([] with no block, terminator, three distinct None conditions with a row each) and its callers (smoke pinned by test_smoke_refuses_a_malformed_effort_block; score as a Task 9 OPEN-DECISION with test_score_maps_a_malformed_effort_block); parse_root_line's None mapped and pinned in Task 6 and Task 10; token assertion before the traceback count; AC-T5.1 names its 10 refusal tests including three Refusal-raising ones; Refusal becomes its token via exc.reason in refusal_token (p-refusal-reason) and the scope narrowing is pinned (p-traceback-scope-reset); Task 16 asserts each outcome sentence's absence on the other branch (K7); reproduce commands for the plain-top-level parser, allow_abbrev and Fraction readings, with python3.15 pinned by absolute path and the exit-site lines printed; rule (3)'s in-process spelling; Task 16's production-files line. Totals 180 rows at S0 (152 P-rows), 182 or 184 after Task 16, 125 marker sites.
