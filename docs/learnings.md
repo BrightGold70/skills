@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-19 · gotcha · [0.5] · `h-mad,handoff,oracle,handoff:2026-10-19-grok-audit-surface-resume-claim` — A handoff's predicted h-mad oracle token is a claim: phase4-exit predicted resume_manual, oracle returned enter_autonomous. Route on the live oracle; WRITE should record observed state, not intended.
 - 2026-10-19 · pattern · [0.7] · `h-mad,audit,delta-review,handoff:2026-10-19-grok-audit-surface-phase4-exit` — Round-cap corrective revisions still introduce defects (v1.3: 3 musts incl. --reset deleting .git); always run the advisory delta review (h_mad_delta_stage.py -> doc-auditor) on each corrective revision before exiting the phase
 - 2026-10-19 · gotcha · [0.5] · `handoff,state,h-mad,handoff:2026-10-19-grok-audit-surface-phase4-exit` — A handoff's 'I wrote/claimed X' is a premise: 10-18 handoff claimed a phase-3 state record and a memory file, neither existed. Re-probe state record mtime and ls every claimed file at resume
 - 2026-10-19 · gotcha · [0.7] · `rtk,pytest,interpreter,handoff:2026-10-19-grok-audit-surface-phase4-exit` — RTK hook rewrites 'python3 -m pytest' to anaconda pytest, so '--version' always says 9.1.1; probe an interpreter via 'rtk proxy <py> -m pytest --version'. python3(3.15) has no pytest; /opt/anaconda3/bin/python3.11 does
