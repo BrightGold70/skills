@@ -36,3 +36,6 @@
 {"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-2.7 six-file exclusion unconditional vs content catch-all", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": false}
 {"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-4.5 should-fix hits dropped on walk mismatch", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": false}
 {"phase": "design", "cycle": 2, "leg": "codex", "item": "D12 extraction walk disagrees with gate classify on nested bullets", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": false}
+{"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "D11 step-3 positive rule turns drifted grok log into UNREADABLE not FAIL", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
+{"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "build-root --reset deletes before checking its target", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
+{"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "X1/X2 mutation rows describe the removed v1.2 wire", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
