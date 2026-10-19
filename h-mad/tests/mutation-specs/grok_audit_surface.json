@@ -295,6 +295,118 @@
       "find": "    if fields.keys() != required:  # M:GAS-PARSE-ROOT",
       "replace": "    if False:  # M:GAS-PARSE-ROOT",
       "test": "tests/test_grok_audit_surface_probe.py::test_root_line_parser_rejects_a_malformed_root_line"
+    },
+    {
+      "name": "p-reset-exclusive",
+      "_mechanism": "Skip the reset/dest-parent conflict before purpose and target validation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if args.dest_parent is not None:  # M:GAS-RESET-EXCLUSIVE",
+      "replace": "    if False:  # M:GAS-RESET-EXCLUSIVE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_and_dest_parent_are_exclusive"
+    },
+    {
+      "name": "p-reset-purpose",
+      "_mechanism": "Allow an S1 root to be reset under a non-S1 purpose.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if args.purpose != \"s1\":  # M:GAS-RESET-PURPOSE",
+      "replace": "    if False:  # M:GAS-RESET-PURPOSE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_a_non_s1_purpose"
+    },
+    {
+      "name": "p-reset-abs",
+      "_mechanism": "Skip the raw reset spelling's absolute-path check.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not os.path.isabs(target):  # M:GAS-RESET-ABS",
+      "replace": "    if False:  # M:GAS-RESET-ABS",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_an_empty_target"
+    },
+    {
+      "name": "p-reset-isdir",
+      "_mechanism": "Skip the existing-directory check for a missing reset target.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not os.path.isdir(target):  # M:GAS-RESET-ISDIR",
+      "replace": "    if False:  # M:GAS-RESET-ISDIR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_a_missing_target"
+    },
+    {
+      "name": "p-reset-tmpdir",
+      "_mechanism": "Allow reset targets outside the resolved temporary directory's direct children.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if root.parent != Path(tempfile.gettempdir()).resolve():  # M:GAS-RESET-TMPDIR",
+      "replace": "    if False:  # M:GAS-RESET-TMPDIR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_a_target_outside_the_tempdir"
+    },
+    {
+      "name": "p-reset-prefix",
+      "_mechanism": "Allow a different document's S1 root to pass target validation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not root.name.startswith(f\"gas-root-{doc}-s1-\"):  # M:GAS-RESET-PREFIX",
+      "replace": "    if False:  # M:GAS-RESET-PREFIX",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_another_documents_root"
+    },
+    {
+      "name": "p-reset-reach",
+      "_mechanism": "Skip Git reach validation before anything can be removed from the target.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    reach_check(root)  # M:GAS-RESET-REACH",
+      "replace": "    pass  # M:GAS-RESET-REACH",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_a_git_target"
+    },
+    {
+      "name": "p-reset-rewalk",
+      "_mechanism": "Allow a post-restore path or file-hash mismatch.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not matches:  # M:GAS-RESET-REWALK",
+      "replace": "    if False:  # M:GAS-RESET-REWALK",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_mismatch_is_internal"
+    },
+    {
+      "name": "p-reset-scan",
+      "_mechanism": "Skip step 6's content scan of the live root after restoration.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        scan_root(live, ledger, args.sources, args.doc)  # M:GAS-RESET-SCAN",
+      "replace": "        pass  # M:GAS-RESET-SCAN",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_rescans_after_removal"
+    },
+    {
+      "name": "p-reset-step6-reach",
+      "_mechanism": "Skip step 6's Git reach check of the restored live root.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        reach_check(live)  # M:GAS-RESET-STEP6-REACH",
+      "replace": "        pass  # M:GAS-RESET-STEP6-REACH",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_runs_the_reach_check"
+    },
+    {
+      "name": "p-reset-nofollow-write",
+      "_mechanism": "Drop O_NOFOLLOW from the initial open, writing through the document link into its outside sentinel.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o666)  # M:GAS-RESET-NOFOLLOW-WRITE",
+      "replace": "            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)  # M:GAS-RESET-NOFOLLOW-WRITE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_restore_expected_does_not_write_through_a_symlinked_placed_document"
+    },
+    {
+      "name": "p-reset-nofollow-remove",
+      "_mechanism": "Remove the symlink's resolved outside directory before unlinking it, deleting the outside sentinel without crashing.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            os.unlink(path)  # M:GAS-RESET-NOFOLLOW-REMOVE",
+      "replace": "            _remove_tree(path.resolve()); os.unlink(path)  # M:GAS-RESET-NOFOLLOW-REMOVE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_does_not_delete_through_a_symlinked_by_product_dir"
+    },
+    {
+      "name": "p-reset-nofollow-parent",
+      "_mechanism": "Skip ancestor replacement, so a final-component-only O_NOFOLLOW open writes through the linked parent into its outside sentinel.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                if not stat.S_ISDIR(mode):  # M:GAS-RESET-NOFOLLOW-PARENT",
+      "replace": "                if False:  # M:GAS-RESET-NOFOLLOW-PARENT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_restore_expected_does_not_write_through_a_symlinked_parent_directory"
+    },
+    {
+      "name": "p-traceback-scope-reset",
+      "_mechanism": "Narrow declared traceback suppression to UsageError, exposing a traceback after the reset refusal token still matches.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not isinstance(exc, ProbeRefusal):  # M:GAS-TRACEBACK-SCOPE",
+      "replace": "        if not isinstance(exc, UsageError):  # M:GAS-TRACEBACK-SCOPE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_an_empty_target"
     }
   ]
 }

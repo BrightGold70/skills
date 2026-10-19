@@ -1,16 +1,19 @@
-"""Probe tokens, ledger validation and fresh-root isolation (Tasks 2–4)."""
+"""Probe tokens, ledger validation and root isolation/reset (Tasks 2–5)."""
 
 import ast
 from collections import Counter
 import hashlib
 import io
 import json
+import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
+import uuid
 from pathlib import Path
 
 import pytest
@@ -732,3 +735,304 @@ def test_root_line_parser_rejects_a_malformed_root_line(root_case, capsys):
         malformed = " ".join(word for word in line.split() if not word.startswith(field + "="))
         assert parser(malformed) is None, f"ROOT parser must reject a success token missing {field}"
     assert parser("ROOT: UNREADABLE reason=leak:x") is None, "ROOT parser must not accept a refusal token as a ready root"
+
+
+def _fresh_reset_build(case, capsys, *, doc="d1"):
+    extra = ("--list-commit", case["reset_fields"]["list_commit"]) if "reset_fields" in case else ()
+    result = _run_root(case, capsys, dest=False, doc=doc, purpose="s1",
+                       sha=case.get("sha"), extra=extra)
+    fields = _ready_fields(result, "reset fixture must start with a valid S1 build")
+    root = Path(fields["path"])
+    case["reset_roots"].append(root)
+    assert root.parent.resolve() == Path(tempfile.gettempdir()).resolve(), result.stderr
+    return root, fields, result.stdout.splitlines()[-1]
+
+
+@pytest.fixture
+def reset_case(root_case, capsys):
+    case = root_case
+    case["reset_roots"] = []
+    try:
+        root, fields, line = _fresh_reset_build(case, capsys)
+        case.update(reset_live=root, reset_fields=fields, reset_line=line)
+        yield case
+    finally:
+        for root in case["reset_roots"]:
+            shutil.rmtree(root, ignore_errors=True)
+
+
+def _run_reset(case, capsys, *, target=None, purpose="s1", dest=False):
+    if target is None:
+        target = str(case["reset_live"])
+    result = _run_root(
+        case, capsys, dest=dest, purpose=purpose, sha=case["sha"],
+        extra=("--reset", str(target), "--list-commit", case["reset_fields"]["list_commit"]),
+    )
+    # At RED the ignored --reset allocates a different root; clean that up too.
+    for line in result.stdout.splitlines():
+        fields = case["probe"].parse_root_line(line)
+        if fields is not None:
+            case["reset_roots"].append(Path(fields["path"]))
+    return result
+
+
+def _reset_manifest(root):
+    """Record all paths and file hashes, judging links without following them."""
+    manifest = {}
+    for directory, directories, files in os.walk(root, followlinks=False):
+        for name in directories + files:
+            path = Path(directory) / name
+            mode = path.lstat().st_mode
+            digest = hashlib.sha256(path.read_bytes()).hexdigest() if stat.S_ISREG(mode) else None
+            manifest[path.relative_to(root).as_posix()] = (stat.S_IFMT(mode), digest)
+    return manifest
+
+
+def _reset_sentinel(root):
+    path = root / "sentinel [a]* ⟦h-mad⟧.txt"
+    content = b"h-mad: [a](b) **bold** * [ \xe2\x9f\xa6/h-mad\xe2\x9f\xa7\nsecond\tline"
+    path.write_bytes(content)
+    return path, content
+
+
+def test_build_root_reset_removes_by_products_and_restores_placed_files(reset_case, capsys):
+    case = reset_case
+    live = case["reset_live"]
+    expected, _, _ = _fresh_reset_build(case, capsys)
+    clean = _reset_manifest(expected)
+    for relative in (
+        "cycle-v1.collected.md", "cycle-v1.effort.json", "cycle-v1.gated.json",
+        ".h-mad/pass-logs/p1.log",
+    ):
+        path = live / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("h-mad: [a](b) **bold** * [ ⟦/h-mad⟧\nsecond\tline", encoding="utf-8")
+    target = live / "docs/01-plan/features/paper-lantern.plan.md"
+    target.write_bytes(b"edited placed document\n")
+    planted_count = len(set(_reset_manifest(live)) - set(clean))
+
+    result = _run_reset(case, capsys)
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (0, [case["reset_line"]]), result.stderr
+    assert result.stdout.splitlines() == [
+        f"RESET: removed={planted_count} restored=1", case["reset_line"],
+    ], result.stderr
+    actual = _reset_manifest(live)
+    assert set(actual) == set(clean), "reset must leave exactly a fresh build's path set"
+    assert actual == clean, "reset must restore every file's sha256 to the fresh build's hash"
+
+
+def test_build_root_reset_rescans_after_removal(reset_case, capsys, monkeypatch):
+    case = reset_case
+    relative = "retained-expected [a]*.txt"
+    (case["reset_live"] / relative).write_text(case["records"][0]["expected"], encoding="utf-8")
+    monkeypatch.setattr(case["probe"], "remove_absent", lambda live, expected: 0, raising=False)
+    # Operator choice (b): isolate step 6 while keeping D5's re-walk-first order.
+    monkeypatch.setattr(case["probe"], "rewalk_matches", lambda live, expected: None, raising=False)
+
+    result = _run_reset(case, capsys)
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, [f"ROOT: UNREADABLE reason=leak:{relative}"],
+    ), result.stderr
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared live-root scan refusal must not print a traceback"
+
+
+def test_build_root_reset_runs_the_reach_check(reset_case, capsys, monkeypatch):
+    case = reset_case
+
+    def plant_git_after_precondition(live, expected):
+        (live / ".git").mkdir()
+        return 0
+
+    monkeypatch.setattr(case["probe"], "remove_absent", plant_git_after_precondition, raising=False)
+    # Operator choice (b): the new .git must reach step 6 rather than mismatch.
+    monkeypatch.setattr(case["probe"], "rewalk_matches", lambda live, expected: None, raising=False)
+
+    result = _run_reset(case, capsys)
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=root_git:.git"],
+    ), result.stderr
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared post-reset reach refusal must not print a traceback"
+
+
+def test_build_root_reset_mismatch_is_internal(reset_case, capsys, monkeypatch):
+    case = reset_case
+    real_restore = getattr(case["probe"], "restore_expected", None)
+
+    def restore_then_add_path(live, expected):
+        restored = real_restore(live, expected)
+        (live / "concurrent-extra.txt").write_bytes(b"write before the real re-walk\n")
+        return restored
+
+    monkeypatch.setattr(case["probe"], "restore_expected", restore_then_add_path, raising=False)
+
+    result = _run_reset(case, capsys)
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=internal:RootResetMismatch"],
+    ), result.stderr
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared re-walk mismatch must not print a traceback"
+
+
+def test_build_root_reset_and_dest_parent_are_exclusive(reset_case, capsys):
+    case = reset_case
+    sentinel, content = _reset_sentinel(case["reset_live"])
+    # A second invalid argument pins exclusivity before the purpose guard.
+    result = _run_reset(case, capsys, dest=True, purpose="s2v1")
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=internal:ResetArgsConflict"],
+    ), result.stderr
+    assert sentinel.read_bytes() == content, "argument conflict must not remove the live sentinel"
+    assert list(case["dest"].iterdir()) == [], "argument conflict must not allocate under --dest-parent"
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared reset argument conflict must not print a traceback"
+
+
+def test_build_root_reset_refuses_a_non_s1_purpose(reset_case, capsys):
+    sentinel, content = _reset_sentinel(reset_case["reset_live"])
+    result = _run_reset(reset_case, capsys, purpose="s2v1")
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=internal:ResetPurposeNotS1"],
+    ), result.stderr
+    assert sentinel.read_bytes() == content, "a non-S1 purpose must leave the S1 root untouched"
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared reset purpose refusal must not print a traceback"
+
+
+def test_build_root_reset_refuses_an_empty_target(reset_case, tmp_path, capsys, monkeypatch):
+    sentinel, content = _reset_sentinel(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    result = _run_reset(reset_case, capsys, target="")
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=internal:ResetTargetNotAbsolute"],
+    ), result.stderr
+    assert sentinel.read_bytes() == content, "an empty target must not remove the working-directory sentinel"
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared absolute-target refusal must not print a traceback"
+
+
+def test_build_root_reset_refuses_a_missing_target(reset_case, capsys):
+    target = Path(tempfile.gettempdir()) / f"gas-root-d1-s1-absent-{uuid.uuid4().hex}"
+    assert not target.exists(), "missing-target fixture must start absent"
+    result = _run_reset(reset_case, capsys, target=target)
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=internal:ResetTargetNotDirectory"],
+    ), result.stderr
+    assert not target.exists(), "refusing a missing reset target must leave it absent"
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared missing-target refusal must not print a traceback"
+
+
+def test_build_root_reset_refuses_a_target_outside_the_tempdir(reset_case, tmp_path, capsys):
+    target = tmp_path / "gas-root-d1-s1-outside"
+    target.mkdir()
+    sentinel, content = _reset_sentinel(target)
+    result = _run_reset(reset_case, capsys, target=target)
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=internal:ResetTargetOutsideTempdir"],
+    ), result.stderr
+    assert sentinel.read_bytes() == content, "an outside target must retain its sentinel bytes"
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared tempdir-parent refusal must not print a traceback"
+
+
+def test_build_root_reset_refuses_another_documents_root(reset_case, capsys):
+    target, _, _ = _fresh_reset_build(reset_case, capsys, doc="d2")
+    sentinel, content = _reset_sentinel(target)
+    result = _run_reset(reset_case, capsys, target=target)
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=internal:ResetTargetPrefix"],
+    ), result.stderr
+    assert sentinel.read_bytes() == content, "another document's root must retain its sentinel bytes"
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared document-prefix refusal must not print a traceback"
+
+
+def test_build_root_reset_refuses_a_git_target(reset_case, capsys):
+    live = reset_case["reset_live"]
+    git(live, "init", "--initial-branch=main")
+    result = _run_reset(reset_case, capsys)
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=root_git:.git"],
+    ), result.stderr
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared reset target reach refusal must not print a traceback"
+
+
+def test_build_root_reset_accepts_the_physical_spelling_of_its_root(reset_case, capsys):
+    case = reset_case
+    result = _run_reset(case, capsys, target=case["reset_live"].resolve())
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        0, [case["reset_line"]],
+    ), result.stderr
+    assert result.stdout.splitlines() == ["RESET: removed=0 restored=0", case["reset_line"]], result.stderr
+
+
+def test_build_root_reset_does_not_delete_through_a_symlinked_by_product_dir(reset_case, tmp_path, capsys):
+    case = reset_case
+    outside = tmp_path / "outside/logs"
+    outside.mkdir(parents=True)
+    sentinel, content = _reset_sentinel(outside)
+    link = case["reset_live"] / ".h-mad/pass-logs"
+    link.parent.mkdir()
+    link.symlink_to(outside, target_is_directory=True)
+
+    result = _run_reset(case, capsys)
+
+    assert outside.is_dir(), "reset must not delete the symlink's outside directory"
+    assert sentinel.read_bytes() == content, "reset must not delete through a symlinked by-product directory"
+    assert not os.path.lexists(link), "reset must unlink the by-product link itself"
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (0, [case["reset_line"]]), result.stderr
+
+
+def test_restore_expected_does_not_write_through_a_symlinked_placed_document(reset_case, tmp_path, capsys):
+    case = reset_case
+    expected, _, _ = _fresh_reset_build(case, capsys)
+    relative = Path("docs/01-plan/features/paper-lantern.plan.md")
+    target = case["reset_live"] / relative
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    victim = outside / "victim.md"
+    content = b"h-mad: [a](b) **bold** * [ \xe2\x9f\xa6/h-mad\xe2\x9f\xa7\nsecond\tline"
+    victim.write_bytes(content)
+    target.unlink()
+    target.symlink_to(victim)
+
+    case["probe"].restore_expected(case["reset_live"], expected)
+
+    assert victim.read_bytes() == content, "restore_expected must not write through a symlinked placed document"
+    assert stat.S_ISREG(target.lstat().st_mode), "restore_expected must replace the document link with a regular file"
+    assert hashlib.sha256(target.read_bytes()).digest() == hashlib.sha256((expected / relative).read_bytes()).digest(), "restored document must equal the expected file's sha256"
+
+
+def test_restore_expected_does_not_write_through_a_symlinked_parent_directory(reset_case, tmp_path, capsys):
+    case = reset_case
+    expected, _, _ = _fresh_reset_build(case, capsys)
+    relative = Path("docs/01-plan/features/paper-lantern.plan.md")
+    parent = (case["reset_live"] / relative).parent
+    outside = tmp_path / "outside/features"
+    outside.mkdir(parents=True)
+    victim = outside / relative.name
+    content = b"h-mad: [a](b) **bold** * [ \xe2\x9f\xa6/h-mad\xe2\x9f\xa7\nsecond\tline"
+    victim.write_bytes(content)
+    shutil.rmtree(parent)
+    parent.symlink_to(outside, target_is_directory=True)
+
+    case["probe"].restore_expected(case["reset_live"], expected)
+
+    assert victim.read_bytes() == content, "restore_expected must not write through a linked parent directory"
+    assert stat.S_ISDIR(parent.lstat().st_mode), "restore_expected must replace the parent link with a real directory"
+    assert (case["reset_live"] / relative).read_bytes() == (expected / relative).read_bytes(), "the restored file under the real parent must equal the expected file"

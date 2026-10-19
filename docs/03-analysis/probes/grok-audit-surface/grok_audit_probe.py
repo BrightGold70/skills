@@ -2,12 +2,14 @@
 
 import argparse
 from collections import Counter
+import errno
 import hashlib
 import io
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -52,6 +54,34 @@ class ProbeRefusal(Exception):
 
 class UsageError(ProbeRefusal):
     """A command line outside the probe's grammar."""
+
+
+class ResetArgsConflict(ProbeRefusal):
+    """Reset and a fresh-root destination were both requested."""
+
+
+class ResetPurposeNotS1(ProbeRefusal):
+    """Only S1 may reuse a root between cycles."""
+
+
+class ResetTargetNotAbsolute(ProbeRefusal):
+    """The reset spelling is not an absolute path."""
+
+
+class ResetTargetNotDirectory(ProbeRefusal):
+    """The reset target is not an existing directory."""
+
+
+class ResetTargetOutsideTempdir(ProbeRefusal):
+    """The resolved target is not directly under the temporary directory."""
+
+
+class ResetTargetPrefix(ProbeRefusal):
+    """The target does not name this document's S1 root."""
+
+
+class RootResetMismatch(ProbeRefusal):
+    """The restored root differs from the fresh expected tree."""
 
 
 class Refusal(ProbeRefusal):
@@ -307,7 +337,14 @@ def _extract_archive(archive: bytes, tree: Path) -> None:
         raise Refusal(f"leak:{exc.tarinfo.name}") from exc
 
 
-def build_root(args: argparse.Namespace) -> str:
+def _remove_tree(path: Path) -> None:
+    if stat.S_ISDIR(os.lstat(path).st_mode):
+        shutil.rmtree(path)
+    else:
+        os.unlink(path)
+
+
+def _build_root(args: argparse.Namespace, *, step6: bool = True) -> tuple[str, list[dict]]:
     entries, list_commit, list_blob = read_exclusions(args.repo, args.list_commit)
     try:
         calibration = _git_bytes(args.repo, "rev-parse", f"{args.calibration_sha}^{{commit}}").decode().strip()
@@ -334,11 +371,11 @@ def build_root(args: argparse.Namespace) -> str:
 
             paths = [path for path in _root_entries(root) if matches(path)]
             absent += not bool(paths)
-            for path in paths:
+            for path in reversed(paths):
                 if path.is_symlink() or path.is_file():
                     path.unlink()
                 elif path.is_dir():
-                    shutil.rmtree(path)
+                    _remove_tree(path)
             for path in _root_entries(root):
                 if matches(path):
                     raise Refusal(f"leak:{path.relative_to(root).as_posix()}")
@@ -346,13 +383,136 @@ def build_root(args: argparse.Namespace) -> str:
             path = root / live
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(_git_bytes(args.repo, "cat-file", "blob", f"{calibration}:{source}"))
-        scan_root(root, ledger, args.sources, args.doc)
-        reach_check(root)
+        if step6:
+            scan_root(root, ledger, args.sources, args.doc)
+            reach_check(root)
     except Exception:
-        shutil.rmtree(root)
+        _remove_tree(root)
         raise
-    return (f"ROOT: READY doc={args.doc} purpose={args.purpose} path={root} "
+    line = (f"ROOT: READY doc={args.doc} purpose={args.purpose} path={root} "
             f"calibration={calibration} list_commit={list_commit} list_blob={list_blob} absent={absent}")
+    return line, ledger
+
+
+def build_root(args: argparse.Namespace) -> str:
+    return _build_root(args)[0]
+
+
+def check_reset_target(target: str, doc: str) -> Path:
+    if not os.path.isabs(target):  # M:GAS-RESET-ABS
+        raise ResetTargetNotAbsolute()
+    if not os.path.isdir(target):  # M:GAS-RESET-ISDIR
+        raise ResetTargetNotDirectory()
+    root = Path(target).resolve()
+    if root.parent != Path(tempfile.gettempdir()).resolve():  # M:GAS-RESET-TMPDIR
+        raise ResetTargetOutsideTempdir()
+    if not root.name.startswith(f"gas-root-{doc}-s1-"):  # M:GAS-RESET-PREFIX
+        raise ResetTargetPrefix()
+    reach_check(root)  # M:GAS-RESET-REACH
+    return root
+
+
+def remove_absent(live: Path, expected: Path) -> int:
+    expected_modes = {path.relative_to(expected): stat.S_IFMT(os.lstat(path).st_mode)
+                      for path in _root_entries(expected)}
+    removed = 0
+    # Children first: count every removed path, including directories, without
+    # losing entries when their containing directory is removed.
+    for path in reversed(_root_entries(live)):
+        mode = os.lstat(path).st_mode
+        if stat.S_ISLNK(mode):
+            os.unlink(path)  # M:GAS-RESET-NOFOLLOW-REMOVE
+        elif expected_modes.get(path.relative_to(live)) != stat.S_IFMT(mode):
+            _remove_tree(path)
+        else:
+            continue
+        removed += 1
+    return removed
+
+
+def restore_expected(live: Path, expected: Path) -> int:
+    live.mkdir(exist_ok=True)
+    restored = 0
+    for source in _root_entries(expected):
+        relative = source.relative_to(expected)
+        source_mode = os.lstat(source).st_mode
+        is_directory = stat.S_ISDIR(source_mode)
+        if not is_directory and not stat.S_ISREG(source_mode):
+            raise RootResetMismatch()
+        parent = live
+        parts = relative.parts if is_directory else relative.parts[:-1]
+        for part in parts:
+            parent = parent / part
+            try:
+                mode = os.lstat(parent).st_mode
+            except FileNotFoundError:
+                parent.mkdir()
+            else:
+                if not stat.S_ISDIR(mode):  # M:GAS-RESET-NOFOLLOW-PARENT
+                    os.unlink(parent)
+                    parent.mkdir()
+        if is_directory:
+            continue
+        path = live / relative
+        data = source.read_bytes()
+        try:
+            mode = os.lstat(path).st_mode
+        except FileNotFoundError:
+            mode = 0
+        if stat.S_ISREG(mode) and path.read_bytes() == data:
+            continue
+        if stat.S_ISDIR(mode):
+            _remove_tree(path)
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o666)  # M:GAS-RESET-NOFOLLOW-WRITE
+        except OSError as exc:
+            if exc.errno != errno.ELOOP:
+                raise
+            os.unlink(path)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o666)
+        with os.fdopen(fd, "wb") as output:
+            output.write(data)
+        restored += 1
+    return restored
+
+
+def rewalk_matches(live: Path, expected: Path) -> None:
+    def manifest(root: Path) -> dict:
+        result = {}
+        for path in _root_entries(root):
+            mode = os.lstat(path).st_mode
+            digest = hashlib.sha256(path.read_bytes()).digest() if stat.S_ISREG(mode) else None
+            result[path.relative_to(root)] = (stat.S_IFMT(mode), digest)
+        return result
+
+    actual = manifest(live)
+    matches = actual == manifest(expected) and all(
+        mode in (stat.S_IFDIR, stat.S_IFREG) for mode, _ in actual.values()
+    )
+    if not matches:  # M:GAS-RESET-REWALK
+        raise RootResetMismatch()
+
+
+def reset_root(args: argparse.Namespace) -> str:
+    if args.dest_parent is not None:  # M:GAS-RESET-EXCLUSIVE
+        raise ResetArgsConflict()
+    if args.purpose != "s1":  # M:GAS-RESET-PURPOSE
+        raise ResetPurposeNotS1()
+    live = check_reset_target(args.reset, args.doc)
+    line, ledger = _build_root(args, step6=False)
+    fields = parse_root_line(line)
+    expected = Path(fields["path"])
+    try:
+        removed = remove_absent(live, expected)
+        restored = restore_expected(live, expected)
+        rewalk_matches(live, expected)
+        scan_root(live, ledger, args.sources, args.doc)  # M:GAS-RESET-SCAN
+        reach_check(live)  # M:GAS-RESET-STEP6-REACH
+    finally:
+        _remove_tree(expected)
+    fields["path"] = str(live)
+    print(f"RESET: removed={removed} restored={restored}")
+    return "ROOT: READY " + " ".join(f"{key}={value}" for key, value in fields.items())
 
 
 def parse_root_line(line: str) -> dict[str, str] | None:
@@ -371,7 +531,7 @@ def parse_root_line(line: str) -> dict[str, str] | None:
 
 
 def _mode_build_root(args: argparse.Namespace) -> int:
-    print(build_root(args))
+    print(reset_root(args) if args.reset is not None else build_root(args))
     return 0
 
 
