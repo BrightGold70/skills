@@ -9,6 +9,7 @@ import io
 import json
 import math
 import os
+import random
 import re
 import shlex
 import shutil
@@ -942,6 +943,242 @@ def _mode_smoke(args: argparse.Namespace) -> int:
 MODES["smoke"] = _mode_smoke
 
 
+def report_findings(text: str) -> dict[str, list[str]]:
+    """Preserve finding spans while following the gate's section decisions."""
+    sections = {key: [] for key in _gate.BLOCKING_SECTIONS.values()}
+    current = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped in _gate.BLOCKING_SECTIONS:
+            current = _gate.BLOCKING_SECTIONS[stripped]
+        elif stripped.startswith("## "):
+            current = None
+        elif current and stripped:
+            sections[current].append(line)
+
+    found = {"must": [], "should": []}
+    for key, content in sections.items():
+        payloads = [_gate._payload(line) for line in content]
+        if all(_gate._is_none_sentinel(payload) for payload in payloads):
+            continue
+        findings = found[key.removesuffix("_count")]
+        for group in _gate._bullet_groups(content):
+            if _gate._collapses(group, set()):  # M:GAS-COLLAPSE-WIRE
+                findings.append("\n".join(group["lines"]))
+            else:
+                flat = iter(_gate._flat_findings(group["lines"]))
+                span = None
+                for line in group["lines"]:
+                    if _gate._bullet_remainder(line.strip()) is not None:
+                        if span is not None:
+                            findings.append("\n".join(span))
+                        payload = _gate._payload(line)
+                        span = None
+                        if payload and not _gate._is_none_sentinel(payload):
+                            next(flat)
+                            span = [line]
+                    elif span is not None:
+                        span.append(line)
+                if span is not None:
+                    findings.append("\n".join(span))
+        if not findings:
+            findings.append("\n".join(content))
+    return found
+
+
+def extract_report(text: str, report: str) -> tuple[list[str], list[str], int, int]:
+    found = report_findings(text)
+    must, should = found["must"], found["should"]
+    _counts = _gate.classify(text)
+    must_count = _counts["must_count"]  # M:GAS-MUST-COUNT-WIRE
+    should_count = _counts["should_count"]  # M:GAS-SHOULD-COUNT-WIRE
+    if len(must) != must_count:
+        raise Refusal(f"must_count_mismatch:{report}")
+    if len(should) != should_count:
+        print(f"SHOULD-COUNT: {report} walk={len(should)} gate={should_count}")
+    return must, should, must_count, should_count
+
+
+def _recorded_cycle(directory: Path) -> dict:
+    reason = f"cycle_token:{directory.parent.name}.{directory.name}"
+    try:
+        text = (directory / "auditcycle.txt").read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        text = ""
+    lines = [line for line in text.splitlines() if line.startswith("AUDITCYCLE:")]
+    parsed = parse_auditcycle(text)
+    if not lines:  # M:GAS-CYCLE-NO-LINE
+        raise Refusal(reason)
+    if lines and parsed is None:  # M:GAS-CYCLE-UNPARSEABLE
+        raise Refusal(reason)
+    return parsed or {}
+
+
+def stands(doc_dir: Path) -> Path:
+    """Choose the whole recorded cycle, using only the wrapper's verdict."""
+    for directory in sorted(doc_dir.glob("v*")):
+        match = re.fullmatch(r"v(\d+)", directory.name)
+        if match and int(match[1]) >= 3:  # M:GAS-CYCLE-V3
+            raise Refusal(f"cycle_token:{doc_dir.name}.{directory.name}")
+    v1, v2 = doc_dir / "v1", doc_dir / "v2"
+    parsed = _recorded_cycle(v1)
+    standing = v1
+    if parsed.get("verdict") == "UNVERIFIED":  # M:GAS-STANDS-V1-UNVERIFIED
+        if not v2.is_dir():  # M:GAS-CYCLE-V2-MISSING
+            raise Refusal(f"cycle_token:{doc_dir.name}.v2")
+        if v2.is_dir():
+            standing = v2
+    elif v2.exists():  # M:GAS-CYCLE-V2-EXTRA
+        raise Refusal(f"cycle_token:{doc_dir.name}.v2")
+    return standing
+
+
+def _standing_reports(s2_dir: Path, sources: dict[str, str]) -> list[dict]:
+    reports = []
+    for index in range(1, len(sources) * 3 + 1):
+        doc = f"d{index}"
+        directory = stands(s2_dir / doc)
+        parsed = _recorded_cycle(directory)
+        reason = f"cycle_token:{doc}.{directory.name}"
+        try:
+            command = shlex.split((directory / "command.txt").read_text(encoding="utf-8"))
+            surfaces = command[command.index("--surfaces") + 1].split(",")
+        except (OSError, UnicodeError, ValueError, IndexError):
+            surfaces = []
+        if surfaces not in (["codex", "agy", "grok"], ["agy", "grok"]):  # M:GAS-CYCLE-SURFACES
+            raise Refusal(reason)
+        deliveries = parsed.get("delivered", "").split(",")
+        for pass_index, surface in enumerate(surfaces, 1):
+            delivery = deliveries[pass_index - 1] if pass_index <= len(deliveries) else "none"
+            if delivery in ("report-file", "out"):  # M:GAS-EXTRACT-DELIVERED
+                collected = sorted((directory / "collected").glob(f"*.p{pass_index}.md"))
+                collected = [path for path in collected if path.is_file()]
+                if delivery in ("report-file", "out") and not collected:  # M:GAS-CYCLE-COLLECTED
+                    raise Refusal(reason)
+                for path in collected:
+                    reports.append({
+                        "doc": doc, "cycle": int(directory.name[1:]),
+                        "pass": pass_index, "surface": surface,
+                        "report": "s2/" + path.relative_to(s2_dir).as_posix(),
+                        "path": path,
+                    })
+    return reports
+
+
+def extract_all(tree: Path, s2_dir: Path, sources: dict[str, str]) -> list[dict]:
+    """Re-extract delivered findings from the standing cycles in external S2."""
+    check_ledger(tree, sources)
+    findings = []
+    for report in _standing_reports(s2_dir, sources):
+        path = report["path"]
+        must, should, _must_count, _should_count = extract_report(
+            path.read_text(encoding="utf-8"), report["report"])
+        root_lines = (path.parent.parent / "root.txt").read_text(encoding="utf-8").splitlines()
+        root = next((parsed["path"] for line in root_lines
+                     if (parsed := parse_root_line(line)) is not None), "")
+        for section, texts in (("must", must), ("should", should)):
+            for text in texts:
+                findings.append({
+                    **{key: value for key, value in report.items() if key != "path"},
+                    "section": section, "text": text,
+                    "quotes": [line.strip() for line in text.splitlines()
+                               if line.strip().startswith("quote:")],
+                    "root": root,
+                })
+    return findings
+
+
+def blind(findings: list[dict], shuffle_seed: int) -> tuple[list[dict], list[dict]]:
+    generator = random.Random(shuffle_seed)
+    rows, keys = [], []
+    used = set()
+    for finding in findings:
+        identifier = f"F{generator.getrandbits(32):08x}"
+        while identifier in used:
+            identifier = f"F{generator.getrandbits(32):08x}"
+        used.add(identifier)
+        rows.append({"id": identifier, **{key: finding[key] for key in
+                     ("doc", "cycle", "section", "text", "quotes")}})
+        keys.append({"id": identifier, **{key: finding[key] for key in
+                     ("doc", "cycle", "pass", "surface", "report")}})
+    generator.shuffle(rows)
+    return rows, keys
+
+
+def hints(findings: list[dict], tree: Path, sources: dict[str, str]) -> list[str]:
+    ledger = read_ledger(tree)
+    lines = []
+    for finding in findings:
+        selected = placements(finding["doc"], sources)
+        for quote in finding["quotes"]:
+            path_text, separator, span = quote.removeprefix("quote:").partition(" › ")
+            if not separator:
+                continue
+            path = Path(path_text.strip())
+            root = finding.get("root", "")
+            if root and path.is_relative_to(root):
+                path = path.relative_to(root)
+            relative = selected.get(path.as_posix(), path.as_posix())
+            span = span.strip()
+            if span.startswith("`") and span.endswith("`"):
+                span = span[1:-1]
+            span = normalise(span.encode("utf-8")).strip()
+            try:
+                content = normalise((tree / relative).read_bytes())
+            except OSError:
+                content = ""
+            if not span or span not in content:
+                lines.append(f"HINT: {finding['id']} candidate-fabrication")
+                continue
+            positions = [match.start() for match in re.finditer(re.escape(span), content)]
+            for seed in ledger:
+                seeded_path = (CALIBRATION / "seeded" / Path(seed["source"]).name).as_posix()
+                if relative != seeded_path:
+                    continue
+                seeded = normalise(seed["seeded"].encode("utf-8")).strip()
+                start = content.find(seeded)
+                if start >= 0 and any(position < start + len(seeded)
+                                      and start < position + len(span) for position in positions):
+                    lines.append(f"HINT: {finding['id']} candidate-hit:{seed['id']}")
+    return list(dict.fromkeys(lines))
+
+
+def _mode_extract(args: argparse.Namespace) -> int:
+    def write(tree: Path) -> None:
+        findings = extract_all(tree, args.s2, args.sources)
+        reports = len(_standing_reports(args.s2, args.sources))
+        rows, keys = blind(findings, args.shuffle_seed)
+        hint_lines = hints([{**finding, "id": key["id"]}
+                            for finding, key in zip(findings, keys)], tree, args.sources)
+        args.out.mkdir(parents=True, exist_ok=True)
+        for name, records in (("findings.jsonl", rows), ("key.jsonl", keys)):
+            (args.out / name).write_text("".join(
+                json.dumps(record, ensure_ascii=False) + "\n" for record in records), encoding="utf-8")
+        (args.out / "extract.txt").write_text(
+            shlex.join([str(Path(__file__)), *args.argv]) + "\n", encoding="utf-8")
+        for line in hint_lines:
+            print(line)
+        must = sum(row["section"] == "must" for row in rows)
+        should = len(rows) - must
+        print(f"FINDINGS: WRITTEN findings={len(rows)} must={must} should={should} reports={reports}")
+
+    if args.tree is not None:
+        write(args.tree)
+    else:
+        try:
+            archive = _git_bytes(args.repo, "archive", "--format=tar", args.base_sha)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise Refusal(f"calibration_ref:sha_unknown:{args.base_sha}") from exc
+        with tempfile.TemporaryDirectory(prefix="gas-extract-") as directory:
+            tree = Path(directory)
+            _extract_archive(archive, tree)
+            write(tree)
+    return 0
+
+
+MODES["extract"] = _mode_extract
+
+
 def build_parser() -> _TokenArgumentParser:
     parser = _TokenArgumentParser()
     subparsers = parser.add_subparsers(dest="mode", parser_class=_TokenArgumentParser)
@@ -1047,6 +1284,7 @@ def main(argv: list[str] | None = None) -> int:
     mode = argv[0]
     try:
         args = parser.parse_args(argv)
+        args.argv = argv
         if mode == "check-ledger" and (args.repo is not None) != (args.calibration_sha is not None):
             parser.error("--repo and --calibration-sha must be supplied together")
         if mode == "extract" and (args.repo is not None) != (args.base_sha is not None):

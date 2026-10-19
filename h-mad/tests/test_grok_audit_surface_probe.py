@@ -7,6 +7,8 @@ import io
 import json
 import os
 import re
+import random
+import shlex
 import shutil
 import stat
 import subprocess
@@ -21,7 +23,8 @@ import pytest
 from grokauditfixtures import (
     CALIBRATION, CALIBRATION_REF, EXCLUSIONS, build_archive, build_ledger,
     build_repo, build_root_repo, build_cycle_inputs, build_commit_inputs,
-    commit_root_tree, git, load_probe,
+    build_extract_inputs, extract_report_path, extract_report_text,
+    write_extract_cycle, commit_root_tree, git, load_probe,
 )
 
 
@@ -1444,3 +1447,512 @@ def test_commit_data_rereads_the_ref(commit_case, capsys, monkeypatch):
     assert state["created"] and state["created"] != case["parent"], "the real commit-tree must have made a new commit"
     assert _read_calibration_ref(case["repo"]) == (0, state["created"]), "D9 does not roll back: real Git must see the commit-tree oid even after ref_unconfirmed"
     assert "Traceback" not in result.stderr, "a declared ref_unconfirmed refusal has no traceback"
+
+
+@pytest.fixture
+def extract_case(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = build_extract_inputs(tmp_path)
+    case["probe"] = load_probe(PROBE)
+    return case
+
+
+def _run_extract(case, capsys, *, seed=None, out=None):
+    arguments = [
+        "extract", "--tree", str(case["tree"]), "--s2", str(case["s2"]),
+        "--shuffle-seed", str(case["seed"] if seed is None else seed),
+        "--out", str(case["out"] if out is None else out), "--sources",
+        ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items()),
+    ]
+    rc = case["probe"].main(arguments)
+    stdout, stderr = capsys.readouterr()
+    return subprocess.CompletedProcess(arguments, rc, stdout, stderr)
+
+
+def _extract_tree_report(case, *, doc="d1", cycle=1, index=1):
+    return "s2/" + extract_report_path(case, doc, cycle, index).relative_to(case["s2"]).as_posix()
+
+
+def _assert_extract_written(case, result, *, must, should=0, reports=1, property_name):
+    expected = f"FINDINGS: WRITTEN findings={must + should} must={must} should={should} reports={reports}"
+    assert result.stdout.splitlines()[-1:] == [expected], (
+        f"{property_name}: expected last token {expected!r}; actual stdout={result.stdout!r}"
+    )
+    assert result.returncode == 0, f"{property_name}: a written extraction must succeed: {result.stderr}"
+    rows = []
+    for name in ("findings.jsonl", "key.jsonl"):
+        path = case["out"] / name
+        assert path.is_file(), f"{property_name}: extraction must write {name}, including an empty result"
+        rows.append([json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()])
+    return rows
+
+
+def _assert_cycle_refusal(case, capsys, cycle, property_name):
+    result = _run_extract(case, capsys)
+    expected = f"FINDINGS: UNREADABLE reason=cycle_token:{cycle}"
+    assert result.stdout.splitlines()[-1:] == [expected], (
+        f"{property_name}: expected {expected!r}; actual stdout={result.stdout!r}"
+    )
+    assert result.returncode == 2, f"{property_name}: invalid recorded cycles must refuse extraction"
+    assert "Traceback" not in result.stderr, f"{property_name}: cycle_token is a declared refusal"
+    assert not (case["out"] / "findings.jsonl").exists(), f"{property_name}: refusal must not publish findings"
+
+
+def _replace_extract_report(case, text, *, index=1):
+    extract_report_path(case, index=index).write_text(text, encoding="utf-8")
+
+
+def _bump_gate_count(case, monkeypatch, field):
+    real_classify = case["probe"]._gate.classify
+    calls = []
+
+    def fake(text):
+        counts = real_classify(text)
+        calls.append(text)
+        return {**counts, field: counts[field] + 1}
+
+    monkeypatch.setattr(case["probe"]._gate, "classify", fake)
+    return calls
+
+
+def test_must_count_mismatch_through_production_path(extract_case, capsys, monkeypatch):
+    case = extract_case
+    calls = _bump_gate_count(case, monkeypatch, "must_count")
+    result = _run_extract(case, capsys)
+    expected = "FINDINGS: UNREADABLE reason=must_count_mismatch:" + _extract_tree_report(case)
+    assert result.stdout.splitlines()[-1:] == [expected], (
+        f"extract_report must use _gate.classify's must_count: expected {expected!r}; "
+        f"actual stdout={result.stdout!r}"
+    )
+    assert calls == [extract_report_path(case).read_text(encoding="utf-8")], "the production caller must classify its report once"
+    assert result.returncode == 2, "a gate/walk must-count difference must refuse extraction"
+    assert "Traceback" not in result.stderr, "must_count_mismatch must be a declared refusal"
+    assert not (case["out"] / "findings.jsonl").exists(), "a must-count mismatch must not publish findings"
+
+
+def test_extract_writes_findings_for_clean_reports(extract_case, capsys):
+    case = extract_case
+    _replace_extract_report(case, extract_report_text("None", "None"))
+    result = _run_extract(case, capsys)
+    findings, key = _assert_extract_written(case, result, must=0, property_name="clean gate sections yield zero findings")
+    assert findings == key == [], "clean reports must produce empty finding and key files"
+    argv = shlex.split((case["out"] / "extract.txt").read_text(encoding="utf-8"))
+    assert argv[-len(result.args):] == result.args, "extract.txt must preserve every argv including the shuffle seed"
+    source = PROBE.read_text(encoding="utf-8")
+    for marker in ("M:GAS-MUST-COUNT-WIRE", "M:GAS-SHOULD-COUNT-WIRE", "M:GAS-COLLAPSE-WIRE"):
+        assert source.count(marker) == 1, f"the probe must carry exactly one {marker} mutation anchor"
+    five_lines = (
+        'found = report_findings(text)',
+        'must, should = found["must"], found["should"]',
+        '_counts = _gate.classify(text)',
+        'must_count = _counts["must_count"]  # M:GAS-MUST-COUNT-WIRE',
+        'should_count = _counts["should_count"]  # M:GAS-SHOULD-COUNT-WIRE',
+    )
+    function = next(node for node in ast.walk(ast.parse(source))
+                    if isinstance(node, ast.FunctionDef) and node.name == "extract_report")
+    lines = source.splitlines()[function.lineno:function.end_lineno]
+    stripped = [line.strip() for line in lines]
+    start = stripped.index(five_lines[0])
+    assert tuple(stripped[start:start + 5]) == five_lines, "extract_report must retain D12's five lines verbatim and in order"
+
+
+def test_extract_reads_s2_beside_the_base_tree(extract_case, capsys):
+    case = extract_case
+    decoy = case["tree"] / CALIBRATION / "s2/d1/v1/collected/decoy.p1.md"
+    decoy.parent.mkdir(parents=True)
+    decoy.write_text(extract_report_text("- Wrong tree report", "- Wrong tree advice"), encoding="utf-8")
+    findings, key = _assert_extract_written(case, _run_extract(case, capsys), must=1,
+        property_name="read the recorded external --s2 rather than stale base-tree cycles")
+    assert len(findings) == len(key) == 1, "only the external delivered report contributes"
+    assert "Wrong tree" not in findings[0]["text"], "the base-tree decoy must not be scored"
+    assert key[0]["report"] == _extract_tree_report(case), "key report paths must be relative to the calibration tree"
+
+
+def test_should_findings_are_extracted_with_their_section(extract_case, capsys):
+    case = extract_case
+    text = extract_report_text("None", "- Advice: h-mad: [a](b) **bold** * [ ⟦/h-mad⟧\n  second\tline")
+    _replace_extract_report(case, text)
+    findings, _ = _assert_extract_written(case, _run_extract(case, capsys), must=0, should=1,
+        property_name="should findings must be written with section=should")
+    assert [(row["section"], row["text"]) for row in findings] == [
+        ("should", text.split("## Should-fix\n")[1].strip())], "should text must retain hostile continuation lines"
+
+
+def test_should_findings_are_written_on_a_count_difference(extract_case, capsys, monkeypatch):
+    case = extract_case
+    _replace_extract_report(case, extract_report_text("None", "- Advice: [a](b) **bold** ⟦/h-mad⟧"))
+    calls = _bump_gate_count(case, monkeypatch, "should_count")
+    result = _run_extract(case, capsys)
+    findings, _ = _assert_extract_written(case, result, must=0, should=1,
+        property_name="a should-count mismatch must publish findings and the difference")
+    expected = f"SHOULD-COUNT: {_extract_tree_report(case)} walk=1 gate=2"
+    assert [line for line in result.stdout.splitlines() if line.startswith("SHOULD-COUNT:")] == [expected], (
+        "extract_report must propagate _gate.classify's should_count exactly once"
+    )
+    assert calls == [extract_report_path(case).read_text(encoding="utf-8")], "the should wire must use the production report caller"
+    assert len(findings) == 1 and findings[0]["section"] == "should", "a count difference cannot drop should findings"
+
+
+def _assert_extract_parity(case, capsys, body, count):
+    text = extract_report_text(body, body) + "\n## Observations\n- Outside blocking sections [a](b) **bold**\n"
+    _replace_extract_report(case, text)
+    counts = case["probe"]._gate.classify(text)
+    assert (counts["must_count"], counts["should_count"]) == (count, count), "the real gate must count this parity shape as documented"
+    result = _run_extract(case, capsys)
+    findings, _ = _assert_extract_written(case, result,
+        must=counts["must_count"], should=counts["should_count"],
+        property_name=f"extract's section walk must agree with classify on {body!r}")
+    assert Counter(row["section"] for row in findings) == {"must": count, "should": count}, "both sections must retain every gate-counted finding"
+    assert "SHOULD-COUNT:" not in result.stdout, "equal should counts must not publish a discrepancy"
+    return findings
+
+
+def test_extract_parity_nested_label_group(extract_case, capsys):
+    body = "- Build defects:\n  - First [a](b) **bold** * [ ⟦/h-mad⟧\n    second\tline\n  - Second defect"
+    findings = _assert_extract_parity(extract_case, capsys, body, 3)
+    assert all(row["text"].count("\n  - ") == 0 for row in findings), "a short label must not collapse its child findings"
+
+
+def test_extract_parity_real_parent_none_child_real_child(extract_case, capsys):
+    body = "- Parent [a](b) **bold** * [ ⟦/h-mad⟧\n  - None\n    Ignore this continuation\n  - Child defect\n    second\tline"
+    findings = _assert_extract_parity(extract_case, capsys, body, 2)
+    assert all("Ignore this continuation" not in row["text"] for row in findings), "a None child's continuation belongs to no finding"
+
+
+def test_extract_parity_collapsing_group(extract_case, capsys):
+    body = "- Parent finding with hostile [a](b) **bold** * [ ⟦/h-mad⟧ evidence follows:\n  - evidence one\n  - evidence two\n    second\tline"
+    findings = _assert_extract_parity(extract_case, capsys, body, 1)
+    assert all(row["text"] == body for row in findings), "a collapsing group must preserve its evidence in one finding"
+
+
+def test_extract_parity_prose_only(extract_case, capsys):
+    body = "Off-template [a](b) **bold** * [ ⟦/h-mad⟧ finding\nsecond\tline"
+    findings = _assert_extract_parity(extract_case, capsys, body, 1)
+    assert all(row["text"] == body for row in findings), "the bulletless fail-safe must preserve all prose lines"
+
+
+def test_findings_carry_no_surface(extract_case, capsys):
+    case = extract_case
+    for surfaces in (("agy", "grok"), ("codex", "agy", "grok")):
+        write_extract_cycle(case, surfaces=surfaces, deliveries=("report-file",) * len(surfaces),
+            reports={index: extract_report_text() for index in range(1, len(surfaces) + 1)})
+        findings, keys = _assert_extract_written(case, _run_extract(case, capsys), must=len(surfaces),
+            reports=len(surfaces), property_name="blind findings while preserving pass-to-surface provenance in the key")
+        assert all(set(row) == set("id doc cycle section text quotes".split()) for row in findings), "findings rows must have exactly the blinded D3 fields"
+        assert all(set(row) == set("id doc cycle pass surface report".split()) for row in keys), "key rows must have exactly the provenance fields"
+        by_id = {row["id"]: row for row in keys}
+        assert len(by_id) == len(findings) and set(by_id) == {row["id"] for row in findings}, "ids must be unique and joined one-to-one"
+        generator = random.Random(case["seed"])
+        expected_ids = [f"F{generator.getrandbits(32):08x}" for _ in findings]
+        assert set(by_id) == set(expected_ids), "ids must come from Random(shuffle_seed).getrandbits(32)"
+        generator.shuffle(expected_ids)
+        assert [row["id"] for row in findings] == expected_ids, "the same seeded generator must shuffle the finding order after assigning ids"
+        assert {row["pass"]: row["surface"] for row in keys} == dict(enumerate(surfaces, 1)), "surface must follow command --surfaces by pass index"
+        for row in findings:
+            assert (row["doc"], row["cycle"]) == ("d1", 1), "blinding must retain document and cycle"
+            assert (by_id[row["id"]]["doc"], by_id[row["id"]]["cycle"]) == (row["doc"], row["cycle"]), "key provenance must agree with its finding"
+        before = [(case["out"] / name).read_bytes() for name in ("findings.jsonl", "key.jsonl")]
+        _assert_extract_written(case, _run_extract(case, capsys), must=len(surfaces), reports=len(surfaces), property_name="the same shuffle seed must reproduce byte-identical findings and key")
+        assert before == [(case["out"] / name).read_bytes() for name in ("findings.jsonl", "key.jsonl")], "seeded blinding must be reproducible"
+        _assert_extract_written(case, _run_extract(case, capsys, seed=1730), must=len(surfaces), reports=len(surfaces), property_name="a different shuffle seed must remain a valid extraction")
+        assert before[0] != (case["out"] / "findings.jsonl").read_bytes(), "a different shuffle seed must change blinded identifiers"
+
+
+def _assert_no_hint_files(case):
+    for root in (case["tree"], case["s2"], case["out"]):
+        for path in root.rglob("*"):
+            if path.is_file():
+                assert not any(line.startswith(b"HINT:") for line in path.read_bytes().splitlines()), f"hints must remain stdout-only: {path}"
+
+
+def test_hint_resolves_a_live_target_path_to_the_seeded_copy(extract_case, capsys):
+    case = extract_case
+    record = case["records"][0]
+    span = record["seeded"].splitlines()[0]
+    root = "/tmp/gas-root-d1-s2v1-synthetic"
+    quote = f"quote: {root}/docs/01-plan/features/paper-lantern.plan.md › `{span}`"
+    _replace_extract_report(case, extract_report_text(f"- Quoted defect\n  {quote}"))
+    result = _run_extract(case, capsys)
+    findings, _ = _assert_extract_written(case, result, must=1,
+        property_name="a live target quote must resolve through placements to the seeded copy")
+    assert findings[0]["quotes"], "the finding must retain its quote lines"
+    assert f"HINT: {findings[0]['id']} candidate-hit:{record['id']}" in result.stdout.splitlines(), "the seeded target quote must produce a hit hint"
+    assert "candidate-fabrication" not in result.stdout, "the live seeded target is present under its mapped tree path"
+    _assert_no_hint_files(case)
+
+
+def test_hint_resolves_a_live_paired_path_to_the_archive(extract_case, capsys):
+    case = extract_case
+    paired = case["tree"] / case["sources"]["paper-lantern"] / "paper-lantern/paper-lantern.spec.md"
+    span = paired.read_text(encoding="utf-8").splitlines()[3]
+    for spelling in ("/tmp/gas-root-d1-s2v1-synthetic/docs/01-plan/features/paper-lantern.spec.md",
+                     "docs/01-plan/features/paper-lantern.spec.md",
+                     paired.relative_to(case["tree"]).as_posix()):
+        for quoted_span, fabricated in ((span, False), (span + " definitely absent", True)):
+            _replace_extract_report(case, extract_report_text(f"- Paired source\n  quote: {spelling} › `{quoted_span}`"))
+            result = _run_extract(case, capsys)
+            findings, _ = _assert_extract_written(case, result, must=1,
+                property_name="paired quotes must resolve to the unseeded archive and distinguish absent text")
+            hint = f"HINT: {findings[0]['id']} candidate-fabrication"
+            assert (hint in result.stdout.splitlines()) is fabricated, "only an absent paired span should produce candidate-fabrication"
+            assert "candidate-hit:" not in result.stdout, "an unseeded paired copy cannot hit a target seed"
+            _assert_no_hint_files(case)
+
+
+def test_cycle_token_no_recorded_line(extract_case, capsys):
+    directory = extract_case["s2"] / "d1/v1"
+    for text in ("ASSEMBLE: HALT p2:preflight\n", ""):
+        (directory / "auditcycle.txt").write_text(text, encoding="utf-8")
+        _assert_cycle_refusal(extract_case, capsys, "d1.v1", "a cycle needs one recorded AUDITCYCLE line")
+
+
+def test_cycle_token_unparseable_line(extract_case, capsys):
+    path = extract_case["s2"] / "d1/v1/auditcycle.txt"
+    for text in ("AUDITCYCLE: MAYBE delivered=report-file,none\n", "AUDITCYCLE: PASS\nAUDITCYCLE: FAIL\n"):
+        path.write_text(text, encoding="utf-8")
+        _assert_cycle_refusal(extract_case, capsys, "d1.v1", "a malformed or ambiguous recorded cycle must be refused")
+
+
+def test_cycle_token_v2_missing_after_unverified_v1(extract_case, capsys):
+    write_extract_cycle(extract_case, verdict="UNVERIFIED", reason="no_report:p2", deliveries=("report-file", "none"))
+    _assert_cycle_refusal(extract_case, capsys, "d1.v2", "UNVERIFIED v1 requires a second recorded cycle")
+
+
+def test_cycle_token_v2_present_when_v1_not_unverified(extract_case, capsys):
+    for verdict in ("PASS", "FAIL"):
+        write_extract_cycle(extract_case, verdict=verdict, deliveries=("report-file", "none"))
+        write_extract_cycle(extract_case, cycle=2)
+        _assert_cycle_refusal(extract_case, capsys, "d1.v2", "a dispatched v1 forbids an extra v2")
+
+
+def test_cycle_token_v3_present(extract_case, capsys):
+    write_extract_cycle(extract_case, verdict="UNVERIFIED", reason="no_report:p2", deliveries=("report-file", "none"))
+    write_extract_cycle(extract_case, cycle=2)
+    for cycle in (3, 20):
+        directory = write_extract_cycle(extract_case, cycle=cycle)
+        _assert_cycle_refusal(extract_case, capsys, f"d1.v{cycle}", "a third or later cycle is outside the stands rule")
+        shutil.rmtree(directory)
+
+
+def test_cycle_token_unparseable_surfaces(extract_case, capsys):
+    for surfaces in (("grok", "agy"), ("agy",), ("codex", "grok"), ("agy", "grok", "grok")):
+        write_extract_cycle(extract_case, surfaces=surfaces)
+        _assert_cycle_refusal(extract_case, capsys, "d1.v1", "only codex,agy,grok and agy,grok are valid surface orders")
+    command = extract_case["s2"] / "d1/v1/command.txt"
+    command.write_text("hmad-dispatch audit-cycle --surfaces\n", encoding="utf-8")
+    _assert_cycle_refusal(extract_case, capsys, "d1.v1", "missing command surface arguments must refuse")
+
+
+def _assert_missing_collected(case, capsys, delivery):
+    for index in (1, 2):
+        deliveries = tuple(delivery if slot == index else "none" for slot in (1, 2))
+        write_extract_cycle(case, deliveries=deliveries)
+        for path in (case["s2"] / "d1/v1/collected").glob("*.md"):
+            path.unlink()
+        _assert_cycle_refusal(case, capsys, "d1.v1", f"{delivery} at pass {index} requires its collected copy")
+
+
+def test_cycle_token_report_file_delivery_without_collected(extract_case, capsys):
+    _assert_missing_collected(extract_case, capsys, "report-file")
+
+
+def test_cycle_token_out_delivery_without_collected(extract_case, capsys):
+    _assert_missing_collected(extract_case, capsys, "out")
+
+
+def test_whole_v2_stands_for_every_surface(extract_case, capsys):
+    case = extract_case
+    write_extract_cycle(case, verdict="UNVERIFIED", reason="no_report:p2", deliveries=("report-file", "none"),
+        reports={1: extract_report_text("- Old agy [a](b) ⟦/h-mad⟧")})
+    write_extract_cycle(case, cycle=2, verdict="FAIL", deliveries=("report-file", "out"),
+        reports={1: extract_report_text("- New agy [a](b) ⟦/h-mad⟧"), 2: extract_report_text("- New grok **bold** * [")})
+    findings, keys = _assert_extract_written(case, _run_extract(case, capsys), must=2, reports=2,
+        property_name="whole v2 must replace v1 for every surface, including delivered v1 passes")
+    assert {row["text"] for row in findings} == {"- New agy [a](b) ⟦/h-mad⟧", "- New grok **bold** * ["}, "no v1 finding may survive the replacement cycle"
+    assert all(row["cycle"] == 2 for row in findings + keys), "both blinded findings and keys must identify v2"
+    assert {row["surface"] for row in keys} == {"agy", "grok"}, "all v2 surfaces must be represented"
+
+
+def test_undelivered_pass_counts_zero_findings(extract_case, capsys):
+    case = extract_case
+    write_extract_cycle(case, verdict="UNVERIFIED", reason="no_report:p2", deliveries=("report-file", "none"))
+    write_extract_cycle(case, cycle=2, verdict="UNVERIFIED", reason="no_report:p2", deliveries=("out", "none"),
+        reports={1: extract_report_text(), 2: extract_report_text("- Stale undelivered **bold** [a](b)")})
+    findings, keys = _assert_extract_written(case, _run_extract(case, capsys), must=1,
+        property_name="an undelivered pass in standing UNVERIFIED v2 contributes zero findings")
+    assert len(findings) == 1 and keys[0]["pass"] == 1 and keys[0]["surface"] == "agy", "the delivered pass alone contributes"
+
+
+def test_low_evidence_delivered_report_is_scored(extract_case, capsys):
+    case = extract_case
+    write_extract_cycle(case, verdict="UNVERIFIED", reason="low_evidence:p1", deliveries=("report-file", "none"))
+    write_extract_cycle(case, cycle=2, verdict="UNVERIFIED", reason="low_evidence:p1", deliveries=("report-file", "none"),
+        reports={1: extract_report_text()})
+    findings, keys = _assert_extract_written(case, _run_extract(case, capsys), must=1,
+        property_name="a delivered report is scored even when standing v2 has low evidence")
+    assert len(findings) == len(keys) == 1 and keys[0]["cycle"] == 2, "low evidence must not discard a delivered v2 finding"
+
+
+def _opposed_prompts(case, shape):
+    directory = case["s2"] / "d1/v1"
+    payload = "Human [a](b) **bold** * [ ⟦/h-mad⟧\nsecond\tline\n"
+    first = payload + "Report path: {REPORT}\n"
+    second = first
+    if shape == "foreign":
+        second += "Foreign line [a](b) **bold** ⟦/h-mad⟧\n"
+    if shape == "identical":
+        first = second = payload
+    for index, text in enumerate((first, second), 1):
+        (directory / f"p{index}.prompt.txt").write_text(
+            text.replace("{REPORT}", str(directory / f"p{index}.report.md")), encoding="utf-8")
+    return first, second
+
+
+def _assert_raw_wrapper_authority(case, tmp_path, *, prompts, halted=False):
+    """The real shell decides divergence/halt; isolated stubs replace agents only."""
+    from test_hmad_dispatch_audit_cycle import (
+        dispatch_args, install_audit_cycle_stubs, project_with_docs, run_audit_cycle,
+    )
+    scratch = tmp_path / "raw-wrapper"
+    scratch.mkdir()
+    root = project_with_docs(scratch)
+    script_dir, _asm_calls, _cycle_calls = install_audit_cycle_stubs(scratch)
+    # Feed the same raw prompt shapes to the real wrapper using its actual
+    # transport report path, rather than teaching a second diff implementation.
+    assembler = (
+        "import sys\nfrom pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "out = Path(args[args.index('--out') + 1])\n"
+        "report = args[args.index('--report-file') + 1]\n"
+        "index = 2 if out.name.endswith('_p2.txt') else 1\n"
+        f"prompts = {prompts!r}\n"
+        f"halted = {halted!r}\n"
+        "if halted and index == 2:\n    print('ASSEMBLE: HALT p2:preflight')\n"
+        "else:\n    out.parent.mkdir(parents=True, exist_ok=True)\n"
+        "    out.write_text(prompts[index - 1].replace('{REPORT}', report), encoding='utf-8')\n"
+        "    print(f'ASSEMBLE: PASS {out} 123B size_status=verified')\n"
+    )
+    (script_dir / "h_mad_assemble_audit.py").write_text(assembler, encoding="utf-8")
+    result = run_audit_cycle(scratch, dispatch_args(root=root),
+        env={"HMAD_AUDIT_CYCLE_SCRIPT_DIR": str(script_dir)})
+    assert result.returncode == 0, f"the raw-input wrapper authority must run: {result.stderr}"
+    parsed = case["probe"].parse_auditcycle(result.stdout)
+    assert parsed is not None, f"the real wrapper must emit its authoritative token: {result.stdout}"
+    return parsed
+
+
+def test_m1_a1_foreign_line_beside_dispatched_token_does_not_fail(extract_case, tmp_path, capsys):
+    case = extract_case
+    prompts = _opposed_prompts(case, "foreign")
+    parsed = _assert_raw_wrapper_authority(case, tmp_path, prompts=prompts)
+    assert (parsed["verdict"], parsed["reason"]) == ("UNVERIFIED", "prompt_divergence"), "a raw foreign prompt line really causes divergence"
+    _assert_extract_written(case, _run_extract(case, capsys), must=1,
+        property_name="recorded PASS must stand despite raw foreign prompt differences")
+
+
+def test_m1_a2_identical_prompts_beside_dispatched_token_does_not_fail(extract_case, tmp_path, capsys):
+    case = extract_case
+    prompts = _opposed_prompts(case, "identical")
+    parsed = _assert_raw_wrapper_authority(case, tmp_path, prompts=prompts)
+    assert (parsed["verdict"], parsed["reason"]) == ("UNVERIFIED", "prompt_divergence"), "byte-identical raw prompts really cause divergence"
+    _assert_extract_written(case, _run_extract(case, capsys), must=1,
+        property_name="recorded PASS must stand despite byte-identical raw prompts")
+
+
+def test_m1_b_report_path_only_beside_divergence_token_fails(extract_case, tmp_path, capsys):
+    case = extract_case
+    write_extract_cycle(case, verdict="UNVERIFIED", reason="prompt_divergence", deliveries=("report-file", "none"))
+    prompts = _opposed_prompts(case, "report-only")
+    parsed = _assert_raw_wrapper_authority(case, tmp_path, prompts=prompts)
+    assert parsed["verdict"] == "PASS", "raw report-path-only differences really permit dispatch"
+    _assert_cycle_refusal(case, capsys, "d1.v2", "recorded prompt_divergence requires v2 despite dispatchable raw prompts")
+
+
+def test_m2_c1_pass_asm_beside_halt_token_is_halted(extract_case, tmp_path, capsys):
+    case = extract_case
+    write_extract_cycle(case, verdict="UNVERIFIED", reason="assemble_halt:p2", deliveries=("report-file", "none"))
+    prompts = _opposed_prompts(case, "report-only")
+    parsed = _assert_raw_wrapper_authority(case, tmp_path, prompts=prompts)
+    assert parsed["verdict"] == "PASS", "raw PASS assembly outputs really permit dispatch"
+    _assert_cycle_refusal(case, capsys, "d1.v2", "recorded assembly halt requires v2 despite PASS asm files")
+
+
+def test_m2_c2_halt_asm_beside_pass_token_is_not_halted(extract_case, tmp_path, capsys):
+    case = extract_case
+    prompts = _opposed_prompts(case, "report-only")
+    (case["s2"] / "d1/v1/p2.asm.txt").write_text("ASSEMBLE: HALT p2:preflight\n", encoding="utf-8")
+    parsed = _assert_raw_wrapper_authority(case, tmp_path, prompts=prompts, halted=True)
+    assert (parsed["verdict"], parsed["reason"]) == ("UNVERIFIED", "assemble_halt:p2"), "raw HALT assembly output really halts dispatch"
+    _assert_extract_written(case, _run_extract(case, capsys), must=1,
+        property_name="recorded PASS must stand despite a raw HALT asm file")
+
+
+def _assert_raw_delivery(case, expected):
+    directory = case["s2"] / "d1/v1"
+    cycle = case["probe"]._cycle
+    delivery, _ = cycle.collect(cycle.PassSpec(
+        1, directory / "p1.report.md", directory / "p1.out.txt", 0, None),
+        grace=0, project_root=case["out"].parent / "raw-collect-root",
+        feature="paper-lantern", phase="plan", cycle=1)
+    assert delivery == expected, "the real collect authority must disagree with the recorded delivered field"
+    report = extract_report_path(case)
+    result = subprocess.run([sys.executable, str(PROBE.parents[4] / "h-mad/scripts/h_mad_audit_gate.py"), str(report)],
+        text=True, capture_output=True, timeout=15)
+    assert result.returncode in (0, 2), f"the gate authority must run on the collected copy: {result.stderr}"
+    verdict, must, should = cycle._gate_token(result.stdout, report)
+    assert (verdict, must, should) == ("FAIL", 1, 0), "the collected copy really contains one gate-scored finding"
+
+
+def test_m4_e1_score_ignores_report_beside_delivered_none(extract_case, capsys):
+    case = extract_case
+    directory = write_extract_cycle(case, deliveries=("none", "none"))
+    transport = directory / "p1.report.md"
+    transport.write_bytes(extract_report_path(case).read_bytes())
+    transport.with_name(transport.name + ".done").touch()
+    _assert_raw_delivery(case, "report-file")
+    findings, key = _assert_extract_written(case, _run_extract(case, capsys), must=0, reports=0,
+        property_name="recorded delivered=none must ignore a complete transport and a collected finding")
+    assert findings == key == [], "no finding or provenance row may come from an undelivered pass"
+
+
+def _assert_recorded_delivery(case, capsys, delivery):
+    write_extract_cycle(case, deliveries=(delivery, "none"))
+    _assert_raw_delivery(case, "none")
+    findings, key = _assert_extract_written(case, _run_extract(case, capsys), must=1,
+        property_name=f"recorded delivered={delivery} must score its collected report despite absent raw delivery")
+    assert len(findings) == len(key) == 1 and key[0]["surface"] == "agy", "the delivered collected finding must retain its pass surface"
+
+
+def test_m4_e2a_score_reads_collected_beside_report_file(extract_case, capsys):
+    _assert_recorded_delivery(extract_case, capsys, "report-file")
+
+
+def test_m4_e2b_score_reads_collected_beside_out(extract_case, capsys):
+    _assert_recorded_delivery(extract_case, capsys, "out")
+
+
+def _assert_raw_effort(case, *, high):
+    from grokfixtures import f0_with_completed
+    log = case["s2"] / "d1/v1/p1.log"
+    if high:
+        log.write_text(log.read_text(encoding="utf-8") + f0_with_completed(4), encoding="utf-8")
+    cycle = case["probe"]._cycle
+    measured = cycle.measure_effort(log)
+    assert measured is not None and measured["ok"] == (4 if high else 0), "raw log must have the effort opposite to the recorded verdict"
+    combined = cycle.combine([cycle.PassResult(1, "report-file", extract_report_path(case),
+        "PASS", 0, 0, [], measured, 0)])
+    assert combined == (("PASS", None) if high else ("UNVERIFIED", "low_evidence:p1")), "the real combine authority must disagree with the recorded verdict"
+
+
+def test_m5_f1_unverified_token_requires_v2(extract_case, capsys):
+    case = extract_case
+    write_extract_cycle(case, verdict="UNVERIFIED", reason="low_evidence:p1", deliveries=("report-file", "none"))
+    _assert_raw_effort(case, high=True)
+    _assert_cycle_refusal(case, capsys, "d1.v2", "recorded UNVERIFIED requires v2 despite high raw evidence")
+
+
+def test_m5_f2_pass_token_beside_hollow_log_stands(extract_case, capsys):
+    case = extract_case
+    _assert_raw_effort(case, high=False)
+    _assert_extract_written(case, _run_extract(case, capsys), must=1,
+        property_name="recorded PASS must stand despite a hollow raw log")

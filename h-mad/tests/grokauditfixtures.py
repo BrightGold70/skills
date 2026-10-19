@@ -317,3 +317,79 @@ def build_commit_inputs(tmp_path: Path) -> dict:
         "repo": repo, "src": src, "parent": git(repo, "rev-parse", CALIBRATION_REF),
         "message": f"Record calibration: {_hostile_text()}",
     }
+
+
+def extract_report_text(must: str | None = None, should: str = "None") -> str:
+    """Keep agent text hostile, including literal Markdown and a wrapped line."""
+    if must is None:
+        must = "- Preserve the seeded contract: " + _hostile_text().replace("\n", "\n  ")
+    return f"# Synthetic audit\n\n## Must-fix\n{must}\n\n## Should-fix\n{should}\n"
+
+
+def extract_report_path(case: dict, doc: str = "d1", cycle: int = 1, index: int = 1) -> Path:
+    feature_index, phase_index = divmod(int(doc[1:]) - 1, len(PHASES))
+    feature = list(case["sources"])[feature_index]
+    name = f"{feature}.{PHASES[phase_index]}.audit.v{cycle}.p{index}.md"
+    return case["s2"] / doc / f"v{cycle}" / "collected" / name
+
+
+def write_extract_cycle(case: dict, *, doc: str = "d1", cycle: int = 1,
+                        verdict: str = "PASS", reason: str | None = None,
+                        deliveries: tuple[str, ...] = ("none", "none"),
+                        reports: dict[int, str] | None = None,
+                        surfaces: tuple[str, ...] = ("agy", "grok")) -> Path:
+    """Write a D3 cycle without asking an unbuilt extract handler to stage it."""
+    directory = case["s2"] / doc / f"v{cycle}"
+    directory.mkdir(parents=True, exist_ok=True)
+    feature_index, phase_index = divmod(int(doc[1:]) - 1, len(PHASES))
+    feature = list(case["sources"])[feature_index]
+    # Root tokens have whitespace-delimited fields; hostile data belongs in the
+    # reports/prompts, while command argv also exercises quoted physical paths.
+    root = Path(f"/tmp/gas-root-{doc}-s2v{cycle}-synthetic")
+    (directory / "command.txt").write_text(shlex.join([
+        "env", f"HMAD_AUDIT_STEM_DIR={directory / 'stem [a]* ⟦h-mad⟧'}",
+        "hmad-dispatch", "audit-cycle", "--feature", feature,
+        "--phase", PHASES[phase_index], "--cycle", str(cycle),
+        "--project-root", str(root), "--passes", str(len(surfaces)),
+        "--surfaces", ",".join(surfaces), "--timeout", "900",
+    ]) + "\n", encoding="utf-8")
+    token = f"AUDITCYCLE: {verdict}"
+    if reason:
+        token += f" reason={reason}"
+    token += f" passes={len(surfaces)} delivered={','.join(deliveries)} size_status=verified"
+    (directory / "auditcycle.txt").write_text(token + "\n", encoding="utf-8")
+    (directory / "root.txt").write_text(
+        f"ROOT: READY doc={doc} purpose=s2v{cycle} path={root} "
+        f"calibration={'a' * 40} list_commit={'b' * 40} list_blob={'c' * 40} absent=0\n",
+        encoding="utf-8",
+    )
+    for index in range(1, len(surfaces) + 1):
+        (directory / f"p{index}.prompt.txt").write_text(
+            f"Audit pass {index}: {_hostile_text()}\n", encoding="utf-8",
+        )
+        (directory / f"p{index}.asm.txt").write_text("ASSEMBLE: PASS synthetic\n", encoding="utf-8")
+        (directory / f"p{index}.out.txt").write_text("", encoding="utf-8")
+        (directory / f"p{index}.log").write_text(
+            json.dumps({"type": "text", "data": _hostile_text()}) + "\n"
+            + '{"type":"end"}\n', encoding="utf-8",
+        )
+    for index, text in (reports or {}).items():
+        path = extract_report_path(case, doc, cycle, index)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return directory
+
+
+def build_extract_inputs(tmp_path: Path) -> dict:
+    """Nine valid seeded docs, external S2 data, initially one delivered report."""
+    tree = tmp_path / "base tree [a]* ⟦h-mad⟧"
+    sources = build_archive(tree)
+    case = {
+        "tree": tree, "sources": sources, "records": build_ledger(tree, sources),
+        "s2": tmp_path / "kept data [a]* ⟦h-mad⟧" / "s2",
+        "out": tmp_path / "extracted [a]* ⟦h-mad⟧", "seed": 1729,
+    }
+    for index in range(1, 10):
+        write_extract_cycle(case, doc=f"d{index}")
+    write_extract_cycle(case, deliveries=("report-file", "none"), reports={1: extract_report_text()})
+    return case

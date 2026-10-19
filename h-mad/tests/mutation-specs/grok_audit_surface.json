@@ -736,6 +736,166 @@
       "find": "        if _OPEN_INPUT is not None:  # M:GAS-OPEN-INPUT",
       "replace": "        if False:  # M:GAS-OPEN-INPUT",
       "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_last_resort_names_the_open_input"
-    }
+    },
+      {
+        "name": "must-count-severed",
+        "_mechanism": "Sever the gate must_count field while keeping the classifier call and report caller intact.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    must_count = _counts[\"must_count\"]  # M:GAS-MUST-COUNT-WIRE",
+        "replace": "    must_count = len(must)  # M:GAS-MUST-COUNT-WIRE",
+        "test": "tests/test_grok_audit_surface_probe.py::test_must_count_mismatch_through_production_path"
+      },
+      {
+        "name": "must-count-forced",
+        "_mechanism": "Force the gate must count upward; clean reports must refuse the discrepancy.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    must_count = _counts[\"must_count\"]  # M:GAS-MUST-COUNT-WIRE",
+        "replace": "    must_count = _counts[\"must_count\"] + 1  # M:GAS-MUST-COUNT-WIRE",
+        "test": "tests/test_grok_audit_surface_probe.py::test_extract_writes_findings_for_clean_reports"
+      },
+      {
+        "name": "collapse-forced",
+        "_mechanism": "Force short-label groups to collapse and lose their separate findings.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "            if _gate._collapses(group, set()):  # M:GAS-COLLAPSE-WIRE",
+        "replace": "            if True:  # M:GAS-COLLAPSE-WIRE",
+        "test": "tests/test_grok_audit_surface_probe.py::test_extract_parity_nested_label_group"
+      },
+      {
+        "name": "collapse-severed",
+        "_mechanism": "Sever the gate collapse decision so nested evidence incorrectly becomes separate findings.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "            if _gate._collapses(group, set()):  # M:GAS-COLLAPSE-WIRE",
+        "replace": "            if False:  # M:GAS-COLLAPSE-WIRE",
+        "test": "tests/test_grok_audit_surface_probe.py::test_extract_parity_collapsing_group"
+      },
+      {
+        "name": "should-count-severed",
+        "_mechanism": "Sever the gate should_count field and suppress the observable discrepancy line.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    should_count = _counts[\"should_count\"]  # M:GAS-SHOULD-COUNT-WIRE",
+        "replace": "    should_count = len(should)  # M:GAS-SHOULD-COUNT-WIRE",
+        "test": "tests/test_grok_audit_surface_probe.py::test_should_findings_are_written_on_a_count_difference"
+      },
+      {
+        "name": "should-count-forced",
+        "_mechanism": "Force the gate should count upward and expose the incorrect published count.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    should_count = _counts[\"should_count\"]  # M:GAS-SHOULD-COUNT-WIRE",
+        "replace": "    should_count = _counts[\"should_count\"] + 1  # M:GAS-SHOULD-COUNT-WIRE",
+        "test": "tests/test_grok_audit_surface_probe.py::test_should_findings_are_written_on_a_count_difference"
+      },
+      {
+        "name": "p-cycle-no-line",
+        "_mechanism": "Disable only this recorded-cycle refusal or stands decision, preserving a runnable extraction path.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    if not lines:  # M:GAS-CYCLE-NO-LINE",
+        "replace": "    if False:  # M:GAS-CYCLE-NO-LINE",
+        "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_no_recorded_line"
+      },
+      {
+        "name": "p-cycle-unparseable",
+        "_mechanism": "Disable only this recorded-cycle refusal or stands decision, preserving a runnable extraction path.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    if lines and parsed is None:  # M:GAS-CYCLE-UNPARSEABLE",
+        "replace": "    if False:  # M:GAS-CYCLE-UNPARSEABLE",
+        "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_unparseable_line"
+      },
+      {
+        "name": "p-cycle-v2-missing",
+        "_mechanism": "Disable only this recorded-cycle refusal or stands decision, preserving a runnable extraction path.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "        if not v2.is_dir():  # M:GAS-CYCLE-V2-MISSING",
+        "replace": "        if False:  # M:GAS-CYCLE-V2-MISSING",
+        "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_v2_missing_after_unverified_v1"
+      },
+      {
+        "name": "p-cycle-v2-extra",
+        "_mechanism": "Disable only this recorded-cycle refusal or stands decision, preserving a runnable extraction path.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    elif v2.exists():  # M:GAS-CYCLE-V2-EXTRA",
+        "replace": "    elif False:  # M:GAS-CYCLE-V2-EXTRA",
+        "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_v2_present_when_v1_not_unverified"
+      },
+      {
+        "name": "p-cycle-v3",
+        "_mechanism": "Disable only this recorded-cycle refusal or stands decision, preserving a runnable extraction path.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "        if match and int(match[1]) >= 3:  # M:GAS-CYCLE-V3",
+        "replace": "        if False:  # M:GAS-CYCLE-V3",
+        "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_v3_present"
+      },
+      {
+        "name": "p-cycle-surfaces",
+        "_mechanism": "Disable only this recorded-cycle refusal or stands decision, preserving a runnable extraction path.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "        if surfaces not in ([\"codex\", \"agy\", \"grok\"], [\"agy\", \"grok\"]):  # M:GAS-CYCLE-SURFACES",
+        "replace": "        if False:  # M:GAS-CYCLE-SURFACES",
+        "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_unparseable_surfaces"
+      },
+      {
+        "name": "p-stands-m1",
+        "_mechanism": "Disable only this recorded-cycle refusal or stands decision, preserving a runnable extraction path.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    if parsed.get(\"verdict\") == \"UNVERIFIED\":  # M:GAS-STANDS-V1-UNVERIFIED",
+        "replace": "    if False:  # M:GAS-STANDS-V1-UNVERIFIED",
+        "test": "tests/test_grok_audit_surface_probe.py::test_m1_b_report_path_only_beside_divergence_token_fails"
+      },
+      {
+        "name": "p-stands-m2",
+        "_mechanism": "Disable only this recorded-cycle refusal or stands decision, preserving a runnable extraction path.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    if parsed.get(\"verdict\") == \"UNVERIFIED\":  # M:GAS-STANDS-V1-UNVERIFIED",
+        "replace": "    if False:  # M:GAS-STANDS-V1-UNVERIFIED",
+        "test": "tests/test_grok_audit_surface_probe.py::test_m2_c1_pass_asm_beside_halt_token_is_halted"
+      },
+      {
+        "name": "p-stands-m5",
+        "_mechanism": "Disable only this recorded-cycle refusal or stands decision, preserving a runnable extraction path.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "    if parsed.get(\"verdict\") == \"UNVERIFIED\":  # M:GAS-STANDS-V1-UNVERIFIED",
+        "replace": "    if False:  # M:GAS-STANDS-V1-UNVERIFIED",
+        "test": "tests/test_grok_audit_surface_probe.py::test_m5_f1_unverified_token_requires_v2"
+      },
+      {
+        "name": "p-cycle-collected-report-file",
+        "_mechanism": "Remove report-file from the accepted delivery values for this guard.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "                if delivery in (\"report-file\", \"out\") and not collected:  # M:GAS-CYCLE-COLLECTED",
+        "replace": "                if delivery in (\"out\",) and not collected:  # M:GAS-CYCLE-COLLECTED",
+        "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_report_file_delivery_without_collected"
+      },
+      {
+        "name": "p-cycle-collected-out",
+        "_mechanism": "Remove out from the accepted delivery values for this guard.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "                if delivery in (\"report-file\", \"out\") and not collected:  # M:GAS-CYCLE-COLLECTED",
+        "replace": "                if delivery in (\"report-file\",) and not collected:  # M:GAS-CYCLE-COLLECTED",
+        "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_out_delivery_without_collected"
+      },
+      {
+        "name": "p-extract-delivered-report-file",
+        "_mechanism": "Remove report-file from the accepted delivery values for this guard.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "            if delivery in (\"report-file\", \"out\"):  # M:GAS-EXTRACT-DELIVERED",
+        "replace": "            if delivery in (\"out\",):  # M:GAS-EXTRACT-DELIVERED",
+        "test": "tests/test_grok_audit_surface_probe.py::test_m4_e2a_score_reads_collected_beside_report_file"
+      },
+      {
+        "name": "p-extract-delivered-out",
+        "_mechanism": "Remove out from the accepted delivery values for this guard.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "            if delivery in (\"report-file\", \"out\"):  # M:GAS-EXTRACT-DELIVERED",
+        "replace": "            if delivery in (\"report-file\",):  # M:GAS-EXTRACT-DELIVERED",
+        "test": "tests/test_grok_audit_surface_probe.py::test_m4_e2b_score_reads_collected_beside_out"
+      },
+      {
+        "name": "p-extract-undelivered-m4",
+        "_mechanism": "Count a recorded none delivery as delivered, exposing a stale collected report.",
+        "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+        "find": "            if delivery in (\"report-file\", \"out\"):  # M:GAS-EXTRACT-DELIVERED",
+        "replace": "            if delivery in (\"report-file\", \"out\", \"none\"):  # M:GAS-EXTRACT-DELIVERED",
+        "test": "tests/test_grok_audit_surface_probe.py::test_m4_e1_score_ignores_report_beside_delivered_none"
+      }
   ]
 }
