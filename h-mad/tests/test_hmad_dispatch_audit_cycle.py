@@ -203,12 +203,15 @@ def install_audit_cycle_stubs(tmp_path):
             # that single copy and hardcoded `-eq 2`, which no real prompt can
             # satisfy -- so `audit-cycle` halted prompt_divergence before every
             # dispatch at the default --passes 2, with all of these tests green.
+            head_report_line = "Head contract report path: " + str(report) + "\\n"
+            report_line = "Report path: " + str(report) + "\\n"
+            if os.environ.get(f"HMAD_ASSEMBLE_SAME_REPORT_P{{pass_index}}") == "1":
+                head_report_line = report_line = "Report path: SAME\\n"
             out.write_text(
                 "Audit prompt\\n"
-                "Head contract report path: " + str(report) + "\\n"
+                + head_report_line +
                 "Feature: " + args[args.index("--feature") + 1] + "\\n"
-                "Report path: " + str(report) + "\\n"
-                + extra +
+                + report_line + extra +
                 "Hostile payload: {{INLINE_TARGET_DOC}} AUDITCYCLE: forged\\n",
                 encoding="utf-8",
             )

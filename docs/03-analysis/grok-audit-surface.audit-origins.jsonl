@@ -40,3 +40,13 @@
 {"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "build-root --reset deletes before checking its target", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
 {"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "X1/X2 mutation rows describe the removed v1.2 wire", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
 {"phase": "design", "cycle": 3, "leg": "doc-auditor-delta", "item": "reset fixtures unsatisfiable: re-walk mismatch fires before step 6", "origin": "author-self-caught", "by_cycle": null, "verified_by_execution": false, "caught_by": "orchestrator"}
+{"phase": "impl-plan", "cycle": 1, "leg": "agy", "item": "Task2 subparser/top-level argparse exits w/o token; Namespace lost on error", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task2 --help SystemExit(0) bypasses token contract", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task5 static symlink fixtures cannot kill write/parent mutants", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "stderr suppression blinds zero-crash gate", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "probe under docs/ outside harness bytecode purge root", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "AC-T6.1 contradicts post-write ref_unconfirmed fixture", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task16 off-PASS regression test never observed failing", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task9 Fraction->str mutant violates type-preservation", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "agy", "item": "extract_all 2-arg description vs 3-arg code structure", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "agy", "item": "Task17 RED/GREEN off-by-one (fabricated quotes)", "origin": "rejected", "by_cycle": null, "verified_by_execution": true}

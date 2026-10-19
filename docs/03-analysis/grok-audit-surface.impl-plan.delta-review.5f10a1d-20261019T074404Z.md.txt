@@ -1,0 +1,13 @@
+PROMPT=<none — a delta review has no assembled prompt; your subject is below>
+PROJECT_ROOT=/Users/kimhawk/orca/skills
+REPORT=/Users/kimhawk/orca/skills/docs/03-analysis/grok-audit-surface.impl-plan.delta-review.5f10a1d-20261019T074404Z.md
+This pass is ADVISORY.
+
+Subject (grok-audit-surface, phase impl-plan): `git show 5f10a1d9d4b98972b444c203b3412bb24b122037 -- docs/01-plan/features/grok-audit-surface.impl-plan.md` — run it in PROJECT_ROOT — and the findings that revision answers:
+  - /Users/kimhawk/orca/skills/docs/01-plan/features/grok-audit-surface.impl-plan.audit.v2.p1.md
+  - /Users/kimhawk/orca/skills/docs/01-plan/features/grok-audit-surface.impl-plan.audit.v2.p2.md
+
+For each hunk: does it close the finding it claims, or only the instance the reviewer named?
+Did it break a claim elsewhere in this document or in a sibling — a count, a cross-reference, a value stated in more than one place?
+
+Write your report at REPORT exactly. Its name is deliberately outside the audit filename grammar (`<feature>.<phase>.audit.v<N>[.<token>].md`) so it never joins the audit ledger — do not rename it into that grammar.
