@@ -5,6 +5,7 @@
     "-m",
     "pytest",
     "tests/test_grok_audit_surface_probe.py",
+    "tests/test_grok_audit_surface_smoke.py",
     "tests/test_grok_audit_surface_docs.py",
     "-q"
   ],
@@ -503,6 +504,238 @@
       "find": "    if confirmed.returncode != 0 or confirmed.stdout.decode().strip() != new:  # M:GAS-COMMIT-REREAD",
       "replace": "    if False:  # M:GAS-COMMIT-REREAD",
       "test": "tests/test_grok_audit_surface_probe.py::test_commit_data_rereads_the_ref"
+    },
+    {
+      "name": "p-smoke-delivered-report-file",
+      "_mechanism": "Remove report-file from accepted delivery shapes.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if delivery not in (\"report-file\", \"out\"):  # M:GAS-SMOKE-DELIVERED",
+      "replace": "    if delivery not in (\"out\",):  # M:GAS-SMOKE-DELIVERED",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_pass"
+    },
+    {
+      "name": "p-smoke-delivered-out",
+      "_mechanism": "Remove out from accepted delivery shapes.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if delivery not in (\"report-file\", \"out\"):  # M:GAS-SMOKE-DELIVERED",
+      "replace": "    if delivery not in (\"report-file\",):  # M:GAS-SMOKE-DELIVERED",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_pass_on_out_delivery"
+    },
+    {
+      "name": "p-smoke-truncated",
+      "_mechanism": "Disable the smoke truncated guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if form == \"truncated\":  # M:GAS-SMOKE-TRUNCATED",
+      "replace": "    if False:  # M:GAS-SMOKE-TRUNCATED",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_truncated"
+    },
+    {
+      "name": "p-smoke-truncated-m3",
+      "_mechanism": "Disable the smoke truncated guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if form == \"truncated\":  # M:GAS-SMOKE-TRUNCATED",
+      "replace": "    if False:  # M:GAS-SMOKE-TRUNCATED",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_m3_d1_end_event_beside_truncated_item_is_truncated"
+    },
+    {
+      "name": "p-smoke-vocab-split",
+      "_mechanism": "Disable the smoke vocab split guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if py_types != sh_types:  # M:GAS-SMOKE-VOCAB-SPLIT",
+      "replace": "    if False:  # M:GAS-SMOKE-VOCAB-SPLIT",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_vocab_split"
+    },
+    {
+      "name": "p-smoke-vocab-missing-end",
+      "_mechanism": "Suppress only the missing end vocabulary witness.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if kind not in types:  # M:GAS-SMOKE-VOCAB-MISSING",
+      "replace": "        if kind not in types and kind != \"end\":  # M:GAS-SMOKE-VOCAB-MISSING",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_vocab_missing_end"
+    },
+    {
+      "name": "p-smoke-vocab-missing-tool-call",
+      "_mechanism": "Suppress only the missing tool_call vocabulary witness.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if kind not in types:  # M:GAS-SMOKE-VOCAB-MISSING",
+      "replace": "        if kind not in types and kind != \"tool_call\":  # M:GAS-SMOKE-VOCAB-MISSING",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_vocab_missing_tool_call"
+    },
+    {
+      "name": "p-smoke-vocab-missing-tool-call-update",
+      "_mechanism": "Suppress only the missing tool_call_update vocabulary witness.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if kind not in types:  # M:GAS-SMOKE-VOCAB-MISSING",
+      "replace": "        if kind not in types and kind != \"tool_call_update\":  # M:GAS-SMOKE-VOCAB-MISSING",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_vocab_missing_tool_call_update"
+    },
+    {
+      "name": "p-smoke-no-delivery",
+      "_mechanism": "Disable the smoke no delivery guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not deliveries[\"grok\"]:  # M:GAS-SMOKE-NO-DELIVERY",
+      "replace": "    if False:  # M:GAS-SMOKE-NO-DELIVERY",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_no_delivery"
+    },
+    {
+      "name": "p-smoke-no-delivery-unscorable",
+      "_mechanism": "Disable the smoke no delivery guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not deliveries[\"grok\"]:  # M:GAS-SMOKE-NO-DELIVERY",
+      "replace": "    if False:  # M:GAS-SMOKE-NO-DELIVERY",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_no_delivery_on_unscorable"
+    },
+    {
+      "name": "p-smoke-no-delivery-m4",
+      "_mechanism": "Disable the smoke no delivery guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not deliveries[\"grok\"]:  # M:GAS-SMOKE-NO-DELIVERY",
+      "replace": "    if False:  # M:GAS-SMOKE-NO-DELIVERY",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_m4_e1_report_file_inputs_beside_delivered_none_is_no_delivery"
+    },
+    {
+      "name": "p-smoke-accepts-grok",
+      "_mechanism": "Suppress only grok root refusal.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not accepts[surface]:  # M:GAS-SMOKE-ACCEPTS",
+      "replace": "        if not accepts[surface] and surface != \"grok\":  # M:GAS-SMOKE-ACCEPTS",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_nongit_root_refused_grok"
+    },
+    {
+      "name": "p-smoke-accepts-agy",
+      "_mechanism": "Suppress only agy root refusal.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not accepts[surface]:  # M:GAS-SMOKE-ACCEPTS",
+      "replace": "        if not accepts[surface] and surface != \"agy\":  # M:GAS-SMOKE-ACCEPTS",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_nongit_root_refused_agy"
+    },
+    {
+      "name": "p-smoke-accepts-m5",
+      "_mechanism": "Suppress grok refusal despite the recorded UNVERIFIED authority.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not accepts[surface]:  # M:GAS-SMOKE-ACCEPTS",
+      "replace": "        if not accepts[surface] and surface != \"grok\":  # M:GAS-SMOKE-ACCEPTS",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_m5_f1_unverified_token_beside_busy_log_refuses_root"
+    },
+    {
+      "name": "p-smoke-missing-auditcycle",
+      "_mechanism": "Disable the smoke missing auditcycle guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if True:  # M:GAS-SMOKE-MISSING-AUDITCYCLE",
+      "replace": "        if False:  # M:GAS-SMOKE-MISSING-AUDITCYCLE",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_input_missing"
+    },
+    {
+      "name": "p-smoke-missing-collected",
+      "_mechanism": "Disable the smoke missing collected guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not report.is_file():  # M:GAS-SMOKE-MISSING-COLLECTED",
+      "replace": "    if False:  # M:GAS-SMOKE-MISSING-COLLECTED",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_input_missing_delivered_collected_report"
+    },
+    {
+      "name": "p-smoke-unparseable-auditcycle",
+      "_mechanism": "Disable the smoke unparseable auditcycle guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if parsed is None:  # M:GAS-SMOKE-UNPARSEABLE-AUDITCYCLE",
+      "replace": "        if False:  # M:GAS-SMOKE-UNPARSEABLE-AUDITCYCLE",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_input_unparseable"
+    },
+    {
+      "name": "p-smoke-effort-counts-unparseable",
+      "_mechanism": "Disable the smoke effort counts guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                elif form == \"counts\":  # M:GAS-SMOKE-EFFORT-COUNTS",
+      "replace": "                elif False:  # M:GAS-SMOKE-EFFORT-COUNTS",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_drifted_log_with_unparseable_item_fails"
+    },
+    {
+      "name": "p-smoke-effort-counts-parsed",
+      "_mechanism": "Disable the smoke effort counts guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                elif form == \"counts\":  # M:GAS-SMOKE-EFFORT-COUNTS",
+      "replace": "                elif False:  # M:GAS-SMOKE-EFFORT-COUNTS",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_drifted_log_with_parsed_item_fails"
+    },
+    {
+      "name": "p-smoke-effort-codex-text",
+      "_mechanism": "Accept the codex-text item by bypassing its refusal inside the matched branch.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    if True:  # M:GAS-SMOKE-EFFORT-CODEX-TEXT",
+      "replace": "                    if False:  # M:GAS-SMOKE-EFFORT-CODEX-TEXT",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_effort_codex_text_item_refuses_as_wrong_file"
+    },
+    {
+      "name": "p-smoke-effort-missing",
+      "_mechanism": "Accept the missing-file item by bypassing its refusal inside the matched branch.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    if True:  # M:GAS-SMOKE-EFFORT-UNREADABLE",
+      "replace": "                    if False:  # M:GAS-SMOKE-EFFORT-UNREADABLE",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_effort_missing_item_refuses_as_wrong_file"
+    },
+    {
+      "name": "p-smoke-effort-empty",
+      "_mechanism": "Accept the empty-file item by bypassing its refusal inside the matched branch.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    if True:  # M:GAS-SMOKE-EFFORT-UNREADABLE",
+      "replace": "                    if False:  # M:GAS-SMOKE-EFFORT-UNREADABLE",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_effort_empty_item_refuses_as_wrong_file"
+    },
+    {
+      "name": "p-smoke-effort-unknown",
+      "_mechanism": "Accept an unrecognised item by bypassing the default refusal.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    if True:  # M:GAS-SMOKE-EFFORT-UNKNOWN",
+      "replace": "                    if False:  # M:GAS-SMOKE-EFFORT-UNKNOWN",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_unrecognised_effort_item_refuses"
+    },
+    {
+      "name": "p-parse-auditcycle-one",
+      "_mechanism": "Disable the parse auditcycle one guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if len(lines) != 1:  # M:GAS-PARSE-AUDITCYCLE-ONE",
+      "replace": "    if False:  # M:GAS-PARSE-AUDITCYCLE-ONE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_auditcycle_parser_rejects_two_lines"
+    },
+    {
+      "name": "p-parse-effort-item",
+      "_mechanism": "Disable the parse effort item guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not re.match(r\"^p\\d+ \", item):  # M:GAS-PARSE-EFFORT-ITEM",
+      "replace": "        if False:  # M:GAS-PARSE-EFFORT-ITEM",
+      "test": "tests/test_grok_audit_surface_probe.py::test_effort_parser_rejects_a_malformed_effort_block"
+    },
+    {
+      "name": "p-parse-effort-empty",
+      "_mechanism": "Disable the parse effort empty guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not items:  # M:GAS-PARSE-EFFORT-EMPTY",
+      "replace": "    if False:  # M:GAS-PARSE-EFFORT-EMPTY",
+      "test": "tests/test_grok_audit_surface_probe.py::test_effort_parser_rejects_a_malformed_effort_block"
+    },
+    {
+      "name": "p-parse-effort-twice",
+      "_mechanism": "Disable the parse effort twice guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if len(starts) > 1:  # M:GAS-PARSE-EFFORT-TWICE",
+      "replace": "    if False:  # M:GAS-PARSE-EFFORT-TWICE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_effort_parser_rejects_a_malformed_effort_block"
+    },
+    {
+      "name": "p-smoke-effort-malformed",
+      "_mechanism": "Disable the smoke effort malformed guard while preserving the surrounding verdict path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if items is None:  # M:GAS-SMOKE-EFFORT-MALFORMED",
+      "replace": "            if False:  # M:GAS-SMOKE-EFFORT-MALFORMED",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_refuses_a_malformed_effort_block"
+    },
+    {
+      "name": "p-open-input",
+      "_mechanism": "Skip the open-input arm so the smoke last resort names the data directory.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if _OPEN_INPUT is not None:  # M:GAS-OPEN-INPUT",
+      "replace": "        if False:  # M:GAS-OPEN-INPUT",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_last_resort_names_the_open_input"
     }
   ]
 }

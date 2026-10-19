@@ -4,8 +4,10 @@ import argparse
 from collections import Counter
 import errno
 import hashlib
+import importlib.util
 import io
 import json
+import math
 import os
 import re
 import shlex
@@ -697,6 +699,249 @@ MODES["record-cycle"] = _mode_record_cycle
 MODES["commit-data"] = _mode_commit_data
 
 
+AUDITCYCLE_RE = re.compile(r"^AUDITCYCLE: (PASS|FAIL|UNVERIFIED)( \S+)*$")
+GROK_ITEM_RE = re.compile(r"^p1 tools=\d+ ok=\d+ unresolved=\d+ thinking=\d+ format=grok( |$)")
+COUNTS_ITEM_RE = re.compile(r"^p1 tools=\d+ ok=\d+ failed=\d+ thinking=\d+( |$)")
+
+
+def parse_auditcycle(text: str) -> dict | None:
+    lines = [line for line in text.split("\n") if line.startswith("AUDITCYCLE:")]
+    if len(lines) != 1:  # M:GAS-PARSE-AUDITCYCLE-ONE
+        return None
+    if not AUDITCYCLE_RE.fullmatch(lines[0]):
+        return None
+    words = lines[0].split()
+    parsed = {"verdict": words[1]}
+    for word in words[2:]:
+        key, separator, value = word.partition("=")
+        if separator:
+            parsed[key] = value
+    # S1 has one pass. Retain its report basename to name a missing collected copy;
+    # the recorded absolute path still names the original export root.
+    for line in text.split("\n"):
+        if line.startswith("reports: "):
+            parsed["report_name"] = Path(line.removeprefix("reports: ")).name
+    return parsed
+
+
+def parse_effort_items(text: str) -> list[str] | None:
+    lines = text.split("\n")
+    starts = [index for index, line in enumerate(lines) if line == "Effort:"]
+    if len(starts) > 1:  # M:GAS-PARSE-EFFORT-TWICE
+        return None
+    if not starts:
+        return []
+    items = []
+    for line in lines[starts[0] + 1:]:
+        if not line.startswith("- "):
+            break
+        item = line[2:]
+        if not re.match(r"^p\d+ ", item):  # M:GAS-PARSE-EFFORT-ITEM
+            return None
+        items.append(item)
+    if not items:  # M:GAS-PARSE-EFFORT-EMPTY
+        return None
+    return items
+
+
+def grok_log_types(text: str) -> dict[str, list[dict]]:
+    events: dict[str, list[dict]] = {}
+    for line in text.split("\n"):
+        try:
+            event = json.loads(line)
+        except (ValueError, RecursionError):
+            continue
+        if isinstance(event, dict) and isinstance(event.get("type"), str):
+            events.setdefault(event["type"], []).append(event)
+    return events
+
+
+def effort_form(item: str) -> str:
+    if GROK_ITEM_RE.match(item):
+        return "grok"
+    if item.startswith("p1 not measured (grok log truncated"):
+        return "truncated"
+    if COUNTS_ITEM_RE.match(item):
+        return "counts"
+    if (item == "p1 unreadable (log named but not readable)"
+            or item.startswith("p1 not measured (codex-text log")):
+        return "wrong-file"
+    return "unknown"
+
+
+def _smoke_read(path: Path) -> str:
+    global _OPEN_INPUT
+    _OPEN_INPUT = str(path)
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        if True:  # M:GAS-SMOKE-MISSING-AUDITCYCLE
+            raise Refusal(f"input_missing:{path}") from exc
+        return ""
+    except UnicodeError as exc:
+        raise Refusal(f"input_unparseable:{path}") from exc
+
+
+def vocab_sets(vocab_py: Path, vocab_sh: Path) -> tuple[frozenset[str], frozenset[str]]:
+    global _OPEN_INPUT
+    _OPEN_INPUT = str(vocab_py)
+    try:
+        spec = importlib.util.spec_from_file_location("_gas_vocab_py", vocab_py)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        py_types = module._GROK_TYPES
+        if not isinstance(py_types, frozenset) or not all(isinstance(t, str) for t in py_types):
+            raise ValueError("expected a string frozenset")
+    except (OSError, ValueError, TypeError, AttributeError, SyntaxError, ImportError) as exc:
+        raise Refusal(f"input_unparseable:{vocab_py}") from exc
+    try:
+        text = _smoke_read(vocab_sh)
+        match = re.search(r"^_GROK_TYPES_RE=['\"]([^'\"\n]*)['\"]$", text, re.MULTILINE)
+        if match is None:
+            raise ValueError("missing vocabulary regexp")
+        sh_types = frozenset(match[1].split("|"))
+    except (ProbeRefusal, ValueError) as exc:
+        raise Refusal(f"input_unparseable:{vocab_sh}") from exc
+    return py_types, sh_types
+
+
+def delivered(cycle_dir: Path, parsed: dict) -> bool:
+    global _OPEN_INPUT
+    delivery = parsed.get("delivered", "").split(",")[0]
+    if delivery not in ("report-file", "out"):  # M:GAS-SMOKE-DELIVERED
+        return False
+    reports = sorted((cycle_dir / "collected").glob("*.p1.md"))
+    report = (reports[0] if reports else
+              cycle_dir / "collected" / parsed.get("report_name", "p1.md"))
+    if not report.is_file():  # M:GAS-SMOKE-MISSING-COLLECTED
+        raise Refusal(f"input_missing:{report}")
+    _OPEN_INPUT = str(report)
+    try:
+        result = subprocess.run(
+            [sys.executable, str(REPO / "h-mad/scripts/h_mad_audit_gate.py"), str(report)],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode not in (0, 2):
+            raise _cycle.OperationalError("audit gate did not run")
+        verdict, _must, _should = _cycle._gate_token(result.stdout, report)
+    except (OSError, UnicodeError, subprocess.SubprocessError, _cycle.OperationalError) as exc:
+        raise Refusal(f"input_unparseable:{report}") from exc
+    return verdict in ("PASS", "FAIL")
+
+
+def _event_keys(value: object, depth: int = 2) -> list[str]:
+    if depth == 0:
+        return []
+    if isinstance(value, dict):
+        return [str(key).lower() for key in value] + [
+            key for child in value.values() for key in _event_keys(child, depth - 1)
+        ]
+    if isinstance(value, list):
+        return [key for child in value for key in _event_keys(child, depth - 1)]
+    return []
+
+
+def smoke(data: Path, vocab_py: Path, vocab_sh: Path) -> tuple[list[str], str]:
+    cycles = {}
+    deliveries = {}
+    types = {}
+    form = "unknown"
+    for surface in ("grok", "agy", "codex"):
+        directory = data / surface
+        if surface == "codex" and not directory.exists():
+            continue
+        audit = directory / "auditcycle.txt"
+        text = _smoke_read(audit)
+        parsed = parse_auditcycle(text)
+        if parsed is None:  # M:GAS-SMOKE-UNPARSEABLE-AUDITCYCLE
+            raise Refusal(f"input_unparseable:{audit}")
+        parsed = parsed or {}
+        cycles[surface] = parsed
+        if surface == "grok":
+            items = parse_effort_items(text)
+            if items is None:  # M:GAS-SMOKE-EFFORT-MALFORMED
+                raise Refusal(f"input_unparseable:{audit}")
+            if "delivered" in parsed:
+                log = directory / "p1.log"
+                types = grok_log_types(_smoke_read(log))
+                if not types:
+                    raise Refusal(f"input_unparseable:{log}")
+                item = next((item for item in (items or []) if item.startswith("p1 ")), "")
+                form = effort_form(item)
+                if form in ("grok", "truncated"):
+                    pass
+                elif form == "counts":  # M:GAS-SMOKE-EFFORT-COUNTS
+                    pass
+                elif item.startswith("p1 not measured (codex-text log"):
+                    if True:  # M:GAS-SMOKE-EFFORT-CODEX-TEXT
+                        raise Refusal(f"input_unparseable:{audit}")
+                elif item == "p1 unreadable (log named but not readable)":
+                    if True:  # M:GAS-SMOKE-EFFORT-UNREADABLE
+                        raise Refusal(f"input_unparseable:{audit}")
+                else:
+                    if True:  # M:GAS-SMOKE-EFFORT-UNKNOWN
+                        raise Refusal(f"input_unparseable:{audit}")
+        deliveries[surface] = delivered(directory, parsed)
+    py_types, sh_types = vocab_sets(vocab_py, vocab_sh)
+    accepts = {surface: deliveries[surface] and parsed.get("verdict") != "UNVERIFIED"
+               for surface, parsed in cycles.items()}
+    reasons = []
+    if form == "truncated":  # M:GAS-SMOKE-TRUNCATED
+        reasons.append("truncated")
+    if py_types != sh_types:  # M:GAS-SMOKE-VOCAB-SPLIT
+        reasons.append("vocab_split")
+    for kind in ("end", "tool_call", "tool_call_update"):
+        if kind not in types:  # M:GAS-SMOKE-VOCAB-MISSING
+            reasons.append(f"vocab_missing:{kind}")
+    if not deliveries["grok"]:  # M:GAS-SMOKE-NO-DELIVERY
+        reasons.append("no_delivery")
+    for surface in ("grok", "agy"):
+        if not accepts[surface]:  # M:GAS-SMOKE-ACCEPTS
+            reasons.append(f"nongit_root_refused:{surface}")
+
+    lines = []
+    for kind, events in sorted(types.items()):
+        keys = [key for event in events for key in _event_keys(event)]
+        tool = any("tool" in key for key in keys)
+        usage = any("usage" in key or "token" in key for key in keys)
+        lines.append(f"VOCAB: type={kind} re={'in' if kind in sh_types else 'out'} "
+                     f"frozenset={'in' if kind in py_types else 'out'} "
+                     f"tool={'yes' if tool else 'no'} usage={'yes' if usage else 'no'}")
+    if "delivered" not in cycles["grok"]:
+        lines.append("VOCAB: none reason=no_grok_dispatch")
+    lines.append("ROOT-ACCEPT: " + " ".join(
+        f"{surface}={'not_run' if surface not in accepts else 'accepted' if accepts[surface] else 'refused'}"
+        for surface in ("grok", "agy", "codex")))
+    try:
+        wall = int(_smoke_read(data / "grok/wall_seconds.txt").strip())
+        lines.append(f"TIMEOUT: wall_seconds={wall} derived={max(900, math.ceil(1.5 * wall / 60) * 60)}")
+    except (ProbeRefusal, ValueError, OverflowError):
+        lines.append("TIMEOUT: wall_seconds=unrecorded")
+    binary = "GROK-BINARY: unrecorded"
+    try:
+        first = _smoke_read(data / "versions.txt").split("\n")[0]
+        if first.startswith("grok_binary="):
+            path, separator, version = first.removeprefix("grok_binary=").partition(" ")
+            if separator and Path(path).is_absolute() and version:
+                binary = f"GROK-BINARY: path={path} version={version}"
+    except ProbeRefusal:
+        pass
+    lines.append(binary)
+    token = "SMOKE: FAIL reason=" + ",".join(reasons) if reasons else "SMOKE: PASS"
+    return lines, token
+
+
+def _mode_smoke(args: argparse.Namespace) -> int:
+    lines, token = smoke(args.data, args.vocab_py, args.vocab_sh)
+    for line in lines:
+        print(line)
+    print(token)
+    return 0
+
+
+MODES["smoke"] = _mode_smoke
+
+
 def build_parser() -> _TokenArgumentParser:
     parser = _TokenArgumentParser()
     subparsers = parser.add_subparsers(dest="mode", parser_class=_TokenArgumentParser)
@@ -773,7 +1018,7 @@ def refusal_token(mode: str, exc: BaseException, argv: list[str]) -> str:
         reason = exc.reason  # M:GAS-REFUSAL-REASON
     elif mode == "smoke":
         path = ""
-        if _OPEN_INPUT is not None:
+        if _OPEN_INPUT is not None:  # M:GAS-OPEN-INPUT
             path = _OPEN_INPUT
         else:
             for index, word in enumerate(argv):

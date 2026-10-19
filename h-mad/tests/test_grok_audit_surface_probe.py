@@ -25,6 +25,107 @@ from grokauditfixtures import (
 )
 
 
+def _rendered_effort_cycle(probe):
+    """Produce the exact cycle renderer's Effort: block for parser consumers."""
+    cycle = probe._cycle
+    results = [cycle.PassResult(
+        index=1,
+        delivered="report-file",
+        collected_path=Path("synthetic-report.md"),
+        verdict="PASS",
+        must=0,
+        should=0,
+        findings=[],
+        effort={
+            "shape": "grok", "tools": 3, "ok": 2,
+            "unresolved": 1, "thinking": 4, "readable": True,
+        },
+        rc=0,
+    )]
+    return cycle, cycle.render(
+        results, "PASS", None, feature="synthetic", size_status="verified", passes=1,
+    )
+
+
+def test_auditcycle_parser_reads_render_output():
+    probe = load_probe(PROBE)
+    cycle, rendered = _rendered_effort_cycle(probe)
+
+    parsed = probe.parse_auditcycle(rendered)
+    unverified = probe.parse_auditcycle(cycle.render(
+        [], "UNVERIFIED", "halted", feature="synthetic", size_status="verified", passes=1,
+    ))
+
+    assert parsed is not None, "the one AUDITCYCLE line rendered by audit-cycle must parse"
+    assert parsed["verdict"] == "PASS"
+    assert parsed["delivered"] == "report-file"
+    assert unverified is not None, "the UNVERIFIED renderer token must parse"
+    assert unverified["verdict"] == "UNVERIFIED"
+    assert unverified["reason"] == "halted"
+    assert "delivered" not in unverified, "a halted cycle renders no delivered field"
+
+
+def test_auditcycle_parser_rejects_two_lines():
+    probe = load_probe(PROBE)
+    _cycle, rendered = _rendered_effort_cycle(probe)
+
+    parsed = probe.parse_auditcycle(rendered + "AUDITCYCLE: FAIL\n")
+
+    assert parsed is None, "two AUDITCYCLE lines are not one authoritative cycle token"
+
+
+def test_effort_parser_reads_effort_items_output():
+    probe = load_probe(PROBE)
+    cycle, rendered = _rendered_effort_cycle(probe)
+    expected = cycle._effort_items([cycle.PassResult(
+        index=1,
+        delivered="report-file",
+        collected_path=Path("synthetic-report.md"),
+        verdict="PASS",
+        must=0,
+        should=0,
+        findings=[],
+        effort={
+            "shape": "grok", "tools": 3, "ok": 2,
+            "unresolved": 1, "thinking": 4, "readable": True,
+        },
+        rc=0,
+    )])
+
+    parsed = probe.parse_effort_items(rendered)
+
+    assert expected, "the renderer fixture must contain at least one Effort item"
+    assert parsed == expected, "the parser must preserve every renderer-written Effort item"
+
+
+def test_effort_parser_rejects_a_malformed_effort_block():
+    probe = load_probe(PROBE)
+    malformed_item = (
+        "AUDITCYCLE: FAIL\nEffort:\n"
+        "- x1 tools=1 ok=1 failed=0 thinking=0\nPremise checklist: empty\n"
+    )
+    empty_block = "AUDITCYCLE: FAIL\nEffort:\n[H-MAD] synthetic audit-cycle FAIL\n"
+    twice = (
+        "AUDITCYCLE: FAIL\nEffort:\n"
+        "- p1 tools=1 ok=1 failed=0 thinking=0\nPremise checklist: empty\n"
+        "Effort:\n- p2 tools=1 ok=1 failed=0 thinking=0\n"
+    )
+    halted = probe._cycle.render(
+        [], "UNVERIFIED", "halted", feature="synthetic", size_status="verified", passes=1,
+    )
+
+    assert probe.parse_effort_items(malformed_item) is None, (
+        "an Effort item must begin with p followed by digits and a space"
+    )
+    assert probe.parse_effort_items(empty_block) is None, (
+        "an opened Effort block must contain an item"
+    )
+    assert probe.parse_effort_items(twice) is None, "only one Effort block is permitted"
+    assert probe.parse_effort_items(halted) == [], (
+        "a rendered halted cycle has no Effort block and is not malformed"
+    )
+
+
 REPO = Path(__file__).resolve().parents[2]
 PROBE = REPO / "docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py"
 MODES = (
