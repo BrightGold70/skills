@@ -28,6 +28,7 @@ from grokauditfixtures import (
     build_extract_inputs, extract_report_path, extract_report_text,
     write_extract_cycle, commit_root_tree, git, load_probe,
     build_score_inputs, write_score_tables,
+    build_rescore_inputs, commit_fixture_tree, _hostile_text,
 )
 
 
@@ -2373,3 +2374,495 @@ def test_score_maps_a_malformed_effort_block(score_case, capsys):
     _assert_surface(malformed, "grok", 1, 1, 0, 0, low_evidence="unreadable")
     _assert_surface(malformed, "agy", 0, 1, 0, 0, low_evidence="unreadable")
     assert malformed[-1] == normal[-1], "option (b): unreadable evidence counts never change the verdict"
+
+
+# Task 10: real branch histories, D3's data set, and all nine D2 handlers.
+@pytest.fixture
+def rescore_case(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+                 "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    return build_rescore_inputs(tmp_path, load_probe(PROBE))
+
+
+@pytest.fixture
+def calibration_set_case(score_case):
+    case = score_case
+    data = case["tree"] / CALIBRATION
+    metadata = {
+        "s2/d1/v1/command.txt": (data / "s2/d1/v1/command.txt").read_bytes(),
+        "s2/d1/v1/root.txt": (data / "s2/d1/v1/root.txt").read_bytes(),
+        "s1/grok/wall_seconds.txt": b"17\n",
+        "s1/grok/resolved_model.txt": b"RESOLVED-MODEL: synthetic\n",
+        "s1/versions.txt": b"grok_binary=/fixture/grok fixture-version\n",
+        "extract.txt": b"extract --shuffle-seed 1729\n",
+    }
+    for relative, content in metadata.items():
+        path = data / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    for name in ("p1.prompt.txt", "p1.asm.txt", "p1.out.txt", "p1.log", "p1.report.md",
+                 "auditcycle.txt", "pass-logs/synthetic.log", "collected/synthetic.md.effort.json"):
+        path = data / "s1/grok" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"Captured {name}: {_hostile_text()}\n", encoding="utf-8")
+    return case
+
+
+def test_calibration_data_set_is_the_directory_minus_six_named_files(calibration_set_case):
+    case = calibration_set_case
+    data = case["tree"] / CALIBRATION
+    all_files = {path.relative_to(case["tree"]).as_posix() for path in data.rglob("*") if path.is_file()}
+    excluded_names = {"command.txt", "root.txt", "wall_seconds.txt", "resolved_model.txt", "extract.txt"}
+    excluded = {path.relative_to(case["tree"]).as_posix() for path in data.rglob("*")
+                if path.is_file() and (path.name in excluded_names or path == data / "s1/versions.txt")}
+    actual = case["probe"].calibration_data_files(case["tree"])
+    assert actual == sorted(all_files - excluded), "D3 includes every calibration file except harmless metadata candidates"
+    assert (CALIBRATION / "s1/grok/auditcycle.txt").as_posix() in actual, "captured wrapper stdout is calibration data"
+    definitions = [node for node in ast.walk(ast.parse(PROBE.read_text(encoding="utf-8")))
+                   if isinstance(node, ast.FunctionDef) and node.name == "calibration_data_files"]
+    assert len(definitions) == 1, "one calibration_data_files definition owns D3's set"
+    main_leak = next(node for node in ast.walk(ast.parse(PROBE.read_text(encoding="utf-8")))
+                     if isinstance(node, ast.FunctionDef) and node.name == "main_leak")
+    assert any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+               and node.func.id == "calibration_data_files" for node in ast.walk(main_leak)), "main_leak must call the sole D3 set definition"
+
+
+def test_calibration_data_set_keeps_an_excluded_name_carrying_a_finding_text(calibration_set_case):
+    case = calibration_set_case
+    probe, tree = case["probe"], case["tree"]
+    candidate = tree / CALIBRATION / "s2/d1/v1/command.txt"
+    report = extract_report_path(case)
+    parent = "Parent finding with hostile [a](b) **bold** * [ ⟦/h-mad⟧ evidence follows:"
+    samples = [
+        ("must", "- Finding payload [a](b) **bold** * [ ⟦/h-mad⟧\n  class: new-mechanism\n  quote: continuation only", "Finding payload [a](b) **bold** * [ ⟦/h-mad⟧"),
+        ("should", "- " + parent + "\n  - evidence one\n  - evidence two", parent),
+        ("must", "Prose finding first [a](b) **bold**\nsecond\tline with ⟦/h-mad⟧", "second\tline with ⟦/h-mad⟧"),
+    ]
+    for section, body, payload in samples:
+        report.write_text(extract_report_text(body if section == "must" else "None",
+                                               body if section == "should" else "None"), encoding="utf-8")
+        assert probe.report_findings(report.read_text(encoding="utf-8"))[section], "the real report authority must file this finding"
+        assert not any(probe.normalise(record[key].encode()) in probe.normalise(payload.encode())
+                       for record in case["records"] for key in ("seeded", "expected")), "finding-text trigger must be independent of seeded and expected needles"
+        candidate.write_text("Human annotation\n" + payload + "\n", encoding="utf-8")
+        assert candidate.relative_to(tree).as_posix() in probe.calibration_data_files(tree), "D3(c) must match each finding's payload per line without requiring its bullet or continuations"
+    # Move a report to S1: both report trees contribute, independent of S2.
+    moved = tree / CALIBRATION / "s1/grok/collected/synthetic.md"
+    moved.parent.mkdir(parents=True, exist_ok=True)
+    moved.write_bytes(report.read_bytes())
+    report.write_text(extract_report_text("None"), encoding="utf-8")
+    assert candidate.relative_to(tree).as_posix() in probe.calibration_data_files(tree), "D3(c) must also read collected S1 findings"
+    for residual in ("class: new-mechanism", "quote: continuation only", "evidence one"):
+        moved.write_text(extract_report_text("- " + parent + "\n  class: new-mechanism\n  quote: continuation only\n  - evidence one\n  - evidence two"), encoding="utf-8")
+        candidate.write_text(residual + "\n", encoding="utf-8")
+        assert candidate.relative_to(tree).as_posix() not in probe.calibration_data_files(tree), "continuation fields and collapsed evidence are D3(c)'s stated residual"
+
+
+def test_calibration_data_set_keeps_an_excluded_name_carrying_a_seeded_span(calibration_set_case):
+    case = calibration_set_case
+    path = case["tree"] / CALIBRATION / "s1/grok/wall_seconds.txt"
+    path.write_text("17\n" + case["records"][0]["seeded"], encoding="utf-8")
+    assert path.relative_to(case["tree"]).as_posix() in case["probe"].calibration_data_files(case["tree"]), "D3(a) retains a wall_seconds candidate that carries a seeded span"
+
+
+def test_calibration_data_set_keeps_an_excluded_name_carrying_an_expected_sentence(calibration_set_case):
+    case = calibration_set_case
+    path = case["tree"] / CALIBRATION / "s2/d1/v1/root.txt"
+    path.write_text(path.read_text(encoding="utf-8") + case["records"][0]["expected"], encoding="utf-8")
+    assert path.relative_to(case["tree"]).as_posix() in case["probe"].calibration_data_files(case["tree"]), "D3(b) retains a root candidate that carries an expected sentence"
+
+
+def _publish_fixture_tip(case, tip):
+    git(case["repo"], "update-ref", CALIBRATION_REF, tip)
+    git(case["repo"], "push", "--force", "origin", CALIBRATION_REF)
+
+
+def _branch_argv(case, mode, *, with_score=True):
+    argv = [mode, "--repo", str(case["repo"]), "--calibration-sha", case["calibration"],
+            "--smoke-sha", case["smoke"], "--sources",
+            ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items())]
+    if with_score:
+        argv += ["--score-sha", case["score"]]
+    return argv
+
+
+def _assert_branch_refusal(case, reason, property_name, *, mode="rescore", with_score=True):
+    argv = _branch_argv(case, mode, with_score=with_score)
+    result = subprocess.run([sys.executable, str(PROBE), *argv], text=True,
+                            capture_output=True, timeout=45)
+    prefix = "MAINLEAK" if mode == "main-leak" else "SEEDSCORE"
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, [f"{prefix}: UNREADABLE reason={reason}"],
+    ), f"{property_name}: stdout={result.stdout!r}; stderr={result.stderr!r}"
+    assert "Traceback" not in result.stderr, f"{property_name}: the refusal must be declared"
+
+
+def test_drift_outside_calibration_dir(rescore_case):
+    case = rescore_case
+    path = "notes/outside [a]* ⟦h-mad⟧.txt"
+    case["score"] = commit_fixture_tree(case["repo"], case["score"], {path: _hostile_text().encode()})
+    _publish_fixture_tip(case, case["score"])
+    _assert_branch_refusal(case, f"calibration_drift:{path}", "changes outside the calibration directory must refuse")
+
+
+def test_drift_not_descendant(rescore_case):
+    case = rescore_case
+    sibling = commit_fixture_tree(case["repo"], case["main"], {})
+    tip = commit_fixture_tree(case["repo"], case["score"], {}, extra_parents=(sibling,))
+    _publish_fixture_tip(case, tip)
+    case["smoke"] = sibling
+    _assert_branch_refusal(case, "calibration_drift:not_descendant", "a known on-ref smoke sibling must descend from calibration", mode="main-leak", with_score=False)
+
+
+def test_drift_score_not_descendant_of_smoke_commit(rescore_case):
+    case = rescore_case
+    sibling = commit_fixture_tree(case["repo"], case["calibration"], {})
+    tip = commit_fixture_tree(case["repo"], case["score"], {}, extra_parents=(sibling,))
+    _publish_fixture_tip(case, tip)
+    case["score"] = sibling
+    _assert_branch_refusal(case, "calibration_drift:not_descendant", "both on-ref descendants of calibration still require smoke-to-score descent")
+
+
+def test_drift_seeded_copy_changed_at_score_sha(rescore_case):
+    case = rescore_case
+    path = CALIBRATION / "seeded" / Path(case["records"][0]["source"]).name
+    content = (case["tree"] / path).read_bytes() + b"changed\n"
+    case["score"] = commit_fixture_tree(case["repo"], case["score"], {path.as_posix(): content})
+    _publish_fixture_tip(case, case["score"])
+    _assert_branch_refusal(case, f"calibration_drift:{path}", "a seeded copy present at calibration must stay byte-identical at score")
+
+
+def test_drift_ledger_changed_at_smoke_commit(rescore_case):
+    case = rescore_case
+    path = CALIBRATION / "ledger.jsonl"
+    case["smoke"] = commit_fixture_tree(case["repo"], case["calibration"], {
+        path.as_posix(): (case["tree"] / path).read_bytes() + b"\n",
+    })
+    _publish_fixture_tip(case, case["smoke"])
+    _assert_branch_refusal(case, f"calibration_drift:{path}", "even parse-equivalent ledger bytes must not drift at smoke", mode="main-leak", with_score=False)
+
+
+def test_drift_ledger_absent_at_score_sha(rescore_case):
+    case = rescore_case
+    path = CALIBRATION / "ledger.jsonl"
+    case["score"] = commit_fixture_tree(case["repo"], case["score"], {path.as_posix(): None})
+    _publish_fixture_tip(case, case["score"])
+    _assert_branch_refusal(case, f"calibration_drift:{path}", "a calibration ledger must remain present at score")
+
+
+def _commit_main_blob(case, content, *, path="notes/leak [a]* ⟦h-mad⟧.bin"):
+    live = case["repo"] / path
+    live.parent.mkdir(parents=True, exist_ok=True)
+    live.write_bytes(content)
+    git(case["repo"], "add", "--", path)
+    git(case["repo"], "commit", "-m", f"Main fixture: {_hostile_text()}")
+    case["main"] = git(case["repo"], "rev-parse", "HEAD")
+    # The detector must inspect committed blobs even when the work-tree copy is clean.
+    live.write_bytes(b"uncommitted replacement has no calibration content\n")
+    return path
+
+
+def test_main_leak_trigger_i_byte_equal_copy(rescore_case):
+    case = rescore_case
+    content = (case["s2"] / "d1/v1/p1.log").read_bytes()
+    path = _commit_main_blob(case, content)
+    _assert_branch_refusal(case, f"main_leak:{path}", "trigger i compares complete committed blobs against calibration file bytes", mode="main-leak")
+
+
+def test_main_leak_trigger_i_on_a_captured_wrapper_stdout(rescore_case):
+    case = rescore_case
+    path = _commit_main_blob(case, (case["s2"] / "d1/v1/auditcycle.txt").read_bytes())
+    _assert_branch_refusal(case, f"main_leak:{path}", "captured wrapper stdout belongs to trigger i's data set", mode="main-leak")
+
+
+def test_main_leak_trigger_i_smoke_commit_without_score_sha(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = build_rescore_inputs(tmp_path, load_probe(PROBE), smoke_failure=True)
+    assert "score" not in case, "a smoke failure must have no score commit"
+    path = _commit_main_blob(case, (case["tree"] / CALIBRATION / "s1/grok/p1.log").read_bytes())
+    _assert_branch_refusal(case, f"main_leak:{path}", "trigger i must use the smoke tree when no score sha exists", mode="main-leak", with_score=False)
+
+
+def test_main_leak_trigger_i_on_an_excluded_name_carrying_a_finding_text(rescore_case):
+    case = rescore_case
+    report = extract_report_path(case).read_text(encoding="utf-8")
+    finding = case["probe"].report_findings(report)["must"][0]
+    payload = case["probe"]._gate._payload(finding.splitlines()[0])
+    content = ("Human command annotation\n" + payload + "\n").encode()
+    relative = CALIBRATION / "s2/d1/v1/command.txt"
+    case["score"] = commit_fixture_tree(case["repo"], case["score"], {relative.as_posix(): content})
+    _publish_fixture_tip(case, case["score"])
+    path = _commit_main_blob(case, content)
+    _assert_branch_refusal(case, f"main_leak:{path}", "a finding-bearing command candidate must remain in trigger i's set", mode="main-leak")
+
+
+def test_main_leak_trigger_ii_expected(rescore_case):
+    case = rescore_case
+    rewrapped = "\n\t".join(case["records"][0]["expected"].split())
+    path = _commit_main_blob(case, ("Before expected sentence\n" + rewrapped + "\nAfter\n").encode())
+    _assert_branch_refusal(case, f"main_leak:{path}", "trigger ii must find a normalised expected sentence inside a larger blob", mode="main-leak")
+
+
+def test_main_leak_trigger_iii_seeded_span(rescore_case):
+    case = rescore_case
+    rewrapped = "\n\t".join(case["records"][0]["seeded"].split())
+    path = _commit_main_blob(case, ("Before seeded span\n" + rewrapped + "\nAfter\n").encode())
+    _assert_branch_refusal(case, f"main_leak:{path}", "trigger iii must find a normalised seeded span absent from its own archive", mode="main-leak")
+
+
+def _assert_main_clean(case, *, with_score=True):
+    result = subprocess.run([sys.executable, str(PROBE), *_branch_argv(case, "main-leak", with_score=with_score)],
+                            capture_output=True, text=True, timeout=45)
+    data_sha = case["score"] if with_score else case["smoke"]
+    blobs = len(git(case["repo"], "ls-tree", "-r", "--name-only", "HEAD").splitlines())
+    token = f"MAINLEAK: CLEAN scanned={case['main']} data={data_sha} blobs={blobs}"
+    assert (result.returncode, result.stdout.splitlines()) == (0, [token]), f"clean main must report the scanned HEAD, data commit and blob count: {result.stdout!r}; {result.stderr!r}"
+    return token
+
+
+def test_seeded_span_also_in_its_own_archive_source_does_not_refuse(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = build_rescore_inputs(tmp_path, load_probe(PROBE), seeded_in_own_source=True)
+    record = case["records"][0]
+    assert record["seeded"] in (case["repo"] / record["source"]).read_text(encoding="utf-8"), "this span must really occur in its own archived source on main"
+    assert case["probe"].check_ledger(case["tree"], case["sources"])["seeds"] == 27, "the exemption fixture must keep a valid ledger"
+    _assert_main_clean(case)
+
+
+def test_main_leak_ignores_a_main_blob_equal_to_wall_seconds(rescore_case):
+    case = rescore_case
+    _commit_main_blob(case, (case["tree"] / CALIBRATION / "s1/grok/wall_seconds.txt").read_bytes())
+    _assert_main_clean(case)
+
+
+def test_main_leak_prints_the_scanned_commit(rescore_case):
+    case = rescore_case
+    _commit_main_blob(case, b"safe main addition with [a]* and unicode \xe2\x9f\xa6h-mad\xe2\x9f\xa7\n")
+    scanned, data, blobs = case["probe"].main_leak(case["repo"], case["score"], case["sources"])
+    assert (scanned, data, blobs) == (case["main"], case["score"], 14), "main_leak must return the actual HEAD sha40, data sha40, and all 14 committed blobs"
+    _assert_main_clean(case)
+
+
+def test_ref_fetch_failed_no_remote(rescore_case):
+    case = rescore_case
+    git(case["repo"], "remote", "remove", "origin")
+    _assert_branch_refusal(case, "calibration_ref:fetch_failed", "a missing origin must refuse fetch rather than score local objects")
+
+
+def test_ref_absent(rescore_case):
+    case = rescore_case
+    git(case["origin"], "update-ref", "-d", CALIBRATION_REF)
+    _assert_branch_refusal(case, "calibration_ref:ref_absent", "an absent remote calibration ref must refuse despite a local branch")
+
+
+def test_ref_sha_unknown(rescore_case):
+    case = rescore_case
+    case["score"] = "f" * 40
+    _assert_branch_refusal(case, "calibration_ref:sha_unknown:" + case["score"], "every cited sha must resolve to a commit")
+
+
+def test_ref_not_on_ref(rescore_case):
+    case = rescore_case
+    case["score"] = commit_fixture_tree(case["repo"], case["calibration"], {
+        (CALIBRATION / "off-ref.txt").as_posix(): _hostile_text().encode(),
+    })
+    _assert_branch_refusal(case, "calibration_ref:not_on_ref:" + case["score"], "a known local commit outside the fetched ref must refuse")
+
+
+def test_list_changed_recorded_blob_differs(rescore_case):
+    case = rescore_case
+    old_blob = case["list_blob"]
+    listing = case["repo"] / EXCLUSIONS
+    listing.write_text(listing.read_text(encoding="utf-8") + "# Changed committed list\n", encoding="utf-8")
+    git(case["repo"], "add", EXCLUSIONS.as_posix())
+    git(case["repo"], "commit", "-m", "Change only exclusion-list bytes")
+    _assert_branch_refusal(case, f"list_changed:{old_blob}", "rescore compares recorded list blobs with its own HEAD list")
+
+
+def test_list_changed_unrecorded_root_record(rescore_case):
+    case = rescore_case
+    relative = CALIBRATION / "s2/d1/v1/root.txt"
+    case["score"] = commit_fixture_tree(case["repo"], case["score"], {relative.as_posix(): None})
+    _publish_fixture_tip(case, case["score"])
+    _assert_branch_refusal(case, "list_changed:unrecorded", "a recorded cycle without root.txt must refuse")
+
+
+def test_list_changed_malformed_root_record(rescore_case):
+    case = rescore_case
+    relative = CALIBRATION / "s2/d1/v1/root.txt"
+    original = (case["tree"] / relative).read_text(encoding="utf-8")
+    malformed = re.sub(r" list_blob=\S+", "", original)
+    assert malformed.startswith("ROOT: READY ") and "list_blob=" not in malformed, "isolate the missing D2 list_blob field"
+    assert case["probe"].parse_root_line(malformed.strip()) is None, "Task 4's parser must classify the malformed READY record as absent"
+    case["score"] = commit_fixture_tree(case["repo"], case["score"], {relative.as_posix(): malformed.encode()})
+    _publish_fixture_tip(case, case["score"])
+    _assert_branch_refusal(case, "list_changed:unrecorded", "a malformed READY record must map parser None to unrecorded, never skip the cycle")
+
+
+def test_main_leak_mode_clean_on_a_smoke_failure_branch(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = build_rescore_inputs(tmp_path, load_probe(PROBE), smoke_failure=True)
+    _lines, smoke_token = case["probe"].smoke(
+        case["tree"] / CALIBRATION / "s1", REPO / "h-mad/scripts/h_mad_review_evidence.py",
+        REPO / "h-mad/scripts/hmad-dispatch.sh",
+    )
+    assert smoke_token == "SMOKE: FAIL reason=vocab_missing:end", "end-to-end smoke branch must really derive to FAIL"
+    assert "score" not in case and git(case["repo"], "rev-parse", CALIBRATION_REF) == case["smoke"], "a failed smoke publishes only the smoke tip"
+    _assert_main_clean(case, with_score=False)
+
+
+def test_rescore_reproduces_the_score_and_removes_its_temp_dirs(rescore_case, monkeypatch, capsys):
+    case, created, calls = rescore_case, [], []
+    probe = case["probe"]
+    expected = subprocess.run([
+        sys.executable, str(PROBE), "score", "--tree", str(case["tree"]),
+        "--calibration-sha", case["calibration"], "--score-sha", case["score"], "--sources",
+        ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items()),
+    ], capture_output=True, text=True, timeout=30)
+    assert expected.returncode == 0 and expected.stdout.splitlines()[-1].startswith("SEEDSCORE: PASS "), "score --tree must establish a real passing baseline"
+    original_mkdtemp = tempfile.mkdtemp
+
+    def tracked_temp(*args, **kwargs):
+        path = Path(original_mkdtemp(*args, **kwargs))
+        created.append(path)
+        return str(path)
+
+    monkeypatch.setattr(probe.tempfile, "mkdtemp", tracked_temp)
+    for name in ("ref_checks", "drift_check", "main_leak", "list_check", "check_ledger", "build_root", "score"):
+        original = getattr(probe, name, None)
+        if original is not None:
+            def trace(*args, _name=name, _original=original, **kwargs):
+                calls.append((_name, args, kwargs))
+                return _original(*args, **kwargs)
+            monkeypatch.setattr(probe, name, trace)
+    try:
+        rc = probe.main(_branch_argv(case, "rescore"))
+        out, err = capsys.readouterr()
+        assert (rc, out.splitlines()[-1:]) == (0, expected.stdout.splitlines()[-1:]), f"rescore must reproduce score --tree's exact SEEDSCORE token: {out!r}; {err!r}"
+        lines = out.splitlines()
+        assert f"SCANNED: main={case['main']} data={case['score']} blobs=13" in lines, "rescore must publish the scanned commit and data tree"
+        list_lines = [line for line in lines if line.startswith("LIST:")]
+        assert len(list_lines) == 1, "rescore must publish one LIST provenance line"
+        listing = re.fullmatch(r"LIST: recorded=([0-9a-f,]+) current=([0-9a-f]{40})", list_lines[0])
+        assert listing and set(listing[1].split(",")) == {case["list_blob"]} and listing[2] == case["list_blob"], "rescore must publish every recorded/current list blob without inventing provenance"
+        assert not any(line.startswith(("LEDGER:", "ROOT:", "MAINLEAK:")) for line in lines), "rescore's internal checks must not publish another mode's token"
+        names = [name for name, _args, _kwargs in calls]
+        assert names.index("ref_checks") < names.index("drift_check") < names.index("main_leak") < names.index("list_check") < names.index("check_ledger") < names.index("build_root") < names.index("score"), "AC-6.4's checks must run in the specified order"
+        roots = [args[0].doc for name, args, _kwargs in calls if name == "build_root"]
+        assert roots == [f"d{index}" for index in range(1, 10)], "rescore must rebuild all nine roots in order"
+        assert created and all(not path.exists() for path in created), f"finally must remove every mkdtemp directory: {created!r}"
+        for parent in {path.parent for path in created}:
+            assert not (set(parent.iterdir()) & set(created)), "re-listing must find no probe temporary directories"
+        assert "[H-MAD]" in err, "rescore must leave its cleanup/completion marker on stderr"
+    finally:
+        for path in created:
+            if path.exists():
+                shutil.rmtree(path)
+
+
+SUCCESS_TOKENS = {
+    "check-ledger": r"LEDGER: OK seeds=27 docs=9 C1=6 C2=7 C3=7 C4=7",
+    "build-root": r"ROOT: READY doc=d1 purpose=rescore path=\S+ calibration=[0-9a-f]{40} list_commit=[0-9a-f]{40} list_blob=[0-9a-f]{40} absent=\d+",
+    "record-cycle": r"RECORD: OK dest=.+ files=\d+",
+    "commit-data": r"COMMIT: OK sha=[0-9a-f]{40} ref=refs/heads/calibration/grok-audit-surface",
+    "smoke": r"SMOKE: PASS",
+    "extract": r"FINDINGS: WRITTEN findings=2 must=2 should=0 reports=18",
+    "score": r"SEEDSCORE: PASS calibration=[0-9a-f]{40} score=[0-9a-f]{40}",
+    "rescore": r"SEEDSCORE: PASS calibration=[0-9a-f]{40} score=[0-9a-f]{40}",
+    "main-leak": r"MAINLEAK: CLEAN scanned=[0-9a-f]{40} data=[0-9a-f]{40} blobs=\d+",
+}
+
+
+def _successful_mode_run(case, mode, tmp_path, capsys):
+    probe = case["probe"]
+    sources = ["--sources", ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items())]
+    root = None
+    if mode in ("rescore", "main-leak"):
+        argv = _branch_argv(case, mode)
+    elif mode == "check-ledger":
+        argv = [mode, "--tree", str(case["tree"]), *sources]
+    elif mode == "build-root":
+        argv = [mode, "--repo", str(case["repo"]), "--calibration-sha", case["calibration"],
+                "--doc", "d1", "--purpose", "rescore", *sources]
+    elif mode == "record-cycle":
+        args = probe.build_parser().parse_args([
+            "build-root", "--repo", str(case["repo"]), "--calibration-sha", case["calibration"],
+            "--doc", "d1", "--purpose", "s1", *sources,
+        ])
+        line = probe.build_root(args)
+        root = Path(probe.parse_root_line(line)["path"])
+        cycle = build_cycle_inputs(tmp_path / f"grammar-cycle-{uuid.uuid4().hex}", root, line)
+        argv = [mode, "--stem", str(cycle["stem"]), "--root", str(root), "--root-record", str(cycle["root_record"]),
+                "--stdout", str(cycle["stdout"]), "--command", str(cycle["command"]), "--dest", str(cycle["dest"])]
+    elif mode == "commit-data":
+        src = tmp_path / "grammar-commit"
+        src.mkdir(exist_ok=True)
+        (src / "grammar.txt").write_text(_hostile_text(), encoding="utf-8")
+        argv = [mode, "--repo", str(case["repo"]), "--parent", git(case["repo"], "rev-parse", CALIBRATION_REF),
+                "--src", str(src), "--message", _hostile_text()]
+    elif mode == "smoke":
+        argv = [mode, "--data", str(case["tree"] / CALIBRATION / "s1")]
+    elif mode == "extract":
+        argv = [mode, "--tree", str(case["tree"]), "--s2", str(case["s2"]),
+                "--shuffle-seed", "1729", "--out", str(tmp_path / f"grammar-extract-{uuid.uuid4().hex}"), *sources]
+    else:
+        argv = [mode, "--tree", str(case["tree"]), "--calibration-sha", case["calibration"],
+                "--score-sha", case["score"], *sources]
+    try:
+        capsys.readouterr()
+        rc = probe.main(argv)
+        out, err = capsys.readouterr()
+        if mode == "build-root" and rc == 0:
+            root = Path(probe.parse_root_line(out.splitlines()[-1])["path"])
+        if mode == "commit-data" and rc == 0:
+            git(case["repo"], "push", "origin", CALIBRATION_REF)
+        return rc, out.splitlines(), err
+    finally:
+        if root is not None and root.exists():
+            shutil.rmtree(root)
+
+
+@pytest.mark.parametrize("mode", MODES, ids=MODES)
+def test_success_token_shape_per_mode(mode, rescore_case, tmp_path, capsys):
+    rc, lines, err = _successful_mode_run(rescore_case, mode, tmp_path, capsys)
+    assert rc == 0 and lines and re.fullmatch(SUCCESS_TOKENS[mode], lines[-1]), f"{mode} must end with its full D2 success grammar: rc={rc}; lines={lines!r}; stderr={err!r}"
+    prefix = rescore_case["probe"].GRAMMAR[mode][0]
+    assert sum(line.startswith(prefix) for line in lines) == 1, f"{mode} must publish exactly one final token"
+
+
+def test_no_published_line_uses_another_modes_prefix(rescore_case, tmp_path, capsys):
+    for mode in MODES:
+        rc, lines, err = _successful_mode_run(rescore_case, mode, tmp_path, capsys)
+        assert rc == 0 and lines and re.fullmatch(SUCCESS_TOKENS[mode], lines[-1]), f"all nine handlers must execute before checking prefixes: {mode}: {lines!r}; {err!r}"
+        prefixes = {grammar[0] for grammar in rescore_case["probe"].GRAMMAR.values()}
+        assert not any(line.startswith(tuple(prefixes)) for line in lines[:-1]), f"{mode}'s published lines must not use any mode's token prefix: {lines!r}"
+
+
+@pytest.mark.parametrize("mode", ["check-ledger", "build-root", "extract", "score", "rescore", "main-leak"])
+def test_sources_override_reaches_every_ledger_mode(mode, rescore_case, tmp_path, monkeypatch, capsys):
+    case, calls = rescore_case, []
+    assert case["sources"] != case["probe"].SOURCES, "synthetic archive override must differ from every default feature"
+    for name in ("check_ledger", "main_leak", "score", "build_root"):
+        original = getattr(case["probe"], name, None)
+        if original is None:
+            continue
+        signature = inspect.signature(original)
+
+        def check_mapping(*args, _original=original, _signature=signature, _name=name, **kwargs):
+            bound = _signature.bind(*args, **kwargs)
+            mapping = bound.arguments.get("sources")
+            if mapping is None and "args" in bound.arguments:
+                mapping = bound.arguments["args"].sources
+            assert mapping == case["sources"], f"{mode} must forward the parsed sources mapping into {_name}"
+            calls.append(_name)
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(case["probe"], name, check_mapping)
+    rc, lines, err = _successful_mode_run(case, mode, tmp_path, capsys)
+    assert rc == 0 and lines and re.fullmatch(SUCCESS_TOKENS[mode], lines[-1]), f"{mode} must successfully read the overridden archive: {lines!r}; {err!r}"
+    required = {"main_leak"} if mode == "main-leak" else {"check_ledger"}
+    if mode == "rescore":
+        required |= {"main_leak", "build_root", "score"}
+    assert required <= set(calls), f"{mode} must exercise every ledger/source consumer through the CLI: {calls!r}"

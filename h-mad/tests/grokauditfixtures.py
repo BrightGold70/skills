@@ -3,6 +3,7 @@
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -189,7 +190,7 @@ def build_root_repo(tmp_path: Path) -> dict:
     }
 
 
-def commit_root_tree(case: dict) -> str:
+def commit_root_tree(case: dict, *, extra_parents=()) -> str:
     """Commit edited export inputs with a temporary index, including symlinks."""
     work, tree = case["repo"], case["tree"]
     with tempfile.TemporaryDirectory(prefix="root-index-", dir=tree.parent) as staging:
@@ -207,7 +208,8 @@ def commit_root_tree(case: dict) -> str:
             git(work, "update-index", "--add", "--cacheinfo", mode, blob,
                 path.relative_to(tree).as_posix(), env=environment)
         tree_oid = git(work, "write-tree", env=environment)
-        return git(work, "commit-tree", tree_oid, "-p", "HEAD",
+        parents = [word for sha in ("HEAD", *extra_parents) for word in ("-p", sha)]
+        return git(work, "commit-tree", tree_oid, *parents,
                    input=f"Root fixture calibration: {_hostile_text()}\n")
 
 
@@ -451,4 +453,103 @@ def build_score_inputs(tmp_path: Path, probe, specs=None,
                                "why": f"Source checked: {_hostile_text()}."})
     assert len(extracted) == len(specs), "the real gate must extract every fixture finding exactly once"
     write_score_tables(case)
+    return case
+
+
+def commit_fixture_tree(repo: Path, parent: str, changes: dict[str, bytes | None],
+                        *, extra_parents=()) -> str:
+    """Make adversarial branch history without a checkout or touching the real index."""
+    with tempfile.TemporaryDirectory(prefix="fixture-index-") as directory:
+        environment = os.environ.copy()
+        environment["GIT_INDEX_FILE"] = str(Path(directory) / "index")
+        git(repo, "read-tree", parent, env=environment)
+        for relative, content in changes.items():
+            if content is None:
+                git(repo, "update-index", "--force-remove", "--", relative, env=environment)
+                continue
+            result = subprocess.run(
+                ["git", "-C", str(repo), "hash-object", "-w", "--stdin"],
+                input=content, capture_output=True, timeout=15, check=True,
+            )
+            git(repo, "update-index", "--add", "--cacheinfo", "100644",
+                result.stdout.decode().strip(), relative, env=environment)
+        tree = git(repo, "write-tree", env=environment)
+        parents = [word for sha in (parent, *extra_parents) for word in ("-p", sha)]
+        return git(repo, "commit-tree", tree, *parents,
+                   input=f"Adversarial fixture history: {_hostile_text()}\n")
+
+
+def build_rescore_inputs(tmp_path: Path, probe, *, smoke_failure=False,
+                         seeded_in_own_source=False) -> dict:
+    """Real main/origin plus calibration → smoke → score, using Task 6's writer."""
+    root_case = build_root_repo(tmp_path)
+    case = build_score_inputs(tmp_path / "score-input", probe)
+    case.update(repo=root_case["repo"], origin=tmp_path / "origin.git", probe=probe)
+    if seeded_in_own_source:
+        # An identity replacement is valid and puts this span in its own archive.
+        for target in (root_case, case):
+            record = target["records"][0]
+            copy = target["tree"] / CALIBRATION / "seeded" / Path(record["source"]).name
+            copy.write_text(copy.read_text(encoding="utf-8").replace(
+                record["seeded"], record["original"], 1), encoding="utf-8")
+            record["seeded"] = record["original"]
+            (target["tree"] / CALIBRATION / "ledger.jsonl").write_text(
+                "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in target["records"]),
+                encoding="utf-8",
+            )
+    repo = case["repo"]
+    # Preserve both main's exclusion policy and the calibration tip already on
+    # origin, so publishing the recorded descendants remains a fast-forward.
+    case["calibration"] = commit_root_tree(root_case, extra_parents=(CALIBRATION_REF,))
+    git(repo, "update-ref", CALIBRATION_REF, case["calibration"])
+    case["main"] = git(repo, "rev-parse", "HEAD")
+    case["list_blob"] = git(repo, "rev-parse", f"HEAD:{EXCLUSIONS.as_posix()}")
+    data = case["tree"] / CALIBRATION
+    from grokfixtures import f0_text
+    for cycle_number, surface in enumerate(("grok", "agy"), 1):
+        directory = data / "s1" / surface
+        directory.mkdir(parents=True)
+        report = directory / "collected" / f"paper-lantern.plan.audit.v{cycle_number}.p1.md"
+        report.parent.mkdir()
+        report.write_text(extract_report_text("None"), encoding="utf-8")
+        log = directory / "p1.log"
+        log.write_text(f0_text(), encoding="utf-8")
+        result = probe._cycle.PassResult(
+            1, "report-file", report, "PASS", 0, 0, [],
+            probe._cycle.measure_effort(log), 0,
+        )
+        stdout = probe._cycle.render(
+            [result], "PASS", None, feature="paper-lantern", size_status="verified", passes=1,
+        )
+        if smoke_failure and surface == "grok":
+            log.write_text("".join(line + "\n" for line in f0_text().splitlines()
+                                   if json.loads(line).get("type") != "end"), encoding="utf-8")
+        (directory / "auditcycle.txt").write_text(stdout, encoding="utf-8")
+        (directory / "command.txt").write_text(shlex.join([
+            "hmad-dispatch", "audit-cycle", "--feature", "paper-lantern", "--phase", "plan",
+            "--cycle", str(cycle_number), "--project-root", f"/tmp/gas-root-d1-s1-{surface}",
+            "--passes", "1", "--surfaces", surface,
+        ]) + "\n", encoding="utf-8")
+    (data / "s1/grok/wall_seconds.txt").write_text("17\n", encoding="utf-8")
+    (data / "s1/grok/resolved_model.txt").write_text("RESOLVED-MODEL: fixture\n", encoding="utf-8")
+    (data / "s1/versions.txt").write_text("grok_binary=/synthetic/grok fixture-version\n", encoding="utf-8")
+    (data / "extract.txt").write_text("extract --shuffle-seed 1729\n", encoding="utf-8")
+    for directory in [data / "s1/grok", data / "s1/agy", *sorted(case["s2"].glob("d*/v*"))]:
+        doc = directory.parent.name if directory.parent.name.startswith("d") else "d1"
+        purpose = "s1" if directory.parent.name == "s1" else "s2v1"
+        (directory / "root.txt").write_text(
+            f"ROOT: READY doc={doc} purpose={purpose} path=/tmp/gas-root-{doc}-{purpose}-synthetic "
+            f"calibration={case['calibration']} list_commit={case['main']} "
+            f"list_blob={case['list_blob']} absent=0\n", encoding="utf-8",
+        )
+    smoke_src = tmp_path / "smoke-input"
+    shutil.copytree(data / "s1", smoke_src / "s1")
+    args = types.SimpleNamespace(repo=repo, parent=case["calibration"], src=smoke_src,
+                                 message=f"Recorded smoke: {_hostile_text()}")
+    case["smoke"] = probe.commit_data(args).split("sha=", 1)[1].split()[0]
+    if not smoke_failure:
+        args.parent, args.src = case["smoke"], data
+        args.message = f"Recorded score: {_hostile_text()}"
+        case["score"] = probe.commit_data(args).split("sha=", 1)[1].split()[0]
+    git(repo, "push", "origin", CALIBRATION_REF)
     return case

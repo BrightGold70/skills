@@ -1074,7 +1074,9 @@ def extract_all(tree: Path, s2_dir: Path, sources: dict[str, str]) -> list[dict]
         path = report["path"]
         must, should, _must_count, _should_count = extract_report(
             path.read_text(encoding="utf-8"), report["report"])
-        root_lines = (path.parent.parent / "root.txt").read_text(encoding="utf-8").splitlines()
+        # Root paths support quote hints; list_check validates record provenance.
+        root_record = path.parent.parent / "root.txt"
+        root_lines = root_record.read_text(encoding="utf-8").splitlines() if root_record.is_file() else []
         root = next((parsed["path"] for line in root_lines
                      if (parsed := parse_root_line(line)) is not None), "")
         for section, texts in (("must", must), ("should", should)):
@@ -1362,6 +1364,247 @@ def _mode_score(args: argparse.Namespace) -> int:
 
 
 MODES["score"] = _mode_score
+
+
+def calibration_data_files(tree: Path) -> list[str]:
+    """Return D3's data set, retaining metadata that carries calibration text."""
+    data = tree / CALIBRATION
+    ledger = read_ledger(tree)
+    seeded = [normalise(row["seeded"].encode()).strip() for row in ledger]
+    expected = [normalise(row["expected"].encode()).strip() for row in ledger]
+    findings = []
+    reports = [*data.glob("s1/*/collected/*.md"),
+               *data.glob("s2/d*/v*/collected/*.md")]
+    for report in sorted(reports):
+        for spans in report_findings(report.read_text(encoding="utf-8")).values():
+            for span in spans:
+                lines = span.splitlines()
+                if lines and _gate._bullet_remainder(lines[0].strip()) is not None:
+                    lines = lines[:1]
+                findings.extend(normalise(_gate._payload(line).encode()).strip()
+                                for line in lines)
+    selected = []
+    for path in sorted(data.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(tree).as_posix()
+        candidate = (path.name in {"command.txt", "root.txt", "wall_seconds.txt",
+                                   "resolved_model.txt", "extract.txt"}
+                     or path == data / "s1/versions.txt")
+        if candidate:
+            text = normalise(path.read_bytes())
+            if any(needle and needle in text for needle in seeded):  # M:GAS-CALSET-SEEDED
+                selected.append(relative)
+                continue
+            if any(needle and needle in text for needle in expected):  # M:GAS-CALSET-EXPECTED
+                selected.append(relative)
+                continue
+            if any(needle and needle in text for needle in findings):  # M:GAS-CALSET-FINDING
+                selected.append(relative)
+            continue
+        selected.append(relative)
+    return selected
+
+
+def ref_checks(repo: Path, remote: str, shas: list[str]) -> str:
+    ref = "refs/heads/calibration/grok-audit-surface"
+    private = "refs/h-mad-probe/grok-audit-surface/calibration"
+    advertised = _git(repo, "ls-remote", "--exit-code", remote, ref)
+    if advertised.returncode == 2:  # M:GAS-REF-ABSENT
+        raise Refusal("calibration_ref:ref_absent")
+    fetched = _git(repo, "fetch", "--no-tags", remote, f"+{ref}:{private}")
+    resolved = _git(repo, "rev-parse", "--verify", private)
+    if advertised.returncode or fetched.returncode or resolved.returncode:  # M:GAS-REF-FETCH
+        raise Refusal("calibration_ref:fetch_failed")
+    tip = resolved.stdout.decode().strip() if resolved.returncode == 0 else shas[-1]
+    for sha in shas:
+        known = _git(repo, "cat-file", "-e", f"{sha}^{{commit}}")
+        if known.returncode != 0:  # M:GAS-REF-SHA-UNKNOWN
+            raise Refusal(f"calibration_ref:sha_unknown:{sha}")
+        ancestor = _git(repo, "merge-base", "--is-ancestor", sha, tip)
+        if ancestor.returncode == 1:  # M:GAS-REF-NOT-ON-REF
+            raise Refusal(f"calibration_ref:not_on_ref:{sha}")
+    return tip
+
+
+def drift_check(repo: Path, calibration: str, later: str) -> None:
+    if _git(repo, "merge-base", "--is-ancestor", calibration, later).returncode != 0:  # M:GAS-DRIFT-ANCESTOR
+        raise Refusal("calibration_drift:not_descendant")
+    changed = _git_bytes(repo, "diff", "--no-renames", "--name-only", "-z", calibration, later)
+    for name in sorted(changed.split(b"\0")):
+        if not name:
+            continue
+        path = os.fsdecode(name)
+        if not path.startswith(CALIBRATION.as_posix() + "/"):  # M:GAS-DRIFT-PATH
+            raise Refusal(f"calibration_drift:{path}")
+    entries = _git_bytes(repo, "ls-tree", "-r", "-z", calibration, "--", str(CALIBRATION))
+    for entry in sorted(filter(None, entries.split(b"\0")), key=lambda item: item.split(b"\t", 1)[1]):
+        metadata, name = entry.split(b"\t", 1)
+        _mode, kind, oid = metadata.split()
+        if kind != b"blob":
+            continue
+        path = os.fsdecode(name)
+        current = _git(repo, "rev-parse", "--verify", f"{later}:{path}")
+        if current.returncode != 0:
+            if True:  # M:GAS-DRIFT-ABSENT
+                raise Refusal(f"calibration_drift:{path}")
+            continue
+        if current.stdout.strip() != oid:  # M:GAS-DRIFT-BLOB
+            raise Refusal(f"calibration_drift:{path}")
+
+
+def main_leak(repo: Path, data_sha: str, sources: dict[str, str]) -> tuple[str, str, int]:
+    head = _git_bytes(repo, "rev-parse", "HEAD^{commit}").decode().strip()
+    data_sha = _git_bytes(repo, "rev-parse", f"{data_sha}^{{commit}}").decode().strip()
+    with tempfile.TemporaryDirectory(prefix="gas-main-leak-") as directory:
+        tree = Path(directory)
+        _extract_archive(_git_bytes(repo, "archive", "--format=tar", data_sha), tree)
+        reach_check(tree)
+        digests = {hashlib.sha256((tree / path).read_bytes()).digest()
+                   for path in calibration_data_files(tree)}
+        ledger = read_ledger(tree)
+        expected = [normalise(row["expected"].encode()).strip() for row in ledger]
+        documents = {(Path(base) / feature / f"{feature}.{phase}.md").as_posix()
+                     for feature, base in sources.items()
+                     for phase in ("plan", "design", "impl-plan")}
+        seeded = []
+        for row in ledger:
+            if row["source"] not in documents:
+                raise Refusal("ledger_counts")
+            needle = normalise(row["seeded"].encode()).strip()
+            if needle not in normalise((tree / row["source"]).read_bytes()):
+                seeded.append(needle)
+        entries = _git_bytes(repo, "ls-tree", "-r", "-z", head)
+        blobs = []
+        for entry in filter(None, entries.split(b"\0")):
+            metadata, name = entry.split(b"\t", 1)
+            _mode, kind, oid = metadata.split()
+            if kind == b"blob":
+                blobs.append((name, oid))
+        blobs.sort()
+        batch = _git_bytes_batch(repo, [oid for _name, oid in blobs])
+        for (name, _oid), content in zip(blobs, batch):
+            path = os.fsdecode(name)
+            if hashlib.sha256(content).digest() in digests:  # M:GAS-MAINLEAK-I
+                raise Refusal(f"main_leak:{path}")
+            text = normalise(content)
+            if any(needle and needle in text for needle in expected):  # M:GAS-MAINLEAK-II
+                raise Refusal(f"main_leak:{path}")
+            if any(needle and needle in text for needle in seeded):  # M:GAS-MAINLEAK-III
+                raise Refusal(f"main_leak:{path}")
+        return head, data_sha, len(blobs)
+
+
+def _git_bytes_batch(repo: Path, oids: list[bytes]) -> list[bytes]:
+    result = _git(repo, "cat-file", "--batch", stdin=b"".join(oid + b"\n" for oid in oids))
+    result.check_returncode()
+    stream = io.BytesIO(result.stdout)
+    blobs = []
+    for oid in oids:
+        object_id, kind, size = stream.readline().split()
+        if object_id != oid or kind != b"blob":
+            raise ValueError("unexpected cat-file object")
+        content = stream.read(int(size))
+        if len(content) != int(size) or stream.read(1) != b"\n":
+            raise ValueError("truncated cat-file blob")
+        blobs.append(content)
+    return blobs
+
+
+def list_check(export: Path, repo: Path) -> str:
+    _entries, _commit, current = read_exclusions(repo, "HEAD")
+    data = export / CALIBRATION
+    cycles = [data / "s1" / surface for surface in ("grok", "agy", "codex")
+              if (data / "s1" / surface).is_dir()]
+    docs = sorted((data / "s2").glob("d*"),
+                  key=lambda path: int(path.name[1:]))
+    for doc in docs:
+        cycles.extend(sorted(doc.glob("v*"), key=lambda path: int(path.name[1:])))
+    recorded = []
+    for cycle in cycles:
+        path = cycle / "root.txt"
+        if not path.is_file():
+            if True:  # M:GAS-LIST-UNRECORDED
+                raise Refusal("list_changed:unrecorded")
+            continue
+        lines = path.read_text(encoding="utf-8").splitlines()
+        records = [parse_root_line(line) for line in lines if line.startswith("ROOT: READY ")]
+        fields = records[0] if len(records) == 1 else None
+        if fields is None:  # M:GAS-LIST-MALFORMED
+            raise Refusal("list_changed:unrecorded")
+        if fields is None:
+            continue
+        blob = fields["list_blob"]
+        if blob != current:  # M:GAS-LIST-CHANGED
+            raise Refusal(f"list_changed:{blob}")
+        recorded.append(blob)
+    return f"LIST: recorded={','.join(recorded)} current={current}"
+
+
+def _branch_checks(args: argparse.Namespace) -> None:
+    shas = [args.calibration_sha, args.smoke_sha]
+    if args.score_sha is not None:
+        shas.append(args.score_sha)
+    ref_checks(args.repo, args.remote, shas)
+    for later in shas[1:]:
+        drift_check(args.repo, args.calibration_sha, later)
+    if args.score_sha is not None:
+        if _git(args.repo, "merge-base", "--is-ancestor", args.smoke_sha, args.score_sha).returncode != 0:  # M:GAS-DRIFT-SMOKE-ANCESTOR
+            raise Refusal("calibration_drift:not_descendant")
+
+
+def rescore(args: argparse.Namespace) -> tuple[list[str], str]:
+    directories = []
+    try:
+        _branch_checks(args)
+        export = Path(tempfile.mkdtemp(prefix="gas-rescore-"))
+        directories.append(export)
+        _extract_archive(_git_bytes(args.repo, "archive", "--format=tar", args.score_sha), export)
+        reach_check(export)
+        head, data, blobs = main_leak(args.repo, args.score_sha, args.sources)
+        lines = [f"SCANNED: main={head} data={data} blobs={blobs}", list_check(export, args.repo)]
+        check_ledger(export, args.sources)
+        for index in range(1, len(args.sources) * 3 + 1):
+            root_args = argparse.Namespace(
+                repo=args.repo, calibration_sha=args.calibration_sha, sources=args.sources,
+                doc=f"d{index}", purpose="rescore", list_commit="HEAD", dest_parent=None,
+            )
+            root_line = build_root(root_args)
+            directories.append(Path(parse_root_line(root_line)["path"]))
+        observations, token = score(export, args.sources, args.calibration_sha, args.score_sha)
+        return lines + observations, token
+    finally:
+        for directory in reversed(directories):
+            try:
+                _remove_tree(directory)
+            except OSError as exc:
+                print(f"[H-MAD] cleanup failed path={directory}: {exc}", file=sys.stderr)
+        for directory in directories:
+            try:
+                if directory in directory.parent.iterdir():
+                    print(f"[H-MAD] cleanup remains path={directory}", file=sys.stderr)
+            except OSError as exc:
+                print(f"[H-MAD] cleanup re-list failed path={directory}: {exc}", file=sys.stderr)
+        print("[H-MAD] grok-audit-surface rescore cleanup complete", file=sys.stderr)
+
+
+def _mode_main_leak(args: argparse.Namespace) -> int:
+    _branch_checks(args)
+    head, data, blobs = main_leak(args.repo, args.score_sha or args.smoke_sha, args.sources)
+    print(f"MAINLEAK: CLEAN scanned={head} data={data} blobs={blobs}")
+    return 0
+
+
+def _mode_rescore(args: argparse.Namespace) -> int:
+    lines, token = rescore(args)
+    for line in lines:
+        print(line)
+    print(token)
+    return 0
+
+
+MODES["main-leak"] = _mode_main_leak
+MODES["rescore"] = _mode_rescore
 
 
 def build_parser() -> _TokenArgumentParser:

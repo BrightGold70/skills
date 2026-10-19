@@ -1104,6 +1104,182 @@
       "find": "            if items is None:  # M:GAS-SCORE-EFFORT-MALFORMED",
       "replace": "            if False:  # M:GAS-SCORE-EFFORT-MALFORMED",
       "test": "tests/test_grok_audit_surface_probe.py::test_score_maps_a_malformed_effort_block"
+    },
+    {
+      "name": "p-calset-finding",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if any(needle and needle in text for needle in findings):  # M:GAS-CALSET-FINDING",
+      "replace": "            if False:  # M:GAS-CALSET-FINDING",
+      "test": "tests/test_grok_audit_surface_probe.py::test_calibration_data_set_keeps_an_excluded_name_carrying_a_finding_text"
+    },
+    {
+      "name": "p-calset-seeded",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if any(needle and needle in text for needle in seeded):  # M:GAS-CALSET-SEEDED",
+      "replace": "            if False:  # M:GAS-CALSET-SEEDED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_calibration_data_set_keeps_an_excluded_name_carrying_a_seeded_span"
+    },
+    {
+      "name": "p-calset-expected",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if any(needle and needle in text for needle in expected):  # M:GAS-CALSET-EXPECTED",
+      "replace": "            if False:  # M:GAS-CALSET-EXPECTED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_calibration_data_set_keeps_an_excluded_name_carrying_an_expected_sentence"
+    },
+    {
+      "name": "p-drift-path",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not path.startswith(CALIBRATION.as_posix() + \"/\"):  # M:GAS-DRIFT-PATH",
+      "replace": "        if False:  # M:GAS-DRIFT-PATH",
+      "test": "tests/test_grok_audit_surface_probe.py::test_drift_outside_calibration_dir"
+    },
+    {
+      "name": "p-drift-ancestor",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if _git(repo, \"merge-base\", \"--is-ancestor\", calibration, later).returncode != 0:  # M:GAS-DRIFT-ANCESTOR",
+      "replace": "    if False:  # M:GAS-DRIFT-ANCESTOR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_drift_not_descendant"
+    },
+    {
+      "name": "p-drift-smoke-ancestor",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if _git(args.repo, \"merge-base\", \"--is-ancestor\", args.smoke_sha, args.score_sha).returncode != 0:  # M:GAS-DRIFT-SMOKE-ANCESTOR",
+      "replace": "        if False:  # M:GAS-DRIFT-SMOKE-ANCESTOR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_drift_score_not_descendant_of_smoke_commit"
+    },
+    {
+      "name": "p-drift-blob-seeded",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if current.stdout.strip() != oid:  # M:GAS-DRIFT-BLOB",
+      "replace": "        if False:  # M:GAS-DRIFT-BLOB",
+      "test": "tests/test_grok_audit_surface_probe.py::test_drift_seeded_copy_changed_at_score_sha"
+    },
+    {
+      "name": "p-drift-blob-ledger",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if current.stdout.strip() != oid:  # M:GAS-DRIFT-BLOB",
+      "replace": "        if False:  # M:GAS-DRIFT-BLOB",
+      "test": "tests/test_grok_audit_surface_probe.py::test_drift_ledger_changed_at_smoke_commit"
+    },
+    {
+      "name": "p-drift-absent",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if True:  # M:GAS-DRIFT-ABSENT",
+      "replace": "            if False:  # M:GAS-DRIFT-ABSENT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_drift_ledger_absent_at_score_sha"
+    },
+    {
+      "name": "p-mainleak-i-copy",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if hashlib.sha256(content).digest() in digests:  # M:GAS-MAINLEAK-I",
+      "replace": "            if False:  # M:GAS-MAINLEAK-I",
+      "test": "tests/test_grok_audit_surface_probe.py::test_main_leak_trigger_i_byte_equal_copy"
+    },
+    {
+      "name": "p-mainleak-i-stdout",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if hashlib.sha256(content).digest() in digests:  # M:GAS-MAINLEAK-I",
+      "replace": "            if False:  # M:GAS-MAINLEAK-I",
+      "test": "tests/test_grok_audit_surface_probe.py::test_main_leak_trigger_i_on_a_captured_wrapper_stdout"
+    },
+    {
+      "name": "p-mainleak-i-smoke",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if hashlib.sha256(content).digest() in digests:  # M:GAS-MAINLEAK-I",
+      "replace": "            if False:  # M:GAS-MAINLEAK-I",
+      "test": "tests/test_grok_audit_surface_probe.py::test_main_leak_trigger_i_smoke_commit_without_score_sha"
+    },
+    {
+      "name": "p-mainleak-i-finding",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if hashlib.sha256(content).digest() in digests:  # M:GAS-MAINLEAK-I",
+      "replace": "            if False:  # M:GAS-MAINLEAK-I",
+      "test": "tests/test_grok_audit_surface_probe.py::test_main_leak_trigger_i_on_an_excluded_name_carrying_a_finding_text"
+    },
+    {
+      "name": "p-mainleak-ii",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if any(needle and needle in text for needle in expected):  # M:GAS-MAINLEAK-II",
+      "replace": "            if False:  # M:GAS-MAINLEAK-II",
+      "test": "tests/test_grok_audit_surface_probe.py::test_main_leak_trigger_ii_expected"
+    },
+    {
+      "name": "p-mainleak-iii",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if any(needle and needle in text for needle in seeded):  # M:GAS-MAINLEAK-III",
+      "replace": "            if False:  # M:GAS-MAINLEAK-III",
+      "test": "tests/test_grok_audit_surface_probe.py::test_main_leak_trigger_iii_seeded_span"
+    },
+    {
+      "name": "p-ref-fetch",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if advertised.returncode or fetched.returncode or resolved.returncode:  # M:GAS-REF-FETCH",
+      "replace": "    if False:  # M:GAS-REF-FETCH",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ref_fetch_failed_no_remote"
+    },
+    {
+      "name": "p-ref-absent",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if advertised.returncode == 2:  # M:GAS-REF-ABSENT",
+      "replace": "    if False:  # M:GAS-REF-ABSENT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ref_absent"
+    },
+    {
+      "name": "p-ref-sha-unknown",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if known.returncode != 0:  # M:GAS-REF-SHA-UNKNOWN",
+      "replace": "        if False:  # M:GAS-REF-SHA-UNKNOWN",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ref_sha_unknown"
+    },
+    {
+      "name": "p-ref-not-on-ref",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if ancestor.returncode == 1:  # M:GAS-REF-NOT-ON-REF",
+      "replace": "        if False:  # M:GAS-REF-NOT-ON-REF",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ref_not_on_ref"
+    },
+    {
+      "name": "p-list-changed",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if blob != current:  # M:GAS-LIST-CHANGED",
+      "replace": "        if False:  # M:GAS-LIST-CHANGED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_recorded_blob_differs"
+    },
+    {
+      "name": "p-list-unrecorded",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if True:  # M:GAS-LIST-UNRECORDED",
+      "replace": "            if False:  # M:GAS-LIST-UNRECORDED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_unrecorded_root_record"
+    },
+    {
+      "name": "p-list-malformed",
+      "_mechanism": "Disable only this Task 10 guard, keeping subsequent checks runnable so the behavioural assertion must catch it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if fields is None:  # M:GAS-LIST-MALFORMED",
+      "replace": "        if False:  # M:GAS-LIST-MALFORMED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_malformed_root_record"
     }
   ]
 }
