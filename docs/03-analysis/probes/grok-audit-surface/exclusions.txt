@@ -1,0 +1,6 @@
+dir docs/archive/2026-09/audit-report-docs-copy
+dir docs/archive/2026-09/tdd-gate-fail-opens
+dir docs/archive/2026-10/agy-coder-fallback
+dir docs/03-analysis/probes/grok-audit-surface
+dir docs/03-analysis/agy-coder-fallback.authoring
+name-contains grok-audit-surface
