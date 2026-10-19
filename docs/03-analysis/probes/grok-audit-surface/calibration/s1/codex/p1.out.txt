@@ -1,0 +1,39 @@
+AUDIT-audit-report-docs-copy-plan-v3-BEGIN
+## Summary
+The plan covers FR-1–FR-6 at strategy level, but its mutation census and evidence records need correction under the supplied invariants. Read-only checks confirmed 40 unique AC declarations and 23 mutation records. The sandbox denied the requested report-file write, so no completion marker was created.
+
+| Requirement | Classification |
+|---|---|
+| FR-1 | implemented-as-written |
+| FR-2 | implemented-as-written |
+| FR-3 | implemented-as-written |
+| FR-4 | implemented-as-written |
+| FR-5 | implemented-as-written |
+| FR-6 | implemented-as-written |
+
+Evidence: 19 files opened, 5 greps run.
+
+## Must-fix
+- The success criterion publishes 25 mutations, whereas the deliverables, spec AC-6.3 and actual JSON contain 23 — the completion threshold contradicts the measured population and violates the counts invariant. Re-derived with `python3 -c 'import json; print(len(json.load(open("h-mad/tests/mutation-specs/collect_report.json"))["mutations"]))'`, which prints `23`; correct the published total.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `(25 mutations, every connection dropped`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `23 mutations.`
+- Several load-bearing observations omit their exact runnable commands — the surface-grammar probe names a Python method without its invocation, the byte-identity census gives only its result, and v1.11 records replay outputs without their commands. Supply the probe, census and replay commands with their original roots and inputs; identify unavailable historical artifacts explicitly. These records fail “Behavioural premises carry their command.”
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › ``executed `_VERSION_RE.search` (2026-09-02):``; `21/21 overlapping`; `gate(RP)=GATE: INVALID must=0 should=0 rc=2`
+
+## Should-fix
+- FR-2's explicit token enumeration omits `CONFLICT`, despite the spec and the plan's conflict policy requiring that verdict — align the contract line so an implementer cannot reasonably produce a two-token interface.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `COLLECT: OK|MISSING path=<docs path>`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `COLLECT: OK|MISSING|CONFLICT path=<docs path>`
+- The mitigation switches this feature's audits to the CLI after task 2, although Implementation Strategy creates the CLI in task 3 — retain hand collection until task 3 finishes so the instructions do not invoke an unavailable executable.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `after task 2, use the worktree CLI`; `(3) the CLI;`
+- The risk table directs verification to a nonexistent test file — `h-mad/tests/test_h_mad_audit_cycle_slices.py` is absent; the referenced section-slicing helpers are in `h-mad/tests/test_h_mad_audit_cycle_docs.py`. Correct the pointer so the prescribed verification can run.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `test_h_mad_audit_cycle_slices.py`
+
+## Nit
+None
+AUDIT-audit-report-docs-copy-plan-v3-END

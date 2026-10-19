@@ -1,0 +1,13 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=4 should=1 passes=1 p1=4/1 delivered=report-file size_status=verified
+Effort:
+- p1 tools=41 ok=41 unresolved=0 thinking=35654 format=grok paths=33 code=8 other=25 unmeasured=0
+Premise checklist:
+- p1 must (no citation): FR-2's requirements contract prints `COLLECT: OK|MISSING` and omits `CONFLICT`, which is narrower than the spec's `COLLECT: OK|MISSING|CONFLICT` token set — AC-2.5 and AC-5.4 require a `CONFLICT` verdict, and the same plan's Goals bullet still names `COLLECT: MISSING|CONFLICT`, so a CLI built from the requirements line would not emit the token the rest of the feature gates on.
+- p1 must (no citation): FR-3 is restated: Requirements name the refusal marker `[H-MAD] <stem>` and say the feature slot is the dot-free transport stem, while the spec (and this plan's Scope line) still say `[H-MAD] <feature>`. Those are different strings in the slot (`audit_f_plan_cycle3_codex` versus a feature name), so the gate line an implementer prints is not fixed.
+- p1 must (no citation): FR-6's Success Criteria requires 25 mutations on `collect_report.json`. The plan's own FR-6 line and deliverable say 23, spec AC-6.3 labels 23 mutants (`a` through `l′`), and `h-mad/tests/mutation-specs/collect_report.json` holds 23 mutation objects. A verifier scoring the success line rejects a spec-complete spec.
+- p1 must (no citation): The SKILL.md edit risk names `test_h_mad_audit_cycle_slices.py` as the anchor test. Spec AC-5.2 names `test_h_mad_audit_cycle_docs.py`, and that is the file under `h-mad/tests` that slices `## Audit prompt assembly` and `6.6.`. No `*slices*` file exists under `h-mad/`, so the "insert outside these anchors" instruction points at a test that cannot go red.
+reports: /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/gas-root-d1-s1-4xe_60ja/docs/01-plan/features/audit-report-docs-copy.plan.audit.v1.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

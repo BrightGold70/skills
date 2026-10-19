@@ -1,0 +1,1 @@
+RESOLVED-MODEL agent=grok model=grok-4.7-build effort=- resolved=1 source=/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25/data/s1/grok/p1.log

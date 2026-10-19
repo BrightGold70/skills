@@ -1,0 +1,11 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=2 should=3 passes=1 p1=2/3 delivered=out size_status=verified
+Effort:
+- p1 not measured (codex-text log; the effort counters read agy stream-json only) targets: paths=24 code=17 other=7 unmeasured=5
+Premise checklist:
+- p1 must (no citation): The success criterion publishes 25 mutations, whereas the deliverables, spec AC-6.3 and actual JSON contain 23 — the completion threshold contradicts the measured population and violates the counts invariant. Re-derived with `python3 -c 'import json; print(len(json.load(open("h-mad/tests/mutation-specs/collect_report.json"))["mutations"]))'`, which prints `23`; correct the published total.
+- p1 must (no citation): Several load-bearing observations omit their exact runnable commands — the surface-grammar probe names a Python method without its invocation, the byte-identity census gives only its result, and v1.11 records replay outputs without their commands. Supply the probe, census and replay commands with their original roots and inputs; identify unavailable historical artifacts explicitly. These records fail “Behavioural premises carry their command.”
+reports: /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/gas-root-d1-s1-4xe_60ja/docs/01-plan/features/audit-report-docs-copy.plan.audit.v3.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

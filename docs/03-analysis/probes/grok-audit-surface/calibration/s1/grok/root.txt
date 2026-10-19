@@ -1,0 +1,1 @@
+ROOT: READY doc=d1 purpose=s1 path=/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/gas-root-d1-s1-4xe_60ja calibration=ab2c85dc2e25be31dcc13740ee9e71a0703d8cc7 list_commit=d4b03fd9bd9bc43d3099cc2d145d45dc9ba5f6c2 list_blob=b78b7f3b2a5893fdd4cd83d591efed83f2069203 absent=0

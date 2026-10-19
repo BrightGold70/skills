@@ -1,0 +1,11 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=2 should=3 passes=1 p1=2/3 delivered=out size_status=verified
+Effort:
+- p1 tools=44 ok=40 failed=4 thinking=6033 paths=15 code=12 other=3 unmeasured=0
+Premise checklist:
+- p1 must (no citation): `## Requirements` narrows the FR-2 `COLLECT:` contract line to `COLLECT: OK|MISSING`, omitting `|CONFLICT` — `docs/01-plan/features/audit-report-docs-copy.spec.md` (`FR-2`, `AC-2.5`, `AC-2.6a`, `AC-5.4`) and the plan's own `## Goals` and `## Architecture Considerations` require three verdict tokens (`OK|MISSING|CONFLICT`), so restating the contract line in `## Requirements` without `|CONFLICT` violates Axis C (weaker/narrower restatement of a spec requirement) and Axis A (internal contradiction).
+- p1 must (no citation): `## Success Criteria` claims `25 mutations` in `collect_report.json` while `## Requirements`, `## Deliverables`, `## Version History` v1.9, the paired spec (`AC-6.3`), and `h-mad/tests/mutation-specs/collect_report.json` all have `23` — violates Axis A (`Contradictions`) and the Base Invariant `Counts are derived, never estimated` (`v1.9` updated `## Requirements` and `## Deliverables` to 23 but left `25 mutations` in `## Success Criteria`).
+reports: /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/gas-root-d1-s1-4xe_60ja/docs/01-plan/features/audit-report-docs-copy.plan.audit.v2.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL
