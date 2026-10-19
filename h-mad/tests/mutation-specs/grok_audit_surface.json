@@ -63,6 +63,126 @@
       "find": "        if not isinstance(exc, ProbeRefusal):  # M:GAS-TRACEBACK-SCOPE",
       "replace": "        if True:  # M:GAS-TRACEBACK-SCOPE",
       "test": "tests/test_grok_audit_surface_probe.py::test_usage_error_prints_the_mode_token"
+    },
+    {
+      "name": "p-ledger-class-repeated",
+      "_mechanism": "Allow repeated per-document classes while aggregate totals remain unchanged.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if sorted(actual) != sorted(permitted):  # M:GAS-LEDGER-CLASS",
+      "replace": "        if False:  # M:GAS-LEDGER-CLASS",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_a_repeated_class_with_totals_kept"
+    },
+    {
+      "name": "p-ledger-class-moved",
+      "_mechanism": "Allow a class moved into the document required to omit it.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if sorted(actual) != sorted(permitted):  # M:GAS-LEDGER-CLASS",
+      "replace": "        if False:  # M:GAS-LEDGER-CLASS",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_a_moved_class"
+    },
+    {
+      "name": "p-ledger-json",
+      "_mechanism": "Disable the JSON-object refusal.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not isinstance(record, dict):  # M:GAS-LEDGER-JSON",
+      "replace": "        if False:  # M:GAS-LEDGER-JSON",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_an_unparseable_line"
+    },
+    {
+      "name": "p-ledger-field",
+      "_mechanism": "Disable required-field validation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not required <= record.keys():  # M:GAS-LEDGER-FIELD",
+      "replace": "        if False:  # M:GAS-LEDGER-FIELD",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_a_missing_field"
+    },
+    {
+      "name": "p-ledger-source",
+      "_mechanism": "Allow sources outside the phase documents.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if record[\"source\"] not in documents:  # M:GAS-LEDGER-SOURCE",
+      "replace": "        if False:  # M:GAS-LEDGER-SOURCE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_a_source_outside_the_nine"
+    },
+    {
+      "name": "p-ledger-empty-original",
+      "_mechanism": "Allow an empty original through the ledger-counts check.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not record[\"original\"]:  # M:GAS-LEDGER-EMPTY-ORIGINAL",
+      "replace": "        if False:  # M:GAS-LEDGER-EMPTY-ORIGINAL",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_an_empty_original"
+    },
+    {
+      "name": "p-ledger-empty-expected",
+      "_mechanism": "Allow an empty expected finding.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if not record[\"expected\"]:  # M:GAS-LEDGER-EMPTY-EXPECTED",
+      "replace": "        if False:  # M:GAS-LEDGER-EMPTY-EXPECTED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_an_empty_expected"
+    },
+    {
+      "name": "p-origin",
+      "_mechanism": "Allow origins outside the imported vocabulary.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if record[\"origin\"] not in ORIGINS:  # M:GAS-ORIGIN",
+      "replace": "        if False:  # M:GAS-ORIGIN",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ledger_origin_refuses_an_unknown_origin"
+    },
+    {
+      "name": "p-rebuild-bytes",
+      "_mechanism": "Disable the byte-for-byte reconstruction comparison.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if rebuilt != seeded_document:  # M:GAS-REBUILD-BYTES",
+      "replace": "        if False:  # M:GAS-REBUILD-BYTES",
+      "test": "tests/test_grok_audit_surface_probe.py::test_seed_rebuild_refuses_one_byte"
+    },
+    {
+      "name": "p-rebuild-original-once",
+      "_mechanism": "Allow a repeated original when one replacement matches the copy.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if original_document.count(original) != 1:  # M:GAS-REBUILD-ORIGINAL-ONCE",
+      "replace": "            if False:  # M:GAS-REBUILD-ORIGINAL-ONCE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_seed_rebuild_refuses_a_twice_occurring_original"
+    },
+    {
+      "name": "p-rebuild-section-twice",
+      "_mechanism": "Allow two seeds in the same heading section.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if section in occupied_sections:  # M:GAS-REBUILD-SECTION-TWICE",
+      "replace": "            if False:  # M:GAS-REBUILD-SECTION-TWICE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_seed_rebuild_refuses_two_seeds_in_one_section"
+    },
+    {
+      "name": "p-rebuild-version-history",
+      "_mechanism": "Allow a seed in Version History.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if parents and parents[-1].group(2).strip() == b\"Version History\":  # M:GAS-REBUILD-VERSION-HISTORY",
+      "replace": "            if False:  # M:GAS-REBUILD-VERSION-HISTORY",
+      "test": "tests/test_grok_audit_surface_probe.py::test_seed_rebuild_refuses_a_seed_under_version_history"
+    },
+    {
+      "name": "p-rebuild-section-name",
+      "_mechanism": "Disable the exact containing-heading comparison.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if heading is None or heading.group(2).strip().decode(\"utf-8\") != record[\"section\"]:  # M:GAS-REBUILD-SECTION-NAME",
+      "replace": "            if False:  # M:GAS-REBUILD-SECTION-NAME",
+      "test": "tests/test_grok_audit_surface_probe.py::test_seed_rebuild_refuses_a_wrong_section_name"
+    },
+    {
+      "name": "p-rebuild-seeded-once",
+      "_mechanism": "Allow a seeded span appearing more than once.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if seeded_document.count(seeded) != 1:  # M:GAS-REBUILD-SEEDED-ONCE",
+      "replace": "            if False:  # M:GAS-REBUILD-SEEDED-ONCE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_seed_rebuild_refuses_a_seeded_span_not_once"
+    },
+    {
+      "name": "p-refusal-reason",
+      "_mechanism": "Replace the declared refusal reason with its internal exception class.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        reason = exc.reason  # M:GAS-REFUSAL-REASON",
+      "replace": "        reason = \"internal:Refusal\"  # M:GAS-REFUSAL-REASON",
+      "test": "tests/test_grok_audit_surface_probe.py::test_ledger_counts_refuses_an_unparseable_line"
     }
   ]
 }

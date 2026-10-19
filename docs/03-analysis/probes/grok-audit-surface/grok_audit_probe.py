@@ -1,7 +1,14 @@
 """Probe entry point for the Grok audit surface calibration."""
 
 import argparse
+from collections import Counter
+import io
+import json
+import re
+import subprocess
 import sys
+import tarfile
+import tempfile
 import traceback
 from pathlib import Path
 from typing import Callable, NoReturn
@@ -20,6 +27,7 @@ SOURCES: dict[str, str] = {
     "tdd-gate-fail-opens": "docs/archive/2026-09",
     "agy-coder-fallback": "docs/archive/2026-10",
 }
+CALIBRATION = Path("docs/03-analysis/probes/grok-audit-surface/calibration")
 GRAMMAR: dict[str, tuple[str, str]] = {
     "check-ledger": ("LEDGER:", "UNREADABLE"),
     "build-root": ("ROOT:", "UNREADABLE"),
@@ -71,6 +79,120 @@ def parse_sources(value: str) -> dict[str, str]:
             raise argparse.ArgumentTypeError("expected unique name=archive-dir entries")
         sources[name] = directory
     return sources
+
+
+def read_ledger(tree: Path) -> list[dict]:
+    """Read one JSON object per line, mapping unreadable input to its refusal."""
+    try:
+        lines = (tree / CALIBRATION / "ledger.jsonl").read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise Refusal("ledger_counts") from exc
+    records = []
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except ValueError:
+            record = None
+        if not isinstance(record, dict):  # M:GAS-LEDGER-JSON
+            raise Refusal("ledger_counts")
+        records.append(record)
+    return records
+
+
+def check_ledger(tree: Path, sources: dict[str, str]) -> dict[str, int]:
+    """Validate the class rule, imported origins and exact seed reconstruction."""
+    documents = [
+        (Path(directory) / feature / f"{feature}.{phase}.md").as_posix()
+        for feature, directory in sources.items()
+        for phase in ("plan", "design", "impl-plan")
+    ]
+    records = read_ledger(tree)
+    required = set("id source phase class origin section original seeded expected".split())
+    for record in records:
+        if not required <= record.keys():  # M:GAS-LEDGER-FIELD
+            raise Refusal("ledger_counts")
+        if record["source"] not in documents:  # M:GAS-LEDGER-SOURCE
+            raise Refusal("ledger_counts")
+        if not record["original"]:  # M:GAS-LEDGER-EMPTY-ORIGINAL
+            raise Refusal("ledger_counts")
+        if not record["expected"]:  # M:GAS-LEDGER-EMPTY-EXPECTED
+            raise Refusal("ledger_counts")
+
+    classes = ("C1", "C2", "C3", "C4")
+    expected_totals = Counter()
+    actual_totals = Counter()
+    for index, source in enumerate(documents):
+        permitted = [value for slot, value in enumerate(classes) if slot != index % len(classes)]
+        actual = [record["class"] for record in records if record["source"] == source]
+        if sorted(actual) != sorted(permitted):  # M:GAS-LEDGER-CLASS
+            raise Refusal("ledger_counts")
+        expected_totals.update(permitted)
+        actual_totals.update(actual)
+    if actual_totals != expected_totals:
+        raise Refusal("ledger_counts")
+
+    for record in records:
+        if record["origin"] not in ORIGINS:  # M:GAS-ORIGIN
+            raise Refusal("ledger_origin")
+
+    for source in documents:
+        try:
+            original_document = (tree / source).read_bytes()
+            seeded_document = (tree / CALIBRATION / "seeded" / Path(source).name).read_bytes()
+        except OSError as exc:
+            raise Refusal("seed_rebuild") from exc
+        rebuilt = original_document
+        occupied_sections = set()
+        for record in records:
+            if record["source"] != source:
+                continue
+            original = record["original"].encode("utf-8")
+            seeded = record["seeded"].encode("utf-8")
+            if original_document.count(original) != 1:  # M:GAS-REBUILD-ORIGINAL-ONCE
+                raise Refusal("seed_rebuild")
+            position = original_document.find(original)
+            headings = list(re.finditer(rb"^(#{2,3})[ \t]+([^\r\n]+)", original_document, re.MULTILINE))
+            preceding = [heading for heading in headings if heading.start() < position]
+            heading = preceding[-1] if preceding else None
+            section = heading.start() if heading is not None else None
+            if section in occupied_sections:  # M:GAS-REBUILD-SECTION-TWICE
+                raise Refusal("seed_rebuild")
+            occupied_sections.add(section)
+            parents = [item for item in preceding if item.group(1) == b"##"]
+            if parents and parents[-1].group(2).strip() == b"Version History":  # M:GAS-REBUILD-VERSION-HISTORY
+                raise Refusal("seed_rebuild")
+            if heading is None or heading.group(2).strip().decode("utf-8") != record["section"]:  # M:GAS-REBUILD-SECTION-NAME
+                raise Refusal("seed_rebuild")
+            if seeded_document.count(seeded) != 1:  # M:GAS-REBUILD-SEEDED-ONCE
+                raise Refusal("seed_rebuild")
+            rebuilt = rebuilt.replace(original, seeded, 1)
+        if rebuilt != seeded_document:  # M:GAS-REBUILD-BYTES
+            raise Refusal("seed_rebuild")
+    return {"seeds": sum(actual_totals.values()), "docs": len(documents),
+            **{value: actual_totals[value] for value in classes}}
+
+
+def _mode_check_ledger(args: argparse.Namespace) -> int:
+    if args.tree is not None:
+        counts = check_ledger(args.tree, args.sources)
+    else:
+        try:
+            archive = subprocess.run(
+                ["git", "-C", str(args.repo), "archive", "--format=tar", args.calibration_sha],
+                capture_output=True, check=True, timeout=15,
+            ).stdout
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise Refusal(f"calibration_ref:sha_unknown:{args.calibration_sha}") from exc
+        with tempfile.TemporaryDirectory(prefix="gas-ledger-") as directory:
+            tree = Path(directory)
+            with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
+                bundle.extractall(tree, filter="data")
+            counts = check_ledger(tree, args.sources)
+    print("LEDGER: OK " + " ".join(f"{key}={value}" for key, value in counts.items()))
+    return 0
+
+
+MODES["check-ledger"] = _mode_check_ledger
 
 
 def build_parser() -> _TokenArgumentParser:
@@ -146,7 +268,7 @@ def build_parser() -> _TokenArgumentParser:
 def refusal_token(mode: str, exc: BaseException, argv: list[str]) -> str:
     prefix, verdict = GRAMMAR[mode]
     if isinstance(exc, Refusal):
-        reason = exc.reason
+        reason = exc.reason  # M:GAS-REFUSAL-REASON
     elif mode == "smoke":
         path = ""
         if _OPEN_INPUT is not None:
