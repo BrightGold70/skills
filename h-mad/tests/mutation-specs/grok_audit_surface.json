@@ -1443,6 +1443,110 @@
       "find": "When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,grok`",
       "replace": "When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,codex`",
       "test": "tests/test_grok_fallback_docs.py::test_never_gate_section_cross_references_the_grok_leg"
+    },
+    {
+      "name": "grok-sandbox-default-dropped",
+      "_mechanism": "Omit the strict default so an unspecified profile is passed empty.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    sandbox=\"${sandbox:-strict}\"  # M:GROK-SANDBOX-DEFAULT",
+      "replace": "    :  # M:GROK-SANDBOX-DEFAULT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_defaults_to_strict"
+    },
+    {
+      "name": "grok-sandbox-default-forced",
+      "_mechanism": "Force strict even when the caller explicitly overrides a weaker profile.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    sandbox=\"${sandbox:-strict}\"  # M:GROK-SANDBOX-DEFAULT",
+      "replace": "    sandbox=\"strict\"  # M:GROK-SANDBOX-DEFAULT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_weaker_profile_with_override_is_recorded"
+    },
+    {
+      "name": "grok-sandbox-arg-dropped",
+      "_mechanism": "Stop appending the explicit sandbox argument to Grok.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    gargs+=(--sandbox \"$sandbox\")  # M:GROK-SANDBOX-ARG",
+      "replace": "    :  # M:GROK-SANDBOX-ARG",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_defaults_to_strict"
+    },
+    {
+      "name": "grok-sandbox-arg-forced",
+      "_mechanism": "Send strict instead of the explicitly overridden profile.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    gargs+=(--sandbox \"$sandbox\")  # M:GROK-SANDBOX-ARG",
+      "replace": "    gargs+=(--sandbox strict)  # M:GROK-SANDBOX-ARG",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_weaker_profile_with_override_is_recorded"
+    },
+    {
+      "name": "grok-sandbox-weaker-disarmed",
+      "_mechanism": "Disable this profile refusal while leaving other validation intact.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if [ -n \"$sandbox\" ] && [ \"$sandbox\" != strict ] && [ \"$allow_weaker_sandbox\" -eq 0 ]; then  # M:GROK-SANDBOX-WEAKER",
+      "replace": "    if false; then  # M:GROK-SANDBOX-WEAKER",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_weaker_profile_refused"
+    },
+    {
+      "name": "grok-override-alone-disarmed",
+      "_mechanism": "Disable this profile refusal while leaving other validation intact.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if [ \"$allow_weaker_sandbox\" -eq 1 ] && [ -z \"$sandbox\" ]; then  # M:GROK-SANDBOX-OVERRIDE-ALONE",
+      "replace": "    if false; then  # M:GROK-SANDBOX-OVERRIDE-ALONE",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_override_alone_exits_2[no-sandbox]"
+    },
+    {
+      "name": "grok-override-strict-disarmed",
+      "_mechanism": "Disable this profile refusal while leaving other validation intact.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if [ \"$allow_weaker_sandbox\" -eq 1 ] && [ \"$sandbox\" = strict ]; then  # M:GROK-SANDBOX-OVERRIDE-STRICT",
+      "replace": "    if false; then  # M:GROK-SANDBOX-OVERRIDE-STRICT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_override_alone_exits_2[strict]"
+    },
+    {
+      "name": "grok-only-flag-codex",
+      "_mechanism": "Accept the Grok-only override flag for every agent.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    --allow-weaker-sandbox) [ \"$agent\" = grok ] || { _unknown_opt exec \"$1\"; return $?; }; allow_weaker_sandbox=1; shift ;;  # M:GROK-OVERRIDE-GROK-ONLY",
+      "replace": "    --allow-weaker-sandbox) allow_weaker_sandbox=1; shift ;;  # M:GROK-OVERRIDE-GROK-ONLY",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_allow_weaker_sandbox_is_unknown_for_codex_and_agy[codex]"
+    },
+    {
+      "name": "grok-only-flag-agy",
+      "_mechanism": "Accept the Grok-only override flag for every agent.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    --allow-weaker-sandbox) [ \"$agent\" = grok ] || { _unknown_opt exec \"$1\"; return $?; }; allow_weaker_sandbox=1; shift ;;  # M:GROK-OVERRIDE-GROK-ONLY",
+      "replace": "    --allow-weaker-sandbox) allow_weaker_sandbox=1; shift ;;  # M:GROK-OVERRIDE-GROK-ONLY",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_allow_weaker_sandbox_is_unknown_for_codex_and_agy[agy]"
+    },
+    {
+      "name": "grok-sandbox-env-dropped",
+      "_mechanism": "Leave GROK_SANDBOX in the child environment.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    child_env=(-u GROK_SANDBOX \"${child_env[@]}\")  # M:GROK-SANDBOX-ENV",
+      "replace": "    :  # M:GROK-SANDBOX-ENV",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_child_has_no_grok_sandbox_env"
+    },
+    {
+      "name": "grok-profile-origin-forced",
+      "_mechanism": "Record default origin even for an explicitly overridden profile.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    printf 'GROK-PROFILE: profile=%s origin=%s\\n' \"$sandbox\" \"$origin\" > \"$log.profile\"  # M:GROK-PROFILE-RECORD",
+      "replace": "    printf 'GROK-PROFILE: profile=%s origin=%s\\n' \"$sandbox\" default > \"$log.profile\"  # M:GROK-PROFILE-RECORD",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_weaker_profile_with_override_is_recorded"
+    },
+    {
+      "name": "grok-profile-record-dropped",
+      "_mechanism": "Omit the per-pass profile record while still launching Grok.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    printf 'GROK-PROFILE: profile=%s origin=%s\\n' \"$sandbox\" \"$origin\" > \"$log.profile\"  # M:GROK-PROFILE-RECORD",
+      "replace": "    :  # M:GROK-PROFILE-RECORD",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_audit_cycle_writes_a_profile_record_per_grok_pass"
+    },
+    {
+      "name": "exec-pane-admits-grok",
+      "_mechanism": "Admit Grok through the existing exec-pane agent guard.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    *) echo \"hmad-dispatch: exec-pane: unknown agent '$agent' (expected codex|agy)\" >&2; return 2 ;;",
+      "replace": "    *) [ \"$agent\" = grok ] || { echo \"hmad-dispatch: exec-pane: unknown agent '$agent' (expected codex|agy)\" >&2; return 2; } ;;",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_pane_still_refuses_grok"
     }
   ]
 }

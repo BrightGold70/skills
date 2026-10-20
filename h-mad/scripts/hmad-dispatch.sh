@@ -2966,7 +2966,7 @@ _codex_input_too_large() {  # <log> <pre_lines> -> "max_chars=N actual_chars=M" 
   printf 'max_chars=%s actual_chars=%s' "${maxc:-?}" "${actc:-?}"
 }
 
-_cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox] [grok: --sandbox <profile>]
+_cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox] [grok: --sandbox <profile> (default strict), --allow-weaker-sandbox]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
   # to reap: this verb returns the agent's own exit code, no idle poll. The agent's
@@ -3059,6 +3059,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   fi
 
   local cd_dir="" model="" out="" timeout="" sandbox="" effort="" log=""
+  local allow_weaker_sandbox=0 origin="default"
   [ "$agent" = codex ] && sandbox="workspace-write"   # codex default; agy has none
   while [ $# -gt 0 ]; do case "$1" in
     --cd) _need_val exec --cd $# || return $?; cd_dir="$2"; shift 2 ;;
@@ -3066,10 +3067,25 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
     --out) _need_val exec --out $# || return $?; out="$2"; shift 2 ;;
     --log) _need_val exec --log $# || return $?; log="$2"; shift 2 ;;             # stream live transcript here for `tail -f`
     --timeout) _need_val exec --timeout $# || return $?; timeout="$2"; shift 2 ;;
-    --sandbox) _need_val exec --sandbox $# || return $?; sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox; grok: passed verbatim
+    --sandbox) _need_val exec --sandbox $# || return $?; sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox; grok: strict or explicit override
+    --allow-weaker-sandbox) [ "$agent" = grok ] || { _unknown_opt exec "$1"; return $?; }; allow_weaker_sandbox=1; shift ;;  # M:GROK-OVERRIDE-GROK-ONLY
     --effort) _need_val exec --effort $# || return $?; effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort; grok: --reasoning-effort
     *) _unknown_opt exec "$1"; return $? ;;
   esac; done
+
+  if [ "$agent" = grok ]; then
+    if [ "$allow_weaker_sandbox" -eq 1 ] && [ -z "$sandbox" ]; then  # M:GROK-SANDBOX-OVERRIDE-ALONE
+      echo "hmad-dispatch: exec: --allow-weaker-sandbox needs a --sandbox weaker than strict" >&2; return 2
+    fi
+    if [ "$allow_weaker_sandbox" -eq 1 ] && [ "$sandbox" = strict ]; then  # M:GROK-SANDBOX-OVERRIDE-STRICT
+      echo "hmad-dispatch: exec: --allow-weaker-sandbox needs a --sandbox weaker than strict" >&2; return 2
+    fi
+    if [ -n "$sandbox" ] && [ "$sandbox" != strict ] && [ "$allow_weaker_sandbox" -eq 0 ]; then  # M:GROK-SANDBOX-WEAKER
+      echo "hmad-dispatch: exec: grok --sandbox ${sandbox} is weaker than strict or unknown; pass --allow-weaker-sandbox to run it, and it is recorded" >&2; return 2
+    fi
+    sandbox="${sandbox:-strict}"  # M:GROK-SANDBOX-DEFAULT
+    [ "$allow_weaker_sandbox" -eq 1 ] && origin="override"
+  fi
 
   # The WAIT gets a ceiling even when the caller gives no `--timeout` (#22).
   #
@@ -3193,13 +3209,15 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   if [ "$agent" = grok ]; then
     # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:
     # the prompt travels as a file, never as an argv element (AC-3.5).
+    child_env=(-u GROK_SANDBOX "${child_env[@]}")  # M:GROK-SANDBOX-ENV
     local gargs=(--cwd "$cd_dir" --always-approve --output-format streaming-json
                  --prompt-file "$bounded_prompt")
     [ -n "$model" ]   && gargs+=(--model "$model")
     [ -n "$effort" ]  && gargs+=(--reasoning-effort "$effort")
-    [ -n "$sandbox" ] && gargs+=(--sandbox "$sandbox")
+    gargs+=(--sandbox "$sandbox")  # M:GROK-SANDBOX-ARG
     if [ -f "$log" ]; then pre_lines="$(wc -l < "$log" 2>/dev/null | tr -d " ")"; fi
     [ -n "$pre_lines" ] || pre_lines=0
+    printf 'GROK-PROFILE: profile=%s origin=%s\n' "$sandbox" "$origin" > "$log.profile"  # M:GROK-PROFILE-RECORD
     _HMAD_EXEC_BEAT_LOG="$log"
     ( cd "$cd_dir" && _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
       "$wait_secs" env "${child_env[@]}" grok "${gargs[@]}" ) < /dev/null >> "$log" 2>&1 || rc=$?
@@ -3212,7 +3230,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
       printf '%s\n' "$grok_final"
       echo "hmad-dispatch: exec: grok stopReason=$(_grok_stop_reason "$log" "$pre_lines")" >&2
       [ -n "$auto_log" ] && _render_progress "$log" 40 >&2 || true
-      [ -n "$auto_log" ] && rm -f "$log"
+      [ -n "$auto_log" ] && rm -f "$log" "$log.profile"
     else
       final_empty=1
     fi

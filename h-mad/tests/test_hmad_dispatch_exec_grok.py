@@ -109,7 +109,7 @@ def test_exec_grok_argv_carries_prompt_file_and_headless_flags(tmp_path):
 
 
 @pytest.mark.parametrize("options,expected", [
-    (["--model", "m1", "--effort", "high", "--sandbox", "s1"], True),
+    (["--model", "m1", "--effort", "high", "--sandbox", "s1", "--allow-weaker-sandbox"], True),
     ([], False),
 ], ids=["given", "none"])
 def test_exec_grok_translates_model_effort_sandbox(tmp_path, options, expected):
