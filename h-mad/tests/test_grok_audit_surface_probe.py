@@ -28,7 +28,7 @@ from grokauditfixtures import (
     build_extract_inputs, extract_report_path, extract_report_text,
     write_extract_cycle, commit_root_tree, git, load_probe,
     build_score_inputs, write_score_tables,
-    build_rescore_inputs, commit_fixture_tree, _hostile_text,
+    build_rescore_inputs, commit_fixture_tree, _hostile_text, build_probe_parent_dirs,
 )
 
 
@@ -1041,18 +1041,20 @@ def test_build_root_reset_refuses_a_missing_target(reset_case, capsys):
     assert n == 0, "a declared missing-target refusal must not print a traceback"
 
 
-def test_build_root_reset_refuses_a_target_outside_the_tempdir(reset_case, tmp_path, capsys):
-    target = tmp_path / "gas-root-d1-s1-outside"
-    target.mkdir()
+def test_build_root_reset_refuses_a_target_in_system_temp(task24_case, capsys):
+    case = task24_case
+    target = case["systemp"] / "roots" / "gas-root-d1-s1-x"
+    target.mkdir(parents=True)
     sentinel, content = _reset_sentinel(target)
-    result = _run_reset(reset_case, capsys, target=target)
+    argv = _task24_argv(case, "build-root", dest=False) + ["--reset", str(target)]
+    result = _task24_run(case, argv, capsys)
 
     assert (result.returncode, result.stdout.splitlines()[-1:]) == (
-        2, ["ROOT: UNREADABLE reason=internal:ResetTargetOutsideTempdir"],
-    ), result.stderr
-    assert sentinel.read_bytes() == content, "an outside target must retain its sentinel bytes"
+        2, ["ROOT: UNREADABLE reason=internal:ResetTargetInSystemTemp"],
+    ), f"reset must refuse a resolved target anywhere inside system temp: {result.stdout!r}; {result.stderr}"
+    assert sentinel.read_bytes() == content, "a system-temp reset target must retain its sentinel bytes"
     n = result.stderr.count("Traceback")
-    assert n == 0, "a declared tempdir-parent refusal must not print a traceback"
+    assert n == 0, "a declared system-temp reset refusal must not print a traceback"
 
 
 def test_build_root_reset_refuses_another_documents_root(reset_case, capsys):
@@ -2866,3 +2868,310 @@ def test_sources_override_reaches_every_ledger_mode(mode, rescore_case, tmp_path
     if mode == "rescore":
         required |= {"main_leak", "build_root", "score"}
     assert required <= set(calls), f"{mode} must exercise every ledger/source consumer through the CLI: {calls!r}"
+
+
+# Task 24 RED: existing invocation/fixture churn is deliberately deferred to GREEN.
+@pytest.fixture
+def parent_layout(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+                 "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    paths = build_probe_parent_dirs(tmp_path)
+    monkeypatch.setenv("TMPDIR", str(paths["systemp"]))
+    monkeypatch.setattr(tempfile, "tempdir", str(paths["systemp"]))
+    return paths
+
+
+@pytest.fixture
+def task24_case(parent_layout, rescore_case):
+    return {**rescore_case, **parent_layout}
+
+
+def _task24_argv(case, mode, *, work=True, dest=True):
+    """Valid real inputs let each omitted/invalid parent reach its own guard."""
+    sources = ["--sources", ",".join(
+        f"{feature}={directory}" for feature, directory in case["sources"].items()
+    )]
+    if mode == "build-root":
+        argv = [mode, "--repo", str(case["repo"]), "--calibration-sha", case["calibration"],
+                "--doc", "d1", "--purpose", "s1", *sources]
+        if dest:
+            argv += ["--dest-parent", str(case["roots"])]
+    elif mode in ("main-leak", "rescore"):
+        argv = _branch_argv(case, mode)
+    elif mode == "check-ledger-repo":
+        argv = ["check-ledger", "--repo", str(case["repo"]),
+                "--calibration-sha", case["calibration"], *sources]
+    elif mode == "extract-repo":
+        argv = ["extract", "--repo", str(case["repo"]), "--base-sha", case["score"],
+                "--s2", str(case["s2"]), "--shuffle-seed", "1729",
+                "--out", str(case["work_dir"].parent / "task24-extracted"), *sources]
+    else:
+        raise AssertionError(f"unknown Task 24 fixture mode: {mode}")
+    if work:
+        argv += ["--work-dir", str(case["work_dir"])]
+    return argv
+
+
+def _task24_run(case, argv, capsys):
+    capsys.readouterr()
+    rc = case["probe"].main(argv)
+    out, err = capsys.readouterr()
+    return subprocess.CompletedProcess(argv, rc, out, err)
+
+
+def test_dest_parent_must_be_a_directory(task24_case, tmp_path, capsys, monkeypatch):
+    case = task24_case
+    ordinary_file = tmp_path / "parent [a]* ⟦h-mad⟧.txt"
+    ordinary_file.write_text(_hostile_text(), encoding="utf-8")
+    for parent in (ordinary_file, tmp_path / "missing-parent", Path("relative-parent")):
+        argv = _task24_argv(case, "build-root", dest=False) + ["--dest-parent", str(parent)]
+        result = _task24_run(case, argv, capsys)
+        _assert_root_refusal(result, "internal:ParentNotDirectory",
+                             "--dest-parent must be an absolute existing directory")
+    # Relative existing directories and None must take the same declared guard.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "relative-parent").mkdir()
+    for parent in (None, "relative-parent", str(ordinary_file), str(tmp_path / "missing-parent")):
+        with pytest.raises(case["probe"].ParentNotDirectory):
+            case["probe"].checked_parent(parent, git_guard=False)
+
+
+def test_dest_parent_in_system_temp_refuses(task24_case, tmp_path, capsys):
+    case = task24_case
+    link = tmp_path / "temp-link [a]* ⟦h-mad⟧"
+    link.symlink_to(case["systemp"], target_is_directory=True)
+    nested = case["systemp"] / "nested"
+    nested.mkdir()
+    for parent in (case["systemp"], nested, link, Path("/tmp"), Path("/private/tmp")):
+        argv = _task24_argv(case, "build-root", dest=False) + ["--dest-parent", str(parent)]
+        result = _task24_run(case, argv, capsys)
+        _assert_root_refusal(result, "internal:ParentInSystemTemp",
+                             "resolved --dest-parent must lie outside every system-temp root")
+
+
+def test_work_dir_in_system_temp_refuses(task24_case, capsys):
+    case = task24_case
+    for work_dir in (case["systemp"], Path("/tmp"), Path("/private/tmp")):
+        argv = _task24_argv(case, "build-root", work=False) + ["--work-dir", str(work_dir)]
+        result = _task24_run(case, argv, capsys)
+        _assert_root_refusal(result, "internal:ParentInSystemTemp",
+                             "--work-dir must be checked before any scratch allocation")
+
+
+def test_work_dir_in_a_git_work_tree_refuses(task24_case, capsys, monkeypatch):
+    case = task24_case
+    nested = case["repo"] / "scratch [a]* ⟦h-mad⟧"
+    nested.mkdir()
+    # D7 must ignore inherited Git context while deciding the actual work directory.
+    monkeypatch.setenv("GIT_DIR", str(case["work_dir"] / "absent.git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(case["work_dir"]))
+    for work_dir in (case["repo"], nested):
+        argv = _task24_argv(case, "build-root", work=False) + ["--work-dir", str(work_dir)]
+        result = _task24_run(case, argv, capsys)
+        _assert_root_refusal(result, "internal:WorkDirInGitTree",
+                             "--work-dir must reject both a Git work tree and its descendants")
+
+
+def test_build_root_requires_a_parent(task24_case, capsys):
+    result = _task24_run(task24_case, _task24_argv(task24_case, "build-root", dest=False), capsys)
+    _assert_root_refusal(result, "internal:UsageError",
+                         "build-root requires one of --dest-parent and --reset")
+    assert "--dest-parent" in result.stderr and "--reset" in result.stderr, (
+        "parser.error must diagnose the missing parent pair, rather than rejecting --work-dir: "
+        f"{result.stderr!r}"
+    )
+    assert "unrecognized arguments" not in result.stderr, "the declared --work-dir flag must parse"
+
+
+@pytest.mark.parametrize("site", ["ledger-tree", "ledger-repo", "root", "extract", "main-leak", "rescore"])
+def test_every_scratch_dir_lies_under_the_work_dir(site, task24_case, monkeypatch, capsys):
+    case, recorded = task24_case, []
+    real_mkdtemp, real_temporary_directory = tempfile.mkdtemp, tempfile.TemporaryDirectory
+
+    def record_mkdtemp(*args, **kwargs):
+        path = real_mkdtemp(*args, **kwargs)
+        recorded.append(("mkdtemp", Path(path).resolve(), kwargs.get("dir")))
+        return path
+
+    def record_temporary_directory(*args, **kwargs):
+        directory = real_temporary_directory(*args, **kwargs)
+        recorded.append(("TemporaryDirectory", Path(directory.name).resolve(), kwargs.get("dir")))
+        return directory
+
+    monkeypatch.setattr(case["probe"].tempfile, "mkdtemp", record_mkdtemp)
+    monkeypatch.setattr(case["probe"].tempfile, "TemporaryDirectory", record_temporary_directory)
+    mode = {"ledger-tree": "build-root", "ledger-repo": "check-ledger-repo",
+            "root": "build-root", "extract": "extract-repo"}.get(site, site)
+    result = _task24_run(case, _task24_argv(case, mode), capsys)
+    assert result.returncode == 0, (
+        f"{site}: exercise the real allocation path before checking its scratch parent; "
+        f"stdout={result.stdout!r}; stderr={result.stderr!r}"
+    )
+    prefix = {"ledger-tree": "gas-ledger-", "ledger-repo": "gas-ledger-",
+              "root": "gas-root-", "extract": "gas-extract-",
+              "main-leak": "gas-main-leak-", "rescore": "gas-rescore-"}[site]
+    assert any(path.name.startswith(prefix) for _kind, path, _parent in recorded), (
+        f"{site}: the designated scratch site must actually allocate a directory"
+    )
+    assert {kind for kind, _path, _parent in recorded} >= {"mkdtemp", "TemporaryDirectory"}, (
+        f"{site}: both tempfile entry points must be observed on the real mode path"
+    )
+    for kind, path, supplied_parent in recorded:
+        expected = case["roots"] if mode == "build-root" and path.name.startswith("gas-root-") else case["work_dir"]
+        assert supplied_parent is not None and path.is_relative_to(expected.resolve()), (
+            f"{site}: every {kind} scratch directory must receive dir= under {expected}; "
+            f"allocated {path} with dir={supplied_parent!r}"
+        )
+
+
+def test_build_root_reset_refuses_a_target_outside_a_roots_dir(task24_case, tmp_path, capsys):
+    case = task24_case
+    target = tmp_path / "other" / "gas-root-d1-s1-x"
+    target.mkdir(parents=True)
+    sentinel, content = _reset_sentinel(target)
+    argv = _task24_argv(case, "build-root", dest=False) + ["--reset", str(target)]
+    result = _task24_run(case, argv, capsys)
+
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, ["ROOT: UNREADABLE reason=internal:ResetTargetOutsideRoots"],
+    ), f"reset must require the resolved parent to be named roots: {result.stdout!r}; {result.stderr}"
+    assert sentinel.read_bytes() == content, "a target outside roots must retain its sentinel bytes"
+    n = result.stderr.count("Traceback")
+    assert n == 0, "a declared roots-parent reset refusal must not print a traceback"
+
+
+def test_build_root_reset_removes_an_in_root_report_and_tmp(task24_case, capsys):
+    case = task24_case
+    argv = _task24_argv(case, "build-root")
+    built = _task24_run(case, argv, capsys)
+    live_fields = _ready_fields(built, "reset report/tmp removal needs a real root outside system temp")
+    live = Path(live_fields["path"])
+    fresh = _task24_run(case, argv, capsys)
+    expected = Path(_ready_fields(fresh, "reset must match a fresh build")["path"])
+    stem = "audit_paper-lantern_plan_cycle1_run20990101T010203Z-314"
+    paths = [live / ".hmad-report" / f"{stem}_p1.report.md",
+             live / "cycle-v1.collected" / f"{stem}_p1.report.md",
+             live / ".tmp" / "staged prompt [a]* ⟦h-mad⟧.txt"]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_hostile_text(), encoding="utf-8")
+    reset_argv = _task24_argv(case, "build-root", dest=False) + ["--reset", str(live)]
+    result = _task24_run(case, reset_argv, capsys)
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        0, [built.stdout.splitlines()[-1]],
+    ), f"reset must remove in-root reports and staged prompts: {result.stdout!r}; {result.stderr}"
+    assert all(not path.exists() for path in paths), "reset must remove the report, collected copy and staged prompt"
+    assert not (live / ".tmp").exists(), "reset must remove the staged-prompt directory itself"
+    assert _reset_manifest(live) == _reset_manifest(expected), (
+        "reset must leave exactly a fresh build's paths, types and bytes, including removal of dot entries"
+    )
+
+
+@pytest.mark.parametrize("mode", ["build-root", "main-leak", "rescore", "check-ledger-repo", "extract-repo"])
+def test_work_dir_is_required_where_a_directory_is_created(mode, task24_case, capsys):
+    argv = _task24_argv(task24_case, mode, work=False)
+    result = _task24_run(task24_case, argv, capsys)
+    actual_mode = argv[0]
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, [f"{REFUSALS[actual_mode]} reason=internal:UsageError"],
+    ), f"{mode}: main must require --work-dir before allocating a directory: {result.stdout!r}; {result.stderr}"
+    assert "--work-dir" in result.stderr, f"{mode}: parser.error must name the missing --work-dir"
+    assert "Traceback" not in result.stderr, f"{mode}: a required-work-dir refusal must be declared"
+
+
+_RESET_DIFFERENTIAL = [
+    ("systemp-child", "accepted", "ResetTargetInSystemTemp"),
+    ("roots-outside-temp", "ResetTargetOutsideTempdir", "accepted"),
+    ("roots-inside-temp", "ResetTargetOutsideTempdir", "ResetTargetInSystemTemp"),
+    ("non-roots-parent", "ResetTargetOutsideTempdir", "ResetTargetOutsideRoots"),
+    ("wrong-doc-prefix", "ResetTargetOutsideTempdir", "ResetTargetPrefix"),
+    ("wrong-purpose-prefix", "ResetTargetOutsideTempdir", "ResetTargetPrefix"),
+    ("nested-root", "ResetTargetOutsideTempdir", "ResetTargetOutsideRoots"),
+    ("sibling-roots-dir", "ResetTargetOutsideTempdir", "accepted"),
+    ("symlink-into-roots", "ResetTargetOutsideTempdir", "accepted"),
+    ("symlink-into-temp", "accepted", "ResetTargetInSystemTemp"),
+    ("physical-spelling", "ResetTargetOutsideTempdir", "accepted"),
+    ("git-target", "ResetTargetOutsideTempdir", "Refusal:root_git:.git"),
+    ("git-target-in-temp", "Refusal:root_git:.git", "ResetTargetInSystemTemp"),
+    ("empty", "ResetTargetNotAbsolute", "ResetTargetNotAbsolute"),
+    ("missing", "ResetTargetNotDirectory", "ResetTargetNotDirectory"),
+]
+
+
+@pytest.mark.parametrize("target_id,old_expected,new_expected", _RESET_DIFFERENTIAL,
+                         ids=[row[0] for row in _RESET_DIFFERENTIAL])
+def test_reset_precondition_old_new_differential(target_id, old_expected, new_expected,
+                                                parent_layout, tmp_path):
+    old_source = git(REPO, "show", "66ff0894:docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py")
+    assert "    if root.parent != Path(tempfile.gettempdir()).resolve():  # M:GAS-RESET-TMPDIR" in old_source.splitlines(), (
+        "the differential's old predicate must be the shipped guard, not a reimplementation"
+    )
+    old_probe = load_probe(PROBE, source=old_source)
+    new_probe = load_probe(PROBE)
+    roots, systemp = parent_layout["roots"], parent_layout["systemp"]
+    normal = roots / "gas-root-d1-s1-x"
+    in_temp = systemp / "gas-root-d1-s1-x"
+    targets = {
+        "systemp-child": in_temp,
+        "roots-outside-temp": normal,
+        "roots-inside-temp": systemp / "roots" / "gas-root-d1-s1-x",
+        "non-roots-parent": tmp_path / "other" / "gas-root-d1-s1-x",
+        "wrong-doc-prefix": roots / "gas-root-d2-s1-x",
+        "wrong-purpose-prefix": roots / "gas-root-d1-s2v1-x",
+        "nested-root": roots / "gas-root-d1-s1-a" / "gas-root-d1-s1-b",
+        "sibling-roots-dir": tmp_path / "other-run" / "roots" / "gas-root-d1-s1-x",
+        "git-target": normal,
+        "git-target-in-temp": in_temp,
+    }
+    if target_id == "empty":
+        target = ""
+    elif target_id == "missing":
+        target = str(roots / "gas-root-d1-s1-missing")
+        assert not Path(target).exists(), "the missing-target guard fixture must stay absent"
+    elif target_id in ("symlink-into-roots", "symlink-into-temp", "physical-spelling"):
+        normal.mkdir()
+        in_temp.mkdir()
+        if target_id == "symlink-into-roots":
+            link, destination = systemp / "target-link", normal
+            target = str(link)
+        elif target_id == "symlink-into-temp":
+            link, destination = roots / "target-link", in_temp
+            target = str(link)
+        else:
+            link, destination = tmp_path / "run-link", roots.parent
+            target = str(link / "roots" / normal.name)
+        link.symlink_to(destination, target_is_directory=True)
+    else:
+        path = targets[target_id]
+        path.mkdir(parents=True)
+        if target_id.startswith("git-target"):
+            git(path, "init", "--initial-branch=main")
+        target = str(path)
+
+    def outcome(probe):
+        try:
+            return probe.check_reset_target(target, "d1")
+        except probe.Refusal as exc:
+            return f"Refusal:{exc.reason}"
+        except probe.ProbeRefusal as exc:
+            return type(exc).__name__
+
+    expected_path = Path(target).resolve()
+    wanted = tuple(expected_path if value == "accepted" else value
+                   for value in (old_expected, new_expected))
+    actual = outcome(old_probe), outcome(new_probe)
+    assert actual == wanted, (
+        f"{target_id}: reset re-anchoring must preserve the exact shipped/new verdict pair; "
+        f"expected {wanted!r}, observed {actual!r}"
+    )
+    softened = {"roots-outside-temp", "sibling-roots-dir", "symlink-into-roots", "physical-spelling"}
+    if isinstance(actual[1], Path) and not isinstance(actual[0], Path):
+        assert target_id in softened, "no target outside the four designed cases may become accepted"
+        resolved = actual[1]
+        assert resolved.parent.name == "roots" and resolved.name.startswith("gas-root-d1-s1-")
+        assert not any(resolved.is_relative_to(path.resolve()) for path in (
+            systemp, Path("/tmp"), Path("/private/tmp"),
+        )), "a softened target must be outside every resolved system-temp root"
+        new_probe.reach_check(resolved)

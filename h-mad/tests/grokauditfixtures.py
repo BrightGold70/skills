@@ -213,14 +213,41 @@ def commit_root_tree(case: dict, *, extra_parents=()) -> str:
                    input=f"Root fixture calibration: {_hostile_text()}\n")
 
 
-def load_probe(path: Path) -> types.ModuleType:
+def load_probe(path: Path, *, source: str | None = None) -> types.ModuleType:
     """Compile fresh source so same-size mutations cannot reuse stale bytecode."""
-    code = compile(path.read_bytes(), str(path), "exec")
+    code = compile(path.read_bytes() if source is None else source, str(path), "exec")
     module = types.ModuleType("grok_audit_probe")
     module.__file__ = str(path)
     sys.modules[module.__name__] = module
     exec(code, module.__dict__)
     return module
+
+
+def build_probe_parent_dirs(tmp_path: Path) -> dict[str, Path]:
+    """Separate scratch, roots and stand-in system temp from the fixture checkout."""
+    paths = {
+        "work_dir": tmp_path / "scratch",
+        "systemp": tmp_path / "systemp",
+        "roots": tmp_path / "run" / "roots",
+    }
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    environment = os.environ.copy()
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+                 "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE"):
+        environment.pop(name, None)
+    result = subprocess.run(
+        ["git", "-C", str(paths["work_dir"]), "rev-parse", "--git-dir"],
+        capture_output=True, text=True, timeout=15, env=environment,
+    )
+    assert result.returncode != 0, "the shared scratch directory must lie outside every Git work tree"
+    for name in ("work_dir", "roots"):
+        assert not paths[name].resolve().is_relative_to(paths["systemp"].resolve())
+        for systemp in (Path("/tmp"), Path("/private/tmp")):
+            assert not paths[name].resolve().is_relative_to(systemp.resolve()), (
+                "accepted parents must also lie outside the fixed system-temp spellings"
+            )
+    return paths
 
 
 def build_cycle_inputs(directory: Path, root: Path, ready_line: str) -> dict:
