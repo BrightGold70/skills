@@ -1,0 +1,20 @@
+## Summary
+`docs/02-design/features/grok-audit-surface.design.md` (v1.7) resolves the D16 production prompt/scratch placement (`<top level>/.h-mad/tmp/hmad_exec_grok.XXXXXX/` in a git work tree vs `<cd>/.tmp/` in a gitless probe root) and aligns with `docs/01-plan/features/grok-audit-surface.spec.md` (v1.13) on all core architecture and containment mechanisms. No must-fix defects remain. Two should-fix items are noted: D20's test list omits the two `internal:<ExceptionName>` refusal fixtures required by spec v1.13 AC-11.6, and `docs/01-plan/features/grok-audit-surface.plan.md` (v1.7) retains stale cross-document notes about D16 and the sixth quarantine refusal reason.
+
+## Must-fix
+None
+
+## Should-fix
+- D20's test plan in `test_grok_audit_surface_containment.py` enumerates fixtures for only five of the six `quarantine` refusal reasons (`quarantine_exists`, `move_failed`, `residue`, `count_mismatch`, `unreadable`) and still remarks that the sixth form (`internal:<E>`) is "owed to the spec, which lists five", whereas `spec.md` v1.13 AC-11.6 already requires fixtures for all six refusal reason forms, including two fixtures for `internal` (one planted by an injected exception and one by a usage error).
+  class: build
+  quote: docs/01-plan/features/grok-audit-surface.spec.md › `for AC-11.7, one fixture per refusal reason form (all six, `internal` among them, planted by an injected exception and, separately, by a usage error), plus a verified quarantine, each run against a stand-in `$HOME`.`
+  quote: docs/02-design/features/grok-audit-surface.design.md › `**D1's last resort adds a sixth form**: a usage error or an escaping exception prints `QUARANTINE: REFUSED reason=internal:<E>`, which is a refusal like the others (owed to the spec, which lists five).`
+  quote: docs/02-design/features/grok-audit-surface.design.md › `- **Tests** (`test_grok_audit_surface_containment.py`, stand-in `$HOME`): `test_quarantine_verifies_and_moves_every_match`, `test_quarantine_verifies_zero_matches`, `test_quarantine_refuses_an_existing_quarantine`, `test_quarantine_refuses_a_failed_move`, `test_quarantine_refuses_residue` (a matching directory planted after the move: `residue:1`), `test_quarantine_refuses_a_count_mismatch`, `test_quarantine_refuses_an_unreadable_store`, `test_quarantine_never_deletes`.`
+- `plan.md` v1.7 has stale cross-document status notes relative to `spec.md` v1.13 and `design.md` v1.7: its "Containment" ("Still open") and "Next Steps" sections still state that D16 "What reaches production" describes `<cd>/.tmp/` for every `exec grok` and is owed to spec v1.13 and the design (both of which have now landed it), and its "Containment" section still lists only five refusal reasons for `quarantine` without the sixth `internal:<ExceptionName>` reason encoded in `spec.md` v1.13 and `design.md` D20.
+  class: measurement
+  quote: docs/01-plan/features/grok-audit-surface.plan.md › `D16 "What reaches production" still describes `<cd>/.tmp/` for every `exec grok`, which conflicts with the orchestrator's `<git toplevel>/.h-mad/` ruling for production. That is owed to spec v1.13 and then to the design.`
+  quote: docs/01-plan/features/grok-audit-surface.plan.md › `It ends on one token line; a refusal is exactly one of `quarantine_exists`, `move_failed:<n>`, `residue:<n>`, `count_mismatch`, `unreadable`, in that order (R21), and the guarded stage does not start.`
+  quote: docs/02-design/features/grok-audit-surface.design.md › `(2) In a git checkout, `exec grok` stages under `<top level>/.h-mad/tmp/hmad_exec_grok.XXXXXX/` and removes it, so `git status` is unchanged (v1.7).`
+
+## Nit
+- In `docs/02-design/features/grok-audit-surface.design.md`, `## Invariant Compliance` ("Operator-override preservation; Backward compatibility") still summarizes FR-11 as `FR-11 changes `exec grok` for every caller (the `strict` default, the prompt in `<cd>/.tmp/`, `TMPDIR`)` without mentioning the `<top level>/.h-mad/tmp/hmad_exec_grok.XXXXXX/` git-checkout path introduced in v1.7, and `## Overview` / `## Plan obligations answered` still cite `spec v1.12` rather than `spec v1.13`.
