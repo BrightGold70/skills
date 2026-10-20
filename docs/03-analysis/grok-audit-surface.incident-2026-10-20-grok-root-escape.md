@@ -44,8 +44,51 @@ The spec's AC-2.6 git reach check refuses a root that holds a `.git` entry or fr
 
 ## What is still owed
 
-1. A containment decision before any further grok dispatch against seeded documents: a read-only checkout for the run, a separate clone the auditor cannot name, or an agent-side sandbox. The watcher only detects.
+1. ~~A containment decision before any further grok dispatch against seeded documents.~~ **Decided 2026-10-20: agent-side sandbox, grok `--sandbox strict`, plus moving the roots.** See §"Containment decision" below. The decision is not yet implemented, and no grok dispatch against seeded documents may run until it is.
 2. Then either a fresh S2 run (all nine documents as v1 in a new run directory) or a probe amendment for operator-declared void cycles, through the spec and design authors.
 3. Task 16's measurement doc should cite this record, and the S4 grok routing (Task 17) must not run on the strength of an audit surface that can write outside its root.
 
 The S2 records, both rounds, remain in `$HOME/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25/data/s2/`.
+
+## Containment decision (2026-10-20)
+
+**Chosen: an agent-side OS sandbox.** The other two options do not stop the observed command. A read-only checkout is one `chmod` away for an agent with a shell, and "a clone the auditor cannot name" cannot be enforced, because the agent found the live path anyway. S2's grok legs ran with **no** `--sandbox`: `data/s2/d5/v1/command.txt` carries none, and `hmad-dispatch.sh` sets a default only for codex (`workspace-write`, `exec`'s `sandbox=` default). `exec` already passes `--sandbox` through to grok verbatim.
+
+**Evidence: grok 1.0.62, macOS 27.0.1 Seatbelt, `--sandbox strict`.** These were live canaries, run headless with `--always-approve`, exactly as dispatch does:
+
+| probe from cwd = root | result |
+|---|---|
+| write `/Users/kimhawk/orca/skills/<file>` (the escape class) | refused, `Operation not permitted` |
+| `git -C /Users/kimhawk/orca/skills log`, read a repo file | refused |
+| read or write a file under `$HOME/.local/state/` | refused |
+| write inside cwd | allowed |
+| `--prompt-file` outside cwd and system temp | grok exits rc=1 (`Failed to read … Operation not permitted`), which fails closed |
+| unknown profile name | rc=1, no work done, which fails closed |
+| read or write a **sibling root under `$TMPDIR`** | **allowed**: strict grants the whole system temp (`$TMPDIR`, `/private/tmp`) |
+| read or write a sibling root under `$HOME/...`, with `TMPDIR` pointed into the own root | refused |
+| read a file in the real `$TMPDIR`, even with `TMPDIR` overridden | allowed |
+
+**What the implementation therefore owes.** Each of these goes through `spec-author`, then `design-author`, then TDD. Do not hot-patch on `main`, because the feature sits at `phase=step5` with the TDD gate armed:
+
+1. **grok defaults to `--sandbox strict` in dispatch** (both `exec` and `exec-pane`). Overriding it to anything weaker needs an explicit flag that gets recorded.
+2. **Export roots move out of system temp.** `build-root` currently uses `$TMPDIR`, and every parallel lane is then readable and writable by every other. The roots go under the run directory instead (`~/.local/state/h-mad/<feature>/run-*/roots/<cycle>/`), where strict denies everything except cwd.
+3. **The grok prompt is staged inside `cd_dir`**, not with `mktemp -t` (`hmad-dispatch.sh`, `bounded_prompt`). Each grok child also gets `TMPDIR=<root>/.tmp`. Nothing seeded may be written to system temp, since strict leaves it readable.
+4. **A per-run preflight canary.** grok documents that when "the sandbox cannot be applied … Grok logs a warning and continues without enforcement". That branch could not be triggered, and `~/.grok/sandbox-events.jsonl` was never written, so nothing positively shows a profile was applied. Before a run's first grok leg, dispatch must make one grok call under the same profile, asking it to write a file outside the root. If that file exists, or the log lacks `Operation not permitted`, the run is refused. A canary that cannot run is refused as well, never treated as passed.
+5. **Optional hardening:** an outer `/usr/bin/sandbox-exec` wrapper, which does not depend on grok's own sandbox code. Not required.
+
+**Out of scope here but the same class.** agy has no sandbox by default, and codex `workspace-write` was not probed against a sibling root. The relocated roots in point 2 protect against those legs too, but neither leg's sandbox is verified. Record that as a residual in the design, not as contained.
+
+**Residuals.** Strict leaves system temp readable, which includes Claude session scratchpads under `/private/tmp`. Only non-seeded material may live there. The model's own in-process network is not restricted, and needs no restriction for this threat.
+
+## S2 route decision (2026-10-20)
+
+**Chosen: route (b), a probe amendment for operator-declared void cycles.** It is one corrective spec and design revision, which also carries §"Containment decision" items 1–4. The operator decided both points on 2026-10-20.
+
+- **A void cycle is not an outcome, so it does not use up AC-3.4's single re-dispatch.** The stands rule runs over the non-void cycles of each document, and each document may still have at most two non-void cycles. The `v3` refusal (`M:GAS-CYCLE-V3`) is relaxed only as far as the voids require. How a void is declared is for the design to settle: a marker in the cycle directory, citing this record, and the measurement doc publishes every void.
+- **What this means for each document, using the recorded verdicts:**
+  - d1, d2, d7 and d8: v1 stands.
+  - d4: v2 stands, as before.
+  - d5 and d6: v1 is void, and v2 (FAIL, clean) stands.
+  - **d3**: v1 is void and v2 is `UNVERIFIED`. It needs **v3**, a fresh grok dispatch.
+  - **d9**: v1 ran from 07:58 to 08:17, across 08:08:54, so it is void. Its v2 was never recorded and is void too. It needs a **fresh cycle**.
+- **So route (b) still dispatches grok**, for d3 and d9, and those two runs wait on the containment implementation.
