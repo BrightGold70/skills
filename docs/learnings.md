@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-20 · gotcha · [0.5] · `git,diagnosis,h-mad,handoff:2026-10-20-grok-audit-surface-s2-root-escape` — A toolchain overwritten mid-run shows as unrelated failures (stem_prefix:0, assemble_halt, missing env support); tell: every changed file shares one mtime second and HEAD did not move.
+- 2026-10-20 · gotcha · [0.7] · `grok,audit,containment,h-mad,handoff:2026-10-20-grok-audit-surface-s2-root-escape` — An export root bounds what an auditor SEES, not where it WRITES: a grok audit pass cd'd to the live checkout by absolute path and ran git checkout <sha> -- ., overwriting 370 files mid-run. Contain shell-capable auditors before live…
 - 2026-10-20 · gotcha · [0.5] · `handoff:2026-10-20-grok-audit-surface-tasks-4-14,h-mad,phase7-integrate` — h_mad_phase7_integrate.py --apply writes a 'closure' merge message; for a mid-feature merge (e.g. before an operator Task) reword it before pushing
 - 2026-10-20 · gotcha · [0.7] · `handoff:2026-10-20-grok-audit-surface-tasks-4-14,h-mad,doc-consumers,interpreter` — h_mad_doc_consumers.py --run under python3 (no pytest) prints UNREADABLE reason=pytest-missing; run it with /opt/anaconda3/bin/python3.11. SKILL.md has 84 consumer files (~10 min)
 - 2026-10-20 · gotcha · [0.7] · `handoff:2026-10-20-grok-audit-surface-tasks-4-14,h-mad,codex-gate,verifier` — h-mad Phase-5 codex gate refuses git diff/show and --check-anchors; a verifier BLOCKED on a diff/spec-unchanged AC means could-not-check, not false — orchestrator measures it and records it in the commit
