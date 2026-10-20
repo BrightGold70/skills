@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-21 · gotcha · [0.7] · `grok,leak,calibration,handoff:2026-10-21-grok-containment-docs-final` — ~/.grok/sessions keeps full past prompts; audit prompts inline unseeded paired originals, so an auditor reading another session sees the answer key — exempt only its own session dir
+- 2026-10-21 · gotcha · [0.7] · `jq,ndjson,measurement,handoff:2026-10-21-grok-containment-docs-final` — Scanning NDJSON agent logs: use jq -R 'fromjson?' — plain jq aborts on one non-JSON line and reports 0; always run the scan against a known-positive log first
+- 2026-10-21 · gotcha · [0.7] · `grok,sandbox,h-mad,handoff:2026-10-21-grok-containment-docs-final` — grok --sandbox strict bounds reads+writes to cwd+system paths but grants ALL system temp ($TMPDIR,/private/tmp); export roots under $TMPDIR are cross-readable/writable between lanes — keep roots under ~/.local/state
 - 2026-10-20 · gotcha · [0.5] · `git,diagnosis,h-mad,handoff:2026-10-20-grok-audit-surface-s2-root-escape` — A toolchain overwritten mid-run shows as unrelated failures (stem_prefix:0, assemble_halt, missing env support); tell: every changed file shares one mtime second and HEAD did not move.
 - 2026-10-20 · gotcha · [0.7] · `grok,audit,containment,h-mad,handoff:2026-10-20-grok-audit-surface-s2-root-escape` — An export root bounds what an auditor SEES, not where it WRITES: a grok audit pass cd'd to the live checkout by absolute path and ran git checkout <sha> -- ., overwriting 370 files mid-run. Contain shell-capable auditors before live…
 - 2026-10-20 · gotcha · [0.5] · `handoff:2026-10-20-grok-audit-surface-tasks-4-14,h-mad,phase7-integrate` — h_mad_phase7_integrate.py --apply writes a 'closure' merge message; for a mid-feature merge (e.g. before an operator Task) reword it before pushing
