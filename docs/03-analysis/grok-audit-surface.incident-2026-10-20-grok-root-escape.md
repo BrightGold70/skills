@@ -92,3 +92,25 @@ The S2 records, both rounds, remain in `$HOME/.local/state/h-mad/grok-audit-surf
   - **d3**: v1 is void and v2 is `UNVERIFIED`. It needs **v3**, a fresh grok dispatch.
   - **d9**: v1 ran from 07:58 to 08:17, across 08:08:54, so it is void. Its v2 was never recorded and is void too. It needs a **fresh cycle**.
 - **So route (b) still dispatches grok**, for d3 and d9, and those two runs wait on the containment implementation.
+
+## S2 route reversed to (a), from new evidence (2026-10-20)
+
+**grok read the unseeded originals in 11 of the 12 recorded S2 cycles.** Every `tool_call` `rawInput` in every pass log under `data/s2/` was extracted line by line with `jq -R 'fromjson?'`, as in the probe below. The check has a positive control: the d5 v1 escape is visible to it, at 14 calls. A first, non-tolerant pass read d5 v1 as 0 and was discarded. These are the counts of tool calls naming `/Users/kimhawk/orca`:
+
+| leg | cycles touching the live checkout | what it touched |
+|---|---|---|
+| grok (pass 3) | **11 of 12**. Only d5 v2 is clean. d1 v1 31/45, d3 v1 52/64, d7 v1 39/55, d8 v1 17/65, and so on | It read, grepped and `find`-ed the **original archived documents** in the live checkout, for example `read_file`/`grep` on `docs/archive/2026-10/agy-coder-fallback/agy-coder-fallback.design.md`. That is the answer key: the seeds are the difference between those files and the export root. |
+| codex (pass 1) | 2 of 12: d6 v2 `ls -ld /Users/kimhawk/orca/skills`; d9 v1 `git rev-parse HEAD` and `git diff --stat … -- h-mad` with cwd in the live checkout | Only metadata and code. No archived document was read. |
+| agy (pass 2) | 0 of 12 (`step_update` tool steps) | — |
+
+```bash
+S=~/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25/data/s2
+for f in $S/d*/v*/p3.log; do
+  jq -R -c 'fromjson? | select(type=="object" and .type=="tool_call") | .rawInput' "$f" \
+    | grep -cE '/Users/kimhawk/orca'
+done
+```
+
+**Consequence.** No grok reading from this S2 run is a valid measurement, whether the cycle was void or not. Route (b) cannot rescue it, because the whole-cycle stands rule would keep the contaminated grok legs of d1, d2, d4, d6, d7 and d8. **The operator chose route (a) on this evidence:** once containment ships, run a fresh S2 of all nine documents on all three surfaces, as v1 in a new run directory under `--sandbox strict`. The void-cycle amendment is dropped. This S2 run is kept as incident evidence only, and is never scored.
+
+**This also widens what the containment is for.** `strict` bounds *reads* to the CWD and system paths, not only writes. For measurement validity, that read bound is the property that matters. codex `workspace-write` and agy have no verified read bound. The measurement therefore publishes this same out-of-root tool-call scan for every standing pass of every surface. A pass that touched the live checkout or an original document is a finding.
