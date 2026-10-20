@@ -9,6 +9,7 @@
     "tests/test_grok_audit_surface_gate_pins.py",
     "tests/test_grok_audit_surface_wrapper.py",
     "tests/test_grok_audit_surface_docs.py",
+    "tests/test_grok_audit_surface_containment.py",
     "tests/test_grok_fallback_docs.py",
     "tests/test_hmad_dispatch_audit_cycle.py",
     "-q"
@@ -1547,6 +1548,198 @@
       "find": "    *) echo \"hmad-dispatch: exec-pane: unknown agent '$agent' (expected codex|agy)\" >&2; return 2 ;;",
       "replace": "    *) [ \"$agent\" = grok ] || { echo \"hmad-dispatch: exec-pane: unknown agent '$agent' (expected codex|agy)\" >&2; return 2; } ;;",
       "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_pane_still_refuses_grok"
+    },
+    {
+      "name": "toolscan-inside-disarmed",
+      "_mechanism": "Disable containment inside the recorded root.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if _below(path, root):  # M:TOOLSCAN-INSIDE",
+      "replace": "    if False:  # M:TOOLSCAN-INSIDE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_grok_clean"
+    },
+    {
+      "name": "toolscan-dev-disarmed",
+      "_mechanism": "Disable the /dev exemption.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if _below(path, \"/dev\"):  # M:TOOLSCAN-DEV",
+      "replace": "    if False:  # M:TOOLSCAN-DEV",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_dev_path_is_exempt"
+    },
+    {
+      "name": "toolscan-own-session-disarmed",
+      "_mechanism": "Disable the own-session exemption.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "        if _below(path, own_session):  # M:TOOLSCAN-OWN-SESSION",
+      "replace": "        if False:  # M:TOOLSCAN-OWN-SESSION",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_own_session_dir_is_exempt[absolute]"
+    },
+    {
+      "name": "toolscan-spell-tilde-dropped",
+      "_mechanism": "Remove tilde as a path start.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    tilde = r\"~/\"  # M:TOOLSCAN-SPELL-TILDE",
+      "replace": "    tilde = r\"(?!)\"  # M:TOOLSCAN-SPELL-TILDE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_own_session_dir_is_exempt[tilde]"
+    },
+    {
+      "name": "toolscan-spell-home-dropped",
+      "_mechanism": "Remove $HOME as a path start.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    home_var = r\"\\$HOME/\"  # M:TOOLSCAN-SPELL-HOME",
+      "replace": "    home_var = r\"(?!)\"  # M:TOOLSCAN-SPELL-HOME",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_own_session_dir_is_exempt[home]"
+    },
+    {
+      "name": "toolscan-spell-brace-dropped",
+      "_mechanism": "Remove ${HOME} as a path start.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    brace = r\"\\$\\{HOME\\}/\"  # M:TOOLSCAN-SPELL-BRACE",
+      "replace": "    brace = r\"(?!)\"  # M:TOOLSCAN-SPELL-BRACE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_own_session_dir_is_exempt[brace]"
+    },
+    {
+      "name": "toolscan-skills-disarmed",
+      "_mechanism": "Disable the Grok skills exemption.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "        if _below(path, home.rstrip(\"/\") + \"/.grok/skills\"):  # M:TOOLSCAN-SKILLS",
+      "replace": "        if False:  # M:TOOLSCAN-SKILLS",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_grok_skills_is_exempt[absolute]"
+    },
+    {
+      "name": "toolscan-own-session-widened",
+      "_mechanism": "Exempt every child of the session store.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "        if _below(path, own_session):  # M:TOOLSCAN-OWN-SESSION",
+      "replace": "        if path.startswith(home.rstrip(\"/\") + \"/.grok/sessions/\"):  # M:TOOLSCAN-OWN-SESSION",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_other_session_dir_is_out_of_root"
+    },
+    {
+      "name": "toolscan-own-session-widened-self",
+      "_mechanism": "Exempt the entire session store including its directory.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "        if _below(path, own_session):  # M:TOOLSCAN-OWN-SESSION",
+      "replace": "        if _below(path, home.rstrip(\"/\") + \"/.grok/sessions\"):  # M:TOOLSCAN-OWN-SESSION",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_sessions_dir_itself_is_out_of_root"
+    },
+    {
+      "name": "toolscan-grok-only-dropped",
+      "_mechanism": "Apply Grok exemptions to all surfaces.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if surface == \"grok\":  # M:TOOLSCAN-GROK-ONLY",
+      "replace": "    if True:  # M:TOOLSCAN-GROK-ONLY",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_codex_own_looking_session_path_is_out_of_root"
+    },
+    {
+      "name": "toolscan-skills-widened",
+      "_mechanism": "Widen skills exemption to every Grok path.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "        if _below(path, home.rstrip(\"/\") + \"/.grok/skills\"):  # M:TOOLSCAN-SKILLS",
+      "replace": "        if _below(path, home.rstrip(\"/\") + \"/.grok\"):  # M:TOOLSCAN-SKILLS",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_other_grok_path_is_out_of_root"
+    },
+    {
+      "name": "toolscan-per-call-exempt-first",
+      "_mechanism": "Give an exempt path priority over an escaped path in the same call.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "        if \"out\" in classes:  # M:TOOLSCAN-PER-CALL",
+      "replace": "        if \"out\" in classes and \"exempt\" not in classes:  # M:TOOLSCAN-PER-CALL",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_mixed_exempt_and_out_of_root_counts_out_of_root"
+    },
+    {
+      "name": "toolscan-word-never-out",
+      "_mechanism": "Report CLEAN even when escaped calls were counted.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    word = \"OUT_OF_ROOT\" if result[\"out_of_root\"] else \"CLEAN\"  # M:TOOLSCAN-OUT-OF-ROOT",
+      "replace": "    word = \"CLEAN\"  # M:TOOLSCAN-OUT-OF-ROOT",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_counts_an_escape_after_a_non_json_line"
+    },
+    {
+      "name": "toolscan-nonjson-ends-scan",
+      "_mechanism": "Stop processing after a malformed JSON line.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            continue  # M:TOOLSCAN-NONJSON",
+      "replace": "            break  # M:TOOLSCAN-NONJSON",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_counts_an_escape_after_a_non_json_line"
+    },
+    {
+      "name": "toolscan-checkout-disarmed",
+      "_mechanism": "Stop counting paths within the live checkout.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            in_checkout = any(_below(path, checkout) for path in outside)  # M:TOOLSCAN-CHECKOUT",
+      "replace": "            in_checkout = False  # M:TOOLSCAN-CHECKOUT",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_grok_live_checkout_counts_checkout"
+    },
+    {
+      "name": "toolscan-needle-disarmed",
+      "_mechanism": "Stop counting paths containing a needle directory.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            in_needle = any(needle + \"/\" in path for path in outside for needle in needle_dirs)  # M:TOOLSCAN-NEEDLE",
+      "replace": "            in_needle = False  # M:TOOLSCAN-NEEDLE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_grok_needle_dir_counts_checkout"
+    },
+    {
+      "name": "toolscan-codex-unmeasured-dropped",
+      "_mechanism": "Report CLEAN when no measurable Codex call exists.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if surface in (\"codex\", \"agy\") and not calls:  # M:TOOLSCAN-CODEX-UNMEASURED",
+      "replace": "    if False:  # M:TOOLSCAN-CODEX-UNMEASURED",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_codex_no_call_is_unmeasured"
+    },
+    {
+      "name": "toolscan-codex-boundary-dropped",
+      "_mechanism": "Scan the prompt echo before the final dispatch boundary.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    start = max((i + 1 for i, line in enumerate(lines) if line == boundary), default=0)  # M:TOOLSCAN-CODEX-BOUNDARY",
+      "replace": "    start = 0  # M:TOOLSCAN-CODEX-BOUNDARY",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_codex_skips_the_prompt_echo"
+    },
+    {
+      "name": "toolscan-agy-key-dropped",
+      "_mechanism": "Count each update as a distinct call instead of grouping by conversation and step.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            key = (step.get(\"conversation_id\"), step.get(\"step_index\"))  # M:TOOLSCAN-AGY-KEY",
+      "replace": "            key = events  # M:TOOLSCAN-AGY-KEY",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_agy_groups_active_and_done_events"
+    },
+    {
+      "name": "toolscan-log-absent-reason",
+      "_mechanism": "Mislabel an absent log as unreadable.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            print(\"TOOLSCAN: UNREADABLE reason=log_absent\")  # M:TOOLSCAN-LOG-ABSENT",
+      "replace": "            print(\"TOOLSCAN: UNREADABLE reason=log_unreadable\")  # M:TOOLSCAN-LOG-ABSENT",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_grok_absent_log_is_unreadable"
+    },
+    {
+      "name": "toolscan-log-unreadable-reason",
+      "_mechanism": "Mislabel an unreadable log as absent.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            print(\"TOOLSCAN: UNREADABLE reason=log_unreadable\")  # M:TOOLSCAN-LOG-UNREADABLE",
+      "replace": "            print(\"TOOLSCAN: UNREADABLE reason=log_absent\")  # M:TOOLSCAN-LOG-UNREADABLE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_grok_unreadable_log_is_unreadable"
+    },
+    {
+      "name": "toolscan-no-event-disarmed",
+      "_mechanism": "Accept a Grok log without any parseable event.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "        if surface == \"grok\" and events == 0:  # M:TOOLSCAN-NO-EVENT",
+      "replace": "        if False:  # M:TOOLSCAN-NO-EVENT",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_grok_no_event_is_unreadable"
+    },
+    {
+      "name": "toolscan-usage-reason",
+      "_mechanism": "Replace UsageError with the incorrect Usage reason.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "        print(f\"TOOLSCAN: UNREADABLE reason=internal:{type(exc).__name__}\")  # M:TOOLSCAN-LAST-RESORT",
+      "replace": "        print(\"TOOLSCAN: UNREADABLE reason=internal:Usage\")  # M:TOOLSCAN-LAST-RESORT",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_usage_error_is_internal"
+    },
+    {
+      "name": "toolscan-token-field-swap",
+      "_mechanism": "Print the out-of-root count in the exempt field.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "        exempt = result[\"exempt\"]  # M:TOOLSCAN-TOKEN",
+      "replace": "        exempt = result[\"out_of_root\"]  # M:TOOLSCAN-TOKEN",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_cli_and_function_agree"
     }
   ]
 }
