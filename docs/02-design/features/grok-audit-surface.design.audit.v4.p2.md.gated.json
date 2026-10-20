@@ -1,0 +1,11 @@
+{
+ "verdict": "PASS",
+ "files": {
+  "grok-audit-surface.design.md": "c38f87826794915dfa1007ea6a51150597a7b3e0a7961bdee382d2ba1277b217"
+ },
+ "suite": "PASS",
+ "legs": [
+  "agy",
+  "codex"
+ ]
+}
