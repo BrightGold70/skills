@@ -1,0 +1,21 @@
+{
+  "agy_events": 0,
+  "collected": "grok-audit-surface.impl-plan.audit.v4.p1.md",
+  "failed": 0,
+  "log": "/private/tmp/claude-501/-Users-kimhawk-orca-skills/f1bc3620-ec3a-43ca-9746-e3b3f18cf8be/scratchpad/stem/audit_grok-audit-surface_impl-plan_cycle4_run20261020T103142Z-7065_p1.log",
+  "log_retained": "/Users/kimhawk/orca/skills/.h-mad/pass-logs/grok-audit-surface.impl-plan.audit.v4.p1.md.log",
+  "log_sha256": "04d72bc91c915eb6bb06b364c97268e2803fd9ac30db431ac5a26be17c445468",
+  "ok": 0,
+  "pass": 1,
+  "readable": true,
+  "shape": "codex-text",
+  "status": null,
+  "targets": {
+    "code": 18,
+    "other": 7,
+    "paths": 25,
+    "unmeasured": 5
+  },
+  "thinking": 0,
+  "tools": 0
+}

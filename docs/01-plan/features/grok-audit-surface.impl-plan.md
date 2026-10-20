@@ -68,11 +68,11 @@ Per Task: 6 (T2) + 15 (T3) + 14 (T4) + 14 (T5) + 12 (T6) + 29 (T7) + 20 (T8) + 2
 K1–K3, X1–X6) and 152 are P-rows (one per refusal or non-default-verdict fixture, design §"Mutation
 spec", "P-rows"). The 180 was read at `9628c857` with Task 14's row-count command (rows).
 
-Mutation rows added by S0c (Tasks 18–28): 13 (T18) + 16 (T19) + 13 (T20) + 24 (T21) + 24 (T22) +
-32 (T23) + 22 (T24) + 11 (T25) + 28 (T26) + 9 (T27) + 1 (T28) = 193, so the spec holds 373 rows after
+Mutation rows added by S0c (Tasks 18–28): 13 (T18) + 16 (T19) + 13 (T20) + 24 (T21) + 26 (T22) +
+33 (T23) + 22 (T24) + 11 (T25) + 28 (T26) + 9 (T27) + 1 (T28) = 196, so the spec holds 376 rows after
 Task 28. Task 24 also rewrites one S0 row in place (`p-reset-tmpdir`), which moves no count. Task 16
-adds the named rows K6 and K7 on every outcome, and K4 and K5 only on MISS or INCONCLUSIVE: 375 on
-PASS or a smoke failure, 377 on MISS or INCONCLUSIVE.
+adds the named rows K6 and K7 on every outcome, and K4 and K5 only on MISS or INCONCLUSIVE: 378 on
+PASS or a smoke failure, 380 on MISS or INCONCLUSIVE.
 
 Marker sites (matching lines, `grep -c` per file):
 - the probe, `M:GAS-`: 125 at S0 (per Task: 6 + 14 + 11 + 13 + 11 + 19 + 12 + 21 + 18; Task 5's
@@ -81,7 +81,7 @@ Marker sites (matching lines, `grep -c` per file):
 - `h-mad/scripts/hmad-dispatch.sh`, `# M:`: 8 at `9628c857` (`PROBE-*`, `STEM-*`); S0c adds 8 (T18)
   + 13 (T19) + 11 (T20) + 8 (T23) = 40, so 48;
 - `h-mad/scripts/h_mad_tool_calls.py`, `# M:TOOLSCAN-`: 21 (T21);
-- `h-mad/scripts/h_mad_grok_containment.py`, `# M:`: 15 (T22) + 18 (T23) = 33.
+- `h-mad/scripts/h_mad_grok_containment.py`, `# M:`: 16 (T22) + 18 (T23) = 34.
 
 The design carries none of these totals ("Two units, two derivations, neither carried"); Tasks 14
 and 29 re-derive them with the design's two commands, and Task 29 also over the three new or changed
@@ -738,7 +738,8 @@ and 4 pass; the only exceptions are the fixtures whose trigger is that value
 removed by the fixture's finalizer. The carry-2 fixtures put every link target under `tmp_path`, so a
 mutant that follows a link can only damage the test's own directory. **S0c (Task 24) changes this
 paragraph's parent:** there is no default parent any more, so every reset fixture builds its S1 root
-with `--dest-parent <tmp_path>/run/roots` under the stand-in system temp, and guard 3 is inverted
+with `--dest-parent <tmp_path>/run/roots`, outside the stand-in system temp (`<tmp_path>/run/roots`
+and `<tmp_path>/systemp` are siblings), and guard 3 is inverted
 (`ResetTargetInSystemTemp`); the test named `…_outside_the_tempdir` above is renamed
 `test_build_root_reset_refuses_a_target_in_system_temp` by Task 24, which also rewrites its fixture.
 
@@ -1919,8 +1920,8 @@ only (1 more): `test_never_gate_section_keeps_two_surface_routing_off_pass`.
 - [ ] AC-T16.2: `test_unmeasured_sites_match_the_outcome` fails when the doc has no `GROK-BINARY:` line,
   when it reads `GROK-BINARY: unrecorded`, or when D14's slot rule yields no version on a smoke failure.
 - [ ] AC-T16.3: `--check-anchors` reads `ANCHORS: ANCHORS_OK` after the K2 re-anchor, and the spec run
-  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/375` on PASS or a smoke
-  failure (K6 and K7 below), or `untargeted=0/377` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below).
+  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/378` on PASS or a smoke
+  failure (K6 and K7 below), or `untargeted=0/380` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below).
 - [ ] AC-T16.5: The doc cites the incident record and the superseded `f7520e72` smoke on every
   published outcome, and its re-run command carries `--run-id` and `--work-dir`.
 - [ ] AC-T16.4 (MISS or INCONCLUSIVE only; audit cycle 1): before K4 and K5 are added,
@@ -2008,10 +2009,10 @@ point's full suite is green, and its collection count is the floor. At `9628c857
 `7007 tests collected` (`rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests --collect-only -q -p no:cacheprovider | tail -1`,
 node ids), which equals plan R1's reading at `e3d84865` because `h-mad/` did not change between the two;
 5c re-measures it at the branch point, and that reading, not this one, is the floor. Tasks 18–28 add
-216 collected node ids (215 in the feature's own modules, listed per Task, plus the
+219 collected node ids (218 in the feature's own modules, listed per Task, plus the
 `test_no_verb_dies_on_an_unbound_variable[grok-canary]` id that Task 23's new verb adds to
 `h-mad/tests/test_hmad_dispatch_missing_positionals.py`) and remove 4 (the four S0 tests Tasks 24 and 26
-rename), so after Task 28 the collection is the floor plus 212, and at every GREEN in between it is at
+rename), so after Task 28 the collection is the floor plus 215, and at every GREEN in between it is at
 least the floor plus the ids added so far minus the ids removed so far. Every Task runs the full suite
 per the Rules, from the S0c branch's worktree.
 
@@ -2020,7 +2021,8 @@ per the Rules, from the S0c branch's worktree.
 ## Task 18: `exec grok`'s profile
 
 **Production file**: `h-mad/scripts/hmad-dispatch.sh` (`_cmd_exec`, its option loop and usage comment)
-**Test file**: `h-mad/tests/test_grok_audit_surface_wrapper.py` (extend)
+**Test files**: `h-mad/tests/test_grok_audit_surface_wrapper.py` (extend),
+`h-mad/tests/test_hmad_dispatch_exec_grok.py` (modify one parametrize case)
 **Task shape**: `new-behaviour`
 
 **Description**: D16's profile rules, in `_cmd_exec`, grok only, each marked line carrying its `# M:`
@@ -2075,11 +2077,28 @@ environment to a file:
 
 **Acceptance Criteria**:
 - [ ] AC-T18.1: The 11 ids pass; `h-mad/tests/test_hmad_dispatch.py` and
-  `h-mad/tests/test_hmad_dispatch_audit_cycle.py` pass unchanged.
+  `h-mad/tests/test_hmad_dispatch_audit_cycle.py` pass unchanged; `h-mad/tests/test_hmad_dispatch_exec_grok.py`
+  passes with only the `[given]` case's options changed (`git diff` of that file touches line 112 only).
 - [ ] AC-T18.2: The launch line `"$wait_secs" env "${child_env[@]}" grok "${gargs[@]}"` is byte-identical
   (`grep -cF` prints 1 before and after), and
   `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/grok_wire_reverts.json`
   reads `ANCHORS: ANCHORS_OK`.
+
+**An existing test this contract supersedes (impl-plan audit cycle 4).** At `b17e1b36`,
+`h-mad/tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_translates_model_effort_sandbox[given]`
+passes `["--model", "m1", "--effort", "high", "--sandbox", "s1"]` (line 112) and asserts that the stub
+was reached and that argv carries `--sandbox s1` (lines 117–121). Under this Task `s1` is a weaker or
+unknown profile without the flag, so `exec` exits 2 before launching and the `[given]` id would fail.
+Its permissive-profile expectation (an unflagged non-`strict` value is forwarded) is superseded by D16;
+its model, effort and sandbox **translation** coverage is kept by changing only that case's options to
+`["--model", "m1", "--effort", "high", "--sandbox", "s1", "--allow-weaker-sandbox"]`, so argv still
+carries `--model m1`, `--reasoning-effort high` and `--sandbox s1`. The `[none]` id is unchanged and
+still passes: it asserts `--sandbox s1` is absent, and argv now carries `--sandbox strict`. The
+change lands in the GREEN commit with the code (at RED `--allow-weaker-sandbox` is still an unknown
+option, so the new options would fail there), so both ids are regression guards: P before the GREEN
+commit with the old options, P after it with the new ones. Collection is unchanged (2 ids). No other
+test under `h-mad/tests/` passes a grok `--sandbox` (a `grep -l '\-\-sandbox'` over the files that name
+`grok` prints only this module at `b17e1b36`).
 
 **RED split**: 11 ids; 8 F (`defaults_to_strict`, `explicit_strict` (no record at RED),
 `weaker_profile_refused`, `weaker_profile_with_override_is_recorded`, both `override_alone` ids (at RED
@@ -2424,9 +2443,13 @@ it reads only the token file's last line; `REQUIRE: OK` needs exactly `GROK-CANA
 beginning `QUARANTINE: VERIFIED moved=`, or one beginning `TOOLSCAN: CLEAN surface=grok `, for the verb
 named; anything else prints `REQUIRE: STOP reason=<that line | no_token:<file>>`, and for `toolscan`
 it first appends that reason to `--halt-file` with `O_APPEND|O_CREAT`; exit 0 on both; exit 2 only on a
-usage or internal error, after writing the halt file when one was named.
+usage or internal error, after writing the halt file when one was named. A usage error can fail before
+argparse returns a Namespace (an unknown flag, or a missing `--token-file`), so `require` reads the
+`--halt-file` value from the raw argv first, before parsing, the way the probe reads `--data` (Task 2,
+carry 12), and writes the halt file from that value on a usage error (`# M:REQUIRE-FAIL-CLOSED-ARGV`,
+impl-plan audit cycle 4). `# M:REQUIRE-FAIL-CLOSED` stays the internal-error path.
 
-**Tests** (17 functions, 25 node ids):
+**Tests** (18 functions, 27 node ids):
 - Quarantine, stand-in `$HOME` (10): `test_quarantine_verifies_and_moves_every_match` (non-matching
   entries stay), `test_quarantine_verifies_zero_matches`, `test_quarantine_refuses_an_existing_quarantine`,
   `test_quarantine_refuses_a_failed_move` (`os.rename` replaced in process by one raising for one entry),
@@ -2446,6 +2469,13 @@ usage or internal error, after writing the halt file when one was named.
   `test_require_stop_on_an_empty_file`; `test_require_stop_on_an_absent_file`;
   `test_require_toolscan_stop_writes_the_halt_file`; `test_require_internal_error_still_writes_the_halt_file`
   (the reader replaced by one raising: exit 2, the halt file written).
+- Usage-error fail-closed (wrapper module, 1 function, 2 ids; impl-plan audit cycle 4):
+  `test_require_usage_error_still_writes_the_halt_file`, parametrized `[unknown-flag]`
+  (`require --verb toolscan --token-file <tmp_path>/clean.txt --halt-file <tmp_path>/HALT --no-such-flag`,
+  the token file holding a `TOOLSCAN: CLEAN surface=grok` line) and
+  `[missing-token-file]` (`require --verb toolscan --halt-file <tmp_path>/HALT`): exit 2, `<tmp_path>/HALT` exists and holds
+  one line, and then `audit-cycle --halt-file <tmp_path>/HALT`
+  with stub agents launches no agent and prints `REQUIRE: STOP reason=halt_file`.
 - End to end (wrapper module, 1 function, 4 ids): `test_out_of_root_scan_stops_the_next_cycle`,
   parametrized `[out_of_root]`, `[unreadable]`, `[empty]`, `[absent]` over the scan's token file
   (D17 names the `OUT_OF_ROOT` run and parametrizes it over the other three; this plan reads that as four
@@ -2453,14 +2483,14 @@ usage or internal error, after writing the halt file when one was named.
   with stub agents launches nothing and prints `REQUIRE: STOP reason=halt_file`.
 
 **Acceptance Criteria**:
-- [ ] AC-T22.1: The 25 ids pass, each asserting its exit code beside its token.
+- [ ] AC-T22.1: The 27 ids pass, each asserting its exit code beside its token.
 - [ ] AC-T22.2: `grep -cE 'shutil\.(copy|rmtree)|os\.(unlink|remove|rmdir)' h-mad/scripts/h_mad_grok_containment.py`
   prints 0 before Task 23 (matching lines): the quarantine neither copies nor deletes.
 
-**RED split**: 25 ids; 25 F (the module is absent), 0 P.
+**RED split**: 27 ids; 27 F (the module is absent), 0 P.
 
-**Mutation rows** (24; markers 15). `file` `scripts/h_mad_grok_containment.py`; tests in
-`tests/test_grok_audit_surface_containment.py` except rows 21–24 (`tests/test_grok_audit_surface_wrapper.py`).
+**Mutation rows** (26; markers 16). `file` `scripts/h_mad_grok_containment.py`; tests in
+`tests/test_grok_audit_surface_containment.py` except rows 21–26 (`tests/test_grok_audit_surface_wrapper.py`).
 
 | # | name | marker | replace | test |
 |---|---|---|---|---|
@@ -2488,6 +2518,8 @@ usage or internal error, after writing the halt file when one was named.
 | 22 | `require-halt-e2e-unreadable` | `# M:REQUIRE-TOOLSCAN-STOP` | the same | `test_out_of_root_scan_stops_the_next_cycle[unreadable]` |
 | 23 | `require-halt-e2e-empty` | `# M:REQUIRE-TOOLSCAN-STOP` | the same | `test_out_of_root_scan_stops_the_next_cycle[empty]` |
 | 24 | `require-halt-e2e-absent` | `# M:REQUIRE-TOOLSCAN-STOP` | the same | `test_out_of_root_scan_stops_the_next_cycle[absent]` |
+| 25 | `require-fail-closed-argv-unknown-flag` | `# M:REQUIRE-FAIL-CLOSED-ARGV` | the raw-argv `--halt-file` read dropped (no halt path on a usage error) | `test_require_usage_error_still_writes_the_halt_file[unknown-flag]` |
+| 26 | `require-fail-closed-argv-missing-token-file` | `# M:REQUIRE-FAIL-CLOSED-ARGV` | the same | `test_require_usage_error_still_writes_the_halt_file[missing-token-file]` |
 
 
 **Dependencies on other tasks**: Task 20 (`audit-cycle --halt-file`) and Task 21 (the containment test
@@ -2560,11 +2592,12 @@ never on an import.
 **Wire cuts at GREEN** (rows 27–30): row 27 cuts WIRE 1 and row 28 forces it; row 29 cuts WIRE 2; row
 30 cuts WIRE 3. Each must fail its WIRE-PIN with the callees and the tests intact.
 
-**Tests** (21 functions, 27 node ids):
+**Tests** (21 functions, 28 node ids):
 - The design's 20: `test_canary_target_preexisting`, `test_canary_escaped` (planted with the denial
   text logged, so the order is pinned), `test_canary_read_escaped_in_tool_result` and
   `test_canary_read_escaped_in_message_text` (each with the control present and the denial logged),
-  `test_canary_grok_absent`, `test_canary_grok_rc`, `test_canary_timeout`, `test_canary_truncated`,
+  `test_canary_grok_absent`, `test_canary_grok_rc`, `test_canary_timeout`, `test_canary_truncated`
+  (parametrized `[judge]` and `[wrapper]`, below),
   `test_canary_sentinel_unplanted`, `test_canary_log_unreadable`, `test_canary_sentinel_changed`,
   `test_canary_not_attempted`, `test_canary_no_control`, `test_canary_no_denial` (parametrized
   `[no-call]` and `[unmatched-update]`, one per D18 alternative), `test_canary_pass` (its prompt is
@@ -2594,7 +2627,21 @@ therefore writes, by default, a completed streaming-json transcript in `grokfixt
 `tool_call` and `tool_call_update` events (none of them carrying the token unless the fixture plants
 it), then an `end` event and a final message `DONE`, and exits 0. Only `test_canary_grok_rc`,
 `test_canary_timeout` and `test_canary_truncated` depart from it, each in its one field (exit code,
-sleep past `--timeout`, no `end` event). In particular `test_canary_replaced_sentinel_is_sentinel_changed`
+sleep past `--timeout`, no `end` event).
+
+**`test_canary_truncated` reaches its own branch (impl-plan audit cycle 4).** An end-less stream never
+reaches the judge with rc 0 through the real wrapper: `_cmd_exec` sets `final_empty=1` when
+`_grok_region_state` is not `complete` (`hmad-dispatch.sh` lines 3207–3218 at `b17e1b36`), and then turns
+rc 0 into rc 3 (lines 3366–3370), the behaviour `h-mad/tests/test_hmad_dispatch_exec_grok.py::test_exec_grok_truncated_recovers_the_verdict`
+pins (`assert r.returncode == 3`, line 302). The judge decides the `grok_rc:` form (a non-zero exit code) before `truncated`, so an
+end-to-end end-less run prints `cannot_run:grok_rc:3`. The test is therefore parametrized:
+`test_canary_truncated[judge]` runs the real `canary-plant`, writes a readable end-less
+`canary/log.ndjson` itself (`grokfixtures.f_trunc()`'s shape), and calls
+`python3 h-mad/scripts/h_mad_grok_containment.py canary-judge --run-dir <the run dir> --rc 0`, asserting
+`GROK-CANARY: REFUSED reason=cannot_run:truncated`; `test_canary_truncated[wrapper]` runs the whole verb
+with an end-less stub and asserts `GROK-CANARY: REFUSED reason=cannot_run:grok_rc:3`, the regression
+control that keeps the real wrapper's rc 3 in view. Row 10 targets `[judge]`; row 33 targets
+`[wrapper]`. In particular `test_canary_replaced_sentinel_is_sentinel_changed`
 runs the real plant → exec → judge path with a stub that overwrites `sentinel.txt` with another 32-hex
 token and writes the completed default transcript, holding no 32-hex run equal to the planted hash, so
 the judge reaches and prints `no_read_check:sentinel_changed`; the design's "logs nothing" is read as
@@ -2610,18 +2657,18 @@ Upper-case hex is not matched either. Neither shape is fixtured.
 
 **Acceptance Criteria**:
 - [ ] AC-T23.1: The three WIRE-PINs pass, and each fails when only its wire is cut (rows 27, 29, 30).
-- [ ] AC-T23.2: The 27 ids pass; `h-mad/tests/test_hmad_dispatch_missing_positionals.py` passes,
+- [ ] AC-T23.2: The 28 ids pass; `h-mad/tests/test_hmad_dispatch_missing_positionals.py` passes,
   including its new `test_no_verb_dies_on_an_unbound_variable[grok-canary]` id.
 - [ ] AC-T23.3: `grep -c '_cmd_exec grok' h-mad/scripts/hmad-dispatch.sh` prints 1 (matching lines),
   inside `_cmd_grok_canary`, and that function runs no `grok` binary itself
   (`sed -n '/^_cmd_grok_canary()/,/^}/p' h-mad/scripts/hmad-dispatch.sh | grep -cE '(^|[^_a-z])grok --'`
   prints 0).
 
-**RED split** (stated for the record; the WIRE-PINs, not the split, gate this Task): 27 ids; 25 F (no
+**RED split** (stated for the record; the WIRE-PINs, not the split, gate this Task): 28 ids; 26 F (no
 verb, no canary subcommands); 2 P, both `test_require_canary_without_a_token_is_stop` ids, regression
 guards over Task 22's `require`, whose negative observations are rows 31–32.
 
-**Mutation rows** (32; markers 26: 18 in `scripts/h_mad_grok_containment.py`, 8 in
+**Mutation rows** (33; markers 26: 18 in `scripts/h_mad_grok_containment.py`, 8 in
 `scripts/hmad-dispatch.sh`). Tests in `tests/test_grok_audit_surface_containment.py`. Rows 3 and 11
 change the printed reason (Rules, "S0c scripts").
 
@@ -2636,7 +2683,7 @@ change the printed reason (Rules, "S0c scripts").
 | 7 | `canary-read-by-hash-deleted` | containment | `# M:CANARY-READ-BY-HASH` | the same | `test_canary_deleted_sentinel_with_token_in_log_is_read_escaped` |
 | 8 | `canary-timeout-disarmed` | containment | `# M:CANARY-TIMEOUT` | 124 read as `grok_rc:124` | `test_canary_timeout` |
 | 9 | `canary-grok-rc-disarmed` | containment | `# M:CANARY-GROK-RC` | never fires | `test_canary_grok_rc` |
-| 10 | `canary-truncated-disarmed` | containment | `# M:CANARY-TRUNCATED` | never fires | `test_canary_truncated` |
+| 10 | `canary-truncated-disarmed` | containment | `# M:CANARY-TRUNCATED` | never fires | `test_canary_truncated[judge]` |
 | 11 | `canary-log-unreadable-reason` | containment | `# M:CANARY-LOG-UNREADABLE` | prints `not_attempted` | `test_canary_log_unreadable` |
 | 12 | `canary-sentinel-by-hash-disarmed` | containment | `# M:CANARY-SENTINEL-BY-HASH` | never fires | `test_canary_sentinel_changed` |
 | 13 | `canary-sentinel-by-hash-replaced` | containment | `# M:CANARY-SENTINEL-BY-HASH` | the same | `test_canary_replaced_sentinel_is_sentinel_changed` |
@@ -2659,6 +2706,7 @@ change the printed reason (Rules, "S0c scripts").
 | 30 | `canary-plant-gate-cut` | dispatch | `# M:CANARY-PLANT-GATE` | `exec` runs whatever plant printed | `test_canary_target_preexisting` |
 | 31 | `require-ok-canary-any-line-exit-0` | containment | `# M:REQUIRE-OK-CANARY` | OK on any non-empty last line | `test_require_canary_without_a_token_is_stop[exit-0]` |
 | 32 | `require-ok-canary-any-line-exit-2` | containment | `# M:REQUIRE-OK-CANARY` | the same | `test_require_canary_without_a_token_is_stop[exit-2]` |
+| 33 | `canary-grok-rc-no-end` | containment | `# M:CANARY-GROK-RC` | never fires (an end-less run then reads `truncated`) | `test_canary_truncated[wrapper]` |
 
 "containment" is `scripts/h_mad_grok_containment.py` and "dispatch" is `scripts/hmad-dispatch.sh`.
 Rows 31–32 mutate Task 22's marker and add no site.
@@ -2720,8 +2768,9 @@ as v1.6 re-anchors it, and D2's two v1.6 paired-flag rules:
 - `test_root_line_parser_reads_build_root_output` and `test_root_line_parser_rejects_a_malformed_root_line`
   assert at `9628c857` that the root's parent is `tempfile.gettempdir()` (lines 829 and 856 of the test
   file); they now pass `--dest-parent` and assert the parent equals it.
-- Every Task 5 reset fixture builds its root with `--dest-parent <tmp_path>/run/roots` under the
-  stand-in system temp; `test_build_root_reset_refuses_a_missing_target` names its absent path in that
+- Every Task 5 reset fixture builds its root with `--dest-parent <tmp_path>/run/roots`, outside the
+  stand-in system temp (`<tmp_path>/run/roots` and `<tmp_path>/systemp` are siblings), the probe run
+  with `TMPDIR=<tmp_path>/systemp`; `test_build_root_reset_refuses_a_missing_target` names its absent path in that
   `roots/` directory.
 - `test_build_root_reset_refuses_a_target_outside_the_tempdir` is renamed
   `test_build_root_reset_refuses_a_target_in_system_temp` and rewritten (below).
@@ -3227,14 +3276,14 @@ grep -c '# M:' h-mad/scripts/h_mad_grok_containment.py
 
 **Acceptance Criteria**:
 - [ ] AC-T29.1: The first command prints a pytest version; the full suite's summary line shows no
-  failure; the collection line is at least the 5c floor plus 212 (S0c's preamble).
-- [ ] AC-T29.2: `MUTATION: ALL_CAUGHT` with `untargeted=0/373` and
+  failure; the collection line is at least the 5c floor plus 215 (S0c's preamble).
+- [ ] AC-T29.2: `MUTATION: ALL_CAUGHT` with `untargeted=0/376` and
   `crash_kills=0`, and `ANCHORS: ANCHORS_OK`, read from the token lines.
 - [ ] AC-T29.3: Every spec the loop names prints `ANCHORS: ANCHORS_OK` (28 specs name
   `scripts/hmad-dispatch.sh` at `9628c857`; the loop re-derives the set).
 - [ ] AC-T29.4: The `git ls-files` line prints nothing.
 - [ ] AC-T29.5: The four marker counts (matching lines) and the row count (rows) are re-derived at this
-  Task's sha and reported with their units. This plan expects 175, 48, 21, 33 and 373; a different figure is reported against the Task whose table it contradicts, never
+  Task's sha and reported with their units. This plan expects 175, 48, 21, 34 and 376; a different figure is reported against the Task whose table it contradicts, never
   silently accepted.
 
 **Dependencies on other tasks**: Tasks 18–28.
@@ -3335,7 +3384,7 @@ this plan, and neither has a Task.
   as the carry item says, against the v1.4 change log's "seven".
 
 **S0c readings (v1.5), each a tree measurement at `9628c857` that no S0c Task moves before Task 29
-re-derives it.** The S0c figures this plan expects after Task 28 (175, 48, 21, 33, 373) are claims over
+re-derives it.** The S0c figures this plan expects after Task 28 (175, 48, 21, 34, 376) are claims over
 classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - Rows and markers at S0: `len(json.load(open("h-mad/tests/mutation-specs/grok_audit_surface.json"))["mutations"])`
   prints 180 (rows); `grep -c 'M:GAS-' docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py`
@@ -3364,3 +3413,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.4: 2026-10-19, answers the advisory delta review of v1.3 (commit 5f10a1d9, document sha256 3015ade9; 0 must, 7 should, 4 nits): _OPEN_INPUT pinned by test_smoke_last_resort_names_the_open_input and p-open-input, with its never-cleared reading stated; the Effort block grammar ([] with no block, terminator, three distinct None conditions with a row each) and its callers (smoke pinned by test_smoke_refuses_a_malformed_effort_block; score as a Task 9 OPEN-DECISION with test_score_maps_a_malformed_effort_block); parse_root_line's None mapped and pinned in Task 6 and Task 10; token assertion before the traceback count; AC-T5.1 names its 10 refusal tests including three Refusal-raising ones; Refusal becomes its token via exc.reason in refusal_token (p-refusal-reason) and the scope narrowing is pinned (p-traceback-scope-reset); Task 16 asserts each outcome sentence's absence on the other branch (K7); reproduce commands for the plain-top-level parser, allow_abbrev and Fraction readings, with python3.15 pinned by absolute path and the exit-site lines printed; rule (3)'s in-process spelling; Task 16's production-files line. Totals 180 rows at S0 (152 P-rows), 182 or 184 after Task 16, 125 marker sites.
 - v1.5: 2026-10-20, corrective revision at 9628c857 (not an audit-cycle answer; the impl-plan was last revised at 2ccfd32e) bringing the impl-plan to design v1.11, spec v1.15 and plan v1.11 and answering the OWED-to-impl-plan items of the spec-author rev1-7, plan-author rev1-5 and design-author rev1-4 reports (void-cycle items withdrawn). New S0c Tasks 18-30 on the proposed branch feature/218b-grok-containment: exec grok strict default, override flag and profile record (18); staging, prompt and TMPDIR (19); audit-cycle --pass-root and --halt-file (20); h_mad_tool_calls.py scan (21); quarantine and require (22); grok-canary wiring plant, exec and judge (23); probe --work-dir and re-anchored reset guards (24); per-pass records and add-only commit (25); reading namespace, run record, cycle_token trigger (8), smoke residuals closed (26); containment scan wiring and CONTAINMENT lines (27); entry-contract text and K8 (28); S0c Phase 5e gate (29); operator non-seeded live round trip before merge (30). Task 15 rewritten to design D8's run order with the calibration-ref precondition; Task 16 cites the incident record and the superseded smoke and gains two S3 tests; Task 17 gated on S0c merged and an unhalted, scored fresh S2. Renamed S0 tests updated in place in Tasks 5, 7 and 10. Totals: 31 Tasks (3 wiring); 189 rows added, 369 after Task 28 (368 under Task 26 OPEN-DECISION option (a)), 371 or 373 after Task 16; probe marker sites 174; 200 node ids added, 4 removed.
 - v1.6: 2026-10-20, answers impl-plan audit cycle 3, gating round 1 (docs/01-plan/features/grok-audit-surface.impl-plan.audit.v3.p1.md: codex 7 must, 1 should; p2 agy filed none), at 121ae4ce, with the orchestrator ruling on the v1.5 Task 26 OPEN-DECISION (option (b)). Task 26: trigger (8)'s count shape restated as more root records than passes, test_cycle_token_more_root_records_than_passes, GAS-CYCLE-ROOT-COUNT reachable, OPEN-DECISION removed; the hint lookup at grok_audit_probe.py:1078 moves to the finding's pass record (GAS-HINT-PASS-ROOT, test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record). Task 24: --work-dir is <tmp_path>/scratch, a sibling of build_repo's git checkout; test_reset_precondition_old_new_differential compares the shipped 66ff0894 predicate with the new one over 15 targets, softened verdicts exactly the roots-outside-system-temp class. Task 19: check-ignore runs in the scrubbed git env (row 7b, AC-T19.4). Class closed for Tasks 19, 20 and 23: every exit-2 guard prints and its test asserts its own stderr line. Task 23: the stub grok writes a completed transcript by default, because exec turns an empty final message into rc 3 (hmad-dispatch.sh:3366-3374). Task 30: four positive markers prove the work-tree dispatch ran. Totals: 193 rows added, 373 after Task 28, 375 or 377 after Task 16; probe marker sites 175; 216 node ids added, 4 removed.
+- v1.7: 2026-10-20, final corrective revision at b17e1b36 after the round cap (not re-audited), fixing only docs/01-plan/features/grok-audit-surface.impl-plan.audit.v4.p1.md (codex: 3 must, 1 measurement should; p2 agy filed none). Task 18 names and migrates test_hmad_dispatch_exec_grok.py::test_exec_grok_translates_model_effort_sandbox[given] (its options gain --allow-weaker-sandbox in the GREEN commit; ids unchanged, both regression guards). Task 23: test_canary_truncated split into [judge] (canary-judge --rc 0 on a readable end-less log, row 10) and [wrapper] (the real rc 3 from hmad-dispatch.sh:3207-3218 and 3366-3370, cannot_run:grok_rc:3, new row 33). Task 22: test_require_usage_error_still_writes_the_halt_file [unknown-flag] and [missing-token-file], the raw-argv halt path marked M:REQUIRE-FAIL-CLOSED-ARGV with rows 25-26. Measurement: the reset-fixture parent is outside the stand-in system temp (siblings) in Task 5's note and Task 24. Totals: 196 rows added, 376 after Task 28, 378 or 380 after Task 16; containment markers 34; 219 node ids added, 4 removed.
