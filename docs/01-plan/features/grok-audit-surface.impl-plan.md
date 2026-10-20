@@ -68,18 +68,16 @@ Per Task: 6 (T2) + 15 (T3) + 14 (T4) + 14 (T5) + 12 (T6) + 29 (T7) + 20 (T8) + 2
 K1–K3, X1–X6) and 152 are P-rows (one per refusal or non-default-verdict fixture, design §"Mutation
 spec", "P-rows"). The 180 was read at `9628c857` with Task 14's row-count command (rows).
 
-Mutation rows added by S0c (Tasks 18–28): 13 (T18) + 15 (T19) + 13 (T20) + 24 (T21) + 24 (T22) +
-32 (T23) + 20 (T24) + 11 (T25) + 27 (T26) + 9 (T27) + 1 (T28) = 189, so the spec holds 369 rows after
-Task 28. Task 24 also rewrites one S0 row in place (`p-reset-tmpdir`), which moves no count. If Task
-26's OPEN-DECISION is resolved as (a), the row `p-cycle-root-count` and its marker are not written:
-368 rows. Task 16 adds the named rows K6 and K7 on every outcome, and K4 and K5 only on MISS or
-INCONCLUSIVE: 371 on PASS or a smoke failure, 373 on MISS or INCONCLUSIVE (one fewer each under
-option (a)).
+Mutation rows added by S0c (Tasks 18–28): 13 (T18) + 16 (T19) + 13 (T20) + 24 (T21) + 24 (T22) +
+32 (T23) + 22 (T24) + 11 (T25) + 28 (T26) + 9 (T27) + 1 (T28) = 193, so the spec holds 373 rows after
+Task 28. Task 24 also rewrites one S0 row in place (`p-reset-tmpdir`), which moves no count. Task 16
+adds the named rows K6 and K7 on every outcome, and K4 and K5 only on MISS or INCONCLUSIVE: 375 on
+PASS or a smoke failure, 377 on MISS or INCONCLUSIVE.
 
 Marker sites (matching lines, `grep -c` per file):
 - the probe, `M:GAS-`: 125 at S0 (per Task: 6 + 14 + 11 + 13 + 11 + 19 + 12 + 21 + 18; Task 5's
   `p-traceback-scope-reset` reuses Task 2's `GAS-TRACEBACK-SCOPE` and adds no site), read 125 at
-  `9628c857`; S0c adds 15 (T24) + 9 (T25) + 18 (T26) + 7 (T27) = 49, so 174 (173 under option (a));
+  `9628c857`; S0c adds 15 (T24) + 9 (T25) + 19 (T26) + 7 (T27) = 50, so 175;
 - `h-mad/scripts/hmad-dispatch.sh`, `# M:`: 8 at `9628c857` (`PROBE-*`, `STEM-*`); S0c adds 8 (T18)
   + 13 (T19) + 11 (T20) + 8 (T23) = 40, so 48;
 - `h-mad/scripts/h_mad_tool_calls.py`, `# M:TOOLSCAN-`: 21 (T21);
@@ -1921,9 +1919,8 @@ only (1 more): `test_never_gate_section_keeps_two_surface_routing_off_pass`.
 - [ ] AC-T16.2: `test_unmeasured_sites_match_the_outcome` fails when the doc has no `GROK-BINARY:` line,
   when it reads `GROK-BINARY: unrecorded`, or when D14's slot rule yields no version on a smoke failure.
 - [ ] AC-T16.3: `--check-anchors` reads `ANCHORS: ANCHORS_OK` after the K2 re-anchor, and the spec run
-  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/371` on PASS or a smoke
-  failure (K6 and K7 below), or `untargeted=0/373` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below);
-  370 and 372 if Task 26's OPEN-DECISION was resolved as (a).
+  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/375` on PASS or a smoke
+  failure (K6 and K7 below), or `untargeted=0/377` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below).
 - [ ] AC-T16.5: The doc cites the incident record and the superseded `f7520e72` smoke on every
   published outcome, and its re-run command carries `--run-id` and `--work-dir`.
 - [ ] AC-T16.4 (MISS or INCONCLUSIVE only; audit cycle 1): before K4 and K5 are added,
@@ -2011,10 +2008,10 @@ point's full suite is green, and its collection count is the floor. At `9628c857
 `7007 tests collected` (`rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests --collect-only -q -p no:cacheprovider | tail -1`,
 node ids), which equals plan R1's reading at `e3d84865` because `h-mad/` did not change between the two;
 5c re-measures it at the branch point, and that reading, not this one, is the floor. Tasks 18–28 add
-200 collected node ids (199 in the feature's own modules, listed per Task, plus the
+216 collected node ids (215 in the feature's own modules, listed per Task, plus the
 `test_no_verb_dies_on_an_unbound_variable[grok-canary]` id that Task 23's new verb adds to
 `h-mad/tests/test_hmad_dispatch_missing_positionals.py`) and remove 4 (the four S0 tests Tasks 24 and 26
-rename), so after Task 28 the collection is the floor plus 196, and at every GREEN in between it is at
+rename), so after Task 28 the collection is the floor plus 212, and at every GREEN in between it is at
 least the floor plus the ids added so far minus the ids removed so far. Every Task runs the full suite
 per the Rules, from the S0c branch's worktree.
 
@@ -2130,12 +2127,19 @@ and codex's last-message file, in `_cmd_exec`:
 1. For grok only, before anything is created or launched, `LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C "$cd_dir" rev-parse --show-toplevel`
    (`# M:GROK-TMP-ENV`, the environment line). Exit 0: `T` is the printed top level; `pwd -P` of
    `$cd_dir` and of `T` differ → exit 2 (`# M:GROK-TMP-SUBDIR`);
-   `git -C "$T" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe` non-zero → exit 2
-   (`# M:GROK-TMP-IGNORED`); otherwise `mkdir -p "$T/.h-mad/tmp"` and
+   the same scrubbed environment then runs
+   `git -C "$T" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe`, non-zero → exit 2
+   (`# M:GROK-TMP-IGNORED`; v1.6, impl-plan audit cycle 3: an inherited `GIT_DIR` would make this call
+   consult another repository's ignore rules, so every `git` call on the staging path runs scrubbed,
+   both on marked lines); otherwise `mkdir -p "$T/.h-mad/tmp"` and
    `S=$(mktemp -d "$T/.h-mad/tmp/hmad_exec_grok.XXXXXX")` (`# M:GROK-TMP-GIT`). Non-zero with
    `not a git repository` on stderr: `S="$cd_dir/.tmp"`, `mkdir -p` (`# M:GROK-TMP-ROOT`). Any other
-   non-zero → exit 2 (`# M:GROK-TMP-GITFAIL`). Each refusal prints
-   `hmad-dispatch: exec: grok staging: <reason>` with the reason naming the check, and launches nothing.
+   non-zero → exit 2 (`# M:GROK-TMP-GITFAIL`). Each refusal prints its own stderr line and launches
+   nothing: `hmad-dispatch: exec: grok staging: --cd is below the git top level`,
+   `hmad-dispatch: exec: grok staging: .h-mad/tmp/ is not ignored by git`, and
+   `hmad-dispatch: exec: grok staging: git rev-parse failed`, followed by git's own message. Each
+   refusal test asserts its own line, so a disarmed guard that falls to a sibling refusal still fails
+   its test (the class audit cycle 3 named in Task 23, closed for every exit-2 guard of Tasks 18–23).
 2. The bounded prompt: for grok `mktemp "$S/hmad_exec_prompt.XXXXXX"` (`# M:GROK-PROMPT-IN-CD`); for codex
    and agy `mktemp "$(dirname -- "$log")/hmad_exec_prompt.XXXXXX"` (`# M:EXEC-PROMPT-BESIDE-LOG`). The
    existing `mktemp -t hmad_exec_prompt.XXXXXX` line (3142 at `9628c857`) is replaced by those two.
@@ -2167,14 +2171,16 @@ directory outside any work tree, first asserting `git -C <it> rev-parse --git-di
 - `test_exec_grok_staging_not_ignored_exits_2` (no `.h-mad/*` ignore).
 - `test_exec_grok_rev_parse_failure_exits_2` (a `git` stub first on `PATH` that exits 128 printing
   `dubious ownership`).
-- `test_exec_grok_ignores_an_ambient_git_dir` (`GIT_DIR` set to another repository: staging still
-  under the `--cd` repository's `.h-mad/tmp/`).
+- `test_exec_grok_ignores_an_ambient_git_dir` (`GIT_DIR` set to a second repository whose
+  `.gitignore` does **not** ignore `.h-mad/*`, while the `--cd` repository's does: staging still lies
+  under the `--cd` repository's `.h-mad/tmp/`, so neither the top-level lookup nor `check-ignore` read
+  the ambient repository).
 - `test_exec_codex_stages_prompt_and_last_beside_the_log` (a stub `codex` records its prompt path and
   `--output-last-message` path: both in the `--log`'s directory).
 - `test_exec_agy_oversize_removes_the_staged_prompt` (an oversize prompt with `TMPDIR` set to a test
   directory: exit 2, and no `hmad_exec_prompt.*` remains beside the log or in that directory).
 
-In each refusal case the stub grok never ran.
+In each refusal case the stub grok never ran and stderr carries that refusal's own line.
 
 **Acceptance Criteria**:
 - [ ] AC-T19.1: The 12 ids pass, each alone; each builds its own repository or directory.
@@ -2182,6 +2188,9 @@ In each refusal case the stub grok never ran.
   prints 0 (matching lines); `hmad_exec_log`, `hmad_exec_wt`, `hmad_probe` and `hmad_pane_log` keep
   `mktemp -t` (D16's classification).
 - [ ] AC-T19.3: The grok launch line is byte-identical (as AC-T18.2).
+- [ ] AC-T19.4: Every `git` call `_cmd_exec` makes to resolve the staging directory carries the scrubbed
+  environment: `sed -n '/^_cmd_exec()/,/^}/p' h-mad/scripts/hmad-dispatch.sh | grep -E 'git -C' | grep -vc 'env -u GIT_DIR'`
+  prints 0 (matching lines).
 
 **RED split**: 12 ids; 11 F; 1 P, `test_exec_grok_removes_the_staged_prompt`, a regression guard (the
 existing `rm -f "$bounded_prompt"` already removes the system-temp prompt at `9628c857`); its negative
@@ -2191,7 +2200,7 @@ observation is row 15.
 begin with the prefix) has no fixture: the wrapper offers no seam that damages `S`, so row 9 shows
 only that removal passes through the guard. A signal between creation and removal leaves `S` (D16).
 
-**Mutation rows** (15; markers 13). `file` is `scripts/hmad-dispatch.sh`; tests in
+**Mutation rows** (16; markers 13). `file` is `scripts/hmad-dispatch.sh`; tests in
 `tests/test_grok_audit_surface_wrapper.py`.
 
 | # | name | marker | replace | test |
@@ -2203,6 +2212,7 @@ only that removal passes through the guard. A signal between creation and remova
 | 5 | `grok-tmp-git-shared` | `# M:GROK-TMP-GIT` | one fixed `$T/.h-mad/tmp/hmad_exec_grok.shared` (made with `mkdir -p`) | `test_exec_grok_two_dispatches_get_distinct_staging_dirs` |
 | 6 | `grok-tmp-root-severed` | `# M:GROK-TMP-ROOT` | `S=$(mktemp -d)` (system temp) | `test_exec_grok_stages_the_prompt_in_cd_tmp` |
 | 7 | `grok-tmp-env-ambient` | `# M:GROK-TMP-ENV` | `-u GIT_DIR` dropped | `test_exec_grok_ignores_an_ambient_git_dir` |
+| 7b | `grok-tmp-ignored-env-ambient` | `# M:GROK-TMP-IGNORED` | `-u GIT_DIR` dropped from the `check-ignore` call | `test_exec_grok_ignores_an_ambient_git_dir` |
 | 8 | `grok-prompt-in-cd-severed` | `# M:GROK-PROMPT-IN-CD` | `mktemp -t hmad_exec_prompt.XXXXXX` | `test_exec_grok_stages_the_prompt_in_cd_tmp` |
 | 9 | `grok-tmp-rmguard-never` | `# M:GROK-TMP-RMGUARD` | the guard never passes | `test_exec_grok_in_a_work_tree_leaves_git_status_unchanged` |
 | 10 | `grok-tmpdir-dropped` | `# M:GROK-TMPDIR` | no `TMPDIR` entry | `test_exec_grok_sets_tmpdir_to_cd_tmp` |
@@ -2225,7 +2235,10 @@ precede this Task's edits of the same branch).
 
 **Description**: D17. `--pass-root <dir>` is repeatable, in pass order; with none given, every
 behaviour is as at `9628c857`. With any given, before any assembly, each its own marked check, exit 2
-with a stderr line in the `--surfaces` count check's form (`hmad-dispatch: audit-cycle: --pass-root …`):
+with its own stderr line in the `--surfaces` count check's form, each beginning
+`hmad-dispatch: audit-cycle: --pass-root` and ending, per check, `count differs from --passes`,
+`is not absolute`, `contains ':'`, `is not an existing directory`, `names one root twice`,
+`lies inside another --pass-root` and `first root is not --project-root`:
 their number equals `--passes` (`# M:PASS-ROOT-COUNT`); each is absolute (`# M:PASS-ROOT-DIR-ABS`),
 holds no `:` (`# M:PASS-ROOT-DIR-COLON`) and is an existing directory (`# M:PASS-ROOT-DIR`), the
 three split as `# M:STEM-DIR-ABS`, `# M:STEM-DIR-COLON` and `# M:STEM-DIR-EXISTS` split the stem
@@ -2267,7 +2280,9 @@ exactly `REQUIRE: STOP reason=halt_file` by `test_audit_cycle_launches_nothing_a
 - `test_audit_cycle_without_a_halt_file_launches` (`--halt-file` naming an absent path: every pass
   launched and an `AUDITCYCLE:` line printed).
 
-Each exit-2 test also asserts that no assembly ran and that stderr carries no `unknown option` text.
+Each exit-2 test also asserts that no assembly ran, that stderr carries no `unknown option` text, and
+that stderr carries its own check's line, so a disarmed check that falls to a sibling check (a relative
+or colon path then failing the existing-directory check) fails its test (impl-plan audit cycle 3).
 
 **Acceptance Criteria**:
 - [ ] AC-T20.1: The 11 ids pass; `h-mad/tests/test_hmad_dispatch_audit_cycle.py` passes unchanged.
@@ -2502,7 +2517,12 @@ their RED split is stated below.
 errors exit 2 with usage on stderr and no `GROK-CANARY:` line, each its own marked check: no
 `--run-dir` (`# M:CANARY-RUNDIR-GIVEN`), relative (`# M:CANARY-RUNDIR-ABS`), missing
 (`# M:CANARY-RUNDIR-EXISTS`), inside system temp, the D5 set `{$TMPDIR, /tmp, /private/tmp}` each
-resolved (`# M:CANARY-RUNDIR-TMP`), no `roots/` (`# M:CANARY-RUNDIR-ROOTS`). Then
+resolved (`# M:CANARY-RUNDIR-TMP`), no `roots/` (`# M:CANARY-RUNDIR-ROOTS`). Each prints its own
+stderr line before the usage, `hmad-dispatch: grok-canary: --run-dir` followed by, per check,
+`is required`, `is not absolute`, `does not exist`, `lies in system temp` and `has no roots/`, because
+without its own line a disarmed check falls to its sibling (a missing directory then fails `roots/`,
+an absent flag then fails the absolute-path check) with the same exit 2, no token and the same usage
+line, and its row survives (impl-plan audit cycle 3). Then
 `python3 h-mad/scripts/h_mad_grok_containment.py canary-plant --run-dir <dir>`; only on its
 `PLANT: READY …` line (`# M:CANARY-PLANT-GATE`), `_cmd_exec grok canary/prompt.txt --cd <cwd> --log canary/log.ndjson --timeout <s>`
 with no `--sandbox` (`# M:CANARY-EXEC-WIRE`); then `canary-judge --run-dir <dir> --rc "$rc"`
@@ -2552,8 +2572,9 @@ never on an import.
   `test_canary_replaced_sentinel_is_sentinel_changed` and
   `test_canary_deleted_sentinel_with_token_in_log_is_read_escaped` (both through the real plant →
   exec → judge path), `test_canary_usage_error_exits_2` (parametrized `[no-run-dir]`, `[relative]`,
-  `[missing]`, `[in-system-temp]`, `[no-roots]`: exit 2, no `GROK-CANARY:` line, and stderr carries the
-  verb's own usage line `usage: hmad-dispatch grok-canary --run-dir`), `test_canary_injected_exception_exits_2`
+  `[missing]`, `[in-system-temp]`, `[no-roots]`: exit 2, no `GROK-CANARY:` line, stderr carries the
+  verb's own usage line `usage: hmad-dispatch grok-canary --run-dir`, and stderr carries that id's own
+  check line and none of the other four), `test_canary_injected_exception_exits_2`
   (`main(["canary-judge", …])` in process with `canary_judge` replaced by a recorder that raises:
   exit 2, no `GROK-CANARY:` line, and the recorder was called).
 - `test_require_canary_without_a_token_is_stop`, parametrized `[exit-0]` and `[exit-2]`: a token file
@@ -2563,6 +2584,22 @@ never on an import.
 
 Every fixture asserts that `plant.txt`, when it exists, holds no plain token, and asserts the exit code
 beside the token (0 for `PASS` and every reason form).
+
+**The stub's default transcript (impl-plan audit cycle 3).** `_cmd_exec` turns a grok run that exits 0
+with no final message into rc 3 (`hmad-dispatch.sh` lines 3366–3374 at `121ae4ce`, `EMPTY final
+message`), and the judge decides `cannot_run` before every `no_read_check`, `no_control` and
+`no_denial` form. So a stub that logs nothing makes every later form unreachable. The stub grok
+therefore writes, by default, a completed streaming-json transcript in `grokfixtures.f0_text()`'s shape
+(the shape `_grok_final_message` reads): the planted outcome's own
+`tool_call` and `tool_call_update` events (none of them carrying the token unless the fixture plants
+it), then an `end` event and a final message `DONE`, and exits 0. Only `test_canary_grok_rc`,
+`test_canary_timeout` and `test_canary_truncated` depart from it, each in its one field (exit code,
+sleep past `--timeout`, no `end` event). In particular `test_canary_replaced_sentinel_is_sentinel_changed`
+runs the real plant → exec → judge path with a stub that overwrites `sentinel.txt` with another 32-hex
+token and writes the completed default transcript, holding no 32-hex run equal to the planted hash, so
+the judge reaches and prints `no_read_check:sentinel_changed`; the design's "logs nothing" is read as
+"logs no tool result carrying a token". Each fixture first asserts that `exec`'s stderr carries no
+`EMPTY final message` line, except the three that plant a `cannot_run` form.
 
 **Residual, stated exactly (design rev4's Phase-5 note).** `read_escaped` searches maximal runs of
 exactly 32 lowercase hex characters, `(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])`. A log that carries the
@@ -2668,7 +2705,12 @@ as v1.6 re-anchors it, and D2's two v1.6 paired-flag rules:
 
 **Churn in existing tests (modified, not duplicated; names kept unless stated).**
 - Every invocation of `build-root`, `main-leak`, `rescore` and the `--repo` forms of `check-ledger` and
-  `extract` gains `--work-dir <tmp_path>/work`, and every probe run that needs an accepted parent runs
+  `extract` gains `--work-dir <tmp_path>/scratch`, a directory the shared helpers create as a sibling
+  of the fixture checkout and pass through (impl-plan audit cycle 3: `build_repo` makes
+  `<tmp_path>/work` a `git init`ed checkout, `h-mad/tests/grokauditfixtures.py` lines 117–122 at
+  `121ae4ce`, so a `--work-dir` there trips `WorkDirInGitTree` before any case reaches its own check;
+  `<tmp_path>/scratch` lies outside that checkout and outside the stand-in system temp, and each helper
+  first asserts `git -C <tmp_path>/scratch rev-parse --git-dir` fails), and every probe run that needs an accepted parent runs
   with `TMPDIR=<tmp_path>/systemp` (subprocess) or `tempfile.tempdir` monkeypatched to it (in process).
   At `9628c857` the invocations sit in 20 `def` blocks of `h-mad/tests/test_grok_audit_surface_probe.py`
   whose text names `"build-root"`, `"main-leak"`, `"rescore"` or `"--repo"` (functions, by a
@@ -2688,7 +2730,7 @@ These are regression guards: each is P before this Task's GREEN commit and P aft
 invocation change lands in the GREEN commit with the code. The RED commit holds only the new and the
 renamed tests.
 
-**Tests** (10 new or renamed functions, 19 node ids):
+**Tests** (11 new or renamed functions, 34 node ids):
 - `test_dest_parent_must_be_a_directory` (`ROOT: UNREADABLE reason=internal:ParentNotDirectory`).
 - `test_dest_parent_in_system_temp_refuses` (`internal:ParentInSystemTemp`).
 - `test_work_dir_in_system_temp_refuses` (`internal:ParentInSystemTemp`).
@@ -2709,20 +2751,59 @@ renamed tests.
 - `test_work_dir_is_required_where_a_directory_is_created` (plan-added: D2 states the rule and names no
   fixture), parametrized `[build-root]`, `[main-leak]`, `[rescore]`, `[check-ledger-repo]`,
   `[extract-repo]`: each without `--work-dir` prints its mode's `internal:UsageError` token.
+- `test_reset_precondition_old_new_differential` (impl-plan audit cycle 3, the base guard-narrowing
+  rule: re-anchoring guard 3 accepts targets the shipped reset refused, so every verdict the change
+  moves is enumerated). The old predicate is the shipped one, never a re-implementation:
+  `check_reset_target` of the probe as committed at `66ff0894` (the last commit that touched it before
+  S0c), read with `git show 66ff0894:docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py`
+  and compiled as `load_probe` compiles; the test first asserts that source holds the line
+  `    if root.parent != Path(tempfile.gettempdir()).resolve():  # M:GAS-RESET-TMPDIR` (its positive
+  control that it loaded the old guard). The new predicate is the working probe's. Both run on the same
+  target, `--doc d1`, under the same stand-in system temp, and the outcome is the returned path or the
+  raised class name (`Refusal` with its reason for the reach guard). Parametrized over 15 targets, each
+  asserting the exact (old, new) pair:
+
+  | id | target | old | new |
+  |---|---|---|---|
+  | `[systemp-child]` | `gas-root-d1-s1-x` directly in system temp | accepted | `ResetTargetInSystemTemp` |
+  | `[roots-outside-temp]` | `<tmp_path>/run/roots/gas-root-d1-s1-x` | `ResetTargetOutsideTempdir` | accepted |
+  | `[roots-inside-temp]` | `roots/gas-root-d1-s1-x` under system temp | `ResetTargetOutsideTempdir` | `ResetTargetInSystemTemp` |
+  | `[non-roots-parent]` | `<tmp_path>/other/gas-root-d1-s1-x` | `ResetTargetOutsideTempdir` | `ResetTargetOutsideRoots` |
+  | `[wrong-doc-prefix]` | `<tmp_path>/run/roots/gas-root-d2-s1-x` | `ResetTargetOutsideTempdir` | `ResetTargetPrefix` |
+  | `[wrong-purpose-prefix]` | `<tmp_path>/run/roots/gas-root-d1-s2v1-x` | `ResetTargetOutsideTempdir` | `ResetTargetPrefix` |
+  | `[nested-root]` | `<tmp_path>/run/roots/gas-root-d1-s1-a/gas-root-d1-s1-b` | `ResetTargetOutsideTempdir` | `ResetTargetOutsideRoots` |
+  | `[sibling-roots-dir]` | `<tmp_path>/other-run/roots/gas-root-d1-s1-x` (another run's `roots/`) | `ResetTargetOutsideTempdir` | accepted |
+  | `[symlink-into-roots]` | a link in system temp naming `<tmp_path>/run/roots/gas-root-d1-s1-x` | `ResetTargetOutsideTempdir` | accepted |
+  | `[symlink-into-temp]` | a link in `<tmp_path>/run/roots/` naming a `gas-root-d1-s1-x` in system temp | accepted | `ResetTargetInSystemTemp` |
+  | `[physical-spelling]` | the `[roots-outside-temp]` target reached through a symlinked ancestor of `<tmp_path>/run` | `ResetTargetOutsideTempdir` | accepted |
+  | `[git-target]` | `<tmp_path>/run/roots/gas-root-d1-s1-x`, `git init`ed | `ResetTargetOutsideTempdir` | `Refusal` `root_git:.git` |
+  | `[git-target-in-temp]` | `gas-root-d1-s1-x` in system temp, `git init`ed | `Refusal` `root_git:.git` | `ResetTargetInSystemTemp` |
+  | `[empty]` / `[missing]` | `""` / an absent absolute path | `ResetTargetNotAbsolute` / `ResetTargetNotDirectory` | the same |
+
+  (`[empty]` and `[missing]` are two ids in one row.) The softened verdicts, old refused and new
+  accepted, are exactly four: `[roots-outside-temp]`, `[sibling-roots-dir]`, `[symlink-into-roots]` and
+  `[physical-spelling]`. All four are one class, a `gas-root-d1-s1-` directory whose resolved parent is
+  a directory named `roots` outside system temp and that is not a git target. That class is the design's
+  intended acceptance (D5 guard 4 and its stated residual: "guard 4 accepts any directory named `roots`
+  outside system temp, not only this run's"). Every other moved verdict hardens: a refusal where the
+  old guard accepted, or a different refusal class. A softened verdict outside this class fails the
+  test.
 
 **Acceptance Criteria**:
-- [ ] AC-T24.1: The 19 ids and every churned test pass; the two reset-refusal tests follow AC-T5.1's
+- [ ] AC-T24.1: The 34 ids and every churned test pass; the two reset-refusal tests follow AC-T5.1's
   three-step assertion order.
 - [ ] AC-T24.2: `grep -n 'gettempdir' docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py`
   shows it only inside the system-temp set of `checked_parent` and reset guard 3.
 - [ ] AC-T24.3: `grep -c 'M:GAS-RESET-TMPDIR' docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py`
   prints 1 (the marker kept its one line).
 
-**RED split**: 19 ids; 19 F (at RED `--work-dir` is an unknown flag, the default parent still exists,
-and guard 3 still requires `tempfile.gettempdir()` as the parent), 0 P. Regression guards: the churned
-tests above.
+**RED split**: 34 ids; 32 F (at RED `--work-dir` is an unknown flag, the default parent still exists,
+guard 3 still requires `tempfile.gettempdir()` as the parent, and 13 differential ids expect a new
+verdict the unchanged probe does not give); 2 P, `test_reset_precondition_old_new_differential[empty]`
+and `[missing]`, whose old and new verdicts are equal by design; rows 21–22 are their negative
+observations. Regression guards: the churned tests above.
 
-**Mutation rows** (20 new; markers 15 new). `p-reset-tmpdir` is rewritten in place: its `find` is the
+**Mutation rows** (22 new; markers 15 new). `p-reset-tmpdir` is rewritten in place: its `find` is the
 inverted `# M:GAS-RESET-TMPDIR` line, its `replace` makes that condition never fire, and its `test` is
 `tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_a_target_in_system_temp`
 (`--check-anchors` shows the move). Every test below is in `tests/test_grok_audit_surface_probe.py`;
@@ -2750,6 +2831,8 @@ inverted `# M:GAS-RESET-TMPDIR` line, its `replace` makes that condition never f
 | 18 | `p-scratch-extract` | `# M:GAS-SCRATCH-EXTRACT` | `dir=` dropped | `test_every_scratch_dir_lies_under_the_work_dir[extract]` |
 | 19 | `p-scratch-main-leak` | `# M:GAS-SCRATCH-MAIN-LEAK` | `dir=` dropped | `test_every_scratch_dir_lies_under_the_work_dir[main-leak]` |
 | 20 | `p-scratch-rescore` | `# M:GAS-SCRATCH-RESCORE` | `dir=` dropped | `test_every_scratch_dir_lies_under_the_work_dir[rescore]` |
+| 21 | `p-reset-abs-differential` | `# M:GAS-RESET-ABS` (Task 5's marker) | condition never fires | `test_reset_precondition_old_new_differential[empty]` |
+| 22 | `p-reset-isdir-differential` | `# M:GAS-RESET-ISDIR` (Task 5's marker) | condition never fires | `test_reset_precondition_old_new_differential[missing]` |
 
 Rows 7–12 fall through to `checked_parent(None)`, a declared `ProbeRefusal` with its own token and no
 traceback, so each is a test kill.
@@ -2869,18 +2952,21 @@ exists). Each P is shown able to fail by its row: rows 1, 2, 9, 11 and 10.
    `tool_call` and `tool_call_update`: `input_unparseable:<data>/grok/auditcycle.txt`
    (`# M:GAS-SMOKE-EFFORT-NONGROK-CONTRADICTED`).
 
-**OPEN-DECISION — `test_cycle_token_one_root_record_fewer_than_passes` cannot reach `cycle_token` under
-D12's order (reported as a contradiction; not resolved here).** Pass (a) refuses any absent
-`pN.root.txt` with `list_changed:unrecorded` before pass (b) runs, and spec AC-5.4 makes an absent
-per-pass record `list_changed` trigger (a). A cycle with one record fewer than its passes is that input,
-so the shape "one root record fewer than the cycle has passes" (spec AC-5.5, D12 trigger (8)) prints
-`list_changed:unrecorded`, and `# M:GAS-CYCLE-ROOT-COUNT` is unreachable from it. Two implementations:
-(a) the fixture asserts `FINDINGS: UNREADABLE reason=list_changed:unrecorded` and the count guard and
-its row are not written (368 rows, 173 probe sites after Task 28); (b) the count guard fires on records
-the cycle holds **beyond** `P` (a `p4.root.txt` beside a three-pass cycle), the fixture is that shape,
-and the test is renamed for it (369 rows, 174 sites). Either needs the spec's or the design's word,
-because (a) drops a spec shape's token and (b) changes the shape. 5d does not start this Task's RED
-until the orchestrator rules.
+**Trigger (8)'s count shape (orchestrator ruling on v1.5's OPEN-DECISION, option (b)).** An absent
+per-pass record is `list_changed` trigger (a), refused by pass (a) before pass (b) runs, so the count
+shape cannot be "one root record fewer than the cycle has passes". It is restated as **"more root
+records than the cycle has passes"**: a `pN.root.txt` with N above `P` beside a cycle whose records
+1…`P` are all present and well formed, which is the stale or shared-root record that shape exists to
+catch. `# M:GAS-CYCLE-ROOT-COUNT` fires on it, reachable because pass (a) reads only records 1…`P`.
+Spec AC-5.5 and design D12 are being changed to this wording in parallel; this plan cites the ruling
+and does not edit them.
+7. **The hint lookup reads the finding's own pass record (impl-plan audit cycle 3, should-fix).** At
+   `121ae4ce` `extract_all` reads the cycle's `root.txt` for every finding's quote hints
+   (`grok_audit_probe.py` line 1078: `root_record = path.parent.parent / "root.txt"`). An S2 cycle has
+   no `root.txt` after S0c, so a pass 2 or pass 3 quote naming its own root by absolute path would be
+   looked up on the live file system. The lookup becomes the finding's pass record,
+   `pN.root.txt` with N its report's `pass`, when the cycle holds per-pass records, and `root.txt`
+   otherwise (`# M:GAS-HINT-PASS-ROOT`). Hints stay advisory and never move the score (AC-4.4).
 
 **Churn (modified, not duplicated).** S2 fixtures (`write_extract_cycle`, `build_score_inputs`,
 `build_rescore_inputs` in `h-mad/tests/grokauditfixtures.py`) write `pN.root.txt` per pass and
@@ -2893,13 +2979,15 @@ land in the GREEN commit and are regression guards. Renamed: `test_calibration_d
 `test_smoke_deep_grok_types_with_unparseable_item_is_the_stated_residual` →
 `test_smoke_deep_grok_types_with_unparseable_item_refuses`.
 
-**Tests** (25 functions, 31 node ids):
+**Tests** (26 functions, 32 node ids):
 - Parsers (4 functions, 7 ids): `test_run_line_parser_reads_the_runbook_line` (the runbook's own
   `printf`, D8), `test_run_line_parser_rejects_a_malformed_run_line` `[missing-home]`, `[repeated-key]`,
   `[two-lines]`; `test_profile_line_parser_reads_the_exec_line` (the line Task 18's `exec` writes, read
   from a real `$log.profile`), `test_profile_line_parser_rejects_a_malformed_profile_line`
   `[missing-origin]`, `[origin-outside]`.
-- Trigger (8) (6): `test_cycle_token_one_root_record_fewer_than_passes` (see the OPEN-DECISION),
+- Trigger (8) (6): `test_cycle_token_more_root_records_than_passes` (a three-pass cycle with
+  `p1.root.txt`–`p3.root.txt` well formed and a stale `p4.root.txt` beside them:
+  `cycle_token:d1.v1`),
   `test_cycle_token_two_passes_same_root`, `test_cycle_token_root_inside_another`,
   `test_cycle_token_roots_differ_in_calibration`, `test_cycle_token_roots_differ_in_list_blob`, and the
   must-not-refuse `test_cycle_with_one_identical_root_per_pass_does_not_refuse`.
@@ -2923,20 +3011,27 @@ land in the GREEN commit and are regression guards. Renamed: `test_calibration_d
   `calibration/runs/<run-id>/resmoke/`, exported with `git archive`, gives the same token as the
   on-disk reading, and that token is `SMOKE: PASS`).
 - `test_calibration_data_set_is_the_directory_minus_the_metadata_names` (1).
+- Hint lookup (1): `test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record` (an S2 cycle
+  with three per-pass records and no `root.txt`; a pass-2 finding whose `quote:` names a seeded span by
+  its absolute path under pass 2's root; the live roots are deleted before `extract` runs; the hint is
+  a `HINT:` line for that finding reading `candidate-hit:` and the seed's id, not `candidate-fabrication`, and the
+  `FINDINGS: WRITTEN` token is the one the same tree gives with every hint removed). At RED the lookup
+  reads the absent `root.txt`, the quote stays absolute, and the deleted file gives
+  `candidate-fabrication`, so it fails.
 
 **Acceptance Criteria**:
-- [ ] AC-T26.1: The 31 ids pass (the first trigger-(8) id as the OPEN-DECISION rules).
+- [ ] AC-T26.1: The 32 ids pass.
 - [ ] AC-T26.2: The token parsers in the probe are exactly D10's six: `parse_auditcycle`,
   `parse_effort_items`, `parse_root_line`, `parse_run_line`, `parse_profile_line` and the imported
   `_gate_token`; no mode reads a `RUN:` or `GROK-PROFILE:` line any other way.
 
-**RED split**: 31 ids; 29 F; 2 P: `test_cycle_with_one_identical_root_per_pass_does_not_refuse` (a
+**RED split**: 32 ids; 30 F; 2 P: `test_cycle_with_one_identical_root_per_pass_does_not_refuse` (a
 must-not-refuse negative control; nothing refuses at RED) and
 `test_smoke_rederives_from_an_exported_namespaced_reading` (the smoke reads only `--data`, D11 "with no
 code change"; it pins equality of two derivations whose shared token is pinned by the `test_smoke_pass`
 rows, so it has no row of its own).
 
-**Mutation rows** (27; markers 18 new). `file` the probe; tests in
+**Mutation rows** (28; markers 19 new). `file` the probe; tests in
 `tests/test_grok_audit_surface_probe.py` except rows 16–17 (`tests/test_grok_audit_surface_smoke.py`).
 Rows 19–27 change the printed reason to `list_changed:unrecorded_run` (19–23) or
 `list_changed:unrecorded_root` (24–27) rather than disarm, because Task 27's scan reads the run and root
@@ -2949,7 +3044,7 @@ records those guards reject (Rules, "S0c scripts").
 | 3 | `p-parse-run-one` | `# M:GAS-PARSE-RUN-ONE` | the first `RUN:` line read | `test_run_line_parser_rejects_a_malformed_run_line[two-lines]` |
 | 4 | `p-parse-profile-keys` | `# M:GAS-PARSE-PROFILE` | key set not checked | `test_profile_line_parser_rejects_a_malformed_profile_line[missing-origin]` |
 | 5 | `p-parse-profile-origin` | `# M:GAS-PARSE-PROFILE-ORIGIN` | any value accepted | `test_profile_line_parser_rejects_a_malformed_profile_line[origin-outside]` |
-| 6 | `p-cycle-root-count` | `# M:GAS-CYCLE-ROOT-COUNT` | condition never fires | `test_cycle_token_one_root_record_fewer_than_passes` (renamed under option (b); absent under (a)) |
+| 6 | `p-cycle-root-count` | `# M:GAS-CYCLE-ROOT-COUNT` | condition never fires | `test_cycle_token_more_root_records_than_passes` |
 | 7 | `p-cycle-root-same` | `# M:GAS-CYCLE-ROOT-SAME` | condition never fires | `test_cycle_token_two_passes_same_root` |
 | 8 | `p-cycle-root-nested` | `# M:GAS-CYCLE-ROOT-NESTED` | condition never fires | `test_cycle_token_root_inside_another` |
 | 9 | `p-cycle-root-calibration` | `# M:GAS-CYCLE-ROOT-CALIBRATION` | condition never fires | `test_cycle_token_roots_differ_in_calibration` |
@@ -2971,9 +3066,10 @@ records those guards reject (Rules, "S0c scripts").
 | 25 | `p-contain-root-no-line` | `# M:GAS-CONTAIN-ROOT-UNRECORDED` | the same | `test_containment_no_ready_line` |
 | 26 | `p-contain-root-two-lines` | `# M:GAS-CONTAIN-ROOT-UNRECORDED` | the same | `test_containment_two_ready_lines` |
 | 27 | `p-contain-root-no-list-blob` | `# M:GAS-CONTAIN-ROOT-UNRECORDED` | the same | `test_containment_ready_line_without_list_blob` |
+| 28 | `p-hint-pass-root` | `# M:GAS-HINT-PASS-ROOT` | always the cycle's `root.txt` | `test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record` |
 
 **Dependencies on other tasks**: Task 25 (the `pN.root.txt` and `pN.profile.txt` records), Task 18
-(the `GROK-PROFILE:` line the parser fixture reads). The OPEN-DECISION above ruled.
+(the `GROK-PROFILE:` line the parser fixture reads).
 
 ---
 
@@ -3131,15 +3227,14 @@ grep -c '# M:' h-mad/scripts/h_mad_grok_containment.py
 
 **Acceptance Criteria**:
 - [ ] AC-T29.1: The first command prints a pytest version; the full suite's summary line shows no
-  failure; the collection line is at least the 5c floor plus 196 (S0c's preamble).
-- [ ] AC-T29.2: `MUTATION: ALL_CAUGHT` with `untargeted=0/369` (`0/368` under Task 26's option (a)) and
+  failure; the collection line is at least the 5c floor plus 212 (S0c's preamble).
+- [ ] AC-T29.2: `MUTATION: ALL_CAUGHT` with `untargeted=0/373` and
   `crash_kills=0`, and `ANCHORS: ANCHORS_OK`, read from the token lines.
 - [ ] AC-T29.3: Every spec the loop names prints `ANCHORS: ANCHORS_OK` (28 specs name
   `scripts/hmad-dispatch.sh` at `9628c857`; the loop re-derives the set).
 - [ ] AC-T29.4: The `git ls-files` line prints nothing.
 - [ ] AC-T29.5: The four marker counts (matching lines) and the row count (rows) are re-derived at this
-  Task's sha and reported with their units. This plan expects 174, 48, 21, 33 and 369 (173 and 368 under
-  option (a)); a different figure is reported against the Task whose table it contradicts, never
+  Task's sha and reported with their units. This plan expects 175, 48, 21, 33 and 373; a different figure is reported against the Task whose table it contradicts, never
   silently accepted.
 
 **Dependencies on other tasks**: Tasks 18–28.
@@ -3165,7 +3260,12 @@ python3 h-mad/scripts/h_mad_grok_containment.py require --verb grok-canary --tok
 G="$X/wt"; git init -q "$G"; printf '.h-mad/*\n' > "$G/.gitignore"
 printf 'Reply with the single word OK.\n' > "$X/wt-prompt.txt"
 git -C "$G" status --porcelain --untracked-files=all > "$X/status-before.txt"
-h-mad/bin/hmad-dispatch exec grok "$X/wt-prompt.txt" --cd "$G" --log "$X/wt.log"
+h-mad/bin/hmad-dispatch exec grok "$X/wt-prompt.txt" --cd "$G" --log "$X/wt.log" > "$X/wt.stdout.txt" 2> "$X/wt.stderr.txt"
+tail -1 "$X/wt.stdout.txt"
+grep -c 'hmad-dispatch: exec: grok stopReason=' "$X/wt.stderr.txt"
+grep -c 'EMPTY final message\|grok staging:' "$X/wt.stderr.txt"
+grep -c '"type": *"end"' "$X/wt.log"
+cat "$X/wt.log.profile"
 git -C "$G" status --porcelain --untracked-files=all > "$X/status-after.txt"
 cmp "$X/status-before.txt" "$X/status-after.txt" && echo STATUS=same || echo STATUS=changed
 ls -d "$G"/.h-mad/tmp/hmad_exec_grok.* 2>/dev/null | wc -l | tr -d ' '
@@ -3176,12 +3276,21 @@ The canary log is not scanned (spec AC-6.6: the canary "is not scanned").
 
 **Acceptance Criteria**:
 - [ ] AC-T30.1: `require` prints `REQUIRE: OK`.
-- [ ] AC-T30.2: `STATUS=same`, and the staging-directory count prints `0`.
+- [ ] AC-T30.2: The work-tree dispatch ran to completion, which is checked before its cleanup
+  results are read (impl-plan audit cycle 3: a staging refusal also leaves `git status` unchanged and no
+  staging directory, so those two alone cannot tell a completed dispatch from one that never launched).
+  Four positive markers, all required: the last line of `$X/wt.stdout.txt` is `OK`; `$X/wt.stderr.txt`
+  holds 1 `grok stopReason=` line (printed only on a complete transcript with a final message,
+  `hmad-dispatch.sh` line 3213 at `121ae4ce`) and 0 `EMPTY final message` or `grok staging:` lines;
+  `$X/wt.log` holds at least one line matching `"type": *"end"`; `$X/wt.log.profile` reads
+  `GROK-PROFILE: profile=strict origin=default`.
+- [ ] AC-T30.5: Only then: `STATUS=same`, and the staging-directory count prints `0`.
 - [ ] AC-T30.3: The evidence file holds every command above verbatim, the canary's token line,
-  `$X/canary/grok.txt`'s line, the `GROK-PROFILE:` line of `$X/canary/log.ndjson.profile`, both
-  `git status` captures, and the S0c branch sha `git rev-parse HEAD` printed; it carries no calibration
+  `$X/canary/grok.txt`'s line, the `GROK-PROFILE:` line of `$X/canary/log.ndjson.profile`, the
+  work-tree leg's four positive markers (AC-T30.2), both `git status` captures, and the S0c branch sha `git rev-parse HEAD` printed; it carries no calibration
   data.
-- [ ] AC-T30.4: A `REQUIRE: STOP`, `STATUS=changed` or a non-zero staging count blocks the merge; the
+- [ ] AC-T30.4: A `REQUIRE: STOP`, a missing positive marker, `STATUS=changed` or a non-zero staging
+  count blocks the merge; the
   defect goes back through TDD (a Task's RED), and Task 30 runs again after Task 29 is green again.
 
 **Dependencies on other tasks**: Task 29.
@@ -3226,7 +3335,7 @@ this plan, and neither has a Task.
   as the carry item says, against the v1.4 change log's "seven".
 
 **S0c readings (v1.5), each a tree measurement at `9628c857` that no S0c Task moves before Task 29
-re-derives it.** The S0c figures this plan expects after Task 28 (174, 48, 21, 33, 369) are claims over
+re-derives it.** The S0c figures this plan expects after Task 28 (175, 48, 21, 33, 373) are claims over
 classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - Rows and markers at S0: `len(json.load(open("h-mad/tests/mutation-specs/grok_audit_surface.json"))["mutations"])`
   prints 180 (rows); `grep -c 'M:GAS-' docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py`
@@ -3254,3 +3363,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.3: 2026-10-19, corrective revision answering impl-plan audit cycle 2 (agy p1: 0 must, 2 should; codex p2: 3 must, 2 should; on v1.2, document sha256 4b8400ba): Refusal and the reset classes subclass ProbeRefusal, with a traceback-absence check on Task 5's refusals; in-process main(argv) assertions forward captured stderr; reproduce commands and outputs beside the argparse and O_NOFOLLOW readings; Test 4's smoke token carries input_unparseable plus the --data value; the smoke's open input reaches refusal_token through _OPEN_INPUT; must-not-parse fixtures for the ROOT and Effort parsers (+2 tests, +2 rows); Task 16 pins grok-runtime.md (test_grok_runtime_states_the_outcome_sentence, row K6). Totals 171 rows at S0 (143 P-rows), 172 or 174 after Task 16, 117 marker sites.
 - v1.4: 2026-10-19, answers the advisory delta review of v1.3 (commit 5f10a1d9, document sha256 3015ade9; 0 must, 7 should, 4 nits): _OPEN_INPUT pinned by test_smoke_last_resort_names_the_open_input and p-open-input, with its never-cleared reading stated; the Effort block grammar ([] with no block, terminator, three distinct None conditions with a row each) and its callers (smoke pinned by test_smoke_refuses_a_malformed_effort_block; score as a Task 9 OPEN-DECISION with test_score_maps_a_malformed_effort_block); parse_root_line's None mapped and pinned in Task 6 and Task 10; token assertion before the traceback count; AC-T5.1 names its 10 refusal tests including three Refusal-raising ones; Refusal becomes its token via exc.reason in refusal_token (p-refusal-reason) and the scope narrowing is pinned (p-traceback-scope-reset); Task 16 asserts each outcome sentence's absence on the other branch (K7); reproduce commands for the plain-top-level parser, allow_abbrev and Fraction readings, with python3.15 pinned by absolute path and the exit-site lines printed; rule (3)'s in-process spelling; Task 16's production-files line. Totals 180 rows at S0 (152 P-rows), 182 or 184 after Task 16, 125 marker sites.
 - v1.5: 2026-10-20, corrective revision at 9628c857 (not an audit-cycle answer; the impl-plan was last revised at 2ccfd32e) bringing the impl-plan to design v1.11, spec v1.15 and plan v1.11 and answering the OWED-to-impl-plan items of the spec-author rev1-7, plan-author rev1-5 and design-author rev1-4 reports (void-cycle items withdrawn). New S0c Tasks 18-30 on the proposed branch feature/218b-grok-containment: exec grok strict default, override flag and profile record (18); staging, prompt and TMPDIR (19); audit-cycle --pass-root and --halt-file (20); h_mad_tool_calls.py scan (21); quarantine and require (22); grok-canary wiring plant, exec and judge (23); probe --work-dir and re-anchored reset guards (24); per-pass records and add-only commit (25); reading namespace, run record, cycle_token trigger (8), smoke residuals closed (26); containment scan wiring and CONTAINMENT lines (27); entry-contract text and K8 (28); S0c Phase 5e gate (29); operator non-seeded live round trip before merge (30). Task 15 rewritten to design D8's run order with the calibration-ref precondition; Task 16 cites the incident record and the superseded smoke and gains two S3 tests; Task 17 gated on S0c merged and an unhalted, scored fresh S2. Renamed S0 tests updated in place in Tasks 5, 7 and 10. Totals: 31 Tasks (3 wiring); 189 rows added, 369 after Task 28 (368 under Task 26 OPEN-DECISION option (a)), 371 or 373 after Task 16; probe marker sites 174; 200 node ids added, 4 removed.
+- v1.6: 2026-10-20, answers impl-plan audit cycle 3, gating round 1 (docs/01-plan/features/grok-audit-surface.impl-plan.audit.v3.p1.md: codex 7 must, 1 should; p2 agy filed none), at 121ae4ce, with the orchestrator ruling on the v1.5 Task 26 OPEN-DECISION (option (b)). Task 26: trigger (8)'s count shape restated as more root records than passes, test_cycle_token_more_root_records_than_passes, GAS-CYCLE-ROOT-COUNT reachable, OPEN-DECISION removed; the hint lookup at grok_audit_probe.py:1078 moves to the finding's pass record (GAS-HINT-PASS-ROOT, test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record). Task 24: --work-dir is <tmp_path>/scratch, a sibling of build_repo's git checkout; test_reset_precondition_old_new_differential compares the shipped 66ff0894 predicate with the new one over 15 targets, softened verdicts exactly the roots-outside-system-temp class. Task 19: check-ignore runs in the scrubbed git env (row 7b, AC-T19.4). Class closed for Tasks 19, 20 and 23: every exit-2 guard prints and its test asserts its own stderr line. Task 23: the stub grok writes a completed transcript by default, because exec turns an empty final message into rc 3 (hmad-dispatch.sh:3366-3374). Task 30: four positive markers prove the work-tree dispatch ran. Totals: 193 rows added, 373 after Task 28, 375 or 377 after Task 16; probe marker sites 175; 216 node ids added, 4 removed.
