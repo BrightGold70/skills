@@ -510,6 +510,8 @@ def test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record(tmp_path,
     (cycle / "command.txt").write_text(
         "hmad-dispatch audit-cycle --passes 3 --surfaces codex,agy,grok\n", encoding="utf-8",
     )
+    (cycle / "p3.log").write_text(json.dumps({"type": "text", "data": "clean"}) + "\n",
+                                   encoding="utf-8")
     auditcycle = cycle / "auditcycle.txt"
     auditcycle.write_text(auditcycle.read_text(encoding="utf-8").replace(
         "passes=2 delivered=report-file,none",
@@ -4009,8 +4011,16 @@ def _t27_assert_not_refused(case, capsys, expected_line):
     )
 
 
-def test_clean_grok_log_does_not_refuse(containment_score_case, capsys):
-    case = containment_score_case
+def test_clean_grok_log_does_not_refuse(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    probe = load_probe(PROBE)
+    try:
+        case = build_score_inputs(
+            tmp_path, probe, surfaces=("codex", "agy", "grok"),
+        )
+        case["probe"] = probe
+    except probe.Refusal as exc:
+        pytest.fail(f"a clean grok log must not refuse extraction: {exc.reason}")
     log = _t27_log(case, "d1", 3)
     log.write_text(json.dumps({"type": "text", "data": _hostile_text()}) + "\n", encoding="utf-8")
     _t27_assert_not_refused(case, capsys, _t27_containment_line(case, "d1", 3, "grok", log.read_text()))

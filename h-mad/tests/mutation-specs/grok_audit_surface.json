@@ -2932,6 +2932,78 @@
       "find": "        root_record = path.parent.parent / f\"p{report['pass']}.root.txt\"  # M:GAS-HINT-PASS-ROOT",
       "replace": "        root_record = path.parent.parent / \"root.txt\"  # M:GAS-HINT-PASS-ROOT",
       "test": "tests/test_grok_audit_surface_probe.py::test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record"
+    },
+    {
+      "name": "p-contain-scan-severed",
+      "_mechanism": "Replace the grok containment scan with a clean zero-count result.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            scan = h_mad_tool_calls.scan_log(text, \"grok\", root=root, checkout=run_fields[\"checkout\"], home=run_fields[\"home\"], needle_dirs=needles) if text is not None else {\"word\": \"UNREADABLE\"}  # M:GAS-CONTAIN-SCAN",
+      "replace": "            scan = {\"word\": \"CLEAN\", \"calls\": 0, \"out_of_root\": 0, \"checkout\": 0, \"exempt\": 0, \"nonjson\": 0, \"mcp_unmeasured\": 0}  # M:GAS-CONTAIN-SCAN",
+      "test": "tests/test_grok_audit_surface_probe.py::test_out_of_root_absolute_path_outside_the_root"
+    },
+    {
+      "name": "p-contain-scan-forced",
+      "_mechanism": "Replace every grok scan with an out-of-root result.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            scan = h_mad_tool_calls.scan_log(text, \"grok\", root=root, checkout=run_fields[\"checkout\"], home=run_fields[\"home\"], needle_dirs=needles) if text is not None else {\"word\": \"UNREADABLE\"}  # M:GAS-CONTAIN-SCAN",
+      "replace": "            scan = {\"word\": \"OUT_OF_ROOT\", \"calls\": 0, \"out_of_root\": 0, \"checkout\": 0, \"exempt\": 0, \"nonjson\": 0, \"mcp_unmeasured\": 0}  # M:GAS-CONTAIN-SCAN",
+      "test": "tests/test_grok_audit_surface_probe.py::test_clean_grok_log_does_not_refuse"
+    },
+    {
+      "name": "p-contain-lines-severed",
+      "_mechanism": "Publish zero counts instead of the scan_log result.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            scan = h_mad_tool_calls.scan_log(text, surface, root=roots[0][\"path\"], checkout=run_fields[\"checkout\"], home=run_fields[\"home\"], needle_dirs=needles)  # M:GAS-CONTAIN-LINES",
+      "replace": "            scan = {\"word\": \"CLEAN\", \"calls\": 0, \"out_of_root\": 0, \"checkout\": 0, \"exempt\": 0, \"nonjson\": 0, \"mcp_unmeasured\": 0}  # M:GAS-CONTAIN-LINES",
+      "test": "tests/test_grok_audit_surface_probe.py::test_containment_lines_name_every_standing_pass"
+    },
+    {
+      "name": "p-contain-out-of-root",
+      "_mechanism": "Do not refuse an OUT_OF_ROOT grok scan.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if scan[\"word\"] == \"OUT_OF_ROOT\":  # M:GAS-CONTAIN-OUT-OF-ROOT",
+      "replace": "            if False:  # M:GAS-CONTAIN-OUT-OF-ROOT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_out_of_root_absolute_path_outside_the_root"
+    },
+    {
+      "name": "p-contain-unreadable-absent",
+      "_mechanism": "Do not refuse a grok log that cannot be read.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if scan[\"word\"] == \"UNREADABLE\":  # M:GAS-CONTAIN-UNREADABLE",
+      "replace": "            if False:  # M:GAS-CONTAIN-UNREADABLE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_out_of_root_absent_log"
+    },
+    {
+      "name": "p-contain-unreadable-no-event",
+      "_mechanism": "Do not refuse a grok log with no readable JSON event.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if scan[\"word\"] == \"UNREADABLE\":  # M:GAS-CONTAIN-UNREADABLE",
+      "replace": "            if False:  # M:GAS-CONTAIN-UNREADABLE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_out_of_root_log_without_event"
+    },
+    {
+      "name": "p-contain-every-cycle",
+      "_mechanism": "Scan only the cycle selected by stands().",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    cycles_to_scan = recorded_roots  # M:GAS-CONTAIN-EVERY-CYCLE",
+      "replace": "    cycles_to_scan = [item for item in recorded_roots if stands(item[0].parent) == item[0]]  # M:GAS-CONTAIN-EVERY-CYCLE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_out_of_root_on_a_non_standing_cycle"
+    },
+    {
+      "name": "p-contain-profile-strict",
+      "_mechanism": "Publish strict when the grok profile record is missing.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                line += (f\" profile={profile['profile']} origin={profile['origin']}\"\n                         if profile else \" profile=none\")  # M:GAS-CONTAIN-PROFILE",
+      "replace": "                line += \" profile=strict\"  # M:GAS-CONTAIN-PROFILE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_containment_line_profile_none_without_record"
+    },
+    {
+      "name": "p-contain-grok-only",
+      "_mechanism": "Run containment refusal checks for codex and agy passes too.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if surface != \"grok\":  # M:GAS-CONTAIN-GROK-ONLY",
+      "replace": "            if False:  # M:GAS-CONTAIN-GROK-ONLY",
+      "test": "tests/test_grok_audit_surface_probe.py::test_codex_or_agy_count_does_not_refuse"
     }
   ]
 }

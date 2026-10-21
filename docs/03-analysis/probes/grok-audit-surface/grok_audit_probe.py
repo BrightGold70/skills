@@ -30,6 +30,7 @@ import h_mad_audit_gate as _gate
 import h_mad_audit_cycle as _cycle
 from h_mad_audit_origins import ORIGINS
 from h_mad_review_evidence import _GROK_TYPES
+import h_mad_tool_calls
 
 
 SOURCES: dict[str, str] = {
@@ -1168,10 +1169,10 @@ def containment_checks(s2_dir: Path, sources: dict[str, str]) -> None:
                 raise Refusal(reason)
             if passes != len(surfaces) or not surfaces:
                 raise Refusal(reason)
-            cycles.append((cycle, passes, reason))
+            cycles.append((cycle, passes, reason, surfaces))
 
     recorded_roots = []
-    for cycle, passes, reason in cycles:
+    for cycle, passes, reason, surfaces in cycles:
             roots = []
             for pass_index in range(1, passes + 1):
                 record = cycle / f"p{pass_index}.root.txt"
@@ -1186,9 +1187,9 @@ def containment_checks(s2_dir: Path, sources: dict[str, str]) -> None:
                 if fields is None:  # M:GAS-CONTAIN-ROOT-UNRECORDED
                     raise Refusal("list_changed:unrecorded")  # M:GAS-CONTAIN-ROOT-UNRECORDED
                 roots.append(fields)
-            recorded_roots.append((cycle, passes, reason, roots))
+            recorded_roots.append((cycle, passes, reason, surfaces, roots))
 
-    for cycle, passes, reason, roots in recorded_roots:
+    for cycle, passes, reason, surfaces, roots in recorded_roots:
             for record in cycle.glob("p*.root.txt"):
                 match = re.fullmatch(r"p([1-9][0-9]*)\.root\.txt", record.name)
                 if match and int(match[1]) > passes:  # M:GAS-CYCLE-ROOT-COUNT
@@ -1204,6 +1205,73 @@ def containment_checks(s2_dir: Path, sources: dict[str, str]) -> None:
                 raise Refusal(reason)
             if len({fields["list_blob"] for fields in roots}) != 1:  # M:GAS-CYCLE-ROOT-LIST
                 raise Refusal(reason)
+
+    needles = [f"{directory}/{feature}" for feature, directory in sources.items()]
+    cycles_to_scan = recorded_roots  # M:GAS-CONTAIN-EVERY-CYCLE
+    for cycle, passes, reason, surfaces, roots in cycles_to_scan:
+        for pass_index, surface in enumerate(surfaces, 1):
+            if surface != "grok":  # M:GAS-CONTAIN-GROK-ONLY
+                continue
+            log = cycle / f"p{pass_index}.log"
+            try:
+                text = log.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                text = None
+            root = roots[pass_index - 1]["path"]
+            scan = h_mad_tool_calls.scan_log(text, "grok", root=root, checkout=run_fields["checkout"], home=run_fields["home"], needle_dirs=needles) if text is not None else {"word": "UNREADABLE"}  # M:GAS-CONTAIN-SCAN
+            if scan["word"] == "OUT_OF_ROOT":  # M:GAS-CONTAIN-OUT-OF-ROOT
+                raise Refusal(f"out_of_root:{cycle.parent.name}.{cycle.name}")
+            if scan["word"] == "UNREADABLE":  # M:GAS-CONTAIN-UNREADABLE
+                raise Refusal(f"out_of_root:{cycle.parent.name}.{cycle.name}")
+
+
+def containment_lines(s2_dir: Path, sources: dict[str, str]) -> list[str]:
+    try:
+        run_fields = parse_run_line((s2_dir / "run.txt").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        run_fields = None
+    if run_fields is None:
+        raise Refusal("list_changed:unrecorded")
+    needles = [f"{directory}/{feature}" for feature, directory in sources.items()]
+    lines = []
+    for index in range(1, len(sources) * 3 + 1):
+        doc = f"d{index}"
+        cycle = stands(s2_dir / doc)
+        try:
+            command = shlex.split((cycle / "command.txt").read_text(encoding="utf-8"))
+            surfaces = command[command.index("--surfaces") + 1].split(",")
+        except (OSError, UnicodeError, ValueError, IndexError):
+            raise Refusal(f"cycle_token:{doc}.{cycle.name}")
+        for pass_index, surface in enumerate(surfaces, 1):
+            root_record = cycle / f"p{pass_index}.root.txt"
+            try:
+                root_lines = [parse_root_line(line) for line in root_record.read_text(encoding="utf-8").splitlines()
+                              if line.startswith("ROOT: READY ")]
+            except (OSError, UnicodeError):
+                root_lines = []
+            roots = [fields for fields in root_lines if fields is not None]
+            if len(roots) != 1:
+                raise Refusal("list_changed:unrecorded")
+            try:
+                text = (cycle / f"p{pass_index}.log").read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                text = ""
+            scan = h_mad_tool_calls.scan_log(text, surface, root=roots[0]["path"], checkout=run_fields["checkout"], home=run_fields["home"], needle_dirs=needles)  # M:GAS-CONTAIN-LINES
+            tail = (f"mcp_unmeasured={scan['mcp_unmeasured']}" if surface == "codex"
+                    else f"nonjson={scan['nonjson']}")
+            line = (f"CONTAINMENT: {doc}.v{cycle.name[1:]} p{pass_index} surface={surface} scan={scan['word']} "
+                    f"calls={scan['calls']} out_of_root={scan['out_of_root']} "
+                    f"checkout={scan['checkout']} exempt={scan['exempt']} {tail}")
+            if surface == "grok":
+                profile_path = cycle / f"p{pass_index}.profile.txt"
+                try:
+                    profile = parse_profile_line(profile_path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError):
+                    profile = None
+                line += (f" profile={profile['profile']} origin={profile['origin']}"
+                         if profile else " profile=none")  # M:GAS-CONTAIN-PROFILE
+            lines.append(line)
+    return lines
 
 
 def _standing_reports(s2_dir: Path, sources: dict[str, str]) -> list[dict]:
@@ -1547,6 +1615,7 @@ def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sh
                      f"delivered={delivered_counts[surface]} low_evidence={evidence[surface]}")
     outcome, reason = verdict(totals)
     lines.extend(observational_lines(rows, ledger))
+    lines.extend(containment_lines(selected_root / "s2", sources))
     token = f"SEEDSCORE: {outcome}" + (f" reason={reason}" if reason else "")
     token += f" calibration={calibration or 'unstated'} score={score_sha or 'unstated'}"
     return lines, token
