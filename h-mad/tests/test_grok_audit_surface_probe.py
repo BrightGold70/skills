@@ -73,6 +73,469 @@ def test_auditcycle_parser_reads_render_output():
     assert "delivered" not in unverified, "a halted cycle renders no delivered field"
 
 
+def test_run_line_parser_reads_the_runbook_line():
+    probe = load_probe(PROBE)
+    text = subprocess.run(
+        ["/usr/bin/printf", "RUN: checkout=%s home=%s\n", "/tmp/checkout", "/tmp/home"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert probe.parse_run_line(text) == {"checkout": "/tmp/checkout", "home": "/tmp/home"}, (
+        "the runbook's single RUN line must preserve both recorded paths"
+    )
+
+
+@pytest.mark.parametrize("text", [
+    "RUN: checkout=/tmp/checkout\n",
+    "RUN: checkout=/tmp/checkout checkout=/tmp/other home=/tmp/home\n",
+    "RUN: checkout=/tmp/checkout home=/tmp/home\nRUN: checkout=/tmp/other home=/tmp/home2\n",
+], ids=["missing-home", "repeated-key", "two-lines"])
+def test_run_line_parser_rejects_a_malformed_run_line(text):
+    probe = load_probe(PROBE)
+    assert probe.parse_run_line(text) is None, "malformed or multiple RUN lines are not authoritative"
+
+
+def test_profile_line_parser_reads_the_exec_line(tmp_path):
+    probe = load_probe(PROBE)
+    from test_grok_audit_surface_wrapper import _profile_case
+
+    result, _capture, log_profile, _log, _calls = _profile_case(tmp_path)
+    assert result.returncode == 0, f"exec grok must produce the profile record: {result.stderr}"
+    assert log_profile.is_file(), "exec grok must write the profile record beside its log"
+    assert probe.parse_profile_line(log_profile.read_text(encoding="utf-8")) == {
+        "profile": "fixture", "origin": "override",
+    }, "the exec-written profile line must preserve its profile and origin"
+
+
+@pytest.mark.parametrize("text", [
+    "GROK-PROFILE: profile=fixture\n",
+    "GROK-PROFILE: profile=fixture origin=elsewhere\n",
+], ids=["missing-origin", "origin-outside"])
+def test_profile_line_parser_rejects_a_malformed_profile_line(text):
+    probe = load_probe(PROBE)
+    assert probe.parse_profile_line(text) is None, "malformed or noncanonical profile records must refuse"
+
+
+def _t26_ready_extract_case(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = build_extract_inputs(tmp_path)
+    case["probe"] = load_probe(PROBE)
+    (case["s2"] / "run.txt").write_text(
+        f"RUN: checkout={case['tree']} home={tmp_path / 'home'}\n", encoding="utf-8",
+    )
+    for doc in sorted((case["s2"]).glob("d*")):
+        for cycle in sorted(doc.glob("v*")):
+            line = (cycle / "root.txt").read_text(encoding="utf-8").strip()
+            (cycle / "p1.root.txt").write_text(line + "\n", encoding="utf-8")
+            (cycle / "p2.root.txt").write_text(
+                line.replace("-synthetic", "-synthetic-p2") + "\n", encoding="utf-8",
+            )
+    return case
+
+
+def _t26_extract(case, capsys, *, out=None):
+    argv = ["extract", "--tree", str(case["tree"]), "--s2", str(case["s2"]),
+            "--shuffle-seed", "1729", "--out", str(out or case["out"]), "--sources",
+            ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items())]
+    capsys.readouterr()
+    rc = case["probe"].main(argv)
+    stdout, stderr = capsys.readouterr()
+    return subprocess.CompletedProcess(argv, rc, stdout, stderr)
+
+
+def _t26_refuses(probe, case, reason, capsys):
+    result = _t26_extract(case, capsys)
+    expected = f"FINDINGS: UNREADABLE reason={reason}"
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (2, [expected]), (
+        f"extract must refuse with {reason!r}: stdout={result.stdout!r}; stderr={result.stderr!r}"
+    )
+    assert "Traceback" not in result.stderr, "declared extraction refusals must not print a traceback"
+
+
+def _t26_change_root_path(line, path):
+    return re.sub(r"path=\S+", f"path={path}", line)
+
+
+def _t26_three_passes(cycle):
+    command = (cycle / "command.txt").read_text(encoding="utf-8")
+    command = command.replace("--passes 2", "--passes 3").replace(
+        "--surfaces agy,grok", "--surfaces codex,agy,grok",
+    )
+    (cycle / "command.txt").write_text(command, encoding="utf-8")
+    audit = cycle / "auditcycle.txt"
+    text = audit.read_text(encoding="utf-8")
+    text = text.replace("passes=2 delivered=report-file,none",
+                        "passes=3 delivered=report-file,none,none")
+    audit.write_text(text, encoding="utf-8")
+    first = (cycle / "p1.root.txt").read_text(encoding="utf-8").strip()
+    for index in (1, 2, 3):
+        (cycle / f"p{index}.root.txt").write_text(
+            _t26_change_root_path(first, f"/tmp/gas-root-d1-s2v1-count-{index}") + "\n",
+            encoding="utf-8",
+        )
+
+
+def test_cycle_token_more_root_records_than_passes(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    cycle = case["s2"] / "d1/v1"
+    _t26_three_passes(cycle)
+    root = (cycle / "p1.root.txt").read_text(encoding="utf-8").strip()
+    (cycle / "p4.root.txt").write_text(
+        _t26_change_root_path(root, "/tmp/gas-root-d1-s2v1-count-4") + "\n", encoding="utf-8",
+    )
+    _t26_refuses(probe, case, "cycle_token:d1.v1", capsys)
+
+
+def test_cycle_token_two_passes_same_root(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    cycle = case["s2"] / "d1/v1"
+    (cycle / "p2.root.txt").write_text(
+        (cycle / "p1.root.txt").read_text(encoding="utf-8"), encoding="utf-8",
+    )
+    _t26_refuses(probe, case, "cycle_token:d1.v1", capsys)
+
+
+def test_cycle_token_root_inside_another(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    cycle = case["s2"] / "d1/v1"
+    root = (cycle / "p2.root.txt").read_text(encoding="utf-8")
+    (cycle / "p2.root.txt").write_text(root.replace(
+        "/tmp/gas-root-d1-s2v1-synthetic-p2", "/tmp/gas-root-d1-s2v1-synthetic/nested",
+    ), encoding="utf-8")
+    _t26_refuses(probe, case, "cycle_token:d1.v1", capsys)
+
+
+def test_cycle_token_roots_differ_in_calibration(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    cycle = case["s2"] / "d1/v1"
+    path = cycle / "p2.root.txt"
+    path.write_text(path.read_text(encoding="utf-8").replace("a" * 40, "d" * 40), encoding="utf-8")
+    _t26_refuses(probe, case, "cycle_token:d1.v1", capsys)
+
+
+def test_cycle_token_roots_differ_in_list_blob(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    cycle = case["s2"] / "d1/v1"
+    path = cycle / "p2.root.txt"
+    path.write_text(path.read_text(encoding="utf-8").replace("c" * 40, "e" * 40), encoding="utf-8")
+    _t26_refuses(probe, case, "cycle_token:d1.v1", capsys)
+
+
+def test_cycle_with_one_identical_root_per_pass_does_not_refuse(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    result = _t26_extract(case, capsys)
+    assert result.returncode == 0 and result.stdout.splitlines()[-1].startswith("FINDINGS: WRITTEN "), (
+        f"one valid recorded root per pass must allow extraction: {result.stdout!r}; {result.stderr!r}"
+    )
+
+
+def test_list_changed_run_record_absent(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    (case["s2"] / "run.txt").unlink()
+    _t26_refuses(probe, case, "list_changed:unrecorded", capsys)
+
+
+@pytest.mark.parametrize("bad", [
+    "no RUN line\n",
+    "RUN: checkout=/tmp/checkout home=/tmp/home\nRUN: checkout=/tmp/other home=/tmp/home2\n",
+    "RUN: checkout=/tmp/checkout\n",
+    "RUN: checkout=/tmp/checkout home=/tmp/home extra=value\n",
+], ids=["no-run-line", "two-run-lines", "missing-home", "extra-key"])
+def test_list_changed_run_record_malformed(tmp_path, monkeypatch, bad, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    (case["s2"] / "run.txt").write_text(bad, encoding="utf-8")
+    _t26_refuses(probe, case, "list_changed:unrecorded", capsys)
+
+
+def test_containment_pass_root_record_absent(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    (case["s2"] / "d1/v1/p1.root.txt").unlink()
+    _t26_refuses(probe, case, "list_changed:unrecorded", capsys)
+
+
+def test_containment_no_ready_line(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    (case["s2"] / "d1/v1/p1.root.txt").write_text("not a ready line\n", encoding="utf-8")
+    _t26_refuses(probe, case, "list_changed:unrecorded", capsys)
+
+
+def test_containment_two_ready_lines(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    path = case["s2"] / "d1/v1/p1.root.txt"
+    valid = path.read_text(encoding="utf-8")
+    path.write_text(valid + valid, encoding="utf-8")
+    _t26_refuses(probe, case, "list_changed:unrecorded", capsys)
+
+
+def test_containment_ready_line_without_list_blob(tmp_path, monkeypatch, capsys):
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    path = case["s2"] / "d1/v1/p1.root.txt"
+    valid = path.read_text(encoding="utf-8")
+    path.write_text(re.sub(r" list_blob=\S+", "", valid), encoding="utf-8")
+    _t26_refuses(probe, case, "list_changed:unrecorded", capsys)
+
+
+def _t26_root_line(doc, purpose, path, *, calibration="a", commit="b", blob="c"):
+    return (f"ROOT: READY doc={doc} purpose={purpose} path={path} "
+            f"calibration={calibration * 40} list_commit={commit * 40} "
+            f"list_blob={blob * 40} absent=0\n")
+
+
+def _t26_list_case(tmp_path, monkeypatch):
+    probe = load_probe(PROBE)
+    monkeypatch.setattr(probe, "read_exclusions", lambda _repo, _commit: ([], "head", "f" * 40))
+    export = tmp_path / "export"
+    data = export / CALIBRATION
+    (data / "s1/grok").mkdir(parents=True)
+    (data / "resmoke/grok").mkdir(parents=True)
+    (data / "s2/d1/v1").mkdir(parents=True)
+    (data / "s1/grok/root.txt").write_text(
+        _t26_root_line("d1", "s1", "/tmp/gas-root-d1-s1"), encoding="utf-8",
+    )
+    (data / "resmoke/grok/root.txt").write_text(
+        _t26_root_line("d1", "resmoke", "/tmp/gas-root-d1-resmoke", blob="d"),
+        encoding="utf-8",
+    )
+    cycle = data / "s2/d1/v1"
+    (cycle / "root.txt").write_text(
+        _t26_root_line("d1", "s2v1", "/tmp/ignored-s2-root", blob="e"), encoding="utf-8",
+    )
+    (cycle / "command.txt").write_text(
+        "hmad-dispatch audit-cycle --passes 2 --surfaces agy,grok\n", encoding="utf-8",
+    )
+    (cycle / "p1.root.txt").write_text(
+        _t26_root_line("d1", "s2v1", "/tmp/gas-root-d1-p1", blob="g"), encoding="utf-8",
+    )
+    (cycle / "p2.root.txt").write_text(
+        _t26_root_line("d1", "s2v1", "/tmp/gas-root-d1-p2", blob="h"), encoding="utf-8",
+    )
+    return probe, export, cycle
+
+
+def test_list_changed_one_pass_root_record_absent(tmp_path, monkeypatch):
+    probe, export, cycle = _t26_list_case(tmp_path, monkeypatch)
+    (cycle / "p2.root.txt").unlink()
+    with pytest.raises(probe.Refusal) as caught:
+        probe.list_check(export, tmp_path)
+    assert caught.value.reason == "list_changed:unrecorded"
+
+
+def test_list_changed_pass_records_without_surfaces(tmp_path, monkeypatch):
+    probe, export, cycle = _t26_list_case(tmp_path, monkeypatch)
+    (cycle / "command.txt").write_text("hmad-dispatch audit-cycle --passes 2\n", encoding="utf-8")
+    with pytest.raises(probe.Refusal) as caught:
+        probe.list_check(export, tmp_path)
+    assert caught.value.reason == "list_changed:unrecorded"
+
+
+def test_list_check_reads_resmoke_records(tmp_path, monkeypatch):
+    probe, export, _cycle = _t26_list_case(tmp_path, monkeypatch)
+    line = probe.list_check(export, tmp_path)
+    assert line == "LIST: recorded=" + ",".join(["c" * 40, "d" * 40, "g" * 40, "h" * 40]) + " current=" + "f" * 40, (
+        "list checking must use s1, resmoke, then each S2 pass record in record order"
+    )
+
+
+def _t26_score_argv(case, *, run_id=None):
+    argv = ["score", "--tree", str(case["tree"]), "--sources", ",".join(
+        f"{feature}={directory}" for feature, directory in case["sources"].items()
+    )]
+    if run_id is not None:
+        argv += ["--run-id", run_id]
+    return argv
+
+
+def test_score_reads_the_reading_named_by_run_id(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    probe = load_probe(PROBE)
+    case = build_score_inputs(tmp_path, probe)
+    base = case["tree"] / CALIBRATION
+    import shutil
+    for run_id in ("run-a", "run-b"):
+        reading = base / "runs" / run_id
+        reading.mkdir(parents=True)
+        for name in ("s2", "findings.jsonl", "key.jsonl", "labels.jsonl", "extract.txt"):
+            source = base / name
+            destination = reading / name
+            if source.is_dir():
+                shutil.copytree(source, destination)
+            elif source.exists():
+                shutil.copy2(source, destination)
+        (reading / "s2/run.txt").write_text(
+            f"RUN: checkout={case['tree']} home={tmp_path / run_id}\n", encoding="utf-8",
+        )
+    labels = base / "runs/run-b/labels.jsonl"
+    rows = [json.loads(line) for line in labels.read_text(encoding="utf-8").splitlines()]
+    for row in rows:
+        row["label"] = "REAL" if row["label"] != "REAL" else "FABRICATED"
+    labels.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    # Put the reading at the flat calibration location so the no-run-id path
+    # derives an independent expected token from exactly run-b's payload.
+    expected_case = build_score_inputs(tmp_path / "run-b-flat-tree", probe)
+    expected_flat = expected_case["tree"] / CALIBRATION
+    for name in ("s2", "findings.jsonl", "key.jsonl", "labels.jsonl", "extract.txt"):
+        source, destination = base / "runs/run-b" / name, expected_flat / name
+        if destination.is_dir():
+            shutil.rmtree(destination)
+        elif destination.exists():
+            destination.unlink()
+        if source.is_dir():
+            shutil.copytree(source, destination)
+        elif source.exists():
+            shutil.copy2(source, destination)
+    outputs = []
+    for run_id in ("run-a", "run-b"):
+        rc = probe.main(_t26_score_argv(case, run_id=run_id))
+        out, err = capsys.readouterr()
+        assert rc == 0 and out.splitlines()[-1].startswith("SEEDSCORE: "), (
+            f"score must read {run_id!r}: stdout={out!r}; stderr={err!r}"
+        )
+        outputs.append(out.splitlines()[-1])
+    expected_rc = probe.main(_t26_score_argv(expected_case))
+    expected_out, expected_err = capsys.readouterr()
+    assert expected_rc == 0, f"flat run-b expectation must score: {expected_out!r}; {expected_err!r}"
+    assert outputs[1] == expected_out.splitlines()[-1], (
+        "--run-id=run-b must match the independently scored flat copy of run-b's data"
+    )
+    assert outputs[0] != outputs[1], "run-id must select the named reading's labels and findings"
+
+
+def test_score_without_run_id_on_a_namespaced_reading_refuses(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    probe = load_probe(PROBE)
+    case = build_score_inputs(tmp_path, probe)
+    base = case["tree"] / CALIBRATION
+    import shutil
+    reading = base / "runs/run-b"
+    shutil.copytree(base, reading, ignore=shutil.ignore_patterns("runs"))
+    shutil.rmtree(base / "s1", ignore_errors=True)
+    shutil.rmtree(base / "s2", ignore_errors=True)
+    for name in ("findings.jsonl", "key.jsonl", "labels.jsonl"):
+        (base / name).unlink()
+    (reading / "s1/grok/root.txt").parent.mkdir(parents=True, exist_ok=True)
+    for cycle in sorted((reading / "s2").glob("d*/v*")):
+        root = (cycle / "root.txt").read_text(encoding="utf-8")
+        (cycle / "p1.root.txt").write_text(root, encoding="utf-8")
+        (cycle / "p2.root.txt").write_text(root.replace("-synthetic", "-synthetic-p2"), encoding="utf-8")
+    (reading / "s2/run.txt").write_text(f"RUN: checkout={case['tree']} home={tmp_path}\n", encoding="utf-8")
+    rc = probe.main(_t26_score_argv(case))
+    out, err = capsys.readouterr()
+    assert (rc, out.splitlines()[-1:]) == (2, ["SEEDSCORE: UNREADABLE reason=cycle_token:d1.v1"]), (
+        "a namespaced reading without its required --run-id must be refused; "
+        f"stdout={out!r}; stderr={err!r}"
+    )
+
+
+def test_calibration_data_set_is_the_directory_minus_the_metadata_names(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    probe = load_probe(PROBE)
+    tree = tmp_path / "tree"
+    sources = build_archive(tree)
+    build_ledger(tree, sources)
+    data = tree / CALIBRATION
+    metadata = [
+        "runs/run-a/resmoke/run.txt", "runs/run-a/s2/run.txt",
+        "runs/run-a/s2/d1/v1/p1.root.txt", "runs/run-a/s2/d1/v1/p1.profile.txt",
+        "runs/run-a/s2/d1/v1/p1.scan.txt",
+    ]
+    for relative in [*metadata, "runs/run-a/resmoke/canary/observed.txt"]:
+        path = data / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("fixture [a](b) **bold** ⟦/h-mad⟧\nsecond line\tvalue\n", encoding="utf-8")
+    canary = "runs/run-a/resmoke/canary/observed.txt"
+    selected = set(probe.calibration_data_files(tree))
+    excluded_names = {"command.txt", "root.txt", "wall_seconds.txt", "resolved_model.txt", "extract.txt"}
+    all_files = {path.relative_to(tree).as_posix() for path in data.rglob("*") if path.is_file()}
+    excluded = {
+        path.relative_to(tree).as_posix() for path in data.rglob("*") if path.is_file()
+        and (path.name in excluded_names or path == data / "s1/versions.txt"
+             or path.relative_to(data).as_posix() in metadata
+             or path.relative_to(data).as_posix() == canary)
+    }
+    assert selected == sorted(all_files - excluded), (
+        "D3 includes every calibration file except the named harmless metadata candidates"
+    )
+    assert (CALIBRATION / "s1/grok/auditcycle.txt").as_posix() in selected, (
+        "captured wrapper stdout remains calibration data"
+    )
+    definitions = [node for node in ast.walk(ast.parse(PROBE.read_text(encoding="utf-8")))
+                   if isinstance(node, ast.FunctionDef) and node.name == "calibration_data_files"]
+    assert len(definitions) == 1, "one calibration_data_files definition owns D3's set"
+    main_leak = next(node for node in ast.walk(ast.parse(PROBE.read_text(encoding="utf-8")))
+                     if isinstance(node, ast.FunctionDef) and node.name == "main_leak")
+    assert any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+               and node.func.id == "calibration_data_files" for node in ast.walk(main_leak)), (
+        "main_leak must call the sole D3 set definition"
+    )
+    assert {f"{CALIBRATION.as_posix()}/{name}" for name in excluded}.isdisjoint(selected), (
+        "D3 metadata names must be excluded unless they carry a seeded, expected or finding span"
+    )
+
+
+def test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    probe = load_probe(PROBE)
+    case = _t26_ready_extract_case(tmp_path, monkeypatch)
+    cycle = case["s2"] / "d1/v1"
+    root_line = (cycle / "root.txt").read_text(encoding="utf-8").strip()
+    live_root = tmp_path / "pass two root"
+    live_root.mkdir()
+    quote_file = live_root / "docs/01-plan/features/paper-lantern.plan.md"
+    quote_file.parent.mkdir(parents=True)
+    seeded_line = case["records"][0]["seeded"].rstrip("\n")
+    quote_file.write_text(seeded_line + "\n", encoding="utf-8")
+    for index in (1, 2, 3):
+        value = root_line.replace("/tmp/gas-root-d1-s2v1-synthetic", str(live_root))
+        if index != 2:
+            value = value.replace(str(live_root), str(tmp_path / f"pass-{index}-root"))
+        (cycle / f"p{index}.root.txt").write_text(value + "\n", encoding="utf-8")
+    (cycle / "command.txt").write_text(
+        "hmad-dispatch audit-cycle --passes 3 --surfaces codex,agy,grok\n", encoding="utf-8",
+    )
+    auditcycle = cycle / "auditcycle.txt"
+    auditcycle.write_text(auditcycle.read_text(encoding="utf-8").replace(
+        "passes=2 delivered=report-file,none",
+        "passes=3 delivered=none,report-file,none",
+    ), encoding="utf-8")
+    report = extract_report_path(case, "d1", 1, 2)
+    quote = f"quote: {live_root}/docs/01-plan/features/paper-lantern.plan.md › `{seeded_line}`"
+    report.write_text(
+        "# Synthetic audit\n\n## Must-fix\n- candidate quote\n  " + quote
+        + "\n\n## Should-fix\nNone\n", encoding="utf-8",
+    )
+    (cycle / "root.txt").unlink()
+    import shutil
+    shutil.rmtree(live_root)
+    argv = ["extract", "--tree", str(case["tree"]), "--s2", str(case["s2"]),
+            "--shuffle-seed", "1729", "--out", str(tmp_path / "with-hints"),
+            "--sources", ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items())]
+    assert probe.main(argv) == 0
+    with_hints = capsys.readouterr().out.splitlines()
+    hint_lines = [line for line in with_hints if line.startswith("HINT:")]
+    assert len(hint_lines) == 1 and f"candidate-hit:{case['records'][0]['id']}" in hint_lines[0], (
+        "a pass-2 quote must resolve through p2.root.txt after its live root is removed"
+    )
+    report.write_text(
+        "# Synthetic audit\n\n## Must-fix\n- candidate quote\n\n## Should-fix\nNone\n",
+        encoding="utf-8",
+    )
+    argv[argv.index("--out") + 1] = str(tmp_path / "without-hints")
+    assert probe.main(argv) == 0
+    without_hints = capsys.readouterr().out.splitlines()
+    assert with_hints[-1] == without_hints[-1], "advisory quote hints must never move the extraction token"
+
+
 def test_auditcycle_parser_rejects_two_lines():
     probe = load_probe(PROBE)
     _cycle, rendered = _rendered_effort_cycle(probe)
@@ -2620,25 +3083,6 @@ def calibration_set_case(score_case):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"Captured {name}: {_hostile_text()}\n", encoding="utf-8")
     return case
-
-
-def test_calibration_data_set_is_the_directory_minus_six_named_files(calibration_set_case):
-    case = calibration_set_case
-    data = case["tree"] / CALIBRATION
-    all_files = {path.relative_to(case["tree"]).as_posix() for path in data.rglob("*") if path.is_file()}
-    excluded_names = {"command.txt", "root.txt", "wall_seconds.txt", "resolved_model.txt", "extract.txt"}
-    excluded = {path.relative_to(case["tree"]).as_posix() for path in data.rglob("*")
-                if path.is_file() and (path.name in excluded_names or path == data / "s1/versions.txt")}
-    actual = case["probe"].calibration_data_files(case["tree"])
-    assert actual == sorted(all_files - excluded), "D3 includes every calibration file except harmless metadata candidates"
-    assert (CALIBRATION / "s1/grok/auditcycle.txt").as_posix() in actual, "captured wrapper stdout is calibration data"
-    definitions = [node for node in ast.walk(ast.parse(PROBE.read_text(encoding="utf-8")))
-                   if isinstance(node, ast.FunctionDef) and node.name == "calibration_data_files"]
-    assert len(definitions) == 1, "one calibration_data_files definition owns D3's set"
-    main_leak = next(node for node in ast.walk(ast.parse(PROBE.read_text(encoding="utf-8")))
-                     if isinstance(node, ast.FunctionDef) and node.name == "main_leak")
-    assert any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-               and node.func.id == "calibration_data_files" for node in ast.walk(main_leak)), "main_leak must call the sole D3 set definition"
 
 
 def test_calibration_data_set_keeps_an_excluded_name_carrying_a_finding_text(calibration_set_case):

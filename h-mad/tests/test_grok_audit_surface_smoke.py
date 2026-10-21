@@ -349,14 +349,17 @@ def test_smoke_unrecognised_effort_item_refuses(smoke_case):
     _unreadable(smoke_case, "input_unparseable", smoke_case / "grok/auditcycle.txt")
 
 
-def test_smoke_parsed_item_with_all_three_types_is_the_stated_residual(smoke_case):
+def test_smoke_parsed_item_with_all_three_types_refuses(smoke_case):
     text = '{"event":"init"}\n' + f0_text()
     assert cycle.measure_effort(_write_log(smoke_case, text))["shape"] == "parsed"
     _write_cycle(smoke_case, "grok", log=text)
-    _assert_smoke(smoke_case)
+    item = _item_for(smoke_case, text, shape="parsed")
+    _write_cycle(smoke_case, "grok", log=text, effort_item=item)
+    _unreadable(smoke_case, "input_unparseable", smoke_case / "grok/auditcycle.txt",
+                property_name="a counts-shaped item contradicts all three grok event types")
 
 
-def test_smoke_deep_grok_types_with_unparseable_item_is_the_stated_residual(smoke_case):
+def test_smoke_deep_grok_types_with_unparseable_item_refuses(smoke_case):
     v = 0
     for _ in range(GROK_MAX_DEPTH):
         v = [v]
@@ -364,9 +367,38 @@ def test_smoke_deep_grok_types_with_unparseable_item_is_the_stated_residual(smok
     assert all(_json_deeper_than(event, GROK_MAX_DEPTH) for event in events)
     text = "".join(json.dumps(event) + "\n" for event in events)
     assert cycle.measure_effort(_write_log(smoke_case, text))["shape"] == "unparseable"
-    _write_cycle(smoke_case, "grok", log=text)
-    _assert_smoke(smoke_case)
+    item = _item_for(smoke_case, text, shape="unparseable")
+    _write_cycle(smoke_case, "grok", log=text, effort_item=item)
+    _unreadable(smoke_case, "input_unparseable", smoke_case / "grok/auditcycle.txt",
+                property_name="an unparseable counts item contradicts all three grok event types")
     assert set(load_probe(PROBE).grok_log_types(text)) == {event["type"] for event in events}
+
+
+def test_smoke_rederives_from_an_exported_namespaced_reading(smoke_case, tmp_path):
+    repo = tmp_path / "reading-repo"
+    reading = repo / "calibration/runs/run-hostile/resmoke"
+    reading.parent.mkdir(parents=True)
+    import shutil
+    shutil.copytree(smoke_case, reading)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, timeout=15)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=fixture", "-c",
+                    "user.email=fixture@example.invalid", "add", "calibration"],
+                   check=True, timeout=15)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=fixture", "-c",
+                    "user.email=fixture@example.invalid", "commit", "-qm", "reading"],
+                   check=True, timeout=15)
+    archive = tmp_path / "exported"
+    archive.mkdir()
+    result = subprocess.run(["git", "-C", str(repo), "archive", "HEAD"],
+                            capture_output=True, check=True, timeout=15)
+    import tarfile
+    import io
+    with tarfile.open(fileobj=io.BytesIO(result.stdout)) as bundle:
+        bundle.extractall(archive)
+    exported_data = archive / "calibration/runs/run-hostile/resmoke"
+    on_disk = _assert_smoke(reading)
+    from_archive = _assert_smoke(exported_data)
+    assert on_disk == from_archive
 
 
 def test_smoke_effort_grok_item_with_targets_is_grok(smoke_case):
