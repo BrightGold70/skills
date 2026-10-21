@@ -33,7 +33,6 @@ def quarantine() -> int:
         home = Path(os.environ["HOME"]).absolute()
         store = home / ".grok/sessions"
         parent = home / ".local/state/h-mad/grok-audit-surface"
-        names = [name for name in _names(store) if _matches(name)]
         parent.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         destination = parent / ("grok-quarantine-" + stamp)
@@ -42,6 +41,7 @@ def quarantine() -> int:
         except FileExistsError:
             print("QUARANTINE: REFUSED reason=quarantine_exists")
             return 0
+        names = [name for name in _names(store) if _matches(name)]
         failed = moved = 0
         for name in names:
             try:
