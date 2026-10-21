@@ -863,3 +863,89 @@ def test_audit_cycle_without_a_halt_file_launches(tmp_path):
     assert "REQUIRE: STOP reason=halt_file" not in result.stdout, "an absent halt file must not halt"
     assert len(read_jsonl(case["assemble"])) == 2, "the launched cycle must assemble every pass"
     assert len(read_jsonl(case["cycle"])) == 1, "the launched cycle must reach collection once"
+
+
+# Task 22 RED: consume a scan token before testing the existing launch boundary.
+CONTAINMENT_SCRIPT = Path(__file__).resolve().parents[1] / "scripts/h_mad_grok_containment.py"
+
+
+def _run_require_cli(*args):
+    return subprocess.run(
+        [sys.executable, str(CONTAINMENT_SCRIPT), "require", *map(str, args)],
+        capture_output=True, text=True, timeout=15,
+    )
+
+
+def _assert_next_cycle_halted(tmp_path, case, halt):
+    cycle = _run_pass_roots(tmp_path, case, extra=["--halt-file", str(halt)])
+    assert (cycle.returncode, cycle.stdout.splitlines()[-1:]) == (
+        0, ["REQUIRE: STOP reason=halt_file"],
+    ), f"audit-cycle must stop at the existing halt file: {cycle.stdout!r}; {cycle.stderr!r}"
+    assert dispatch_count(case["capture"]) == 0, "a require-created halt must launch no stub agent"
+    assert auditcycle_lines(cycle.stdout) == [], "a halted cycle must print no AUDITCYCLE line"
+    assert len(read_jsonl(case["assemble"])) == 2, "both assemblies precede the launch halt gate"
+    assert not read_jsonl(case["cycle"]), "a halted cycle must skip collection"
+
+
+@pytest.mark.parametrize("usage", ["unknown-flag", "missing-token-file"],
+                         ids=["unknown-flag", "missing-token-file"])
+def test_require_usage_error_still_writes_the_halt_file(tmp_path, monkeypatch, usage):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = _pass_root_case(tmp_path)
+    token_file, halt = tmp_path / "clean.txt", tmp_path / "HALT"
+    token_file.write_text(HOSTILE_PROMPT + "\nTOOLSCAN: CLEAN surface=grok calls=0\n", encoding="utf-8")
+    args = ["--verb", "toolscan"]
+    if usage == "unknown-flag":
+        args.extend(["--token-file", str(token_file)])
+    args.extend(["--halt-file", str(halt)])
+    if usage == "unknown-flag":
+        args.append("--no-such-flag")
+    required = _run_require_cli(*args)
+    reason = "internal:UsageError"
+    assert (required.returncode, required.stdout.splitlines()[-1:]) == (
+        2, [f"REQUIRE: STOP reason={reason}"],
+    ), (
+        f"require must recover --halt-file from raw argv on {usage}, then fail closed: "
+        f"stdout={required.stdout!r}; stderr={required.stderr!r}"
+    )
+    assert "REQUIRE: OK" not in required.stdout, "a parser failure must never print OK"
+    assert halt.is_file(), f"{usage} must write the raw-argv halt path before returning"
+    assert halt.read_text(encoding="utf-8") == reason + "\n", (
+        "require's usage-error halt record must contain exactly one reason line before audit-cycle"
+    )
+    _assert_next_cycle_halted(tmp_path, case, halt)
+
+
+@pytest.mark.parametrize("scan_state", ["out_of_root", "unreadable", "empty", "absent"],
+                         ids=["out_of_root", "unreadable", "empty", "absent"])
+def test_out_of_root_scan_stops_the_next_cycle(tmp_path, monkeypatch, scan_state):
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    case = _pass_root_case(tmp_path)
+    token_file, halt = tmp_path / "scan [*] 'quoted'.txt", tmp_path / "HALT [*] 'quoted'"
+    tokens = {
+        "out_of_root": "TOOLSCAN: OUT_OF_ROOT surface=grok calls=1 out_of_root=1 checkout=1 exempt=0 nonjson=0",
+        "unreadable": "TOOLSCAN: UNREADABLE reason=log_unreadable",
+    }
+    if scan_state in tokens:
+        reason = tokens[scan_state]
+        token_file.write_text(
+            "TOOLSCAN: CLEAN surface=grok calls=0\n" + HOSTILE_PROMPT + "\n" + reason + "\n",
+            encoding="utf-8",
+        )
+    else:
+        reason = f"no_token:{token_file}"
+        if scan_state == "empty":
+            token_file.write_text("", encoding="utf-8")
+    required = _run_require_cli("--verb", "toolscan", "--token-file", token_file,
+                                "--halt-file", halt)
+    assert (required.returncode, required.stdout.splitlines()[-1:]) == (
+        0, [f"REQUIRE: STOP reason={reason}"],
+    ), (
+        f"require must stop on {scan_state} using the token-file reason, before audit-cycle runs: "
+        f"stdout={required.stdout!r}; stderr={required.stderr!r}"
+    )
+    assert halt.is_file(), f"a {scan_state} scan must persist a halt before the next cycle"
+    assert halt.read_text(encoding="utf-8") == reason + "\n", (
+        "the scan halt must contain exactly its reason line before audit-cycle"
+    )
+    _assert_next_cycle_halted(tmp_path, case, halt)
