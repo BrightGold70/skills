@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: alive | ask | audit-cycle | automation-create | automation-list | automation-remove | automation-run | await | clear | collect-report | dispatch | env | exec | exec-pane | file-diff | file-open-changed | gate-create | gate-resolve | gate-wait | interrupt | launch | notify | pin | pin-agents | probe | progress | read | report-wait | resolve | resolved-model | run | run-ensure | send | task-create | verify | wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
+# Verbs: alive | ask | audit-cycle | automation-create | automation-list | automation-remove | automation-run | await | clear | collect-report | dispatch | env | exec | exec-pane | file-diff | file-open-changed | gate-create | gate-resolve | gate-wait | grok-canary | interrupt | launch | notify | pin | pin-agents | probe | progress | read | report-wait | resolve | resolved-model | run | run-ensure | send | task-create | verify | wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -4546,9 +4546,52 @@ _cmd_run() {  # --timeout <s> -- <cmd...>
   return "$rc"
 }
 
+_cmd_grok_canary_usage() {
+  if [ -n "${1:-}" ]; then
+    echo "hmad-dispatch: grok-canary: --run-dir $1" >&2
+  fi
+  echo "usage: hmad-dispatch grok-canary --run-dir <abs> [--timeout <s>]" >&2
+}
+
+_cmd_grok_canary() {
+  local run="" timeout=300 here plant cwd rc=0 in_temp
+  while [ $# -gt 0 ]; do case "$1" in
+    --run-dir) _need_val grok-canary --run-dir $# || return $?; run="$2"; shift 2 ;;
+    --timeout) _need_val grok-canary --timeout $# || return $?; timeout="$2"; shift 2 ;;
+    *) _unknown_opt grok-canary "$1"; _cmd_grok_canary_usage; return 2 ;;
+  esac; done
+  if [ -z "$run" ]; then _cmd_grok_canary_usage "is required"; return 2; fi  # M:CANARY-RUNDIR-GIVEN
+  if [[ "$run" != /* ]]; then _cmd_grok_canary_usage "is not absolute"; return 2; fi  # M:CANARY-RUNDIR-ABS
+  if [ ! -d "$run" ]; then _cmd_grok_canary_usage "does not exist"; return 2; fi  # M:CANARY-RUNDIR-EXISTS
+  run="$(cd "$run" && pwd -P)" || return 2
+  in_temp="$(python3 - "$run" <<'PY'
+import os
+from pathlib import Path
+import sys
+run = Path(sys.argv[1])
+temps = [Path(value).resolve() for value in (os.environ.get("TMPDIR"), "/tmp", "/private/tmp") if value]
+print("yes" if any(run == root or root in run.parents for root in temps) else "no")
+PY
+  )" || return 2
+  if [ "$in_temp" = yes ]; then _cmd_grok_canary_usage "lies in system temp"; return 2; fi  # M:CANARY-RUNDIR-TMP
+  if [ ! -d "$run/roots" ]; then _cmd_grok_canary_usage "has no roots/"; return 2; fi  # M:CANARY-RUNDIR-ROOTS
+  case "$timeout" in
+    ''|*[!0-9]*) _cmd_grok_canary_usage; return 2 ;;
+  esac
+  [ "$timeout" -gt 0 ] || { _cmd_grok_canary_usage; return 2; }
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || return 2
+  plant="$(python3 "$here/h_mad_grok_containment.py" canary-plant --run-dir "$run")" || { rc=$?; printf '%s\n' "$plant"; return "$rc"; }
+  printf '%s\n' "$plant"
+  if [[ "$plant" == 'PLANT: READY cwd='* ]]; then  # M:CANARY-PLANT-GATE
+    cwd="${plant#PLANT: READY cwd=}"
+    _cmd_exec grok "$run/canary/prompt.txt" --cd "$cwd" --log "$run/canary/log.ndjson" --timeout "$timeout" || rc=$?  # M:CANARY-EXEC-WIRE
+    python3 "$here/h_mad_grok_containment.py" canary-judge --run-dir "$run" --rc "$rc"  # M:CANARY-RC-WIRE
+  fi
+}
+
 # Every verb `main` routes, in help order. The help line and the --help guard both
 # read it; tests/test_hmad_dispatch_verb_help.py pins it to main's case arms.
-_HMAD_VERBS="env resolve verify launch pin pin-agents resolved-model send ask probe exec clear interrupt read wait alive notify progress exec-pane audit-cycle run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
+_HMAD_VERBS="env resolve verify launch pin pin-agents resolved-model send ask probe exec clear interrupt read wait alive notify progress exec-pane audit-cycle grok-canary run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
 
 main() {
   local verb="${1:-}"; shift || true
@@ -4587,6 +4630,7 @@ main() {
     progress) _cmd_progress "$@" ;;
     exec-pane) _cmd_exec_pane "$@" ;;
     audit-cycle) _cmd_audit_cycle "$@" ;;
+    grok-canary) _cmd_grok_canary "$@" ;;
     run)    _cmd_run "$@" ;;
     run-ensure) _require_orca run-ensure && _run_ensure ;;
     task-create) _cmd_task_create "$@" ;;
