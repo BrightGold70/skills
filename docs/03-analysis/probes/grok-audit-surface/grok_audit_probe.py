@@ -77,8 +77,24 @@ class ResetTargetNotDirectory(ProbeRefusal):
     """The reset target is not an existing directory."""
 
 
-class ResetTargetOutsideTempdir(ProbeRefusal):
-    """The resolved target is not directly under the temporary directory."""
+class ParentNotDirectory(ProbeRefusal):
+    """The parent is not an absolute existing directory."""
+
+
+class ParentInSystemTemp(ProbeRefusal):
+    """The resolved parent lies inside a system temporary directory."""
+
+
+class WorkDirInGitTree(ProbeRefusal):
+    """The scratch parent is reachable from a Git tree."""
+
+
+class ResetTargetInSystemTemp(ProbeRefusal):
+    """The resolved reset target lies inside system temp."""
+
+
+class ResetTargetOutsideRoots(ProbeRefusal):
+    """The resolved reset target's parent is not named roots."""
 
 
 class ResetTargetPrefix(ProbeRefusal):
@@ -221,7 +237,7 @@ def _mode_check_ledger(args: argparse.Namespace) -> int:
             ).stdout
         except (OSError, subprocess.SubprocessError) as exc:
             raise Refusal(f"calibration_ref:sha_unknown:{args.calibration_sha}") from exc
-        with tempfile.TemporaryDirectory(prefix="gas-ledger-") as directory:
+        with tempfile.TemporaryDirectory(prefix="gas-ledger-", dir=args.work_dir) as directory:  # M:GAS-SCRATCH-LEDGER-REPO
             tree = Path(directory)
             with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
                 bundle.extractall(tree, filter="data")
@@ -243,6 +259,22 @@ def _git_environment() -> dict[str, str]:
                  "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE"):
         environment.pop(name, None)
     return environment
+
+
+def checked_parent(path, *, git_guard: bool) -> Path:
+    if path is None or not os.path.isabs(path) or not os.path.isdir(path):  # M:GAS-PARENT-ISDIR
+        raise ParentNotDirectory()
+    parent = Path(path).resolve()
+    if any(parent.is_relative_to(Path(directory).resolve()) for directory in {tempfile.gettempdir(), "/tmp", "/private/tmp"}):  # M:GAS-PARENT-TMPDIR
+        raise ParentInSystemTemp()
+    if git_guard:
+        result = subprocess.run(
+            ["git", "-C", str(parent), "rev-parse", "--git-dir"],
+            capture_output=True, timeout=15, env=_git_environment(),
+        )
+        if result.returncode == 0:  # M:GAS-WORKDIR-GIT
+            raise WorkDirInGitTree()
+    return parent
 
 
 def _git_bytes(repo: Path, *arguments: str) -> bytes:
@@ -356,7 +388,7 @@ def _build_root(args: argparse.Namespace, *, step6: bool = True) -> tuple[str, l
         archive = _git_bytes(args.repo, "archive", "--format=tar", calibration)
     except (OSError, subprocess.SubprocessError) as exc:
         raise Refusal(f"calibration_ref:sha_unknown:{args.calibration_sha}") from exc
-    with tempfile.TemporaryDirectory(prefix="gas-ledger-") as directory:
+    with tempfile.TemporaryDirectory(prefix="gas-ledger-", dir=args.work_dir) as directory:  # M:GAS-SCRATCH-LEDGER-TREE
         tree = Path(directory)
         _extract_archive(archive, tree)
         check_ledger(tree, args.sources)
@@ -364,8 +396,7 @@ def _build_root(args: argparse.Namespace, *, step6: bool = True) -> tuple[str, l
         for record in ledger:
             record["_source_sha256"] = hashlib.sha256((tree / record["source"]).read_bytes()).hexdigest()
 
-    root = Path(tempfile.mkdtemp(prefix=f"gas-root-{args.doc}-{args.purpose}-",
-                                 dir=args.dest_parent)).resolve()
+    root = Path(tempfile.mkdtemp(prefix=f"gas-root-{args.doc}-{args.purpose}-", dir=args.dest_parent or args.work_dir)).resolve()  # M:GAS-SCRATCH-ROOT
     try:
         _extract_archive(archive, root)
         absent = 0
@@ -409,8 +440,10 @@ def check_reset_target(target: str, doc: str) -> Path:
     if not os.path.isdir(target):  # M:GAS-RESET-ISDIR
         raise ResetTargetNotDirectory()
     root = Path(target).resolve()
-    if root.parent != Path(tempfile.gettempdir()).resolve():  # M:GAS-RESET-TMPDIR
-        raise ResetTargetOutsideTempdir()
+    if any(root.is_relative_to(Path(directory).resolve()) for directory in {tempfile.gettempdir(), "/tmp", "/private/tmp"}):  # M:GAS-RESET-TMPDIR
+        raise ResetTargetInSystemTemp()
+    if root.parent.name != "roots":  # M:GAS-RESET-ROOTS
+        raise ResetTargetOutsideRoots()
     if not root.name.startswith(f"gas-root-{doc}-s1-"):  # M:GAS-RESET-PREFIX
         raise ResetTargetPrefix()
     reach_check(root)  # M:GAS-RESET-REACH
@@ -428,7 +461,7 @@ def remove_absent(live: Path, expected: Path) -> int:
         if stat.S_ISLNK(mode):
             os.unlink(path)  # M:GAS-RESET-NOFOLLOW-REMOVE
         elif expected_modes.get(path.relative_to(live)) != stat.S_IFMT(mode):
-            _remove_tree(path)
+            _remove_tree(path)  # M:GAS-RESET-REMOVE
         else:
             continue
         removed += 1
@@ -1172,7 +1205,7 @@ def _mode_extract(args: argparse.Namespace) -> int:
             archive = _git_bytes(args.repo, "archive", "--format=tar", args.base_sha)
         except (OSError, subprocess.SubprocessError) as exc:
             raise Refusal(f"calibration_ref:sha_unknown:{args.base_sha}") from exc
-        with tempfile.TemporaryDirectory(prefix="gas-extract-") as directory:
+        with tempfile.TemporaryDirectory(prefix="gas-extract-", dir=args.work_dir) as directory:  # M:GAS-SCRATCH-EXTRACT
             tree = Path(directory)
             _extract_archive(archive, tree)
             write(tree)
@@ -1453,10 +1486,10 @@ def drift_check(repo: Path, calibration: str, later: str) -> None:
             raise Refusal(f"calibration_drift:{path}")
 
 
-def main_leak(repo: Path, data_sha: str, sources: dict[str, str]) -> tuple[str, str, int]:
+def main_leak(repo: Path, data_sha: str, sources: dict[str, str], work_dir: Path) -> tuple[str, str, int]:
     head = _git_bytes(repo, "rev-parse", "HEAD^{commit}").decode().strip()
     data_sha = _git_bytes(repo, "rev-parse", f"{data_sha}^{{commit}}").decode().strip()
-    with tempfile.TemporaryDirectory(prefix="gas-main-leak-") as directory:
+    with tempfile.TemporaryDirectory(prefix="gas-main-leak-", dir=work_dir) as directory:  # M:GAS-SCRATCH-MAIN-LEAK
         tree = Path(directory)
         _extract_archive(_git_bytes(repo, "archive", "--format=tar", data_sha), tree)
         reach_check(tree)
@@ -1557,17 +1590,18 @@ def rescore(args: argparse.Namespace) -> tuple[list[str], str]:
     directories = []
     try:
         _branch_checks(args)
-        export = Path(tempfile.mkdtemp(prefix="gas-rescore-"))
+        export = Path(tempfile.mkdtemp(prefix="gas-rescore-", dir=args.work_dir))  # M:GAS-SCRATCH-RESCORE
         directories.append(export)
         _extract_archive(_git_bytes(args.repo, "archive", "--format=tar", args.score_sha), export)
         reach_check(export)
-        head, data, blobs = main_leak(args.repo, args.score_sha, args.sources)
+        head, data, blobs = main_leak(args.repo, args.score_sha, args.sources, args.work_dir)
         lines = [f"SCANNED: main={head} data={data} blobs={blobs}", list_check(export, args.repo)]
         check_ledger(export, args.sources)
         for index in range(1, len(args.sources) * 3 + 1):
             root_args = argparse.Namespace(
                 repo=args.repo, calibration_sha=args.calibration_sha, sources=args.sources,
-                doc=f"d{index}", purpose="rescore", list_commit="HEAD", dest_parent=None,
+                doc=f"d{index}", purpose="rescore", list_commit="HEAD",
+                dest_parent=args.work_dir, work_dir=args.work_dir,
             )
             root_line = build_root(root_args)
             directories.append(Path(parse_root_line(root_line)["path"]))
@@ -1590,7 +1624,7 @@ def rescore(args: argparse.Namespace) -> tuple[list[str], str]:
 
 def _mode_main_leak(args: argparse.Namespace) -> int:
     _branch_checks(args)
-    head, data, blobs = main_leak(args.repo, args.score_sha or args.smoke_sha, args.sources)
+    head, data, blobs = main_leak(args.repo, args.score_sha or args.smoke_sha, args.sources, args.work_dir)
     print(f"MAINLEAK: CLEAN scanned={head} data={data} blobs={blobs}")
     return 0
 
@@ -1674,6 +1708,8 @@ def build_parser() -> _TokenArgumentParser:
     leak.add_argument("--score-sha")
     leak.add_argument("--remote", default="origin")
     leak.add_argument("--sources", type=parse_sources, default=SOURCES.copy())
+    for command in (ledger, root, extract, rescore, leak):
+        command.add_argument("--work-dir", type=Path)
     return parser
 
 
@@ -1719,6 +1755,17 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--repo and --base-sha must be supplied together")
         if mode == "score" and (args.calibration_sha is None) != (args.score_sha is None):
             parser.error("--calibration-sha and --score-sha must be supplied together")
+        needs_work_dir = mode in ("build-root", "main-leak", "rescore") or (
+            mode in ("check-ledger", "extract") and args.repo is not None)
+        if needs_work_dir and args.work_dir is None:  # M:GAS-WORK-DIR-REQUIRED
+            parser.error("--work-dir is required")
+        if needs_work_dir:
+            args.work_dir = checked_parent(args.work_dir, git_guard=True)  # M:GAS-WORK-DIR-CHECK
+        if mode == "build-root":
+            if args.dest_parent is None and args.reset is None:  # M:GAS-PARENT-REQUIRED
+                parser.error("one of --dest-parent and --reset is required")
+            if args.reset is None:
+                args.dest_parent = checked_parent(args.dest_parent, git_guard=False)  # M:GAS-DEST-PARENT-CHECK
         return MODES[mode](args)
     except Exception as exc:
         if not isinstance(exc, ProbeRefusal):  # M:GAS-TRACEBACK-SCOPE

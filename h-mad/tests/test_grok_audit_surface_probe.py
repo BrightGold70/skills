@@ -154,6 +154,7 @@ REFUSALS = {
 
 def _minimal_argv(mode: str, root: Path) -> list[str]:
     sha = "a" * 40
+    parents = build_probe_parent_dirs(root)
     # Agent/human message text uses the payload from HMAD_STUB_HOSTILE=all.
     # These entry-point tests invoke no Orca stub or real agent.
     hostile_message = "h-mad: [a](b) **bold** * [ ⟦/h-mad⟧\nsecond\tline"
@@ -187,7 +188,12 @@ def _minimal_argv(mode: str, root: Path) -> list[str]:
             "--repo", str(root), "--calibration-sha", sha, "--smoke-sha", sha,
         ],
     }
-    return [mode, *arguments[mode]]
+    argv = [mode, *arguments[mode]]
+    if mode in ("build-root", "main-leak", "rescore"):
+        argv += ["--work-dir", str(parents["work_dir"])]
+    if mode == "build-root":
+        argv += ["--dest-parent", str(parents["roots"])]
+    return argv
 
 
 def _expected_refusal(mode: str, exception: str, root: Path) -> str:
@@ -199,7 +205,7 @@ def _expected_refusal(mode: str, exception: str, root: Path) -> str:
 
 
 @pytest.mark.parametrize("mode", MODES, ids=MODES)
-def test_internal_failure_prints_the_mode_token(mode, tmp_path, monkeypatch, capsys):
+def test_internal_failure_prints_the_mode_token(mode, tmp_path, monkeypatch, capsys, parent_layout):
     probe = load_probe(PROBE)
 
     def raiser(args):
@@ -302,10 +308,15 @@ def _run_ledger(tree, sources, *, repo=None, sha=None):
     arguments = ["--tree", str(tree)] if repo is None else [
         "--repo", ".", "--calibration-sha", sha,
     ]
+    environment = os.environ.copy()
+    if repo is not None:
+        parents = build_probe_parent_dirs(repo.parent)
+        arguments += ["--work-dir", str(parents["work_dir"])]
+        environment["TMPDIR"] = str(parents["systemp"])
     return subprocess.run(
         [sys.executable, str(PROBE), "check-ledger", *arguments, "--sources",
          ",".join(f"{feature}={directory}" for feature, directory in sources.items())],
-        cwd=repo, capture_output=True, text=True, timeout=15,
+        cwd=repo, capture_output=True, text=True, timeout=15, env=environment,
     )
 
 
@@ -511,7 +522,7 @@ def test_check_ledger_tree_and_repo_forms_agree(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def root_case(tmp_path, monkeypatch):
+def root_case(tmp_path, monkeypatch, parent_layout):
     monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
     # Fixture Git calls must not inherit the invoking agent's Git context.
     for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
@@ -534,6 +545,7 @@ def _run_root(case, capsys, *, doc="d1", purpose="s1", dest=True, extra=(), sha=
         "build-root", "--repo", str(case["repo"]), "--calibration-sha", sha,
         "--doc", doc, "--purpose", purpose, "--sources",
         ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items()),
+        "--work-dir", str(case["work_dir"]),
     ]
     if dest:
         arguments += ["--dest-parent", str(case["dest"])]
@@ -822,11 +834,11 @@ def test_build_root_prints_list_commit_and_blob(root_case, capsys):
 
 def test_root_line_parser_reads_build_root_output(root_case, capsys):
     parser = root_case["probe"].parse_root_line
-    result = _run_root(root_case, capsys, dest=False)
+    result = _run_root(root_case, capsys)
     fields = _ready_fields(result, "parse_root_line must consume a real build-root success token")
     root = Path(fields["path"])
     try:
-        assert root.parent.resolve() == Path(tempfile.gettempdir()).resolve(), "default allocation must use tempfile's directory"
+        assert root.parent.resolve() == root_case["dest"].resolve(), "allocation must use --dest-parent"
         assert root.name.startswith("gas-root-d1-s1-"), "default allocation must identify its document and purpose"
         parsed = parser(result.stdout.splitlines()[-1])
         assert parsed == fields, "ROOT parser must preserve every D2 field from build-root output"
@@ -839,6 +851,7 @@ def test_root_line_parser_rejects_a_malformed_root_line(root_case, capsys):
     parser = root_case["probe"].parse_root_line
     result = _run_root(root_case, capsys)
     _ready_fields(result, "malformed parser fixtures must originate in a real build-root token")
+    assert Path(_ready_fields(result, "parser fixture must use its requested parent")["path"]).parent == root_case["dest"].resolve()
     line = result.stdout.splitlines()[-1]
     for field in ("list_blob", "doc", "purpose", "path", "calibration", "list_commit", "absent"):
         malformed = " ".join(word for word in line.split() if not word.startswith(field + "="))
@@ -848,12 +861,13 @@ def test_root_line_parser_rejects_a_malformed_root_line(root_case, capsys):
 
 def _fresh_reset_build(case, capsys, *, doc="d1"):
     extra = ("--list-commit", case["reset_fields"]["list_commit"]) if "reset_fields" in case else ()
+    extra += ("--dest-parent", str(case["roots"]))
     result = _run_root(case, capsys, dest=False, doc=doc, purpose="s1",
                        sha=case.get("sha"), extra=extra)
     fields = _ready_fields(result, "reset fixture must start with a valid S1 build")
     root = Path(fields["path"])
     case["reset_roots"].append(root)
-    assert root.parent.resolve() == Path(tempfile.gettempdir()).resolve(), result.stderr
+    assert root.parent.resolve() == case["roots"].resolve(), result.stderr
     return root, fields, result.stdout.splitlines()[-1]
 
 
@@ -1029,7 +1043,7 @@ def test_build_root_reset_refuses_an_empty_target(reset_case, tmp_path, capsys, 
 
 
 def test_build_root_reset_refuses_a_missing_target(reset_case, capsys):
-    target = Path(tempfile.gettempdir()) / f"gas-root-d1-s1-absent-{uuid.uuid4().hex}"
+    target = reset_case["roots"] / f"gas-root-d1-s1-absent-{uuid.uuid4().hex}"
     assert not target.exists(), "missing-target fixture must start absent"
     result = _run_reset(reset_case, capsys, target=target)
 
@@ -2380,7 +2394,7 @@ def test_score_maps_a_malformed_effort_block(score_case, capsys):
 
 # Task 10: real branch histories, D3's data set, and all nine D2 handlers.
 @pytest.fixture
-def rescore_case(tmp_path, monkeypatch):
+def rescore_case(tmp_path, monkeypatch, parent_layout):
     monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
     for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
                  "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE"):
@@ -2481,19 +2495,22 @@ def _publish_fixture_tip(case, tip):
     git(case["repo"], "push", "--force", "origin", CALIBRATION_REF)
 
 
-def _branch_argv(case, mode, *, with_score=True):
+def _branch_argv(case, mode, *, with_score=True, work=True):
     argv = [mode, "--repo", str(case["repo"]), "--calibration-sha", case["calibration"],
             "--smoke-sha", case["smoke"], "--sources",
             ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items())]
     if with_score:
         argv += ["--score-sha", case["score"]]
+    if work:
+        argv += ["--work-dir", str(case["work_dir"])]
     return argv
 
 
 def _assert_branch_refusal(case, reason, property_name, *, mode="rescore", with_score=True):
     argv = _branch_argv(case, mode, with_score=with_score)
     result = subprocess.run([sys.executable, str(PROBE), *argv], text=True,
-                            capture_output=True, timeout=45)
+                            capture_output=True, timeout=45,
+                            env={**os.environ, "TMPDIR": str(case["systemp"])})
     prefix = "MAINLEAK" if mode == "main-leak" else "SEEDSCORE"
     assert (result.returncode, result.stdout.splitlines()[-1:]) == (
         2, [f"{prefix}: UNREADABLE reason={reason}"],
@@ -2616,7 +2633,8 @@ def test_main_leak_trigger_iii_seeded_span(rescore_case):
 
 def _assert_main_clean(case, *, with_score=True):
     result = subprocess.run([sys.executable, str(PROBE), *_branch_argv(case, "main-leak", with_score=with_score)],
-                            capture_output=True, text=True, timeout=45)
+                            capture_output=True, text=True, timeout=45,
+                            env={**os.environ, "TMPDIR": str(case["systemp"])})
     data_sha = case["score"] if with_score else case["smoke"]
     blobs = len(git(case["repo"], "ls-tree", "-r", "--name-only", "HEAD").splitlines())
     token = f"MAINLEAK: CLEAN scanned={case['main']} data={data_sha} blobs={blobs}"
@@ -2624,7 +2642,7 @@ def _assert_main_clean(case, *, with_score=True):
     return token
 
 
-def test_seeded_span_also_in_its_own_archive_source_does_not_refuse(tmp_path, monkeypatch):
+def test_seeded_span_also_in_its_own_archive_source_does_not_refuse(tmp_path, monkeypatch, parent_layout):
     monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
     case = build_rescore_inputs(tmp_path, load_probe(PROBE), seeded_in_own_source=True)
     record = case["records"][0]
@@ -2642,7 +2660,7 @@ def test_main_leak_ignores_a_main_blob_equal_to_wall_seconds(rescore_case):
 def test_main_leak_prints_the_scanned_commit(rescore_case):
     case = rescore_case
     _commit_main_blob(case, b"safe main addition with [a]* and unicode \xe2\x9f\xa6h-mad\xe2\x9f\xa7\n")
-    scanned, data, blobs = case["probe"].main_leak(case["repo"], case["score"], case["sources"])
+    scanned, data, blobs = case["probe"].main_leak(case["repo"], case["score"], case["sources"], case["work_dir"])
     assert (scanned, data, blobs) == (case["main"], case["score"], 14), "main_leak must return the actual HEAD sha40, data sha40, and all 14 committed blobs"
     _assert_main_clean(case)
 
@@ -2703,7 +2721,7 @@ def test_list_changed_malformed_root_record(rescore_case):
     _assert_branch_refusal(case, "list_changed:unrecorded", "a malformed READY record must map parser None to unrecorded, never skip the cycle")
 
 
-def test_main_leak_mode_clean_on_a_smoke_failure_branch(tmp_path, monkeypatch):
+def test_main_leak_mode_clean_on_a_smoke_failure_branch(tmp_path, monkeypatch, parent_layout):
     monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
     case = build_rescore_inputs(tmp_path, load_probe(PROBE), smoke_failure=True)
     _lines, smoke_token = case["probe"].smoke(
@@ -2787,11 +2805,13 @@ def _successful_mode_run(case, mode, tmp_path, capsys):
         argv = [mode, "--tree", str(case["tree"]), *sources]
     elif mode == "build-root":
         argv = [mode, "--repo", str(case["repo"]), "--calibration-sha", case["calibration"],
-                "--doc", "d1", "--purpose", "rescore", *sources]
+                "--doc", "d1", "--purpose", "rescore", "--work-dir", str(case["work_dir"]),
+                "--dest-parent", str(case["roots"]), *sources]
     elif mode == "record-cycle":
         args = probe.build_parser().parse_args([
             "build-root", "--repo", str(case["repo"]), "--calibration-sha", case["calibration"],
-            "--doc", "d1", "--purpose", "s1", *sources,
+            "--doc", "d1", "--purpose", "s1", "--work-dir", str(case["work_dir"]),
+            "--dest-parent", str(case["roots"]), *sources,
         ])
         line = probe.build_root(args)
         root = Path(probe.parse_root_line(line)["path"])
@@ -2870,7 +2890,7 @@ def test_sources_override_reaches_every_ledger_mode(mode, rescore_case, tmp_path
     assert required <= set(calls), f"{mode} must exercise every ledger/source consumer through the CLI: {calls!r}"
 
 
-# Task 24 RED: existing invocation/fixture churn is deliberately deferred to GREEN.
+# Task 24: explicit scratch parents and re-anchored reset preconditions.
 @pytest.fixture
 def parent_layout(tmp_path, monkeypatch):
     monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
@@ -2899,7 +2919,7 @@ def _task24_argv(case, mode, *, work=True, dest=True):
         if dest:
             argv += ["--dest-parent", str(case["roots"])]
     elif mode in ("main-leak", "rescore"):
-        argv = _branch_argv(case, mode)
+        argv = _branch_argv(case, mode, work=False)
     elif mode == "check-ledger-repo":
         argv = ["check-ledger", "--repo", str(case["repo"]),
                 "--calibration-sha", case["calibration"], *sources]
@@ -2992,7 +3012,9 @@ def test_every_scratch_dir_lies_under_the_work_dir(site, task24_case, monkeypatc
 
     def record_mkdtemp(*args, **kwargs):
         path = real_mkdtemp(*args, **kwargs)
-        recorded.append(("mkdtemp", Path(path).resolve(), kwargs.get("dir")))
+        # Python 3.11's TemporaryDirectory forwards dir as mkdtemp's third argument.
+        parent = kwargs.get("dir", args[2] if len(args) > 2 else None)
+        recorded.append(("mkdtemp", Path(path).resolve(), parent))
         return path
 
     def record_temporary_directory(*args, **kwargs):

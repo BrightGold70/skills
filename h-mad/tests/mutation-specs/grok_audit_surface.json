@@ -336,11 +336,11 @@
     },
     {
       "name": "p-reset-tmpdir",
-      "_mechanism": "Allow reset targets outside the resolved temporary directory's direct children.",
+      "_mechanism": "Skip rejection of resolved reset targets inside system temp.",
       "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
-      "find": "    if root.parent != Path(tempfile.gettempdir()).resolve():  # M:GAS-RESET-TMPDIR",
+      "find": "    if any(root.is_relative_to(Path(directory).resolve()) for directory in {tempfile.gettempdir(), \"/tmp\", \"/private/tmp\"}):  # M:GAS-RESET-TMPDIR",
       "replace": "    if False:  # M:GAS-RESET-TMPDIR",
-      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_a_target_outside_the_tempdir"
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_a_target_in_system_temp"
     },
     {
       "name": "p-reset-prefix",
@@ -1740,6 +1740,182 @@
       "find": "        exempt = result[\"exempt\"]  # M:TOOLSCAN-TOKEN",
       "replace": "        exempt = result[\"out_of_root\"]  # M:TOOLSCAN-TOKEN",
       "test": "tests/test_grok_audit_surface_containment.py::test_scan_cli_and_function_agree"
+    },
+    {
+      "name": "p-parent-isdir",
+      "_mechanism": "Skip absolute existing-directory validation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if path is None or not os.path.isabs(path) or not os.path.isdir(path):  # M:GAS-PARENT-ISDIR",
+      "replace": "    if False:  # M:GAS-PARENT-ISDIR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_dest_parent_must_be_a_directory"
+    },
+    {
+      "name": "p-parent-tmpdir-dest",
+      "_mechanism": "Allow destination parents in system temp.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if any(parent.is_relative_to(Path(directory).resolve()) for directory in {tempfile.gettempdir(), \"/tmp\", \"/private/tmp\"}):  # M:GAS-PARENT-TMPDIR",
+      "replace": "    if False:  # M:GAS-PARENT-TMPDIR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_dest_parent_in_system_temp_refuses"
+    },
+    {
+      "name": "p-parent-tmpdir-work",
+      "_mechanism": "Allow work directories in system temp.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if any(parent.is_relative_to(Path(directory).resolve()) for directory in {tempfile.gettempdir(), \"/tmp\", \"/private/tmp\"}):  # M:GAS-PARENT-TMPDIR",
+      "replace": "    if False:  # M:GAS-PARENT-TMPDIR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_work_dir_in_system_temp_refuses"
+    },
+    {
+      "name": "p-workdir-git",
+      "_mechanism": "Allow Git-reachable work directories.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if result.returncode == 0:  # M:GAS-WORKDIR-GIT",
+      "replace": "        if False:  # M:GAS-WORKDIR-GIT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_work_dir_in_a_git_work_tree_refuses"
+    },
+    {
+      "name": "p-work-dir-check",
+      "_mechanism": "Bypass work-directory validation at its call site.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            args.work_dir = checked_parent(args.work_dir, git_guard=True)  # M:GAS-WORK-DIR-CHECK",
+      "replace": "            args.work_dir = Path(args.work_dir)  # M:GAS-WORK-DIR-CHECK",
+      "test": "tests/test_grok_audit_surface_probe.py::test_work_dir_in_system_temp_refuses"
+    },
+    {
+      "name": "p-dest-parent-check",
+      "_mechanism": "Bypass destination-parent validation at its call site.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                args.dest_parent = checked_parent(args.dest_parent, git_guard=False)  # M:GAS-DEST-PARENT-CHECK",
+      "replace": "                args.dest_parent = Path(args.dest_parent)  # M:GAS-DEST-PARENT-CHECK",
+      "test": "tests/test_grok_audit_surface_probe.py::test_dest_parent_in_system_temp_refuses"
+    },
+    {
+      "name": "p-parent-required",
+      "_mechanism": "Omit the required destination/reset pair UsageError.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if args.dest_parent is None and args.reset is None:  # M:GAS-PARENT-REQUIRED",
+      "replace": "            if False:  # M:GAS-PARENT-REQUIRED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_requires_a_parent"
+    },
+    {
+      "name": "p-work-dir-required-build-root",
+      "_mechanism": "Omit required work-directory UsageError for build-root.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if needs_work_dir and args.work_dir is None:  # M:GAS-WORK-DIR-REQUIRED",
+      "replace": "        if False:  # M:GAS-WORK-DIR-REQUIRED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_work_dir_is_required_where_a_directory_is_created[build-root]"
+    },
+    {
+      "name": "p-work-dir-required-main-leak",
+      "_mechanism": "Omit required work-directory UsageError for main-leak.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if needs_work_dir and args.work_dir is None:  # M:GAS-WORK-DIR-REQUIRED",
+      "replace": "        if False:  # M:GAS-WORK-DIR-REQUIRED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_work_dir_is_required_where_a_directory_is_created[main-leak]"
+    },
+    {
+      "name": "p-work-dir-required-rescore",
+      "_mechanism": "Omit required work-directory UsageError for rescore.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if needs_work_dir and args.work_dir is None:  # M:GAS-WORK-DIR-REQUIRED",
+      "replace": "        if False:  # M:GAS-WORK-DIR-REQUIRED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_work_dir_is_required_where_a_directory_is_created[rescore]"
+    },
+    {
+      "name": "p-work-dir-required-check-ledger",
+      "_mechanism": "Omit required work-directory UsageError for check-ledger-repo.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if needs_work_dir and args.work_dir is None:  # M:GAS-WORK-DIR-REQUIRED",
+      "replace": "        if False:  # M:GAS-WORK-DIR-REQUIRED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_work_dir_is_required_where_a_directory_is_created[check-ledger-repo]"
+    },
+    {
+      "name": "p-work-dir-required-extract",
+      "_mechanism": "Omit required work-directory UsageError for extract-repo.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if needs_work_dir and args.work_dir is None:  # M:GAS-WORK-DIR-REQUIRED",
+      "replace": "        if False:  # M:GAS-WORK-DIR-REQUIRED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_work_dir_is_required_where_a_directory_is_created[extract-repo]"
+    },
+    {
+      "name": "p-reset-roots",
+      "_mechanism": "Allow reset targets outside a roots directory.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if root.parent.name != \"roots\":  # M:GAS-RESET-ROOTS",
+      "replace": "    if False:  # M:GAS-RESET-ROOTS",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_refuses_a_target_outside_a_roots_dir"
+    },
+    {
+      "name": "p-reset-remove-dot",
+      "_mechanism": "Keep dot entries absent from the expected reset tree.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            _remove_tree(path)  # M:GAS-RESET-REMOVE",
+      "replace": "            if not path.name.startswith(\".\"): _remove_tree(path)  # M:GAS-RESET-REMOVE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_build_root_reset_removes_an_in_root_report_and_tmp"
+    },
+    {
+      "name": "p-scratch-ledger-tree",
+      "_mechanism": "Drop dir= at the ledger-tree scratch allocation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    with tempfile.TemporaryDirectory(prefix=\"gas-ledger-\", dir=args.work_dir) as directory:  # M:GAS-SCRATCH-LEDGER-TREE",
+      "replace": "    with tempfile.TemporaryDirectory(prefix=\"gas-ledger-\") as directory:  # M:GAS-SCRATCH-LEDGER-TREE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_every_scratch_dir_lies_under_the_work_dir[ledger-tree]"
+    },
+    {
+      "name": "p-scratch-ledger-repo",
+      "_mechanism": "Drop dir= at the ledger-repo scratch allocation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        with tempfile.TemporaryDirectory(prefix=\"gas-ledger-\", dir=args.work_dir) as directory:  # M:GAS-SCRATCH-LEDGER-REPO",
+      "replace": "        with tempfile.TemporaryDirectory(prefix=\"gas-ledger-\") as directory:  # M:GAS-SCRATCH-LEDGER-REPO",
+      "test": "tests/test_grok_audit_surface_probe.py::test_every_scratch_dir_lies_under_the_work_dir[ledger-repo]"
+    },
+    {
+      "name": "p-scratch-root",
+      "_mechanism": "Drop dir= at the root scratch allocation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    root = Path(tempfile.mkdtemp(prefix=f\"gas-root-{args.doc}-{args.purpose}-\", dir=args.dest_parent or args.work_dir)).resolve()  # M:GAS-SCRATCH-ROOT",
+      "replace": "    root = Path(tempfile.mkdtemp(prefix=f\"gas-root-{args.doc}-{args.purpose}-\")).resolve()  # M:GAS-SCRATCH-ROOT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_every_scratch_dir_lies_under_the_work_dir[root]"
+    },
+    {
+      "name": "p-scratch-extract",
+      "_mechanism": "Drop dir= at the extract scratch allocation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        with tempfile.TemporaryDirectory(prefix=\"gas-extract-\", dir=args.work_dir) as directory:  # M:GAS-SCRATCH-EXTRACT",
+      "replace": "        with tempfile.TemporaryDirectory(prefix=\"gas-extract-\") as directory:  # M:GAS-SCRATCH-EXTRACT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_every_scratch_dir_lies_under_the_work_dir[extract]"
+    },
+    {
+      "name": "p-scratch-main-leak",
+      "_mechanism": "Drop dir= at the main-leak scratch allocation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    with tempfile.TemporaryDirectory(prefix=\"gas-main-leak-\", dir=work_dir) as directory:  # M:GAS-SCRATCH-MAIN-LEAK",
+      "replace": "    with tempfile.TemporaryDirectory(prefix=\"gas-main-leak-\") as directory:  # M:GAS-SCRATCH-MAIN-LEAK",
+      "test": "tests/test_grok_audit_surface_probe.py::test_every_scratch_dir_lies_under_the_work_dir[main-leak]"
+    },
+    {
+      "name": "p-scratch-rescore",
+      "_mechanism": "Drop dir= at the rescore scratch allocation.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        export = Path(tempfile.mkdtemp(prefix=\"gas-rescore-\", dir=args.work_dir))  # M:GAS-SCRATCH-RESCORE",
+      "replace": "        export = Path(tempfile.mkdtemp(prefix=\"gas-rescore-\"))  # M:GAS-SCRATCH-RESCORE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_every_scratch_dir_lies_under_the_work_dir[rescore]"
+    },
+    {
+      "name": "p-reset-abs-differential",
+      "_mechanism": "Skip absolute-target validation in the shipped/new differential.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not os.path.isabs(target):  # M:GAS-RESET-ABS",
+      "replace": "    if False:  # M:GAS-RESET-ABS",
+      "test": "tests/test_grok_audit_surface_probe.py::test_reset_precondition_old_new_differential[empty]"
+    },
+    {
+      "name": "p-reset-isdir-differential",
+      "_mechanism": "Skip existing-target validation in the shipped/new differential.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if not os.path.isdir(target):  # M:GAS-RESET-ISDIR",
+      "replace": "    if False:  # M:GAS-RESET-ISDIR",
+      "test": "tests/test_grok_audit_surface_probe.py::test_reset_precondition_old_new_differential[missing]"
     }
   ]
 }

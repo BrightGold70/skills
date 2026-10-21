@@ -154,6 +154,7 @@ EXCLUSIONS = CALIBRATION.parent / "exclusions.txt"
 
 def build_root_repo(tmp_path: Path) -> dict:
     """Prepare editable synthetic calibration inputs and a committed main list."""
+    parents = build_probe_parent_dirs(tmp_path)
     work, _origin = build_repo(tmp_path)
     tree = tmp_path / "calibration-input"
     sources = build_archive(tree)
@@ -187,6 +188,7 @@ def build_root_repo(tmp_path: Path) -> dict:
     return {
         "repo": work, "tree": tree, "sources": sources, "records": records,
         "dest": destination, "entries": entries,
+        **parents,
     }
 
 
@@ -511,7 +513,8 @@ def build_rescore_inputs(tmp_path: Path, probe, *, smoke_failure=False,
     """Real main/origin plus calibration → smoke → score, using Task 6's writer."""
     root_case = build_root_repo(tmp_path)
     case = build_score_inputs(tmp_path / "score-input", probe)
-    case.update(repo=root_case["repo"], origin=tmp_path / "origin.git", probe=probe)
+    case.update(repo=root_case["repo"], origin=tmp_path / "origin.git", probe=probe,
+                **{name: root_case[name] for name in ("work_dir", "systemp", "roots")})
     if seeded_in_own_source:
         # An identity replacement is valid and puts this span in its own archive.
         for target in (root_case, case):
