@@ -1190,3 +1190,43 @@ def test_require_canary_without_a_token_is_stop(canary_case, exit_code):
     _assert_containment_token(result.returncode, result.stdout, result.stderr, 0,
                               "REQUIRE: STOP reason=" + last,
                               f"require must reject an exit-{exit_code} run without a last-line canary token")
+
+
+def test_canary_read_escaped_in_a_non_utf8_log(canary_case):
+    case = canary_case
+    token = _plant_canary(case, "read_escaped")
+    from grokfixtures import f0_text
+
+    log = case["canary"] / "log.ndjson"
+    log.write_bytes(b"\xff\xfe\n" + token.encode("ascii") + b"\n" + f0_text().encode("utf-8"))
+    result = _canary_subcommand(case, "canary-judge", "--rc", 0)
+    _assert_canary_result(case, result, "read_escaped")
+
+
+def test_canary_denial_counts_only_rawoutput_or_content(canary_case):
+    case = canary_case
+    _plant_canary(case, "no_denial")
+    plant = (case["canary"] / "plant.txt").read_text(encoding="utf-8").strip()
+    fields = dict(item.split("=", 1) for item in plant.removeprefix("PLANT: ").split())
+    sentinel, denied, cwd = fields["sentinel"], fields["denied"], fields["cwd"]
+    report = Path(cwd) / ".hmad-report/canary.report.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text("positive control\n", encoding="utf-8")
+
+    from grokfixtures import f0_lines
+
+    events = [
+        {"type": "tool_call", "toolCallId": "sentinel-read", "toolName": "read_file",
+         "rawInput": {"path": sentinel}},
+        {"type": "tool_call", "toolCallId": "control-write", "toolName": "write_file",
+         "rawInput": {"path": str(report)}},
+        {"type": "tool_call", "toolCallId": "denied-write", "toolName": "write_file",
+         "rawInput": {"path": denied}},
+        {"type": "tool_call_update", "toolCallId": "denied-write", "status": "completed",
+         "title": "Operation not permitted", "rawOutput": "write attempted", "content": "blocked"},
+    ]
+    lines = f0_lines()
+    lines[-1:-1] = [json.dumps(event, separators=(",", ":")) for event in events]
+    (case["canary"] / "log.ndjson").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    result = _canary_subcommand(case, "canary-judge", "--rc", 0)
+    _assert_canary_result(case, result, "no_denial")
