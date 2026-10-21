@@ -2044,6 +2044,110 @@
       "find": "  rm -f \"$bounded_prompt\"  # M:EXEC-PROMPT-RM",
       "replace": "  :  # M:EXEC-PROMPT-RM",
       "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_removes_the_staged_prompt"
+    },
+    {
+      "name": "pass-root-count-disarmed",
+      "_mechanism": "Disable the PASS-ROOT-COUNT refusal.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if [ \"$pass_root_count\" -ne \"$passes\" ]; then  # M:PASS-ROOT-COUNT",
+      "replace": "    if false; then  # M:PASS-ROOT-COUNT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_pass_root_count_mismatch_exits_2"
+    },
+    {
+      "name": "pass-root-abs-disarmed",
+      "_mechanism": "Disable the PASS-ROOT-DIR-ABS refusal.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if [[ \"${pass_root[$ri]}\" != /* ]]; then  # M:PASS-ROOT-DIR-ABS",
+      "replace": "      if false; then  # M:PASS-ROOT-DIR-ABS",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_pass_root_not_a_directory_exits_2[relative]"
+    },
+    {
+      "name": "pass-root-exists-disarmed",
+      "_mechanism": "Disable the PASS-ROOT-DIR refusal.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if [ ! -d \"${pass_root[$ri]}\" ]; then  # M:PASS-ROOT-DIR",
+      "replace": "      if false; then  # M:PASS-ROOT-DIR",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_pass_root_not_a_directory_exits_2[missing]"
+    },
+    {
+      "name": "pass-root-colon-disarmed",
+      "_mechanism": "Disable the PASS-ROOT-DIR-COLON refusal.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if [[ \"${pass_root[$ri]}\" == *:* ]]; then  # M:PASS-ROOT-DIR-COLON",
+      "replace": "      if false; then  # M:PASS-ROOT-DIR-COLON",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_pass_root_not_a_directory_exits_2[colon]"
+    },
+    {
+      "name": "pass-root-distinct-disarmed",
+      "_mechanism": "Disable the PASS-ROOT-DISTINCT refusal.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "        if [ \"${pass_root_phys[$ri]}\" = \"${pass_root_phys[$rj]}\" ]; then  # M:PASS-ROOT-DISTINCT",
+      "replace": "        if false; then  # M:PASS-ROOT-DISTINCT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_pass_roots_not_distinct_exit_2"
+    },
+    {
+      "name": "pass-root-nested-disarmed",
+      "_mechanism": "Disable the PASS-ROOT-NESTED refusal.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "        if [[ \"${pass_root_phys[$ri]}\" == \"${pass_root_phys[$rj]%/}/\"* || \"${pass_root_phys[$rj]}\" == \"${pass_root_phys[$ri]%/}/\"* ]]; then  # M:PASS-ROOT-NESTED",
+      "replace": "        if false; then  # M:PASS-ROOT-NESTED",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_pass_root_nested_in_another_exits_2"
+    },
+    {
+      "name": "pass-root-project-disarmed",
+      "_mechanism": "Disable the PASS-ROOT-PROJECT refusal.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if [ \"${pass_root_phys[1]}\" != \"$(cd \"$root\" && pwd -P)\" ]; then  # M:PASS-ROOT-PROJECT",
+      "replace": "    if false; then  # M:PASS-ROOT-PROJECT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_first_pass_root_not_project_root_exits_2"
+    },
+    {
+      "name": "pass-root-cd-dropped",
+      "_mechanism": "Keep every exec pass in the parent project root.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      root=\"${pass_root[$i]:-$root}\"  # M:PASS-ROOT-CD",
+      "replace": "      root=\"$root\"  # M:PASS-ROOT-CD",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_pass_roots_give_each_pass_its_own_cd"
+    },
+    {
+      "name": "pass-root-cd-forced",
+      "_mechanism": "Force every exec pass to use the first pass root.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      root=\"${pass_root[$i]:-$root}\"  # M:PASS-ROOT-CD",
+      "replace": "      root=\"${pass_root[1]:-$root}\"  # M:PASS-ROOT-CD",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_pass_roots_give_each_pass_its_own_cd"
+    },
+    {
+      "name": "pass-root-report-dropped",
+      "_mechanism": "Keep each report in the shared stem directory.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      report[$i]=\"${pass_root[$i]}/.hmad-report/${stem##*/}_p${i}.report.md\"  # M:PASS-ROOT-REPORT",
+      "replace": "      :  # M:PASS-ROOT-REPORT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_pass_root_report_path_lies_in_its_own_root"
+    },
+    {
+      "name": "audit-halt-gate-disarmed",
+      "_mechanism": "Ignore an existing halt file and launch the cycle.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ -n \"$halt_file\" ] && [ -e \"$halt_file\" ]; then  # M:AUDIT-HALT-GATE",
+      "replace": "  if false; then  # M:AUDIT-HALT-GATE",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_audit_cycle_launches_nothing_after_a_halt"
+    },
+    {
+      "name": "audit-halt-gate-always",
+      "_mechanism": "Halt whenever --halt-file is supplied, even when absent.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ -n \"$halt_file\" ] && [ -e \"$halt_file\" ]; then  # M:AUDIT-HALT-GATE",
+      "replace": "  if [ -n \"$halt_file\" ]; then  # M:AUDIT-HALT-GATE",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_audit_cycle_without_a_halt_file_launches"
+    },
+    {
+      "name": "audit-halt-exit-2",
+      "_mechanism": "Return an error after a successful halt.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    return 0  # M:AUDIT-HALT-EXIT",
+      "replace": "    return 2  # M:AUDIT-HALT-EXIT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_audit_cycle_launches_nothing_after_a_halt"
     }
   ]
 }

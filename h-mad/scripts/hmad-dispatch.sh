@@ -3561,8 +3561,9 @@ _cmd_audit_cycle() {
   local passes="2"   # spec AC-3.1: default pass count is 2, so the flag is optional
   local surfaces=""  # csv, one agent per pass; empty = every pass on agy (legacy)
   local project_tests="" suite_cmd=""
-  local -a prompt report out log asm tok rc pids pass_args agent gated legs
-  pass_args=(); gated=(); legs=()
+  local pass_root_count=0 halt_file=""
+  local -a prompt report out log asm tok rc pids pass_args agent gated legs pass_root pass_root_phys
+  pass_args=(); gated=(); legs=(); pass_root=()
   here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
 
   while [ $# -gt 0 ]; do case "$1" in
@@ -3572,6 +3573,8 @@ _cmd_audit_cycle() {
     --passes) _need_val audit-cycle --passes $# || return $?; passes="$2"; shift 2 ;;
     --surfaces) _need_val audit-cycle --surfaces $# || return $?; surfaces="$2"; shift 2 ;;
     --project-root) _need_val audit-cycle --project-root $# || return $?; root="$2"; shift 2 ;;
+    --pass-root) _need_val audit-cycle --pass-root $# || return $?; pass_root_count=$((pass_root_count + 1)); pass_root[$pass_root_count]="$2"; shift 2 ;;
+    --halt-file) _need_val audit-cycle --halt-file $# || return $?; halt_file="$2"; shift 2 ;;
     --ack-file) _need_val audit-cycle --ack-file $# || return $?; ack_file="$2"; shift 2 ;;
     --report-grace) _need_val audit-cycle --report-grace $# || return $?; report_grace="$2"; shift 2 ;;
     --timeout) _need_val audit-cycle --timeout $# || return $?; timeout="$2"; shift 2 ;;
@@ -3603,6 +3606,47 @@ _cmd_audit_cycle() {
   esac
   [ "$passes" -ge 1 ] || {
     echo "hmad-dispatch: audit-cycle: --passes must be >= 1" >&2; return 2; }
+
+  if [ "$pass_root_count" -gt 0 ]; then
+    if [ "$pass_root_count" -ne "$passes" ]; then  # M:PASS-ROOT-COUNT
+      echo "hmad-dispatch: audit-cycle: --pass-root count differs from --passes" >&2
+      return 2
+    fi
+    local ri rj
+    ri=1
+    while [ "$ri" -le "$pass_root_count" ]; do
+      if [[ "${pass_root[$ri]}" != /* ]]; then  # M:PASS-ROOT-DIR-ABS
+        echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' is not absolute" >&2
+        return 2
+      fi
+      if [[ "${pass_root[$ri]}" == *:* ]]; then  # M:PASS-ROOT-DIR-COLON
+        echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' contains ':'" >&2
+        return 2
+      fi
+      if [ ! -d "${pass_root[$ri]}" ]; then  # M:PASS-ROOT-DIR
+        echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' is not an existing directory" >&2
+        return 2
+      fi
+      pass_root_phys[$ri]="$(cd "${pass_root[$ri]}" && pwd -P)" || return 2
+      rj=1
+      while [ "$rj" -lt "$ri" ]; do
+        if [ "${pass_root_phys[$ri]}" = "${pass_root_phys[$rj]}" ]; then  # M:PASS-ROOT-DISTINCT
+          echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' names one root twice" >&2
+          return 2
+        fi
+        if [[ "${pass_root_phys[$ri]}" == "${pass_root_phys[$rj]%/}/"* || "${pass_root_phys[$rj]}" == "${pass_root_phys[$ri]%/}/"* ]]; then  # M:PASS-ROOT-NESTED
+          echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' lies inside another --pass-root" >&2
+          return 2
+        fi
+        rj=$((rj + 1))
+      done
+      ri=$((ri + 1))
+    done
+    if [ "${pass_root_phys[1]}" != "$(cd "$root" && pwd -P)" ]; then  # M:PASS-ROOT-PROJECT
+      echo "hmad-dispatch: audit-cycle: --pass-root first root is not --project-root" >&2
+      return 2
+    fi
+  fi
 
   # --surfaces: which agent runs each pass (#6).
   #
@@ -3678,6 +3722,10 @@ _cmd_audit_cycle() {
   while [ "$i" -le "$passes" ]; do
     prompt[$i]="${stem}_p${i}.txt"
     report[$i]="${stem}_p${i}.report.md"
+    if [ -n "${pass_root[$i]:-}" ]; then
+      report[$i]="${pass_root[$i]}/.hmad-report/${stem##*/}_p${i}.report.md"  # M:PASS-ROOT-REPORT
+      mkdir -p -- "${pass_root[$i]}/.hmad-report" || return 1
+    fi
     out[$i]="${stem}_p${i}.out.txt"
     log[$i]="${stem}_p${i}.log"
     asm[$i]="${stem}_p${i}.asm.txt"
@@ -3758,9 +3806,16 @@ _cmd_audit_cycle() {
     i=$((i + 1))
   done
 
+  if [ -n "$halt_file" ] && [ -e "$halt_file" ]; then  # M:AUDIT-HALT-GATE
+    echo "[H-MAD] audit-cycle halted halt_file=$halt_file" >&2
+    echo "REQUIRE: STOP reason=halt_file"
+    return 0  # M:AUDIT-HALT-EXIT
+  fi
+
   i=1
   while [ "$i" -le "$passes" ]; do
     (
+      root="${pass_root[$i]:-$root}"  # M:PASS-ROOT-CD
       _cmd_exec "${agent[$i]}" "${prompt[$i]}" --cd "$root" \
         --out "${out[$i]}" --log "${log[$i]}" --timeout "$timeout" >/dev/null
     ) &
