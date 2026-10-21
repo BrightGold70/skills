@@ -560,6 +560,56 @@ def test_quarantine_internal_on_a_usage_error(containment_home):
     assert not case["parent"].exists(), "a usage error must create no quarantine"
 
 
+def test_quarantine_creates_the_quarantine_before_listing_the_store(
+        containment_module, tmp_path, monkeypatch, capsys):
+    import re
+
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    module = containment_module()
+    collision_home = tmp_path / "collision home [*] 'quoted' ⟦h-mad⟧"
+    collision_home.mkdir()
+    monkeypatch.setenv("HOME", str(collision_home))
+    assert not (collision_home / ".grok/sessions").exists()
+    real_mkdir = module.os.mkdir
+    collisions = []
+
+    def mkdir_with_collision(path, *args, **kwargs):
+        candidate = Path(path)
+        if candidate.name.startswith("grok-quarantine-") and not collisions:
+            real_mkdir(path, *args, **kwargs)
+            collisions.append(candidate)
+        return real_mkdir(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(module.os, "mkdir", mkdir_with_collision)
+        rc, out, err = _containment_main(module, capsys, "quarantine")
+    _assert_containment_token(
+        rc, out, err, 0, "QUARANTINE: REFUSED reason=quarantine_exists",
+        "D20 must attempt exclusive quarantine creation before listing an absent store",
+    )
+    assert len(collisions) == 1, "exclusive quarantine creation must be attempted once"
+
+    unreadable_home = tmp_path / "unreadable home [*] 'quoted' ⟦h-mad⟧"
+    unreadable_home.mkdir()
+    monkeypatch.setenv("HOME", str(unreadable_home))
+    assert not (unreadable_home / ".grok/sessions").exists()
+    rc, out, err = _containment_main(module, capsys, "quarantine")
+    _assert_containment_token(
+        rc, out, err, 0, "QUARANTINE: REFUSED reason=unreadable",
+        "D20 must create the quarantine before reporting the absent store as unreadable",
+    )
+    parent = unreadable_home / ".local/state/h-mad/grok-audit-surface"
+    assert parent.is_dir(), "quarantine parent must exist when store listing fails"
+    destinations = list(parent.iterdir())
+    assert len(destinations) == 1, "an absent store must leave exactly one quarantine"
+    destination = destinations[0]
+    assert destination.is_dir(), "the created quarantine entry must be a directory"
+    assert re.fullmatch(r"grok-quarantine-\d{8}T\d{6}Z", destination.name), (
+        "the created quarantine must use the documented UTC timestamp spelling"
+    )
+    assert not list(destination.iterdir()), "an absent store must leave the quarantine empty"
+
+
 @pytest.mark.parametrize("verb,token", [
     ("toolscan", "TOOLSCAN: CLEAN surface=grok calls=1 out_of_root=0 checkout=0 exempt=0 nonjson=0"),
     ("grok-canary", "GROK-CANARY: PASS"),
