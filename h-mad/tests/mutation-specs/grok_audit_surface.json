@@ -1916,6 +1916,134 @@
       "find": "    if not os.path.isdir(target):  # M:GAS-RESET-ISDIR",
       "replace": "    if False:  # M:GAS-RESET-ISDIR",
       "test": "tests/test_grok_audit_surface_probe.py::test_reset_precondition_old_new_differential[missing]"
+    },
+    {
+      "name": "grok-tmp-subdir-disarmed",
+      "_mechanism": "Disable the physical top-level comparison refusal.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if [ \"$(cd \"$cd_dir\" && pwd -P)\" != \"$(cd \"$T\" && pwd -P)\" ]; then  # M:GROK-TMP-SUBDIR",
+      "replace": "      if false; then  # M:GROK-TMP-SUBDIR",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_subdirectory_exits_2"
+    },
+    {
+      "name": "grok-tmp-ignored-disarmed",
+      "_mechanism": "Disable refusal when the repository does not ignore staging.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$T\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED",
+      "replace": "      if false; then  # M:GROK-TMP-IGNORED",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_staging_not_ignored_exits_2"
+    },
+    {
+      "name": "grok-tmp-gitfail-disarmed",
+      "_mechanism": "Treat every failed top-level lookup as an export root.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    elif [[ \"$git_error\" == *\"not a git repository\"* ]]; then  # M:GROK-TMP-GITFAIL",
+      "replace": "    elif true; then  # M:GROK-TMP-GITFAIL",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_rev_parse_failure_exits_2"
+    },
+    {
+      "name": "grok-tmp-git-severed",
+      "_mechanism": "Stage work-tree dispatches in the export-root directory.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      S=\"$(mktemp -d \"$T/.h-mad/tmp/hmad_exec_grok.XXXXXX\")\" || return 1  # M:GROK-TMP-GIT",
+      "replace": "      S=\"$cd_dir/.tmp\"; mkdir -p \"$S\" || return 1  # M:GROK-TMP-GIT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_stages_under_h_mad_tmp"
+    },
+    {
+      "name": "grok-tmp-git-shared",
+      "_mechanism": "Reuse a fixed work-tree staging directory across dispatches.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      S=\"$(mktemp -d \"$T/.h-mad/tmp/hmad_exec_grok.XXXXXX\")\" || return 1  # M:GROK-TMP-GIT",
+      "replace": "      S=\"$T/.h-mad/tmp/hmad_exec_grok.shared\"; mkdir -p \"$S\" || return 1  # M:GROK-TMP-GIT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_two_dispatches_get_distinct_staging_dirs"
+    },
+    {
+      "name": "grok-tmp-root-severed",
+      "_mechanism": "Allocate export-root staging in system temp.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      S=\"$cd_dir/.tmp\"; mkdir -p \"$S\" || return 1  # M:GROK-TMP-ROOT",
+      "replace": "      S=\"$(mktemp -d)\" || return 1  # M:GROK-TMP-ROOT",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_stages_the_prompt_in_cd_tmp"
+    },
+    {
+      "name": "grok-tmp-env-ambient",
+      "_mechanism": "Let ambient GIT_DIR divert the top-level lookup.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "        git_stdout=\"$(LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$cd_dir\" rev-parse --show-toplevel 2>&3)\" || git_status=$?  # M:GROK-TMP-ENV",
+      "replace": "        git_stdout=\"$(LC_ALL=C env -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$cd_dir\" rev-parse --show-toplevel 2>&3)\" || git_status=$?  # M:GROK-TMP-ENV",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_ignores_an_ambient_git_dir"
+    },
+    {
+      "name": "grok-tmp-ignored-env-ambient",
+      "_mechanism": "Let ambient GIT_DIR divert the ignore-rule lookup.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$T\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED",
+      "replace": "      if ! LC_ALL=C env -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$T\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_ignores_an_ambient_git_dir"
+    },
+    {
+      "name": "grok-prompt-in-cd-severed",
+      "_mechanism": "Allocate the Grok prompt with system-temp mktemp -t.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    bounded_prompt=\"$(mktemp \"$S/hmad_exec_prompt.XXXXXX\")\" || return 1  # M:GROK-PROMPT-IN-CD",
+      "replace": "    bounded_prompt=\"$(mktemp -t hmad_exec_prompt.XXXXXX)\" || return 1  # M:GROK-PROMPT-IN-CD",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_stages_the_prompt_in_cd_tmp"
+    },
+    {
+      "name": "grok-tmp-rmguard-never",
+      "_mechanism": "Prevent the staging-directory removal guard from passing.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  trap 'if [ -n \"$T\" ] && [[ \"$S\" == \"$T/.h-mad/tmp/hmad_exec_grok.\"* ]]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
+      "replace": "  trap 'if false; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_leaves_git_status_unchanged"
+    },
+    {
+      "name": "grok-tmpdir-dropped",
+      "_mechanism": "Omit the child's staging TMPDIR assignment.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    child_env+=(\"TMPDIR=$S\")  # M:GROK-TMPDIR",
+      "replace": "    :  # M:GROK-TMPDIR",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_sets_tmpdir_to_cd_tmp"
+    },
+    {
+      "name": "grok-tmpdir-forced",
+      "_mechanism": "Force the child's TMPDIR outside its staging directory.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    child_env+=(\"TMPDIR=$S\")  # M:GROK-TMPDIR",
+      "replace": "    child_env+=(\"TMPDIR=/tmp\")  # M:GROK-TMPDIR",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_sets_tmpdir_to_cd_tmp"
+    },
+    {
+      "name": "exec-prompt-beside-log-severed",
+      "_mechanism": "Allocate the Codex/agy prompt with system-temp mktemp -t.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    bounded_prompt=\"$(mktemp \"$(dirname -- \"$log\")/hmad_exec_prompt.XXXXXX\")\" || return 1  # M:EXEC-PROMPT-BESIDE-LOG",
+      "replace": "    bounded_prompt=\"$(mktemp -t hmad_exec_prompt.XXXXXX)\" || return 1  # M:EXEC-PROMPT-BESIDE-LOG",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_codex_stages_prompt_and_last_beside_the_log"
+    },
+    {
+      "name": "exec-last-beside-log-severed",
+      "_mechanism": "Allocate the Codex last-message file with system-temp mktemp -t.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    local last; last=\"$(mktemp \"$(dirname -- \"$log\")/hmad_exec_last.XXXXXX\")\" || { rm -f \"$bounded_prompt\"; return 1; }  # M:EXEC-LAST-BESIDE-LOG",
+      "replace": "    local last; last=\"$(mktemp -t hmad_exec_last.XXXXXX)\" || { rm -f \"$bounded_prompt\"; return 1; }  # M:EXEC-LAST-BESIDE-LOG",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_codex_stages_prompt_and_last_beside_the_log"
+    },
+    {
+      "name": "exec-prompt-oversize-rm-dropped",
+      "_mechanism": "Keep the staged prompt on agy's OVERSIZE refusal.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "        rm -f \"$bounded_prompt\"  # M:EXEC-PROMPT-OVERSIZE-RM",
+      "replace": "        :  # M:EXEC-PROMPT-OVERSIZE-RM",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_agy_oversize_removes_the_staged_prompt"
+    },
+    {
+      "name": "exec-prompt-rm-dropped",
+      "_mechanism": "Keep the staged prompt after a completed dispatch.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  rm -f \"$bounded_prompt\"  # M:EXEC-PROMPT-RM",
+      "replace": "  :  # M:EXEC-PROMPT-RM",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_removes_the_staged_prompt"
     }
   ]
 }

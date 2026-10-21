@@ -3117,6 +3117,43 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   [ -n "$cd_dir" ] || cd_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
   local label; label="$(basename "$cd_dir")"
 
+  # Isolate the EXIT trap so every return/error cleans this dispatch's staging.
+  (
+  local T="" S="" git_top git_error git_rc
+  trap 'if [ -n "$T" ] && [[ "$S" == "$T/.h-mad/tmp/hmad_exec_grok."* ]]; then rm -rf -- "$S"; fi' EXIT  # M:GROK-TMP-RMGUARD
+  if [ "$agent" = grok ]; then
+    # Keep stderr separate even on success (Apple's git shim can print warnings).
+    # NUL-delimited pipe fields avoid creating a file before staging is validated.
+    {
+      IFS= read -r -d '' git_error
+      IFS= read -r -d '' git_top
+      IFS= read -r -d '' git_rc
+    } < <(
+      {
+        local git_stdout="" git_status=0
+        git_stdout="$(LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C "$cd_dir" rev-parse --show-toplevel 2>&3)" || git_status=$?  # M:GROK-TMP-ENV
+        printf '\0%s\0%s\0' "$git_stdout" "$git_status"
+      } 3>&1
+    )
+    if [ "$git_rc" -eq 0 ]; then
+      T="$git_top"
+      if [ "$(cd "$cd_dir" && pwd -P)" != "$(cd "$T" && pwd -P)" ]; then  # M:GROK-TMP-SUBDIR
+        echo "hmad-dispatch: exec: grok staging: --cd is below the git top level" >&2; return 2
+      fi
+      if ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C "$T" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED
+        echo "hmad-dispatch: exec: grok staging: .h-mad/tmp/ is not ignored by git" >&2; return 2
+      fi
+      mkdir -p "$T/.h-mad/tmp" || return 1
+      S="$(mktemp -d "$T/.h-mad/tmp/hmad_exec_grok.XXXXXX")" || return 1  # M:GROK-TMP-GIT
+    elif [[ "$git_error" == *"not a git repository"* ]]; then  # M:GROK-TMP-GITFAIL
+      S="$cd_dir/.tmp"; mkdir -p "$S" || return 1  # M:GROK-TMP-ROOT
+    else
+      echo "hmad-dispatch: exec: grok staging: git rev-parse failed" >&2
+      printf '%s\n' "$git_error" >&2
+      return 2
+    fi
+  fi
+
   local auto_log=""
   if [ -z "$log" ]; then
     log="$(mktemp -t hmad_exec_log.XXXXXX)" || return 1
@@ -3155,7 +3192,12 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   # when there is no coordinator is silence, not an error and not a warning.
   local _coord=""; _coord="$(_coordinator 2>/dev/null)" || _coord=""
   local boundary; boundary="$(_dispatch_boundary)"
-  local bounded_prompt; bounded_prompt="$(mktemp -t hmad_exec_prompt.XXXXXX)" || return 1
+  local bounded_prompt
+  if [ "$agent" = grok ]; then
+    bounded_prompt="$(mktemp "$S/hmad_exec_prompt.XXXXXX")" || return 1  # M:GROK-PROMPT-IN-CD
+  else
+    bounded_prompt="$(mktemp "$(dirname -- "$log")/hmad_exec_prompt.XXXXXX")" || return 1  # M:EXEC-PROMPT-BESIDE-LOG
+  fi
   {
     # Codex's exec sandbox cannot reach the Orca socket; omit the handle so the
     # template's documented fallback skips worker_done and prints STATUS.
@@ -3210,6 +3252,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
     # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:
     # the prompt travels as a file, never as an argv element (AC-3.5).
     child_env=(-u GROK_SANDBOX "${child_env[@]}")  # M:GROK-SANDBOX-ENV
+    child_env+=("TMPDIR=$S")  # M:GROK-TMPDIR
     local gargs=(--cwd "$cd_dir" --always-approve --output-format streaming-json
                  --prompt-file "$bounded_prompt")
     [ -n "$model" ]   && gargs+=(--model "$model")
@@ -3235,7 +3278,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
       final_empty=1
     fi
   elif [ "$agent" = codex ]; then
-    local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || { rm -f "$bounded_prompt"; return 1; }
+    local last; last="$(mktemp "$(dirname -- "$log")/hmad_exec_last.XXXXXX")" || { rm -f "$bounded_prompt"; return 1; }  # M:EXEC-LAST-BESIDE-LOG
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
                 --output-last-message "$last" --skip-git-repo-check)
     [ -n "$model" ] && args+=(--model "$model")
@@ -3317,6 +3360,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
         echo "hmad-dispatch: exec: OVERSIZE prompt bytes=${_argv_bytes} budget=$(( _arg_max - _argv_reserve )) arg_max=${_arg_max} reserve=${_argv_reserve}" >&2
         echo "  agy receives the prompt as ONE argv element, so the kernel refuses this before agy starts (E2BIG, rc 126) — the agent never runs and writes nothing." >&2
         echo "  Not a hang and not an empty reply — the prompt never left this machine. Re-assemble smaller: --vh-tail N is the first remedy." >&2
+        rm -f "$bounded_prompt"  # M:EXEC-PROMPT-OVERSIZE-RM
         return 2
       fi
     fi
@@ -3370,7 +3414,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
       final_empty=1
     fi
   fi
-  rm -f "$bounded_prompt"
+  rm -f "$bounded_prompt"  # M:EXEC-PROMPT-RM
 
   local refused=""
   [ "$agent" = codex ] && [ "$final_empty" -eq 1 ] && refused="$(_codex_input_too_large "$log" "$pre_lines")"
@@ -3509,6 +3553,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   fi
   echo "hmad-dispatch: $agent exec rc=$rc" >&2
   return "$rc"
+  )
 }
 
 _cmd_audit_cycle() {
