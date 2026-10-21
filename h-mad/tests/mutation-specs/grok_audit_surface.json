@@ -2502,6 +2502,14 @@
       "test": "tests/test_grok_audit_surface_containment.py::test_canary_deleted_sentinel_with_token_in_log_is_read_escaped"
     },
     {
+      "name": "canary-token-window-reverted-to-hex-run",
+      "_mechanism": "Revert to hashing only maximal exactly-32 lowercase-hex runs, missing a token glued to lowercase hex.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    candidates = (run[i:i + 32] for run in re.findall(rb\"[0-9a-f]{32,}\", log_bytes or b\"\") for i in range(len(run) - 31))  # M:CANARY-TOKEN-WINDOW",
+      "replace": "    candidates = re.findall(rb\"(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])\", log_bytes or b\"\")  # M:CANARY-TOKEN-WINDOW",
+      "test": "tests/test_grok_audit_surface_containment.py::test_canary_read_escaped_glued_token[hex-wrapped]"
+    },
+    {
       "name": "canary-timeout-disarmed",
       "_mechanism": "Let timeout 124 fall through to the generic Grok return code.",
       "file": "scripts/h_mad_grok_containment.py",
