@@ -1,4 +1,4 @@
-"""Task 11/12 wrapper contracts, Task 18 profiles, and Task 19 staging."""
+"""Wrapper contracts, profiles, staging, and Task 20 audit-cycle isolation."""
 
 import json
 import os
@@ -682,3 +682,184 @@ def test_exec_agy_oversize_removes_the_staged_prompt(tmp_path, monkeypatch):
         "agy's OVERSIZE refusal must leave no new staged prompts in the real system temp "
         f"directory: {sorted(new_system_prompts)}"
     )
+
+
+def _pass_root_case(tmp_path):
+    root = project_with_docs(tmp_path).resolve()
+    roots = [root]
+    for name in ("pass two [*] 'quoted'", "pass three [*] 'quoted'"):
+        other = tmp_path / name
+        other.mkdir()
+        roots.append(other.resolve())
+    script_dir, assemble_calls, cycle_calls = install_audit_cycle_stubs(tmp_path)
+    # Observe the directory at assembly time: a later mkdir must not satisfy
+    # the report-placement contract. This edits only the disposable stub.
+    assembler = script_dir / "h_mad_assemble_audit.py"
+    source = assembler.read_text(encoding="utf-8")
+    anchor = 'report = Path(args[args.index("--report-file") + 1])\n'
+    assert source.count(anchor) == 1, "the assembly observer needs one report-path assignment"
+    assembler.write_text(
+        source.replace(anchor, anchor +
+                       'assert report.parent.is_dir(), "report directory must exist before assembly"\n'),
+        encoding="utf-8",
+    )
+    return {
+        "root": root, "roots": roots, "assemble": assemble_calls, "cycle": cycle_calls,
+        "capture": tmp_path / "pass-root-agy.calls",
+        "env": {"HMAD_AUDIT_CYCLE_SCRIPT_DIR": str(script_dir),
+                "HMAD_STUB_HOSTILE": "all", "HMAD_STUB_AGY_RESP": HOSTILE_PROMPT},
+    }
+
+
+def _run_pass_roots(tmp_path, case, *, roots=(), passes=2, extra=()):
+    options = [arg for root in roots for arg in ("--pass-root", str(root))]
+    return run_audit_cycle(
+        tmp_path, dispatch_args(root=case["root"], passes=str(passes)) + options + list(extra),
+        env=case["env"], capture=case["capture"], cwd=tmp_path,
+    )
+
+
+def _assert_pass_root_refusal(case, result, ending):
+    assert result.returncode == 2, f"--pass-root {ending} must exit 2: {result.stderr}"
+    assert not read_jsonl(case["assemble"]), "invalid pass roots must stop before any assembly"
+    assert "unknown option" not in result.stderr, (
+        f"audit-cycle must recognize --pass-root and refuse because it {ending}: {result.stderr}"
+    )
+    assert any(line.startswith("hmad-dispatch: audit-cycle: --pass-root")
+               and line.endswith(ending) for line in result.stderr.splitlines()), (
+        f"--pass-root must print its own check's line ending {ending!r}: {result.stderr}"
+    )
+    assert dispatch_count(case["capture"]) == 0, "invalid pass roots must launch no agent"
+    assert not read_jsonl(case["cycle"]), "invalid pass roots must not invoke collection"
+
+
+def test_pass_roots_give_each_pass_its_own_cd(tmp_path):
+    case = _pass_root_case(tmp_path)
+    result = _run_pass_roots(tmp_path, case, roots=case["roots"], passes=3)
+    assert result.returncode == 0, f"each pass must launch with its own --cd: {result.stderr}"
+    assert dispatch_count(case["capture"]) == 3, "three roots must dispatch three actual stub agents"
+    assembly = read_jsonl(case["assemble"])
+    assert len(assembly) == 3, "all three pass prompts must assemble"
+    calls = read_jsonl(case["cycle"])
+    assert len(calls) == 1 and "--halt-reason" not in calls[0], (
+        "prompts with distinct root-local report paths must pass the divergence check"
+    )
+    pass_specs = [calls[0][i + 1] for i, arg in enumerate(calls[0]) if arg == "--pass"]
+    assert len(pass_specs) == 3, "collection must receive all three launched passes"
+    observed = {}
+    for spec in pass_specs:
+        index, _report, _out, rc, log = spec.split(":")
+        assert rc == "0", f"pass {index} must finish its real _cmd_exec successfully"
+        init = [row for row in read_jsonl(Path(log)) if row.get("event") == "init"]
+        assert len(init) == 1, f"pass {index} must expose its actual agent working directory"
+        observed[int(index)] = Path(init[0]["init"]["cwd"]).resolve()
+    assert observed == dict(enumerate(case["roots"], 1)), (
+        "each _cmd_exec --cd must reach the root at its own pass index"
+    )
+    assert len(set(observed.values())) == 3, "no two exec passes may share a working directory"
+    assert all(args[args.index("--project-root") + 1] == str(case["root"])
+               for args in [*assembly, calls[0]]), (
+        "per-pass --cd must leave the parent's project root intact for assembly and collection"
+    )
+    assert len(auditcycle_lines(result.stdout)) == 1, "the isolated passes must complete one cycle"
+
+
+def test_pass_root_report_path_lies_in_its_own_root(tmp_path):
+    case = _pass_root_case(tmp_path)
+    result = _run_pass_roots(tmp_path, case, roots=case["roots"], passes=3)
+    assert result.returncode == 0, f"pass-root report directories must precede assembly: {result.stderr}"
+    assembly = read_jsonl(case["assemble"])
+    assert len(assembly) == 3, "report placement must be checked for every assembled pass"
+    expected = []
+    for index, (root, args) in enumerate(zip(case["roots"], assembly), 1):
+        prompt = Path(args[args.index("--out") + 1])
+        report = Path(args[args.index("--report-file") + 1])
+        wanted = root / ".hmad-report" / (prompt.stem + ".report.md")
+        assert prompt.stem.endswith(f"_p{index}"), "report names must keep their pass index"
+        assert report == wanted, f"pass {index}'s report must live in its own root's .hmad-report"
+        assert report.parent.is_dir(), "each report directory must be created before assembly"
+        expected.append(str(wanted))
+    calls = read_jsonl(case["cycle"])
+    assert len(calls) == 1, "the cycle must collect the root-local reports"
+    reports = [calls[0][i + 1].split(":")[1]
+               for i, arg in enumerate(calls[0]) if arg == "--pass"]
+    assert reports == expected, "collection must use the same root-local report paths as assembly"
+
+
+def test_pass_root_count_mismatch_exits_2(tmp_path):
+    case = _pass_root_case(tmp_path)
+    result = _run_pass_roots(tmp_path, case, roots=case["roots"][:1])
+    _assert_pass_root_refusal(case, result, "count differs from --passes")
+
+
+@pytest.mark.parametrize("kind", ["relative", "missing", "colon"])
+def test_pass_root_not_a_directory_exits_2(tmp_path, kind):
+    case = _pass_root_case(tmp_path)
+    if kind == "relative":
+        # Exists relative to the child's cwd: disarming ABS cannot fall through
+        # to a missing-directory refusal and masquerade as the right guard.
+        other = case["roots"][1].relative_to(tmp_path.resolve())
+        ending = "is not absolute"
+    elif kind == "missing":
+        other = tmp_path / "missing root [*] 'quoted'"
+        ending = "is not an existing directory"
+    else:
+        other = tmp_path / "colon:root [*] 'quoted'"
+        other.mkdir()
+        ending = "contains ':'"
+    result = _run_pass_roots(tmp_path, case, roots=[case["root"], other])
+    _assert_pass_root_refusal(case, result, ending)
+
+
+def test_pass_roots_not_distinct_exit_2(tmp_path):
+    case = _pass_root_case(tmp_path)
+    alias = tmp_path / "same root [*] 'quoted'"
+    alias.symlink_to(case["root"], target_is_directory=True)
+    result = _run_pass_roots(tmp_path, case, roots=[case["root"], alias])
+    _assert_pass_root_refusal(case, result, "names one root twice")
+
+
+def test_pass_root_nested_in_another_exits_2(tmp_path):
+    case = _pass_root_case(tmp_path)
+    nested = case["roots"][1] / "nested root [*] 'quoted'"
+    nested.mkdir()
+    # Put the child before its parent to catch a one-direction nesting check.
+    result = _run_pass_roots(tmp_path, case,
+                             roots=[case["root"], nested, case["roots"][1]], passes=3)
+    _assert_pass_root_refusal(case, result, "lies inside another --pass-root")
+
+
+def test_first_pass_root_not_project_root_exits_2(tmp_path):
+    case = _pass_root_case(tmp_path)
+    result = _run_pass_roots(tmp_path, case, roots=case["roots"][1:])
+    _assert_pass_root_refusal(case, result, "first root is not --project-root")
+
+
+def test_audit_cycle_launches_nothing_after_a_halt(tmp_path):
+    case = _pass_root_case(tmp_path)
+    halt = tmp_path / "halt file [*] 'quoted'.txt"
+    halt.write_text(HOSTILE_PROMPT, encoding="utf-8")
+    result = _run_pass_roots(tmp_path, case, extra=["--halt-file", str(halt)])
+    assert result.returncode == 0, f"a present --halt-file must halt successfully: {result.stderr}"
+    assert dispatch_count(case["capture"]) == 0, "a present halt file must launch no stub agent"
+    assert auditcycle_lines(result.stdout) == [], "a halted cycle must print no AUDITCYCLE line"
+    assert result.stdout.splitlines()[-1:] == ["REQUIRE: STOP reason=halt_file"], (
+        "the last stdout line must be exactly REQUIRE: STOP reason=halt_file"
+    )
+    assert f"[H-MAD] audit-cycle halted halt_file={halt}" in result.stderr.splitlines(), (
+        "the halt marker on stderr must name the given halt-file path"
+    )
+    assert len(read_jsonl(case["assemble"])) == 2, "the halt gate must run after both assemblies"
+    assert not read_jsonl(case["cycle"]), "the halt branch must skip cycle collection"
+
+
+def test_audit_cycle_without_a_halt_file_launches(tmp_path):
+    case = _pass_root_case(tmp_path)
+    halt = tmp_path / "absent halt [*] 'quoted'.txt"
+    result = _run_pass_roots(tmp_path, case, extra=["--halt-file", str(halt)])
+    assert result.returncode == 0, f"an absent --halt-file must allow launch: {result.stderr}"
+    assert dispatch_count(case["capture"]) == 2, "an absent halt file must launch every pass"
+    assert len(auditcycle_lines(result.stdout)) == 1, "a launched cycle must print its AUDITCYCLE line"
+    assert "REQUIRE: STOP reason=halt_file" not in result.stdout, "an absent halt file must not halt"
+    assert len(read_jsonl(case["assemble"])) == 2, "the launched cycle must assemble every pass"
+    assert len(read_jsonl(case["cycle"])) == 1, "the launched cycle must reach collection once"
