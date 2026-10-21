@@ -451,7 +451,17 @@ def write_extract_cycle(case: dict, *, doc: str = "d1", cycle: int = 1,
         f"calibration={'a' * 40} list_commit={'b' * 40} list_blob={'c' * 40} absent=0\n",
         encoding="utf-8",
     )
+    run_record = case["s2"] / "run.txt"
+    if not run_record.exists():
+        run_record.write_text("RUN: checkout=/tmp/grok-audit-checkout home=/tmp/grok-audit-home\n",
+                              encoding="utf-8")
     for index in range(1, len(surfaces) + 1):
+        pass_root = Path(f"/tmp/gas-root-{doc}-s2v{cycle}-pass{index}")
+        (directory / f"p{index}.root.txt").write_text(
+            f"ROOT: READY doc={doc} purpose=s2v{cycle} path={pass_root} "
+            f"calibration={'a' * 40} list_commit={'b' * 40} list_blob={'c' * 40} absent=0\n",
+            encoding="utf-8",
+        )
         (directory / f"p{index}.prompt.txt").write_text(
             f"Audit pass {index}: {_hostile_text()}\n", encoding="utf-8",
         )
@@ -570,6 +580,19 @@ def build_rescore_inputs(tmp_path: Path, probe, *, smoke_failure=False,
     """Real main/origin plus calibration → smoke → score, using Task 6's writer."""
     root_case = build_root_repo(tmp_path)
     case = build_score_inputs(tmp_path / "score-input", probe)
+    calibration_dir = case["tree"] / CALIBRATION
+    run_id = "fixture-run"
+    reading = calibration_dir / "runs" / run_id
+    reading.mkdir(parents=True)
+    for name in ("s2", "findings.jsonl", "key.jsonl", "labels.jsonl", "extract.txt"):
+        source = calibration_dir / name
+        if source.exists():
+            source.replace(reading / name)
+    if not (reading / "extract.txt").exists():
+        (reading / "extract.txt").write_text("extract --shuffle-seed 1729\n", encoding="utf-8")
+    case["run_id"] = run_id
+    case["reading_root"] = reading
+    case["s2"] = reading / "s2"
     case.update(repo=root_case["repo"], origin=tmp_path / "origin.git", probe=probe,
                 **{name: root_case[name] for name in ("work_dir", "systemp", "roots")})
     if seeded_in_own_source:
@@ -629,6 +652,15 @@ def build_rescore_inputs(tmp_path: Path, probe, *, smoke_failure=False,
             f"calibration={case['calibration']} list_commit={case['main']} "
             f"list_blob={case['list_blob']} absent=0\n", encoding="utf-8",
         )
+        if purpose.startswith("s2"):
+            command = shlex.split((directory / "command.txt").read_text(encoding="utf-8"))
+            surfaces = command[command.index("--surfaces") + 1].split(",")
+            for index in range(1, len(surfaces) + 1):
+                (directory / f"p{index}.root.txt").write_text(
+                    f"ROOT: READY doc={doc} purpose={purpose} path=/tmp/gas-root-{doc}-{purpose}-pass{index} "
+                    f"calibration={case['calibration']} list_commit={case['main']} "
+                    f"list_blob={case['list_blob']} absent=0\n", encoding="utf-8",
+                )
     smoke_src = tmp_path / "smoke-input"
     shutil.copytree(data / "s1", smoke_src / "s1")
     args = types.SimpleNamespace(repo=repo, parent=case["calibration"], src=smoke_src,

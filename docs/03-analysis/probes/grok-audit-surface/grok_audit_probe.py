@@ -568,6 +568,45 @@ def parse_root_line(line: str) -> dict[str, str] | None:
     return fields
 
 
+def parse_run_line(text: str) -> dict[str, str] | None:
+    """Parse the single runbook checkout/home authority line."""
+    lines = [line for line in text.splitlines() if line.startswith("RUN: ")]
+    if len(lines) != 1:  # M:GAS-PARSE-RUN-ONE
+        return None
+    fields = {}
+    words = re.split(r"\s+(?=(?:checkout|home)=)", lines[0][len("RUN: "):])
+    for word in words:
+        key, separator, value = word.partition("=")
+        if not separator or not value:
+            return None
+        if key in fields:  # M:GAS-PARSE-RUN-DUP
+            return None
+        if re.search(r"\s+[A-Za-z0-9_-]+=\S+", value):  # M:GAS-PARSE-RUN
+            return None
+        fields[key] = value.strip()
+    if fields.keys() != {"checkout", "home"}:  # M:GAS-PARSE-RUN
+        return None
+    return fields
+
+
+def parse_profile_line(text: str) -> dict[str, str] | None:
+    """Parse the single exec profile and its provenance."""
+    lines = [line for line in text.splitlines() if line.startswith("GROK-PROFILE: ")]
+    if len(lines) != 1:
+        return None
+    fields = {}
+    for word in lines[0][len("GROK-PROFILE: "):].split():
+        key, separator, value = word.partition("=")
+        if not separator or not value or key in fields:
+            return None
+        fields[key] = value
+    if fields.keys() != {"profile", "origin"}:  # M:GAS-PARSE-PROFILE
+        return None
+    if fields.get("origin") not in {"default", "override"}:  # M:GAS-PARSE-PROFILE-ORIGIN
+        return None
+    return fields
+
+
 def _mode_build_root(args: argparse.Namespace) -> int:
     print(reset_root(args) if args.reset is not None else build_root(args))
     return 0
@@ -946,7 +985,8 @@ def smoke(data: Path, vocab_py: Path, vocab_sh: Path) -> tuple[list[str], str]:
                 if form in ("grok", "truncated"):
                     pass
                 elif form == "counts":  # M:GAS-SMOKE-EFFORT-COUNTS
-                    pass
+                    if {"end", "tool_call", "tool_call_update"} <= types.keys():  # M:GAS-SMOKE-EFFORT-NONGROK-CONTRADICTED
+                        raise Refusal(f"input_unparseable:{audit}")
                 elif item.startswith("p1 not measured (codex-text log"):
                     if True:  # M:GAS-SMOKE-EFFORT-CODEX-TEXT
                         raise Refusal(f"input_unparseable:{audit}")
@@ -1107,6 +1147,65 @@ def stands(doc_dir: Path) -> Path:
     return standing
 
 
+def containment_checks(s2_dir: Path, sources: dict[str, str]) -> None:
+    run_record = s2_dir / "run.txt"
+    try:
+        run_fields = parse_run_line(run_record.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        run_fields = None
+    if run_fields is None:  # M:GAS-CONTAIN-RUN-RECORD
+        raise Refusal("list_changed:unrecorded")  # M:GAS-CONTAIN-RUN-RECORD
+    cycles = []
+    for index in range(1, len(sources) * 3 + 1):
+        doc_dir = s2_dir / f"d{index}"
+        for cycle in sorted(doc_dir.glob("v*"), key=lambda path: int(path.name[1:])):
+            reason = f"cycle_token:{doc_dir.name}.{cycle.name}"
+            try:
+                command = shlex.split((cycle / "command.txt").read_text(encoding="utf-8"))
+                surfaces = command[command.index("--surfaces") + 1].split(",")
+                passes = int(command[command.index("--passes") + 1])
+            except (OSError, UnicodeError, ValueError, IndexError):
+                raise Refusal(reason)
+            if passes != len(surfaces) or not surfaces:
+                raise Refusal(reason)
+            cycles.append((cycle, passes, reason))
+
+    recorded_roots = []
+    for cycle, passes, reason in cycles:
+            roots = []
+            for pass_index in range(1, passes + 1):
+                record = cycle / f"p{pass_index}.root.txt"
+                fields = None
+                if record.is_file():
+                    try:
+                        lines = [parse_root_line(line) for line in record.read_text(encoding="utf-8").splitlines()
+                                 if line.startswith("ROOT: READY ")]
+                    except (OSError, UnicodeError):
+                        lines = []
+                    fields = lines[0] if len(lines) == 1 else None
+                if fields is None:  # M:GAS-CONTAIN-ROOT-UNRECORDED
+                    raise Refusal("list_changed:unrecorded")  # M:GAS-CONTAIN-ROOT-UNRECORDED
+                roots.append(fields)
+            recorded_roots.append((cycle, passes, reason, roots))
+
+    for cycle, passes, reason, roots in recorded_roots:
+            for record in cycle.glob("p*.root.txt"):
+                match = re.fullmatch(r"p([1-9][0-9]*)\.root\.txt", record.name)
+                if match and int(match[1]) > passes:  # M:GAS-CYCLE-ROOT-COUNT
+                    raise Refusal(reason)
+            paths = [Path(fields["path"]) for fields in roots]
+            if len({str(path) for path in paths}) != len(paths):  # M:GAS-CYCLE-ROOT-SAME
+                raise Refusal(reason)
+            if any(left in right.parents or right in left.parents
+                   for left_index, left in enumerate(paths)
+                   for right in paths[left_index + 1:]):  # M:GAS-CYCLE-ROOT-NESTED
+                raise Refusal(reason)
+            if len({fields["calibration"] for fields in roots}) != 1:  # M:GAS-CYCLE-ROOT-CALIBRATION
+                raise Refusal(reason)
+            if len({fields["list_blob"] for fields in roots}) != 1:  # M:GAS-CYCLE-ROOT-LIST
+                raise Refusal(reason)
+
+
 def _standing_reports(s2_dir: Path, sources: dict[str, str]) -> list[dict]:
     reports = []
     for index in range(1, len(sources) * 3 + 1):
@@ -1139,16 +1238,38 @@ def _standing_reports(s2_dir: Path, sources: dict[str, str]) -> list[dict]:
     return reports
 
 
+def quote_hints(text: str) -> list[str]:
+    lines = text.splitlines()
+    quotes = []
+    index = 0
+    while index < len(lines):
+        line = lines[index].strip()
+        if not line.startswith("quote:"):
+            index += 1
+            continue
+        block = [line]
+        index += 1
+        while index < len(lines) and not block[-1].endswith("`"):
+            block.append(lines[index].strip())
+            index += 1
+        quotes.append("\n".join(block))
+    return quotes
+
+
 def extract_all(tree: Path, s2_dir: Path, sources: dict[str, str]) -> list[dict]:
     """Re-extract delivered findings from the standing cycles in external S2."""
     check_ledger(tree, sources)
     findings = []
-    for report in _standing_reports(s2_dir, sources):
+    reports = _standing_reports(s2_dir, sources)
+    containment_checks(s2_dir, sources)
+    for report in reports:
         path = report["path"]
         must, should, _must_count, _should_count = extract_report(
             path.read_text(encoding="utf-8"), report["report"])
         # Root paths support quote hints; list_check validates record provenance.
-        root_record = path.parent.parent / "root.txt"
+        root_record = path.parent.parent / f"p{report['pass']}.root.txt"  # M:GAS-HINT-PASS-ROOT
+        if not root_record.is_file():
+            root_record = path.parent.parent / "root.txt"
         root_lines = root_record.read_text(encoding="utf-8").splitlines() if root_record.is_file() else []
         root = next((parsed["path"] for line in root_lines
                      if (parsed := parse_root_line(line)) is not None), "")
@@ -1157,8 +1278,7 @@ def extract_all(tree: Path, s2_dir: Path, sources: dict[str, str]) -> list[dict]
                 findings.append({
                     **{key: value for key, value in report.items() if key != "path"},
                     "section": section, "text": text,
-                    "quotes": [line.strip() for line in text.splitlines()
-                               if line.strip().startswith("quote:")],
+                    "quotes": quote_hints(text),
                     "root": root,
                 })
     return findings
@@ -1278,7 +1398,9 @@ def verdict(totals: dict[str, tuple[int, int, int, int]]) -> tuple[str, str | No
     return "INCONCLUSIVE", "undecidable_flips"  # M:GAS-VERDICT-FLIPS
 
 
-def check_key(tree: Path, findings: list[dict], key: list[dict], reextracted: list[dict]) -> None:
+def check_key(tree: Path, findings: list[dict], key: list[dict], reextracted: list[dict],
+              selected_root: Path | None = None) -> None:
+    s2_root = (selected_root or tree / CALIBRATION) / "s2"
     by_id = {row["id"]: row for row in findings}
     keyed = {row["id"]: row for row in key}
     if by_id.keys() != keyed.keys():  # M:GAS-KEY-ID-SETS
@@ -1296,7 +1418,7 @@ def check_key(tree: Path, findings: list[dict], key: list[dict], reextracted: li
         if row["cycle"] != cycle:  # M:GAS-KEY-CYCLE
             raise Refusal("key_mismatch")
         try:
-            command = shlex.split((tree / CALIBRATION / "s2" / doc / f"v{cycle}" / "command.txt").read_text(encoding="utf-8"))
+            command = shlex.split((s2_root / doc / f"v{cycle}" / "command.txt").read_text(encoding="utf-8"))
             surfaces = command[command.index("--surfaces") + 1].split(",")
             pass_index = row["pass"]
             surface = dict(enumerate(surfaces, 1)).get(pass_index)
@@ -1373,22 +1495,24 @@ def observational_lines(rows: list[dict], ledger: list[dict]) -> list[str]:
 
 def _score_table(tree: Path, name: str, reason: str) -> list[dict]:
     try:
-        return [json.loads(line) for line in (tree / CALIBRATION / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()]
+        return [json.loads(line) for line in (tree / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()]
     except (OSError, UnicodeError, ValueError) as exc:
         raise Refusal(reason) from exc
 
 
-def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sha: str | None) -> tuple[list[str], str]:
+def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sha: str | None,
+          run_id: str | None = None) -> tuple[list[str], str]:
     # extract_all validates the ledger, every standing cycle, and must counts first.
-    reextracted = extract_all(tree, tree / CALIBRATION / "s2", sources)
-    findings = _score_table(tree, "findings", "key_mismatch")
-    key = _score_table(tree, "key", "key_mismatch")
-    check_key(tree, findings, key, reextracted)
+    selected_root = reading_root(tree, run_id)
+    reextracted = extract_all(tree, selected_root / "s2", sources)
+    findings = _score_table(selected_root, "findings", "key_mismatch")
+    key = _score_table(selected_root, "key", "key_mismatch")
+    check_key(tree, findings, key, reextracted, selected_root)
     documents = [(Path(directory) / feature / f"{feature}.{phase}.md").as_posix()
                  for feature, directory in sources.items() for phase in ("plan", "design", "impl-plan")]
     doc_ids = {source: f"d{index}" for index, source in enumerate(documents, 1)}
     ledger = [{**seed, "doc": doc_ids[seed["source"]]} for seed in read_ledger(tree)]
-    labelled = check_labels(findings, _score_table(tree, "labels", "label:unknown"), ledger)
+    labelled = check_labels(findings, _score_table(selected_root, "labels", "label:unknown"), ledger)
     keyed = {row["id"]: row for row in key}
     phases = {seed["doc"]: seed["phase"] for seed in ledger}
     joined = [{**finding, **keyed[finding["id"]], **labelled.get(finding["id"], {}),
@@ -1396,7 +1520,7 @@ def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sh
     delivered_counts = Counter()
     evidence = {}
     for doc in doc_ids.values():
-        directory = stands(tree / CALIBRATION / "s2" / doc)
+        directory = stands(selected_root / "s2" / doc)
         text = (directory / "auditcycle.txt").read_text(encoding="utf-8")
         parsed = _recorded_cycle(directory)
         command = shlex.split((directory / "command.txt").read_text(encoding="utf-8"))
@@ -1429,7 +1553,8 @@ def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sh
 
 
 def _mode_score(args: argparse.Namespace) -> int:
-    lines, token = score(args.tree, args.sources, args.calibration_sha, args.score_sha)
+    lines, token = score(args.tree, args.sources, args.calibration_sha, args.score_sha,
+                         args.run_id)
     for line in lines:
         print(line)
     print(token)
@@ -1447,7 +1572,8 @@ def calibration_data_files(tree: Path) -> list[str]:
     expected = [normalise(row["expected"].encode()).strip() for row in ledger]
     findings = []
     reports = [*data.glob("s1/*/collected/*.md"),
-               *data.glob("s2/d*/v*/collected/*.md")]
+               *data.glob("s2/d*/v*/collected/*.md"),
+               *data.glob("runs/*/s2/d*/v*/collected/*.md")]
     for report in sorted(reports):
         for spans in report_findings(report.read_text(encoding="utf-8")).values():
             for span in spans:
@@ -1461,9 +1587,20 @@ def calibration_data_files(tree: Path) -> list[str]:
         if not path.is_file():
             continue
         relative = path.relative_to(tree).as_posix()
+        relative_to_data = path.relative_to(data)
         candidate = (path.name in {"command.txt", "root.txt", "wall_seconds.txt",
                                    "resolved_model.txt", "extract.txt"}
-                     or path == data / "s1/versions.txt")
+                     or path == data / "s1/versions.txt"
+                     or ("resmoke" in relative_to_data.parts and "canary" in relative_to_data.parts)
+                     or (relative_to_data.parts[-2:] == ("resmoke", "run.txt"))
+                     or ("resmoke" in relative_to_data.parts
+                         and relative_to_data.parts[-1] == "versions.txt")
+                     or ("resmoke" in relative_to_data.parts
+                         and len(relative_to_data.parts) >= 3
+                         and re.fullmatch(r"p[1-9][0-9]*\.profile\.txt", path.name))
+                     or (relative_to_data.parts[-2:] == ("s2", "run.txt"))
+                     or ("s2" in relative_to_data.parts
+                         and re.fullmatch(r"p[1-9][0-9]*\.(root|profile|scan)\.txt", path.name)))  # M:GAS-CALSET-METADATA
         if candidate:
             text = normalise(path.read_bytes())
             if any(needle and needle in text for needle in seeded):  # M:GAS-CALSET-SEEDED
@@ -1584,15 +1721,35 @@ def _git_bytes_batch(repo: Path, oids: list[bytes]) -> list[bytes]:
     return blobs
 
 
-def list_check(export: Path, repo: Path) -> str:
+def reading_root(tree: Path, run_id: str | None = None) -> Path:
+    root = tree / CALIBRATION
+    return root / "runs" / run_id if run_id else root  # M:GAS-RUN-ID
+
+
+def list_check(export: Path, repo: Path, run_id: str | None = None) -> str:
+    def check_recorded_list_blob(blob: str) -> None:
+        if blob != current:  # M:GAS-LIST-CHANGED
+            raise Refusal(f"list_changed:{blob}")
+
     _entries, _commit, current = read_exclusions(repo, "HEAD")
-    data = export / CALIBRATION
+    data = reading_root(export, run_id)
     cycles = [data / "s1" / surface for surface in ("grok", "agy", "codex")
               if (data / "s1" / surface).is_dir()]
+    cycles.extend(data / "resmoke" / surface for surface in ("grok", "agy", "codex")
+                  if (data / "resmoke" / surface).is_dir())  # M:GAS-LIST-RESMOKE
     docs = sorted((data / "s2").glob("d*"),
                   key=lambda path: int(path.name[1:]))
+    pass_cycles = []
     for doc in docs:
-        cycles.extend(sorted(doc.glob("v*"), key=lambda path: int(path.name[1:])))
+        for cycle in sorted(doc.glob("v*"), key=lambda path: int(path.name[1:])):
+            try:
+                words = shlex.split((cycle / "command.txt").read_text(encoding="utf-8"))
+                surfaces = words[words.index("--surfaces") + 1].split(",")
+            except (OSError, UnicodeError, ValueError, IndexError):
+                surfaces = []
+            if not surfaces:  # M:GAS-LIST-SURFACES
+                raise Refusal("list_changed:unrecorded")
+            pass_cycles.append((cycle, len(surfaces)))
     recorded = []
     for cycle in cycles:
         path = cycle / "root.txt"
@@ -1608,9 +1765,21 @@ def list_check(export: Path, repo: Path) -> str:
         if fields is None:
             continue
         blob = fields["list_blob"]
-        if blob != current:  # M:GAS-LIST-CHANGED
-            raise Refusal(f"list_changed:{blob}")
+        check_recorded_list_blob(blob)
         recorded.append(blob)
+    for cycle, passes in pass_cycles:
+        for pass_index in range(1, passes + 1):  # M:GAS-LIST-PASS-RECORDS
+            path = cycle / f"p{pass_index}.root.txt"
+            if not path.is_file():
+                raise Refusal("list_changed:unrecorded")
+            lines = [parse_root_line(line) for line in path.read_text(encoding="utf-8").splitlines()
+                     if line.startswith("ROOT: READY ")]
+            fields = lines[0] if len(lines) == 1 else None
+            if fields is None:
+                raise Refusal("list_changed:unrecorded")
+            blob = fields["list_blob"]
+            check_recorded_list_blob(blob)
+            recorded.append(blob)
     return f"LIST: recorded={','.join(recorded)} current={current}"
 
 
@@ -1635,7 +1804,8 @@ def rescore(args: argparse.Namespace) -> tuple[list[str], str]:
         _extract_archive(_git_bytes(args.repo, "archive", "--format=tar", args.score_sha), export)
         reach_check(export)
         head, data, blobs = main_leak(args.repo, args.score_sha, args.sources, args.work_dir)
-        lines = [f"SCANNED: main={head} data={data} blobs={blobs}", list_check(export, args.repo)]
+        listing = list_check(export, args.repo, args.run_id)
+        lines = [f"SCANNED: main={head} data={data} blobs={blobs}", listing]
         check_ledger(export, args.sources)
         for index in range(1, len(args.sources) * 3 + 1):
             root_args = argparse.Namespace(
@@ -1645,7 +1815,8 @@ def rescore(args: argparse.Namespace) -> tuple[list[str], str]:
             )
             root_line = build_root(root_args)
             directories.append(Path(parse_root_line(root_line)["path"]))
-        observations, token = score(export, args.sources, args.calibration_sha, args.score_sha)
+        observations, token = score(export, args.sources, args.calibration_sha,
+                                    args.score_sha, args.run_id)
         return lines + observations, token
     finally:
         for directory in reversed(directories):
@@ -1733,6 +1904,7 @@ def build_parser() -> _TokenArgumentParser:
     score.add_argument("--tree", type=Path, required=True)
     score.add_argument("--calibration-sha")
     score.add_argument("--score-sha")
+    score.add_argument("--run-id")
     score.add_argument("--sources", type=parse_sources, default=SOURCES.copy())
 
     rescore = subparsers.add_parser("rescore")
@@ -1740,6 +1912,7 @@ def build_parser() -> _TokenArgumentParser:
     rescore.add_argument("--calibration-sha", required=True)
     rescore.add_argument("--smoke-sha", required=True)
     rescore.add_argument("--score-sha", required=True)
+    rescore.add_argument("--run-id", required=True)
     rescore.add_argument("--remote", default="origin")
     rescore.add_argument("--sources", type=parse_sources, default=SOURCES.copy())
 

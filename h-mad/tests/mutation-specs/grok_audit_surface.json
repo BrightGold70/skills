@@ -2708,6 +2708,230 @@
       "find": "    if args.rc != 0:  # M:CANARY-GROK-RC",
       "replace": "    if False:  # M:CANARY-GROK-RC",
       "test": "tests/test_grok_audit_surface_containment.py::test_canary_truncated[wrapper]"
+    },
+    {
+      "name": "p-parse-run-keys",
+      "_mechanism": "Accept a RUN line without the exact checkout/home key set.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if fields.keys() != {\"checkout\", \"home\"}:  # M:GAS-PARSE-RUN",
+      "replace": "    if False:  # M:GAS-PARSE-RUN",
+      "test": "tests/test_grok_audit_surface_probe.py::test_run_line_parser_rejects_a_malformed_run_line[missing-home]"
+    },
+    {
+      "name": "p-parse-run-dup",
+      "_mechanism": "Accept a repeated checkout/home key in a RUN line.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if key in fields:  # M:GAS-PARSE-RUN-DUP",
+      "replace": "        if False:  # M:GAS-PARSE-RUN-DUP",
+      "test": "tests/test_grok_audit_surface_probe.py::test_run_line_parser_rejects_a_malformed_run_line[repeated-key]"
+    },
+    {
+      "name": "p-parse-run-one",
+      "_mechanism": "Read one RUN line when the record contains more than one.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if len(lines) != 1:  # M:GAS-PARSE-RUN-ONE",
+      "replace": "    if not lines:  # M:GAS-PARSE-RUN-ONE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_run_line_parser_rejects_a_malformed_run_line[two-lines]"
+    },
+    {
+      "name": "p-parse-profile-keys",
+      "_mechanism": "Accept a profile line without both required keys.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if fields.keys() != {\"profile\", \"origin\"}:  # M:GAS-PARSE-PROFILE",
+      "replace": "    if False:  # M:GAS-PARSE-PROFILE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_profile_line_parser_rejects_a_malformed_profile_line[extra-key]"
+    },
+    {
+      "name": "p-parse-profile-origin",
+      "_mechanism": "Accept any profile origin string.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if fields.get(\"origin\") not in {\"default\", \"override\"}:  # M:GAS-PARSE-PROFILE-ORIGIN",
+      "replace": "    if False:  # M:GAS-PARSE-PROFILE-ORIGIN",
+      "test": "tests/test_grok_audit_surface_probe.py::test_profile_line_parser_rejects_a_malformed_profile_line[origin-outside]"
+    },
+    {
+      "name": "p-cycle-root-count",
+      "_mechanism": "Ignore root records above the declared pass count.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                if match and int(match[1]) > passes:  # M:GAS-CYCLE-ROOT-COUNT",
+      "replace": "                if False:  # M:GAS-CYCLE-ROOT-COUNT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_more_root_records_than_passes"
+    },
+    {
+      "name": "p-cycle-root-same",
+      "_mechanism": "Allow two passes to record the same root path.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if len({str(path) for path in paths}) != len(paths):  # M:GAS-CYCLE-ROOT-SAME",
+      "replace": "            if False:  # M:GAS-CYCLE-ROOT-SAME",
+      "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_two_passes_same_root"
+    },
+    {
+      "name": "p-cycle-root-nested",
+      "_mechanism": "Allow one pass root to be nested inside another.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                   for right in paths[left_index + 1:]):  # M:GAS-CYCLE-ROOT-NESTED",
+      "replace": "                   for right in []):  # M:GAS-CYCLE-ROOT-NESTED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_root_inside_another"
+    },
+    {
+      "name": "p-cycle-root-calibration",
+      "_mechanism": "Allow pass roots to record different calibration commits.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if len({fields[\"calibration\"] for fields in roots}) != 1:  # M:GAS-CYCLE-ROOT-CALIBRATION",
+      "replace": "            if False:  # M:GAS-CYCLE-ROOT-CALIBRATION",
+      "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_roots_differ_in_calibration"
+    },
+    {
+      "name": "p-cycle-root-list",
+      "_mechanism": "Allow pass roots to record different list blobs.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if len({fields[\"list_blob\"] for fields in roots}) != 1:  # M:GAS-CYCLE-ROOT-LIST",
+      "replace": "            if False:  # M:GAS-CYCLE-ROOT-LIST",
+      "test": "tests/test_grok_audit_surface_probe.py::test_cycle_token_roots_differ_in_list_blob"
+    },
+    {
+      "name": "p-list-pass-records",
+      "_mechanism": "Read only the first pass root record for each S2 cycle.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        for pass_index in range(1, passes + 1):  # M:GAS-LIST-PASS-RECORDS",
+      "replace": "        for pass_index in range(1, 2):  # M:GAS-LIST-PASS-RECORDS",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_one_pass_root_record_absent"
+    },
+    {
+      "name": "p-list-surfaces",
+      "_mechanism": "Continue when an S2 command has no parseable surfaces list.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if not surfaces:  # M:GAS-LIST-SURFACES",
+      "replace": "            if False:  # M:GAS-LIST-SURFACES",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_pass_records_without_surfaces"
+    },
+    {
+      "name": "p-list-resmoke",
+      "_mechanism": "Omit resmoke root records from the list record sequence.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    cycles.extend(data / \"resmoke\" / surface for surface in (\"grok\", \"agy\", \"codex\")\n                  if (data / \"resmoke\" / surface).is_dir())  # M:GAS-LIST-RESMOKE",
+      "replace": "    pass  # M:GAS-LIST-RESMOKE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_check_reads_resmoke_records"
+    },
+    {
+      "name": "p-run-id-ignored",
+      "_mechanism": "Ignore an explicitly selected reading id.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    return root / \"runs\" / run_id if run_id else root  # M:GAS-RUN-ID",
+      "replace": "    return root  # M:GAS-RUN-ID",
+      "test": "tests/test_grok_audit_surface_probe.py::test_score_reads_the_reading_named_by_run_id"
+    },
+    {
+      "name": "p-run-id-newest",
+      "_mechanism": "Silently select the newest namespaced reading when --run-id is omitted.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    return root / \"runs\" / run_id if run_id else root  # M:GAS-RUN-ID",
+      "replace": "    return root / \"runs\" / (run_id or sorted(path.name for path in (root / \"runs\").iterdir())[-1]) if (run_id or (root / \"runs\").is_dir()) else root  # M:GAS-RUN-ID",
+      "test": "tests/test_grok_audit_surface_probe.py::test_score_without_run_id_on_a_namespaced_reading_refuses"
+    },
+    {
+      "name": "p-smoke-nongrok-parsed",
+      "_mechanism": "Accept a counts-shaped effort item that contradicts the Grok log event types.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    if {\"end\", \"tool_call\", \"tool_call_update\"} <= types.keys():  # M:GAS-SMOKE-EFFORT-NONGROK-CONTRADICTED",
+      "replace": "                    if False:  # M:GAS-SMOKE-EFFORT-NONGROK-CONTRADICTED",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_parsed_item_with_all_three_types_refuses"
+    },
+    {
+      "name": "p-smoke-nongrok-deep",
+      "_mechanism": "Accept an unparseable counts-shaped item despite all three deep Grok event types.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    if {\"end\", \"tool_call\", \"tool_call_update\"} <= types.keys():  # M:GAS-SMOKE-EFFORT-NONGROK-CONTRADICTED",
+      "replace": "                    if False:  # M:GAS-SMOKE-EFFORT-NONGROK-CONTRADICTED",
+      "test": "tests/test_grok_audit_surface_smoke.py::test_smoke_deep_grok_types_with_unparseable_item_refuses"
+    },
+    {
+      "name": "p-calset-metadata",
+      "_mechanism": "Include harmless run, pass-record and canary metadata in D3's calibration data set.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                     or (\"s2\" in relative_to_data.parts\n                         and re.fullmatch(r\"p[1-9][0-9]*\\.(root|profile|scan)\\.txt\", path.name)))  # M:GAS-CALSET-METADATA",
+      "replace": "                     or False)  # M:GAS-CALSET-METADATA",
+      "test": "tests/test_grok_audit_surface_probe.py::test_calibration_data_set_is_the_directory_minus_the_metadata_names"
+    },
+    {
+      "name": "p-contain-run-record-absent",
+      "_mechanism": "Report an absent run record with the wrong refusal reason.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        raise Refusal(\"list_changed:unrecorded\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "replace": "        raise Refusal(\"list_changed:unrecorded_run\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_run_record_absent"
+    },
+    {
+      "name": "p-contain-run-record-no-line",
+      "_mechanism": "Report a run record without a RUN line with the wrong refusal reason.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        raise Refusal(\"list_changed:unrecorded\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "replace": "        raise Refusal(\"list_changed:unrecorded_run\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_run_record_malformed[no-run-line]"
+    },
+    {
+      "name": "p-contain-run-record-two-lines",
+      "_mechanism": "Report multiple RUN lines with the wrong refusal reason.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        raise Refusal(\"list_changed:unrecorded\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "replace": "        raise Refusal(\"list_changed:unrecorded_run\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_run_record_malformed[two-run-lines]"
+    },
+    {
+      "name": "p-contain-run-record-missing-home",
+      "_mechanism": "Report a RUN line missing home with the wrong refusal reason.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        raise Refusal(\"list_changed:unrecorded\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "replace": "        raise Refusal(\"list_changed:unrecorded_run\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_run_record_malformed[missing-home]"
+    },
+    {
+      "name": "p-contain-run-record-extra-key",
+      "_mechanism": "Report an extra RUN key with the wrong refusal reason.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        raise Refusal(\"list_changed:unrecorded\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "replace": "        raise Refusal(\"list_changed:unrecorded_run\")  # M:GAS-CONTAIN-RUN-RECORD",
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_run_record_malformed[extra-key]"
+    },
+    {
+      "name": "p-contain-root-absent",
+      "_mechanism": "Report an absent per-pass root record with the wrong refusal reason.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    raise Refusal(\"list_changed:unrecorded\")  # M:GAS-CONTAIN-ROOT-UNRECORDED",
+      "replace": "                    raise Refusal(\"list_changed:unrecorded_root\")  # M:GAS-CONTAIN-ROOT-UNRECORDED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_containment_pass_root_record_absent"
+    },
+    {
+      "name": "p-contain-root-no-line",
+      "_mechanism": "Report a per-pass file without a READY root line with the wrong refusal reason.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    raise Refusal(\"list_changed:unrecorded\")  # M:GAS-CONTAIN-ROOT-UNRECORDED",
+      "replace": "                    raise Refusal(\"list_changed:unrecorded_root\")  # M:GAS-CONTAIN-ROOT-UNRECORDED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_containment_no_ready_line"
+    },
+    {
+      "name": "p-contain-root-two-lines",
+      "_mechanism": "Report multiple READY root lines with the wrong refusal reason.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    raise Refusal(\"list_changed:unrecorded\")  # M:GAS-CONTAIN-ROOT-UNRECORDED",
+      "replace": "                    raise Refusal(\"list_changed:unrecorded_root\")  # M:GAS-CONTAIN-ROOT-UNRECORDED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_containment_two_ready_lines"
+    },
+    {
+      "name": "p-contain-root-no-list-blob",
+      "_mechanism": "Report a malformed per-pass root line with the wrong refusal reason.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "                    raise Refusal(\"list_changed:unrecorded\")  # M:GAS-CONTAIN-ROOT-UNRECORDED",
+      "replace": "                    raise Refusal(\"list_changed:unrecorded_root\")  # M:GAS-CONTAIN-ROOT-UNRECORDED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_containment_ready_line_without_list_blob"
+    },
+    {
+      "name": "p-hint-pass-root",
+      "_mechanism": "Resolve every quote through the S2 cycle root instead of its own pass root.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        root_record = path.parent.parent / f\"p{report['pass']}.root.txt\"  # M:GAS-HINT-PASS-ROOT",
+      "replace": "        root_record = path.parent.parent / \"root.txt\"  # M:GAS-HINT-PASS-ROOT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record"
     }
   ]
 }

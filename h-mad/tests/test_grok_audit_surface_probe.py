@@ -98,18 +98,22 @@ def test_profile_line_parser_reads_the_exec_line(tmp_path):
     probe = load_probe(PROBE)
     from test_grok_audit_surface_wrapper import _profile_case
 
-    result, _capture, log_profile, _log, _calls = _profile_case(tmp_path)
+    result, _capture, log_profile, _log, _calls = _profile_case(
+        tmp_path, options=["--sandbox", "workspace", "--allow-weaker-sandbox"],
+    )
     assert result.returncode == 0, f"exec grok must produce the profile record: {result.stderr}"
     assert log_profile.is_file(), "exec grok must write the profile record beside its log"
     assert probe.parse_profile_line(log_profile.read_text(encoding="utf-8")) == {
-        "profile": "fixture", "origin": "override",
+        "profile": "workspace", "origin": "override",
     }, "the exec-written profile line must preserve its profile and origin"
 
 
 @pytest.mark.parametrize("text", [
     "GROK-PROFILE: profile=fixture\n",
     "GROK-PROFILE: profile=fixture origin=elsewhere\n",
-], ids=["missing-origin", "origin-outside"])
+    "GROK-PROFILE: origin=default\n",
+    "GROK-PROFILE: profile=p origin=default extra=1\n",
+], ids=["missing-origin", "origin-outside", "missing-profile", "extra-key"])
 def test_profile_line_parser_rejects_a_malformed_profile_line(text):
     probe = load_probe(PROBE)
     assert probe.parse_profile_line(text) is None, "malformed or noncanonical profile records must refuse"
@@ -301,10 +305,10 @@ def _t26_list_case(tmp_path, monkeypatch):
     (data / "resmoke/grok").mkdir(parents=True)
     (data / "s2/d1/v1").mkdir(parents=True)
     (data / "s1/grok/root.txt").write_text(
-        _t26_root_line("d1", "s1", "/tmp/gas-root-d1-s1"), encoding="utf-8",
+        _t26_root_line("d1", "s1", "/tmp/gas-root-d1-s1", blob="f"), encoding="utf-8",
     )
     (data / "resmoke/grok/root.txt").write_text(
-        _t26_root_line("d1", "resmoke", "/tmp/gas-root-d1-resmoke", blob="d"),
+        _t26_root_line("d1", "resmoke", "/tmp/gas-root-d1-resmoke", blob="f"),
         encoding="utf-8",
     )
     cycle = data / "s2/d1/v1"
@@ -315,10 +319,10 @@ def _t26_list_case(tmp_path, monkeypatch):
         "hmad-dispatch audit-cycle --passes 2 --surfaces agy,grok\n", encoding="utf-8",
     )
     (cycle / "p1.root.txt").write_text(
-        _t26_root_line("d1", "s2v1", "/tmp/gas-root-d1-p1", blob="g"), encoding="utf-8",
+        _t26_root_line("d1", "s2v1", "/tmp/gas-root-d1-p1", blob="f"), encoding="utf-8",
     )
     (cycle / "p2.root.txt").write_text(
-        _t26_root_line("d1", "s2v1", "/tmp/gas-root-d1-p2", blob="h"), encoding="utf-8",
+        _t26_root_line("d1", "s2v1", "/tmp/gas-root-d1-p2", blob="f"), encoding="utf-8",
     )
     return probe, export, cycle
 
@@ -342,7 +346,7 @@ def test_list_changed_pass_records_without_surfaces(tmp_path, monkeypatch):
 def test_list_check_reads_resmoke_records(tmp_path, monkeypatch):
     probe, export, _cycle = _t26_list_case(tmp_path, monkeypatch)
     line = probe.list_check(export, tmp_path)
-    assert line == "LIST: recorded=" + ",".join(["c" * 40, "d" * 40, "g" * 40, "h" * 40]) + " current=" + "f" * 40, (
+    assert line == "LIST: recorded=" + ",".join(["f" * 40] * 4) + " current=" + "f" * 40, (
         "list checking must use s1, resmoke, then each S2 pass record in record order"
     )
 
@@ -444,6 +448,9 @@ def test_calibration_data_set_is_the_directory_minus_the_metadata_names(tmp_path
     sources = build_archive(tree)
     build_ledger(tree, sources)
     data = tree / CALIBRATION
+    captured_stdout = data / "s1/grok/auditcycle.txt"
+    captured_stdout.parent.mkdir(parents=True, exist_ok=True)
+    captured_stdout.write_text("AUDITCYCLE: PASS\n", encoding="utf-8")
     metadata = [
         "runs/run-a/resmoke/run.txt", "runs/run-a/s2/run.txt",
         "runs/run-a/s2/d1/v1/p1.root.txt", "runs/run-a/s2/d1/v1/p1.profile.txt",
@@ -454,7 +461,7 @@ def test_calibration_data_set_is_the_directory_minus_the_metadata_names(tmp_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("fixture [a](b) **bold** ⟦/h-mad⟧\nsecond line\tvalue\n", encoding="utf-8")
     canary = "runs/run-a/resmoke/canary/observed.txt"
-    selected = set(probe.calibration_data_files(tree))
+    selected = probe.calibration_data_files(tree)
     excluded_names = {"command.txt", "root.txt", "wall_seconds.txt", "resolved_model.txt", "extract.txt"}
     all_files = {path.relative_to(tree).as_posix() for path in data.rglob("*") if path.is_file()}
     excluded = {
@@ -489,7 +496,7 @@ def test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record(tmp_path,
     case = _t26_ready_extract_case(tmp_path, monkeypatch)
     cycle = case["s2"] / "d1/v1"
     root_line = (cycle / "root.txt").read_text(encoding="utf-8").strip()
-    live_root = tmp_path / "pass two root"
+    live_root = tmp_path / "pass-two-root"
     live_root.mkdir()
     quote_file = live_root / "docs/01-plan/features/paper-lantern.plan.md"
     quote_file.parent.mkdir(parents=True)
@@ -646,7 +653,7 @@ def _minimal_argv(mode: str, root: Path) -> list[str]:
         "score": ["--tree", str(root)],
         "rescore": [
             "--repo", str(root), "--calibration-sha", sha,
-            "--smoke-sha", sha, "--score-sha", sha,
+            "--smoke-sha", sha, "--score-sha", sha, "--run-id", "fixture-run",
         ],
         "main-leak": [
             "--repo", str(root), "--calibration-sha", sha, "--smoke-sha", sha,
@@ -2348,7 +2355,7 @@ def test_hint_resolves_a_live_target_path_to_the_seeded_copy(extract_case, capsy
     case = extract_case
     record = case["records"][0]
     span = record["seeded"].splitlines()[0]
-    root = "/tmp/gas-root-d1-s2v1-synthetic"
+    root = "/tmp/gas-root-d1-s2v1-pass1"
     quote = f"quote: {root}/docs/01-plan/features/paper-lantern.plan.md › `{span}`"
     _replace_extract_report(case, extract_report_text(f"- Quoted defect\n  {quote}"))
     result = _run_extract(case, capsys)
@@ -2364,7 +2371,7 @@ def test_hint_resolves_a_live_paired_path_to_the_archive(extract_case, capsys):
     case = extract_case
     paired = case["tree"] / case["sources"]["paper-lantern"] / "paper-lantern/paper-lantern.spec.md"
     span = paired.read_text(encoding="utf-8").splitlines()[3]
-    for spelling in ("/tmp/gas-root-d1-s2v1-synthetic/docs/01-plan/features/paper-lantern.spec.md",
+    for spelling in ("/tmp/gas-root-d1-s2v1-pass1/docs/01-plan/features/paper-lantern.spec.md",
                      "docs/01-plan/features/paper-lantern.spec.md",
                      paired.relative_to(case["tree"]).as_posix()):
         for quoted_span, fabricated in ((span, False), (span + " definitely absent", True)):
@@ -3141,6 +3148,8 @@ def _branch_argv(case, mode, *, with_score=True, work=True):
             ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items())]
     if with_score:
         argv += ["--score-sha", case["score"]]
+    if mode == "rescore":
+        argv += ["--run-id", case["run_id"]]
     if work:
         argv += ["--work-dir", str(case["work_dir"])]
     return argv
@@ -3250,7 +3259,7 @@ def test_main_leak_trigger_i_on_an_excluded_name_carrying_a_finding_text(rescore
     finding = case["probe"].report_findings(report)["must"][0]
     payload = case["probe"]._gate._payload(finding.splitlines()[0])
     content = ("Human command annotation\n" + payload + "\n").encode()
-    relative = CALIBRATION / "s2/d1/v1/command.txt"
+    relative = case["s2"].relative_to(case["tree"]) / "d1/v1/command.txt"
     case["score"] = commit_fixture_tree(case["repo"], case["score"], {relative.as_posix(): content})
     _publish_fixture_tip(case, case["score"])
     path = _commit_main_blob(case, content)
@@ -3343,15 +3352,15 @@ def test_list_changed_recorded_blob_differs(rescore_case):
 
 def test_list_changed_unrecorded_root_record(rescore_case):
     case = rescore_case
-    relative = CALIBRATION / "s2/d1/v1/root.txt"
+    relative = CALIBRATION / "runs/fixture-run/s2/d1/v1/p1.root.txt"
     case["score"] = commit_fixture_tree(case["repo"], case["score"], {relative.as_posix(): None})
     _publish_fixture_tip(case, case["score"])
-    _assert_branch_refusal(case, "list_changed:unrecorded", "a recorded cycle without root.txt must refuse")
+    _assert_branch_refusal(case, "list_changed:unrecorded", "a recorded cycle without its p1 root record must refuse")
 
 
 def test_list_changed_malformed_root_record(rescore_case):
     case = rescore_case
-    relative = CALIBRATION / "s2/d1/v1/root.txt"
+    relative = CALIBRATION / "runs/fixture-run/s2/d1/v1/p1.root.txt"
     original = (case["tree"] / relative).read_text(encoding="utf-8")
     malformed = re.sub(r" list_blob=\S+", "", original)
     assert malformed.startswith("ROOT: READY ") and "list_blob=" not in malformed, "isolate the missing D2 list_blob field"
@@ -3380,6 +3389,7 @@ def test_rescore_reproduces_the_score_and_removes_its_temp_dirs(rescore_case, mo
         sys.executable, str(PROBE), "score", "--tree", str(case["tree"]),
         "--calibration-sha", case["calibration"], "--score-sha", case["score"], "--sources",
         ",".join(f"{feature}={directory}" for feature, directory in case["sources"].items()),
+        "--run-id", case["run_id"],
     ], capture_output=True, text=True, timeout=30)
     assert expected.returncode == 0 and expected.stdout.splitlines()[-1].startswith("SEEDSCORE: PASS "), "score --tree must establish a real passing baseline"
     original_mkdtemp = tempfile.mkdtemp
@@ -3472,6 +3482,8 @@ def _successful_mode_run(case, mode, tmp_path, capsys):
     else:
         argv = [mode, "--tree", str(case["tree"]), "--calibration-sha", case["calibration"],
                 "--score-sha", case["score"], *sources]
+        if mode == "score":
+            argv += ["--run-id", case["run_id"]]
     try:
         capsys.readouterr()
         rc = probe.main(argv)
