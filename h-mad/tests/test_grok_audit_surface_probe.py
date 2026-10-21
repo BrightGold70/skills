@@ -351,6 +351,33 @@ def test_list_check_reads_resmoke_records(tmp_path, monkeypatch):
     )
 
 
+def test_list_changed_unrecorded_s1_or_resmoke_root_record(tmp_path, monkeypatch):
+    for kind in ("s1", "resmoke"):
+        probe, export, _cycle = _t26_list_case(tmp_path / kind, monkeypatch)
+        assert probe.list_check(export, tmp_path).startswith("LIST: "), "control: every record valid must pass"
+        (export / CALIBRATION / kind / "grok/root.txt").unlink()
+        with pytest.raises(probe.Refusal) as caught:
+            probe.list_check(export, tmp_path)
+        assert caught.value.reason == "list_changed:unrecorded", (
+            f"a {kind} cycle without its root.txt must refuse even when every S2 pass record is valid"
+        )
+
+
+def test_list_changed_malformed_s1_or_resmoke_root_record(tmp_path, monkeypatch):
+    for kind in ("s1", "resmoke"):
+        probe, export, _cycle = _t26_list_case(tmp_path / kind, monkeypatch)
+        assert probe.list_check(export, tmp_path).startswith("LIST: "), "control: every record valid must pass"
+        path = export / CALIBRATION / kind / "grok/root.txt"
+        malformed = re.sub(r" list_blob=\S+", "", path.read_text(encoding="utf-8"))
+        assert malformed.startswith("ROOT: READY ") and probe.parse_root_line(malformed.strip()) is None
+        path.write_text(malformed, encoding="utf-8")
+        with pytest.raises(probe.Refusal) as caught:
+            probe.list_check(export, tmp_path)
+        assert caught.value.reason == "list_changed:unrecorded", (
+            f"a malformed {kind} READY record must refuse even when every S2 pass record is valid"
+        )
+
+
 def _t26_score_argv(case, *, run_id=None):
     argv = ["score", "--tree", str(case["tree"]), "--sources", ",".join(
         f"{feature}={directory}" for feature, directory in case["sources"].items()

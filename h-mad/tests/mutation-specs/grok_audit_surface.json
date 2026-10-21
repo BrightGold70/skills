@@ -1276,7 +1276,7 @@
       "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
       "find": "            if True:  # M:GAS-LIST-UNRECORDED",
       "replace": "            if False:  # M:GAS-LIST-UNRECORDED",
-      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_unrecorded_root_record"
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_unrecorded_s1_or_resmoke_root_record"
     },
     {
       "name": "p-list-malformed",
@@ -1284,7 +1284,7 @@
       "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
       "find": "        if fields is None:  # M:GAS-LIST-MALFORMED",
       "replace": "        if False:  # M:GAS-LIST-MALFORMED",
-      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_malformed_root_record"
+      "test": "tests/test_grok_audit_surface_probe.py::test_list_changed_malformed_s1_or_resmoke_root_record"
     },
     {
       "name": "divergence-empty-branch-dropped",
