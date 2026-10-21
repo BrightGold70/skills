@@ -578,7 +578,13 @@ MODES["build-root"] = _mode_build_root
 
 def record_cycle(args: argparse.Namespace) -> str:
     """Validate one wrapper run before copying its D3 recording files."""
-    contents = {path: b"" for path in (args.root_record, args.stdout, args.command)}
+    pass_records = args.pass_root_record
+    if args.root_record is not None and pass_records:  # M:GAS-RECORD-FORMS-BOTH
+        raise UsageError("choose one root-record form")
+    if args.root_record is None and not pass_records:  # M:GAS-RECORD-FORMS-NEITHER
+        raise UsageError("a root-record form is required")
+    records = pass_records or ([args.root_record] if args.root_record is not None else [])
+    contents = {path: b"" for path in (*records, args.stdout, args.command)}
     missing = [path for path in (args.stem, args.root) if not path.is_dir()]
     for path in contents:
         try:
@@ -588,16 +594,21 @@ def record_cycle(args: argparse.Namespace) -> str:
     if missing:  # M:GAS-RECORD-INPUT
         raise Refusal(f"input_missing:{missing[0]}")
 
-    lines = [line for line in contents[args.root_record].decode("utf-8", errors="replace").splitlines()
-             if line.startswith("ROOT: READY ")]
-    if len(lines) != 1:  # M:GAS-RECORD-ROOT-LINE
-        raise Refusal("root_record:no_line")
-    root_line = next(iter(lines), "")
-    fields = parse_root_line(root_line)
-    if fields is None:
-        raise Refusal("root_record:no_line")  # M:GAS-RECORD-ROOT-MALFORMED
-    if Path(fields["path"]).resolve() != args.root.resolve():  # M:GAS-RECORD-ROOT-PATH
-        raise Refusal("root_record:path_mismatch")
+    root_records, pass_roots = {}, []
+    for index, record in enumerate(records, 1):  # M:GAS-RECORD-PASS-LOOP
+        lines = [line for line in contents[record].decode("utf-8", errors="replace").splitlines()
+                 if line.startswith("ROOT: READY ")]
+        if len(lines) != 1:  # M:GAS-RECORD-ROOT-LINE
+            raise Refusal("root_record:no_line")
+        root_line = next(iter(lines), "")
+        fields = parse_root_line(root_line)
+        if fields is None:
+            raise Refusal("root_record:no_line")  # M:GAS-RECORD-ROOT-MALFORMED
+        if index == 1 and Path(fields["path"]).resolve() != args.root.resolve():  # M:GAS-RECORD-ROOT-PATH  # M:GAS-RECORD-PASS-PATH
+            raise Refusal("root_record:path_mismatch")
+        name = f"p{index}.root.txt" if pass_records else "root.txt"  # M:GAS-RECORD-PASS-NAME
+        root_records[name] = (root_line + "\n").encode("utf-8")
+        pass_roots.append(Path(fields["path"]))
     stdout_lines = contents[args.stdout].decode("utf-8", errors="replace").splitlines()
     if not any(line.startswith("AUDITCYCLE: ") for line in stdout_lines):  # M:GAS-RECORD-AUDITCYCLE
         raise Refusal(f"no_auditcycle_line:{args.stdout}")
@@ -626,7 +637,7 @@ def record_cycle(args: argparse.Namespace) -> str:
 
     stem_pattern = re.compile(
         re.escape(f"audit_{feature}_{phase}_cycle{cycle}_run")
-        + r"(.+)_p([1-9][0-9]*)(\.txt|\.asm\.txt|\.out\.txt|\.log|\.report\.md)"
+        + r"(.+)_p([1-9][0-9]*)(\.txt|\.asm\.txt|\.out\.txt|\.log|\.report\.md|\.log\.profile)"  # M:GAS-RECORD-PROFILE
     )
     stem_files = [(path, stem_pattern.fullmatch(path.name)) for path in sorted(args.stem.iterdir())
                   if path.is_file()]
@@ -637,8 +648,17 @@ def record_cycle(args: argparse.Namespace) -> str:
     copies = {}
     for source, match in stem_files:
         if match is not None and match[1] == prefix:
-            suffix = ".prompt.txt" if match[3] == ".txt" else match[3]
+            suffix = {".txt": ".prompt.txt", ".log.profile": ".profile.txt"}.get(match[3], match[3])
             copies[f"p{match[2]}{suffix}"] = source
+
+    report_roots = {int(match[2]): args.root for _source, match in stem_files if match is not None}
+    if pass_records:
+        report_roots = dict(enumerate(pass_roots, 1))
+    stem_name = f"audit_{feature}_{phase}_cycle{cycle}_run{prefix}"
+    for index, root in report_roots.items():
+        report = root / ".hmad-report" / f"{stem_name}_p{index}.report.md"
+        if report.is_file():  # M:GAS-RECORD-PASS-REPORT
+            copies[f"p{index}.report.md"] = report
 
     report_name = re.escape(f"{feature}.{phase}.audit.v{cycle}") + r"\.p[1-9][0-9]*\.md"
     report_dir = "docs/02-design/features" if phase == "design" else "docs/01-plan/features"
@@ -652,7 +672,7 @@ def record_cycle(args: argparse.Namespace) -> str:
                     copies[f"{destination}/{source.name}"] = source
 
     # Read every selected source before creating any destination file.
-    recorded = {"root.txt": (root_line + "\n").encode("utf-8"),
+    recorded = {**root_records,
                 "command.txt": contents[args.command], "auditcycle.txt": contents[args.stdout]}
     for destination, source in copies.items():
         try:
@@ -695,15 +715,35 @@ def commit_data(args: argparse.Namespace) -> str:
         if path.is_file():
             sources.append((path, CALIBRATION / path.relative_to(args.src)))
     try:
+        parent_tree = _git(args.repo, "ls-tree", "-r", "-z", parent_oid, "--", CALIBRATION.as_posix())
+        parent_tree.check_returncode()
+        parent_blobs = {}
+        for entry in parent_tree.stdout.split(b"\0"):
+            if not entry:
+                continue
+            metadata, name = entry.split(b"\t", 1)
+            _mode, kind, oid = metadata.split()
+            if kind == b"blob":
+                parent_blobs[os.fsdecode(name)] = oid.decode()
+        additions = []
+        for path, destination in sources:
+            blob = _git(args.repo, "hash-object", "-w", "--stdin", stdin=path.read_bytes())
+            blob.check_returncode()
+            oid = blob.stdout.decode().strip()
+            previous = parent_blobs.get(destination.as_posix())
+            relative = path.relative_to(args.src)
+            authoring = relative == Path("ledger.jsonl") or relative.as_posix().startswith("seeded/")  # M:GAS-COMMIT-AUTHORING
+            if previous is not None and previous != oid and not authoring:  # M:GAS-COMMIT-REPLACE
+                raise Refusal(f"would_replace:{destination.as_posix()}")
+            if previous != oid:
+                additions.append((destination, oid))
         with tempfile.TemporaryDirectory(prefix="gas-commit-") as directory:
             environment = _git_environment()
             environment["GIT_INDEX_FILE"] = str(Path(directory) / "index")
             _git(args.repo, "read-tree", parent_oid, env=environment).check_returncode()
-            for path, destination in sources:
-                blob = _git(args.repo, "hash-object", "-w", "--stdin", stdin=path.read_bytes())
-                blob.check_returncode()
+            for destination, oid in additions:
                 _git(args.repo, "update-index", "--add", "--cacheinfo", "100644",
-                     blob.stdout.decode().strip(), destination.as_posix(),
+                     oid, destination.as_posix(),
                      env=environment).check_returncode()
             tree = _git(args.repo, "write-tree", env=environment)
             tree.check_returncode()
@@ -1663,8 +1703,10 @@ def build_parser() -> _TokenArgumentParser:
     root.add_argument("--sources", type=parse_sources, default=SOURCES.copy())
 
     record = subparsers.add_parser("record-cycle")
-    for flag in ("--stem", "--root", "--root-record", "--stdout", "--command", "--dest"):
+    for flag in ("--stem", "--root", "--stdout", "--command", "--dest"):
         record.add_argument(flag, type=Path, required=True)
+    record.add_argument("--root-record", type=Path)
+    record.add_argument("--pass-root-record", type=Path, action="append", default=[])
 
     commit = subparsers.add_parser("commit-data")
     commit.add_argument("--repo", type=Path, required=True)

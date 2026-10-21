@@ -1618,8 +1618,8 @@ def test_commit_data_never_touches_work_tree_or_index(commit_case, capsys, monke
         assert len(updates) == 1 and updates[0][-1] in (("", "0" * 40) if first else (previous,)), "update-ref must compare-and-swap against absence or the exact parent"
         assert state["rereads"] > 0, "success requires re-reading the ref after update-ref"
         case["parent"] = created
-        # Make the second commit's data differ while keeping its human input hostile.
-        (case["src"] / "s1/grok/p1.log").write_bytes(case["src"].joinpath("s1/grok/p1.log").read_bytes() + b"next cycle\n")
+        # Add a new path for the second commit while keeping its human input hostile.
+        (case["src"] / "s1/grok/p2.log").write_bytes(case["src"].joinpath("s1/grok/p1.log").read_bytes() + b"next cycle\n")
 
 
 def test_commit_data_refuses_an_unknown_parent(commit_case, capsys, monkeypatch):

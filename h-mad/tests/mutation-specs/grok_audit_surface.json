@@ -418,24 +418,24 @@
       "name": "p-record-root-line",
       "_mechanism": "Disable the exactly-one ROOT READY line guard; duplicated lines then record successfully.",
       "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
-      "find": "    if len(lines) != 1:  # M:GAS-RECORD-ROOT-LINE",
-      "replace": "    if False:  # M:GAS-RECORD-ROOT-LINE",
+      "find": "        if len(lines) != 1:  # M:GAS-RECORD-ROOT-LINE",
+      "replace": "        if False:  # M:GAS-RECORD-ROOT-LINE",
       "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_a_root_record_without_a_line"
     },
     {
       "name": "p-record-root-path",
       "_mechanism": "Allow the recorded READY line to name a different root.",
       "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
-      "find": "    if Path(fields[\"path\"]).resolve() != args.root.resolve():  # M:GAS-RECORD-ROOT-PATH",
-      "replace": "    if False:  # M:GAS-RECORD-ROOT-PATH",
+      "find": "        if index == 1 and Path(fields[\"path\"]).resolve() != args.root.resolve():  # M:GAS-RECORD-ROOT-PATH  # M:GAS-RECORD-PASS-PATH",
+      "replace": "        if False:  # M:GAS-RECORD-ROOT-PATH  # M:GAS-RECORD-PASS-PATH",
       "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_a_root_record_for_another_root"
     },
     {
       "name": "p-record-root-malformed",
       "_mechanism": "Map a malformed READY line to path_mismatch instead of no_line without crashing.",
       "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
-      "find": "        raise Refusal(\"root_record:no_line\")  # M:GAS-RECORD-ROOT-MALFORMED",
-      "replace": "        raise Refusal(\"root_record:path_mismatch\")  # M:GAS-RECORD-ROOT-MALFORMED",
+      "find": "            raise Refusal(\"root_record:no_line\")  # M:GAS-RECORD-ROOT-MALFORMED",
+      "replace": "            raise Refusal(\"root_record:path_mismatch\")  # M:GAS-RECORD-ROOT-MALFORMED",
       "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_a_root_record_with_a_malformed_ready_line"
     },
     {
@@ -2148,6 +2148,94 @@
       "find": "    return 0  # M:AUDIT-HALT-EXIT",
       "replace": "    return 2  # M:AUDIT-HALT-EXIT",
       "test": "tests/test_grok_audit_surface_wrapper.py::test_audit_cycle_launches_nothing_after_a_halt"
+    },
+    {
+      "name": "p-record-forms-both",
+      "_mechanism": "Let pass records win when both root-record forms are supplied.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if args.root_record is not None and pass_records:  # M:GAS-RECORD-FORMS-BOTH",
+      "replace": "    if False:  # M:GAS-RECORD-FORMS-BOTH",
+      "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_both_root_record_forms[both]"
+    },
+    {
+      "name": "p-record-forms-neither",
+      "_mechanism": "Allow recording without either root-record form.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if args.root_record is None and not pass_records:  # M:GAS-RECORD-FORMS-NEITHER",
+      "replace": "    if False:  # M:GAS-RECORD-FORMS-NEITHER",
+      "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_both_root_record_forms[neither]"
+    },
+    {
+      "name": "p-record-pass-path",
+      "_mechanism": "Skip the first pass record's resolved-root equality check.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if index == 1 and Path(fields[\"path\"]).resolve() != args.root.resolve():  # M:GAS-RECORD-ROOT-PATH  # M:GAS-RECORD-PASS-PATH",
+      "replace": "        if False:  # M:GAS-RECORD-ROOT-PATH  # M:GAS-RECORD-PASS-PATH",
+      "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_a_first_pass_record_for_another_root"
+    },
+    {
+      "name": "p-record-pass-loop",
+      "_mechanism": "Validate only the first record and ignore malformed later records.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    for index, record in enumerate(records, 1):  # M:GAS-RECORD-PASS-LOOP",
+      "replace": "    for index, record in enumerate(records[:1], 1):  # M:GAS-RECORD-PASS-LOOP",
+      "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_refuses_a_malformed_second_pass_record"
+    },
+    {
+      "name": "p-record-pass-name",
+      "_mechanism": "Write every ordered pass record to root.txt.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        name = f\"p{index}.root.txt\" if pass_records else \"root.txt\"  # M:GAS-RECORD-PASS-NAME",
+      "replace": "        name = \"root.txt\"  # M:GAS-RECORD-PASS-NAME",
+      "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_writes_one_root_record_per_pass"
+    },
+    {
+      "name": "p-record-pass-report",
+      "_mechanism": "Keep the stem report even when the pass root has its own report.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        if report.is_file():  # M:GAS-RECORD-PASS-REPORT",
+      "replace": "        if False:  # M:GAS-RECORD-PASS-REPORT",
+      "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_copies_the_report_from_its_pass_root"
+    },
+    {
+      "name": "p-record-profile",
+      "_mechanism": "Exclude .log.profile files from the selected wrapper stem.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "        + r\"(.+)_p([1-9][0-9]*)(\\.txt|\\.asm\\.txt|\\.out\\.txt|\\.log|\\.report\\.md|\\.log\\.profile)\"  # M:GAS-RECORD-PROFILE",
+      "replace": "        + r\"(.+)_p([1-9][0-9]*)(\\.txt|\\.asm\\.txt|\\.out\\.txt|\\.log|\\.report\\.md)\"  # M:GAS-RECORD-PROFILE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_record_cycle_copies_the_profile_record"
+    },
+    {
+      "name": "p-commit-replace",
+      "_mechanism": "Allow a source blob to replace different parent bytes.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if previous is not None and previous != oid and not authoring:  # M:GAS-COMMIT-REPLACE",
+      "replace": "            if False:  # M:GAS-COMMIT-REPLACE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_commit_data_refuses_a_replaced_blob"
+    },
+    {
+      "name": "p-commit-replace-identical",
+      "_mechanism": "Refuse every existing non-authoring path, including identical bytes.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if previous is not None and previous != oid and not authoring:  # M:GAS-COMMIT-REPLACE",
+      "replace": "            if previous is not None and not authoring:  # M:GAS-COMMIT-REPLACE",
+      "test": "tests/test_grok_audit_surface_probe.py::test_commit_data_accepts_an_identical_re_add"
+    },
+    {
+      "name": "p-commit-authoring",
+      "_mechanism": "Remove the ledger.jsonl and seeded/ authoring exemptions.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            authoring = relative == Path(\"ledger.jsonl\") or relative.as_posix().startswith(\"seeded/\")  # M:GAS-COMMIT-AUTHORING",
+      "replace": "            authoring = False  # M:GAS-COMMIT-AUTHORING",
+      "test": "tests/test_grok_audit_surface_probe.py::test_commit_data_accepts_a_changed_authoring_file"
+    },
+    {
+      "name": "p-commit-ref-moved-append",
+      "_mechanism": "Accept a stale parent when appending a new reading after resmoke.",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "    if old and old != parent_oid:  # M:GAS-COMMIT-REF-MOVED",
+      "replace": "    if False:  # M:GAS-COMMIT-REF-MOVED",
+      "test": "tests/test_grok_audit_surface_probe.py::test_commit_data_appends_a_second_reading_after_an_earlier_resmoke"
     }
   ]
 }
