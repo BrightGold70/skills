@@ -2236,6 +2236,214 @@
       "find": "    if old and old != parent_oid:  # M:GAS-COMMIT-REF-MOVED",
       "replace": "    if False:  # M:GAS-COMMIT-REF-MOVED",
       "test": "tests/test_grok_audit_surface_probe.py::test_commit_data_appends_a_second_reading_after_an_earlier_resmoke"
+    },
+    {
+      "name": "quarantine-exists-disarmed",
+      "_mechanism": "Reuse an existing quarantine instead of requiring exclusive creation.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "            os.mkdir(destination)  # M:QUARANTINE-EXISTS",
+      "replace": "            os.makedirs(destination, exist_ok=True)  # M:QUARANTINE-EXISTS",
+      "test": "tests/test_grok_audit_surface_containment.py::test_quarantine_refuses_an_existing_quarantine"
+    },
+    {
+      "name": "quarantine-move-failed-disarmed",
+      "_mechanism": "Ignore failed renames.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        if failed:  # M:QUARANTINE-MOVE-FAILED",
+      "replace": "        if False:  # M:QUARANTINE-MOVE-FAILED",
+      "test": "tests/test_grok_audit_surface_containment.py::test_quarantine_refuses_a_failed_move"
+    },
+    {
+      "name": "quarantine-residue-disarmed",
+      "_mechanism": "Ignore matching entries left in the store.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        if residue:  # M:QUARANTINE-RESIDUE",
+      "replace": "        if False:  # M:QUARANTINE-RESIDUE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_quarantine_refuses_residue"
+    },
+    {
+      "name": "quarantine-count-mismatch-disarmed",
+      "_mechanism": "Disable the destination count verification.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        if len(_names(destination)) != len(names):  # M:QUARANTINE-COUNT-MISMATCH",
+      "replace": "        if False:  # M:QUARANTINE-COUNT-MISMATCH",
+      "test": "tests/test_grok_audit_surface_containment.py::test_quarantine_refuses_a_count_mismatch"
+    },
+    {
+      "name": "quarantine-unreadable-reason",
+      "_mechanism": "Mislabel an unreadable store.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        print(\"QUARANTINE: REFUSED reason=unreadable\")  # M:QUARANTINE-UNREADABLE",
+      "replace": "        print(\"QUARANTINE: REFUSED reason=count_mismatch\")  # M:QUARANTINE-UNREADABLE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_quarantine_refuses_an_unreadable_store"
+    },
+    {
+      "name": "quarantine-last-resort-exit-0",
+      "_mechanism": "Return success on an unexpected quarantine exception.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        return 2  # M:QUARANTINE-LAST-RESORT",
+      "replace": "        return 0  # M:QUARANTINE-LAST-RESORT",
+      "test": "tests/test_grok_audit_surface_containment.py::test_quarantine_internal_on_an_injected_exception"
+    },
+    {
+      "name": "quarantine-usage-reason",
+      "_mechanism": "Change the exact usage-error reason.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        print(\"QUARANTINE: REFUSED reason=internal:UsageError\")  # M:QUARANTINE-USAGE",
+      "replace": "        print(\"QUARANTINE: REFUSED reason=internal:Usage\")  # M:QUARANTINE-USAGE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_quarantine_internal_on_a_usage_error"
+    },
+    {
+      "name": "quarantine-match-widened",
+      "_mechanism": "Match every store entry.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    return \"gas-root-\" in name  # M:QUARANTINE-MATCH",
+      "replace": "    return True  # M:QUARANTINE-MATCH",
+      "test": "tests/test_grok_audit_surface_containment.py::test_quarantine_verifies_and_moves_every_match"
+    },
+    {
+      "name": "quarantine-move-copies",
+      "_mechanism": "Copy directories and delete their originals instead of renaming.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "                os.rename(store / name, destination / name)  # M:QUARANTINE-MOVE",
+      "replace": "                import shutil; shutil.copytree(store / name, destination / name, symlinks=True); shutil.rmtree(store / name)  # M:QUARANTINE-MOVE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_quarantine_never_deletes"
+    },
+    {
+      "name": "require-ok-toolscan-narrowed",
+      "_mechanism": "Reject the verb's valid token.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        ok = line.startswith(\"TOOLSCAN: CLEAN surface=grok \")  # M:REQUIRE-OK-TOOLSCAN",
+      "replace": "        ok = False  # M:REQUIRE-OK-TOOLSCAN",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_ok_per_verb[toolscan]"
+    },
+    {
+      "name": "require-ok-canary-narrowed",
+      "_mechanism": "Reject the verb's valid token.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        ok = line == \"GROK-CANARY: PASS\"  # M:REQUIRE-OK-CANARY",
+      "replace": "        ok = False  # M:REQUIRE-OK-CANARY",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_ok_per_verb[grok-canary]"
+    },
+    {
+      "name": "require-ok-quarantine-narrowed",
+      "_mechanism": "Reject the verb's valid token.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        ok = line.startswith(\"QUARANTINE: VERIFIED moved=\")  # M:REQUIRE-OK-QUARANTINE",
+      "replace": "        ok = False  # M:REQUIRE-OK-QUARANTINE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_ok_per_verb[quarantine]"
+    },
+    {
+      "name": "require-ok-toolscan-widened",
+      "_mechanism": "Accept refused scan tokens.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        ok = line.startswith(\"TOOLSCAN: CLEAN surface=grok \")  # M:REQUIRE-OK-TOOLSCAN",
+      "replace": "        ok = line.startswith(\"TOOLSCAN: \")  # M:REQUIRE-OK-TOOLSCAN",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_stop_on_another_token[toolscan]"
+    },
+    {
+      "name": "require-ok-toolscan-any-surface",
+      "_mechanism": "Accept a clean token for another surface.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        ok = line.startswith(\"TOOLSCAN: CLEAN surface=grok \")  # M:REQUIRE-OK-TOOLSCAN",
+      "replace": "        ok = line.startswith(\"TOOLSCAN: CLEAN \")  # M:REQUIRE-OK-TOOLSCAN",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_stop_on_another_token[toolscan-codex-clean]"
+    },
+    {
+      "name": "require-ok-canary-widened",
+      "_mechanism": "Accept refused canary tokens.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        ok = line == \"GROK-CANARY: PASS\"  # M:REQUIRE-OK-CANARY",
+      "replace": "        ok = line.startswith(\"GROK-CANARY: \")  # M:REQUIRE-OK-CANARY",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_stop_on_another_token[grok-canary]"
+    },
+    {
+      "name": "require-ok-quarantine-widened",
+      "_mechanism": "Accept refused quarantine tokens.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        ok = line.startswith(\"QUARANTINE: VERIFIED moved=\")  # M:REQUIRE-OK-QUARANTINE",
+      "replace": "        ok = line.startswith(\"QUARANTINE: \")  # M:REQUIRE-OK-QUARANTINE",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_stop_on_another_token[quarantine]"
+    },
+    {
+      "name": "require-no-token-reason-absent",
+      "_mechanism": "Change the no-token reason.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    reason = line or f\"no_token:{args.token_file}\"  # M:REQUIRE-NO-TOKEN",
+      "replace": "    reason = line or f\"missing:{args.token_file}\"  # M:REQUIRE-NO-TOKEN",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_stop_on_an_absent_file"
+    },
+    {
+      "name": "require-no-token-reason-empty",
+      "_mechanism": "Change the no-token reason.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    reason = line or f\"no_token:{args.token_file}\"  # M:REQUIRE-NO-TOKEN",
+      "replace": "    reason = line or f\"missing:{args.token_file}\"  # M:REQUIRE-NO-TOKEN",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_stop_on_an_empty_file"
+    },
+    {
+      "name": "require-toolscan-stop-no-append",
+      "_mechanism": "Omit the scan STOP halt record.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        _append_halt(args.halt_file, reason)  # M:REQUIRE-TOOLSCAN-STOP",
+      "replace": "        pass  # M:REQUIRE-TOOLSCAN-STOP",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_toolscan_stop_writes_the_halt_file"
+    },
+    {
+      "name": "require-fail-closed-dropped",
+      "_mechanism": "Drop the halt path on an internal error.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "            return _require_error(halt, f\"internal:{type(exc).__name__}\")  # M:REQUIRE-FAIL-CLOSED",
+      "replace": "            return _require_error(None, f\"internal:{type(exc).__name__}\")  # M:REQUIRE-FAIL-CLOSED",
+      "test": "tests/test_grok_audit_surface_containment.py::test_require_internal_error_still_writes_the_halt_file"
+    },
+    {
+      "name": "require-halt-e2e-out-of-root",
+      "_mechanism": "Drop the halt record that must stop the next audit cycle.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        _append_halt(args.halt_file, reason)  # M:REQUIRE-TOOLSCAN-STOP",
+      "replace": "        pass  # M:REQUIRE-TOOLSCAN-STOP",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_out_of_root_scan_stops_the_next_cycle[out_of_root]"
+    },
+    {
+      "name": "require-halt-e2e-unreadable",
+      "_mechanism": "Drop the halt record that must stop the next audit cycle.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        _append_halt(args.halt_file, reason)  # M:REQUIRE-TOOLSCAN-STOP",
+      "replace": "        pass  # M:REQUIRE-TOOLSCAN-STOP",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_out_of_root_scan_stops_the_next_cycle[unreadable]"
+    },
+    {
+      "name": "require-halt-e2e-empty",
+      "_mechanism": "Drop the halt record that must stop the next audit cycle.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        _append_halt(args.halt_file, reason)  # M:REQUIRE-TOOLSCAN-STOP",
+      "replace": "        pass  # M:REQUIRE-TOOLSCAN-STOP",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_out_of_root_scan_stops_the_next_cycle[empty]"
+    },
+    {
+      "name": "require-halt-e2e-absent",
+      "_mechanism": "Drop the halt record that must stop the next audit cycle.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        _append_halt(args.halt_file, reason)  # M:REQUIRE-TOOLSCAN-STOP",
+      "replace": "        pass  # M:REQUIRE-TOOLSCAN-STOP",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_out_of_root_scan_stops_the_next_cycle[absent]"
+    },
+    {
+      "name": "require-fail-closed-argv-unknown-flag",
+      "_mechanism": "Discard the raw-argv halt path before parsing.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    halt = _raw_halt_file(argv)  # M:REQUIRE-FAIL-CLOSED-ARGV",
+      "replace": "    halt = None  # M:REQUIRE-FAIL-CLOSED-ARGV",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_require_usage_error_still_writes_the_halt_file[unknown-flag]"
+    },
+    {
+      "name": "require-fail-closed-argv-missing-token-file",
+      "_mechanism": "Discard the raw-argv halt path before parsing.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    halt = _raw_halt_file(argv)  # M:REQUIRE-FAIL-CLOSED-ARGV",
+      "replace": "    halt = None  # M:REQUIRE-FAIL-CLOSED-ARGV",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_require_usage_error_still_writes_the_halt_file[missing-token-file]"
     }
   ]
 }
