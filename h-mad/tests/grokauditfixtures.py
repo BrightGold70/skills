@@ -28,6 +28,14 @@ def _hostile_text() -> str:
     return payloads[os.environ.get("HMAD_STUB_HOSTILE", "all")]
 
 
+def grok_tool_call(path: str, *, extra=None) -> str:
+    """Encode one D19 grok tool-call event with hostile agent-style text."""
+    raw_input = {"cmd": f"tool payload {_hostile_text()} {path}"}
+    if extra is not None:
+        raw_input["extra"] = extra
+    return json.dumps({"type": "tool_call", "rawInput": raw_input, "locations": []}) + "\n"
+
+
 def build_archive(root: Path) -> dict[str, str]:
     """Write three invented features, each with a spec and three phase docs."""
     sources = {
