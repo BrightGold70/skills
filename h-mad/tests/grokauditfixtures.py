@@ -329,6 +329,63 @@ def build_cycle_inputs(directory: Path, root: Path, ready_line: str) -> dict:
     }
 
 
+def build_pass_cycle_inputs(case: dict) -> dict:
+    """Three ordered roots, with conflicting root-local and stem reports."""
+    case = {**case, "expected": dict(case["expected"])}
+    roots = [case["root"]]
+    for index in (2, 3):
+        root = case["root"].parent / f"gas-root-d1-s1-pass{index}"
+        root.mkdir()
+        roots.append(root)
+    records, lines, reports = [], [], {}
+    payload = _hostile_text().encode("utf-8") + b"\r\n\x00\xff\n"
+    for index, root in enumerate(roots, 1):
+        line = case["ready_line"].replace(
+            f"path={case['root']}", f"path={root.resolve()}",
+        )
+        record = case["command"].parent / f"pass {index} [a]* ⟦h-mad⟧.txt"
+        record.write_text(f"Agent annotation: {_hostile_text()}\n{line}\n", encoding="utf-8")
+        records.append(record)
+        lines.append(line)
+        stem_report = case["stem"] / f"{case['prefix']}_p{index}.report.md"
+        stem_report.write_bytes(f"stem report pass={index}\n".encode() + payload)
+        reports[f"p{index}.report.md"] = stem_report.read_bytes()
+        # Pass 2 deliberately has no local report, exercising the stem fallback.
+        if index != 2:
+            local = root / ".hmad-report" / stem_report.name
+            local.parent.mkdir()
+            local.write_bytes(f"root-local report pass={index}\n".encode() + payload)
+            reports[f"p{index}.report.md"] = local.read_bytes()
+        # Another pass's report in this root must never be selected.
+        decoy = root / ".hmad-report" / f"{case['prefix']}_p{index % 3 + 1}.report.md"
+        decoy.parent.mkdir(exist_ok=True)
+        decoy.write_bytes(b"wrong pass root\n" + payload)
+    command = case["command"].read_text(encoding="utf-8")
+    case["command"].write_text(command.replace("--passes 2", "--passes 3"), encoding="utf-8")
+    case["stdout"].write_text(
+        f"Agent output: {_hostile_text()}\n"
+        "AUDITCYCLE: PASS p1=PASS p2=PASS p3=PASS "
+        "delivered=report-file,report-file,report-file must=0 should=0 size_status=verified\n",
+        encoding="utf-8",
+    )
+    case.update(pass_roots=roots, pass_root_records=records, pass_ready_lines=lines,
+                pass_reports=reports)
+    return case
+
+
+def seed_commit_parent(case: dict, files: dict[str, bytes] | None = None) -> str:
+    """Put real source blobs and optional calibration paths in the parent tree."""
+    contents = {path.relative_to(case["src"]).as_posix(): path.read_bytes()
+                for path in case["src"].rglob("*") if path.is_file()}
+    contents.update(files or {})
+    changes = {(CALIBRATION / relative).as_posix(): content
+               for relative, content in contents.items()}
+    parent = commit_fixture_tree(case["repo"], case["parent"], changes)
+    git(case["repo"], "update-ref", CALIBRATION_REF, parent, case["parent"])
+    case["parent"] = parent
+    return parent
+
+
 def build_commit_inputs(tmp_path: Path) -> dict:
     """Keep Git fixtures real; stage and dirty tracked bytes before recording."""
     repo, _origin = build_repo(tmp_path)

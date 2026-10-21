@@ -29,6 +29,7 @@ from grokauditfixtures import (
     write_extract_cycle, commit_root_tree, git, load_probe,
     build_score_inputs, write_score_tables,
     build_rescore_inputs, commit_fixture_tree, _hostile_text, build_probe_parent_dirs,
+    build_pass_cycle_inputs, seed_commit_parent,
 )
 
 
@@ -1376,6 +1377,201 @@ def _assert_commit_prewrite_refusal(case, capsys, monkeypatch, reason, property_
         2, [f"COMMIT: REFUSED reason={reason}"],
     ), f"{property_name}: stdout={result.stdout!r}; stderr={result.stderr!r}"
     assert "Traceback" not in result.stderr, f"{property_name}: a declared refusal has no traceback"
+
+
+# Task 25: ordered pass roots, pass-local reports/profiles, and add-only data.
+@pytest.fixture
+def pass_cycle_case(cycle_case):
+    return build_pass_cycle_inputs(cycle_case)
+
+
+def _run_pass_record(case, capsys, *, single=False, passes=True):
+    arguments = ["record-cycle"]
+    for key in ("stem", "root", "stdout", "command", "dest"):
+        arguments += ["--" + key.replace("_", "-"), str(case[key])]
+    if single:
+        arguments += ["--root-record", str(case["root_record"])]
+    if passes:
+        for record in case["pass_root_records"]:
+            arguments += ["--pass-root-record", str(record)]
+    capsys.readouterr()
+    rc = case["probe"].main(arguments)
+    out, err = capsys.readouterr()
+    return subprocess.CompletedProcess(arguments, rc, out, err)
+
+
+def test_record_cycle_writes_one_root_record_per_pass(pass_cycle_case, capsys):
+    case = pass_cycle_case
+    files = _assert_record_ok(case, _run_pass_record(case, capsys),
+                              "write all three ordered per-pass root records")
+    assert "root.txt" not in files, "per-pass records must not also write root.txt"
+    assert {name for name in files if name.endswith(".root.txt")} == {
+        "p1.root.txt", "p2.root.txt", "p3.root.txt",
+    }, "each pass must have exactly its own numbered root record"
+    for index, line in enumerate(case["pass_ready_lines"], 1):
+        assert files[f"p{index}.root.txt"] == (line + "\n").encode(), (
+            f"pass {index} must preserve only its own READY line in argument order"
+        )
+
+
+def test_record_cycle_copies_the_report_from_its_pass_root(pass_cycle_case, capsys):
+    case = pass_cycle_case
+    # The legacy form must prefer --root/.hmad-report as well.
+    files = _assert_record_ok(case, _run_pass_record(case, capsys, single=True, passes=False),
+                              "prefer a root-local report over the conflicting stem copy")
+    assert files["p1.report.md"] == case["pass_reports"]["p1.report.md"], (
+        "p1.report.md must come from --root/.hmad-report, preserving hostile binary bytes"
+    )
+    assert files["p2.report.md"] == (
+        case["root"] / ".hmad-report" / f"{case['prefix']}_p2.report.md"
+    ).read_bytes(), "the single-record form must resolve every pass report against --root"
+    assert files["p3.report.md"] == (
+        case["stem"] / f"{case['prefix']}_p3.report.md"
+    ).read_bytes(), (
+        "a missing root-local report must fall back to the stem directory"
+    )
+    case["dest"] = case["dest"].parent / "per-pass reports [a]* ⟦h-mad⟧"
+    files = _assert_record_ok(case, _run_pass_record(case, capsys),
+                              "resolve every report against that pass's recorded path")
+    for name, content in case["pass_reports"].items():
+        assert files[name] == content, f"{name} must use its own pass root or the stem fallback"
+
+
+def test_record_cycle_copies_the_profile_record(cycle_case, capsys):
+    case, expected = cycle_case, {}
+    for index in (1, 2):
+        content = f"profile pass={index}\n{_hostile_text()}".encode() + b"\r\n\x00\xff"
+        (case["stem"] / f"{case['prefix']}_p{index}.log.profile").write_bytes(content)
+        expected[f"p{index}.profile.txt"] = content
+    (case["stem"] / "audit_copper-kite_plan_cycle2_run20990101T010203Z-314_p1.log.profile").write_bytes(b"decoy")
+    files = _assert_record_ok(case, _run_record(case, capsys), "collect each pass's .log.profile")
+    assert {name: content for name, content in files.items() if name.endswith(".profile.txt")} == expected, (
+        "the selected stem's pN.log.profile files must map byte-for-byte to pN.profile.txt"
+    )
+
+
+@pytest.mark.parametrize("form", ["both", "neither"], ids=["both", "neither"])
+def test_record_cycle_refuses_both_root_record_forms(form, pass_cycle_case, capsys):
+    case = pass_cycle_case
+    result = _run_pass_record(case, capsys, single=form == "both", passes=form == "both")
+    _assert_record_refusal(case, result, "internal:UsageError",
+                           f"exactly one root-record form is required ({form})")
+
+
+def test_record_cycle_refuses_a_first_pass_record_for_another_root(pass_cycle_case, capsys):
+    case = pass_cycle_case
+    wrong = case["pass_ready_lines"][0].replace(
+        f"path={case['root']}", f"path={case['pass_roots'][1].resolve()}",
+    )
+    assert wrong != case["pass_ready_lines"][0], "the first record must actually name another root"
+    assert case["probe"].parse_root_line(wrong) is not None, "a wrong path must remain a valid READY line"
+    case["pass_root_records"][0].write_text(wrong + "\n", encoding="utf-8")
+    _assert_record_refusal(case, _run_pass_record(case, capsys), "root_record:path_mismatch",
+                           "the first pass record's path must equal resolved --root")
+
+
+def test_record_cycle_refuses_a_malformed_second_pass_record(pass_cycle_case, capsys):
+    case = pass_cycle_case
+    malformed = " ".join(word for word in case["pass_ready_lines"][1].split()
+                         if not word.startswith("list_blob="))
+    assert case["probe"].parse_root_line(malformed) is None, "removing list_blob must invalidate pass 2"
+    assert all(case["probe"].parse_root_line(case["pass_ready_lines"][i]) is not None for i in (0, 2)), (
+        "pass 1 and pass 3 must remain valid so only the second record causes refusal"
+    )
+    case["pass_root_records"][1].write_text(malformed + "\n", encoding="utf-8")
+    _assert_record_refusal(case, _run_pass_record(case, capsys), "root_record:no_line",
+                           "D5 validation must reach the malformed second of three pass records")
+
+
+def _assert_task25_commit_ok(case, result, property_name):
+    rc, tip = _read_calibration_ref(case["repo"])
+    assert rc == 0 and (result.returncode, result.stdout.splitlines()[-1:]) == (
+        0, [f"COMMIT: OK sha={tip} ref={CALIBRATION_REF}"],
+    ), f"{property_name}: stdout={result.stdout!r}; stderr={result.stderr!r}"
+    return tip
+
+
+def test_commit_data_refuses_a_replaced_blob(commit_case, capsys, monkeypatch):
+    case = commit_case
+    parent = seed_commit_parent(case)
+    # A sorted earlier addition must not be staged before a later conflict is found.
+    (case["src"] / "00-new.txt").write_text(_hostile_text(), encoding="utf-8")
+    for source in sorted(case["src"].joinpath("s1/grok").iterdir()):
+        source.write_bytes(source.read_bytes() + b"changed\n")
+    replaced = (CALIBRATION / "s1/grok/command.txt").as_posix()
+    state = _observe_commit_git(case, monkeypatch)
+    result = _run_commit(case, capsys)
+    assert (result.returncode, result.stdout.splitlines()[-1:]) == (
+        2, [f"COMMIT: REFUSED reason=would_replace:{replaced}"],
+    ), f"refuse the first replaced calibration blob in sorted source order: {result.stdout!r}; {result.stderr!r}"
+    assert _read_calibration_ref(case["repo"]) == (0, parent), "replacement refusal must retain the parent ref"
+    assert not any(argv[0] in ("update-index", "update-ref") for argv, _env in state["calls"]), (
+        "all replacement checks must finish before any update-index, even for an earlier new file"
+    )
+    assert "Traceback" not in result.stderr, "would_replace must be a declared refusal"
+
+
+def test_commit_data_accepts_an_identical_re_add(commit_case, capsys):
+    case = commit_case
+    parent = seed_commit_parent(case)
+    tip = _assert_task25_commit_ok(case, _run_commit(case, capsys), "identical re-add must not refuse")
+    assert git(case["repo"], "rev-parse", f"{tip}^{{tree}}") == git(case["repo"], "rev-parse", f"{parent}^{{tree}}"), (
+        "identical source blobs must leave the complete parent tree unchanged"
+    )
+
+
+def test_commit_data_appends_a_second_reading_after_an_earlier_resmoke(commit_case, tmp_path, capsys):
+    case = commit_case
+    old_data = {"runs/run-a/resmoke/p1.log": _hostile_text().encode() + b"\r\n\x00\xff",
+                "runs/run-a/resmoke/command.txt": f"Earlier reading: {_hostile_text()}\n".encode()}
+    parent = seed_commit_parent(case, old_data)
+    old_path = (CALIBRATION / "runs/run-a").as_posix()
+    old_tree = git(case["repo"], "rev-parse", f"{parent}:{old_path}")
+    case["src"] = tmp_path / "reading-b [a]* ⟦h-mad⟧"
+    new_file = case["src"] / "runs/run-b/resmoke/p1.log"
+    new_file.parent.mkdir(parents=True)
+    new_file.write_bytes(f"Second reading: {_hostile_text()}\n".encode() + b"\x00\xff")
+    tip = _assert_task25_commit_ok(case, _run_commit(case, capsys), "append run-b after run-a resmoke")
+    assert git(case["repo"], "rev-parse", f"{tip}^") == parent, "the new reading must descend from --parent"
+    assert git(case["repo"], "rev-parse", f"{tip}:{old_path}") == old_tree, "runs/run-a must remain byte-identical"
+    destination = (CALIBRATION / new_file.relative_to(case["src"])).as_posix()
+    assert git(case["repo"], "rev-parse", f"{tip}:{destination}") == git(case["repo"], "hash-object", str(new_file)), (
+        "the second reading must retain its hostile binary bytes at runs/run-b/resmoke"
+    )
+    assert git(case["repo"], "diff", "--name-only", parent, tip).splitlines() == [destination], (
+        "appending a reading must change only the new run's file"
+    )
+    stale = _run_commit(case, capsys)  # --parent still names the pre-append commit.
+    assert (stale.returncode, stale.stdout.splitlines()[-1:]) == (
+        2, [f"COMMIT: REFUSED reason=ref_moved:{tip}"],
+    ), f"a stale --parent must name the actual tip in ref_moved: {stale.stdout!r}; {stale.stderr!r}"
+    assert _read_calibration_ref(case["repo"]) == (0, tip), "a stale append must not move the calibration ref"
+    assert "Traceback" not in stale.stderr, "ref_moved must be a declared refusal"
+
+
+def test_commit_data_accepts_a_changed_authoring_file(commit_case, capsys):
+    case = commit_case
+    old = {"ledger.jsonl": b'{"reading":"old"}\n',
+           "seeded/d1/plan.md": f"Old seed: {_hostile_text()}\n".encode()}
+    parent = seed_commit_parent(case, old)
+    changed = {"ledger.jsonl": (json.dumps({"reading": _hostile_text()}) + "\n").encode(),
+               "seeded/d1/plan.md": f"Changed seed: {_hostile_text()}\n".encode()}
+    for relative, content in changed.items():
+        source = case["src"] / relative
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(content)
+    tip = _assert_task25_commit_ok(case, _run_commit(case, capsys),
+                                  "changed ledger.jsonl and seeded/ authoring files must be exempt")
+    assert git(case["repo"], "rev-parse", f"{tip}^") == parent, "authoring changes must retain the supplied parent"
+    for relative in changed:
+        destination = (CALIBRATION / relative).as_posix()
+        blob = git(case["repo"], "rev-parse", f"{tip}:{destination}")
+        assert blob == git(case["repo"], "hash-object", str(case["src"] / relative)), (
+            f"the changed authoring file must actually be committed: {relative}"
+        )
+        assert blob != git(case["repo"], "rev-parse", f"{parent}:{destination}"), (
+            f"the authoring fixture must replace different parent bytes: {relative}"
+        )
 
 
 def test_commit_data_never_touches_work_tree_or_index(commit_case, capsys, monkeypatch):
