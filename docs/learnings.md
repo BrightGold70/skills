@@ -9,6 +9,10 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-22 · pattern · [0.5] · `handoff:2026-10-22-grok-s0c-merged,h-mad,tdd,context` — Delegate each TDD task to a fresh subagent with a runbook + report FILE (message transport cuts ~4KB): ~2k orchestrator context per task vs ~45k inline.
+- 2026-10-22 · gotcha · [0.7] · `handoff:2026-10-22-grok-s0c-merged,h-mad,tdd,codex-gate` — Codex Phase-5 gate: allowlist matches exact argv (absolute interpreter), bounded run inner cmd ignores the allowlist, and the TDD judge needs a repo .venv with pytest or every prod .py write is refused.
+- 2026-10-22 · gotcha · [0.7] · `handoff:2026-10-22-grok-s0c-merged,h-mad,tdd,mutation` — Per-task mutation subsets miss regressions of OLD rows when a later task moves their fixtures (row stays green, guard unpinned); run the full spec at the gate.
+- 2026-10-22 · gotcha · [0.7] · `handoff:2026-10-22-grok-s0c-merged,h-mad,tdd,design-check` — A green suite can be bought by GREEN bending production to a defective RED fixture (a refusal made conditional = fail-open); only a code-vs-DESIGN comparison caught it, not tests or mutation.
 - 2026-10-21 · gotcha · [0.7] · `grok,leak,calibration,handoff:2026-10-21-grok-containment-docs-final` — ~/.grok/sessions keeps full past prompts; audit prompts inline unseeded paired originals, so an auditor reading another session sees the answer key — exempt only its own session dir
 - 2026-10-21 · gotcha · [0.7] · `jq,ndjson,measurement,handoff:2026-10-21-grok-containment-docs-final` — Scanning NDJSON agent logs: use jq -R 'fromjson?' — plain jq aborts on one non-JSON line and reports 0; always run the scan against a known-positive log first
 - 2026-10-21 · gotcha · [0.7] · `grok,sandbox,h-mad,handoff:2026-10-21-grok-containment-docs-final` — grok --sandbox strict bounds reads+writes to cwd+system paths but grants ALL system temp ($TMPDIR,/private/tmp); export roots under $TMPDIR are cross-readable/writable between lanes — keep roots under ~/.local/state
