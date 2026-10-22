@@ -195,6 +195,9 @@ def install_audit_cycle_stubs(tmp_path):
                 sys.exit(0)
             out.parent.mkdir(parents=True, exist_ok=True)
             extra = ""
+            scope = ""
+            if "--path-scope" in args and not os.environ.get(f"HMAD_ASSEMBLE_DROP_CLAUSE_P{{pass_index}}"):
+                scope = {STUB_PATH_SCOPE_CLAUSE!r} + "\\n"
             if os.environ.get(f"HMAD_ASSEMBLE_DIVERGE_P{{pass_index}}"):
                 extra = "Unexpected prompt-only divergence\\n"
             # TWO occurrences, matching production. h_mad_assemble_audit.py
@@ -210,7 +213,7 @@ def install_audit_cycle_stubs(tmp_path):
             if os.environ.get(f"HMAD_ASSEMBLE_SAME_REPORT_P{{pass_index}}") == "1":
                 head_report_line = report_line = "Report path: SAME\\n"
             out.write_text(
-                "Audit prompt\\n"
+                "Audit prompt\\n" + scope
                 + head_report_line +
                 "Feature: " + args[args.index("--feature") + 1] + "\\n"
                 + report_line + extra +
