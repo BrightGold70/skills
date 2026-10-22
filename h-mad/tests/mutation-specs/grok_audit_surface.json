@@ -3159,6 +3159,222 @@
       "find": "  if [ \"${#scope_arg[@]}\" -gt 0 ]; then  # M:PATH-SCOPE-HERE-ARMED",
       "replace": "  if true; then  # M:PATH-SCOPE-HERE-ARMED",
       "test": "tests/test_grok_audit_surface_path_scope.py::test_audit_cycle_without_pass_roots_does_not_pass_the_switch"
+    },
+    {
+      "name": "assembler-read-sha-dropped",
+      "_mechanism": "Force the assembler reading SHA to unreadable.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    sha = sha_text if re.fullmatch(r\"[0-9a-f]{40}\", sha_text) else \"unreadable\"  # M:ASSEMBLER-READ-SHA",
+      "replace": "    sha = \"unreadable\"  # M:ASSEMBLER-READ-SHA",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_read_clean_tree_reads_sha_and_no"
+    },
+    {
+      "name": "assembler-read-sha-unchecked",
+      "_mechanism": "Accept any successful rev-parse output as a SHA.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    sha = sha_text if re.fullmatch(r\"[0-9a-f]{40}\", sha_text) else \"unreadable\"  # M:ASSEMBLER-READ-SHA",
+      "replace": "    sha = sha_text  # M:ASSEMBLER-READ-SHA",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_read_sha256_repository_reads_unreadable"
+    },
+    {
+      "name": "assembler-read-dirty-never",
+      "_mechanism": "Never report a dirty worktree.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    dirty = \"unknown\" if status.returncode else (\"yes\" if status.stdout else \"no\")  # M:ASSEMBLER-READ-DIRTY",
+      "replace": "    dirty = \"unknown\" if status.returncode else \"no\"  # M:ASSEMBLER-READ-DIRTY",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_read_dirty_h_mad_reads_yes"
+    },
+    {
+      "name": "assembler-read-dirty-unknown-dropped",
+      "_mechanism": "Treat a failed git status as clean.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    dirty = \"unknown\" if status.returncode else (\"yes\" if status.stdout else \"no\")  # M:ASSEMBLER-READ-DIRTY",
+      "replace": "    dirty = \"no\" if status.returncode else (\"yes\" if status.stdout else \"no\")  # M:ASSEMBLER-READ-DIRTY",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_read_outside_git_reads_unreadable"
+    },
+    {
+      "name": "assembler-read-env-nonempty-only",
+      "_mechanism": "Treat an empty but present script directory variable as unset.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    script_dir_env = \"set\" if \"HMAD_AUDIT_CYCLE_SCRIPT_DIR\" in os.environ else \"unset\"  # M:ASSEMBLER-READ-ENV",
+      "replace": "    script_dir_env = \"set\" if os.environ.get(\"HMAD_AUDIT_CYCLE_SCRIPT_DIR\") else \"unset\"  # M:ASSEMBLER-READ-ENV",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_read_records_a_set_script_dir_env[empty]"
+    },
+    {
+      "name": "assembler-read-usage-reason",
+      "_mechanism": "Print the wrong usage-error reason for assembler-read.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "            print(\"ASSEMBLER-READING: unreadable reason=internal:UsageError\")  # M:ASSEMBLER-READ-USAGE",
+      "replace": "            print(\"ASSEMBLER-READING: unreadable reason=internal:Usage\")  # M:ASSEMBLER-READ-USAGE",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_read_usage_error_exits_2"
+    },
+    {
+      "name": "assembler-reading-unparseable-reason",
+      "_mechanism": "Report the end reading as unparseable even when the start reading is broken.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        print(\"ASSEMBLER: UNPINNED reason=reading_unparseable:start\")  # M:ASSEMBLER-READING-UNPARSEABLE",
+      "replace": "        print(\"ASSEMBLER: UNPINNED reason=reading_unparseable:end\")  # M:ASSEMBLER-READING-UNPARSEABLE",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_unparseable_reading"
+    },
+    {
+      "name": "assembler-script-dir-set-disarmed",
+      "_mechanism": "Allow a reading captured with the script directory variable set.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    if start[\"script_dir_env\"] == \"set\" or end[\"script_dir_env\"] == \"set\":  # M:ASSEMBLER-SCRIPT-DIR-SET",
+      "replace": "    if False:  # M:ASSEMBLER-SCRIPT-DIR-SET",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_script_dir_set"
+    },
+    {
+      "name": "assembler-sha-unreadable-disarmed",
+      "_mechanism": "Allow an unreadable source SHA.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    if start[\"sha\"] == \"unreadable\" or end[\"sha\"] == \"unreadable\":  # M:ASSEMBLER-SHA-UNREADABLE",
+      "replace": "    if False:  # M:ASSEMBLER-SHA-UNREADABLE",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_sha_unreadable"
+    },
+    {
+      "name": "assembler-here-changed-disarmed",
+      "_mechanism": "Allow the recorded assembler directory to change between readings.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    if start[\"here\"] != end[\"here\"]:  # M:ASSEMBLER-HERE-CHANGED",
+      "replace": "    if False:  # M:ASSEMBLER-HERE-CHANGED",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_here_changed"
+    },
+    {
+      "name": "assembler-sha-changed-disarmed",
+      "_mechanism": "Allow the source revision to change between readings.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    if start[\"sha\"] != end[\"sha\"]:  # M:ASSEMBLER-SHA-CHANGED",
+      "replace": "    if False:  # M:ASSEMBLER-SHA-CHANGED",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_sha_changed"
+    },
+    {
+      "name": "assembler-dirty-disarmed",
+      "_mechanism": "Allow dirty or unknown worktree readings.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    if start[\"dirty\"] != \"no\" or end[\"dirty\"] != \"no\":  # M:ASSEMBLER-DIRTY",
+      "replace": "    if False:  # M:ASSEMBLER-DIRTY",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_dirty[yes]"
+    },
+    {
+      "name": "assembler-dirty-yes-only",
+      "_mechanism": "Allow unknown dirty state while still rejecting a known dirty tree.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    if start[\"dirty\"] != \"no\" or end[\"dirty\"] != \"no\":  # M:ASSEMBLER-DIRTY",
+      "replace": "    if start[\"dirty\"] == \"yes\" or end[\"dirty\"] == \"yes\":  # M:ASSEMBLER-DIRTY",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_dirty[unknown]"
+    },
+    {
+      "name": "assembler-here-not-self-disarmed",
+      "_mechanism": "Allow readings that name another assembler directory.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "    if start[\"here\"] != str(SELF_DIR):  # M:ASSEMBLER-HERE-NOT-SELF",
+      "replace": "    if False:  # M:ASSEMBLER-HERE-NOT-SELF",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_here_not_self"
+    },
+    {
+      "name": "assembler-here-unrecorded-disarmed",
+      "_mechanism": "Allow a cycle without exactly one here record.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        if len(records) != 1:  # M:ASSEMBLER-HERE-UNRECORDED",
+      "replace": "        if False:  # M:ASSEMBLER-HERE-UNRECORDED",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_here_unrecorded[none]"
+    },
+    {
+      "name": "assembler-here-unrecorded-at-least-one",
+      "_mechanism": "Accept multiple here records in one cycle directory.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        if len(records) != 1:  # M:ASSEMBLER-HERE-UNRECORDED",
+      "replace": "        if len(records) == 0:  # M:ASSEMBLER-HERE-UNRECORDED",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_here_unrecorded[two]"
+    },
+    {
+      "name": "assembler-here-mismatch-disarmed",
+      "_mechanism": "Allow a cycle record whose here value differs from the assembler directory.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "            if match.group(1) != here:  # M:ASSEMBLER-HERE-MISMATCH",
+      "replace": "            if False:  # M:ASSEMBLER-HERE-MISMATCH",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_here_mismatch"
+    },
+    {
+      "name": "assembler-stems-dirs-widened",
+      "_mechanism": "Treat sibling log directories as cycle directories.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "                         if entry.is_dir() and cycle_re.fullmatch(entry.name))  # M:ASSEMBLER-STEMS-DIRS",
+      "replace": "                         if entry.is_dir())  # M:ASSEMBLER-STEMS-DIRS",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_ignores_sibling_agy_log_dirs"
+    },
+    {
+      "name": "assembler-clause-unavailable-reason",
+      "_mechanism": "Use the wrong token reason when the assembler clause cannot load.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        print(f\"ASSEMBLER: NO_CLAUSE reason=clause_unavailable sha={start['sha']}\")  # M:ASSEMBLER-CLAUSE-UNAVAILABLE",
+      "replace": "        print(f\"ASSEMBLER: NO_CLAUSE reason=no_prompts:clause sha={start['sha']}\")  # M:ASSEMBLER-CLAUSE-UNAVAILABLE",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_clause_unavailable"
+    },
+    {
+      "name": "assembler-no-prompts-disarmed",
+      "_mechanism": "Permit an empty prompt set for a requested stage.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        if not matches:  # M:ASSEMBLER-NO-PROMPTS",
+      "replace": "        if False:  # M:ASSEMBLER-NO-PROMPTS",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_no_prompts[resmoke]"
+    },
+    {
+      "name": "assembler-no-prompts-resmoke-only",
+      "_mechanism": "Check for missing prompts only in resmoke, not S2.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        if not matches:  # M:ASSEMBLER-NO-PROMPTS",
+      "replace": "        if not matches and stage == \"resmoke\":  # M:ASSEMBLER-NO-PROMPTS",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_no_prompts[s2]"
+    },
+    {
+      "name": "assembler-clause-missing-disarmed",
+      "_mechanism": "Permit a prompt with no exact copy of the clause.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        if lines.count(clause) != 1:  # M:ASSEMBLER-CLAUSE-MISSING",
+      "replace": "        if False:  # M:ASSEMBLER-CLAUSE-MISSING",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_clause_missing"
+    },
+    {
+      "name": "assembler-clause-missing-at-least-once",
+      "_mechanism": "Accept multiple copies of the clause in a prompt.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        if lines.count(clause) != 1:  # M:ASSEMBLER-CLAUSE-MISSING",
+      "replace": "        if lines.count(clause) < 1:  # M:ASSEMBLER-CLAUSE-MISSING",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_clause_twice_is_missing"
+    },
+    {
+      "name": "assembler-last-resort-exit-0",
+      "_mechanism": "Return success for an escaping assembler-check exception.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "            return 2  # M:ASSEMBLER-LAST-RESORT",
+      "replace": "            return 0  # M:ASSEMBLER-LAST-RESORT",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_internal_exits_2"
+    },
+    {
+      "name": "assembler-check-usage-reason",
+      "_mechanism": "Print the wrong usage-error reason for assembler-check.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "            print(\"ASSEMBLER: UNPINNED reason=internal:UsageError\")  # M:ASSEMBLER-CHECK-USAGE",
+      "replace": "            print(\"ASSEMBLER: UNPINNED reason=internal:Usage\")  # M:ASSEMBLER-CHECK-USAGE",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_assembler_check_usage_error_exits_2"
+    },
+    {
+      "name": "require-ok-assembler-narrowed",
+      "_mechanism": "Never accept an assembler PINNED token.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        ok = line.startswith(\"ASSEMBLER: PINNED sha=\")  # M:REQUIRE-OK-ASSEMBLER",
+      "replace": "        ok = False  # M:REQUIRE-OK-ASSEMBLER",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_require_assembler_ok_only_on_pinned[PINNED]"
+    },
+    {
+      "name": "require-ok-assembler-widened",
+      "_mechanism": "Accept any assembler token as successful.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "        ok = line.startswith(\"ASSEMBLER: PINNED sha=\")  # M:REQUIRE-OK-ASSEMBLER",
+      "replace": "        ok = line.startswith(\"ASSEMBLER: \")  # M:REQUIRE-OK-ASSEMBLER",
+      "test": "tests/test_grok_audit_surface_assembler_pin.py::test_require_assembler_ok_only_on_pinned[UNPINNED]"
     }
   ]
 }
