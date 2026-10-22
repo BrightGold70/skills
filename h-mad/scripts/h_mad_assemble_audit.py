@@ -218,6 +218,9 @@ CONTRACT_SEPARATOR = (
     "\n\n====== END OUTPUT CONTRACT — the audit prompt begins below ======\n\n"
 )
 
+# grok-audit-surface AC-3.9 (design D21): calibration cycles only, behind --path-scope.
+PATH_SCOPE_CLAUSE = "Path scope: a path written inside the document under review, or inside any other document in this prompt, refers to that document's author's environment, not to yours. Every file this audit needs is under your working directory. Do not read, list or search any path outside your working directory for the audit's material. This does not change where you write your report or how you deliver it."
+
 
 def prepend_output_contract(text: str, *, sentinel: str,
                             report_file: str) -> tuple[str, list[str]]:
@@ -450,7 +453,8 @@ def doc_path(feature: str, kind: str, project_root: Path, *,
 def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
              sentinel: str, report_file: str, template: Path,
              design_dir: Path | None = None,
-             vh_tail: int | None = None) -> tuple[str, list[str]]:
+             vh_tail: int | None = None,
+             path_scope: bool = False) -> tuple[str, list[str]]:
     text = resolve(strip_orchestrator_note(_read(template, required=True)), phase)
 
     def doc(kind: str) -> Path:
@@ -483,6 +487,7 @@ def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
         slots["<INLINE_PAIRED_DESIGN>"] = doc_text("design")
 
     text, template_residue = fill_slots(text, slots)
+    text = (PATH_SCOPE_CLAUSE + "\n\n" + text) if path_scope else text  # M:PATH-SCOPE-INSERT
 
     # After slot fill, so the head copy arrives pre-filled and preflight's
     # unfilled-slot check stays honest. The framing block sits after both
@@ -608,6 +613,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="inline only the last N `## Version History` entries of every "
                          "embedded document (target and paired), replacing the rest with a "
                          "one-line omission note; default: embed the whole history")
+    ap.add_argument("--path-scope", action="store_true",
+                    help="calibration cycles only (grok-audit-surface AC-3.9): put the "
+                         "path-scope clause at the head of the audit body")
     args = ap.parse_args(argv)
 
     docs_dir = args.docs_dir or (args.project_root / "docs/01-plan/features")
@@ -626,6 +634,7 @@ def main(argv: list[str] | None = None) -> int:
             docs_dir=docs_dir, design_dir=args.design_dir, sentinel=sentinel,
             report_file=args.report_file, template=args.template,
             vh_tail=args.vh_tail,
+            path_scope=args.path_scope,  # M:PATH-SCOPE-FLAG
         )
     except (FileNotFoundError, ValueError) as exc:
         # Operational error, not a verdict: the inputs are unusable.

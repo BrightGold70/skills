@@ -3024,6 +3024,54 @@
       "test": "tests/test_grok_audit_surface_probe.py::test_codex_or_agy_count_does_not_refuse"
     },
     {
+      "name": "path-scope-insert-dropped",
+      "_mechanism": "Drop the opt-in path-scope clause from assembled prompts.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    text = (PATH_SCOPE_CLAUSE + \"\\n\\n\" + text) if path_scope else text  # M:PATH-SCOPE-INSERT",
+      "replace": "    text = (PATH_SCOPE_CLAUSE + \"\\n\\n\" + text) if False else text  # M:PATH-SCOPE-INSERT",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_path_scope_clause_present_when_switched_on"
+    },
+    {
+      "name": "path-scope-insert-always",
+      "_mechanism": "Insert the path-scope clause even when the switch is off.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    text = (PATH_SCOPE_CLAUSE + \"\\n\\n\" + text) if path_scope else text  # M:PATH-SCOPE-INSERT",
+      "replace": "    text = (PATH_SCOPE_CLAUSE + \"\\n\\n\" + text) if True else text  # M:PATH-SCOPE-INSERT",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_switch_off_prompt_is_byte_identical_to_the_pinned_assembler[plan]"
+    },
+    {
+      "name": "path-scope-flag-severed",
+      "_mechanism": "Ignore the command-line path-scope flag when assembling the prompt.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "            path_scope=args.path_scope,  # M:PATH-SCOPE-FLAG",
+      "replace": "            path_scope=False,  # M:PATH-SCOPE-FLAG",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_path_scope_flag_reaches_the_prompt_through_the_cli"
+    },
+    {
+      "name": "prompt-names-the-root",
+      "_mechanism": "Put an absolute inlined document path into the prompt.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "            ref = str(path.resolve().relative_to(project_root.resolve()))",
+      "replace": "            ref = str(path.resolve())",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_assembled_prompt_carries_no_root_path"
+    },
+    {
+      "name": "path-scope-extra-byte",
+      "_mechanism": "Add an extra newline after the path-scope clause.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    text = (PATH_SCOPE_CLAUSE + \"\\n\\n\" + text) if path_scope else text  # M:PATH-SCOPE-INSERT",
+      "replace": "    text = (PATH_SCOPE_CLAUSE + \"\\n\\n\\n\" + text) if path_scope else text  # M:PATH-SCOPE-INSERT",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_switch_on_prompt_is_switch_off_plus_the_clause_only[plan]"
+    },
+    {
+      "name": "path-scope-clause-names-the-root",
+      "_mechanism": "Include the project root in the path-scope clause.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    text = (PATH_SCOPE_CLAUSE + \"\\n\\n\" + text) if path_scope else text  # M:PATH-SCOPE-INSERT",
+      "replace": "    text = (PATH_SCOPE_CLAUSE + \" \" + str(project_root) + \"\\n\\n\" + text) if path_scope else text  # M:PATH-SCOPE-INSERT",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_path_scope_clause_is_identical_across_roots_and_report_paths"
+    },
+    {
       "name": "exec-grok-strict-sentence-pin",
       "_mechanism": "K8: weaken the FR-11 exec grok bullet so the override reads as optional; the strict-contract doc pin must fail.",
       "file": "SKILL.md",
