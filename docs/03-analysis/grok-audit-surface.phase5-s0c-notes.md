@@ -15,6 +15,19 @@
    `.venv` exists → every production `.py` write refused `pytest-missing`. No bootstrap step creates the venv.
 3. assembler `--python python3.11` (bare) vs allowlist exact-argv prefix (absolute) mismatch → codex blocked.
 4. Agent message transport truncates subagent final reports (~4 KB) — use report files.
+5. (2026-10-22, Task 15 canary fix) The codex write gate's TDD judge runs the mapped test FILE with
+   `-x` inside `JUDGE_BUDGET_S = 40`; `test_grok_audit_surface_containment.py` takes ~70 s, so a RED
+   test near the end of it is never reached and every write is refused `timeout`. Worked around by
+   moving the RED test to the top of the file for the GREEN dispatch, then restoring it.
+6. (same) Codex source reads (`sed -n`, graft MCP) were refused by the Phase-5 command gate; GREEN
+   landed only once the prompt carried the exact old and new line for `apply_patch`.
+
+## Design notes owed (route to design-author)
+- D18 step 6 (`no_denial`) names the literal `Operation not permitted`. Since the 2026-10-22 fix the
+  judge matches `operation not permitted` case-insensitively (casefold), still only in `rawOutput`
+  and `content` of an update whose `toolCallId` named the denied target. Live cause: zsh printed
+  `(eval):1: operation not permitted: <denied>`. A write tool failing with `File exists (os error
+  17)` is still not a denial (operator decision 2026-10-22).
 
 ## Plan defects (measurement-class, for the plan/impl-plan record)
 - Task 19: premise "oversize prompt with TMPDIR set to a test directory" — macOS `mktemp -t`

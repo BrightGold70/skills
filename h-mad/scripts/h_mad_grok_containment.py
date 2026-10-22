@@ -236,7 +236,7 @@ def canary_judge(args: argparse.Namespace) -> int:
         return verdict("no_denial")
     denied_ids = {call.get("toolCallId") for call in denied_calls if isinstance(call.get("toolCallId"), str)}
     updates = [event for event in events if event.get("type") == "tool_call_update"]
-    if not any(event.get("toolCallId") in denied_ids and "Operation not permitted" in "\n".join(paths_module._strings(event.get("rawOutput")) + paths_module._strings(event.get("content"))) for event in updates):  # M:CANARY-DENIAL-ID
+    if not any(event.get("toolCallId") in denied_ids and "operation not permitted" in "\n".join(paths_module._strings(event.get("rawOutput")) + paths_module._strings(event.get("content"))).casefold() for event in updates):  # M:CANARY-DENIAL-ID
         return verdict("no_denial")
     return verdict(None)
 
