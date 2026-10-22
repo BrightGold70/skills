@@ -5,7 +5,8 @@
 > `docs/03-analysis/grok-audit-surface.phase5-carry.md` (15 items), operator decision D4
 > (`docs/03-analysis/grok-audit-surface.decision-2026-10-19-d4.md`) and the incident record
 > `docs/03-analysis/grok-audit-surface.incident-2026-10-20-grok-root-escape.md`. Tasks 14a–14d and
-> the D21 additions to Tasks 15 and 16 (v1.8) are from design v1.13 (`8a27d264`) and spec v1.19
+> the D21 additions to Tasks 15 and 16 (v1.8, revised in v1.9 to design v1.14 `8fd0f637` and spec
+> v1.20 `d78cca8d`) are from design v1.13 (`8a27d264`) and spec v1.19
 > (`d9f25dc2`), and the route (b) ruling in
 > `docs/03-analysis/grok-audit-surface.incident-2026-10-22-task15-halts.md` (`242c26bd`).
 > Branches: S0 (Tasks 0–14) ran on `feature/218-grok-audit-surface`, merged to `main`. **S0c (Tasks
@@ -49,8 +50,8 @@ and runs only on `SEEDSCORE: PASS` from a fresh S2 that was not halted.
 | 13 | new-behaviour | SKILL.md AC-6.2a and AC-9.5 text and the S0 doc pins | D14 |
 | 14 | gate | the Phase 5e verdict over the whole spec, the anchors, the fixture-name check, the two counts | Mutation spec; carry 11 |
 | 14a | new-behaviour | `PATH_SCOPE_CLAUSE`, `assemble(path_scope=)` and `--path-scope` in the assembler; the path-scope test module | D21; spec AC-3.9 (1), (2), (4), (5) |
-| 14b | wiring | `audit-cycle` forwards `--path-scope` when `--pass-root` is given; the pre-divergence `path_scope_missing:pN` halt; the stub's clause line and knob | D21, D17; spec AC-3.9 (3), (6) |
-| 14c | new-behaviour | `assembler-read`, `assembler-check`, `require --verb assembler` | D21, D20, D8; spec AC-3.6 |
+| 14b | wiring | `audit-cycle` forwards `--path-scope` when `--pass-root` is given; the armed `${stem}.here.txt` record and the pre-divergence `path_scope_missing:pN` halt; the stub's clause line and knob | D21, D17; spec AC-3.9 (3), (6) |
+| 14c | new-behaviour | `assembler-read`, `assembler-check` (with `--stems`), `require --verb assembler`, in the new assembler-pin test module | D21, D20, D8; spec AC-3.6 |
 | 14d | gate | the path-scope Phase 5e verdict, the cross-spec anchors, the counts, the module's time budget | D21; Mutation spec |
 | 15 | operational | the live sequence after S0c and Tasks 14a–14c merge: codex tracer pair, quarantine, canary, assembler start reading, re-smoke, smoke, re-smoke commit, quarantine, fresh S2 with per-cycle scans, `require` and the halt, assembler end reading and gate, positive control, extract, labels, score sha (operator) | D8, D9, D16, D18, D19, D20, D21; carry 6, 10 |
 | 16 | new-behaviour | S3: `main-leak`, `rescore`, the measurement doc, `grok-runtime.md`, AC-6.2/6.3 text and pins, K2 re-anchor | D9, D14, D15 |
@@ -84,10 +85,10 @@ Mutation rows added by S0c (Tasks 18–28): 13 (T18) + 16 (T19) + 13 (T20) + 24 
 Task 28. Task 24 also rewrites one S0 row in place (`p-reset-tmpdir`), which moves no count. Two
 operator-approved fixes after the S0c merge each added one row (`f3714912`
 `canary-token-window-reverted-to-hex-run`; `2925febd` `canary-denial-case-sensitive`), so the spec holds 378 rows at `d9f25dc2` (rows, read with Task 14's
-row-count command; 376 at `bfd76555`, Task 28). Tasks 14a–14c add 6 (T14a) + 7 (T14b) + 20 (T14c) =
-33: the 13 design rows PS1–PS13 and 20 containment rows, 411 after Task 14c. Task 16 adds the named
-rows K6 and K7 on every outcome, and K4 and K5 only on MISS or INCONCLUSIVE: 413 on PASS or a smoke
-failure, 415 on MISS or INCONCLUSIVE.
+row-count command; 376 at `bfd76555`, Task 28; still 378 at `8fd0f637`, where `h-mad/` is unchanged).
+Tasks 14a–14c add 6 (T14a) + 9 (T14b) + 27 (T14c) = 42: the 15 design rows PS1–PS15 and 27
+assembler-pin rows, 420 after Task 14c. Task 16 adds the named rows K6 and K7 on every outcome, and
+K4 and K5 only on MISS or INCONCLUSIVE: 422 on PASS or a smoke failure, 424 on MISS or INCONCLUSIVE.
 
 Marker sites (matching lines, `grep -c` per file):
 - the probe, `M:GAS-`: 125 at S0 (per Task: 6 + 14 + 11 + 13 + 11 + 19 + 12 + 21 + 18; Task 5's
@@ -97,11 +98,12 @@ Marker sites (matching lines, `grep -c` per file):
   + 13 (T19) + 11 (T20) + 8 (T23) = 40, so 48;
 - `h-mad/scripts/h_mad_tool_calls.py`, `# M:TOOLSCAN-`: 21 (T21);
 - `h-mad/scripts/h_mad_grok_containment.py`, `# M:`: 16 (T22) + 18 (T23) = 34;
-- the additions of this plan's v1.8, each counted by its own prefix (matching lines): `M:PATH-SCOPE-` 2 in
-  `h-mad/scripts/h_mad_assemble_audit.py` (T14a) and 3 in `h-mad/scripts/hmad-dispatch.sh` (T14b);
-  `# M:ASSEMBLER-` 14 and `# M:REQUIRE-OK-ASSEMBLER` 1 in `h-mad/scripts/h_mad_grok_containment.py`
-  (T14c). All four prefixes read 0 at `d9f25dc2` (`grep -rn` for `path_scope`, `PATH_SCOPE` and
-  `path-scope` over `h-mad/` printed nothing).
+- the additions of Tasks 14a–14c, each counted by its own prefix (matching lines): `M:PATH-SCOPE-` 2 in
+  `h-mad/scripts/h_mad_assemble_audit.py` (T14a) and 5 in `h-mad/scripts/hmad-dispatch.sh` (T14b);
+  `# M:ASSEMBLER-` 19 and `# M:REQUIRE-OK-ASSEMBLER` 1 in `h-mad/scripts/h_mad_grok_containment.py`
+  (T14c). All of these read 0 at `8fd0f637`:
+  `grep -rnE 'M:ASSEMBLER-|REQUIRE-OK-ASSEMBLER|M:PATH-SCOPE|path_scope|PATH_SCOPE|path-scope' h-mad/ | wc -l`
+  printed 0 (matching lines).
 
 The design carries none of these totals ("Two units, two derivations, neither carried"); Tasks 14
 and 29 re-derive them with the design's two commands, and Task 29 also over the three new or changed
@@ -178,8 +180,9 @@ files.
   creates a test file inserts it into `command` at its design position, so after Task 13 `command`
   equals the design's seven-file list at S0 (read at `9628c857`), and after Task 21 it equals design
   v1.11's eight-file list, with `tests/test_grok_audit_surface_containment.py` after
-  `tests/test_grok_audit_surface_docs.py`; after Task 14a it equals design v1.13's nine-file list,
-with `tests/test_grok_audit_surface_path_scope.py` after the containment module. S0c rows in `h-mad/scripts/` name `file` relative to
+  `tests/test_grok_audit_surface_docs.py`; after Task 14c it equals design v1.14's ten-file list,
+with `tests/test_grok_audit_surface_path_scope.py` (Task 14a) and then
+`tests/test_grok_audit_surface_assembler_pin.py` (Task 14c) after the containment module. S0c rows in `h-mad/scripts/` name `file` relative to
   `h-mad/` (`scripts/hmad-dispatch.sh`, `scripts/h_mad_tool_calls.py`,
   `scripts/h_mad_grok_containment.py`). Rows carry `name`, `file`, `find`, `replace`, `test` and
   `symbol` (the enclosing function or class). Probe rows name `file`
@@ -1759,44 +1762,58 @@ grep -c 'M:GAS-' docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py
 
 ---
 
-## Tasks 14a–14d: the AC-3.9 path-scope clause and the assembler pin (design v1.13 D21)
+## Tasks 14a–14d: the AC-3.9 path-scope clause and the assembler pin (design D21)
 
-These four Tasks answer design v1.13 (`8a27d264`, D21 and its edits to D2, D8, D15, D17, D18, D20)
-and spec v1.19 (`d9f25dc2`: AC-3.9 tests (1)–(6), AC-3.6's assembler commit). They gate run 3 of
-Task 15 (design "Implementation Order" item 12), so they sit before it. They are numbered 14a–14d
-rather than 15–18 because renumbering would move every cross-reference to Tasks 15–30, which
-earlier Tasks, the audit reports and the S0c notes cite by number. They run on a branch Phase 5c
-names (this plan proposes `feature/218c-path-scope`), cut from `main` after the S0c merge.
+These four Tasks answer design v1.14 (`8fd0f637`; D21 as revised from v1.13 `8a27d264`, and its edits
+to D2, D8, D15, D17, D18, D20) and spec v1.20 (`d78cca8d`: AC-3.9 tests (1)–(6), AC-3.6's assembler
+commit). They gate run 3 of Task 15 (design "Implementation Order" item 12), so they sit before it.
+They are numbered 14a–14d rather than 15–18 because renumbering would move every cross-reference
+to Tasks 15–30, which earlier Tasks, the audit reports and the S0c notes cite by number. They run on
+a branch Phase 5c names (this plan proposes `feature/218c-path-scope`), cut from `main` after the
+S0c merge.
 
-Every `path:symbol`, line, anchor and count below was read at `d9f25dc2`, where `h-mad/` is
-byte-identical to `8a27d264` (`git diff --stat 8a27d264 d9f25dc2` names only the spec).
+Every `path:symbol`, line, anchor and count below was read at `8fd0f637`, where `h-mad/` is
+byte-identical to `d9f25dc2` (`git diff --stat d9f25dc2 8fd0f637 -- h-mad` prints nothing).
 
 **Phase 5 constraints these Tasks encode** (`docs/03-analysis/grok-audit-surface.phase5-s0c-notes.md`):
 - Codex authors Phase 5, and its source reads are refused, so every edit to an existing file is
-  given below as an exact old text and its new text, each old text matching once in its file
-  (`grep -cF` printed 1 for each at `d9f25dc2`).
-- The TDD judge runs the mapped test file with `-x` inside `JUDGE_BUDGET_S = 40`.
-  `h-mad/tests/test_grok_audit_surface_containment.py` ran 85 passed in 41.33 s (the summary line) on
-  this Mac at `d9f25dc2`, and the notes record about 70 s under load, so it is over the budget
-  either way. Task 14c therefore writes its new tests at the **top** of that module, before the
-  first existing test, where they stay (see Task 14c). The new module
-  `h-mad/tests/test_grok_audit_surface_path_scope.py` holds only the 19 node ids below, and AC-T14d.5
-  measures it under 40 s.
+  given below as an exact old text and its new text. Each old text is stated with the unit that
+  makes it unique: `-cF` (substring, matching lines), `-cxF` (whole line), or a multi-line pair whose
+  lines are unique together. Each such count was run at `8fd0f637` and is 1 unless stated.
+- The TDD judge runs the mapped test file with `-x` inside `JUDGE_BUDGET_S = 40`
+  (`h-mad/scripts/h_mad_tdd_judge.py:29`). `h-mad/tests/test_grok_audit_surface_containment.py` is
+  already over it (85 passed in 41.33 s on this Mac, 40.51 s in the audit's run, about 70 s under
+  load per the notes), so no Task here adds a test to it. The new tests go in two new modules,
+  `h-mad/tests/test_grok_audit_surface_path_scope.py` (20 node ids) and
+  `h-mad/tests/test_grok_audit_surface_assembler_pin.py` (32 node ids), and AC-T14d.5 measures each
+  under 40 s. Estimate, not a measurement (neither module exists yet): the slowest path-scope ids
+  drive `h-mad/bin/hmad-dispatch audit-cycle` with stub agents, which took 0.63 s for
+  `test_pass_roots_give_each_pass_its_own_cd` here, so 20 ids at up to about 1.5 s each is about
+  30 s at worst; the assembler-pin ids are in-process calls and a few `git init` subprocesses,
+  a few seconds in all.
 - No tracked file is edited while a mutation run is in progress (the harness refuses `TREE_MOVED`).
 - Each Task's gate is the full suite, `rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests -q -p no:cacheprovider`,
   never a scoped green.
+- **A GUARD touches only what exists at RED.** A GUARD is green before the production edit, so it
+  never names an API that the edit adds: the switch-off calls pass no `path_scope` keyword (design
+  v1.14), and a GUARD over the wrapper reads its output, not only its argv.
+- **Monkeypatching an attribute the edit adds uses `raising=False`** (precedent:
+  `test_grok_audit_surface_containment.py:1184`), so the RED is the behaviour asserted, never an
+  `AttributeError` in the test body.
 
 **Shared literal.** `STUB_PATH_SCOPE_CLAUSE`, a module constant in
-`h-mad/tests/test_hmad_dispatch_audit_cycle.py` (added by Task 14a's RED commit, after
-`CONNECTIONS_MUTATION_SPEC = SPEC_DIR / "audit_cycle_connections.mutation.json"`), is the clause
-spelled out, byte for byte D21's text:
+`h-mad/tests/test_hmad_dispatch_audit_cycle.py` (added by Task 14a's RED commit, after the line
+`CONNECTIONS_MUTATION_SPEC = SPEC_DIR / "audit_cycle_connections.mutation.json"`, line 19, `-cxF` 1),
+is the clause spelled out, byte for byte D21's text:
 
 ```text
 Path scope: a path written inside the document under review, or inside any other document in this prompt, refers to that document's author's environment, not to yours. Every file this audit needs is under your working directory. Do not read, list or search any path outside your working directory for the audit's material. This does not change where you write your report or how you deliver it.
 ```
 
-No test imports the clause from the assembler, except the copy test of Task 14b, which compares the
-two. The same text is `PATH_SCOPE_CLAUSE` (Task 14a) and `_HMAD_PATH_SCOPE_CLAUSE` (Task 14b).
+The presence tests ((1), (3), (5)) never import the clause from the assembler. The copy test of
+Task 14b reads the assembler's `PATH_SCOPE_CLAUSE` by `ast`-parsing the source, without importing
+it (design v1.14). The same text is `PATH_SCOPE_CLAUSE` (Task 14a) and `_HMAD_PATH_SCOPE_CLAUSE`
+(Task 14b).
 
 ---
 
@@ -1806,8 +1823,7 @@ two. The same text is `PATH_SCOPE_CLAUSE` (Task 14a) and `_HMAD_PATH_SCOPE_CLAUS
 **Test files**: `h-mad/tests/test_grok_audit_surface_path_scope.py` (create);
 `h-mad/tests/test_hmad_dispatch_audit_cycle.py` (add `STUB_PATH_SCOPE_CLAUSE` only);
 `h-mad/tests/mutation-specs/grok_audit_surface.json` (`command` gains
-`tests/test_grok_audit_surface_path_scope.py` after `tests/test_grok_audit_surface_containment.py`,
-design v1.13's nine-file list)
+`tests/test_grok_audit_surface_path_scope.py` after `tests/test_grok_audit_surface_containment.py`)
 **Task shape**: `new-behaviour`
 **Implements**: design D21 ("The clause", "Placement", "The switch" for the assembler, "The pre-clause
 reference for test (4)"); spec AC-3.9 tests (1), (2), (4) and (5), invariants (a)–(d).
@@ -1821,9 +1837,11 @@ clause, then the body from `You are the agy audit reviewer.` (template line 44) 
 `Target document:` (template line 61) and on. With the switch off nothing changes, so production
 prompts are byte-identical to the `7e10f543` assembler's.
 
-**Edits, exact** (`h-mad/scripts/h_mad_assemble_audit.py`, `d9f25dc2` line numbers):
-1. After the `CONTRACT_SEPARATOR` assignment (lines 217–219, ending in the line `)`), add one blank
-   line and:
+**Edits, exact** (`h-mad/scripts/h_mad_assemble_audit.py`, `8fd0f637` line numbers; each old text
+`-cF` 1):
+1. After the `CONTRACT_SEPARATOR` assignment (lines 217–219, whose middle line is
+   `    "\n\n====== END OUTPUT CONTRACT — the audit prompt begins below ======\n\n"`, `-cF` 1, and whose
+   last line is `)`), add one blank line and:
    ```python
    # grok-audit-surface AC-3.9 (design D21): calibration cycles only, behind --path-scope.
    PATH_SCOPE_CLAUSE = "Path scope: a path written inside the document under review, or inside any other document in this prompt, refers to that document's author's environment, not to yours. Every file this audit needs is under your working directory. Do not read, list or search any path outside your working directory for the audit's material. This does not change where you write your report or how you deliver it."
@@ -1844,23 +1862,25 @@ prompts are byte-identical to the `7e10f543` assembler's.
 5. Old (line 628): `            vh_tail=args.vh_tail,`
    New: that line, followed by `            path_scope=args.path_scope,  # M:PATH-SCOPE-FLAG`
 
-No mutation row in any committed spec spans lines 215–222, 448–495 or 600–625 of this file (every
-row naming `scripts/h_mad_assemble_audit.py` was located; none overlaps), so no other spec's anchor moves.
+No mutation row in any committed spec spans lines 215–222, 448–495 or 600–630 of this file (every
+row naming `scripts/h_mad_assemble_audit.py` was located; none overlaps; the audit's simulation of
+these edits over all 34 specs naming the three scripts agreed).
 
 **Tests** (6 functions, 10 node ids) in the new module, which loads the assembler per test with
 `importlib.util.spec_from_file_location("h_mad_assemble_audit_under_test", …)` inside a fixture,
 builds its stub feature with `_project_with_history` and `_vh_doc` imported from
 `test_h_mad_assemble_audit`, and relies on the conftest's autouse `_hermetic_report_path_claims`
-(`XDG_CACHE_HOME` under `tmp_path`):
+(`XDG_CACHE_HOME` under `tmp_path`). Every switch-off call passes **no** `path_scope` keyword:
 - `test_path_scope_clause_present_when_switched_on` (RED): `assemble(path_scope=True)` for the stub
   feature holds `STUB_PATH_SCOPE_CLAUSE` as exactly one line, after `CONTRACT_SEPARATOR` and before
   `Target document:`.
 - `test_path_scope_flag_reaches_the_prompt_through_the_cli` (RED): the same through
   `main([... "--path-scope"])` with `--report-file` and `--out` under `tmp_path`; the prompt file read back.
-- `test_assembled_prompt_carries_no_root_path` (GUARD, switch off): `--project-root` is a symlink to
-  the real stub root, the report file lies inside the root, and `vh_tail` is smaller than an inlined
-  document's `- v` entry count, so the Version History omission note is present. After every
-  occurrence of the report-file string is removed, neither the given nor the resolved root spelling occurs.
+- `test_assembled_prompt_carries_no_root_path` (GUARD, switch off, no `path_scope` keyword):
+  `--project-root` is a symlink to the real stub root, the report file lies inside the root, and
+  `vh_tail` is smaller than an inlined document's `- v` entry count, so the Version History omission
+  note is present. After every occurrence of the report-file string is removed, neither the given
+  nor the resolved root spelling occurs.
 - `test_path_scope_clause_is_identical_across_roots_and_report_paths` (RED): two switch-on assemblies
   that differ only in project root and report file give byte-identical clause lines, and the
   root-path assertion above holds for both.
@@ -1868,38 +1888,44 @@ builds its stub feature with `_project_with_history` and `_vh_doc` imported from
   `[design]`, `[impl-plan]`: `git show 7e10f543237267643824c8d452b0415b10103d33:h-mad/scripts/h_mad_assemble_audit.py`
   and `…:h-mad/audit-prompt.template.md` into `tmp_path/ref/scripts/h_mad_assemble_audit.py` and
   `tmp_path/ref/audit-prompt.template.md`, the current `h-mad/invariants.base.md` copied to
-  `tmp_path/ref/invariants.base.md`, the reference module loaded with `spec_from_file_location`; both
-  `assemble(...)` calls take identical keyword arguments, the reference with the reference template,
-  the current one with the current default template and `path_scope=False`, and the two texts are equal.
+  `tmp_path/ref/invariants.base.md`, the reference module loaded with `spec_from_file_location`. Both
+  `assemble(...)` calls take the same feature, phase, project root, docs dirs, sentinel, report file
+  and `vh_tail`; the reference call gets the reference template and the current call the current
+  default template, and the current call passes **no** `path_scope` keyword (design v1.14: at RED
+  `assemble` is keyword-only with no such parameter, so `path_scope=False` would raise `TypeError`,
+  which the audit ran). The two texts are equal.
 - `test_switch_on_prompt_is_switch_off_plus_the_clause_only` (RED), parametrized `[plan]`, `[design]`,
   `[impl-plan]`: removing `STUB_PATH_SCOPE_CLAUSE + "\n\n"` once from the switch-on prompt gives the
-  switch-off prompt byte for byte.
+  switch-off prompt (no keyword) byte for byte.
 
 **Acceptance Criteria**:
 - [ ] AC-T14a.1: The 10 ids pass; the full suite's summary line shows no failure.
 - [ ] AC-T14a.2: `grep -c 'M:PATH-SCOPE-' h-mad/scripts/h_mad_assemble_audit.py` prints 2 (matching lines).
-- [ ] AC-T14a.3: The spec's `command` equals design v1.13's nine-file list.
+- [ ] AC-T14a.3: The spec's `command` holds `tests/test_grok_audit_surface_path_scope.py` right after
+  `tests/test_grok_audit_surface_containment.py` (Task 14c then adds the assembler-pin module, which
+  completes design v1.14's ten-file list).
 - [ ] AC-T14a.4: The four GUARD ids are run, and pass, before the production edit (spec AC-3.9: test (4)
   and the no-root-path half of (2) hold on today's assembler).
 
 **RED split**: 10 ids; 6 F (`assemble` has no `path_scope` keyword and `main` no `--path-scope`
 flag: a `TypeError` or an argparse exit per node, never a collection error), 4 P (GUARD:
 `test_assembled_prompt_carries_no_root_path` and the three `test_switch_off_prompt_is_byte_identical_to_the_pinned_assembler`
-ids). PS2 and PS9 are the negative observations for the GUARDs.
+ids, none of which names `path_scope`). PS2 and PS9 are the negative observations for the GUARDs;
+PS2 still flips test (4) with the keyword omitted, because then the default is the mutated branch.
 
 **Mutation rows** (6; markers 2). `file` `scripts/h_mad_assemble_audit.py`; tests in
-`tests/test_grok_audit_surface_path_scope.py`. The `find` of PS1, PS2, PS10 and PS11 is the
-`# M:PATH-SCOPE-INSERT` line, of PS3 the `# M:PATH-SCOPE-FLAG` line, of PS9
-`            ref = str(path.resolve().relative_to(project_root.resolve()))` (line 463, 1 matching line).
+`tests/test_grok_audit_surface_path_scope.py`. Each `find` is its whole marker line (PS9's, the
+whole line `            ref = str(path.resolve().relative_to(project_root.resolve()))`, line 463,
+`-cF` 1); each `replace` is that line with only the part named changed, the marker kept.
 
 | # | name | replace | test |
 |---|---|---|---|
-| PS1 | `path-scope-insert-dropped` | `if False else text` | `test_path_scope_clause_present_when_switched_on` |
-| PS2 | `path-scope-insert-always` | `if True else text` | `test_switch_off_prompt_is_byte_identical_to_the_pinned_assembler[plan]` |
-| PS3 | `path-scope-flag-severed` | `            path_scope=False,  # M:PATH-SCOPE-FLAG` | `test_path_scope_flag_reaches_the_prompt_through_the_cli` |
-| PS9 | `prompt-names-the-root` | `            ref = str(path.resolve())` | `test_assembled_prompt_carries_no_root_path` |
-| PS10 | `path-scope-extra-byte` | `PATH_SCOPE_CLAUSE + "\n\n\n"` in place of `PATH_SCOPE_CLAUSE + "\n\n"` | `test_switch_on_prompt_is_switch_off_plus_the_clause_only[plan]` |
-| PS11 | `path-scope-clause-names-the-root` | `PATH_SCOPE_CLAUSE + " " + str(project_root) + "\n\n"` in place of `PATH_SCOPE_CLAUSE + "\n\n"` | `test_path_scope_clause_is_identical_across_roots_and_report_paths` |
+| PS1 | `path-scope-insert-dropped` | `if path_scope else text` becomes `if False else text` | `test_path_scope_clause_present_when_switched_on` |
+| PS2 | `path-scope-insert-always` | `if path_scope else text` becomes `if True else text` | `test_switch_off_prompt_is_byte_identical_to_the_pinned_assembler[plan]` |
+| PS3 | `path-scope-flag-severed` | `path_scope=args.path_scope` becomes `path_scope=False` | `test_path_scope_flag_reaches_the_prompt_through_the_cli` |
+| PS9 | `prompt-names-the-root` | the line becomes `            ref = str(path.resolve())` | `test_assembled_prompt_carries_no_root_path` |
+| PS10 | `path-scope-extra-byte` | `PATH_SCOPE_CLAUSE + "\n\n"` becomes `PATH_SCOPE_CLAUSE + "\n\n\n"` | `test_switch_on_prompt_is_switch_off_plus_the_clause_only[plan]` |
+| PS11 | `path-scope-clause-names-the-root` | `PATH_SCOPE_CLAUSE + "\n\n"` becomes `PATH_SCOPE_CLAUSE + " " + str(project_root) + "\n\n"` | `test_path_scope_clause_is_identical_across_roots_and_report_paths` |
 
 PS9's omission note is written only when a document has more `- v` entries than `vh_tail`, which
 is why its target inlines one with more entries than the `vh_tail` it passes.
@@ -1908,19 +1934,19 @@ is why its target inlines one with more entries than the `vh_tail` it passes.
 
 ---
 
-## Task 14b: `audit-cycle` turns the switch on with `--pass-root`, and halts on a missing clause
+## Task 14b: `audit-cycle` turns the switch on with `--pass-root`, records its `$here`, and halts on a missing clause
 
 **Production file**: `h-mad/scripts/hmad-dispatch.sh` (`_HMAD_PATH_SCOPE_CLAUSE`, `_cmd_audit_cycle`)
 **Test files**: `h-mad/tests/test_grok_audit_surface_path_scope.py` (extend);
 `h-mad/tests/test_hmad_dispatch_audit_cycle.py` (`install_audit_cycle_stubs`: the clause line and the
 knob `HMAD_ASSEMBLE_DROP_CLAUSE_PN`, N a pass number); `h-mad/tests/specs/audit_cycle_connections.mutation.json`
 (row `verb-assemble-drop` re-anchored, below)
-**Task shape**: `wiring` — WIRE 1 forwards the switch from the wrapper to the assembler. The
-pre-divergence check this Task also adds is new behaviour; its RED is stated in prose under
-"RED split".
-**Implements**: design D21 ("The switch", "Fail closed", "A switch the assembler does not
-recognise", "Fixtures that change"), D17 ("The path-scope switch"); spec AC-3.9 tests (3) and (6),
-"Fail closed".
+**Task shape**: `wiring` — WIRE 1 forwards the switch from the wrapper to the assembler. The armed
+check and the `$here` record this Task also adds are new behaviour; their RED is stated in prose
+under "RED split".
+**Implements**: design D21 ("The switch", "Fail closed", "The wrapper records its `$here`", "A
+switch the assembler does not recognise", "Fixtures that change"), D17 ("The path-scope switch");
+spec AC-3.9 tests (3) and (6), "Fail closed"; spec AC-3.6 (the `$here` the run's prompts used).
 
 **WIRE 1**: `h-mad/scripts/hmad-dispatch.sh:_cmd_audit_cycle` → `h-mad/scripts/h_mad_assemble_audit.py:main` (`--path-scope`, on every pass's assembly, exactly when `pass_root_count > 0`)
 **WIRE-PIN 1**: `h-mad/tests/test_grok_audit_surface_path_scope.py::test_audit_cycle_with_pass_roots_passes_the_switch_to_every_pass`
@@ -1930,46 +1956,54 @@ recognise", "Fixtures that change"), D17 ("The path-scope switch"); spec AC-3.9 
 (Task 14a's GREEN is on the branch), so no fake module is needed. WIRE-PIN 1 drives the stub
 assembler of `install_audit_cycle_stubs`, which records its argv in `assemble_calls.jsonl`; at RED
 the assertion that every recorded argv holds `--path-scope` fails. WIRE-PIN 2 runs the real
-assembler; at RED each pass's prompt file in the stem dir (`_p1.txt`, `_p2.txt`, `_p3.txt` after
-the stem) holds the clause line 0 times, and the assertion on that
-count fails. Neither RED is an import or collection error.
+assembler; at RED each pass's prompt file in the stem dir (`_p1.txt`, `_p2.txt`, `_p3.txt` after the
+stem) holds the clause line 0 times, and the assertion on that count fails. Neither RED is an import
+or collection error.
 
 **Description**: A calibration cycle is recognised by `--pass-root` (D21): with any given,
 `_cmd_audit_cycle` sets `scope_arg=(--path-scope)` and adds `${scope_arg[@]+"${scope_arg[@]}"}` to
-every pass's assembler argv; with none, the argv is exactly as before. After the assembly loop and
-its `ASSEMBLE: HALT` branch, and before the divergence check, when `scope_arg` is set, each pass's
-prompt must hold exactly one line equal to `_HMAD_PATH_SCOPE_CLAUSE` (`grep -cxF`, matching lines).
-On the first pass N that does not (`pN` below is that pass's number, as in the Rules' file names):
-append `path_scope_missing:pN` to `--halt-file` when one was given, write
+every pass's assembler argv; with none, `scope_arg=()` and the argv is exactly as before. After the
+assembly loop and its `ASSEMBLE: HALT` branch, and before the divergence check, the check is armed
+by the array's **length** (`"${#scope_arg[@]}" -gt 0`; never `[ -n "${scope_arg[@]+x}" ]`, which is
+true for an empty array: the audit ran that form and 38 of 86 tests failed). Armed, the wrapper
+first writes `here=` and its `$here` to `${stem}.here.txt` in the stem dir, then requires each pass's
+prompt to hold exactly one line equal to `_HMAD_PATH_SCOPE_CLAUSE`. The count is captured with
+`|| true` (D21's `set -e` class rule: `grep -c` exits 1 on a count of 0, which is exactly the case
+this check exists for) and compared as a string, so an empty count also halts. On the first pass N
+that does not (`pN` below is that pass's number, as in the Rules' file names): append
+`path_scope_missing:pN` to `--halt-file` when one was given, write
 `[H-MAD] audit-cycle halted path_scope_missing:pN` to stderr, print
 `REQUIRE: STOP reason=path_scope_missing:pN` as the last stdout line, launch nothing, print no
 `AUDITCYCLE:` line, return 0. A pre-clause assembler rejects the flag (argparse exit 2), and the
-existing `[ "$arc" -eq 0 ] || exit 4` launches nothing.
+existing `[ "$arc" -eq 0 ] || exit 4` launches nothing. With the switch off nothing is written and
+nothing is checked.
 
-**Edits, exact** (`h-mad/scripts/hmad-dispatch.sh`, `d9f25dc2` line numbers; the script runs under
+**Edits, exact** (`h-mad/scripts/hmad-dispatch.sh`, `8fd0f637` line numbers; the script runs under
 `set -euo pipefail`, line 5):
-1. Old (line 3559): `_cmd_audit_cycle() {`
+1. Old (line 3559, `-cxF` 1): `_cmd_audit_cycle() {`
    New: a top-level line, one blank line, then that line:
    `_HMAD_PATH_SCOPE_CLAUSE="Path scope: a path written inside the document under review, or inside any other document in this prompt, refers to that document's author's environment, not to yours. Every file this audit needs is under your working directory. Do not read, list or search any path outside your working directory for the audit's material. This does not change where you write your report or how you deliver it."`
    (the clause holds no `"`, `$`, backtick or backslash, so it is literal inside double quotes).
-2. Old (line 3566): `  pass_args=(); gated=(); legs=(); pass_root=()`
+2. Old (line 3566, `-cF` 1): `  pass_args=(); gated=(); legs=(); pass_root=()`
    New: that line, followed by `  local -a scope_arg; scope_arg=()`
-3. Old (lines 3646–3649, the end of the `# M:PASS-ROOT-PROJECT` check):
+3. Old (lines 3646–3649, a multi-line text unique because its first line is, `-cF` 1):
    `      echo "hmad-dispatch: audit-cycle: --pass-root first root is not --project-root" >&2` /
    `      return 2` / `    fi` / `  fi`
    New: those four lines, followed by
    `  if [ "$pass_root_count" -gt 0 ]; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH`
-4. Old (line 3739): `         --report-file "${report[$i]}" --out "${prompt[$i]}" >"${asm[$i]}"`
+4. Old (line 3739, `-cF` 1): `         --report-file "${report[$i]}" --out "${prompt[$i]}" >"${asm[$i]}"`
    New: `         --report-file "${report[$i]}" --out "${prompt[$i]}" ${scope_arg[@]+"${scope_arg[@]}"} >"${asm[$i]}"`
-5. Insert after the blank line that follows the `ASSEMBLE: HALT` branch's closing `  fi` (line
-   3773) and before the line `  # Two prompts for the same cycle must differ ONLY in the per-pass report path.`:
+5. Insert after the blank line (3774) that follows the `ASSEMBLE: HALT` branch's closing `  fi`
+   (line 3773) and before the line
+   `  # Two prompts for the same cycle must differ ONLY in the per-pass report path.` (line 3775, `-cF` 1):
    ```bash
-     if [ -n "${scope_arg[@]+x}" ]; then
-       local scope_n
+     if [ "${#scope_arg[@]}" -gt 0 ]; then  # M:PATH-SCOPE-CHECK-ARMED
+       printf 'here=%s\n' "$here" > "${stem}.here.txt" || exit 4  # M:PATH-SCOPE-HERE
+       local n
        i=1
        while [ "$i" -le "$passes" ]; do
-         scope_n="$(grep -cxF -e "$_HMAD_PATH_SCOPE_CLAUSE" -- "${prompt[$i]}" || true)"
-         if [ "$scope_n" != "1" ]; then  # M:PATH-SCOPE-CHECK
+         n="$(grep -cxF -e "$_HMAD_PATH_SCOPE_CLAUSE" -- "${prompt[$i]}" || true)"
+         if [ "$n" != 1 ]; then  # M:PATH-SCOPE-CHECK
            [ -z "$halt_file" ] || printf '%s\n' "path_scope_missing:p$i" >> "$halt_file"  # M:PATH-SCOPE-HALT-FILE
            echo "[H-MAD] audit-cycle halted path_scope_missing:p$i" >&2
            echo "REQUIRE: STOP reason=path_scope_missing:p$i"
@@ -1980,7 +2014,10 @@ existing `[ "$arc" -eq 0 ] || exit 4` launches nothing.
      fi
 
    ```
-   The `|| true` is load-bearing: `grep -c` exits 1 on no match while printing 0.
+   `n` is not used elsewhere in `_cmd_audit_cycle` (lines 3559–3900 searched at `8fd0f637`). The
+   audit ran the array-length guard under `/bin/bash` 3.2.57 and `/opt/homebrew/bin/bash` 5.3.20
+   with `set -euo pipefail`: off for an empty array, on for one element, and 86 passed over the
+   wrapper and audit-cycle modules with the plan's other edits applied.
 
 **Other specs' anchors (Rules, "Lines other specs anchor on").** Edit 4 changes the third line of
 `verb-assemble-drop`'s three-line `find` in `h-mad/tests/specs/audit_cycle_connections.mutation.json`
@@ -1991,12 +2028,13 @@ notes). Edit 5 is placed after the blank line, so `verb-helper-force`, whose `fi
 branch's `  fi` and its newline, stays byte-identical. Edits 1, 2 and 3 touch no line any row finds
 (every row naming `scripts/hmad-dispatch.sh` in `h-mad/tests/mutation-specs/` and
 `h-mad/tests/specs/` was located; only `pass-root-project-disarmed`, at line 3645, and these two
-`audit_cycle_connections` rows meet the edited spans, and edit 3 keeps line 3645 byte-identical).
+`audit_cycle_connections` rows meet the edited spans, and edit 3 keeps line 3645 byte-identical; the
+audit's simulation over all 34 specs found only `verb-assemble-drop` drifting).
 
 **Stub edits, exact** (`h-mad/tests/test_hmad_dispatch_audit_cycle.py`, `install_audit_cycle_stubs`,
 inside its f-string; the source bytes are quoted as they stand in the file):
-1. Old (line 197, 16 leading spaces; `grep -cxF` matches it once, while a substring `grep -cF`
-   also matches line 362 of another stub, which has 20):
+1. Old (line 197, 16 leading spaces; `-cxF` 1, while `-cF` is 2 because line 362 of another stub,
+   with 20 spaces, contains it):
    `                extra = "Unexpected prompt-only divergence\\n"`
    New: that line, followed by
    ```python
@@ -2004,87 +2042,105 @@ inside its f-string; the source bytes are quoted as they stand in the file):
                if "--path-scope" in args and not os.environ.get(f"HMAD_ASSEMBLE_DROP_CLAUSE_P{{pass_index}}"):
                    scope = {STUB_PATH_SCOPE_CLAUSE!r} + "\\n"
    ```
-2. Old (lines 211–212; line 212 is the file's one `+ head_report_line +` line):
+2. Old (lines 211–212, a multi-line pair: its first line alone is `-cF` 3 and `-cxF` 2, at lines
+   211, 368 and 1394; its second line `                + head_report_line +` is `-cxF` 1, so the pair is unique):
    `                "Audit prompt\\n"` followed by `                + head_report_line +`
    New: `                "Audit prompt\\n" + scope` followed by `                + head_report_line +`
 
-Without `--path-scope` the stub writes byte-for-byte what it writes at `d9f25dc2`. The stub line
+Without `--path-scope` the stub writes byte-for-byte what it writes at `8fd0f637`. The stub line
 `report = Path(args[args.index("--report-file") + 1])` stays exactly once, because
 `_pass_root_case` (`test_grok_audit_surface_wrapper.py:687`) asserts that count before patching it.
 After GREEN, `test_pass_roots_give_each_pass_its_own_cd` and
 `test_pass_root_report_path_lies_in_its_own_root`, the only tests that reach dispatch with
-`--pass-root` (`grep -c -- '--pass-root'` over `h-mad/tests/*.py` at `d9f25dc2`: 6 matching lines in
+`--pass-root` (`grep -c -- '--pass-root'` over `h-mad/tests/*.py` at `8fd0f637`: 6 matching lines in
 `test_grok_audit_surface_wrapper.py`, 1 in `test_grok_audit_surface_probe.py`, a
 `--pass-root-record` argument), pass the check because the stub writes the clause.
 
-**Tests** (7 functions, 9 node ids), added to the path-scope module. The stub-driven ones reuse
+**Tests** (8 functions, 10 node ids), added to the path-scope module. The stub-driven ones reuse
 `_pass_root_case` and `_run_pass_roots`, imported from `test_grok_audit_surface_wrapper`:
 - WIRE-PIN 1, `test_audit_cycle_with_pass_roots_passes_the_switch_to_every_pass` (RED): three pass
   roots; every row of `assemble_calls.jsonl` holds `--path-scope`.
-- `test_audit_cycle_without_pass_roots_does_not_pass_the_switch` (GUARD): no `--pass-root`; no
-  recorded argv holds `--path-scope`.
+- `test_audit_cycle_without_pass_roots_does_not_pass_the_switch` (GUARD; argv **and** output): no
+  `--pass-root`; no recorded argv holds `--path-scope`; stdout has exactly one `AUDITCYCLE:` line and
+  no `REQUIRE: STOP`; the stem dir holds no `*.here.txt`. So an armed check without `--pass-root`
+  fails it (PS14).
 - WIRE-PIN 2, `test_calibration_cycle_carries_the_clause_in_every_pass_and_reaches_dispatch` (RED):
   `audit-cycle --passes 3 --pass-root …` with `HMAD_AUDIT_CYCLE_SCRIPT_DIR` removed from the
   environment (so the real assembler and the real `h_mad_audit_cycle.py` run), stub agents,
   `HMAD_AUDIT_STEM_DIR` under `tmp_path`, and plain test-written documents (not `HOSTILE_DOC`) of
   which one holds an absolute path line, as d1 did. It asserts that each pass's `_p1.asm.txt`,
   `_p2.asm.txt` and `_p3.asm.txt` file in the stem dir reads `ASSEMBLE: PASS`, that each pass's
-  prompt file there holds the clause line exactly once, three dispatches,
-  and no `reason=prompt_divergence`.
+  prompt file there holds the clause line exactly once, three dispatches, and no
+  `reason=prompt_divergence`.
+- `test_calibration_cycle_records_its_here` (RED, design v1.14): the setup of the test above; the
+  stem dir holds exactly one `*.here.txt`, whose one line is `here=` followed by the `pwd -P` of
+  `h-mad/scripts`.
 - `test_calibration_cycle_halts_when_a_pass_lacks_the_clause` (RED), parametrized `[p2]`
   (`HMAD_ASSEMBLE_DROP_CLAUSE_P2=1`), `[p1]` (`…_P1=1`), `[all]` (`…_P1`, `…_P2`, `…_P3` all `1`),
-  with `--halt-file <tmp_path>/HALT`: exit 0; last stdout line exactly
+  with `--halt-file` naming `HALT` under `tmp_path`: exit 0; last stdout line exactly
   `REQUIRE: STOP reason=path_scope_missing:p2` for `[p2]` and `…:p1` for `[p1]` and `[all]`; no
   `AUDITCYCLE:` line; `dispatch_count` 0; `cycle_calls.jsonl` empty; the halt file holds that
   reason line once; the stderr marker present.
 - `test_calibration_cycle_with_the_clause_in_every_pass_launches` (RED, the negative control of PS6
   and PS7): the same case with no knob and `--halt-file` naming an absent path; three dispatches, one
   `AUDITCYCLE:` line, no `REQUIRE: STOP`, and each prompt holds `STUB_PATH_SCOPE_CLAUSE` once.
-- `test_pre_clause_assembler_refuses_the_switch_and_nothing_launches` (RED): a script dir
-  `<tmp_path>/old/scripts` holding the `7e10f543` assembler and a copy of the real
-  `h_mad_audit_cycle.py`, with the `7e10f543` template and the current `invariants.base.md` in
-  `<tmp_path>/old`, as `HMAD_AUDIT_CYCLE_SCRIPT_DIR`; three pass roots: wrapper exit 4, no
-  `AUDITCYCLE:` line, `dispatch_count` 0.
+- `test_pre_clause_assembler_refuses_the_switch_and_nothing_launches` (RED): a script dir `old/scripts`
+  under `tmp_path` holding the `7e10f543` assembler (`git show`) and copies of the real
+  `h_mad_audit_cycle.py` and of the three modules it imports, `h_mad_extract_report.py`,
+  `h_mad_review_evidence.py` (`h_mad_audit_cycle.py:18-20`) and `h_mad_audit_gate.py` (its lazy import,
+  line 764), with the `7e10f543` template and the current `invariants.base.md` in `old/`, as
+  `HMAD_AUDIT_CYCLE_SCRIPT_DIR`; three pass roots. It asserts `dispatch_count == 0` **first**, then
+  wrapper exit 4 and no `AUDITCYCLE:` line, so a mutant that dispatches fails on the dispatch, not on
+  a helper crash.
 - `test_wrapper_clause_copy_equals_the_assembler_constant` (RED): reads
-  `^_HMAD_PATH_SCOPE_CLAUSE="([^"\n]*)"$` (multiline) from `hmad-dispatch.sh`, exactly one match,
-  equal to `PATH_SCOPE_CLAUSE` (loaded as in Task 14a) and to `STUB_PATH_SCOPE_CLAUSE`.
+  `^_HMAD_PATH_SCOPE_CLAUSE="([^"\n]*)"$` (multiline) from `hmad-dispatch.sh`, exactly one match;
+  reads `PATH_SCOPE_CLAUSE` from `h-mad/scripts/h_mad_assemble_audit.py` by `ast.parse`, taking the
+  module-level assignment's string constant, without importing the module (design v1.14); both equal
+  `STUB_PATH_SCOPE_CLAUSE`.
 
 **Acceptance Criteria**:
-- [ ] AC-T14b.1: The 9 ids pass, and the 10 Task 14a ids still pass; the full suite's summary line
-  shows no failure, `test_grok_audit_surface_wrapper.py` included, unchanged.
+- [ ] AC-T14b.1: The 10 ids pass, and the 10 Task 14a ids still pass; the full suite's summary line
+  shows no failure, `test_grok_audit_surface_wrapper.py` and `test_hmad_dispatch_audit_cycle.py`
+  included, unchanged.
 - [ ] AC-T14b.2: Each WIRE-PIN fails when only WIRE 1 is cut (PS4, PS12) and passes on the restored line.
-- [ ] AC-T14b.3: `grep -c 'M:PATH-SCOPE-' h-mad/scripts/hmad-dispatch.sh` prints 3 and
-  `grep -c '^_HMAD_PATH_SCOPE_CLAUSE=' h-mad/scripts/hmad-dispatch.sh` prints 1 (matching lines).
+- [ ] AC-T14b.3: `grep -c 'M:PATH-SCOPE-' h-mad/scripts/hmad-dispatch.sh` prints 5,
+  `grep -c '^_HMAD_PATH_SCOPE_CLAUSE=' h-mad/scripts/hmad-dispatch.sh` prints 1, and
+  `grep -c 'scope_arg\[@\]+x' h-mad/scripts/hmad-dispatch.sh` prints 0 (matching lines).
 - [ ] AC-T14b.4: `--check-anchors` reads `ANCHORS: ANCHORS_OK` on
   `h-mad/tests/specs/audit_cycle_connections.mutation.json`, and its mutation run reads
   `MUTATION: ALL_CAUGHT` with `crash_kills=0`.
 
-**RED split** (stated for the record; the WIRE-PINs, not the split, gate this Task): 9 ids; 8 F, 1
-P (GUARD: `test_audit_cycle_without_pass_roots_does_not_pass_the_switch`, whose negative observation
-is PS5). The three halt ids and the copy test fail because the check and the constant do not exist
-(the cycle launches; the regex finds nothing); the control and the pre-clause test fail because no
-flag is forwarded (no clause in any prompt; the old assembler builds a prompt and the cycle
+**RED split** (stated for the record; the WIRE-PINs, not the split, gate this Task): 10 ids; 9 F, 1
+P (GUARD: `test_audit_cycle_without_pass_roots_does_not_pass_the_switch`, whose argv and output both
+hold before the edit; its negative observations are PS5 and PS14). The three halt ids, the `$here`
+test and the copy test fail because the check, the record and the constant do not exist (the cycle
+launches; no `*.here.txt`; the regex finds nothing); the control and the pre-clause test fail because
+no flag is forwarded (no clause in any prompt; the old assembler builds a prompt and the cycle
 dispatches). The stub edits and `STUB_PATH_SCOPE_CLAUSE` are test-side and land in the RED commit;
 without `--path-scope` in the argv they change nothing, so no existing test moves at RED.
 
-**Mutation rows** (7; markers 3). `file` `scripts/hmad-dispatch.sh`; tests in
+**Mutation rows** (9; markers 5). `file` `scripts/hmad-dispatch.sh`; tests in
 `tests/test_grok_audit_surface_path_scope.py`. Each `find` is its whole marker line (PS8's, the
-whole `_HMAD_PATH_SCOPE_CLAUSE=` line); each `replace` is that line with only the part named changed
-(`if false; then` for the condition `if [ "$pass_root_count" -gt 0 ]; then`, and so on), the marker kept.
+whole `_HMAD_PATH_SCOPE_CLAUSE=` line); each `replace` is that line with only the part named
+changed, the marker kept.
 
 | # | name | marker or find | replace | test |
 |---|---|---|---|---|
-| PS4 | `path-scope-switch-dropped` | `# M:PATH-SCOPE-SWITCH` | `if false; then` | `test_audit_cycle_with_pass_roots_passes_the_switch_to_every_pass` |
-| PS5 | `path-scope-switch-always` | `# M:PATH-SCOPE-SWITCH` | `if true; then` | `test_audit_cycle_without_pass_roots_does_not_pass_the_switch` |
-| PS6 | `path-scope-check-dropped` | `# M:PATH-SCOPE-CHECK` | `if false; then` | `test_calibration_cycle_halts_when_a_pass_lacks_the_clause[p2]` |
-| PS7 | `path-scope-halt-file-dropped` | `# M:PATH-SCOPE-HALT-FILE` | the statement replaced by `:` | `test_calibration_cycle_halts_when_a_pass_lacks_the_clause[p2]` |
-| PS8 | `path-scope-clause-copy-drifted` | the `_HMAD_PATH_SCOPE_CLAUSE=` line | `Every file` changed to `Each file` | `test_wrapper_clause_copy_equals_the_assembler_constant` |
-| PS12 | `path-scope-switch-dropped-real-cycle` | `# M:PATH-SCOPE-SWITCH` | `if false; then` | `test_calibration_cycle_carries_the_clause_in_every_pass_and_reaches_dispatch` |
-| PS13 | `path-scope-switch-dropped-old-assembler` | `# M:PATH-SCOPE-SWITCH` | `if false; then` | `test_pre_clause_assembler_refuses_the_switch_and_nothing_launches` |
+| PS4 | `path-scope-switch-dropped` | `# M:PATH-SCOPE-SWITCH` | `if [ "$pass_root_count" -gt 0 ]` becomes `if false` | `test_audit_cycle_with_pass_roots_passes_the_switch_to_every_pass` |
+| PS5 | `path-scope-switch-always` | `# M:PATH-SCOPE-SWITCH` | the same condition becomes `if true` | `test_audit_cycle_without_pass_roots_does_not_pass_the_switch` |
+| PS6 | `path-scope-check-dropped` | `# M:PATH-SCOPE-CHECK` | `[ "$n" != 1 ]` becomes `false` | `test_calibration_cycle_halts_when_a_pass_lacks_the_clause[p2]` |
+| PS7 | `path-scope-halt-file-dropped` | `# M:PATH-SCOPE-HALT-FILE` | the statement becomes `:` | `test_calibration_cycle_halts_when_a_pass_lacks_the_clause[p2]` |
+| PS8 | `path-scope-clause-copy-drifted` | the `_HMAD_PATH_SCOPE_CLAUSE=` line | `Every file` becomes `Each file` | `test_wrapper_clause_copy_equals_the_assembler_constant` |
+| PS12 | `path-scope-switch-dropped-real-cycle` | `# M:PATH-SCOPE-SWITCH` | as PS4 | `test_calibration_cycle_carries_the_clause_in_every_pass_and_reaches_dispatch` |
+| PS13 | `path-scope-switch-dropped-old-assembler` | `# M:PATH-SCOPE-SWITCH` | as PS4 | `test_pre_clause_assembler_refuses_the_switch_and_nothing_launches` |
+| PS14 | `path-scope-check-always` | `# M:PATH-SCOPE-CHECK-ARMED` | `[ "${#scope_arg[@]}" -gt 0 ]` becomes `true` | `test_audit_cycle_without_pass_roots_does_not_pass_the_switch` |
+| PS15 | `path-scope-here-dropped` | `# M:PATH-SCOPE-HERE` | the `printf … || exit 4` statement becomes `:` | `test_calibration_cycle_records_its_here` |
 
 PS13's target dispatches under the mutant: with no flag forwarded, the pre-clause assembler builds
-a prompt. Under PS6 with `HMAD_ASSEMBLE_DROP_CLAUSE_P2`, the cycle reaches the divergence check, whose
-differing line names no report path, so it records `prompt_divergence` instead of the halt token.
+a prompt, and `dispatch_count == 0`, asserted first, fails. Under PS6 with
+`HMAD_ASSEMBLE_DROP_CLAUSE_P2`, the cycle reaches the divergence check, whose differing line names no
+report path, so it records `prompt_divergence` instead of the halt token. Under PS14 with no
+`--pass-root`, the stub writes no clause, so the armed check halts `path_scope_missing:p1`.
 
 **Dependencies on other tasks**: Task 14a (the callee and `STUB_PATH_SCOPE_CLAUSE`).
 
@@ -2093,18 +2149,20 @@ differing line names no report path, so it records `prompt_divergence` instead o
 ## Task 14c: `assembler-read`, `assembler-check` and `require --verb assembler`
 
 **Production file**: `h-mad/scripts/h_mad_grok_containment.py`
-**Test file**: `h-mad/tests/test_grok_audit_surface_containment.py` (extend, at the top)
+**Test files**: `h-mad/tests/test_grok_audit_surface_assembler_pin.py` (create);
+`h-mad/tests/mutation-specs/grok_audit_surface.json` (`command` gains
+`tests/test_grok_audit_surface_assembler_pin.py` right after `tests/test_grok_audit_surface_path_scope.py`,
+which makes it design v1.14's ten-file list)
 **Task shape**: `new-behaviour`
-**Implements**: design D21 ("The assembler pin"), D20 (`require`), D8 (`require` scope, four
-prefixes); spec AC-3.6 (the assembler commit; an unpinned run is not scored).
+**Implements**: design D21 ("The assembler pin", "The wrapper records its `$here`"), D20 (`require`),
+D8 (`require` scope, four prefixes); spec AC-3.6 (the assembler commit; an unpinned run is not scored).
 
-**Placement of the tests (Phase 5 note).** D21 and the design's Test Plan put these fixtures in the
-containment module, and this plan keeps them there, so their node ids are the design's. Because the
-module is over the judge's 40 s budget, every new test is written above the module's first test
-(`test_scan_grok_clean`, line 105 at `d9f25dc2`), after the imports, and stays there; pytest runs in
-definition order, so `-x` reaches them first. Fixtures and helpers defined further down
-(`containment_module`, `_containment_main`, `_containment_cli`, `_assert_containment_token`) resolve
-at call time, so the order does not break them.
+**Module placement (design v1.14).** The fixtures go in the new module, not in
+`test_grok_audit_surface_containment.py`, which is over the judge's 40 s budget. The new module
+imports `containment_module`, `_containment_cli`, `_containment_main` and `_assert_containment_token`
+from `test_grok_audit_surface_containment`, and `STUB_PATH_SCOPE_CLAUSE` from
+`test_hmad_dispatch_audit_cycle`, as the wrapper module imports its helpers. The containment
+module is not edited, so its existing Task 22 and Task 23 ids are unchanged.
 
 **Description**: two verbs and one `require` verb, both run with `GIT_DIR`, `GIT_WORK_TREE`,
 `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY` and `GIT_ALTERNATE_OBJECT_DIRECTORIES` removed from git's
@@ -2112,60 +2170,85 @@ environment.
 - `assembler-read [--here <dir>]` prints one line,
   `ASSEMBLER-READING: sha=<sha40|unreadable> dirty=<no|yes|unknown> script_dir_env=<unset|set> here=<abs>`,
   exit 0. `here` is `SELF_DIR = Path(__file__).resolve().parent` unless `--here` is given (tests
-  only). `sha` is the stdout of `git -C <here> rev-parse --verify HEAD` when it is 40 lowercase hex
-  (`# M:ASSEMBLER-READ-SHA`). `dirty` is `unknown` when `git -C <here>/.. status --porcelain --untracked-files=all -- .`
-  fails, `yes` when it prints anything, `no` otherwise (`# M:ASSEMBLER-READ-DIRTY`).
-  `script_dir_env` is `set` when `HMAD_AUDIT_CYCLE_SCRIPT_DIR` is in the environment, an empty
-  value included (`# M:ASSEMBLER-READ-ENV`). An escaping exception prints
-  `ASSEMBLER-READING: unreadable reason=internal:<ExceptionName>`, exit 2.
-- `assembler-check --start <file> --end <file> --reading <dir> --stages <resmoke|resmoke,s2>`
+  only). `sha` is the stdout of `git -C <here> rev-parse --verify HEAD` when it is exactly 40
+  lowercase hex, else `unreadable` (`# M:ASSEMBLER-READ-SHA`). `dirty` is `unknown` when
+  `git -C <here>/.. status --porcelain --untracked-files=all -- .` fails, `yes` when it prints
+  anything, `no` otherwise (`# M:ASSEMBLER-READ-DIRTY`). `script_dir_env` is `set` when
+  `HMAD_AUDIT_CYCLE_SCRIPT_DIR` is in the environment, an empty value included
+  (`# M:ASSEMBLER-READ-ENV`). An escaping exception prints
+  `ASSEMBLER-READING: unreadable reason=internal:<ExceptionName>`, exit 2. A usage error prints
+  `ASSEMBLER-READING: unreadable reason=internal:UsageError`, exit 2, from its own branch in `main`'s
+  `except UsageError` block (`# M:ASSEMBLER-READ-USAGE`; design v1.14).
+- `assembler-check --start <file> --end <file> --reading <dir> --stems <dir> --stages <resmoke|resmoke,s2>`
   prints one token line, exit 0, the first that applies, in D21's order:
-  `ASSEMBLER: UNPINNED reason=` `reading_unparseable:start`, then `:end` (an absent file, or not
-  exactly one line beginning `ASSEMBLER-READING: ` that fullmatches
-  `sha=(\S+) dirty=(\S+) script_dir_env=(\S+) here=(.+)` after the prefix;
-  `# M:ASSEMBLER-READING-UNPARSEABLE`); `script_dir_set` (either reading;
-  `# M:ASSEMBLER-SCRIPT-DIR-SET`); `sha_unreadable` (either; `# M:ASSEMBLER-SHA-UNREADABLE`);
-  `here_changed` (`# M:ASSEMBLER-HERE-CHANGED`); `sha_changed` (`# M:ASSEMBLER-SHA-CHANGED`);
-  `dirty:yes` or `dirty:unknown`, the start reading's `dirty` value when it is not `no`, else the end
-  reading's (`# M:ASSEMBLER-DIRTY`); `here_not_self` (the readings' `here` is not `str(SELF_DIR)`;
-  `# M:ASSEMBLER-HERE-NOT-SELF`). Then `ASSEMBLER: NO_CLAUSE reason=` one of the three reasons below,
-  then ` sha=` and the start reading's sha: `clause_unavailable` (the `h_mad_assemble_audit.py` beside `SELF_DIR` is absent, raises on load
-  with `spec_from_file_location`, or has no non-empty one-line `str` `PATH_SCOPE_CLAUSE`;
-  `# M:ASSEMBLER-CLAUSE-UNAVAILABLE`), `no_prompts:resmoke` or `no_prompts:s2` (in `--stages` order, a stage whose glob,
-  `resmoke/*/p*.prompt.txt` or `s2/d*/v*/p*.prompt.txt` under `--reading`, matches nothing;
-  `# M:ASSEMBLER-NO-PROMPTS`), or `clause_missing:<path relative to --reading>` (the first prompt,
-  sorted by that relative path over every named stage, whose lines do not hold the clause exactly
-  once; `# M:ASSEMBLER-CLAUSE-MISSING`). Otherwise `ASSEMBLER: PINNED sha=<sha40> prompts=<n> here=<abs>`.
+  - `ASSEMBLER: UNPINNED reason=` one of:
+    - `reading_unparseable:start`, then `:end` (an absent file, or not exactly one line beginning
+      `ASSEMBLER-READING: ` that fullmatches `sha=(\S+) dirty=(\S+) script_dir_env=(\S+) here=(.+)`
+      after the prefix; `# M:ASSEMBLER-READING-UNPARSEABLE`);
+    - `script_dir_set` (either reading; `# M:ASSEMBLER-SCRIPT-DIR-SET`);
+    - `sha_unreadable` (either; `# M:ASSEMBLER-SHA-UNREADABLE`);
+    - `here_changed` (`# M:ASSEMBLER-HERE-CHANGED`);
+    - `sha_changed` (`# M:ASSEMBLER-SHA-CHANGED`);
+    - `dirty:yes` or `dirty:unknown`, the start reading's `dirty` value when it is not `no`, else the
+      end reading's (`# M:ASSEMBLER-DIRTY`);
+    - `here_not_self` (the readings' `here` is not `str(SELF_DIR)`; `# M:ASSEMBLER-HERE-NOT-SELF`);
+    - `here_unrecorded:` and the cycle id, or `here_mismatch:` and the cycle id (design v1.14). The
+      cycle directories are the entries of `--stems` whose names fullmatch
+      `^(s1-[a-z]+|s2-d[0-9]+-v[0-9]+)$` (`# M:ASSEMBLER-STEMS-DIRS`), which skips the sibling
+      `.agy-log` directories and `.txt` files, checked in sorted order, the first failure reported.
+      `here_unrecorded` when a cycle directory does not hold exactly one `*.here.txt` whose content
+      is exactly one `here=` line (`# M:ASSEMBLER-HERE-UNRECORDED`); `here_mismatch` when that
+      line's value is not the readings' `here` (`# M:ASSEMBLER-HERE-MISMATCH`).
+  - Then `ASSEMBLER: NO_CLAUSE reason=` one of the three reasons below, then ` sha=` and the start
+    reading's sha: `clause_unavailable` (the `h_mad_assemble_audit.py` beside `SELF_DIR` is absent,
+    raises on load with `spec_from_file_location`, or has no non-empty one-line `str`
+    `PATH_SCOPE_CLAUSE`; `# M:ASSEMBLER-CLAUSE-UNAVAILABLE`), `no_prompts:resmoke` or
+    `no_prompts:s2` (in `--stages` order, a stage whose glob, `resmoke/*/p*.prompt.txt` or
+    `s2/d*/v*/p*.prompt.txt` under `--reading`, matches nothing; `# M:ASSEMBLER-NO-PROMPTS`), or
+    `clause_missing:` and the path relative to `--reading` (the first prompt, sorted by that relative
+    path over every named stage, whose lines do not hold the clause exactly once; lines are the bytes
+    decoded as UTF-8 and split on `"\n"` only, never `splitlines()`, so the count agrees with the
+    wrapper's `grep -cxF`; `# M:ASSEMBLER-CLAUSE-MISSING`).
+  - Otherwise `ASSEMBLER: PINNED sha=<sha40> prompts=<n> here=<abs>`.
   An escaping exception prints `ASSEMBLER: UNPINNED reason=internal:<ExceptionName>` and exits 2
-  (`# M:ASSEMBLER-LAST-RESORT` on that branch's `return 2`). A usage error prints the same form with
-  `internal:UsageError`, exit 2, for either verb (this plan's choice; the design names only the
-  escaping exception).
+  (`# M:ASSEMBLER-LAST-RESORT` on that branch's `return 2`). A usage error prints
+  `ASSEMBLER: UNPINNED reason=internal:UsageError`, exit 2, from its own branch
+  (`# M:ASSEMBLER-CHECK-USAGE`; design v1.14).
 - `require --verb assembler`: `REQUIRE: OK` only when the last line begins `ASSEMBLER: PINNED sha=`
   (`# M:REQUIRE-OK-ASSEMBLER`); otherwise `REQUIRE: STOP reason=<that line | no_token:<file>>`. Like
   the canary and quarantine verbs it writes no halt file.
 
-**Edits to existing lines, exact** (`d9f25dc2` line numbers):
-1. Old (line 18): `class UsageError(Exception):` — New: `SELF_DIR = Path(__file__).resolve().parent`,
+**Edits to existing lines, exact** (`8fd0f637` line numbers):
+1. Old (line 20, `-cxF` 1): `class UsageError(Exception):` — New: `SELF_DIR = Path(__file__).resolve().parent`,
    two blank lines, then that line.
-2. Old (lines 102–103): `        ok = line == "GROK-CANARY: PASS"  # M:REQUIRE-OK-CANARY` / `    else:`
+2. Old (lines 102–103, a multi-line pair: the first line is `-cF` 1, the second, `    else:`, is
+   `-cxF` 1): `        ok = line == "GROK-CANARY: PASS"  # M:REQUIRE-OK-CANARY` / `    else:`
    New: the first line, then `    elif args.verb == "assembler":`,
    `        ok = line.startswith("ASSEMBLER: PINNED sha=")  # M:REQUIRE-OK-ASSEMBLER`, then `    else:`.
    Lines 100, 102, 104, 108 and 110, which rows of Task 22 find, stay byte-identical.
-3. Old (line 253): `        consume.add_argument("--verb", choices=("toolscan", "grok-canary", "quarantine"), required=True)`
+3. Old (line 253, `-cF` 1): `        consume.add_argument("--verb", choices=("toolscan", "grok-canary", "quarantine"), required=True)`
    New: the same with `choices=("toolscan", "grok-canary", "quarantine", "assembler")`.
-4. Old (line 261): `        args = parser.parse_args(argv)` — New: before it, the two sub-parsers
-   (`assembler-read` with `--here`; `assembler-check` with `--start`, `--end`, `--reading` required and
-   `--stages` required with `choices=("resmoke", "resmoke,s2")`), each `add_help=False, allow_abbrev=False`;
-   after it, `if args.mode == "assembler-read": return assembler_read(args)` and the same for
-   `assembler-check`, before the existing `if args.mode == "quarantine":`.
-5. Old (line 276): `        print("QUARANTINE: REFUSED reason=internal:UsageError")  # M:QUARANTINE-USAGE`
-   New: before it, `if mode == "assembler-read":` printing `ASSEMBLER-READING: unreadable reason=internal:UsageError`
-   and `return 2`, and the same for `assembler-check` printing `ASSEMBLER: UNPINNED reason=internal:UsageError`;
+4. Old (line 261, `-cxF` 1): `        args = parser.parse_args(argv)` — New: before it, the two
+   sub-parsers (`assembler-read` with `--here`; `assembler-check` with `--start`, `--end`,
+   `--reading`, `--stems` required and `--stages` required with `choices=("resmoke", "resmoke,s2")`),
+   each `add_help=False, allow_abbrev=False`; after it, `if args.mode == "assembler-read": return assembler_read(args)`
+   and the same for `assembler-check`, before the existing `if args.mode == "quarantine":`.
+5. Old (line 276, `-cF` 1): `        print("QUARANTINE: REFUSED reason=internal:UsageError")  # M:QUARANTINE-USAGE`
+   New: before it,
+   ```python
+           if mode == "assembler-read":
+               print("ASSEMBLER-READING: unreadable reason=internal:UsageError")  # M:ASSEMBLER-READ-USAGE
+               return 2
+           if mode == "assembler-check":
+               print("ASSEMBLER: UNPINNED reason=internal:UsageError")  # M:ASSEMBLER-CHECK-USAGE
+               return 2
+   ```
    then that line, unchanged.
-6. Old (line 284): `        print(f"QUARANTINE: REFUSED reason=internal:{type(exc).__name__}")`
-   New: before it, the two `mode` branches printing the `internal:{type(exc).__name__}` forms above,
-   the `assembler-check` branch ending `            return 2  # M:ASSEMBLER-LAST-RESORT`; then that
-   line, unchanged. Lines 247, 276, 281, 283 and 285, which Task 22 and Task 23 rows find, stay byte-identical.
+6. Old (line 284, `-cF` 1): `        print(f"QUARANTINE: REFUSED reason=internal:{type(exc).__name__}")`
+   New: before it, the two `mode` branches printing `ASSEMBLER-READING: unreadable reason=internal:{type(exc).__name__}`
+   and `ASSEMBLER: UNPINNED reason=internal:{type(exc).__name__}`, the `assembler-check` branch ending
+   `            return 2  # M:ASSEMBLER-LAST-RESORT`; then that line, unchanged. Lines 247, 276, 281,
+   283 and 285, which Task 22 and Task 23 rows find, stay byte-identical.
 
 **Code structure** (new):
 ```python
@@ -2174,81 +2257,110 @@ def _git(here: Path, *args: str) -> subprocess.CompletedProcess: ...  # scrubbed
 def assembler_read(args: argparse.Namespace) -> int: ...
 def parse_assembler_reading(path: str) -> dict[str, str] | None: ...
 def _assembler_clause() -> str | None: ...
+def _recorded_here(stems: Path, here: str) -> str | None: ...  # the first here_* reason, or None
 def assembler_check(args: argparse.Namespace) -> int: ...
 ```
 
-**Tests** (18 functions, 25 node ids), at the top of the containment module. Every fixture asserts
-the exit code beside the exact last stdout line through `_assert_containment_token`. The
-`assembler-read` fixtures run `_containment_cli("assembler-read", "--here", …)` against a git
-repository made under `tmp_path` with the GIT_* variables removed (`h-mad/scripts/` committed,
-`HMAD_AUDIT_CYCLE_SCRIPT_DIR` removed unless the test sets it); the `assembler-check` fixtures call
-`_containment_main` in process with `SELF_DIR` monkeypatched to a temp directory holding a stand-in
-`h_mad_assemble_audit.py` that defines `PATH_SCOPE_CLAUSE = STUB_PATH_SCOPE_CLAUSE`, readings written
-by the test, and a `--reading` tree whose prompts hold the clause once, so each fixture plants its
-one condition alone:
-- `test_assembler_read_clean_tree_reads_sha_and_no`, `test_assembler_read_dirty_h_mad_reads_yes` (an
-  untracked file under `h-mad/`), `test_assembler_read_outside_git_reads_unreadable` (`sha=unreadable
-  dirty=unknown`; it first asserts `git -C <its parent> rev-parse --git-dir` fails),
-  `test_assembler_read_records_a_set_script_dir_env`, parametrized `[nonempty]` and `[empty]`.
-- `test_assembler_check_pinned` (the must-not-refuse control), `test_assembler_check_unparseable_reading`
-  (the start reading broken, the end one intact: `reading_unparseable:start`),
-  `test_assembler_check_script_dir_set`, `test_assembler_check_sha_unreadable`,
-  `test_assembler_check_here_changed`, `test_assembler_check_sha_changed`, `test_assembler_check_dirty`
-  parametrized `[yes]` and `[unknown]`, `test_assembler_check_here_not_self`,
-  `test_assembler_check_clause_unavailable`, `test_assembler_check_no_prompts` parametrized
-  `[resmoke]` (no resmoke prompt) and `[s2]` (`--stages resmoke,s2`, resmoke prompts with the clause,
-  no S2 prompt), `test_assembler_check_clause_missing`, `test_assembler_check_clause_twice_is_missing`,
-  `test_assembler_check_internal_exits_2` (a helper the check calls replaced in process by one raising
-  `RuntimeError`: exactly `ASSEMBLER: UNPINNED reason=internal:RuntimeError`, exit 2).
-- `test_require_assembler_ok_only_on_pinned`, parametrized `[PINNED]` (`REQUIRE: OK`), `[UNPINNED]`,
-  `[NO_CLAUSE]`, `[empty]` and `[absent]` (each `REQUIRE: STOP`), exit 0 each, and no halt file
-  created in any case.
+**Tests** (24 functions, 32 node ids) in the new module. Every fixture asserts the exit code beside
+the exact last stdout line through `_assert_containment_token`. The `assembler-read` fixtures run
+`_containment_cli("assembler-read", "--here", …)` against a git repository made under `tmp_path`
+with the GIT_* variables removed (`h-mad/scripts/` committed, `HMAD_AUDIT_CYCLE_SCRIPT_DIR` removed
+unless the test sets it). The `assembler-check` fixtures call `_containment_main` in process with
+`monkeypatch.setattr(module, "SELF_DIR", <temp dir>, raising=False)`, the temp dir holding a stand-in
+`h_mad_assemble_audit.py` that defines `PATH_SCOPE_CLAUSE` as `STUB_PATH_SCOPE_CLAUSE`, readings
+written by the test, a `--reading` tree whose prompts hold the clause once, and a `--stems` tree
+whose cycle directories (`s1-grok`, `s2-d1-v1`) each hold one `*.here.txt` with the readings' `here`;
+so each fixture plants its one condition alone:
+- `assembler-read` (6 functions, 7 ids): `test_assembler_read_clean_tree_reads_sha_and_no`,
+  `test_assembler_read_dirty_h_mad_reads_yes` (an untracked file under `h-mad/`),
+  `test_assembler_read_outside_git_reads_unreadable` (`sha=unreadable dirty=unknown`; it first asserts
+  `git -C` on its parent with `rev-parse --git-dir` fails), `test_assembler_read_records_a_set_script_dir_env`
+  parametrized `[nonempty]` and `[empty]`, `test_assembler_read_sha256_repository_reads_unreadable`
+  (plan-added: a repository made with `git init --object-format=sha256` and one commit, so
+  `rev-parse` succeeds with 64 hex characters, which the impl-plan audit measured on git 2.54.0;
+  `sha=unreadable dirty=no`), and `test_assembler_read_usage_error_exits_2` (an unknown flag:
+  exactly `ASSEMBLER-READING: unreadable reason=internal:UsageError`, exit 2, no `QUARANTINE:` line).
+- `assembler-check` (17 functions, 20 ids): `test_assembler_check_pinned` (the must-not-refuse
+  control), `test_assembler_check_unparseable_reading` (the start reading broken, the end one intact:
+  `reading_unparseable:start`), `test_assembler_check_script_dir_set`,
+  `test_assembler_check_sha_unreadable`, `test_assembler_check_here_changed`,
+  `test_assembler_check_sha_changed`, `test_assembler_check_dirty` parametrized `[yes]` and
+  `[unknown]`, `test_assembler_check_here_not_self`, `test_assembler_check_here_unrecorded`
+  parametrized `[none]` (a cycle directory with no `*.here.txt`) and `[two]` (one with two),
+  `test_assembler_check_here_mismatch`, `test_assembler_check_ignores_sibling_agy_log_dirs` (an
+  `s2-d1-v1.agy-log` directory and an `s2-d1-v1.p1.root.txt` file beside the cycle directories, with
+  no `*.here.txt`: still `PINNED`), `test_assembler_check_clause_unavailable`,
+  `test_assembler_check_no_prompts` parametrized `[resmoke]` (no resmoke prompt) and `[s2]`
+  (`--stages resmoke,s2`, resmoke prompts with the clause, no S2 prompt),
+  `test_assembler_check_clause_missing`, `test_assembler_check_clause_twice_is_missing`,
+  `test_assembler_check_internal_exits_2` (a helper the check calls replaced in process, with
+  `raising=False`, by one raising `RuntimeError`: exactly
+  `ASSEMBLER: UNPINNED reason=internal:RuntimeError`, exit 2), and
+  `test_assembler_check_usage_error_exits_2` (an unknown flag: exactly
+  `ASSEMBLER: UNPINNED reason=internal:UsageError`, exit 2, no `QUARANTINE:` line).
+- `test_require_assembler_ok_only_on_pinned` (1 function, 5 ids), parametrized `[PINNED]`
+  (`REQUIRE: OK`), `[UNPINNED]`, `[NO_CLAUSE]`, `[empty]` and `[absent]` (each `REQUIRE: STOP`), exit
+  0 each, and no halt file created in any case.
 
 **Acceptance Criteria**:
-- [ ] AC-T14c.1: The 25 ids pass; the full suite's summary line shows no failure.
-- [ ] AC-T14c.2: `grep -c '# M:ASSEMBLER-' h-mad/scripts/h_mad_grok_containment.py` prints 14 and
+- [ ] AC-T14c.1: The 32 ids pass; the full suite's summary line shows no failure.
+- [ ] AC-T14c.2: `grep -c '# M:ASSEMBLER-' h-mad/scripts/h_mad_grok_containment.py` prints 19 and
   `grep -c '# M:REQUIRE-OK-ASSEMBLER' h-mad/scripts/h_mad_grok_containment.py` prints 1 (matching lines).
 - [ ] AC-T14c.3: `test_require_ok_per_verb` keeps its three ids (`[toolscan]`, `[grok-canary]`,
-  `[quarantine]`), and every Task 22 and Task 23 row still finds its line (`--check-anchors`).
+  `[quarantine]`), `test_grok_audit_surface_containment.py` is unchanged
+  (`git diff --quiet` on it), and every Task 22 and Task 23 row still finds its line (`--check-anchors`).
 
-**RED split**: 25 ids; 25 F (at RED both verbs are unknown sub-commands, so `main` takes the usage
-branch and prints a `QUARANTINE:` token, and `--verb assembler` is rejected by `choices`), 0 P.
+**RED split**: 32 ids; 32 F, 0 P. At RED both verbs are unknown sub-commands, so `main` takes the
+usage branch and prints a `QUARANTINE:` token, and `--verb assembler` is rejected by `choices`. The
+in-process `assembler-check` ids set `SELF_DIR` and the injected helper with `raising=False`, so they
+reach `main` and fail on that token, not on an `AttributeError` (impl-plan audit should-fix).
 
-**Mutation rows** (20; markers 15). `file` `scripts/h_mad_grok_containment.py`; tests in
-`tests/test_grok_audit_surface_containment.py`. Rows 2, 5 and 13 change a value or the printed reason
+**Mutation rows** (27; markers 20). `file` `scripts/h_mad_grok_containment.py`; tests in
+`tests/test_grok_audit_surface_assembler_pin.py`. Rows 6, 7, 19 and 25 change the printed reason
 rather than disarm, so no mutant reaches later code with a value the guard rejected (Rules, "S0c
-scripts"). D21 requires one row per `# M:ASSEMBLER-<REASON>` guard and one for
-`# M:REQUIRE-OK-ASSEMBLER`: rows 5–10, 12–14, 16, 18 and 19 (12). Rows 1–4, 11, 15, 17 and 20 (8)
-are plan-added, one per alternative that a single disarm cannot tell apart, as Task 21 added its own.
+scripts"). Each `find` is its whole marker line, and each marked condition sits on its marker line.
+D21 requires one row per `# M:ASSEMBLER-<REASON>` guard, one per usage branch and one for
+`# M:REQUIRE-OK-ASSEMBLER`: rows 6, 7, 8, 9, 10, 11, 12, 14, 15, 17, 19, 20, 22, 24, 25 and 26 (16).
+Rows 1–5, 13, 16, 18, 21, 23 and 27 (11) are plan-added, one per alternative that a single disarm
+cannot tell apart, as Task 21 added its own.
 
 | # | name | marker | replace | test |
 |---|---|---|---|---|
-| 1 | `assembler-read-sha-dropped` | `# M:ASSEMBLER-READ-SHA` | `sha = "unreadable"` | `test_assembler_read_clean_tree_reads_sha_and_no` |
-| 2 | `assembler-read-sha-unchecked` | `# M:ASSEMBLER-READ-SHA` | the stdout taken without the 40-hex check | `test_assembler_read_outside_git_reads_unreadable` |
+| 1 | `assembler-read-sha-dropped` | `# M:ASSEMBLER-READ-SHA` | `sha` always `unreadable` | `test_assembler_read_clean_tree_reads_sha_and_no` |
+| 2 | `assembler-read-sha-unchecked` | `# M:ASSEMBLER-READ-SHA` | the stdout taken without the 40-hex check | `test_assembler_read_sha256_repository_reads_unreadable` |
 | 3 | `assembler-read-dirty-never` | `# M:ASSEMBLER-READ-DIRTY` | `yes` never chosen | `test_assembler_read_dirty_h_mad_reads_yes` |
-| 4 | `assembler-read-env-nonempty-only` | `# M:ASSEMBLER-READ-ENV` | `set` only for a non-empty value | `test_assembler_read_records_a_set_script_dir_env[empty]` |
-| 5 | `assembler-reading-unparseable-reason` | `# M:ASSEMBLER-READING-UNPARSEABLE` | prints `reading_unparseable:end` for either reading | `test_assembler_check_unparseable_reading` |
-| 6 | `assembler-script-dir-set-disarmed` | `# M:ASSEMBLER-SCRIPT-DIR-SET` | condition never fires | `test_assembler_check_script_dir_set` |
-| 7 | `assembler-sha-unreadable-disarmed` | `# M:ASSEMBLER-SHA-UNREADABLE` | condition never fires | `test_assembler_check_sha_unreadable` |
-| 8 | `assembler-here-changed-disarmed` | `# M:ASSEMBLER-HERE-CHANGED` | condition never fires | `test_assembler_check_here_changed` |
-| 9 | `assembler-sha-changed-disarmed` | `# M:ASSEMBLER-SHA-CHANGED` | condition never fires | `test_assembler_check_sha_changed` |
-| 10 | `assembler-dirty-disarmed` | `# M:ASSEMBLER-DIRTY` | condition never fires | `test_assembler_check_dirty[yes]` |
-| 11 | `assembler-dirty-yes-only` | `# M:ASSEMBLER-DIRTY` | fires only on `yes` | `test_assembler_check_dirty[unknown]` |
-| 12 | `assembler-here-not-self-disarmed` | `# M:ASSEMBLER-HERE-NOT-SELF` | condition never fires | `test_assembler_check_here_not_self` |
-| 13 | `assembler-clause-unavailable-reason` | `# M:ASSEMBLER-CLAUSE-UNAVAILABLE` | prints `no_prompts:clause` | `test_assembler_check_clause_unavailable` |
-| 14 | `assembler-no-prompts-disarmed` | `# M:ASSEMBLER-NO-PROMPTS` | condition never fires | `test_assembler_check_no_prompts[resmoke]` |
-| 15 | `assembler-no-prompts-resmoke-only` | `# M:ASSEMBLER-NO-PROMPTS` | fires only for the `resmoke` stage | `test_assembler_check_no_prompts[s2]` |
-| 16 | `assembler-clause-missing-disarmed` | `# M:ASSEMBLER-CLAUSE-MISSING` | condition never fires | `test_assembler_check_clause_missing` |
-| 17 | `assembler-clause-missing-at-least-once` | `# M:ASSEMBLER-CLAUSE-MISSING` | fires only on a count below 1 | `test_assembler_check_clause_twice_is_missing` |
-| 18 | `assembler-last-resort-exit-0` | `# M:ASSEMBLER-LAST-RESORT` | `return 0` | `test_assembler_check_internal_exits_2` |
-| 19 | `require-ok-assembler-narrowed` | `# M:REQUIRE-OK-ASSEMBLER` | never OK | `test_require_assembler_ok_only_on_pinned[PINNED]` |
-| 20 | `require-ok-assembler-widened` | `# M:REQUIRE-OK-ASSEMBLER` | OK on any `ASSEMBLER: ` line | `test_require_assembler_ok_only_on_pinned[UNPINNED]` |
+| 4 | `assembler-read-dirty-unknown-dropped` | `# M:ASSEMBLER-READ-DIRTY` | `unknown` never chosen (a failed status reads `no`) | `test_assembler_read_outside_git_reads_unreadable` |
+| 5 | `assembler-read-env-nonempty-only` | `# M:ASSEMBLER-READ-ENV` | `set` only for a non-empty value | `test_assembler_read_records_a_set_script_dir_env[empty]` |
+| 6 | `assembler-read-usage-reason` | `# M:ASSEMBLER-READ-USAGE` | prints `internal:Usage` | `test_assembler_read_usage_error_exits_2` |
+| 7 | `assembler-reading-unparseable-reason` | `# M:ASSEMBLER-READING-UNPARSEABLE` | prints `reading_unparseable:end` for either reading | `test_assembler_check_unparseable_reading` |
+| 8 | `assembler-script-dir-set-disarmed` | `# M:ASSEMBLER-SCRIPT-DIR-SET` | condition never fires | `test_assembler_check_script_dir_set` |
+| 9 | `assembler-sha-unreadable-disarmed` | `# M:ASSEMBLER-SHA-UNREADABLE` | condition never fires | `test_assembler_check_sha_unreadable` |
+| 10 | `assembler-here-changed-disarmed` | `# M:ASSEMBLER-HERE-CHANGED` | condition never fires | `test_assembler_check_here_changed` |
+| 11 | `assembler-sha-changed-disarmed` | `# M:ASSEMBLER-SHA-CHANGED` | condition never fires | `test_assembler_check_sha_changed` |
+| 12 | `assembler-dirty-disarmed` | `# M:ASSEMBLER-DIRTY` | condition never fires | `test_assembler_check_dirty[yes]` |
+| 13 | `assembler-dirty-yes-only` | `# M:ASSEMBLER-DIRTY` | fires only on `yes` | `test_assembler_check_dirty[unknown]` |
+| 14 | `assembler-here-not-self-disarmed` | `# M:ASSEMBLER-HERE-NOT-SELF` | condition never fires | `test_assembler_check_here_not_self` |
+| 15 | `assembler-here-unrecorded-disarmed` | `# M:ASSEMBLER-HERE-UNRECORDED` | condition never fires | `test_assembler_check_here_unrecorded[none]` |
+| 16 | `assembler-here-unrecorded-at-least-one` | `# M:ASSEMBLER-HERE-UNRECORDED` | fires only on zero files | `test_assembler_check_here_unrecorded[two]` |
+| 17 | `assembler-here-mismatch-disarmed` | `# M:ASSEMBLER-HERE-MISMATCH` | condition never fires | `test_assembler_check_here_mismatch` |
+| 18 | `assembler-stems-dirs-widened` | `# M:ASSEMBLER-STEMS-DIRS` | every directory entry is a cycle directory | `test_assembler_check_ignores_sibling_agy_log_dirs` |
+| 19 | `assembler-clause-unavailable-reason` | `# M:ASSEMBLER-CLAUSE-UNAVAILABLE` | prints `no_prompts:clause` | `test_assembler_check_clause_unavailable` |
+| 20 | `assembler-no-prompts-disarmed` | `# M:ASSEMBLER-NO-PROMPTS` | condition never fires | `test_assembler_check_no_prompts[resmoke]` |
+| 21 | `assembler-no-prompts-resmoke-only` | `# M:ASSEMBLER-NO-PROMPTS` | fires only for the `resmoke` stage | `test_assembler_check_no_prompts[s2]` |
+| 22 | `assembler-clause-missing-disarmed` | `# M:ASSEMBLER-CLAUSE-MISSING` | condition never fires | `test_assembler_check_clause_missing` |
+| 23 | `assembler-clause-missing-at-least-once` | `# M:ASSEMBLER-CLAUSE-MISSING` | fires only on a count below 1 | `test_assembler_check_clause_twice_is_missing` |
+| 24 | `assembler-last-resort-exit-0` | `# M:ASSEMBLER-LAST-RESORT` | `return 0` | `test_assembler_check_internal_exits_2` |
+| 25 | `assembler-check-usage-reason` | `# M:ASSEMBLER-CHECK-USAGE` | prints `internal:Usage` | `test_assembler_check_usage_error_exits_2` |
+| 26 | `require-ok-assembler-narrowed` | `# M:REQUIRE-OK-ASSEMBLER` | never OK | `test_require_assembler_ok_only_on_pinned[PINNED]` |
+| 27 | `require-ok-assembler-widened` | `# M:REQUIRE-OK-ASSEMBLER` | OK on any `ASSEMBLER: ` line | `test_require_assembler_ok_only_on_pinned[UNPINNED]` |
 
-Each marked condition sits on its marker line, so every row above is a one-line `find`.
-`test_assembler_check_pinned` has no row of its own: it is the must-not-refuse control of rows 6–17.
+`test_assembler_check_pinned` has no row of its own: it is the must-not-refuse control of rows 8–23.
+Row 2's kill does not depend on whether the implementation also checks the return code: in its
+fixture `rev-parse` succeeds, so only the 40-hex check can turn a 64-character sha into `unreadable`.
 
-**Dependencies on other tasks**: Task 22 (`require`), Task 14a (`PATH_SCOPE_CLAUSE`, which
-`clause_unavailable` reads; the fixtures use a stand-in, so 14c's tests do not need 14a's GREEN).
+**Dependencies on other tasks**: Task 22 (`require`), Task 14b (the `${stem}.here.txt` record that
+`--stems` reads; the fixtures write their own, so 14c's tests do not need 14b's GREEN), Task 14a
+(`PATH_SCOPE_CLAUSE`; the fixtures use a stand-in).
 
 ---
 
@@ -2258,12 +2370,13 @@ Each marked condition sits on its marker line, so every row above is a one-line 
 **Test files**: none
 **Task shape**: `gate` — reads verdicts over what Tasks 14a–14c built; writes no production file.
 **Implements**: design "Implementation Order" item 12 (full suite, then Phase 5e, before run 3);
-design Test Plan "Mutation spec" (the v1.13 rows).
+design Test Plan "Mutation spec" (the v1.13 and v1.14 rows).
 
 ```bash
 rtk proxy /opt/anaconda3/bin/python3.11 -m pytest --version
 rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests -q -p no:cacheprovider
-rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/test_grok_audit_surface_path_scope.py -q -p no:cacheprovider
+rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/test_grok_audit_surface_path_scope.py -x -q -p no:cacheprovider
+rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/test_grok_audit_surface_assembler_pin.py -x -q -p no:cacheprovider
 python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/grok_audit_surface.json
 python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/grok_audit_surface.json
 for s in $(grep -l '"scripts/hmad-dispatch.sh"\|"scripts/h_mad_assemble_audit.py"\|"scripts/h_mad_grok_containment.py"' h-mad/tests/mutation-specs/*.json h-mad/tests/specs/*.json); do python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors "$s" | tail -1; done
@@ -2275,16 +2388,17 @@ grep -c '# M:ASSEMBLER-' h-mad/scripts/h_mad_grok_containment.py
 
 **Acceptance Criteria**:
 - [ ] AC-T14d.1: The first command prints a pytest version; the full suite's summary line shows no failure.
-- [ ] AC-T14d.2: `MUTATION: ALL_CAUGHT` with `untargeted=0/411` and `crash_kills=0`, and
+- [ ] AC-T14d.2: `MUTATION: ALL_CAUGHT` with `untargeted=0/420` and `crash_kills=0`, and
   `ANCHORS: ANCHORS_OK`, read from the token lines.
 - [ ] AC-T14d.3: Every spec the loop names prints `ANCHORS: ANCHORS_OK` (34 files name one of the
-  three scripts at `d9f25dc2`; the loop re-derives the set).
+  three scripts at `8fd0f637`; the loop re-derives the set).
 - [ ] AC-T14d.4: The three marker counts (matching lines) and the row count (rows) are re-derived at
-  this Task's sha and reported with their units. This plan expects 2, 3, 14 and 411 (378 at
-  `d9f25dc2`, read with the last command, plus 6 + 7 + 20); a different figure is reported against
+  this Task's sha and reported with their units. This plan expects 2, 5, 19 and 420 (378 at
+  `8fd0f637`, read with the last command, plus 6 + 9 + 27); a different figure is reported against
   the Task whose table it contradicts, never silently accepted.
-- [ ] AC-T14d.5: The path-scope module's summary line reads 19 passed in under 40 s (the judge's
-  `JUDGE_BUDGET_S`).
+- [ ] AC-T14d.5: Each new module's summary line, run under `-x` as the judge runs it, reads all
+  passed in under 40 s (the judge's `JUDGE_BUDGET_S`): 20 passed for the path-scope module and 32 for
+  the assembler-pin module.
 
 **Dependencies on other tasks**: Tasks 14a–14c.
 
@@ -2364,8 +2478,11 @@ from these variables and from the `ROOT: READY` line of the root it names.
    needs a new run). `SMOKE: FAIL` takes the smoke-failure branch after step 7 (Task 16 publishes;
    steps 8–11 do not run). On that branch the end reading follows the last re-smoke cycle (D21):
    `python3 h-mad/scripts/h_mad_grok_containment.py assembler-read > "$RUN/assembler/end.txt"`, then
-   `python3 h-mad/scripts/h_mad_grok_containment.py assembler-check --start "$RUN/assembler/start.txt" --end "$RUN/assembler/end.txt" --reading "$READING" --stages resmoke > "$RUN/assembler/check.txt"`,
-   whose token Task 16 publishes (no `extract` follows on this branch, so nothing is gated on it).
+   `python3 h-mad/scripts/h_mad_grok_containment.py assembler-check --start "$RUN/assembler/start.txt" --end "$RUN/assembler/end.txt" --reading "$READING" --stems "$RUN/stem" --stages resmoke > "$RUN/assembler/check.txt"`,
+   then `python3 h-mad/scripts/h_mad_grok_containment.py require --verb assembler --token-file "$RUN/assembler/check.txt"`.
+   Task 16 publishes the smoke-failure doc only on `REQUIRE: OK` (design v1.14 D15); on
+   `REQUIRE: STOP` the run is not a reading and goes only to an incident record on `main`, with the
+   readings and the `ASSEMBLER:` line verbatim.
 7. **The re-smoke commit**, on `SMOKE: PASS` or `SMOKE: FAIL`: run the calibration-ref precondition
    below, then `git fetch --no-tags origin +refs/heads/calibration/grok-audit-surface:refs/heads/calibration/grok-audit-surface`,
    `TIP=$(git rev-parse refs/heads/calibration/grok-audit-surface)`, confirm
@@ -2393,7 +2510,7 @@ from these variables and from the `ROOT: READY` line of the root it names.
 9a. **The assembler pin** (D8 step 6, D21; spec AC-3.6), after the last S2 cycle's scan and its
     `require`, and before step 10:
     `python3 h-mad/scripts/h_mad_grok_containment.py assembler-read > "$RUN/assembler/end.txt"`, then
-    `python3 h-mad/scripts/h_mad_grok_containment.py assembler-check --start "$RUN/assembler/start.txt" --end "$RUN/assembler/end.txt" --reading "$READING" --stages resmoke,s2 > "$RUN/assembler/check.txt"`,
+    `python3 h-mad/scripts/h_mad_grok_containment.py assembler-check --start "$RUN/assembler/start.txt" --end "$RUN/assembler/end.txt" --reading "$READING" --stems "$RUN/stem" --stages resmoke,s2 > "$RUN/assembler/check.txt"`,
     then `python3 h-mad/scripts/h_mad_grok_containment.py require --verb assembler --token-file "$RUN/assembler/check.txt"`:
     `REQUIRE: OK`. A `REQUIRE: STOP` (`ASSEMBLER: UNPINNED` or `NO_CLAUSE`) means no `extract`, no
     labels and no score sha: the run is evidence only, recorded as an incident on `main` as a halted
@@ -2442,7 +2559,8 @@ operator decision, never by the forced fetch.
   `checkout=` above 0, before any scan line is published.
 - [ ] AC-T15.6 (design v1.13 D21): `$RUN/assembler/start.txt` was written before the versions line,
   `end.txt` after the last S2 cycle's `require` (or, on a smoke failure, after the last re-smoke
-  cycle), and on a scored outcome `require --verb assembler` printed `REQUIRE: OK` before `extract` ran.
+  cycle), `assembler-check` ran with `--stems "$RUN/stem"`, and `require --verb assembler` printed
+  `REQUIRE: OK` before `extract` ran (scored outcome) or before the doc was published (smoke failure).
   Every re-smoke and S2 `audit-cycle` carried `--pass-root`.
 
 **Dependencies on other tasks**: Tasks 0–14 (merged); Tasks 18–28 merged to `main` with Task 29's
@@ -2487,14 +2605,16 @@ positive-control `TOOLSCAN:` line, every `CONTAINMENT:` line and the codex and a
 `Not run: second quarantine, fresh S2, positive control, CONTAINMENT lines (smoke failed)`. A halted
 run publishes no measurement doc (Task 15 AC-T15.4).
 
-**D21 additions (design v1.13 D15; spec AC-3.6, AC-3.9, FR-6).** On every published outcome the
-stamp carries the assembler commit and the prompt delta:
+**D21 additions (design v1.14 D15; spec AC-3.6, AC-3.9, FR-6).** The doc is published only from a
+run whose `ASSEMBLER:` token is `PINNED`, read by `require --verb assembler` (Task 15 step 9a, or step
+6 on the smoke-failure shape through its `--stages resmoke` gate). An `UNPINNED` or `NO_CLAUSE` run is
+not a reading: it has no measurement doc and no stamp, and its readings and token go only to an
+incident record on `main`. On every published outcome the stamp carries the assembler commit and
+the prompt delta:
 - the two `ASSEMBLER-READING:` lines (`$RUN/assembler/start.txt`, `end.txt`) and the `ASSEMBLER:`
   token (`$RUN/assembler/check.txt`), verbatim;
-- the stamp line `assembler=` followed by the token's 40-hex `sha=` value when the token is `PINNED`
-  or `NO_CLAUSE`, or `assembler=unpinned` when it is `UNPINNED`, with the reading lines as the values
-  found. A scored outcome always reads `PINNED`, because Task 15 step 9a gates `extract`; an
-  `UNPINNED` or `NO_CLAUSE` S2 run is evidence only and publishes no measurement doc, as a halted run;
+- the stamp line `assembler=` followed by the 40-hex `sha=` value copied from the `ASSEMBLER: PINNED`
+  token;
 - beside it, this sentence, verbatim: "The calibration prompt is the production prompt plus exactly
   the path-scope clause below, inserted once at the head of the audit body; production grok legs do
   not receive it, and whether a production grok leg without it behaves the same is not measured
@@ -2525,17 +2645,17 @@ only (1 more): `test_never_gate_section_keeps_two_surface_routing_off_pass`.
 - [ ] AC-T16.2: `test_unmeasured_sites_match_the_outcome` fails when the doc has no `GROK-BINARY:` line,
   when it reads `GROK-BINARY: unrecorded`, or when D14's slot rule yields no version on a smoke failure.
 - [ ] AC-T16.3: `--check-anchors` reads `ANCHORS: ANCHORS_OK` after the K2 re-anchor, and the spec run
-  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/413` on PASS or a smoke
-  failure (K6 and K7 below), or `untargeted=0/415` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below).
-  The base is 411 after Task 14d (AC-T14d.4); until v1.7 of this plan these read 378 and 380, which
+  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/422` on PASS or a smoke
+  failure (K6 and K7 below), or `untargeted=0/424` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below).
+  The base is 420 after Task 14d (AC-T14d.4); until v1.7 of this plan these read 378 and 380, which
   predate the two post-S0c fix rows and Tasks 14a–14c.
 - [ ] AC-T16.5: The doc cites the incident record and the superseded `f7520e72` smoke on every
   published outcome, and its re-run command carries `--run-id` and `--work-dir`.
 - [ ] AC-T16.6 (D21): in the doc, `grep -c '^assembler='` prints 1 and `grep -c '^ASSEMBLER-READING: '`
   prints 2 (matching lines); the delta sentence occurs once (whitespace collapsed), and the clause
   line occurs once as a whole line (`grep -cxF` with the clause as the pattern prints 1). These are
-  checked by command at Task 16, not by a pinned doc test: design v1.13 names none (see this plan's
-  v1.8 Version History line).
+  checked by command at Task 16, not by a pinned doc test: design v1.14 names none. The `assembler=`
+  value equals the `sha=` of the doc's `ASSEMBLER: PINNED` line, and no `assembler=unpinned` line exists.
 - [ ] AC-T16.4 (MISS or INCONCLUSIVE only; audit cycle 1): before K4 and K5 are added,
   `test_never_gate_section_keeps_two_surface_routing_off_pass` is observed failing against each of
   the two mutated texts and passing on the restored text. The harness run is that observation: each
@@ -4027,3 +4147,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.6: 2026-10-20, answers impl-plan audit cycle 3, gating round 1 (docs/01-plan/features/grok-audit-surface.impl-plan.audit.v3.p1.md: codex 7 must, 1 should; p2 agy filed none), at 121ae4ce, with the orchestrator ruling on the v1.5 Task 26 OPEN-DECISION (option (b)). Task 26: trigger (8)'s count shape restated as more root records than passes, test_cycle_token_more_root_records_than_passes, GAS-CYCLE-ROOT-COUNT reachable, OPEN-DECISION removed; the hint lookup at grok_audit_probe.py:1078 moves to the finding's pass record (GAS-HINT-PASS-ROOT, test_hint_resolves_a_pass_2_absolute_quote_through_its_pass_record). Task 24: --work-dir is <tmp_path>/scratch, a sibling of build_repo's git checkout; test_reset_precondition_old_new_differential compares the shipped 66ff0894 predicate with the new one over 15 targets, softened verdicts exactly the roots-outside-system-temp class. Task 19: check-ignore runs in the scrubbed git env (row 7b, AC-T19.4). Class closed for Tasks 19, 20 and 23: every exit-2 guard prints and its test asserts its own stderr line. Task 23: the stub grok writes a completed transcript by default, because exec turns an empty final message into rc 3 (hmad-dispatch.sh:3366-3374). Task 30: four positive markers prove the work-tree dispatch ran. Totals: 193 rows added, 373 after Task 28, 375 or 377 after Task 16; probe marker sites 175; 216 node ids added, 4 removed.
 - v1.7: 2026-10-20, final corrective revision at b17e1b36 after the round cap (not re-audited), fixing only docs/01-plan/features/grok-audit-surface.impl-plan.audit.v4.p1.md (codex: 3 must, 1 measurement should; p2 agy filed none). Task 18 names and migrates test_hmad_dispatch_exec_grok.py::test_exec_grok_translates_model_effort_sandbox[given] (its options gain --allow-weaker-sandbox in the GREEN commit; ids unchanged, both regression guards). Task 23: test_canary_truncated split into [judge] (canary-judge --rc 0 on a readable end-less log, row 10) and [wrapper] (the real rc 3 from hmad-dispatch.sh:3207-3218 and 3366-3370, cannot_run:grok_rc:3, new row 33). Task 22: test_require_usage_error_still_writes_the_halt_file [unknown-flag] and [missing-token-file], the raw-argv halt path marked M:REQUIRE-FAIL-CLOSED-ARGV with rows 25-26. Measurement: the reset-fixture parent is outside the stand-in system temp (siblings) in Task 5's note and Task 24. Totals: 196 rows added, 376 after Task 28, 378 or 380 after Task 16; containment markers 34; 219 node ids added, 4 removed.
 - v1.8: 2026-10-22, answers no audit cycle: brings the plan to design v1.13 (8a27d264, D21) and spec v1.19 (d9f25dc2) after the route (b) ruling (242c26bd); sole author, not audited. New Tasks 14a (assembler PATH_SCOPE_CLAUSE and --path-scope; 10 ids, 6 rows), 14b (wiring: audit-cycle forwards the switch on --pass-root and halts path_scope_missing:pN before the divergence check; stub clause line and knob; verb-assemble-drop re-anchored; 9 ids, 7 rows), 14c (assembler-read, assembler-check, require --verb assembler, tests at the top of the containment module for the 40 s judge budget; 25 ids, 20 rows, 8 of them plan-added) and 14d (gate), placed before Task 15. Task 15 gains the assembler directory, start and end readings, step 9a's gate and --pass-root on the re-smoke; Task 16 gains the D15 assembler stamp, delta sentence and clause, and its row totals move to 413 or 415. Totals: 35 Tasks (4 wiring); 378 rows at d9f25dc2, 411 after Task 14c.
+- v1.9: 2026-10-22, answers the impl-plan audit of v1.8 (scratchpad audit-implplan-route-b.md: 2 must, 5 should) and takes design v1.14 (8fd0f637) and spec v1.20 (d78cca8d), under the orchestrator's decisions; sole author, not re-audited. Must: the armed check tests the array length (# M:PATH-SCOPE-CHECK-ARMED, row PS14) and the production GUARD also asserts one AUDITCYCLE line, no REQUIRE: STOP and no here file; the test (4) and no-root-path GUARDs pass no path_scope keyword. Should: the assembler-pin fixtures move to the new module test_grok_audit_surface_assembler_pin.py; SELF_DIR and the injected helper are monkeypatched with raising=False; row assembler-read-sha-unchecked targets a new sha256-repository fixture; the pre-clause test copies the three imported helpers and asserts dispatch_count first; each anchor states its matching unit, class UsageError is line 20. Design v1.14: the ${stem}.here.txt record (PS15, test_calibration_cycle_records_its_here), assembler-check --stems with here_unrecorded and here_mismatch, the two usage-error branches, the copy test reads the clause by ast parse, newline-only line split, and the doc is published only from a PINNED run (Task 15 steps 6 and 9a gain --stems and the smoke-failure require). Totals: 6 + 9 + 27 = 42 new rows, 420 after Task 14c, 422 or 424 after Task 16; new modules 20 and 32 node ids.
