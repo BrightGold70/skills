@@ -92,3 +92,30 @@ is codex's graft MCP server starting in its working directory.
 The scan halts on an attempt, and grok made the attempt on its own initiative ("Locate plan doc and
 skills worktree"), so a new run is likely to halt the same way. The routes are the operator's to
 choose. None is taken here.
+
+### Ruling, 2026-10-22: route (b)
+
+**The trigger is in the audited document, not in grok's initiative alone.** The d1 seeded plan
+inlines its own Convention Prerequisites (`p1.prompt.txt:280-281`): "Work only in worktree
+`/Users/kimhawk/orca/workspaces/skills/audit-report-docs-copy` … never edit
+`/Users/kimhawk/orca/skills`". Call 1's `ls -d` lists exactly those two paths and their parent. The
+assembled prompt carries no clause that says paths written inside the document belong to its
+author's environment.
+
+The operator chose route (b). The decision covers four points:
+
+- **The clause.** Add a narrow audit-prompt clause: paths written inside the document under review
+  refer to its author's environment, and every file the audit needs is under the working directory.
+  The auditor must not read, list or search a path outside it.
+- **Same prompt everywhere.** The clause is identical across surfaces and passes. It contains no
+  root or run path, so the AC-3.2 divergence check is unchanged.
+- **D19 is unchanged.** Any grok out-of-root call still halts the run.
+- **Order of work.** The spec, design and impl-plan are revised and audited, then the change is
+  built test-first in Phase 5, and only then is run 3 started in a new run directory.
+
+**Rejected routes.**
+
+- **(a) Count a refused or empty out-of-root read as contained.** Rejected because the log cannot
+  show a refusal. The scan reads only `rawInput`, and call 1 discarded its own stderr
+  (`2>/dev/null`), so a refused read and a `find` with no match look the same.
+- **(c) Retry as-is.** Rejected because the trigger is the document's text, which a retry repeats.
