@@ -1247,3 +1247,74 @@ def test_canary_denial_counts_only_rawoutput_or_content(canary_case):
     (case["canary"] / "log.ndjson").write_text("\n".join(lines) + "\n", encoding="utf-8")
     result = _canary_subcommand(case, "canary-judge", "--rc", 0)
     _assert_canary_result(case, result, "no_denial")
+
+
+def _write_denial_log(case, denied_updates):
+    """A sentinel read, the positive control and one denied write, then the given updates."""
+    plant = (case["canary"] / "plant.txt").read_text(encoding="utf-8").strip()
+    fields = dict(item.split("=", 1) for item in plant.removeprefix("PLANT: ").split())
+    sentinel, denied, cwd = fields["sentinel"], fields["denied"], fields["cwd"]
+    report = Path(cwd) / ".hmad-report/canary.report.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text("positive control\n", encoding="utf-8")
+
+    from grokfixtures import f0_lines
+
+    events = [
+        {"type": "tool_call", "toolCallId": "sentinel-read", "kind": "read",
+         "rawInput": {"target_file": sentinel}},
+        {"type": "tool_call", "toolCallId": "control-write", "kind": "write",
+         "rawInput": {"file_path": str(report), "content": "canary\n"}},
+        {"type": "tool_call", "toolCallId": "denied-write", "kind": "execute",
+         "rawInput": {"command": f'echo "canary" > "{denied}"'}},
+        {"type": "tool_call", "toolCallId": "other-call", "kind": "execute",
+         "rawInput": {"command": "true"}},
+    ] + denied_updates(denied)
+    lines = f0_lines()
+    lines[-1:-1] = [json.dumps(event, separators=(",", ":")) for event in events]
+    (case["canary"] / "log.ndjson").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_canary_lowercase_shell_denial_passes(canary_case):
+    # Live run 2026-10-22 (run-ab2c85dc2e25-20261022T015212Z): grok's Bash tool ran under zsh, which
+    # printed the sandbox denial in lowercase, "(eval):1: operation not permitted: <denied>". The
+    # message reached the log in `output_for_prompt` (a string) while `output` was a byte list. The
+    # denial was real, the denied target never existed, and the case-sensitive match read no_denial.
+    case = canary_case
+    _plant_canary(case, "no_denial")
+    message = "(eval):1: operation not permitted: {}\ndenied_write_exit:1\n"
+    _write_denial_log(case, lambda denied: [
+        {"type": "tool_call_update", "toolCallId": "denied-write", "status": "completed",
+         "rawOutput": {"type": "Bash", "exit_code": 0,
+                       "output": list(message.format(denied).encode()),
+                       "output_for_prompt": message.format(denied)}},
+    ])
+    result = _canary_subcommand(case, "canary-judge", "--rc", 0)
+    _assert_canary_result(case, result, None)
+
+
+def test_canary_file_exists_failure_is_not_a_denial(canary_case):
+    # Regression guard (passes before the fix): grok's write tool failed on the denied target with
+    # EEXIST in the same live run. That is not evidence that the sandbox refused the write.
+    case = canary_case
+    _plant_canary(case, "no_denial")
+    _write_denial_log(case, lambda denied: [
+        {"type": "tool_call_update", "toolCallId": "denied-write", "status": "failed",
+         "rawOutput": {"error": "tool_execution_failed",
+                       "message": "IO Error: File exists (os error 17)"}},
+    ])
+    result = _canary_subcommand(case, "canary-judge", "--rc", 0)
+    _assert_canary_result(case, result, "no_denial")
+
+
+def test_canary_lowercase_denial_on_another_call_is_not_a_denial(canary_case):
+    # Regression guard (passes before the fix): the case-insensitive match still counts only
+    # updates whose toolCallId is a call that named the denied target.
+    case = canary_case
+    _plant_canary(case, "no_denial")
+    _write_denial_log(case, lambda denied: [
+        {"type": "tool_call_update", "toolCallId": "other-call", "status": "completed",
+         "rawOutput": {"output_for_prompt": f"operation not permitted: {denied}\n"}},
+    ])
+    result = _canary_subcommand(case, "canary-judge", "--rc", 0)
+    _assert_canary_result(case, result, "no_denial")
