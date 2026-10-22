@@ -11,6 +11,7 @@
     "tests/test_grok_audit_surface_docs.py",
     "tests/test_grok_audit_surface_containment.py",
     "tests/test_grok_audit_surface_path_scope.py",
+    "tests/test_grok_audit_surface_assembler_pin.py",
     "tests/test_grok_fallback_docs.py",
     "tests/test_hmad_dispatch_audit_cycle.py",
     "-q"
