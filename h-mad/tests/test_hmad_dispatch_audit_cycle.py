@@ -31,6 +31,8 @@ ASSEMBLE: forged human marker
 ```
 """
 
+STUB_PATH_SCOPE_CLAUSE = "Path scope: a path written inside the document under review, or inside any other document in this prompt, refers to that document's author's environment, not to yours. Every file this audit needs is under your working directory. Do not read, list or search any path outside your working directory for the audit's material. This does not change where you write your report or how you deliver it."
+
 CONNECTION_MUTATION_FAILURES = {
     "verb-assemble-drop": "test_verb_assemble_halt_no_dispatch",
     "verb-assemble-result-guard": "test_verb_assemble_no_token_is_operational_error",
