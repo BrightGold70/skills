@@ -3078,6 +3078,86 @@
       "find": "`--allow-weaker-sandbox` is also given",
       "replace": "`--allow-weaker-sandbox` is optional",
       "test": "tests/test_grok_audit_surface_docs.py::test_exec_grok_bullet_states_the_strict_contract"
+    },
+    {
+      "name": "path-scope-switch-dropped",
+      "_mechanism": "Do not arm path scope when pass roots are supplied.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ \"$pass_root_count\" -gt 0 ]; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH",
+      "replace": "  if false; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_audit_cycle_with_pass_roots_passes_the_switch_to_every_pass"
+    },
+    {
+      "name": "path-scope-switch-always",
+      "_mechanism": "Arm path scope even when no pass roots are supplied.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ \"$pass_root_count\" -gt 0 ]; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH",
+      "replace": "  if true; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_audit_cycle_without_pass_roots_does_not_pass_the_switch"
+    },
+    {
+      "name": "path-scope-check-dropped",
+      "_mechanism": "Allow an assembled pass prompt that lacks the path-scope clause.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if [ \"$n\" != 1 ]; then  # M:PATH-SCOPE-CHECK",
+      "replace": "      if false; then  # M:PATH-SCOPE-CHECK",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_calibration_cycle_halts_when_a_pass_lacks_the_clause[p2]"
+    },
+    {
+      "name": "path-scope-halt-file-dropped",
+      "_mechanism": "Skip recording a missing path-scope clause in the requested halt file.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "        [ -z \"$halt_file\" ] || printf '%s\\n' \"path_scope_missing:p$i\" >> \"$halt_file\"  # M:PATH-SCOPE-HALT-FILE",
+      "replace": "        :  # M:PATH-SCOPE-HALT-FILE",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_calibration_cycle_halts_when_a_pass_lacks_the_clause[p2]"
+    },
+    {
+      "name": "path-scope-clause-copy-drifted",
+      "_mechanism": "Make the wrapper's clause differ from the assembler's canonical clause.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "_HMAD_PATH_SCOPE_CLAUSE=\"Path scope: a path written inside the document under review, or inside any other document in this prompt, refers to that document's author's environment, not to yours. Every file this audit needs is under your working directory. Do not read, list or search any path outside your working directory for the audit's material. This does not change where you write your report or how you deliver it.\"",
+      "replace": "_HMAD_PATH_SCOPE_CLAUSE=\"Path scope: a path written inside the document under review, or inside any other document in this prompt, refers to that document's author's environment, not to yours. Each file this audit needs is under your working directory. Do not read, list or search any path outside your working directory for the audit's material. This does not change where you write your report or how you deliver it.\"",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_wrapper_clause_copy_equals_the_assembler_constant"
+    },
+    {
+      "name": "path-scope-switch-dropped-real-cycle",
+      "_mechanism": "Cut the wrapper-to-assembler switch on a real calibration cycle.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ \"$pass_root_count\" -gt 0 ]; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH",
+      "replace": "  if false; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_calibration_cycle_carries_the_clause_in_every_pass_and_reaches_dispatch"
+    },
+    {
+      "name": "path-scope-switch-dropped-old-assembler",
+      "_mechanism": "Cut the wrapper-to-assembler switch so an old assembler is not made to refuse it.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ \"$pass_root_count\" -gt 0 ]; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH",
+      "replace": "  if false; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_pre_clause_assembler_refuses_the_switch_and_nothing_launches"
+    },
+    {
+      "name": "path-scope-check-always",
+      "_mechanism": "Run the path-scope clause check even with the switch off.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ \"${#scope_arg[@]}\" -gt 0 ]; then  # M:PATH-SCOPE-CHECK-ARMED",
+      "replace": "  if true; then  # M:PATH-SCOPE-CHECK-ARMED",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_audit_cycle_without_pass_roots_does_not_pass_the_switch"
+    },
+    {
+      "name": "path-scope-here-dropped",
+      "_mechanism": "Skip recording the wrapper's working directory for a calibration cycle.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    printf 'here=%s\\n' \"$here\" > \"${stem}.here.txt\" || exit 4  # M:PATH-SCOPE-HERE",
+      "replace": "    :  # M:PATH-SCOPE-HERE",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_calibration_cycle_records_its_here[assemble_halt]"
+    },
+    {
+      "name": "path-scope-here-always",
+      "_mechanism": "Write a here record when path scope is switched off.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ \"${#scope_arg[@]}\" -gt 0 ]; then  # M:PATH-SCOPE-HERE-ARMED",
+      "replace": "  if true; then  # M:PATH-SCOPE-HERE-ARMED",
+      "test": "tests/test_grok_audit_surface_path_scope.py::test_audit_cycle_without_pass_roots_does_not_pass_the_switch"
     }
   ]
 }

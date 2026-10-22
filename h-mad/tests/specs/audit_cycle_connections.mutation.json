@@ -12,7 +12,7 @@
     {
       "name": "verb-assemble-drop",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "    if python3 \"$here/h_mad_assemble_audit.py\" --feature \"$feature\" --phase \"$phase\" \\\n         --cycle \"$cycle\" --project-root \"$root\" \\\n         --report-file \"${report[$i]}\" --out \"${prompt[$i]}\" >\"${asm[$i]}\"",
+      "find": "    if python3 \"$here/h_mad_assemble_audit.py\" --feature \"$feature\" --phase \"$phase\" \\\n         --cycle \"$cycle\" --project-root \"$root\" \\\n         --report-file \"${report[$i]}\" --out \"${prompt[$i]}\" ${scope_arg[@]+\"${scope_arg[@]}\"} >\"${asm[$i]}\"",
       "replace": "    if : >\"${asm[$i]}\"",
       "failure_test": "test_verb_assemble_halt_no_dispatch"
     },

@@ -273,7 +273,8 @@ def test_calibration_cycle_carries_the_clause_in_every_pass_and_reaches_dispatch
     for path in assembled:
         pass_line = next(line for line in path.read_text(encoding="utf-8").splitlines()
                          if line.startswith("ASSEMBLE: PASS "))
-        prompt = Path(pass_line.split()[2])
+        # The path may hold spaces; it ends where the `<bytes>B` size field begins.
+        prompt = Path(re.match(r"ASSEMBLE: PASS (.+?) \d+B ", pass_line).group(1))
         assert prompt.parent == stem_dir, "real pass prompts must be staged in the cycle stem dir"
         prompts.append(prompt)
     assert all(path.read_text(encoding="utf-8").splitlines().count(STUB_PATH_SCOPE_CLAUSE) == 1
@@ -295,8 +296,7 @@ def test_calibration_cycle_records_its_here(tmp_path, monkeypatch, halt):
     else:
         case = _pass_root_case(tmp_path)
         stem_dir = _own_stems(tmp_path, case)
-        here = str(tmp_path / "script cwd")
-        case["env"]["HMAD_AUDIT_CYCLE_SCRIPT_DIR"] = here
+        here = case["env"]["HMAD_AUDIT_CYCLE_SCRIPT_DIR"]
         case["env"]["HMAD_ASSEMBLE_HALT_P2"] = "1"
         result = _run_pass_roots(tmp_path, case, roots=case["roots"], passes=3)
         expected_here = here

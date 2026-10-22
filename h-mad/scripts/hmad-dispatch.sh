@@ -3556,6 +3556,8 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   )
 }
 
+_HMAD_PATH_SCOPE_CLAUSE="Path scope: a path written inside the document under review, or inside any other document in this prompt, refers to that document's author's environment, not to yours. Every file this audit needs is under your working directory. Do not read, list or search any path outside your working directory for the audit's material. This does not change where you write your report or how you deliver it."
+
 _cmd_audit_cycle() {
   local here feature="" phase="" cycle="" root="" ack_file="" report_grace="5" timeout="900"
   local passes="2"   # spec AC-3.1: default pass count is 2, so the flag is optional
@@ -3564,6 +3566,7 @@ _cmd_audit_cycle() {
   local pass_root_count=0 halt_file=""
   local -a prompt report out log asm tok rc pids pass_args agent gated legs pass_root pass_root_phys
   pass_args=(); gated=(); legs=(); pass_root=()
+  local -a scope_arg; scope_arg=()
   here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
 
   while [ $# -gt 0 ]; do case "$1" in
@@ -3647,6 +3650,7 @@ _cmd_audit_cycle() {
       return 2
     fi
   fi
+  if [ "$pass_root_count" -gt 0 ]; then scope_arg=(--path-scope); fi  # M:PATH-SCOPE-SWITCH
 
   # --surfaces: which agent runs each pass (#6).
   #
@@ -3718,6 +3722,9 @@ _cmd_audit_cycle() {
   # a new leg, and the `rm -f` that cleared the channel deleted its work. With a
   # fresh stem there is nothing to clear.
   stem="${stem_dir}/audit_${feature}_${phase}_cycle${cycle}_run$(date -u +%Y%m%dT%H%M%SZ)-$$"  # M:STEM-FRESH
+  if [ "${#scope_arg[@]}" -gt 0 ]; then  # M:PATH-SCOPE-HERE-ARMED
+    printf 'here=%s\n' "$here" > "${stem}.here.txt" || exit 4  # M:PATH-SCOPE-HERE
+  fi
   i=1
   while [ "$i" -le "$passes" ]; do
     prompt[$i]="${stem}_p${i}.txt"
@@ -3736,7 +3743,7 @@ _cmd_audit_cycle() {
   while [ "$i" -le "$passes" ]; do
     if python3 "$here/h_mad_assemble_audit.py" --feature "$feature" --phase "$phase" \
          --cycle "$cycle" --project-root "$root" \
-         --report-file "${report[$i]}" --out "${prompt[$i]}" >"${asm[$i]}"
+         --report-file "${report[$i]}" --out "${prompt[$i]}" ${scope_arg[@]+"${scope_arg[@]}"} >"${asm[$i]}"
     then arc=0; else arc=$?; fi
     tok[$i]="$(sed -n 's/^ASSEMBLE: //p' "${asm[$i]}" | tail -1)"
     [ "$arc" -eq 0 ] || exit 4
@@ -3770,6 +3777,21 @@ _cmd_audit_cycle() {
       --size-status "$size_status" \
       --halt-reason "assemble_halt:p${halt_pass}"
     exit $?
+  fi
+
+  if [ "${#scope_arg[@]}" -gt 0 ]; then  # M:PATH-SCOPE-CHECK-ARMED
+    local n
+    i=1
+    while [ "$i" -le "$passes" ]; do
+      n="$(grep -cxF -e "$_HMAD_PATH_SCOPE_CLAUSE" -- "${prompt[$i]}" || true)"
+      if [ "$n" != 1 ]; then  # M:PATH-SCOPE-CHECK
+        [ -z "$halt_file" ] || printf '%s\n' "path_scope_missing:p$i" >> "$halt_file"  # M:PATH-SCOPE-HALT-FILE
+        echo "[H-MAD] audit-cycle halted path_scope_missing:p$i" >&2
+        echo "REQUIRE: STOP reason=path_scope_missing:p$i"
+        return 0
+      fi
+      i=$((i + 1))
+    done
   fi
 
   # Two prompts for the same cycle must differ ONLY in the per-pass report path.
