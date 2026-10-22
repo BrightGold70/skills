@@ -28,6 +28,14 @@ def _hostile_text() -> str:
     return payloads[os.environ.get("HMAD_STUB_HOSTILE", "all")]
 
 
+def grok_tool_call(path: str, *, extra=None) -> str:
+    """Encode one D19 grok tool-call event with hostile agent-style text."""
+    raw_input = {"cmd": f"tool payload {_hostile_text()} {path}"}
+    if extra is not None:
+        raw_input["extra"] = extra
+    return json.dumps({"type": "tool_call", "rawInput": raw_input, "locations": []}) + "\n"
+
+
 def build_archive(root: Path) -> dict[str, str]:
     """Write three invented features, each with a spec and three phase docs."""
     sources = {
@@ -154,6 +162,7 @@ EXCLUSIONS = CALIBRATION.parent / "exclusions.txt"
 
 def build_root_repo(tmp_path: Path) -> dict:
     """Prepare editable synthetic calibration inputs and a committed main list."""
+    parents = build_probe_parent_dirs(tmp_path)
     work, _origin = build_repo(tmp_path)
     tree = tmp_path / "calibration-input"
     sources = build_archive(tree)
@@ -187,6 +196,7 @@ def build_root_repo(tmp_path: Path) -> dict:
     return {
         "repo": work, "tree": tree, "sources": sources, "records": records,
         "dest": destination, "entries": entries,
+        **parents,
     }
 
 
@@ -213,14 +223,41 @@ def commit_root_tree(case: dict, *, extra_parents=()) -> str:
                    input=f"Root fixture calibration: {_hostile_text()}\n")
 
 
-def load_probe(path: Path) -> types.ModuleType:
+def load_probe(path: Path, *, source: str | None = None) -> types.ModuleType:
     """Compile fresh source so same-size mutations cannot reuse stale bytecode."""
-    code = compile(path.read_bytes(), str(path), "exec")
+    code = compile(path.read_bytes() if source is None else source, str(path), "exec")
     module = types.ModuleType("grok_audit_probe")
     module.__file__ = str(path)
     sys.modules[module.__name__] = module
     exec(code, module.__dict__)
     return module
+
+
+def build_probe_parent_dirs(tmp_path: Path) -> dict[str, Path]:
+    """Separate scratch, roots and stand-in system temp from the fixture checkout."""
+    paths = {
+        "work_dir": tmp_path / "scratch",
+        "systemp": tmp_path / "systemp",
+        "roots": tmp_path / "run" / "roots",
+    }
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    environment = os.environ.copy()
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+                 "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE"):
+        environment.pop(name, None)
+    result = subprocess.run(
+        ["git", "-C", str(paths["work_dir"]), "rev-parse", "--git-dir"],
+        capture_output=True, text=True, timeout=15, env=environment,
+    )
+    assert result.returncode != 0, "the shared scratch directory must lie outside every Git work tree"
+    for name in ("work_dir", "roots"):
+        assert not paths[name].resolve().is_relative_to(paths["systemp"].resolve())
+        for systemp in (Path("/tmp"), Path("/private/tmp")):
+            assert not paths[name].resolve().is_relative_to(systemp.resolve()), (
+                "accepted parents must also lie outside the fixed system-temp spellings"
+            )
+    return paths
 
 
 def build_cycle_inputs(directory: Path, root: Path, ready_line: str) -> dict:
@@ -300,6 +337,63 @@ def build_cycle_inputs(directory: Path, root: Path, ready_line: str) -> dict:
     }
 
 
+def build_pass_cycle_inputs(case: dict) -> dict:
+    """Three ordered roots, with conflicting root-local and stem reports."""
+    case = {**case, "expected": dict(case["expected"])}
+    roots = [case["root"]]
+    for index in (2, 3):
+        root = case["root"].parent / f"gas-root-d1-s1-pass{index}"
+        root.mkdir()
+        roots.append(root)
+    records, lines, reports = [], [], {}
+    payload = _hostile_text().encode("utf-8") + b"\r\n\x00\xff\n"
+    for index, root in enumerate(roots, 1):
+        line = case["ready_line"].replace(
+            f"path={case['root']}", f"path={root.resolve()}",
+        )
+        record = case["command"].parent / f"pass {index} [a]* ⟦h-mad⟧.txt"
+        record.write_text(f"Agent annotation: {_hostile_text()}\n{line}\n", encoding="utf-8")
+        records.append(record)
+        lines.append(line)
+        stem_report = case["stem"] / f"{case['prefix']}_p{index}.report.md"
+        stem_report.write_bytes(f"stem report pass={index}\n".encode() + payload)
+        reports[f"p{index}.report.md"] = stem_report.read_bytes()
+        # Pass 2 deliberately has no local report, exercising the stem fallback.
+        if index != 2:
+            local = root / ".hmad-report" / stem_report.name
+            local.parent.mkdir()
+            local.write_bytes(f"root-local report pass={index}\n".encode() + payload)
+            reports[f"p{index}.report.md"] = local.read_bytes()
+        # Another pass's report in this root must never be selected.
+        decoy = root / ".hmad-report" / f"{case['prefix']}_p{index % 3 + 1}.report.md"
+        decoy.parent.mkdir(exist_ok=True)
+        decoy.write_bytes(b"wrong pass root\n" + payload)
+    command = case["command"].read_text(encoding="utf-8")
+    case["command"].write_text(command.replace("--passes 2", "--passes 3"), encoding="utf-8")
+    case["stdout"].write_text(
+        f"Agent output: {_hostile_text()}\n"
+        "AUDITCYCLE: PASS p1=PASS p2=PASS p3=PASS "
+        "delivered=report-file,report-file,report-file must=0 should=0 size_status=verified\n",
+        encoding="utf-8",
+    )
+    case.update(pass_roots=roots, pass_root_records=records, pass_ready_lines=lines,
+                pass_reports=reports)
+    return case
+
+
+def seed_commit_parent(case: dict, files: dict[str, bytes] | None = None) -> str:
+    """Put real source blobs and optional calibration paths in the parent tree."""
+    contents = {path.relative_to(case["src"]).as_posix(): path.read_bytes()
+                for path in case["src"].rglob("*") if path.is_file()}
+    contents.update(files or {})
+    changes = {(CALIBRATION / relative).as_posix(): content
+               for relative, content in contents.items()}
+    parent = commit_fixture_tree(case["repo"], case["parent"], changes)
+    git(case["repo"], "update-ref", CALIBRATION_REF, parent, case["parent"])
+    case["parent"] = parent
+    return parent
+
+
 def build_commit_inputs(tmp_path: Path) -> dict:
     """Keep Git fixtures real; stage and dirty tracked bytes before recording."""
     repo, _origin = build_repo(tmp_path)
@@ -365,7 +459,17 @@ def write_extract_cycle(case: dict, *, doc: str = "d1", cycle: int = 1,
         f"calibration={'a' * 40} list_commit={'b' * 40} list_blob={'c' * 40} absent=0\n",
         encoding="utf-8",
     )
+    run_record = case["s2"] / "run.txt"
+    if not run_record.exists():
+        run_record.write_text("RUN: checkout=/tmp/grok-audit-checkout home=/tmp/grok-audit-home\n",
+                              encoding="utf-8")
     for index in range(1, len(surfaces) + 1):
+        pass_root = Path(f"/tmp/gas-root-{doc}-s2v{cycle}-pass{index}")
+        (directory / f"p{index}.root.txt").write_text(
+            f"ROOT: READY doc={doc} purpose=s2v{cycle} path={pass_root} "
+            f"calibration={'a' * 40} list_commit={'b' * 40} list_blob={'c' * 40} absent=0\n",
+            encoding="utf-8",
+        )
         (directory / f"p{index}.prompt.txt").write_text(
             f"Audit pass {index}: {_hostile_text()}\n", encoding="utf-8",
         )
@@ -484,7 +588,21 @@ def build_rescore_inputs(tmp_path: Path, probe, *, smoke_failure=False,
     """Real main/origin plus calibration → smoke → score, using Task 6's writer."""
     root_case = build_root_repo(tmp_path)
     case = build_score_inputs(tmp_path / "score-input", probe)
-    case.update(repo=root_case["repo"], origin=tmp_path / "origin.git", probe=probe)
+    calibration_dir = case["tree"] / CALIBRATION
+    run_id = "fixture-run"
+    reading = calibration_dir / "runs" / run_id
+    reading.mkdir(parents=True)
+    for name in ("s2", "findings.jsonl", "key.jsonl", "labels.jsonl", "extract.txt"):
+        source = calibration_dir / name
+        if source.exists():
+            source.replace(reading / name)
+    if not (reading / "extract.txt").exists():
+        (reading / "extract.txt").write_text("extract --shuffle-seed 1729\n", encoding="utf-8")
+    case["run_id"] = run_id
+    case["reading_root"] = reading
+    case["s2"] = reading / "s2"
+    case.update(repo=root_case["repo"], origin=tmp_path / "origin.git", probe=probe,
+                **{name: root_case[name] for name in ("work_dir", "systemp", "roots")})
     if seeded_in_own_source:
         # An identity replacement is valid and puts this span in its own archive.
         for target in (root_case, case):
@@ -542,6 +660,15 @@ def build_rescore_inputs(tmp_path: Path, probe, *, smoke_failure=False,
             f"calibration={case['calibration']} list_commit={case['main']} "
             f"list_blob={case['list_blob']} absent=0\n", encoding="utf-8",
         )
+        if purpose.startswith("s2"):
+            command = shlex.split((directory / "command.txt").read_text(encoding="utf-8"))
+            surfaces = command[command.index("--surfaces") + 1].split(",")
+            for index in range(1, len(surfaces) + 1):
+                (directory / f"p{index}.root.txt").write_text(
+                    f"ROOT: READY doc={doc} purpose={purpose} path=/tmp/gas-root-{doc}-{purpose}-pass{index} "
+                    f"calibration={case['calibration']} list_commit={case['main']} "
+                    f"list_blob={case['list_blob']} absent=0\n", encoding="utf-8",
+                )
     smoke_src = tmp_path / "smoke-input"
     shutil.copytree(data / "s1", smoke_src / "s1")
     args = types.SimpleNamespace(repo=repo, parent=case["calibration"], src=smoke_src,

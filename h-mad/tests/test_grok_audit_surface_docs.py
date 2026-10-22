@@ -95,3 +95,64 @@ def test_never_do_legs_bullet_states_the_first_gate_leg_set() -> None:
         "the reviewer --legs bullet must append the explanation that the first "
         "gate uses a different leg set and the streak is among revision cycles"
     )
+def test_exec_grok_bullet_states_the_strict_contract():
+    from pathlib import Path
+
+    from test_grok_fallback_docs import titled_section
+
+    skill = Path(__file__).parents[1] / "SKILL.md"
+    lines = titled_section(
+        skill.read_text(),
+        "Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot",
+    ).splitlines()
+    start = next(
+        index
+        for index, line in enumerate(lines)
+        if "**`exec grok`** — an explicit RED/GREEN implementer fallback" in line
+    )
+    end = next(
+        (
+            index
+            for index in range(start + 1, len(lines))
+            if lines[index].lstrip().startswith("- **")
+        ),
+        len(lines),
+    )
+    bullet = " ".join(" ".join(lines[start:end]).split())
+    expected = (
+        "From FR-11, `exec grok` always runs `--sandbox strict`: a weaker or unknown "
+        "`--sandbox` value exits 2 unless `--allow-weaker-sandbox` is also given, "
+        "which is recorded in `<log>.profile`, and `GROK_SANDBOX` is removed from "
+        "grok's environment. In a git work tree it stages its prompt and `TMPDIR` "
+        "under `<top level>/.h-mad/tmp/` and exits 2, launching nothing, when `--cd` "
+        "is below the top level, when the repository does not ignore `.h-mad/tmp/`, "
+        "or when `git rev-parse` fails for a reason other than \"not a git repository\"; "
+        "outside a work tree it uses `<cd>/.tmp/`."
+    )
+    assert expected in bullet, "exec grok bullet must state the verbatim FR-11 strict contract"
+
+
+def test_agent_substrate_grok_row_states_the_strict_default():
+    from pathlib import Path
+
+    from test_grok_fallback_docs import titled_section
+
+    substrate = Path(__file__).parents[1] / "references" / "agent-substrate.md"
+    section = titled_section(
+        substrate.read_text(), "Agent Dispatch Substrate (cmux | orca)"
+    )
+    row = next(line for line in section.splitlines() if "GROK_SANDBOX" in line)
+    row = " ".join(row.split())
+    expected = (
+        "`--sandbox` defaults to `strict`; a weaker or unknown profile exits 2 unless "
+        "`--allow-weaker-sandbox` is given, and the effective profile is recorded in "
+        "`<log>.profile`. `GROK_SANDBOX` is removed from the child. The prompt and "
+        "`TMPDIR` are staged under `<top level>/.h-mad/tmp/` in a git work tree, or "
+        "`<cd>/.tmp/` outside one, and `exec` refuses a `--cd` below the top level, "
+        "an unignored `.h-mad/tmp/`, and a `git rev-parse` failure other than "
+        "\"not a git repository\"."
+    )
+    assert "[--sandbox <profile>] [--allow-weaker-sandbox]" in row, (
+        "agent-substrate exec grok command must expose the strict-default override"
+    )
+    assert expected in row, "agent-substrate exec grok row must state the verbatim FR-11 contract"

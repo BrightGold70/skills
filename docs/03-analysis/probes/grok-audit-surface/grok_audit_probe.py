@@ -30,6 +30,7 @@ import h_mad_audit_gate as _gate
 import h_mad_audit_cycle as _cycle
 from h_mad_audit_origins import ORIGINS
 from h_mad_review_evidence import _GROK_TYPES
+import h_mad_tool_calls
 
 
 SOURCES: dict[str, str] = {
@@ -77,8 +78,24 @@ class ResetTargetNotDirectory(ProbeRefusal):
     """The reset target is not an existing directory."""
 
 
-class ResetTargetOutsideTempdir(ProbeRefusal):
-    """The resolved target is not directly under the temporary directory."""
+class ParentNotDirectory(ProbeRefusal):
+    """The parent is not an absolute existing directory."""
+
+
+class ParentInSystemTemp(ProbeRefusal):
+    """The resolved parent lies inside a system temporary directory."""
+
+
+class WorkDirInGitTree(ProbeRefusal):
+    """The scratch parent is reachable from a Git tree."""
+
+
+class ResetTargetInSystemTemp(ProbeRefusal):
+    """The resolved reset target lies inside system temp."""
+
+
+class ResetTargetOutsideRoots(ProbeRefusal):
+    """The resolved reset target's parent is not named roots."""
 
 
 class ResetTargetPrefix(ProbeRefusal):
@@ -221,7 +238,7 @@ def _mode_check_ledger(args: argparse.Namespace) -> int:
             ).stdout
         except (OSError, subprocess.SubprocessError) as exc:
             raise Refusal(f"calibration_ref:sha_unknown:{args.calibration_sha}") from exc
-        with tempfile.TemporaryDirectory(prefix="gas-ledger-") as directory:
+        with tempfile.TemporaryDirectory(prefix="gas-ledger-", dir=args.work_dir) as directory:  # M:GAS-SCRATCH-LEDGER-REPO
             tree = Path(directory)
             with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
                 bundle.extractall(tree, filter="data")
@@ -243,6 +260,22 @@ def _git_environment() -> dict[str, str]:
                  "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE"):
         environment.pop(name, None)
     return environment
+
+
+def checked_parent(path, *, git_guard: bool) -> Path:
+    if path is None or not os.path.isabs(path) or not os.path.isdir(path):  # M:GAS-PARENT-ISDIR
+        raise ParentNotDirectory()
+    parent = Path(path).resolve()
+    if any(parent.is_relative_to(Path(directory).resolve()) for directory in {tempfile.gettempdir(), "/tmp", "/private/tmp"}):  # M:GAS-PARENT-TMPDIR
+        raise ParentInSystemTemp()
+    if git_guard:
+        result = subprocess.run(
+            ["git", "-C", str(parent), "rev-parse", "--git-dir"],
+            capture_output=True, timeout=15, env=_git_environment(),
+        )
+        if result.returncode == 0:  # M:GAS-WORKDIR-GIT
+            raise WorkDirInGitTree()
+    return parent
 
 
 def _git_bytes(repo: Path, *arguments: str) -> bytes:
@@ -356,7 +389,7 @@ def _build_root(args: argparse.Namespace, *, step6: bool = True) -> tuple[str, l
         archive = _git_bytes(args.repo, "archive", "--format=tar", calibration)
     except (OSError, subprocess.SubprocessError) as exc:
         raise Refusal(f"calibration_ref:sha_unknown:{args.calibration_sha}") from exc
-    with tempfile.TemporaryDirectory(prefix="gas-ledger-") as directory:
+    with tempfile.TemporaryDirectory(prefix="gas-ledger-", dir=args.work_dir) as directory:  # M:GAS-SCRATCH-LEDGER-TREE
         tree = Path(directory)
         _extract_archive(archive, tree)
         check_ledger(tree, args.sources)
@@ -364,8 +397,7 @@ def _build_root(args: argparse.Namespace, *, step6: bool = True) -> tuple[str, l
         for record in ledger:
             record["_source_sha256"] = hashlib.sha256((tree / record["source"]).read_bytes()).hexdigest()
 
-    root = Path(tempfile.mkdtemp(prefix=f"gas-root-{args.doc}-{args.purpose}-",
-                                 dir=args.dest_parent)).resolve()
+    root = Path(tempfile.mkdtemp(prefix=f"gas-root-{args.doc}-{args.purpose}-", dir=args.dest_parent or args.work_dir)).resolve()  # M:GAS-SCRATCH-ROOT
     try:
         _extract_archive(archive, root)
         absent = 0
@@ -409,8 +441,10 @@ def check_reset_target(target: str, doc: str) -> Path:
     if not os.path.isdir(target):  # M:GAS-RESET-ISDIR
         raise ResetTargetNotDirectory()
     root = Path(target).resolve()
-    if root.parent != Path(tempfile.gettempdir()).resolve():  # M:GAS-RESET-TMPDIR
-        raise ResetTargetOutsideTempdir()
+    if any(root.is_relative_to(Path(directory).resolve()) for directory in {tempfile.gettempdir(), "/tmp", "/private/tmp"}):  # M:GAS-RESET-TMPDIR
+        raise ResetTargetInSystemTemp()
+    if root.parent.name != "roots":  # M:GAS-RESET-ROOTS
+        raise ResetTargetOutsideRoots()
     if not root.name.startswith(f"gas-root-{doc}-s1-"):  # M:GAS-RESET-PREFIX
         raise ResetTargetPrefix()
     reach_check(root)  # M:GAS-RESET-REACH
@@ -428,7 +462,7 @@ def remove_absent(live: Path, expected: Path) -> int:
         if stat.S_ISLNK(mode):
             os.unlink(path)  # M:GAS-RESET-NOFOLLOW-REMOVE
         elif expected_modes.get(path.relative_to(live)) != stat.S_IFMT(mode):
-            _remove_tree(path)
+            _remove_tree(path)  # M:GAS-RESET-REMOVE
         else:
             continue
         removed += 1
@@ -535,6 +569,45 @@ def parse_root_line(line: str) -> dict[str, str] | None:
     return fields
 
 
+def parse_run_line(text: str) -> dict[str, str] | None:
+    """Parse the single runbook checkout/home authority line."""
+    lines = [line for line in text.splitlines() if line.startswith("RUN: ")]
+    if len(lines) != 1:  # M:GAS-PARSE-RUN-ONE
+        return None
+    fields = {}
+    words = re.split(r"\s+(?=(?:checkout|home)=)", lines[0][len("RUN: "):])
+    for word in words:
+        key, separator, value = word.partition("=")
+        if not separator or not value:
+            return None
+        if key in fields:  # M:GAS-PARSE-RUN-DUP
+            return None
+        if re.search(r"\s+[A-Za-z0-9_-]+=\S+", value):  # M:GAS-PARSE-RUN
+            return None
+        fields[key] = value.strip()
+    if fields.keys() != {"checkout", "home"}:  # M:GAS-PARSE-RUN
+        return None
+    return fields
+
+
+def parse_profile_line(text: str) -> dict[str, str] | None:
+    """Parse the single exec profile and its provenance."""
+    lines = [line for line in text.splitlines() if line.startswith("GROK-PROFILE: ")]
+    if len(lines) != 1:
+        return None
+    fields = {}
+    for word in lines[0][len("GROK-PROFILE: "):].split():
+        key, separator, value = word.partition("=")
+        if not separator or not value or key in fields:
+            return None
+        fields[key] = value
+    if fields.keys() != {"profile", "origin"}:  # M:GAS-PARSE-PROFILE
+        return None
+    if fields.get("origin") not in {"default", "override"}:  # M:GAS-PARSE-PROFILE-ORIGIN
+        return None
+    return fields
+
+
 def _mode_build_root(args: argparse.Namespace) -> int:
     print(reset_root(args) if args.reset is not None else build_root(args))
     return 0
@@ -545,7 +618,13 @@ MODES["build-root"] = _mode_build_root
 
 def record_cycle(args: argparse.Namespace) -> str:
     """Validate one wrapper run before copying its D3 recording files."""
-    contents = {path: b"" for path in (args.root_record, args.stdout, args.command)}
+    pass_records = args.pass_root_record
+    if args.root_record is not None and pass_records:  # M:GAS-RECORD-FORMS-BOTH
+        raise UsageError("choose one root-record form")
+    if args.root_record is None and not pass_records:  # M:GAS-RECORD-FORMS-NEITHER
+        raise UsageError("a root-record form is required")
+    records = pass_records or ([args.root_record] if args.root_record is not None else [])
+    contents = {path: b"" for path in (*records, args.stdout, args.command)}
     missing = [path for path in (args.stem, args.root) if not path.is_dir()]
     for path in contents:
         try:
@@ -555,16 +634,21 @@ def record_cycle(args: argparse.Namespace) -> str:
     if missing:  # M:GAS-RECORD-INPUT
         raise Refusal(f"input_missing:{missing[0]}")
 
-    lines = [line for line in contents[args.root_record].decode("utf-8", errors="replace").splitlines()
-             if line.startswith("ROOT: READY ")]
-    if len(lines) != 1:  # M:GAS-RECORD-ROOT-LINE
-        raise Refusal("root_record:no_line")
-    root_line = next(iter(lines), "")
-    fields = parse_root_line(root_line)
-    if fields is None:
-        raise Refusal("root_record:no_line")  # M:GAS-RECORD-ROOT-MALFORMED
-    if Path(fields["path"]).resolve() != args.root.resolve():  # M:GAS-RECORD-ROOT-PATH
-        raise Refusal("root_record:path_mismatch")
+    root_records, pass_roots = {}, []
+    for index, record in enumerate(records, 1):  # M:GAS-RECORD-PASS-LOOP
+        lines = [line for line in contents[record].decode("utf-8", errors="replace").splitlines()
+                 if line.startswith("ROOT: READY ")]
+        if len(lines) != 1:  # M:GAS-RECORD-ROOT-LINE
+            raise Refusal("root_record:no_line")
+        root_line = next(iter(lines), "")
+        fields = parse_root_line(root_line)
+        if fields is None:
+            raise Refusal("root_record:no_line")  # M:GAS-RECORD-ROOT-MALFORMED
+        if index == 1 and Path(fields["path"]).resolve() != args.root.resolve():  # M:GAS-RECORD-ROOT-PATH  # M:GAS-RECORD-PASS-PATH
+            raise Refusal("root_record:path_mismatch")
+        name = f"p{index}.root.txt" if pass_records else "root.txt"  # M:GAS-RECORD-PASS-NAME
+        root_records[name] = (root_line + "\n").encode("utf-8")
+        pass_roots.append(Path(fields["path"]))
     stdout_lines = contents[args.stdout].decode("utf-8", errors="replace").splitlines()
     if not any(line.startswith("AUDITCYCLE: ") for line in stdout_lines):  # M:GAS-RECORD-AUDITCYCLE
         raise Refusal(f"no_auditcycle_line:{args.stdout}")
@@ -593,7 +677,7 @@ def record_cycle(args: argparse.Namespace) -> str:
 
     stem_pattern = re.compile(
         re.escape(f"audit_{feature}_{phase}_cycle{cycle}_run")
-        + r"(.+)_p([1-9][0-9]*)(\.txt|\.asm\.txt|\.out\.txt|\.log|\.report\.md)"
+        + r"(.+)_p([1-9][0-9]*)(\.txt|\.asm\.txt|\.out\.txt|\.log|\.report\.md|\.log\.profile)"  # M:GAS-RECORD-PROFILE
     )
     stem_files = [(path, stem_pattern.fullmatch(path.name)) for path in sorted(args.stem.iterdir())
                   if path.is_file()]
@@ -604,8 +688,17 @@ def record_cycle(args: argparse.Namespace) -> str:
     copies = {}
     for source, match in stem_files:
         if match is not None and match[1] == prefix:
-            suffix = ".prompt.txt" if match[3] == ".txt" else match[3]
+            suffix = {".txt": ".prompt.txt", ".log.profile": ".profile.txt"}.get(match[3], match[3])
             copies[f"p{match[2]}{suffix}"] = source
+
+    report_roots = {int(match[2]): args.root for _source, match in stem_files if match is not None}
+    if pass_records:
+        report_roots = dict(enumerate(pass_roots, 1))
+    stem_name = f"audit_{feature}_{phase}_cycle{cycle}_run{prefix}"
+    for index, root in report_roots.items():
+        report = root / ".hmad-report" / f"{stem_name}_p{index}.report.md"
+        if report.is_file():  # M:GAS-RECORD-PASS-REPORT
+            copies[f"p{index}.report.md"] = report
 
     report_name = re.escape(f"{feature}.{phase}.audit.v{cycle}") + r"\.p[1-9][0-9]*\.md"
     report_dir = "docs/02-design/features" if phase == "design" else "docs/01-plan/features"
@@ -619,7 +712,7 @@ def record_cycle(args: argparse.Namespace) -> str:
                     copies[f"{destination}/{source.name}"] = source
 
     # Read every selected source before creating any destination file.
-    recorded = {"root.txt": (root_line + "\n").encode("utf-8"),
+    recorded = {**root_records,
                 "command.txt": contents[args.command], "auditcycle.txt": contents[args.stdout]}
     for destination, source in copies.items():
         try:
@@ -662,15 +755,35 @@ def commit_data(args: argparse.Namespace) -> str:
         if path.is_file():
             sources.append((path, CALIBRATION / path.relative_to(args.src)))
     try:
+        parent_tree = _git(args.repo, "ls-tree", "-r", "-z", parent_oid, "--", CALIBRATION.as_posix())
+        parent_tree.check_returncode()
+        parent_blobs = {}
+        for entry in parent_tree.stdout.split(b"\0"):
+            if not entry:
+                continue
+            metadata, name = entry.split(b"\t", 1)
+            _mode, kind, oid = metadata.split()
+            if kind == b"blob":
+                parent_blobs[os.fsdecode(name)] = oid.decode()
+        additions = []
+        for path, destination in sources:
+            blob = _git(args.repo, "hash-object", "-w", "--stdin", stdin=path.read_bytes())
+            blob.check_returncode()
+            oid = blob.stdout.decode().strip()
+            previous = parent_blobs.get(destination.as_posix())
+            relative = path.relative_to(args.src)
+            authoring = relative == Path("ledger.jsonl") or relative.as_posix().startswith("seeded/")  # M:GAS-COMMIT-AUTHORING
+            if previous is not None and previous != oid and not authoring:  # M:GAS-COMMIT-REPLACE
+                raise Refusal(f"would_replace:{destination.as_posix()}")
+            if previous != oid:
+                additions.append((destination, oid))
         with tempfile.TemporaryDirectory(prefix="gas-commit-") as directory:
             environment = _git_environment()
             environment["GIT_INDEX_FILE"] = str(Path(directory) / "index")
             _git(args.repo, "read-tree", parent_oid, env=environment).check_returncode()
-            for path, destination in sources:
-                blob = _git(args.repo, "hash-object", "-w", "--stdin", stdin=path.read_bytes())
-                blob.check_returncode()
+            for destination, oid in additions:
                 _git(args.repo, "update-index", "--add", "--cacheinfo", "100644",
-                     blob.stdout.decode().strip(), destination.as_posix(),
+                     oid, destination.as_posix(),
                      env=environment).check_returncode()
             tree = _git(args.repo, "write-tree", env=environment)
             tree.check_returncode()
@@ -873,7 +986,8 @@ def smoke(data: Path, vocab_py: Path, vocab_sh: Path) -> tuple[list[str], str]:
                 if form in ("grok", "truncated"):
                     pass
                 elif form == "counts":  # M:GAS-SMOKE-EFFORT-COUNTS
-                    pass
+                    if {"end", "tool_call", "tool_call_update"} <= types.keys():  # M:GAS-SMOKE-EFFORT-NONGROK-CONTRADICTED
+                        raise Refusal(f"input_unparseable:{audit}")
                 elif item.startswith("p1 not measured (codex-text log"):
                     if True:  # M:GAS-SMOKE-EFFORT-CODEX-TEXT
                         raise Refusal(f"input_unparseable:{audit}")
@@ -1034,6 +1148,132 @@ def stands(doc_dir: Path) -> Path:
     return standing
 
 
+def containment_checks(s2_dir: Path, sources: dict[str, str]) -> None:
+    run_record = s2_dir / "run.txt"
+    try:
+        run_fields = parse_run_line(run_record.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        run_fields = None
+    if run_fields is None:  # M:GAS-CONTAIN-RUN-RECORD
+        raise Refusal("list_changed:unrecorded")  # M:GAS-CONTAIN-RUN-RECORD
+    cycles = []
+    for index in range(1, len(sources) * 3 + 1):
+        doc_dir = s2_dir / f"d{index}"
+        for cycle in sorted(doc_dir.glob("v*"), key=lambda path: int(path.name[1:])):
+            reason = f"cycle_token:{doc_dir.name}.{cycle.name}"
+            try:
+                command = shlex.split((cycle / "command.txt").read_text(encoding="utf-8"))
+                surfaces = command[command.index("--surfaces") + 1].split(",")
+                passes = int(command[command.index("--passes") + 1])
+            except (OSError, UnicodeError, ValueError, IndexError):
+                raise Refusal(reason)
+            if passes != len(surfaces) or not surfaces:
+                raise Refusal(reason)
+            cycles.append((cycle, passes, reason, surfaces))
+
+    recorded_roots = []
+    for cycle, passes, reason, surfaces in cycles:
+            roots = []
+            for pass_index in range(1, passes + 1):
+                record = cycle / f"p{pass_index}.root.txt"
+                fields = None
+                if record.is_file():
+                    try:
+                        lines = [parse_root_line(line) for line in record.read_text(encoding="utf-8").splitlines()
+                                 if line.startswith("ROOT: READY ")]
+                    except (OSError, UnicodeError):
+                        lines = []
+                    fields = lines[0] if len(lines) == 1 else None
+                if fields is None:  # M:GAS-CONTAIN-ROOT-UNRECORDED
+                    raise Refusal("list_changed:unrecorded")  # M:GAS-CONTAIN-ROOT-UNRECORDED
+                roots.append(fields)
+            recorded_roots.append((cycle, passes, reason, surfaces, roots))
+
+    for cycle, passes, reason, surfaces, roots in recorded_roots:
+            for record in cycle.glob("p*.root.txt"):
+                match = re.fullmatch(r"p([1-9][0-9]*)\.root\.txt", record.name)
+                if match and int(match[1]) > passes:  # M:GAS-CYCLE-ROOT-COUNT
+                    raise Refusal(reason)
+            paths = [Path(fields["path"]) for fields in roots]
+            if len({str(path) for path in paths}) != len(paths):  # M:GAS-CYCLE-ROOT-SAME
+                raise Refusal(reason)
+            if any(left in right.parents or right in left.parents
+                   for left_index, left in enumerate(paths)
+                   for right in paths[left_index + 1:]):  # M:GAS-CYCLE-ROOT-NESTED
+                raise Refusal(reason)
+            if len({fields["calibration"] for fields in roots}) != 1:  # M:GAS-CYCLE-ROOT-CALIBRATION
+                raise Refusal(reason)
+            if len({fields["list_blob"] for fields in roots}) != 1:  # M:GAS-CYCLE-ROOT-LIST
+                raise Refusal(reason)
+
+    needles = [f"{directory}/{feature}" for feature, directory in sources.items()]
+    cycles_to_scan = recorded_roots  # M:GAS-CONTAIN-EVERY-CYCLE
+    for cycle, passes, reason, surfaces, roots in cycles_to_scan:
+        for pass_index, surface in enumerate(surfaces, 1):
+            if surface != "grok":  # M:GAS-CONTAIN-GROK-ONLY
+                continue
+            log = cycle / f"p{pass_index}.log"
+            try:
+                text = log.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                text = None
+            root = roots[pass_index - 1]["path"]
+            scan = h_mad_tool_calls.scan_log(text, "grok", root=root, checkout=run_fields["checkout"], home=run_fields["home"], needle_dirs=needles) if text is not None else {"word": "UNREADABLE"}  # M:GAS-CONTAIN-SCAN
+            if scan["word"] == "OUT_OF_ROOT":  # M:GAS-CONTAIN-OUT-OF-ROOT
+                raise Refusal(f"out_of_root:{cycle.parent.name}.{cycle.name}")
+            if scan["word"] == "UNREADABLE":  # M:GAS-CONTAIN-UNREADABLE
+                raise Refusal(f"out_of_root:{cycle.parent.name}.{cycle.name}")
+
+
+def containment_lines(s2_dir: Path, sources: dict[str, str]) -> list[str]:
+    try:
+        run_fields = parse_run_line((s2_dir / "run.txt").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        run_fields = None
+    if run_fields is None:
+        raise Refusal("list_changed:unrecorded")
+    needles = [f"{directory}/{feature}" for feature, directory in sources.items()]
+    lines = []
+    for index in range(1, len(sources) * 3 + 1):
+        doc = f"d{index}"
+        cycle = stands(s2_dir / doc)
+        try:
+            command = shlex.split((cycle / "command.txt").read_text(encoding="utf-8"))
+            surfaces = command[command.index("--surfaces") + 1].split(",")
+        except (OSError, UnicodeError, ValueError, IndexError):
+            raise Refusal(f"cycle_token:{doc}.{cycle.name}")
+        for pass_index, surface in enumerate(surfaces, 1):
+            root_record = cycle / f"p{pass_index}.root.txt"
+            try:
+                root_lines = [parse_root_line(line) for line in root_record.read_text(encoding="utf-8").splitlines()
+                              if line.startswith("ROOT: READY ")]
+            except (OSError, UnicodeError):
+                root_lines = []
+            roots = [fields for fields in root_lines if fields is not None]
+            if len(roots) != 1:
+                raise Refusal("list_changed:unrecorded")
+            try:
+                text = (cycle / f"p{pass_index}.log").read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                text = ""
+            scan = h_mad_tool_calls.scan_log(text, surface, root=roots[0]["path"], checkout=run_fields["checkout"], home=run_fields["home"], needle_dirs=needles)  # M:GAS-CONTAIN-LINES
+            tail = (f"mcp_unmeasured={scan['mcp_unmeasured']}" if surface == "codex"
+                    else f"nonjson={scan['nonjson']}")
+            line = (f"CONTAINMENT: {doc}.v{cycle.name[1:]} p{pass_index} surface={surface} scan={scan['word']} "
+                    f"calls={scan['calls']} out_of_root={scan['out_of_root']} "
+                    f"checkout={scan['checkout']} exempt={scan['exempt']} {tail}")
+            if surface == "grok":
+                profile_path = cycle / f"p{pass_index}.profile.txt"
+                try:
+                    profile = parse_profile_line(profile_path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError):
+                    profile = None
+                line += (f" profile={profile['profile']} origin={profile['origin']}"
+                         if profile else " profile=none")  # M:GAS-CONTAIN-PROFILE
+            lines.append(line)
+    return lines
+
+
 def _standing_reports(s2_dir: Path, sources: dict[str, str]) -> list[dict]:
     reports = []
     for index in range(1, len(sources) * 3 + 1):
@@ -1066,16 +1306,38 @@ def _standing_reports(s2_dir: Path, sources: dict[str, str]) -> list[dict]:
     return reports
 
 
+def quote_hints(text: str) -> list[str]:
+    lines = text.splitlines()
+    quotes = []
+    index = 0
+    while index < len(lines):
+        line = lines[index].strip()
+        if not line.startswith("quote:"):
+            index += 1
+            continue
+        block = [line]
+        index += 1
+        while index < len(lines) and not block[-1].endswith("`"):
+            block.append(lines[index].strip())
+            index += 1
+        quotes.append("\n".join(block))
+    return quotes
+
+
 def extract_all(tree: Path, s2_dir: Path, sources: dict[str, str]) -> list[dict]:
     """Re-extract delivered findings from the standing cycles in external S2."""
     check_ledger(tree, sources)
     findings = []
-    for report in _standing_reports(s2_dir, sources):
+    reports = _standing_reports(s2_dir, sources)
+    containment_checks(s2_dir, sources)
+    for report in reports:
         path = report["path"]
         must, should, _must_count, _should_count = extract_report(
             path.read_text(encoding="utf-8"), report["report"])
         # Root paths support quote hints; list_check validates record provenance.
-        root_record = path.parent.parent / "root.txt"
+        root_record = path.parent.parent / f"p{report['pass']}.root.txt"  # M:GAS-HINT-PASS-ROOT
+        if not root_record.is_file():
+            root_record = path.parent.parent / "root.txt"
         root_lines = root_record.read_text(encoding="utf-8").splitlines() if root_record.is_file() else []
         root = next((parsed["path"] for line in root_lines
                      if (parsed := parse_root_line(line)) is not None), "")
@@ -1084,8 +1346,7 @@ def extract_all(tree: Path, s2_dir: Path, sources: dict[str, str]) -> list[dict]
                 findings.append({
                     **{key: value for key, value in report.items() if key != "path"},
                     "section": section, "text": text,
-                    "quotes": [line.strip() for line in text.splitlines()
-                               if line.strip().startswith("quote:")],
+                    "quotes": quote_hints(text),
                     "root": root,
                 })
     return findings
@@ -1172,7 +1433,7 @@ def _mode_extract(args: argparse.Namespace) -> int:
             archive = _git_bytes(args.repo, "archive", "--format=tar", args.base_sha)
         except (OSError, subprocess.SubprocessError) as exc:
             raise Refusal(f"calibration_ref:sha_unknown:{args.base_sha}") from exc
-        with tempfile.TemporaryDirectory(prefix="gas-extract-") as directory:
+        with tempfile.TemporaryDirectory(prefix="gas-extract-", dir=args.work_dir) as directory:  # M:GAS-SCRATCH-EXTRACT
             tree = Path(directory)
             _extract_archive(archive, tree)
             write(tree)
@@ -1205,7 +1466,9 @@ def verdict(totals: dict[str, tuple[int, int, int, int]]) -> tuple[str, str | No
     return "INCONCLUSIVE", "undecidable_flips"  # M:GAS-VERDICT-FLIPS
 
 
-def check_key(tree: Path, findings: list[dict], key: list[dict], reextracted: list[dict]) -> None:
+def check_key(tree: Path, findings: list[dict], key: list[dict], reextracted: list[dict],
+              selected_root: Path | None = None) -> None:
+    s2_root = (selected_root or tree / CALIBRATION) / "s2"
     by_id = {row["id"]: row for row in findings}
     keyed = {row["id"]: row for row in key}
     if by_id.keys() != keyed.keys():  # M:GAS-KEY-ID-SETS
@@ -1223,7 +1486,7 @@ def check_key(tree: Path, findings: list[dict], key: list[dict], reextracted: li
         if row["cycle"] != cycle:  # M:GAS-KEY-CYCLE
             raise Refusal("key_mismatch")
         try:
-            command = shlex.split((tree / CALIBRATION / "s2" / doc / f"v{cycle}" / "command.txt").read_text(encoding="utf-8"))
+            command = shlex.split((s2_root / doc / f"v{cycle}" / "command.txt").read_text(encoding="utf-8"))
             surfaces = command[command.index("--surfaces") + 1].split(",")
             pass_index = row["pass"]
             surface = dict(enumerate(surfaces, 1)).get(pass_index)
@@ -1300,22 +1563,24 @@ def observational_lines(rows: list[dict], ledger: list[dict]) -> list[str]:
 
 def _score_table(tree: Path, name: str, reason: str) -> list[dict]:
     try:
-        return [json.loads(line) for line in (tree / CALIBRATION / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()]
+        return [json.loads(line) for line in (tree / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()]
     except (OSError, UnicodeError, ValueError) as exc:
         raise Refusal(reason) from exc
 
 
-def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sha: str | None) -> tuple[list[str], str]:
+def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sha: str | None,
+          run_id: str | None = None) -> tuple[list[str], str]:
     # extract_all validates the ledger, every standing cycle, and must counts first.
-    reextracted = extract_all(tree, tree / CALIBRATION / "s2", sources)
-    findings = _score_table(tree, "findings", "key_mismatch")
-    key = _score_table(tree, "key", "key_mismatch")
-    check_key(tree, findings, key, reextracted)
+    selected_root = reading_root(tree, run_id)
+    reextracted = extract_all(tree, selected_root / "s2", sources)
+    findings = _score_table(selected_root, "findings", "key_mismatch")
+    key = _score_table(selected_root, "key", "key_mismatch")
+    check_key(tree, findings, key, reextracted, selected_root)
     documents = [(Path(directory) / feature / f"{feature}.{phase}.md").as_posix()
                  for feature, directory in sources.items() for phase in ("plan", "design", "impl-plan")]
     doc_ids = {source: f"d{index}" for index, source in enumerate(documents, 1)}
     ledger = [{**seed, "doc": doc_ids[seed["source"]]} for seed in read_ledger(tree)]
-    labelled = check_labels(findings, _score_table(tree, "labels", "label:unknown"), ledger)
+    labelled = check_labels(findings, _score_table(selected_root, "labels", "label:unknown"), ledger)
     keyed = {row["id"]: row for row in key}
     phases = {seed["doc"]: seed["phase"] for seed in ledger}
     joined = [{**finding, **keyed[finding["id"]], **labelled.get(finding["id"], {}),
@@ -1323,7 +1588,7 @@ def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sh
     delivered_counts = Counter()
     evidence = {}
     for doc in doc_ids.values():
-        directory = stands(tree / CALIBRATION / "s2" / doc)
+        directory = stands(selected_root / "s2" / doc)
         text = (directory / "auditcycle.txt").read_text(encoding="utf-8")
         parsed = _recorded_cycle(directory)
         command = shlex.split((directory / "command.txt").read_text(encoding="utf-8"))
@@ -1350,13 +1615,15 @@ def score(tree: Path, sources: dict[str, str], calibration: str | None, score_sh
                      f"delivered={delivered_counts[surface]} low_evidence={evidence[surface]}")
     outcome, reason = verdict(totals)
     lines.extend(observational_lines(rows, ledger))
+    lines.extend(containment_lines(selected_root / "s2", sources))
     token = f"SEEDSCORE: {outcome}" + (f" reason={reason}" if reason else "")
     token += f" calibration={calibration or 'unstated'} score={score_sha or 'unstated'}"
     return lines, token
 
 
 def _mode_score(args: argparse.Namespace) -> int:
-    lines, token = score(args.tree, args.sources, args.calibration_sha, args.score_sha)
+    lines, token = score(args.tree, args.sources, args.calibration_sha, args.score_sha,
+                         args.run_id)
     for line in lines:
         print(line)
     print(token)
@@ -1374,7 +1641,8 @@ def calibration_data_files(tree: Path) -> list[str]:
     expected = [normalise(row["expected"].encode()).strip() for row in ledger]
     findings = []
     reports = [*data.glob("s1/*/collected/*.md"),
-               *data.glob("s2/d*/v*/collected/*.md")]
+               *data.glob("s2/d*/v*/collected/*.md"),
+               *data.glob("runs/*/s2/d*/v*/collected/*.md")]
     for report in sorted(reports):
         for spans in report_findings(report.read_text(encoding="utf-8")).values():
             for span in spans:
@@ -1388,9 +1656,20 @@ def calibration_data_files(tree: Path) -> list[str]:
         if not path.is_file():
             continue
         relative = path.relative_to(tree).as_posix()
+        relative_to_data = path.relative_to(data)
         candidate = (path.name in {"command.txt", "root.txt", "wall_seconds.txt",
                                    "resolved_model.txt", "extract.txt"}
-                     or path == data / "s1/versions.txt")
+                     or path == data / "s1/versions.txt"
+                     or ("resmoke" in relative_to_data.parts and "canary" in relative_to_data.parts)
+                     or (relative_to_data.parts[-2:] == ("resmoke", "run.txt"))
+                     or ("resmoke" in relative_to_data.parts
+                         and relative_to_data.parts[-1] == "versions.txt")
+                     or ("resmoke" in relative_to_data.parts
+                         and len(relative_to_data.parts) >= 3
+                         and re.fullmatch(r"p[1-9][0-9]*\.profile\.txt", path.name))
+                     or (relative_to_data.parts[-2:] == ("s2", "run.txt"))
+                     or ("s2" in relative_to_data.parts
+                         and re.fullmatch(r"p[1-9][0-9]*\.(root|profile|scan)\.txt", path.name)))  # M:GAS-CALSET-METADATA
         if candidate:
             text = normalise(path.read_bytes())
             if any(needle and needle in text for needle in seeded):  # M:GAS-CALSET-SEEDED
@@ -1453,10 +1732,10 @@ def drift_check(repo: Path, calibration: str, later: str) -> None:
             raise Refusal(f"calibration_drift:{path}")
 
 
-def main_leak(repo: Path, data_sha: str, sources: dict[str, str]) -> tuple[str, str, int]:
+def main_leak(repo: Path, data_sha: str, sources: dict[str, str], work_dir: Path) -> tuple[str, str, int]:
     head = _git_bytes(repo, "rev-parse", "HEAD^{commit}").decode().strip()
     data_sha = _git_bytes(repo, "rev-parse", f"{data_sha}^{{commit}}").decode().strip()
-    with tempfile.TemporaryDirectory(prefix="gas-main-leak-") as directory:
+    with tempfile.TemporaryDirectory(prefix="gas-main-leak-", dir=work_dir) as directory:  # M:GAS-SCRATCH-MAIN-LEAK
         tree = Path(directory)
         _extract_archive(_git_bytes(repo, "archive", "--format=tar", data_sha), tree)
         reach_check(tree)
@@ -1511,15 +1790,35 @@ def _git_bytes_batch(repo: Path, oids: list[bytes]) -> list[bytes]:
     return blobs
 
 
-def list_check(export: Path, repo: Path) -> str:
+def reading_root(tree: Path, run_id: str | None = None) -> Path:
+    root = tree / CALIBRATION
+    return root / "runs" / run_id if run_id else root  # M:GAS-RUN-ID
+
+
+def list_check(export: Path, repo: Path, run_id: str | None = None) -> str:
+    def check_recorded_list_blob(blob: str) -> None:
+        if blob != current:  # M:GAS-LIST-CHANGED
+            raise Refusal(f"list_changed:{blob}")
+
     _entries, _commit, current = read_exclusions(repo, "HEAD")
-    data = export / CALIBRATION
+    data = reading_root(export, run_id)
     cycles = [data / "s1" / surface for surface in ("grok", "agy", "codex")
               if (data / "s1" / surface).is_dir()]
+    cycles.extend(data / "resmoke" / surface for surface in ("grok", "agy", "codex")
+                  if (data / "resmoke" / surface).is_dir())  # M:GAS-LIST-RESMOKE
     docs = sorted((data / "s2").glob("d*"),
                   key=lambda path: int(path.name[1:]))
+    pass_cycles = []
     for doc in docs:
-        cycles.extend(sorted(doc.glob("v*"), key=lambda path: int(path.name[1:])))
+        for cycle in sorted(doc.glob("v*"), key=lambda path: int(path.name[1:])):
+            try:
+                words = shlex.split((cycle / "command.txt").read_text(encoding="utf-8"))
+                surfaces = words[words.index("--surfaces") + 1].split(",")
+            except (OSError, UnicodeError, ValueError, IndexError):
+                surfaces = []
+            if not surfaces:  # M:GAS-LIST-SURFACES
+                raise Refusal("list_changed:unrecorded")
+            pass_cycles.append((cycle, len(surfaces)))
     recorded = []
     for cycle in cycles:
         path = cycle / "root.txt"
@@ -1535,9 +1834,21 @@ def list_check(export: Path, repo: Path) -> str:
         if fields is None:
             continue
         blob = fields["list_blob"]
-        if blob != current:  # M:GAS-LIST-CHANGED
-            raise Refusal(f"list_changed:{blob}")
+        check_recorded_list_blob(blob)
         recorded.append(blob)
+    for cycle, passes in pass_cycles:
+        for pass_index in range(1, passes + 1):  # M:GAS-LIST-PASS-RECORDS
+            path = cycle / f"p{pass_index}.root.txt"
+            if not path.is_file():
+                raise Refusal("list_changed:unrecorded")
+            lines = [parse_root_line(line) for line in path.read_text(encoding="utf-8").splitlines()
+                     if line.startswith("ROOT: READY ")]
+            fields = lines[0] if len(lines) == 1 else None
+            if fields is None:
+                raise Refusal("list_changed:unrecorded")
+            blob = fields["list_blob"]
+            check_recorded_list_blob(blob)
+            recorded.append(blob)
     return f"LIST: recorded={','.join(recorded)} current={current}"
 
 
@@ -1557,21 +1868,24 @@ def rescore(args: argparse.Namespace) -> tuple[list[str], str]:
     directories = []
     try:
         _branch_checks(args)
-        export = Path(tempfile.mkdtemp(prefix="gas-rescore-"))
+        export = Path(tempfile.mkdtemp(prefix="gas-rescore-", dir=args.work_dir))  # M:GAS-SCRATCH-RESCORE
         directories.append(export)
         _extract_archive(_git_bytes(args.repo, "archive", "--format=tar", args.score_sha), export)
         reach_check(export)
-        head, data, blobs = main_leak(args.repo, args.score_sha, args.sources)
-        lines = [f"SCANNED: main={head} data={data} blobs={blobs}", list_check(export, args.repo)]
+        head, data, blobs = main_leak(args.repo, args.score_sha, args.sources, args.work_dir)
+        listing = list_check(export, args.repo, args.run_id)
+        lines = [f"SCANNED: main={head} data={data} blobs={blobs}", listing]
         check_ledger(export, args.sources)
         for index in range(1, len(args.sources) * 3 + 1):
             root_args = argparse.Namespace(
                 repo=args.repo, calibration_sha=args.calibration_sha, sources=args.sources,
-                doc=f"d{index}", purpose="rescore", list_commit="HEAD", dest_parent=None,
+                doc=f"d{index}", purpose="rescore", list_commit="HEAD",
+                dest_parent=args.work_dir, work_dir=args.work_dir,
             )
             root_line = build_root(root_args)
             directories.append(Path(parse_root_line(root_line)["path"]))
-        observations, token = score(export, args.sources, args.calibration_sha, args.score_sha)
+        observations, token = score(export, args.sources, args.calibration_sha,
+                                    args.score_sha, args.run_id)
         return lines + observations, token
     finally:
         for directory in reversed(directories):
@@ -1590,7 +1904,7 @@ def rescore(args: argparse.Namespace) -> tuple[list[str], str]:
 
 def _mode_main_leak(args: argparse.Namespace) -> int:
     _branch_checks(args)
-    head, data, blobs = main_leak(args.repo, args.score_sha or args.smoke_sha, args.sources)
+    head, data, blobs = main_leak(args.repo, args.score_sha or args.smoke_sha, args.sources, args.work_dir)
     print(f"MAINLEAK: CLEAN scanned={head} data={data} blobs={blobs}")
     return 0
 
@@ -1629,8 +1943,10 @@ def build_parser() -> _TokenArgumentParser:
     root.add_argument("--sources", type=parse_sources, default=SOURCES.copy())
 
     record = subparsers.add_parser("record-cycle")
-    for flag in ("--stem", "--root", "--root-record", "--stdout", "--command", "--dest"):
+    for flag in ("--stem", "--root", "--stdout", "--command", "--dest"):
         record.add_argument(flag, type=Path, required=True)
+    record.add_argument("--root-record", type=Path)
+    record.add_argument("--pass-root-record", type=Path, action="append", default=[])
 
     commit = subparsers.add_parser("commit-data")
     commit.add_argument("--repo", type=Path, required=True)
@@ -1657,6 +1973,7 @@ def build_parser() -> _TokenArgumentParser:
     score.add_argument("--tree", type=Path, required=True)
     score.add_argument("--calibration-sha")
     score.add_argument("--score-sha")
+    score.add_argument("--run-id")
     score.add_argument("--sources", type=parse_sources, default=SOURCES.copy())
 
     rescore = subparsers.add_parser("rescore")
@@ -1664,6 +1981,7 @@ def build_parser() -> _TokenArgumentParser:
     rescore.add_argument("--calibration-sha", required=True)
     rescore.add_argument("--smoke-sha", required=True)
     rescore.add_argument("--score-sha", required=True)
+    rescore.add_argument("--run-id", required=True)
     rescore.add_argument("--remote", default="origin")
     rescore.add_argument("--sources", type=parse_sources, default=SOURCES.copy())
 
@@ -1674,6 +1992,8 @@ def build_parser() -> _TokenArgumentParser:
     leak.add_argument("--score-sha")
     leak.add_argument("--remote", default="origin")
     leak.add_argument("--sources", type=parse_sources, default=SOURCES.copy())
+    for command in (ledger, root, extract, rescore, leak):
+        command.add_argument("--work-dir", type=Path)
     return parser
 
 
@@ -1719,6 +2039,17 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--repo and --base-sha must be supplied together")
         if mode == "score" and (args.calibration_sha is None) != (args.score_sha is None):
             parser.error("--calibration-sha and --score-sha must be supplied together")
+        needs_work_dir = mode in ("build-root", "main-leak", "rescore") or (
+            mode in ("check-ledger", "extract") and args.repo is not None)
+        if needs_work_dir and args.work_dir is None:  # M:GAS-WORK-DIR-REQUIRED
+            parser.error("--work-dir is required")
+        if needs_work_dir:
+            args.work_dir = checked_parent(args.work_dir, git_guard=True)  # M:GAS-WORK-DIR-CHECK
+        if mode == "build-root":
+            if args.dest_parent is None and args.reset is None:  # M:GAS-PARENT-REQUIRED
+                parser.error("one of --dest-parent and --reset is required")
+            if args.reset is None:
+                args.dest_parent = checked_parent(args.dest_parent, git_guard=False)  # M:GAS-DEST-PARENT-CHECK
         return MODES[mode](args)
     except Exception as exc:
         if not isinstance(exc, ProbeRefusal):  # M:GAS-TRACEBACK-SCOPE

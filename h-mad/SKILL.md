@@ -622,7 +622,14 @@ resolved implementer and the independent review assignment:
   and `fallback_agent=grok`. Stage with `h_mad_assemble_tdd.py --agent grok`;
   its default timeout is 1500 seconds. Grok's GREEN, mutation, wiring, and audit
   precision are **unmeasured** (D4), so its verdict remains a claim until the
-  independent checks run.
+  independent checks run. From FR-11, `exec grok` always runs `--sandbox strict`:
+  a weaker or unknown `--sandbox` value exits 2 unless
+  `--allow-weaker-sandbox` is also given, which is recorded in `<log>.profile`,
+  and `GROK_SANDBOX` is removed from grok's environment. In a git work tree it
+  stages its prompt and `TMPDIR` under `<top level>/.h-mad/tmp/` and exits 2,
+  launching nothing, when `--cd` is below the top level, when the repository
+  does not ignore `.h-mad/tmp/`, or when `git rev-parse` fails for a reason
+  other than "not a git repository"; outside a work tree it uses `<cd>/.tmp/`.
 - **`exec agy`** — a resolved RED/GREEN implementer dispatch, or the independent 5e-review (and Phase 3/4/5b audit) dispatch. Runs `agy --print`
   under `--output-format stream-json`, so the transcript is a live NDJSON event stream
   and the wrapper lifts the final response out of the stream's `result` event. A

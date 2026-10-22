@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: alive | ask | audit-cycle | automation-create | automation-list | automation-remove | automation-run | await | clear | collect-report | dispatch | env | exec | exec-pane | file-diff | file-open-changed | gate-create | gate-resolve | gate-wait | interrupt | launch | notify | pin | pin-agents | probe | progress | read | report-wait | resolve | resolved-model | run | run-ensure | send | task-create | verify | wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
+# Verbs: alive | ask | audit-cycle | automation-create | automation-list | automation-remove | automation-run | await | clear | collect-report | dispatch | env | exec | exec-pane | file-diff | file-open-changed | gate-create | gate-resolve | gate-wait | grok-canary | interrupt | launch | notify | pin | pin-agents | probe | progress | read | report-wait | resolve | resolved-model | run | run-ensure | send | task-create | verify | wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -2966,7 +2966,7 @@ _codex_input_too_large() {  # <log> <pre_lines> -> "max_chars=N actual_chars=M" 
   printf 'max_chars=%s actual_chars=%s' "${maxc:-?}" "${actc:-?}"
 }
 
-_cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox] [grok: --sandbox <profile>]
+_cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox] [grok: --sandbox <profile> (default strict), --allow-weaker-sandbox]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
   # to reap: this verb returns the agent's own exit code, no idle poll. The agent's
@@ -3059,6 +3059,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   fi
 
   local cd_dir="" model="" out="" timeout="" sandbox="" effort="" log=""
+  local allow_weaker_sandbox=0 origin="default"
   [ "$agent" = codex ] && sandbox="workspace-write"   # codex default; agy has none
   while [ $# -gt 0 ]; do case "$1" in
     --cd) _need_val exec --cd $# || return $?; cd_dir="$2"; shift 2 ;;
@@ -3066,10 +3067,25 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
     --out) _need_val exec --out $# || return $?; out="$2"; shift 2 ;;
     --log) _need_val exec --log $# || return $?; log="$2"; shift 2 ;;             # stream live transcript here for `tail -f`
     --timeout) _need_val exec --timeout $# || return $?; timeout="$2"; shift 2 ;;
-    --sandbox) _need_val exec --sandbox $# || return $?; sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox; grok: passed verbatim
+    --sandbox) _need_val exec --sandbox $# || return $?; sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox; grok: strict or explicit override
+    --allow-weaker-sandbox) [ "$agent" = grok ] || { _unknown_opt exec "$1"; return $?; }; allow_weaker_sandbox=1; shift ;;  # M:GROK-OVERRIDE-GROK-ONLY
     --effort) _need_val exec --effort $# || return $?; effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort; grok: --reasoning-effort
     *) _unknown_opt exec "$1"; return $? ;;
   esac; done
+
+  if [ "$agent" = grok ]; then
+    if [ "$allow_weaker_sandbox" -eq 1 ] && [ -z "$sandbox" ]; then  # M:GROK-SANDBOX-OVERRIDE-ALONE
+      echo "hmad-dispatch: exec: --allow-weaker-sandbox needs a --sandbox weaker than strict" >&2; return 2
+    fi
+    if [ "$allow_weaker_sandbox" -eq 1 ] && [ "$sandbox" = strict ]; then  # M:GROK-SANDBOX-OVERRIDE-STRICT
+      echo "hmad-dispatch: exec: --allow-weaker-sandbox needs a --sandbox weaker than strict" >&2; return 2
+    fi
+    if [ -n "$sandbox" ] && [ "$sandbox" != strict ] && [ "$allow_weaker_sandbox" -eq 0 ]; then  # M:GROK-SANDBOX-WEAKER
+      echo "hmad-dispatch: exec: grok --sandbox ${sandbox} is weaker than strict or unknown; pass --allow-weaker-sandbox to run it, and it is recorded" >&2; return 2
+    fi
+    sandbox="${sandbox:-strict}"  # M:GROK-SANDBOX-DEFAULT
+    [ "$allow_weaker_sandbox" -eq 1 ] && origin="override"
+  fi
 
   # The WAIT gets a ceiling even when the caller gives no `--timeout` (#22).
   #
@@ -3100,6 +3116,43 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
     echo "hmad-dispatch: exec requires the $agent CLI on PATH" >&2; return 2; }
   [ -n "$cd_dir" ] || cd_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
   local label; label="$(basename "$cd_dir")"
+
+  # Isolate the EXIT trap so every return/error cleans this dispatch's staging.
+  (
+  local T="" S="" git_top git_error git_rc
+  trap 'if [ -n "$T" ] && [[ "$S" == "$T/.h-mad/tmp/hmad_exec_grok."* ]]; then rm -rf -- "$S"; fi' EXIT  # M:GROK-TMP-RMGUARD
+  if [ "$agent" = grok ]; then
+    # Keep stderr separate even on success (Apple's git shim can print warnings).
+    # NUL-delimited pipe fields avoid creating a file before staging is validated.
+    {
+      IFS= read -r -d '' git_error
+      IFS= read -r -d '' git_top
+      IFS= read -r -d '' git_rc
+    } < <(
+      {
+        local git_stdout="" git_status=0
+        git_stdout="$(LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C "$cd_dir" rev-parse --show-toplevel 2>&3)" || git_status=$?  # M:GROK-TMP-ENV
+        printf '\0%s\0%s\0' "$git_stdout" "$git_status"
+      } 3>&1
+    )
+    if [ "$git_rc" -eq 0 ]; then
+      T="$git_top"
+      if [ "$(cd "$cd_dir" && pwd -P)" != "$(cd "$T" && pwd -P)" ]; then  # M:GROK-TMP-SUBDIR
+        echo "hmad-dispatch: exec: grok staging: --cd is below the git top level" >&2; return 2
+      fi
+      if ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C "$T" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED
+        echo "hmad-dispatch: exec: grok staging: .h-mad/tmp/ is not ignored by git" >&2; return 2
+      fi
+      mkdir -p "$T/.h-mad/tmp" || return 1
+      S="$(mktemp -d "$T/.h-mad/tmp/hmad_exec_grok.XXXXXX")" || return 1  # M:GROK-TMP-GIT
+    elif [[ "$git_error" == *"not a git repository"* ]]; then  # M:GROK-TMP-GITFAIL
+      S="$cd_dir/.tmp"; mkdir -p "$S" || return 1  # M:GROK-TMP-ROOT
+    else
+      echo "hmad-dispatch: exec: grok staging: git rev-parse failed" >&2
+      printf '%s\n' "$git_error" >&2
+      return 2
+    fi
+  fi
 
   local auto_log=""
   if [ -z "$log" ]; then
@@ -3139,7 +3192,12 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   # when there is no coordinator is silence, not an error and not a warning.
   local _coord=""; _coord="$(_coordinator 2>/dev/null)" || _coord=""
   local boundary; boundary="$(_dispatch_boundary)"
-  local bounded_prompt; bounded_prompt="$(mktemp -t hmad_exec_prompt.XXXXXX)" || return 1
+  local bounded_prompt
+  if [ "$agent" = grok ]; then
+    bounded_prompt="$(mktemp "$S/hmad_exec_prompt.XXXXXX")" || return 1  # M:GROK-PROMPT-IN-CD
+  else
+    bounded_prompt="$(mktemp "$(dirname -- "$log")/hmad_exec_prompt.XXXXXX")" || return 1  # M:EXEC-PROMPT-BESIDE-LOG
+  fi
   {
     # Codex's exec sandbox cannot reach the Orca socket; omit the handle so the
     # template's documented fallback skips worker_done and prints STATUS.
@@ -3193,13 +3251,16 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   if [ "$agent" = grok ]; then
     # grok: prompt by file, streaming-json appended to $log (FR-3). No OVERSIZE check here:
     # the prompt travels as a file, never as an argv element (AC-3.5).
+    child_env=(-u GROK_SANDBOX "${child_env[@]}")  # M:GROK-SANDBOX-ENV
+    child_env+=("TMPDIR=$S")  # M:GROK-TMPDIR
     local gargs=(--cwd "$cd_dir" --always-approve --output-format streaming-json
                  --prompt-file "$bounded_prompt")
     [ -n "$model" ]   && gargs+=(--model "$model")
     [ -n "$effort" ]  && gargs+=(--reasoning-effort "$effort")
-    [ -n "$sandbox" ] && gargs+=(--sandbox "$sandbox")
+    gargs+=(--sandbox "$sandbox")  # M:GROK-SANDBOX-ARG
     if [ -f "$log" ]; then pre_lines="$(wc -l < "$log" 2>/dev/null | tr -d " ")"; fi
     [ -n "$pre_lines" ] || pre_lines=0
+    printf 'GROK-PROFILE: profile=%s origin=%s\n' "$sandbox" "$origin" > "$log.profile"  # M:GROK-PROFILE-RECORD
     _HMAD_EXEC_BEAT_LOG="$log"
     ( cd "$cd_dir" && _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
       "$wait_secs" env "${child_env[@]}" grok "${gargs[@]}" ) < /dev/null >> "$log" 2>&1 || rc=$?
@@ -3212,12 +3273,12 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
       printf '%s\n' "$grok_final"
       echo "hmad-dispatch: exec: grok stopReason=$(_grok_stop_reason "$log" "$pre_lines")" >&2
       [ -n "$auto_log" ] && _render_progress "$log" 40 >&2 || true
-      [ -n "$auto_log" ] && rm -f "$log"
+      [ -n "$auto_log" ] && rm -f "$log" "$log.profile"
     else
       final_empty=1
     fi
   elif [ "$agent" = codex ]; then
-    local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || { rm -f "$bounded_prompt"; return 1; }
+    local last; last="$(mktemp "$(dirname -- "$log")/hmad_exec_last.XXXXXX")" || { rm -f "$bounded_prompt"; return 1; }  # M:EXEC-LAST-BESIDE-LOG
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
                 --output-last-message "$last" --skip-git-repo-check)
     [ -n "$model" ] && args+=(--model "$model")
@@ -3299,6 +3360,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
         echo "hmad-dispatch: exec: OVERSIZE prompt bytes=${_argv_bytes} budget=$(( _arg_max - _argv_reserve )) arg_max=${_arg_max} reserve=${_argv_reserve}" >&2
         echo "  agy receives the prompt as ONE argv element, so the kernel refuses this before agy starts (E2BIG, rc 126) — the agent never runs and writes nothing." >&2
         echo "  Not a hang and not an empty reply — the prompt never left this machine. Re-assemble smaller: --vh-tail N is the first remedy." >&2
+        rm -f "$bounded_prompt"  # M:EXEC-PROMPT-OVERSIZE-RM
         return 2
       fi
     fi
@@ -3352,7 +3414,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
       final_empty=1
     fi
   fi
-  rm -f "$bounded_prompt"
+  rm -f "$bounded_prompt"  # M:EXEC-PROMPT-RM
 
   local refused=""
   [ "$agent" = codex ] && [ "$final_empty" -eq 1 ] && refused="$(_codex_input_too_large "$log" "$pre_lines")"
@@ -3491,6 +3553,7 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   fi
   echo "hmad-dispatch: $agent exec rc=$rc" >&2
   return "$rc"
+  )
 }
 
 _cmd_audit_cycle() {
@@ -3498,8 +3561,9 @@ _cmd_audit_cycle() {
   local passes="2"   # spec AC-3.1: default pass count is 2, so the flag is optional
   local surfaces=""  # csv, one agent per pass; empty = every pass on agy (legacy)
   local project_tests="" suite_cmd=""
-  local -a prompt report out log asm tok rc pids pass_args agent gated legs
-  pass_args=(); gated=(); legs=()
+  local pass_root_count=0 halt_file=""
+  local -a prompt report out log asm tok rc pids pass_args agent gated legs pass_root pass_root_phys
+  pass_args=(); gated=(); legs=(); pass_root=()
   here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
 
   while [ $# -gt 0 ]; do case "$1" in
@@ -3509,6 +3573,8 @@ _cmd_audit_cycle() {
     --passes) _need_val audit-cycle --passes $# || return $?; passes="$2"; shift 2 ;;
     --surfaces) _need_val audit-cycle --surfaces $# || return $?; surfaces="$2"; shift 2 ;;
     --project-root) _need_val audit-cycle --project-root $# || return $?; root="$2"; shift 2 ;;
+    --pass-root) _need_val audit-cycle --pass-root $# || return $?; pass_root_count=$((pass_root_count + 1)); pass_root[$pass_root_count]="$2"; shift 2 ;;
+    --halt-file) _need_val audit-cycle --halt-file $# || return $?; halt_file="$2"; shift 2 ;;
     --ack-file) _need_val audit-cycle --ack-file $# || return $?; ack_file="$2"; shift 2 ;;
     --report-grace) _need_val audit-cycle --report-grace $# || return $?; report_grace="$2"; shift 2 ;;
     --timeout) _need_val audit-cycle --timeout $# || return $?; timeout="$2"; shift 2 ;;
@@ -3540,6 +3606,47 @@ _cmd_audit_cycle() {
   esac
   [ "$passes" -ge 1 ] || {
     echo "hmad-dispatch: audit-cycle: --passes must be >= 1" >&2; return 2; }
+
+  if [ "$pass_root_count" -gt 0 ]; then
+    if [ "$pass_root_count" -ne "$passes" ]; then  # M:PASS-ROOT-COUNT
+      echo "hmad-dispatch: audit-cycle: --pass-root count differs from --passes" >&2
+      return 2
+    fi
+    local ri rj
+    ri=1
+    while [ "$ri" -le "$pass_root_count" ]; do
+      if [[ "${pass_root[$ri]}" != /* ]]; then  # M:PASS-ROOT-DIR-ABS
+        echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' is not absolute" >&2
+        return 2
+      fi
+      if [[ "${pass_root[$ri]}" == *:* ]]; then  # M:PASS-ROOT-DIR-COLON
+        echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' contains ':'" >&2
+        return 2
+      fi
+      if [ ! -d "${pass_root[$ri]}" ]; then  # M:PASS-ROOT-DIR
+        echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' is not an existing directory" >&2
+        return 2
+      fi
+      pass_root_phys[$ri]="$(cd "${pass_root[$ri]}" && pwd -P)" || return 2
+      rj=1
+      while [ "$rj" -lt "$ri" ]; do
+        if [ "${pass_root_phys[$ri]}" = "${pass_root_phys[$rj]}" ]; then  # M:PASS-ROOT-DISTINCT
+          echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' names one root twice" >&2
+          return 2
+        fi
+        if [[ "${pass_root_phys[$ri]}" == "${pass_root_phys[$rj]%/}/"* || "${pass_root_phys[$rj]}" == "${pass_root_phys[$ri]%/}/"* ]]; then  # M:PASS-ROOT-NESTED
+          echo "hmad-dispatch: audit-cycle: --pass-root '${pass_root[$ri]}' lies inside another --pass-root" >&2
+          return 2
+        fi
+        rj=$((rj + 1))
+      done
+      ri=$((ri + 1))
+    done
+    if [ "${pass_root_phys[1]}" != "$(cd "$root" && pwd -P)" ]; then  # M:PASS-ROOT-PROJECT
+      echo "hmad-dispatch: audit-cycle: --pass-root first root is not --project-root" >&2
+      return 2
+    fi
+  fi
 
   # --surfaces: which agent runs each pass (#6).
   #
@@ -3615,6 +3722,10 @@ _cmd_audit_cycle() {
   while [ "$i" -le "$passes" ]; do
     prompt[$i]="${stem}_p${i}.txt"
     report[$i]="${stem}_p${i}.report.md"
+    if [ -n "${pass_root[$i]:-}" ]; then
+      report[$i]="${pass_root[$i]}/.hmad-report/${stem##*/}_p${i}.report.md"  # M:PASS-ROOT-REPORT
+      mkdir -p -- "${pass_root[$i]}/.hmad-report" || return 1
+    fi
     out[$i]="${stem}_p${i}.out.txt"
     log[$i]="${stem}_p${i}.log"
     asm[$i]="${stem}_p${i}.asm.txt"
@@ -3695,9 +3806,16 @@ _cmd_audit_cycle() {
     i=$((i + 1))
   done
 
+  if [ -n "$halt_file" ] && [ -e "$halt_file" ]; then  # M:AUDIT-HALT-GATE
+    echo "[H-MAD] audit-cycle halted halt_file=$halt_file" >&2
+    echo "REQUIRE: STOP reason=halt_file"
+    return 0  # M:AUDIT-HALT-EXIT
+  fi
+
   i=1
   while [ "$i" -le "$passes" ]; do
     (
+      root="${pass_root[$i]:-$root}"  # M:PASS-ROOT-CD
       _cmd_exec "${agent[$i]}" "${prompt[$i]}" --cd "$root" \
         --out "${out[$i]}" --log "${log[$i]}" --timeout "$timeout" >/dev/null
     ) &
@@ -4428,9 +4546,52 @@ _cmd_run() {  # --timeout <s> -- <cmd...>
   return "$rc"
 }
 
+_cmd_grok_canary_usage() {
+  if [ -n "${1:-}" ]; then
+    echo "hmad-dispatch: grok-canary: --run-dir $1" >&2
+  fi
+  echo "usage: hmad-dispatch grok-canary --run-dir <abs> [--timeout <s>]" >&2
+}
+
+_cmd_grok_canary() {
+  local run="" timeout=300 here plant cwd rc=0 in_temp
+  while [ $# -gt 0 ]; do case "$1" in
+    --run-dir) _need_val grok-canary --run-dir $# || return $?; run="$2"; shift 2 ;;
+    --timeout) _need_val grok-canary --timeout $# || return $?; timeout="$2"; shift 2 ;;
+    *) _unknown_opt grok-canary "$1"; _cmd_grok_canary_usage; return 2 ;;
+  esac; done
+  if [ -z "$run" ]; then _cmd_grok_canary_usage "is required"; return 2; fi  # M:CANARY-RUNDIR-GIVEN
+  if [[ "$run" != /* ]]; then _cmd_grok_canary_usage "is not absolute"; return 2; fi  # M:CANARY-RUNDIR-ABS
+  if [ ! -d "$run" ]; then _cmd_grok_canary_usage "does not exist"; return 2; fi  # M:CANARY-RUNDIR-EXISTS
+  run="$(cd "$run" && pwd -P)" || return 2
+  in_temp="$(python3 - "$run" <<'PY'
+import os
+from pathlib import Path
+import sys
+run = Path(sys.argv[1])
+temps = [Path(value).resolve() for value in (os.environ.get("TMPDIR"), "/tmp", "/private/tmp") if value]
+print("yes" if any(run == root or root in run.parents for root in temps) else "no")
+PY
+  )" || return 2
+  if [ "$in_temp" = yes ]; then _cmd_grok_canary_usage "lies in system temp"; return 2; fi  # M:CANARY-RUNDIR-TMP
+  if [ ! -d "$run/roots" ]; then _cmd_grok_canary_usage "has no roots/"; return 2; fi  # M:CANARY-RUNDIR-ROOTS
+  case "$timeout" in
+    ''|*[!0-9]*) _cmd_grok_canary_usage; return 2 ;;
+  esac
+  [ "$timeout" -gt 0 ] || { _cmd_grok_canary_usage; return 2; }
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || return 2
+  plant="$(python3 "$here/h_mad_grok_containment.py" canary-plant --run-dir "$run")" || { rc=$?; printf '%s\n' "$plant"; return "$rc"; }
+  printf '%s\n' "$plant"
+  if [[ "$plant" == 'PLANT: READY cwd='* ]]; then  # M:CANARY-PLANT-GATE
+    cwd="${plant#PLANT: READY cwd=}"
+    _cmd_exec grok "$run/canary/prompt.txt" --cd "$cwd" --log "$run/canary/log.ndjson" --timeout "$timeout" || rc=$?  # M:CANARY-EXEC-WIRE
+    python3 "$here/h_mad_grok_containment.py" canary-judge --run-dir "$run" --rc "$rc"  # M:CANARY-RC-WIRE
+  fi
+}
+
 # Every verb `main` routes, in help order. The help line and the --help guard both
 # read it; tests/test_hmad_dispatch_verb_help.py pins it to main's case arms.
-_HMAD_VERBS="env resolve verify launch pin pin-agents resolved-model send ask probe exec clear interrupt read wait alive notify progress exec-pane audit-cycle run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
+_HMAD_VERBS="env resolve verify launch pin pin-agents resolved-model send ask probe exec clear interrupt read wait alive notify progress exec-pane audit-cycle grok-canary run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
 
 main() {
   local verb="${1:-}"; shift || true
@@ -4469,6 +4630,7 @@ main() {
     progress) _cmd_progress "$@" ;;
     exec-pane) _cmd_exec_pane "$@" ;;
     audit-cycle) _cmd_audit_cycle "$@" ;;
+    grok-canary) _cmd_grok_canary "$@" ;;
     run)    _cmd_run "$@" ;;
     run-ensure) _require_orca run-ensure && _run_ensure ;;
     task-create) _cmd_task_create "$@" ;;
