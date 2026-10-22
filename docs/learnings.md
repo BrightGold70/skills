@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-22 · pattern · [0.7] · `h-mad,audit,doc-auditor,handoff:2026-10-22-grok-route-b-docs-converged` — Plan-audit build defects surface only by applying the planned edits to a git-archive copy and running pytest; each remediation round still added new must-fixes (3,4,1) — re-audit every fix delta
+- 2026-10-22 · gotcha · [0.7] · `bash,h-mad,wrapper,handoff:2026-10-22-grok-route-b-docs-converged` — bash: [ -n "${arr[@]+x}" ] is TRUE for an empty array (becomes one-arg [ -n ]); test array emptiness with [ "${#arr[@]}" -gt 0 ]
 - 2026-10-22 · gotcha · [0.5] · `h-mad,codex,tdd-gate,handoff:2026-10-22-grok-task15-halted` — codex Phase-5 TDD judge runs the mapped test file with -x in a 40s budget; a RED test at the end of a 70s file is never reached and every write is refused timeout. Move RED to top for the dispatch, then restore.
 - 2026-10-22 · gotcha · [0.5] · `grok,sandbox,canary,handoff:2026-10-22-grok-task15-halted` — grok strict sandbox: zsh prints 'operation not permitted' lowercase; Bash rawOutput.output is a byte list (text only in output_for_prompt); write tool on a denied path fails EEXIST. Match denials case-insensitively.
 - 2026-10-22 · pattern · [0.5] · `handoff:2026-10-22-grok-s0c-merged,h-mad,tdd,context` — Delegate each TDD task to a fresh subagent with a runbook + report FILE (message transport cuts ~4KB): ~2k orchestrator context per task vs ~45k inline.
