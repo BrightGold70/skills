@@ -90,7 +90,10 @@ def _ndjson_calls(text: str, surface: str):
             continue
         events += 1
         if surface == "grok" and event.get("type") == "tool_call":
-            calls.append(_strings(event.get("rawInput")) + _strings(event.get("locations")))
+            raw_input = event.get("rawInput")
+            if event.get("toolName") == "grep" and isinstance(raw_input, dict):
+                raw_input = {key: value for key, value in raw_input.items() if key != "pattern"}  # M:TOOLSCAN-GREP-PATTERN
+            calls.append(_strings(raw_input) + _strings(event.get("locations")))
         elif surface == "agy" and event.get("event") == "step_update":
             step = event.get("step_update")
             if not isinstance(step, dict) or step.get("step_type") != "tool":

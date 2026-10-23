@@ -12,6 +12,7 @@
     "tests/test_grok_audit_surface_containment.py",
     "tests/test_grok_audit_surface_path_scope.py",
     "tests/test_grok_audit_surface_assembler_pin.py",
+    "tests/test_grok_audit_surface_toolscan_pattern.py",
     "tests/test_grok_fallback_docs.py",
     "tests/test_hmad_dispatch_audit_cycle.py",
     "-q"
@@ -1566,6 +1567,14 @@
       "find": "    if _below(path, \"/dev\"):  # M:TOOLSCAN-DEV",
       "replace": "    if False:  # M:TOOLSCAN-DEV",
       "test": "tests/test_grok_audit_surface_containment.py::test_scan_dev_path_is_exempt"
+    },
+    {
+      "name": "toolscan-grep-pattern-scanned",
+      "_mechanism": "Scan a grok grep call's regex pattern as a path source again (the run-4 false positive).",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "if key != \"pattern\"}  # M:TOOLSCAN-GREP-PATTERN",
+      "replace": "if key != \"\\u0000\"}  # M:TOOLSCAN-GREP-PATTERN",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_grep_pattern_naming_an_outside_path_is_clean"
     },
     {
       "name": "toolscan-own-session-disarmed",
