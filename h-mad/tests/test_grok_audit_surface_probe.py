@@ -3951,8 +3951,10 @@ def _t27_refusal(case, capsys, reason="out_of_root:d1.v1"):
 
 def test_out_of_root_absolute_path_outside_the_root(containment_score_case, capsys):
     case = containment_score_case
-    _t27_log(case, "d1", 3).write_text(
-        _t27_tool_call("/tmp/hostile-outside [a]* ⟦grok⟧.txt"), encoding="utf-8",
+    # Task 14h: only contamination refuses, so the escape names another run under the state tree.
+    _t27_log(case, "d1", 3).write_text(_t27_tool_call(
+        "/tmp/grok-audit-home/.local/state/h-mad/grok-audit-surface/run-other [a]* ⟦grok⟧/p3.log"),
+        encoding="utf-8",
     )
     _t27_refusal(case, capsys)
 
@@ -3968,7 +3970,8 @@ def test_out_of_root_live_checkout(containment_score_case, capsys):
 def test_out_of_root_after_a_non_json_line(containment_score_case, capsys):
     case = containment_score_case
     log = _t27_log(case, "d1", 3)
-    log.write_text("agent note [a]* ⟦grok⟧\n" + _t27_tool_call("/tmp/escape-after-note.txt"), encoding="utf-8")
+    # Task 14h: a contaminating escape (the live checkout), so the skip is still seen as a refusal.
+    log.write_text("agent note [a]* ⟦grok⟧\n" + _t27_tool_call("/tmp/grok-audit-checkout/escape-after-note.txt"), encoding="utf-8")
     _t27_refusal(case, capsys)
 
 
@@ -3994,7 +3997,8 @@ def test_out_of_root_on_a_non_standing_cycle(containment_score_case, capsys):
     # A valid v2 stands for d2, so only the non-standing v1's grok scan can refuse.
     write_extract_cycle(case, doc="d2", cycle=2, deliveries=("none", "none", "none"),
                         surfaces=("codex", "agy", "grok"))
-    _t27_log(case, "d2", 3).write_text(_t27_tool_call("/tmp/non-standing-escape.txt"), encoding="utf-8")
+    # Task 14h: a contaminating escape (the live checkout).
+    _t27_log(case, "d2", 3).write_text(_t27_tool_call("/tmp/grok-audit-checkout/non-standing-escape.txt"), encoding="utf-8")
     _t27_refusal(case, capsys, "out_of_root:d2.v1")
 
 
@@ -4013,16 +4017,22 @@ def test_out_of_root_sessions_dir_itself(containment_score_case, capsys):
 
 
 def test_out_of_root_other_grok_path(containment_score_case, capsys):
+    # Task 14h: a non-exempt `~/.grok/` path outside the sessions dir is out of root but not
+    # contamination, so it is published (out_of_root=1 checkout=0), never refused.
     case = containment_score_case
-    _t27_log(case, "d1", 3).write_text(_t27_tool_call(
+    log = _t27_log(case, "d1", 3)
+    log.write_text(_t27_tool_call(
         "/tmp/grok-audit-home/.grok/other [a]* ⟦grok⟧/file.txt"), encoding="utf-8")
-    _t27_refusal(case, capsys)
+    line = _t27_containment_line(case, "d1", 3, "grok", log.read_text(encoding="utf-8"))
+    assert " scan=OUT_OF_ROOT calls=1 out_of_root=1 checkout=0 " in line, line
+    _t27_assert_not_refused(case, capsys, line)
 
 
 def test_out_of_root_mixed_exempt_and_outside(containment_score_case, capsys):
     case = containment_score_case
+    # Task 14h: the outside path is contaminating (the live checkout).
     _t27_log(case, "d1", 3).write_text(
-        _t27_tool_call("/dev/null", "/tmp/mixed-escape.txt"), encoding="utf-8",
+        _t27_tool_call("/dev/null", "/tmp/grok-audit-checkout/mixed-escape.txt"), encoding="utf-8",
     )
     _t27_refusal(case, capsys)
 

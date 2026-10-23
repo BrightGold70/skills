@@ -162,15 +162,17 @@ def test_scan_grok_skills_is_exempt(scan_module, scan_case, capsys, spelling):
 
 def test_scan_other_session_dir_is_out_of_root(scan_module, scan_case, capsys):
     # A sibling with the own key as a prefix must not inherit its exemption.
+    # Task 14h: another session's directory is contamination, so it also counts in checkout.
     _assert_scan(scan_module, scan_case, capsys,
                  _grok(_own_session(scan_case) + "-other/history.json"),
-                 _token(word="OUT_OF_ROOT", out_of_root=1))
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
 
 
 def test_scan_sessions_dir_itself_is_out_of_root(scan_module, scan_case, capsys):
+    # Task 14h: the shared sessions directory itself is contamination (checkout).
     _assert_scan(scan_module, scan_case, capsys,
                  _grok(scan_case["home"] + "/.grok/sessions"),
-                 _token(word="OUT_OF_ROOT", out_of_root=1))
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
 
 
 def test_scan_other_grok_path_is_out_of_root(scan_module, scan_case, capsys):

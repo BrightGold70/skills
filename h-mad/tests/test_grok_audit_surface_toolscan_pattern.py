@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from grokauditfixtures import _hostile_text
 from test_grok_audit_surface_containment import _assert_scan, _token, scan_case, scan_module  # noqa: F401
 
@@ -103,3 +105,141 @@ def test_a_pattern_argument_of_another_tool_is_still_scanned(scan_module, scan_c
         "locations": [],
     }) + "\n"
     _assert_scan(scan_module, case, capsys, text, _token(word="OUT_OF_ROOT", out_of_root=1))
+
+
+# Task 14h (operator ruling 2026-10-24, "contamination-only halt"). The scan still reports every
+# out-of-root call, but only CONTAMINATION stops a run or refuses a score: `checkout>0`. The
+# `checkout` count now also covers `<home>/.local/state/h-mad` (other runs' roots and collected
+# reports) and `<home>/.grok/sessions` outside the pass's own session directory. Run 7
+# (docs/03-analysis/grok-audit-surface.incident-2026-10-24-run7-shell-home-tmp.md) halted at S2 d1
+# on `out_of_root=1 checkout=0`, from `HOME=/tmp` in a `run_terminal_command`.
+from test_grok_audit_surface_containment import (  # noqa: E402,F401
+    _assert_containment_token, _containment_cli, _own_session, containment_home,
+)
+from test_grok_audit_surface_probe import (  # noqa: E402,F401
+    _t27_assert_not_refused, _t27_containment_line, _t27_log, _t27_refusal, containment_score_case,
+)
+
+RUN7_COMMAND = ("export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 HOME=/tmp\n"
+                "git log -1 --format=%H")
+
+
+def _state_tree(case):
+    return case["home"] + "/.local/state/h-mad"
+
+
+def test_state_tree_path_of_another_run_counts_checkout(scan_module, scan_case, capsys):
+    case = scan_case
+    other = _state_tree(case) + "/grok-audit-surface/run-other [a]*/data/s2/d5/v1/p3.report.md"
+    _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=other),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+def test_state_tree_path_in_tilde_spelling_counts_checkout(scan_module, scan_case, capsys):
+    _assert_scan(scan_module, scan_case, capsys,
+                 _tool("run_terminal_command",
+                       command="find ~/.local/state/h-mad -name '*.report.md'"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+def test_own_root_under_the_state_tree_stays_inside(scan_module, scan_case, capsys):
+    # The cycle's own root lives under the state tree; it is inside, never contamination.
+    case = dict(scan_case)
+    case["root"] = _state_tree(case) + "/grok-audit-surface/run-x/roots/gas-root-d1-s2v1-314"
+    _assert_scan(scan_module, case, capsys,
+                 _tool("read_file", target_file=case["root"] + "/docs/plan.md"), _token())
+
+
+def test_state_tree_sibling_prefix_is_not_contamination(scan_module, scan_case, capsys):
+    case = scan_case
+    _assert_scan(scan_module, case, capsys,
+                 _tool("read_file", target_file=case["home"] + "/.local/state/h-mad-other/x.md"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1))
+
+
+def test_other_session_dir_in_tilde_spelling_counts_checkout(scan_module, scan_case, capsys):
+    _assert_scan(scan_module, scan_case, capsys,
+                 _tool("run_terminal_command", command="cat ~/.grok/sessions/another/prompt.md"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+def test_own_session_dir_stays_exempt_not_contamination(scan_module, scan_case, capsys):
+    _assert_scan(scan_module, scan_case, capsys,
+                 _tool("read_file", target_file=_own_session(scan_case) + "/history.json"),
+                 _token(exempt=1))
+
+
+def test_grok_settings_is_out_of_root_but_not_contamination(scan_module, scan_case, capsys):
+    _assert_scan(scan_module, scan_case, capsys,
+                 _tool("read_file", target_file=scan_case["home"] + "/.grok/settings.json"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1))
+
+
+def test_run7_shell_home_tmp_is_out_of_root_but_not_contamination(scan_module, scan_case, capsys):
+    # The run-7 d1 call, p3.log:1370: `/dev/null` is exempt, `/tmp` is out, nothing is contamination.
+    _assert_scan(scan_module, scan_case, capsys,
+                 _tool("run_terminal_command", command=RUN7_COMMAND, is_background=False),
+                 _token(word="OUT_OF_ROOT", out_of_root=1))
+
+
+RUN7_TOKEN = ("TOOLSCAN: OUT_OF_ROOT surface=grok calls=46 out_of_root=1 checkout=0 "
+              "exempt=0 nonjson=6")
+
+
+def _require_toolscan(case, token, name):
+    token_file = case["home"] / f"{name} [*] ⟦h-mad⟧.txt"
+    token_file.write_text(_hostile_text() + "\nREQUIRE: STOP reason=decoy\n" + token + "\n",
+                          encoding="utf-8")
+    halt = case["home"] / "HALT [*]"
+    result = _containment_cli("require", "--verb", "toolscan", "--token-file", token_file,
+                              "--halt-file", halt)
+    return result, halt
+
+
+def test_require_toolscan_out_of_root_without_contamination_is_ok(containment_home):
+    result, halt = _require_toolscan(containment_home, RUN7_TOKEN, "run7")
+    _assert_containment_token(result.returncode, result.stdout, result.stderr, 0, "REQUIRE: OK",
+                              "require(toolscan) must accept OUT_OF_ROOT with checkout=0 (14h)")
+    assert not halt.exists(), "an uncontaminated OUT_OF_ROOT scan must create no halt file"
+
+
+@pytest.mark.parametrize("token", [
+    "TOOLSCAN: OUT_OF_ROOT surface=grok calls=46 out_of_root=1 checkout=1 exempt=0 nonjson=6",
+    "TOOLSCAN: OUT_OF_ROOT surface=grok calls=46 out_of_root=10 checkout=10 exempt=0 nonjson=0",
+    "TOOLSCAN: OUT_OF_ROOT surface=codex calls=4 out_of_root=1 checkout=0 exempt=0 mcp_unmeasured=0",
+], ids=["checkout-1", "checkout-10", "codex-surface"])
+def test_require_toolscan_contamination_still_stops(containment_home, token):
+    result, halt = _require_toolscan(containment_home, token, "contaminated")
+    _assert_containment_token(result.returncode, result.stdout, result.stderr, 0,
+                              "REQUIRE: STOP reason=" + token,
+                              "require(toolscan) must stop on contamination or a non-grok token")
+    assert halt.read_text(encoding="utf-8") == token + "\n", "the STOP must append its exact reason"
+
+
+def _terminal_call(command):
+    return json.dumps({"type": "tool_call", "toolCallId": "call-x", "toolName": "run_terminal_command",
+                       "rawInput": {"command": command, "is_background": False},
+                       "locations": []}) + "\n"
+
+
+def test_probe_tmp_only_escape_is_published_not_refused(containment_score_case, capsys):
+    case = containment_score_case
+    log = _t27_log(case, "d1", 3)
+    log.write_text(_terminal_call(RUN7_COMMAND), encoding="utf-8")
+    line = _t27_containment_line(case, "d1", 3, "grok", log.read_text(encoding="utf-8"))
+    assert " scan=OUT_OF_ROOT calls=1 out_of_root=1 checkout=0 " in line, line
+    _t27_assert_not_refused(case, capsys, line)
+
+
+def test_probe_live_checkout_in_a_shell_command_still_refuses(containment_score_case, capsys):
+    case = containment_score_case
+    _t27_log(case, "d1", 3).write_text(
+        _terminal_call("cd /tmp/grok-audit-checkout && git log -1"), encoding="utf-8")
+    _t27_refusal(case, capsys)
+
+
+def test_probe_state_tree_in_a_shell_command_refuses(containment_score_case, capsys):
+    case = containment_score_case
+    _t27_log(case, "d1", 3).write_text(_terminal_call(
+        "ls /tmp/grok-audit-home/.local/state/h-mad/grok-audit-surface"), encoding="utf-8")
+    _t27_refusal(case, capsys)

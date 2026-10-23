@@ -2643,6 +2643,127 @@ recorded root.
 
 ---
 
+## Task 14h: halt and refuse only on contamination (checkout>0)
+
+**Production files**: `h-mad/scripts/h_mad_tool_calls.py` (`scan_log`);
+`h-mad/scripts/h_mad_grok_containment.py` (`require`);
+`docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py` (`containment_checks`)
+**Test files**: `h-mad/tests/test_grok_audit_surface_toolscan_pattern.py` (extend, 15 tests added);
+`h-mad/tests/test_grok_audit_surface_containment.py` and `h-mad/tests/test_grok_audit_surface_probe.py`
+(existing tests updated to the new contract);
+`h-mad/tests/mutation-specs/grok_audit_surface.json` (rows re-anchored and added after GREEN)
+**Task shape**: `defect-fix` / policy change (operator ruling 2026-10-24, "contamination-only halt")
+**Implements**: the run-7 incident
+(`docs/03-analysis/grok-audit-surface.incident-2026-10-24-run7-shell-home-tmp.md`); spec v1.23 AC-6.6 and
+AC-5.4, design v1.18 D8, D12, D19 and D21. Task 15 run 8 depends on it.
+
+**Why.** Run 7 passed steps 1–8 (smoke commit `0b1dbb8d`) and halted at S2 d1 v1 on
+`TOOLSCAN: OUT_OF_ROOT surface=grok calls=46 out_of_root=1 checkout=0 exempt=0 nonjson=6`. The one out
+path was `/tmp`, from a grok `run_terminal_command` that set `HOME=/tmp` before running `git` inside its
+root (`p3.log:1370`). The scan was correct, so it is not a scanner false positive like 14f and 14g.
+`/tmp` cannot be exempted, because Claude scratchpads live under `/private/tmp/claude-501/`. Every S2
+halt so far (runs 4, 6 and 7) had `checkout=0`. The ruling keeps the scan's truth and changes the policy:
+only contamination stops a run.
+
+**Change.**
+1. `scan_log` (`h_mad_tool_calls.py`, ~L146–175). Extend the `in_checkout or in_needle` test, which
+   decides `result["checkout"] += 1` for an `out_of_root` call. It gains two more contamination classes
+   over the call's out-of-root paths:
+   - `_below(path, home + "/.local/state/h-mad")`, the calibration state tree;
+   - `_below(path, home + "/.grok/sessions")`, which covers the sessions directory itself and every
+     session except the own one. For grok the own session is classified `exempt`, so it is never out.
+
+   The tests are lexical, with no filesystem access. Mark the new lines `# M:TOOLSCAN-STATE-TREE` and
+   `# M:TOOLSCAN-SESSIONS-CONTAMINATION`. `classify_path`, the word, the counts and the token format are
+   unchanged.
+2. `require` (`h_mad_grok_containment.py`, ~L100–118). For verb `toolscan`, `ok` is true when the line
+   starts `TOOLSCAN: CLEAN surface=grok `. It is also true when the line starts
+   `TOOLSCAN: OUT_OF_ROOT surface=grok ` and contains ` checkout=0 ` (`# M:REQUIRE-OK-TOOLSCAN`).
+   Everything else is unchanged: STOP, and the halt-file append on STOP.
+3. `containment_checks` (probe, ~L1221–1225). Refuse `out_of_root:<cycle>` on `OUT_OF_ROOT` only when
+   `scan["checkout"] > 0` (`# M:GAS-CONTAIN-OUT-OF-ROOT`). `UNREADABLE` still refuses. The
+   `CONTAINMENT:` lines are unchanged and still publish every count.
+
+**RED** (orchestrator, test-only). Expected RED over the four touched modules: **8 failed**.
+- `toolscan_pattern` reads 5 failed / 20 passed. The 10 earlier 14f/14g tests pass, and so do 10 new
+  guards. The 5 failures:
+  - `test_state_tree_path_of_another_run_counts_checkout` reads `checkout=0`;
+  - `test_state_tree_path_in_tilde_spelling_counts_checkout` reads `checkout=0`;
+  - `test_other_session_dir_in_tilde_spelling_counts_checkout` reads `checkout=0`;
+  - `test_require_toolscan_out_of_root_without_contamination_is_ok` reads `REQUIRE: STOP` on the
+    verbatim run-7 token;
+  - `test_probe_tmp_only_escape_is_published_not_refused` reads `SEEDSCORE: UNREADABLE
+    reason=out_of_root:d1.v1`.
+- The 10 new guards, passing now: `test_own_root_under_the_state_tree_stays_inside`,
+  `test_state_tree_sibling_prefix_is_not_contamination`,
+  `test_own_session_dir_stays_exempt_not_contamination`,
+  `test_grok_settings_is_out_of_root_but_not_contamination`,
+  `test_run7_shell_home_tmp_is_out_of_root_but_not_contamination`,
+  `test_require_toolscan_contamination_still_stops` `[checkout-1]`, `[checkout-10]` and
+  `[codex-surface]`, `test_probe_live_checkout_in_a_shell_command_still_refuses` and
+  `test_probe_state_tree_in_a_shell_command_refuses`.
+- `containment` reads 2 failed / 83 passed. `test_scan_other_session_dir_is_out_of_root` and
+  `test_scan_sessions_dir_itself_is_out_of_root` now expect `checkout=1`; at RED they read `checkout=0`.
+- `probe` reads 1 failed / 310 passed. `test_out_of_root_other_grok_path` is now a
+  published-not-refused assertion (`out_of_root=1 checkout=0`); at RED it is refused. Four refusal tests
+  switched their escape to a contaminating path and keep passing:
+  - `test_out_of_root_absolute_path_outside_the_root` now names another run under the state tree;
+  - `test_out_of_root_after_a_non_json_line`, `test_out_of_root_on_a_non_standing_cycle` and
+    `test_out_of_root_mixed_exempt_and_outside` now name the live checkout.
+- `wrapper` reads 47 passed. Its `test_out_of_root_scan_stops_the_next_cycle[out_of_root]` token
+  carries `checkout=1`, so it still stops.
+
+**GREEN** (Codex). The three edits above, no others. All four modules pass. The full suite shows no new
+failure.
+
+**After GREEN** (orchestrator, test-side; mutation rows):
+- `toolscan-state-tree-dropped` (`# M:TOOLSCAN-STATE-TREE`, the state-tree test removed), caught by
+  `test_state_tree_path_of_another_run_counts_checkout`;
+- `toolscan-state-tree-widened` (`<home>/.local/state` in place of `<home>/.local/state/h-mad`, or a
+  prefix test without the trailing `/`), caught by `test_state_tree_sibling_prefix_is_not_contamination`;
+- `toolscan-sessions-contamination-dropped` (`# M:TOOLSCAN-SESSIONS-CONTAMINATION` removed), caught by
+  `test_scan_other_session_dir_is_out_of_root`;
+- `toolscan-sessions-contamination-widened` (`<home>/.grok` in place of `<home>/.grok/sessions`), caught
+  by `test_grok_settings_is_out_of_root_but_not_contamination`;
+- `require-ok-toolscan-contamination-only-dropped` (back to CLEAN only), caught by
+  `test_require_toolscan_out_of_root_without_contamination_is_ok`;
+- `require-ok-toolscan-checkout-ignored` (any grok `OUT_OF_ROOT` accepted), caught by
+  `test_require_toolscan_contamination_still_stops[checkout-1]`;
+- `require-ok-toolscan-surface-ignored` (the `surface=grok` prefix dropped), caught by
+  `[codex-surface]`;
+- `p-contain-contamination-only-dropped` (every `OUT_OF_ROOT` refuses), caught by
+  `test_probe_tmp_only_escape_is_published_not_refused`;
+- re-anchor `p-contain-out-of-root` on the new `checkout > 0` line, still caught by
+  `test_out_of_root_absolute_path_outside_the_root`.
+
+Then run anchors, the mutation run and the full suite.
+
+**Calibration before run 8** (orchestrator, read-only). Re-scan every recorded grok S1, re-smoke and S2
+pass log under `$KEEP` with the 14h scanner, each against its recorded root, checkout and home. Feed
+each token line to the 14h `require --verb toolscan`.
+- List, per log, the token and `REQUIRE: OK` or `STOP`.
+- Run 7's d1 v1 `p3.log` must read `OUT_OF_ROOT … checkout=0` → `REQUIRE: OK`.
+- For every log whose `require` outcome changes from the 14g run, name the class behind it: an
+  uncontaminated out path that now passes, or a state-tree or sessions path that is now contamination.
+- The positive control, the old S2 d5 v1 `p3.log` (`run-ab2c85dc2e25`), must still read `checkout>0`
+  (14 under 14g) and still `REQUIRE: STOP`. The probe's `containment_checks` on that cycle must still
+  refuse.
+
+Record the table in the run-7 incident doc.
+
+**Acceptance Criteria**:
+- [ ] AC-T14h.1: The RED split is 8 failed: toolscan_pattern 5/20, containment 2/83, probe 1/310,
+  wrapper 0/47. Each failure reads the old policy or the old classification, never a fixture error.
+- [ ] AC-T14h.2: After GREEN, the four modules pass, and the full suite shows no new failure.
+- [ ] AC-T14h.3: `ANCHORS_OK` and `MUTATION: ALL_CAUGHT` with `untargeted=0` for `grok_audit_surface.json`,
+  with the rows above.
+- [ ] AC-T14h.4: The calibration table is in the run-7 incident doc. Run 7's d1 `p3.log` reads
+  `REQUIRE: OK`, and the positive control still reads `checkout>0` and still refuses.
+
+**Dependencies on other tasks**: Task 14g. Task 15 run 8 depends on this Task.
+
+---
+
 ## Task 15: the live sequence after S0c (operator)
 
 **Production files**: none on `main` (calibration data goes only to `calibration/grok-audit-surface`, by Task 6's `commit-data`)
@@ -3422,7 +3543,8 @@ matching `*gas-root-*`, never followed, moved with `os.rename` and never copied 
 `QUARANTINE: REFUSED reason=<r>`, the first of the five ordered reasons, exit 0 on all six; the sixth
 form `internal:<ExceptionName>`, exit 2). D8 and D20 `require --verb <toolscan|grok-canary|quarantine> --token-file <file> [--halt-file <file>]`:
 it reads only the token file's last line; `REQUIRE: OK` needs exactly `GROK-CANARY: PASS`, a line
-beginning `QUARANTINE: VERIFIED moved=`, or one beginning `TOOLSCAN: CLEAN surface=grok `, for the verb
+beginning `QUARANTINE: VERIFIED moved=`, or one beginning `TOOLSCAN: CLEAN surface=grok ` (since Task 14h,
+also one beginning `TOOLSCAN: OUT_OF_ROOT surface=grok ` that carries ` checkout=0 `), for the verb
 named; anything else prints `REQUIRE: STOP reason=<that line | no_token:<file>>`, and for `toolscan`
 it first appends that reason to `--halt-file` with `O_APPEND|O_CREAT`; exit 0 on both; exit 2 only on a
 usage or internal error, after writing the halt file when one was named. A usage error can fail before
@@ -4120,7 +4242,8 @@ carried in the same Task, and their RED split is stated below.
 **Description**: D12 pass (c) and D13's containment lines. Pass (c): for each grok pass of every
 recorded S2 cycle (`# M:GAS-CONTAIN-EVERY-CYCLE`), `scan_log` on the pass's `pN.log` with that pass's root
 `path=`, and `checkout=`/`home=` from `s2/run.txt` (`# M:GAS-CONTAIN-SCAN`); a word `OUT_OF_ROOT`
-(`# M:GAS-CONTAIN-OUT-OF-ROOT`, AC-5.4 trigger (1)) or `UNREADABLE` (`# M:GAS-CONTAIN-UNREADABLE`,
+with `checkout` > 0 (`# M:GAS-CONTAIN-OUT-OF-ROOT`, AC-5.4 trigger (1); since Task 14h, an `OUT_OF_ROOT`
+scan with `checkout=0` is published, never refused) or `UNREADABLE` (`# M:GAS-CONTAIN-UNREADABLE`,
 trigger (2)) refuses `out_of_root:` followed by the cycle (`d1.v1` form); a codex or agy pass never refuses (`# M:GAS-CONTAIN-GROK-ONLY`).
 `containment_lines(...)`, called by `score` after the observational lines and never by `verdict`: one
 `CONTAINMENT:` line per pass of every standing cycle from `scan_log`'s counts (`# M:GAS-CONTAIN-LINES`),
@@ -4144,6 +4267,9 @@ there is no such line. Each fails on its assertion, never on an import.
   `test_out_of_root_log_without_event`, `test_out_of_root_on_a_non_standing_cycle`,
   `test_out_of_root_other_session_dir`, `test_out_of_root_sessions_dir_itself`,
   `test_out_of_root_other_grok_path`, `test_out_of_root_mixed_exempt_and_outside`.
+  Since Task 14h only contamination refuses. `test_out_of_root_other_grok_path` moves to must-not-refuse,
+  and every remaining refusal's escape is contaminating: the live checkout, another run under the state
+  tree, or another session.
 - Must not refuse (5 functions, 11 ids): `test_clean_grok_log_does_not_refuse`,
   `test_exempt_dev_path_does_not_refuse`, `test_exempt_own_session_dir_does_not_refuse` and
   `test_exempt_grok_skills_does_not_refuse` (each publishing `exempt=1`, the last two parametrized
@@ -4404,3 +4530,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.13: 2026-10-23, answers no audit cycle; sole author, not audited. It adds Task 14f (defect-fix): the out-of-root scan no longer reads a grok `grep` call's regex `pattern` as a path. Run 4 (`run-ab2c85dc2e25-20261023T034641Z`) passed its smoke (smoke commit `b1562dd4`) and then halted at S2 d2 on `out_of_root=1`; that hit was the pattern `python3\.11|/opt/anaconda3`. The new module is `test_grok_audit_surface_toolscan_pattern.py`, with RED 2 failed / 3 passed. After GREEN, the mutation spec gains one row (422) and the new module in `command`. Ordered by the operator 2026-10-23.
 - v1.14: 2026-10-23. Task 15 step 5 passes `--timeout 1800` on every re-smoke cycle, measuring grok's wall time unclipped. Run 5 (`run-ab2c85dc2e25-20261023T070009Z`) failed its smoke when grok hit the 900 s default (rc=124, wall 909 s). Operator ruling; sole author, not audited. Run 6 follows.
 - v1.15: 2026-10-23. Adds Task 14g (defect-fix), which generalises 14f into a named table of grok payload arguments (`grep.pattern`, `write.content`, `search_replace.old_string`/`new_string`) that are not path sources. Run 6 (`run-ab2c85dc2e25-20261023T081135Z`, smoke commit `533ed0c5`) halted at S2 d3 on `write.content` prose naming `/tmp`. A calibration re-scan of every recorded grok log runs before run 7. RED: 2 failed / 8 passed. Operator ruling; sole author, not audited.
+- v1.16: 2026-10-24. Adds Task 14h (defect-fix / policy), from the operator ruling on run 7 (`run-ab2c85dc2e25-20261023T110325Z`, smoke commit `0b1dbb8d`): contamination-only halt. Run 7 halted at S2 d1 v1 on `OUT_OF_ROOT … out_of_root=1 checkout=0`, from a shell `HOME=/tmp`. `checkout` becomes the contamination count, adding `<home>/.local/state/h-mad` and `<home>/.grok/sessions` (not the own session). `require --verb toolscan` accepts a grok `OUT_OF_ROOT` with `checkout=0`. The probe refuses `out_of_root:<cycle>` only when `checkout>0` or the scan is UNREADABLE. The Task 27 and require text is amended to match. Spec v1.23, design v1.18. Sole author, not audited. Run 8 follows GREEN and calibration.
