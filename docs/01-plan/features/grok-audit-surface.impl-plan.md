@@ -2586,6 +2586,63 @@ python3 h-mad/scripts/h_mad_tool_calls.py scan --surface grok --log <run-4 d2 p3
 
 ---
 
+## Task 14g: grok payload arguments are not path sources for the out-of-root scan
+
+**Production file**: `h-mad/scripts/h_mad_tool_calls.py`
+**Test files**: `h-mad/tests/test_grok_audit_surface_toolscan_pattern.py` (extend);
+`h-mad/tests/mutation-specs/grok_audit_surface.json` (the 14f row is re-anchored and a row is added)
+**Task shape**: `defect-fix`
+**Implements**: the run-6 incident
+(`docs/03-analysis/grok-audit-surface.incident-2026-10-23-run6-toolscan-write-content.md`), which
+generalises Task 14f. Task 15 run 7 depends on it.
+
+**Why.** Run 6's S2 halted at d3 on `out_of_root=1`. The one hit was grok's `write` of its own report
+inside the root. The scanner read the report's `content` prose, which names `/tmp/audit_…`, as a path.
+This is the same class as run 4's `grep.pattern`: a *payload* argument, text the tool writes or searches
+for, scanned as if it were a location.
+
+**Change.** Replace 14f's single `grep` exclusion with one named table, `_GROK_PAYLOAD_ARGS`:
+- `"grep"` → `{"pattern"}`;
+- `"write"` → `{"content"}`;
+- `"search_replace"` → `{"old_string", "new_string"}`.
+
+`_ndjson_calls` drops exactly those keys from a dict `rawInput` of the named tool. Every other key is
+still scanned: `file_path`, `target_file`, `path`, `glob` and `target_directory`, plus `locations`.
+`run_terminal_command.command` is still scanned too; it is the shell-text residual. Every argument of a
+tool not in the table is still scanned. Mark the table and the line that applies it
+`# M:TOOLSCAN-PAYLOAD-ARGS`.
+
+**RED** (orchestrator, test-only). Five tests are added to the 14f module. Expected RED: 2 failed, 8 passed.
+- These two fail: `test_write_content_naming_an_outside_path_is_clean` (the run-6 shape) and
+  `test_search_replace_strings_naming_an_outside_path_are_clean`.
+- These three are guards: `test_write_file_path_outside_the_root_is_still_out_of_root`,
+  `test_search_replace_file_path_outside_the_root_is_still_out_of_root` and
+  `test_content_of_an_unknown_tool_is_still_scanned`.
+- The five 14f tests keep passing.
+
+**After GREEN** (orchestrator, test-side):
+- re-anchor `toolscan-grep-pattern-scanned` on the table;
+- add `toolscan-write-content-scanned`, caught by `test_write_content_naming_an_outside_path_is_clean`;
+- run anchors, the mutation run and the full suite.
+
+**Calibration before run 7** (orchestrator, read-only). Re-scan every recorded grok S1, re-smoke and S2
+pass log under `$KEEP` with the scanner at the parent sha and at this Task's sha, each against its
+recorded root.
+- Any log whose verdict changes must change only through a table argument.
+- The step-10 positive control must still read `checkout=` above 0.
+
+**Acceptance Criteria**:
+- [ ] AC-T14g.1: The RED split is 2 failed / 8 passed.
+- [ ] AC-T14g.2: After GREEN, the module reads 10 passed and the full suite shows no new failure.
+- [ ] AC-T14g.3: `ANCHORS_OK` and `MUTATION: ALL_CAUGHT` with `untargeted=0` for `grok_audit_surface.json`.
+- [ ] AC-T14g.4: The calibration table (log, old verdict, new verdict, the argument behind each change)
+  is recorded in the run-6 incident doc. Re-scanning run 6's d3 `p3.log` reads `CLEAN`, and the positive
+  control reads `checkout>0`.
+
+**Dependencies on other tasks**: Task 14f. Task 15 run 7 depends on this Task.
+
+---
+
 ## Task 15: the live sequence after S0c (operator)
 
 **Production files**: none on `main` (calibration data goes only to `calibration/grok-audit-surface`, by Task 6's `commit-data`)
@@ -4346,3 +4403,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.12: 2026-10-23, answers no audit cycle; sole author, not audited. It adds Task 14e (defect-fix): the agy TDD gate classes agy's unadvertised `read_file` as (a). The run-3 incident's premise ("armed by `phase=step5`") is corrected: the deny is phase-independent. The `.agents/hooks.json` copied into each non-git root makes the class-(d) `git rev-parse` lookup raise, and S1 passed only because it read with `view_file`. Ordered by the operator 2026-10-23 (option A); the no-git-toplevel policy (deny or allow) stays open. The mutation and marker totals are unchanged.
 - v1.13: 2026-10-23, answers no audit cycle; sole author, not audited. It adds Task 14f (defect-fix): the out-of-root scan no longer reads a grok `grep` call's regex `pattern` as a path. Run 4 (`run-ab2c85dc2e25-20261023T034641Z`) passed its smoke (smoke commit `b1562dd4`) and then halted at S2 d2 on `out_of_root=1`; that hit was the pattern `python3\.11|/opt/anaconda3`. The new module is `test_grok_audit_surface_toolscan_pattern.py`, with RED 2 failed / 3 passed. After GREEN, the mutation spec gains one row (422) and the new module in `command`. Ordered by the operator 2026-10-23.
 - v1.14: 2026-10-23. Task 15 step 5 passes `--timeout 1800` on every re-smoke cycle, measuring grok's wall time unclipped. Run 5 (`run-ab2c85dc2e25-20261023T070009Z`) failed its smoke when grok hit the 900 s default (rc=124, wall 909 s). Operator ruling; sole author, not audited. Run 6 follows.
+- v1.15: 2026-10-23. Adds Task 14g (defect-fix), which generalises 14f into a named table of grok payload arguments (`grep.pattern`, `write.content`, `search_replace.old_string`/`new_string`) that are not path sources. Run 6 (`run-ab2c85dc2e25-20261023T081135Z`, smoke commit `533ed0c5`) halted at S2 d3 on `write.content` prose naming `/tmp`. A calibration re-scan of every recorded grok log runs before run 7. RED: 2 failed / 8 passed. Operator ruling; sole author, not audited.

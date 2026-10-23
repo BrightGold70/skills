@@ -50,6 +50,51 @@ def test_grep_glob_naming_the_checkout_is_still_out_of_root(scan_module, scan_ca
                  _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
 
 
+def _tool(tool_name, **raw_input):
+    return json.dumps({
+        "type": "tool_call", "toolCallId": "call-t", "toolName": tool_name,
+        "rawInput": raw_input, "locations": [],
+    }, ensure_ascii=False) + "\n"
+
+
+def test_write_content_naming_an_outside_path_is_clean(scan_module, scan_case, capsys):
+    # Task 14g, the run-6 d3 call: the report is written inside the root; its prose names /tmp.
+    case = scan_case
+    _assert_scan(scan_module, case, capsys,
+                 _tool("write", file_path=case["root"] + "/.hmad-report/p3.report.md",
+                       content="## Summary\nThe plan writes to /tmp/audit_x and reads "
+                               + case["checkout"] + "/docs/answer-key.md."),
+                 _token())
+
+
+def test_search_replace_strings_naming_an_outside_path_are_clean(scan_module, scan_case, capsys):
+    case = scan_case
+    _assert_scan(scan_module, case, capsys,
+                 _tool("search_replace", file_path=case["root"] + "/.hmad-report/p3.report.md",
+                       old_string="see /codex/step3", new_string="see " + case["checkout"] + "/x"),
+                 _token())
+
+
+def test_write_file_path_outside_the_root_is_still_out_of_root(scan_module, scan_case, capsys):
+    case = scan_case
+    _assert_scan(scan_module, case, capsys,
+                 _tool("write", file_path=case["checkout"] + "/docs/x.md", content="text"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+def test_search_replace_file_path_outside_the_root_is_still_out_of_root(scan_module, scan_case, capsys):
+    case = scan_case
+    _assert_scan(scan_module, case, capsys,
+                 _tool("search_replace", file_path="/opt/elsewhere/x.md", old_string="a", new_string="b"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1))
+
+
+def test_content_of_an_unknown_tool_is_still_scanned(scan_module, scan_case, capsys):
+    _assert_scan(scan_module, scan_case, capsys,
+                 _tool("brand_new_writer", content="/opt/anaconda3/lib"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1))
+
+
 def test_a_pattern_argument_of_another_tool_is_still_scanned(scan_module, scan_case, capsys):
     case = scan_case
     text = json.dumps({
