@@ -62,6 +62,13 @@ def classify_path(path: str, surface: str, *, root: str, home: str) -> str:
     return "out"
 
 
+_GROK_PAYLOAD_ARGS: dict[str, frozenset[str]] = {  # M:TOOLSCAN-PAYLOAD-ARGS
+    "grep": frozenset({"pattern"}),
+    "write": frozenset({"content"}),
+    "search_replace": frozenset({"old_string", "new_string"}),
+}
+
+
 def _strings(value) -> list[str]:
     strings = []
     pending = [value]
@@ -91,8 +98,9 @@ def _ndjson_calls(text: str, surface: str):
         events += 1
         if surface == "grok" and event.get("type") == "tool_call":
             raw_input = event.get("rawInput")
-            if event.get("toolName") == "grep" and isinstance(raw_input, dict):
-                raw_input = {key: value for key, value in raw_input.items() if key != "pattern"}  # M:TOOLSCAN-GREP-PATTERN
+            payload = _GROK_PAYLOAD_ARGS.get(event.get("toolName"))
+            if payload is not None and isinstance(raw_input, dict):
+                raw_input = {key: value for key, value in raw_input.items() if key not in payload}  # M:TOOLSCAN-PAYLOAD-ARGS
             calls.append(_strings(raw_input) + _strings(event.get("locations")))
         elif surface == "agy" and event.get("event") == "step_update":
             step = event.get("step_update")

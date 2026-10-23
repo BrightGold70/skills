@@ -33,3 +33,18 @@ A census of every recorded grok log by argument key found payload-key hits on `w
 Task 14g (impl-plan v1.15) replaces 14f's single exclusion with a named per-tool table of grok payload arguments: `grep.pattern`, `write.content`, `search_replace.old_string` and `search_replace.new_string`. Every path argument, `run_terminal_command.command` and every argument of an unknown tool are still scanned.
 
 Before run 7, every recorded grok S1, re-smoke and S2 log is re-scanned with the old and the new scanner. Any newly CLEAN log must owe its change to a payload argument only, and the positive control must still read `checkout>0`.
+
+## Calibration (Task 14g, AC-T14g.4)
+
+Each recorded grok pass log under `~/.local/state/h-mad/grok-audit-surface` was re-scanned against its recorded root and checkout. That covered every S1 log, every re-smoke log, and the S2 `p3` logs of each run. Each log was scanned twice:
+
+- by the scanner at `b76e67af` (14f);
+- by the 14g working tree.
+
+Script: `calibrate_14g.py`, in the session scratchpad.
+
+- **23 logs.** Under 14g, 14 read `OUT_OF_ROOT`, mostly the pre-route-b escape runs, and 9 read `CLEAN`. No log failed to resolve its root.
+- **2 changed:**
+  - **Run 6 S2 d3 `p3.log`** went from `OUT_OF_ROOT out=1 chk=0` to `CLEAN`. The only `out` paths in this log came from payload keys, `write.content` and `grep.pattern`.
+  - **The old S2 d7 v1 `p3.log`** (`run-ab2c85dc2e25`) stays `OUT_OF_ROOT out=42`, but its checkout count drops from `chk=39` to `chk=38`. Each of the 42 calls is still out of root because of its real path arguments. In one of them, the checkout attribution had come only from `write.content` prose. That is a re-attribution; no escape went undetected.
+- **Positive control** (old S2 d5 v1 `p3.log`): `OUT_OF_ROOT out=24 chk=14` under both scanners.
