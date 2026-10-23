@@ -47,3 +47,31 @@ two. Candidate resolutions, none chosen:
 
 Run 2's grok STOP happened before its agy cycle, so this is the first run in which the agy leg met the
 armed gate. Run 3's directory is kept as evidence; a new run directory is required after the fix.
+
+## Addendum 2026-10-23 (next session): the cause is not `phase=step5`
+
+Finding 2's "armed because this feature's record is `phase=step5`" is **false**. The two resolutions that
+depend on it, 2 (disarm window) and 3 (resequence out of `step5`), cannot fix run 4.
+
+- **Where the hook comes from.** The hook is wired per project, not globally:
+  `~/.gemini/config/hooks.json` has no tdd-gate entry. `.agents/hooks.json` is tracked (since
+  `f3233797`), so `git archive` copies it into every calibration root.
+- **Why it denies in every phase.** agy runs the hook with cwd `$ROOT/.agents`. The gate then runs
+  `git -C <cwd>.parent rev-parse --show-toplevel` (`h-mad/hooks/h-mad-agy-tdd-gate.py:104`) before it
+  reads any phase. The root is non-git by design (`reach_check`), so the call raises, and the `finally`
+  block denies with `kind=judge-error`. This happens for every class except (a), which returns `allow`
+  before the lookup.
+- **Reproduction.** From `$ROOT/.agents`, `read_file` gives
+  `{"decision": "deny", "reason": "Gate could not reach a judgement. kind=judge-error"}` and
+  `view_file` gives `{"decision": "allow"}`. From `/tmp`, with no h-mad state at all, the result is the
+  same deny.
+- **Why S1 passed and run 3 failed.** Both used the same gate, the same tree (`ab2c85dc`) and the same
+  model (Gemini 4 Argon (Medium)). S1's agy read with `view_file` (40 DONE, plus 1 `run_command` and
+  1 `write_to_file` denied). Run 3's agy read with `read_file` (5 denied, plus 1 `run_command` denied).
+- **What `read_file` is.** It is absent from agy's advertised init inventory (60 names), but agy
+  executes it as a read-only tool: about 1233 DONE steps answer `Showing lines a-b of n`. The old S2
+  data, dated 2026-10-20 and kept only as evidence, already carries the same `read_file` denials.
+
+Remedy ordered by the operator (option A): impl-plan Task 14e (v1.12) adds `read_file` to the gate's
+class (a). Open policy, not decided here: whether the gate should deny or allow a call when no git
+toplevel exists.

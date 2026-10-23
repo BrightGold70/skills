@@ -23,10 +23,15 @@ PAYLOADS = ROOT / "h-mad/tests/fixtures/agy-payloads"
 GATE = ROOT / "h-mad/hooks/h-mad-agy-tdd-gate.py"
 SCRIPTS = ROOT / "h-mad/scripts"
 INVENTORY = ROOT / "docs/03-analysis/probes/multi-host-runtime/rehearsal/live-agy-2026-10-01.log"
+# agy executes these read-only tools but does not advertise them in its init
+# inventory. read_file: 1233 DONE steps ("Showing lines …") in agy transcripts
+# by 2026-10-23; denied as class (d) it blinded the grok-audit-surface run-3
+# agy re-smoke (docs/03-analysis/grok-audit-surface.incident-2026-10-23-run3-agy-gate.md).
+UNADVERTISED_CLASS_A = frozenset({"read_file"})
 CLASS_A = frozenset({
     "view_file", "list_dir", "grep_search", "find_by_name", "command_status",
     "read_url_content", "search_web", "ask_question", "finish", "wait", "wait_5_seconds",
-})
+}) | UNADVERTISED_CLASS_A
 CLASS_B = frozenset({
     "write_to_file", "replace_file_content", "multi_replace_file_content", "sed_file", "notebook_edit",
 })
@@ -394,7 +399,8 @@ def test_class_a_names_are_in_the_recaptured_inventory():
     with inventory.open(encoding="utf-8") as stream:
         first_init = next(event for line in stream if line.strip()
                           if (event := json.loads(line)).get("event") == "init")
-    assert CLASS_A <= set(first_init["init"]["tools"]), "recaptured inventory must retain every class (a) name"
+    assert CLASS_A - UNADVERTISED_CLASS_A <= set(first_init["init"]["tools"]), (
+        "recaptured inventory must retain every advertised class (a) name")
 
 
 def test_classification_table_is_the_recorded_inventory(monkeypatch):
@@ -405,7 +411,7 @@ def test_classification_table_is_the_recorded_inventory(monkeypatch):
     names = first_init["init"]["tools"]
     recorded = set(names)
     assert len(names) == len(recorded) == 58, "the recorded first init must contain 58 distinct tool names"
-    assert gate.CLASS_A == CLASS_A, "CLASS_A must contain exactly the 11 FR-4 read-only names"
+    assert gate.CLASS_A == CLASS_A, "CLASS_A must contain exactly the 11 FR-4 read-only names plus read_file"
     assert gate.CLASS_B == CLASS_B, "CLASS_B must contain exactly the five FR-4 path-write names"
     assert isinstance(gate.CLASS_A, frozenset) and isinstance(gate.CLASS_B, frozenset)
     assert gate.PATH_KEYS == {
@@ -413,8 +419,10 @@ def test_classification_table_is_the_recorded_inventory(monkeypatch):
     }, "path keys must stay limited to the observed contract"
     assert gate.GATE_KINDS == GATE_KINDS, "gate deny kinds must match FR-4's five-name closed set"
     assert isinstance(gate.GATE_KINDS, frozenset)
-    admitted = CLASS_A | CLASS_B | {"run_command"}
-    assert admitted <= recorded, "every class (a), (b), and (c) name must occur in the recorded inventory"
+    assert UNADVERTISED_CLASS_A.isdisjoint(recorded), (
+        "an unadvertised class (a) name now in the inventory belongs in the advertised set")
+    admitted = (CLASS_A - UNADVERTISED_CLASS_A) | CLASS_B | {"run_command"}
+    assert admitted <= recorded, "every advertised class (a), (b), and (c) name must occur in the recorded inventory"
     remainder = recorded - admitted
     assert len(remainder) == 41, "the inventory remainder must contain exactly 41 class-(d) tools"
     for label, members in (("a", CLASS_A), ("b", CLASS_B), ("c", {"run_command"}), ("d", remainder)):

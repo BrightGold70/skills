@@ -2462,6 +2462,62 @@ grep -c '# M:ASSEMBLER-' h-mad/scripts/h_mad_grok_containment.py
 
 ---
 
+## Task 14e: agy's unadvertised `read_file` is class (a) in the agy TDD gate
+
+**Production file**: `h-mad/hooks/h-mad-agy-tdd-gate.py`
+**Test file**: `h-mad/tests/test_h_mad_agy_tdd_gate.py` (extend)
+**Task shape**: `defect-fix`
+**Implements**: the run-3 incident's corrected cause
+(`docs/03-analysis/grok-audit-surface.incident-2026-10-23-run3-agy-gate.md`, addendum of 2026-10-23).
+Task 15 run 4 depends on it; the S1 and route (b) design is unchanged.
+
+**Why.** The incident record names the armed `phase=step5` as the cause. That premise is false. The gate's
+class-(d) path runs `git -C <cwd>.parent rev-parse --show-toplevel` before it reads any phase. agy
+runs the hook from `$ROOT/.agents`; `.agents/hooks.json` is tracked, so `git archive` puts it in every
+calibration root, and `reach_check` keeps every root non-git. The lookup raises, and the `finally`
+denies with `kind=judge-error` in every phase. Only class (a) returns before the lookup. S1 passed because
+its agy pass read with `view_file` (40 DONE). Run 3's pass, on the same model (Gemini 4 Argon
+(Medium)), read with `read_file` (5 denied). `read_file` is not in agy's advertised init inventory:
+60 names in both runs, 58 in the 2026-10-01 recording. agy nevertheless executes it: about 1233 DONE
+steps answer `Showing lines a-b of n` in the agy transcripts, its arguments are `Path`, `StartLine`
+and `EndLine`, and it is read-only. In git repos with Phase 5 armed it was refused as
+`tool-not-admitted` (75 steps). That is carried defect 4.
+
+**RED** (orchestrator-authored, test-only). The module gains
+`UNADVERTISED_CLASS_A = frozenset({"read_file"})`, and its `CLASS_A` becomes the 11 FR-4 names
+`| UNADVERTISED_CLASS_A`. The inventory tests bind only the advertised names
+(`CLASS_A - UNADVERTISED_CLASS_A`), and `test_classification_table_is_the_recorded_inventory` also
+asserts `UNADVERTISED_CLASS_A.isdisjoint(recorded)`. Expected RED: 2 failed, 102 passed.
+- `test_class_a_allowed_before_state_is_read[read_file]` fails with run 3's own deny,
+  `Gate could not reach a judgement. kind=judge-error`.
+- `test_classification_table_is_the_recorded_inventory` fails on `gate.CLASS_A == CLASS_A`.
+
+**GREEN** (Codex). Add `"read_file"` to `CLASS_A` on its own line, after the `"read_url_content", …` line,
+under one comment line. The line `    "view_file", "list_dir", "grep_search", "find_by_name", "command_status",`
+stays byte-identical, because `fr4-class-a-name-moved` in `h-mad/tests/mutation-specs/agy_tdd_gate.json`
+anchors on its prefix.
+
+```bash
+rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/test_h_mad_agy_tdd_gate.py -q -p no:cacheprovider
+rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests -q -p no:cacheprovider
+python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/agy_tdd_gate.json
+python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/agy_tdd_gate.json
+```
+
+**Acceptance Criteria**:
+- [ ] AC-T14e.1: The RED split is 2 failed / 102 passed for the reasons above, read from the failure lines.
+- [ ] AC-T14e.2: After GREEN the module reads 104 passed. The full suite's summary shows no failure that
+  is not also present at this Task's parent sha.
+- [ ] AC-T14e.3: `agy_tdd_gate.json` prints `ANCHORS: ANCHORS_OK` and `MUTATION: ALL_CAUGHT`, read from
+  the token lines.
+- [ ] AC-T14e.4: From `$ROOT/.agents` of a non-git root, the gate prints `{"decision": "allow"}` for
+  `read_file`. `run_command` and the writes keep their run-3 deny, so this Task does not settle the
+  open policy question (deny or allow when no git toplevel exists).
+
+**Dependencies on other tasks**: none. Task 15 run 4 depends on this Task.
+
+---
+
 ## Task 15: the live sequence after S0c (operator)
 
 **Production files**: none on `main` (calibration data goes only to `calibration/grok-audit-surface`, by Task 6's `commit-data`)
@@ -4219,3 +4275,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.9: 2026-10-22, answers the impl-plan audit of v1.8 (scratchpad audit-implplan-route-b.md: 2 must, 5 should) and takes design v1.14 (8fd0f637) and spec v1.20 (d78cca8d), under the orchestrator's decisions; sole author, not re-audited. Must: the armed check tests the array length (# M:PATH-SCOPE-CHECK-ARMED, row PS14) and the production GUARD also asserts one AUDITCYCLE line, no REQUIRE: STOP and no here file; the test (4) and no-root-path GUARDs pass no path_scope keyword. Should: the assembler-pin fixtures move to the new module test_grok_audit_surface_assembler_pin.py; SELF_DIR and the injected helper are monkeypatched with raising=False; row assembler-read-sha-unchecked targets a new sha256-repository fixture; the pre-clause test copies the three imported helpers and asserts dispatch_count first; each anchor states its matching unit, class UsageError is line 20. Design v1.14: the ${stem}.here.txt record (PS15, test_calibration_cycle_records_its_here), assembler-check --stems with here_unrecorded and here_mismatch, the two usage-error branches, the copy test reads the clause by ast parse, newline-only line split, and the doc is published only from a PINNED run (Task 15 steps 6 and 9a gain --stems and the smoke-failure require). Totals: 6 + 9 + 27 = 42 new rows, 420 after Task 14c, 422 or 424 after Task 16; new modules 20 and 32 node ids.
 - v1.10: 2026-10-22, answers the round-2 impl-plan audit of v1.9 (scratchpad audit2-implplan.md: 2 must, 1 should, nits) and takes design v1.15 (741f35f4) and spec v1.21 (061bde85); sole author, not re-audited. Must: the two real-cycle tests (and the pre-clause test) pass --report-grace 0, and the module budget uses the audit's measured per-id figures (6.91 s real-cycle, 0.17–0.60 s stub) with AC-T14d.5 at 30 s or less under -x; every path-scope test that drives audit-cycle owns its HMAD_AUDIT_STEM_DIR, the GUARD's no-here-file check included. Should: WIRE-PIN 2 counts dispatches by init events. Design v1.15: the here write moves to its own armed block after stem= (new edit 5; the clause check is edit 6); test_calibration_cycle_records_its_here gains [assemble_halt] (PS15's target); new must-not-refuse fixture test_assembler_check_assemble_halt_cycle_beside_good_v2_is_pinned; Task 15's SMOKE: FAIL branch runs the end reading, the resmoke check and require before any doc is published; Task 16 pins the AC-3.9 transfer residual and the AC-6.2 phrase (PASS, MISS and INCONCLUSIVE only). Nits: AC-T14b.1 wording; row 24 is plan-added (15 design-required, 12 plan-added). Totals: rows unchanged at 42 (420; 422 or 424); new modules 21 and 33 node ids.
 - v1.11: 2026-10-22, answers the round-3 impl-plan audit (scratchpad audit3.md: 1 must, 3 should, nits) and takes design v1.16 (5767086f); sole author, not re-audited. Must: records_its_here[assemble_halt] asserts its AUDITCYCLE line through auditcycle_lines, never as the last stdout line (the stub prints an [H-MAD] marker after it). Should: the here guard is marked # M:PATH-SCOPE-HERE-ARMED with row PS16 path-scope-here-always targeting the production GUARD; WIRE-PIN 2 counts init events in its own stem dir's *_p[0-9].log (exactly 3); Task 14d's two module runs carry --durations=3. Nit: the assemble_halt-beside-v2 fixture names its --reading prompts. Totals: 6 + 10 + 27 = 43 rows, 421 after Task 14c, 423 or 425 after Task 16; wrapper M:PATH-SCOPE- markers 6.
+- v1.12: 2026-10-23, answers no audit cycle; sole author, not audited. It adds Task 14e (defect-fix): the agy TDD gate classes agy's unadvertised `read_file` as (a). The run-3 incident's premise ("armed by `phase=step5`") is corrected: the deny is phase-independent. The `.agents/hooks.json` copied into each non-git root makes the class-(d) `git rev-parse` lookup raise, and S1 passed only because it read with `view_file`. Ordered by the operator 2026-10-23 (option A); the no-git-toplevel policy (deny or allow) stays open. The mutation and marker totals are unchanged.
