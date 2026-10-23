@@ -2518,6 +2518,74 @@ python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/agy_t
 
 ---
 
+## Task 14f: a grok `grep` call's `pattern` is not a path source for the out-of-root scan
+
+**Production file**: `h-mad/scripts/h_mad_tool_calls.py`
+**Test files**: `h-mad/tests/test_grok_audit_surface_toolscan_pattern.py` (create);
+`h-mad/tests/mutation-specs/grok_audit_surface.json` (gains one row and the new module in `command`)
+**Task shape**: `defect-fix`
+**Implements**: the run-4 incident
+(`docs/03-analysis/grok-audit-surface.incident-2026-10-23-run4-toolscan-false-positive.md`); D19's
+scan of the paths a call names. Task 15 run 5 depends on it.
+
+**Why.** Run 4's S2 halted at d2 on `TOOLSCAN: OUT_OF_ROOT … out_of_root=1 checkout=0`. The one call
+was a grok `grep` with `rawInput {"pattern": "python3\\.11|/opt/anaconda3", "glob":
+"**/test_h_mad_audit_cycle.py", "head_limit": 15}` and no `path`, so it searched the root. `_ndjson_calls`
+passes every string of `rawInput` to `named_paths`, and the `|` in the regex is in the lookbehind
+class, so `/opt/anaconda3` was counted as a path the call named.
+
+Across every recorded grok log, the only structured search tool is `toolName: "grep"`, with
+`pattern` beside `path`, `glob`, `head_limit` and `-A`. Its `pattern` is a content regex, while its `path`
+and `glob` name what it reads.
+
+**Scope.** Only `rawInput["pattern"]` of a grok `tool_call` whose `toolName` is `"grep"` stops being a
+path source. Everything else is still scanned:
+- the call's other `rawInput` values;
+- its `locations`;
+- a `pattern` argument of any other tool;
+- all agy and codex input.
+
+A path inside shell text (`run_terminal_command`'s `command`) is unchanged and stays a known
+residual. A shell-text classifier is out of scope.
+
+**RED** (orchestrator-authored, test-only). There is a new module because the containment module is
+over the judge's 40 s budget; it imports `_assert_scan`, `_token`, `scan_case` and `scan_module`
+from `test_grok_audit_surface_containment`. Expected RED: 2 failed, 3 passed.
+- These two fail: `test_grep_pattern_naming_an_outside_path_is_clean` (the run-4 call) and
+  `test_grep_pattern_naming_the_checkout_counts_nothing`. Both currently read `OUT_OF_ROOT`.
+- These three pass now and must stay passing: `test_grep_path_outside_the_root_is_still_out_of_root`,
+  `test_grep_glob_naming_the_checkout_is_still_out_of_root` and
+  `test_a_pattern_argument_of_another_tool_is_still_scanned`.
+
+**GREEN** (Codex). In `_ndjson_calls`, for a grok `tool_call` with `toolName == "grep"` and a dict
+`rawInput`, scan `rawInput` without its `pattern` key. Mark the line `# M:TOOLSCAN-GREP-PATTERN`.
+No other function changes.
+
+**After GREEN** (orchestrator, test-side). Add the row `toolscan-grep-pattern-scanned` to
+`grok_audit_surface.json`. It removes the exclusion and must be caught by
+`test_grep_pattern_naming_an_outside_path_is_clean`. Also add the new module to the spec's `command`.
+
+```bash
+rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/test_grok_audit_surface_toolscan_pattern.py h-mad/tests/test_grok_audit_surface_containment.py -q -p no:cacheprovider
+rtk proxy /opt/anaconda3/bin/python3.11 -m pytest h-mad/tests -q -p no:cacheprovider
+python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/grok_audit_surface.json
+python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/grok_audit_surface.json
+python3 h-mad/scripts/h_mad_tool_calls.py scan --surface grok --log <run-4 d2 p3.log> --root <its p3 root> --checkout /Users/kimhawk/orca/skills --home "$HOME" …
+```
+
+**Acceptance Criteria**:
+- [ ] AC-T14f.1: The RED split is 2 failed / 3 passed for the reasons above.
+- [ ] AC-T14f.2: After GREEN, both modules read all passed. The full suite's summary shows no new
+  failure.
+- [ ] AC-T14f.3: `ANCHORS_OK` and `MUTATION: ALL_CAUGHT`, the latter with `untargeted=0`, for
+  `grok_audit_surface.json` with the new row.
+- [ ] AC-T14f.4: Re-scanning run 4's d2 `p3.log` reads `TOOLSCAN: CLEAN`. Re-scanning the step-10
+  positive-control log still reads `checkout=` above 0.
+
+**Dependencies on other tasks**: Task 21 (the scanner). Task 15 run 5 depends on this Task.
+
+---
+
 ## Task 15: the live sequence after S0c (operator)
 
 **Production files**: none on `main` (calibration data goes only to `calibration/grok-audit-surface`, by Task 6's `commit-data`)
@@ -4276,3 +4344,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.10: 2026-10-22, answers the round-2 impl-plan audit of v1.9 (scratchpad audit2-implplan.md: 2 must, 1 should, nits) and takes design v1.15 (741f35f4) and spec v1.21 (061bde85); sole author, not re-audited. Must: the two real-cycle tests (and the pre-clause test) pass --report-grace 0, and the module budget uses the audit's measured per-id figures (6.91 s real-cycle, 0.17–0.60 s stub) with AC-T14d.5 at 30 s or less under -x; every path-scope test that drives audit-cycle owns its HMAD_AUDIT_STEM_DIR, the GUARD's no-here-file check included. Should: WIRE-PIN 2 counts dispatches by init events. Design v1.15: the here write moves to its own armed block after stem= (new edit 5; the clause check is edit 6); test_calibration_cycle_records_its_here gains [assemble_halt] (PS15's target); new must-not-refuse fixture test_assembler_check_assemble_halt_cycle_beside_good_v2_is_pinned; Task 15's SMOKE: FAIL branch runs the end reading, the resmoke check and require before any doc is published; Task 16 pins the AC-3.9 transfer residual and the AC-6.2 phrase (PASS, MISS and INCONCLUSIVE only). Nits: AC-T14b.1 wording; row 24 is plan-added (15 design-required, 12 plan-added). Totals: rows unchanged at 42 (420; 422 or 424); new modules 21 and 33 node ids.
 - v1.11: 2026-10-22, answers the round-3 impl-plan audit (scratchpad audit3.md: 1 must, 3 should, nits) and takes design v1.16 (5767086f); sole author, not re-audited. Must: records_its_here[assemble_halt] asserts its AUDITCYCLE line through auditcycle_lines, never as the last stdout line (the stub prints an [H-MAD] marker after it). Should: the here guard is marked # M:PATH-SCOPE-HERE-ARMED with row PS16 path-scope-here-always targeting the production GUARD; WIRE-PIN 2 counts init events in its own stem dir's *_p[0-9].log (exactly 3); Task 14d's two module runs carry --durations=3. Nit: the assemble_halt-beside-v2 fixture names its --reading prompts. Totals: 6 + 10 + 27 = 43 rows, 421 after Task 14c, 423 or 425 after Task 16; wrapper M:PATH-SCOPE- markers 6.
 - v1.12: 2026-10-23, answers no audit cycle; sole author, not audited. It adds Task 14e (defect-fix): the agy TDD gate classes agy's unadvertised `read_file` as (a). The run-3 incident's premise ("armed by `phase=step5`") is corrected: the deny is phase-independent. The `.agents/hooks.json` copied into each non-git root makes the class-(d) `git rev-parse` lookup raise, and S1 passed only because it read with `view_file`. Ordered by the operator 2026-10-23 (option A); the no-git-toplevel policy (deny or allow) stays open. The mutation and marker totals are unchanged.
+- v1.13: 2026-10-23, answers no audit cycle; sole author, not audited. It adds Task 14f (defect-fix): the out-of-root scan no longer reads a grok `grep` call's regex `pattern` as a path. Run 4 (`run-ab2c85dc2e25-20261023T034641Z`) passed its smoke (smoke commit `b1562dd4`) and then halted at S2 d2 on `out_of_root=1`; that hit was the pattern `python3\.11|/opt/anaconda3`. The new module is `test_grok_audit_surface_toolscan_pattern.py`, with RED 2 failed / 3 passed. After GREEN, the mutation spec gains one row (422) and the new module in `command`. Ordered by the operator 2026-10-23.

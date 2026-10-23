@@ -53,3 +53,5 @@ The scan is a measurement instrument, and it read a search pattern as an access.
 2. **Keep the scan conservative.** Accept that a pattern naming an outside path halts the run, and only re-run. This is not recommended: the false positive can recur on any document that cites a path outside the root.
 
 The smoke commit `b1562dd4` stays on the calibration branch. A new run makes and pushes its own re-smoke commit on top.
+
+**Decision (operator, 2026-10-23): remedy 1.** Impl-plan Task 14f (v1.13) excludes only the `pattern` argument of a grok `grep` call. A path inside shell text (`run_terminal_command`) is still scanned as-is and is recorded as a residual. Run 5 starts in a new run dir after 14f lands.
