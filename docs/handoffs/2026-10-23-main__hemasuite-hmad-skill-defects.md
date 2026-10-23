@@ -58,3 +58,11 @@ $EDITOR docs/skill-candidates.md   # file the merged defect rows
 **Related docs:**
 - `docs/handoffs/2026-10-23-main__grok-run3-agy-gate-halt.md` (skills defects 1–12)
 - `~/.claude/skills/handoff/references/automation-scout.md`
+
+## Closure — 2026-10-23
+
+These items were already filed when this brief was taken over. HemaSuite's own session `01BYaYNYZJEuYY5qcYCnse9G` committed `f2a37a71`, "file 11 H-MAD defects from HemaSuite document-intake-source-review Phase 5". That commit adds all nine items above, plus two more (the bkit SubagentStop loop and the Codex lazy-import rule), to `docs/skill-candidates.md` as unverified rows.
+
+Next Step 1 is done. Next Step 2, re-probing the premises, belongs to those rows now, so this brief carries nothing further. The claim `hemasuite-hmad-skill-defects` is released.
+
+The skills lane's own defects 1–12 are still unfiled; that is todo #4. Dedupe them against the `f2a37a71` rows: HS2 is our #1, HS7 is our #2, HS1 and HS5 are close to #4, and HS6 is close to #5.
