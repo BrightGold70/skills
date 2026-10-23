@@ -1,0 +1,13 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=4 should=1 passes=1 p1=4/1 delivered=report-file size_status=verified
+Effort:
+- p1 not measured (codex-text log; the effort counters read agy stream-json only) targets: paths=17 code=16 other=1 unmeasured=2
+Premise checklist:
+- p1 must (no citation): The plan describes the collector, gate refusal, wrapper verb, and codex recipe as new work although these are already present in the reviewed checkout; its starting-state assumptions and implementation sequence therefore do not describe the remaining delta. Re-scope against the existing implementation before approval.
+- p1 must (no citation): Axis C FR-1 is restated: the plan names a surface-aware path derivation but omits the spec’s required surface-token validation and rejection of `p\d+`; without this, an implementer can satisfy the plan while accepting forbidden surface names.
+- p1 must (no citation): Behavioral premises in the Assumption verification table lack their exact runnable command and observed output, contrary to the required behavioral-premise evidence format. For example, the overwrite claim cites a function description rather than a command that demonstrates the behavior; include the command and result for each such premise.
+- p1 must (no citation): The completion census is inconsistent: the plan claims 40 unique ACs, but the supplied spec enumerates 39 (6 under FR-1, 14 under FR-2, 7 under FR-3, 3 under FR-4, 4 under FR-5, and 5 under FR-6); the mutation target is 23 in FR-6 but 25 in Success Criteria. Re-derive and use one count for each population so the gate has a determinate completion target.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T081135Z/roots/gas-root-d1-s1-mtk2b34k/docs/01-plan/features/audit-report-docs-copy.plan.audit.v3.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

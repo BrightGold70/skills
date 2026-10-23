@@ -1,0 +1,46 @@
+AUDIT-audit-report-docs-copy-plan-v1-BEGIN
+## Summary
+The plan covers FR-1, FR-3, FR-4, FR-5, and FR-6 in the spec's form. FR-2 is restated: the requirements contract line names only `COLLECT: OK|MISSING`, while the spec's contract line and this plan's goals and architecture include `CONFLICT` as a verdict. Success Criteria also demands 25 mutations; the spec's named list, this plan's FR-6, and `h-mad/tests/mutation-specs/collect_report.json` each contain 23.
+
+| FR | Classification |
+|---|---|
+| FR-1 | implemented-as-written |
+| FR-2 | restated |
+| FR-3 | implemented-as-written |
+| FR-4 | implemented-as-written |
+| FR-5 | implemented-as-written |
+| FR-6 | implemented-as-written |
+
+Evidence: 7 files opened, 18 greps run. Re-derived: 40 `AC-` headings in the spec; 23 mutation ids in `collect_report.json`; `docs/04-report/features/*.report.md` is 4 files. `_cmd_exec`'s option loop (now `hmad-dispatch.sh` 3063–3071) still accepts only `--cd --model --out --log --timeout --sandbox --effort`.
+
+## Must-fix
+- FR-2 is restated narrower than the spec: the plan's requirements contract line prints `COLLECT: OK|MISSING` and omits `CONFLICT`, so a collector built from that line cannot emit the verdict AC-2.5, AC-5.4, and this plan's own Goals and Architecture require for a differing docs copy — the recipe halt on non-`OK` then has no `CONFLICT` token to read.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `COLLECT: OK|MISSING path=<docs path>`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `COLLECT: OK|MISSING|CONFLICT path=<docs path>`
+- Success Criteria requires `MUTATION: ALL_CAUGHT` on 25 mutations, but FR-6, the deliverables row, and spec AC-6.3 enumerate the same 23 named mutants (a through l′), and `collect_report.json` holds 23 ids. The done-condition cannot be true at the same time as the mutation contract.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `(25 mutations, every connection dropped`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `bites. 23 mutations.`
+
+## Should-fix
+- The spec's CLI signature and AC-2.3 depend on `--grace` (`--grace 0` makes a present report with no `.done` marker `MISSING`). The plan never names `grace`, so an impl-plan taken from the plan's FR-2 bullet can drop the flag and still match that bullet.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `[--grace <s>]`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `delivered=report-file|out|none [forced=1]`
+- The risk row tells this feature's own codex audits to use the worktree CLI after task 2. The order of work in the same plan makes task 2 the gate refusal and task 3 the CLI, which is the first point the v1.4 note says the AC-2.9 steps can run. Following the risk cell invokes a script the preceding task has not created.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `after task 2, use the worktree CLI`
+- The docs-anchor risk names `test_h_mad_audit_cycle_slices.py`. That path is not in `h-mad/tests`. The spec's AC-5.2 names `test_h_mad_audit_cycle_docs.py`, which is the file that slices `## Audit prompt assembly` through `## Putting …` and `6.6.` through `\n7.`. An edit guided by the plan's filename never runs the test that pins those anchors.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `test_h_mad_audit_cycle_slices.py`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `test_h_mad_audit_cycle_docs.py`
+- The Phase-7 census the transport grammar rests on is stale against this tree. The plan's own `ls docs/04-report/features/*.report.md` now returns 4 files (`exec-missing-report-recovery`, `orca-native-orchestration`, `orca-native-transport`, `tdd-dispatch-verification-discipline`), and `gate-blindness-hardening.report.md` is only at `docs/archive/2026-08/gate-blindness-hardening/`. The suffix is still shared with live Phase-7 reports, so the grammar choice stands; the published 7 and the example path do not.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `→ 7 Phase-7 reports`
+
+## Nit
+- Next Steps still says "Operator approves v1.0 → Phase 3" while Version History is at v1.11 and already records plan-audit and 5b count sweeps.
+- Scope emits `[H-MAD] <feature> gate INVALID` and Requirements emit `[H-MAD] <stem>` for the same refusal. For a dot-free transport basename, `name.split(".")[0]` is the stem, so the bytes match; the two placeholders still read as two slots.
+- The deliverables table names only `_copy_collected_report` as the conflict-safe writer. Scope says `_write_collected_report` gains the same `overwrite` keyword.
+AUDIT-audit-report-docs-copy-plan-v1-END

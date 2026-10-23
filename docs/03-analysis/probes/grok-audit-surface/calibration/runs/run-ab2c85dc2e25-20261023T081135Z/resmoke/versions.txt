@@ -1,0 +1,3 @@
+grok_binary=/Users/kimhawk/.grok/bin/grok grok 1.0.62 (1474f9cbdd91)
+1.4.6
+codex-cli 0.163.0

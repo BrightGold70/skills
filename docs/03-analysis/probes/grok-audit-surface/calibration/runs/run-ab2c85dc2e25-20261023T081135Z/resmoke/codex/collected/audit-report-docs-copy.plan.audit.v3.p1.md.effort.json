@@ -1,0 +1,21 @@
+{
+  "agy_events": 0,
+  "collected": "audit-report-docs-copy.plan.audit.v3.p1.md",
+  "failed": 0,
+  "log": "/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T081135Z/stem/s1-codex/audit_audit-report-docs-copy_plan_cycle3_run20261023T083018Z-10646_p1.log",
+  "log_retained": "/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T081135Z/roots/gas-root-d1-s1-mtk2b34k/.h-mad/pass-logs/audit-report-docs-copy.plan.audit.v3.p1.md.log",
+  "log_sha256": "a2f01bf013f39958aec678e71ecabf6e49a8f662922f1740768b7fd4cccd38c4",
+  "ok": 0,
+  "pass": 1,
+  "readable": true,
+  "shape": "codex-text",
+  "status": null,
+  "targets": {
+    "code": 16,
+    "other": 1,
+    "paths": 17,
+    "unmeasured": 2
+  },
+  "thinking": 0,
+  "tools": 0
+}

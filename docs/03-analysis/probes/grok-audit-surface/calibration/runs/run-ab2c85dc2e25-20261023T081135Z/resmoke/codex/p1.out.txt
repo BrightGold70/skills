@@ -1,0 +1,45 @@
+AUDIT-audit-report-docs-copy-plan-v3-BEGIN
+## Summary
+Axis C finds FR-1 restated and FR-2 through FR-6 implemented-as-written at FR granularity. The plan is not ready to implement against this checkout: core deliverables already exist, and its completion counts conflict.
+
+| Spec FR | Classification |
+|---|---|
+| FR-1 | restated — surface validation constraints are not specified |
+| FR-2 | implemented-as-written |
+| FR-3 | implemented-as-written |
+| FR-4 | implemented-as-written |
+| FR-5 | implemented-as-written |
+| FR-6 | implemented-as-written, though the target counts conflict |
+
+Evidence: 3 files opened, 5 greps run. The graft graph was unavailable (`graft map`: “no graph”).
+
+## Must-fix
+- The plan describes the collector, gate refusal, wrapper verb, and codex recipe as new work although these are already present in the reviewed checkout; its starting-state assumptions and implementation sequence therefore do not describe the remaining delta. Re-scope against the existing implementation before approval.
+  class: build
+  quote: Target plan › `New h-mad/scripts/h_mad_collect_report.py — CLI over collect(); COLLECT: contract.`
+  quote: Target plan › `The codex leg has no recipe step | grep -c 'exec codex.*audit\|\.codex\.md' h-mad/SKILL.md h-mad/references/*.md → 0; recipe found only in two memory files`
+  quote: h-mad/SKILL.md › `- h_mad_collect_report.py — collect-report surface collector: copies a delivered report-file or \`--out\` fallback into the docs audit path`
+  quote: h-mad/scripts/hmad-dispatch.sh › `collect-report) _cmd_collect_report "$@" ;;`
+- Axis C FR-1 is restated: the plan names a surface-aware path derivation but omits the spec’s required surface-token validation and rejection of `p\d+`; without this, an implementer can satisfy the plan while accepting forbidden surface names.
+  class: build
+  quote: Source spec › `AC-1.3: A surface that does not match the single dot-free token grammar (\`h_mad_cycle_counts._VERSION_RE\`'s discriminator: \`[A-Za-z0-9][A-Za-z0-9_-]*\`) or that matches \`^p\d+$\` raises \`ValueError\` naming the token — the path is never built.`
+  quote: Target plan › `FR-1: surface-aware _collected_path — single derivation.`
+- Behavioral premises in the Assumption verification table lack their exact runnable command and observed output, contrary to the required behavioral-premise evidence format. For example, the overwrite claim cites a function description rather than a command that demonstrates the behavior; include the command and result for each such premise.
+  class: measurement
+  quote: Target plan › `Re-dispatching a cycle overwrites its collected file | _copy_collected_report: unlink(missing_ok=True) then write; the low-evidence remedy is "re-dispatch that pass" at the SAME cycle number`
+- The completion census is inconsistent: the plan claims 40 unique ACs, but the supplied spec enumerates 39 (6 under FR-1, 14 under FR-2, 7 under FR-3, 3 under FR-4, 4 under FR-5, and 5 under FR-6); the mutation target is 23 in FR-6 but 25 in Success Criteria. Re-derive and use one count for each population so the gate has a determinate completion target.
+  class: measurement
+  quote: Target plan › `All 40 unique ACs in the spec pass automated tests`
+  quote: Target plan › `MUTATION: ALL_CAUGHT on collect_report.json (25 mutations, every connection dropped AND forced, fall-through paths included).`
+  quote: Target plan › `23 named-test mutations — every new connection dropped AND forced on its fall-through path`
+  quote: Source spec › `h_mad_mutation_harness.py reports \`MUTATION: ALL_CAUGHT\`.`
+
+## Should-fix
+- The Next Steps still asks for approval of v1.0 although the Version History ends at v1.11, so it points the operator at a superseded plan revision.
+  class: measurement
+  quote: Target plan › `Operator approves v1.0 → Phase 3 audit cycle`
+  quote: Target plan › `v1.11: AC-2.9h hand replay 2026-09-02`
+
+## Nit
+None
+AUDIT-audit-report-docs-copy-plan-v3-END

@@ -1,0 +1,12 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=3 should=2 passes=1 p1=3/2 delivered=out size_status=verified
+Effort:
+- p1 tools=27 ok=22 failed=5 thinking=2246 paths=13 code=11 other=2 unmeasured=0
+Premise checklist:
+- p1 must (no citation): `## Requirements` restates `FR-2` narrower than the spec and its own `## Goals` by omitting `CONFLICT` from the `COLLECT:` contract line (`COLLECT: OK|MISSING` instead of `COLLECT: OK|MISSING|CONFLICT`) — an implementer or test author reading `## Requirements` for the CLI output grammar gets a two-verdict token set that drops the conflict verdict required by `FR-2` (`AC-2.5`, `AC-2.6a`, `AC-5.4`).
+- p1 must (no citation): `## Scope` in the plan and `FR-3` in the spec contradict `## Requirements` (and `v1.10` in `## Version History`) on the feature slot of the gate's transport-refusal `[H-MAD]` marker (`[H-MAD] <feature> gate INVALID` vs `[H-MAD] <stem> gate INVALID`) — `h_mad_audit_gate.py` emits the dot-free transport stem (`p.name[:-len(".report.md")]`), so `<feature>` in `## Scope` and the spec's `FR-3` states a different marker contract than `## Requirements`.
+- p1 must (no citation): `## Success Criteria` requires `25 mutations` in `collect_report.json`, contradicting `## Requirements` (`23 named-test mutations`), `## Deliverables` (`23 mutations`), `## Version History` (`v1.9: ... → 23 mutations`), spec `AC-6.3` (`23 mutations.`), and `h-mad/tests/mutation-specs/collect_report.json` (which contains 23 mutations) — a stale count from an intermediate sweep left in the acceptance gate of the plan.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T081135Z/roots/gas-root-d1-s1-mtk2b34k/docs/01-plan/features/audit-report-docs-copy.plan.audit.v2.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

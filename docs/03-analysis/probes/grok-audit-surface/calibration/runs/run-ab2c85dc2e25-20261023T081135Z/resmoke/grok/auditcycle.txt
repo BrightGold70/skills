@@ -1,0 +1,11 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=2 should=4 passes=1 p1=2/4 delivered=report-file size_status=verified
+Effort:
+- p1 tools=55 ok=55 unresolved=0 thinking=48261 format=grok paths=19 code=15 other=4 unmeasured=0
+Premise checklist:
+- p1 must (no citation): FR-2 is restated narrower than the spec: the plan's requirements contract line prints `COLLECT: OK|MISSING` and omits `CONFLICT`, so a collector built from that line cannot emit the verdict AC-2.5, AC-5.4, and this plan's own Goals and Architecture require for a differing docs copy — the recipe halt on non-`OK` then has no `CONFLICT` token to read.
+- p1 must (no citation): Success Criteria requires `MUTATION: ALL_CAUGHT` on 25 mutations, but FR-6, the deliverables row, and spec AC-6.3 enumerate the same 23 named mutants (a through l′), and `collect_report.json` holds 23 ids. The done-condition cannot be true at the same time as the mutation contract.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T081135Z/roots/gas-root-d1-s1-mtk2b34k/docs/01-plan/features/audit-report-docs-copy.plan.audit.v1.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL
