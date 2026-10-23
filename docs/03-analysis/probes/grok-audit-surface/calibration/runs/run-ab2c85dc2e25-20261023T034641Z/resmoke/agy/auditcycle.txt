@@ -1,0 +1,11 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=2 should=0 passes=1 p1=2/0 delivered=out size_status=verified
+Effort:
+- p1 tools=27 ok=24 failed=3 thinking=1783 paths=13 code=11 other=2 unmeasured=0
+Premise checklist:
+- p1 must (no citation): `## Requirements` FR-2 omits `CONFLICT` from the `COLLECT:` stdout contract line schema (`COLLECT: OK|MISSING path=<docs path>` instead of `COLLECT: OK|MISSING|CONFLICT path=<docs path>`) — this restates and narrows the spec's FR-2 contract and contradicts `## Goals` (`COLLECT: MISSING|CONFLICT`) and `## Architecture` within the same plan, leaving an incomplete verdict union for implementers and contract parsers.
+- p1 must (no citation): `## Success Criteria` claims `collect_report.json` has `25 mutations`, contradicting `## Requirements` (`23 named-test mutations`), `## Deliverables` (`23 mutations`), `## Version History` (`→ 23 mutations`), `audit-report-docs-copy.spec.md` AC-6.3 (`23 mutations`), and `h-mad/tests/mutation-specs/collect_report.json` (23 entries) — the v0.10 cycle 9 update lowered the count from 24/25 to 23 in three sections but left `## Success Criteria` stale.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T034641Z/roots/gas-root-d1-s1-efd_5thw/docs/01-plan/features/audit-report-docs-copy.plan.audit.v2.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

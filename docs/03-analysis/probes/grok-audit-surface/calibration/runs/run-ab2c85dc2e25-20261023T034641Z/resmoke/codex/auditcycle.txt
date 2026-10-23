@@ -1,0 +1,11 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=2 should=0 passes=1 p1=2/0 delivered=report-file size_status=verified
+Effort:
+- p1 not measured (codex-text log; the effort counters read agy stream-json only) targets: paths=12 code=11 other=1 unmeasured=3
+Premise checklist:
+- p1 must (no citation): FR-1 narrows away invalid-surface rejection: the plan calls for a surface-aware path derivation but never specifies rejecting tokens outside the grammar or `p\d+`, leaving AC-1.3 (and the concrete invalid cases in AC-2.7) unplanned. — this leaves the path contract incomplete and permits surface names that collide with pass-index naming or cannot be represented as one token.
+- p1 must (no citation): The mutation acceptance count is internally contradictory: FR-6 and Deliverables specify 23, while Success Criteria requires 25. This leaves the implementation gate unclear about whether two additional mutations are required.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T034641Z/roots/gas-root-d1-s1-efd_5thw/docs/01-plan/features/audit-report-docs-copy.plan.audit.v3.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

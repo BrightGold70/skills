@@ -1,0 +1,30 @@
+## Summary
+FR-1 is restated without its surface-token validation contract; FR-2 through FR-6 are implemented-as-written. The plan also gives conflicting mutation totals (23 and 25); the current `collect_report.json` has 23 mutations.
+
+| Functional requirement | Classification |
+|---|---|
+| FR-1 | restated |
+| FR-2 | implemented-as-written |
+| FR-3 | implemented-as-written |
+| FR-4 | implemented-as-written |
+| FR-5 | implemented-as-written |
+| FR-6 | implemented-as-written |
+
+Evidence: 6 files opened, 4 greps run. `graft map` reported no graph; I did not build one because this is a read-only audit.
+
+## Must-fix
+- FR-1 narrows away invalid-surface rejection: the plan calls for a surface-aware path derivation but never specifies rejecting tokens outside the grammar or `p\d+`, leaving AC-1.3 (and the concrete invalid cases in AC-2.7) unplanned. — this leaves the path contract incomplete and permits surface names that collide with pass-index naming or cannot be represented as one token.
+  class: build
+  quote: Source spec › `A surface that does not match the single dot-free token grammar (`h_mad_cycle_counts._VERSION_RE`'s discriminator: `[A-Za-z0-9][A-Za-z0-9_-]*`) or that matches `^p\d+$` raises `ValueError` naming the token — the path is never built.`
+  quote: Target document (prompt) › `FR-1: surface-aware _collected_path — single derivation.`
+  quote: Target document (prompt) › `FR-2: h_mad_collect_report.py with COLLECT: OK|MISSING path=<docs path> delivered=report-file|out|none [forced=1] + [H-MAD] <feature> collect <verdict> on every verdict and [H-MAD] … collect readback_failed on a readback disagreement (Marker discipline), exit 0 on any verdict / 2 on operational error; --force to overwrite a differing docs copy; internal contract CollectConflict + optional PassSpec.out_path.`
+- The mutation acceptance count is internally contradictory: FR-6 and Deliverables specify 23, while Success Criteria requires 25. This leaves the implementation gate unclear about whether two additional mutations are required.
+  class: measurement
+  quote: Target document (prompt) › `FR-6: tests for every AC including the incident replay (AC-2.9), operational errors (AC-2.10) and readback (AC-2.12); mutation spec with 23 named-test mutations — every new connection dropped AND forced on its fall-through path, plus the grammar-disjointness property (regex loosened / docs pattern de-dotted); wrapper wiring test for the verb in both directions (AC-4.1, AC-4.3); suite green.`
+  quote: Target document (prompt) › `MUTATION: ALL_CAUGHT on collect_report.json (25 mutations, every connection dropped AND forced, fall-through paths included).`
+
+## Should-fix
+None
+
+## Nit
+None

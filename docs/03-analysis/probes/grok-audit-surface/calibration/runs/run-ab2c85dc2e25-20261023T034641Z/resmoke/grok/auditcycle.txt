@@ -1,0 +1,13 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=4 should=4 passes=1 p1=4/4 delivered=report-file size_status=verified
+Effort:
+- p1 tools=52 ok=51 unresolved=1 thinking=62279 format=grok paths=16 code=12 other=4 unmeasured=0
+Premise checklist:
+- p1 must (no citation): FR-2's Requirements token grammar lists `OK|MISSING` only, which is narrower than the spec's three-verdict line. A collector that emits no `CONFLICT` line still matches that Requirements sentence, while spec AC-2.5 requires `COLLECT: CONFLICT` and unchanged docs bytes when the collected file differs. Architecture and Goals still name a CONFLICT verdict, so the copied grammar and the rest of the plan disagree.
+- p1 must (no citation): FR-3's Requirements put the dot-free transport stem in the refusal marker's identity slot. The spec, and the plan's Scope, put `<feature>` in that same slot. Those are different strings: the stem of `audit_nlmpin_plan_cycle8_codex.report.md` is `audit_nlmpin_plan_cycle8_codex`, and `<feature>` elsewhere in the gate is the feature slug. The stem reading has to land in the spec before the marker text is stable.
+- p1 must (no citation): Success criteria require 25 mutations on `collect_report.json`. Spec AC-6.3 enumerates 23 (a through l′), and the plan's own FR-6 and Deliverables say 23. The mutation file has 23 `name` entries. A run that catches the spec's list misses this success bar.
+- p1 must (no citation): The overview's skip census and the assumption row's agy-leg file count are behavioural premises with no runnable command. This tree has 0 `nlm-cli-version-pin.plan.audit.v*.p1.md`, so neither figure can be re-derived from the plan. A behavioural premise carries its command beside the output.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T034641Z/roots/gas-root-d1-s1-efd_5thw/docs/01-plan/features/audit-report-docs-copy.plan.audit.v1.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

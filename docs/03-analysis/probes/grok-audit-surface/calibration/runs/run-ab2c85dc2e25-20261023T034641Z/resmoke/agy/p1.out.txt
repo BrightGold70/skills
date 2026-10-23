@@ -1,0 +1,30 @@
+AUDIT-audit-report-docs-copy-plan-v2-BEGIN
+## Summary
+The plan is structurally sound and aligns well with the repository implementation, test suite, and `collect_report.json` mutation spec, but two defects remain: `## Requirements` FR-2 drops `CONFLICT` from the `COLLECT: OK|MISSING|CONFLICT` contract line schema defined in `audit-report-docs-copy.spec.md`, and `## Success Criteria` still asserts `25 mutations` on `collect_report.json` after the v0.10 revision reduced the spec, requirements, deliverables, and mutation spec to 23. Evidence: 12 files opened, 0 greps run.
+
+| Spec ID | Classification | Notes |
+| --- | --- | --- |
+| FR-1 | preserved | `_collected_path` surface parameter, validation (`[A-Za-z0-9_-]+`), and single derivation match spec FR-1 (AC-1.1..1.4). |
+| FR-2 | restated | `## Requirements` FR-2 narrows the contract line to `COLLECT: OK|MISSING path=<docs path>`, omitting `CONFLICT` from the spec's `COLLECT: OK|MISSING|CONFLICT path=<docs path>`. |
+| FR-3 | preserved | `TRANSPORT_RE = ^audit_[^.]+\.report\.md$`, `GATE: INVALID`, exit 2, and `[H-MAD] <feature> gate INVALID` marker match spec FR-3 (AC-3.1..3.5). |
+| FR-4 | preserved | `hmad-dispatch collect-report` delegation, `--help` usage line, and unknown-flag exit 2 match spec FR-4 (AC-4.1..4.3). |
+| FR-5 | preserved | `h-mad/SKILL.md` and `h-mad/references/orchestration-mode.md` codex-leg recipe, helper registry row, verb table row, and step 9 sentence match spec FR-5 (AC-5.1..5.4). |
+| FR-6 | restated | `## Requirements` and `## Deliverables` match the spec's 23 mutations, but `## Success Criteria` still claims 25 mutations on `collect_report.json`. |
+
+## Must-fix
+- `## Requirements` FR-2 omits `CONFLICT` from the `COLLECT:` stdout contract line schema (`COLLECT: OK|MISSING path=<docs path>` instead of `COLLECT: OK|MISSING|CONFLICT path=<docs path>`) — this restates and narrows the spec's FR-2 contract and contradicts `## Goals` (`COLLECT: MISSING|CONFLICT`) and `## Architecture` within the same plan, leaving an incomplete verdict union for implementers and contract parsers.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `- FR-2: `h_mad_collect_report.py` with `COLLECT: OK|MISSING path=<docs path>`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `It prints one contract line `COLLECT: OK|MISSING|CONFLICT path=<docs path>`
+- `## Success Criteria` claims `collect_report.json` has `25 mutations`, contradicting `## Requirements` (`23 named-test mutations`), `## Deliverables` (`23 mutations`), `## Version History` (`→ 23 mutations`), `audit-report-docs-copy.spec.md` AC-6.3 (`23 mutations`), and `h-mad/tests/mutation-specs/collect_report.json` (23 entries) — the v0.10 cycle 9 update lowered the count from 24/25 to 23 in three sections but left `## Success Criteria` stale.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `- `MUTATION: ALL_CAUGHT` on `collect_report.json` (25 mutations, every connection dropped`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `mutation spec with 23 named-test mutations — every new`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `(l′) CLI error path prints a `COLLECT:` line → AC-2.10 bites. 23 mutations.`
+
+## Should-fix
+None
+
+## Nit
+None
+AUDIT-audit-report-docs-copy-plan-v2-END
