@@ -1,0 +1,11 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=2 should=2 passes=1 p1=2/2 delivered=out size_status=verified
+Effort:
+- p1 tools=26 ok=20 failed=6 thinking=9267 paths=15 code=13 other=2 unmeasured=0
+Premise checklist:
+- p1 must (no citation): [Axis C / Axis A — FR-2 restated] `## Requirements` restates the `FR-2` `COLLECT:` contract line as `COLLECT: OK|MISSING path=<docs path> delivered=report-file|out|none [forced=1]`, omitting the `CONFLICT` verdict token required by the spec (`COLLECT: OK|MISSING|CONFLICT`, `AC-2.5`, `AC-2.6a`, `AC-5.4`) and contradicting the plan's own `## Goals` (`COLLECT: MISSING|CONFLICT`) and `## Architecture Considerations` (`MISSING and CONFLICT exit 0 (verdicts)`). Update `## Requirements` FR-2 to `COLLECT: OK|MISSING|CONFLICT`.
+- p1 must (no citation): [Axis A — Contradictory mutation count] `## Success Criteria` requires `25 mutations` in `collect_report.json`, contradicting `23` in `## Requirements`, `## Deliverables`, `## Version History` (v1.7, v1.9), the spec's `AC-6.3` (`23 mutations`), and `h-mad/tests/mutation-specs/collect_report.json` (which has 23 entries in `"mutations"`). Update `## Success Criteria` from `25 mutations` to `23 mutations`.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T110325Z/roots/gas-root-d1-s1-w1yzs15g/docs/01-plan/features/audit-report-docs-copy.plan.audit.v2.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

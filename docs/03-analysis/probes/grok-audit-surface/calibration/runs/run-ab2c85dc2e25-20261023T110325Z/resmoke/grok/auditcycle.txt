@@ -1,0 +1,14 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=5 should=3 passes=1 p1=5/3 delivered=report-file size_status=verified
+Effort:
+- p1 tools=44 ok=44 unresolved=0 thinking=48096 format=grok paths=13 code=10 other=3 unmeasured=0
+Premise checklist:
+- p1 must (no citation): FR-2 restates the collector stdout contract. The spec's contract line is `OK|MISSING|CONFLICT`; the plan's Requirements line is `OK|MISSING` only, so a CLI grammar copied from that line rejects `COLLECT: CONFLICT`, which AC-2.5 requires and which this plan's Goals and Architecture still treat as an exit-0 verdict.
+- p1 must (no citation): FR-3 restates the transport-refusal marker. The spec prints `[H-MAD] <feature> gate INVALID` with the parenthetical that names `h_mad_collect_report.py`. The plan's Requirements put the dot-free transport stem in that slot and shorten the parenthetical to `transport file …`, while Scope in the same plan still writes `<feature>`. The marker bytes are three different strings.
+- p1 must (no citation): Success Criteria require 25 mutations on `collect_report.json`. Requirements, the deliverables row, version history v1.9, and spec AC-6.3 all fix the set at 23 (labels a through l′, with a unprimed: 23). A done-check written from Success Criteria fails a spec-complete mutation spec, or it demands two mutants the enumerated list does not contain.
+- p1 must (no citation): The SKILL.md slice guard is named `test_h_mad_audit_cycle_slices.py`, and that file is absent under `h-mad/tests/`. The anchors in the same risk row (`## Audit prompt assembly`, `6.6.`, `\n7.`) live in `h-mad/tests/test_h_mad_audit_cycle_docs.py`, which is the file spec AC-5.2 says must pass unchanged. Running the plan's named test does not exercise the guard.
+- p1 must (no citation): The overview's "seven of eight" skip rate is a behavioural premise with no inline command and no observed output. Base invariant "Behavioural premises carry their command" requires the runnable command beside the figure; without it a later cycle cannot re-derive the count.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T110325Z/roots/gas-root-d1-s1-w1yzs15g/docs/01-plan/features/audit-report-docs-copy.plan.audit.v1.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

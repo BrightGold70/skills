@@ -1,0 +1,10 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=1 should=0 passes=1 p1=1/0 delivered=report-file size_status=verified
+Effort:
+- p1 not measured (codex-text log; the effort counters read agy stream-json only) targets: paths=14 code=14 other=0 unmeasured=2
+Premise checklist:
+- p1 must (no citation): Resolve the mutation-count conflict: the success criterion requires 25 mutations, but the plan's FR-6 and deliverables and the source spec require 23, so an implementer cannot satisfy both release gates. The local test also enforces exactly 23. — a contradictory acceptance target makes the required mutation battery indeterminate.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T110325Z/roots/gas-root-d1-s1-w1yzs15g/docs/01-plan/features/audit-report-docs-copy.plan.audit.v3.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL

@@ -1,0 +1,1 @@
+ROOT: READY doc=d1 purpose=s1 path=/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T110325Z/roots/gas-root-d1-s1-w1yzs15g calibration=ab2c85dc2e25be31dcc13740ee9e71a0703d8cc7 list_commit=896b9cf149b407c141b597bb4a943c7de419994e list_blob=b78b7f3b2a5893fdd4cd83d591efed83f2069203 absent=0

@@ -1,0 +1,1155 @@
+!!! READ THIS BLOCK FIRST AND OBEY IT LAST !!!
+This is the OUTPUT CONTRACT. It is repeated verbatim at the end of this prompt.
+Your reply is machine-scored: a report that omits the sentinels or the exact
+`## Summary` / `## Must-fix` / `## Should-fix` / `## Nit` headings is scored
+INVALID and discarded no matter what it says. Do NOT invent your own verdict
+line. Re-read this block before you write a single word of your report.
+
+Output framing (mandatory — the orchestrator extracts on these markers):
+
+Emit your report bracketed by these two lines, each alone on its line, with
+nothing before the first or after the second:
+
+    AUDIT-audit-report-docs-copy-plan-v3-BEGIN
+    ...your report...
+    AUDIT-audit-report-docs-copy-plan-v3-END
+
+Your report is read by scraping this terminal, and the previous cycle's report
+is usually still visible above the prompt. The markers are how the orchestrator
+tells your new report from that old one — omit them and the audit cannot be
+scored. Emit them even if you have nothing to report.
+
+Output schema (exact, no other top-level sections):
+
+## Summary
+<2-3 sentences>
+
+## Must-fix
+- <issue> — <why it breaks invariant or creates a hard gap>
+  *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
+
+## Should-fix
+- <issue> — <why it matters but isn't a hard gate>
+  *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
+
+## Nit
+- <style/clarity issue>
+  *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
+
+Class rule (Must-fix and Should-fix): **every bullet carries a `class:` continuation line**, `build` or
+`measurement`, under the bullet and never as a `- ` bullet of its own (a leading `- ` is a second
+finding). The test is one question: **would the code or tests a 5d/5e implementer writes differ if this finding were fixed?** Yes → `class: build` (an interface, a contract, a
+predicate, a fixture, a test's assertion or RED/GREEN count, a false premise about the platform). No →
+`class: measurement` (a published number, stamp, ledger row, sha series, pointer or self-count that is
+stale or mis-derived; the tree is unchanged by fixing it). An untagged bullet is scored as `build`, so
+omitting the line never softens a finding — it only costs the orchestrator the triage. Put the `class:` line directly under its bullet (before or after `quote:`); do not indent a sub-bullet between a finding and its `class:` line, which leaves the finding untagged.
+
+    - <issue> — <why>
+      class: build
+      quote: <path/to/file.md> › `<span copied verbatim from that file>`
+
+Quoting rule (Must-fix and Should-fix): **if a finding asserts what a document says, prove it.**
+Add an indented `quote:` line under that bullet naming the file and carrying the span copied
+verbatim out of it:
+
+    - <issue> — <why it breaks the invariant>
+      quote: <path/to/file.md> › `<span copied verbatim from that file>`
+
+The `quote:` line is a continuation of its bullet, never a new `- ` bullet — a leading `- ` would
+be scored as a second finding. Use one `quote:` line per document the finding names.
+
+This exists because backticks alone are ambiguous. Reviewers correctly backtick three other kinds
+of span — code they are **proposing** as the fix, test inputs they **constructed**, and commands
+they **ran** — and those legitimately do not occur in the document. Measured over 37 must-fixes:
+43% of *real* findings carry a backticked span absent from the document, so absence alone proves
+nothing and no automatic check can be built on it. `quote:` is the marker that separates a claim
+about the document from everything else you are entitled to write in backticks.
+
+A finding that asserts document content with no `quote:` line is not rejected automatically, but it
+is the first thing the orchestrator re-derives from source — and a `quote:` span that does not occur
+in the file it names is a finding withdrawn, not a finding to argue.
+
+Report file (preferred delivery under Orca — the orchestrator fills the path below, or leaves it empty):
+
+/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T110325Z/roots/gas-root-d1-s1-w1yzs15g/.hmad-report/audit_audit-report-docs-copy_plan_cycle3_run20261023T112335Z-33510_p1.report.md
+
+If a path appears above, your **final two actions** are: (1) write your report — the exact `## Summary` / `## Must-fix` / `## Should-fix` / `## Nit` schema above; the `AUDIT-audit-report-docs-copy-plan-v3` brackets are optional inside the file — to that exact path. Write it **directly** — do not stage it via `<path>.tmp` and `mv`. The marker ordering below is already the completeness guarantee, so staging adds two tool calls and buys nothing, and it has been refused outright at least once (agy: "`<path>.report.md.tmp` is not a valid artifact path"). Then (2) create the marker `<that-path>.done` (e.g. `: > "<path>.done"`). The coordinator reads the file, not your terminal, so the file must be complete before the marker exists. If the path is empty, ignore this section and deliver via the terminal sentinels above.
+
+
+====== END OUTPUT CONTRACT — the audit prompt begins below ======
+
+Path scope: a path written inside the document under review, or inside any other document in this prompt, refers to that document's author's environment, not to yours. Every file this audit needs is under your working directory. Do not read, list or search any path outside your working directory for the audit's material. This does not change where you write your report or how you deliver it.
+
+You are the agy audit reviewer.
+
+**READ-ONLY. Do not modify the repository.** Read, search and observe freely (`pytest`,
+`git status`, `git diff`); do not edit, create, delete, revert, stage or commit anything. Found
+something broken — a failing test, a stale citation, a wrong path? **Report it as a finding and
+leave it broken.** An audit that repairs what it was measuring has destroyed its own evidence, and
+a red test made green by removing its measurement is worse than the red test, silently. Measured
+2026-08-28: an audit edited three tracked files, one a test unrelated to the feature, stubbing out
+the call that test existed to exercise, and reported this as restoring a green suite. When a fix
+looks obvious, that is precisely when to write it down instead — and mark your stated cause as a
+belief unless you verified it.
+
+Your role this turn:
+- Plan audit: Reviewer.adversarial_consistency
+- Design audit: Reviewer.adversarial_consistency + Analyzer.cross_doc_consistency
+- Impl-plan audit: Reviewer.adversarial_consistency (focus: writing-plans quality — no TBD placeholders, no vague reqs, exact file paths, type consistency across tasks, code blocks that match referenced functions)
+
+Target document: # Plan: audit-report-docs-copy
+
+## Executive Summary
+Move the audit report's docs copy from a remembered `cp` to the collector that already knows
+`(feature, phase, cycle, surface)`, expose that collector to the codex leg as a verb, and make
+the gate refuse a transport file — so an audit that was never persisted cannot score.
+
+## Overview
+Under Orca's report-file transport an audit pass lands at
+`/tmp/audit_<feature>_<phase>_cycle<N>[_<surface>].report.md`. The agy leg runs inside
+`hmad-dispatch audit-cycle`, whose `collect()` copies to `docs/…audit.v<N>.p<i>.md`; the codex
+leg runs outside the verb and its docs copy `…audit.v<N>.codex.md` is a hand `cp` with no
+recipe step. Seven of eight consecutive plan cycles on HemaSuite `nlm-cli-version-pin` skipped
+it; the reports survived only because `/tmp` had not been wiped yet. This plan closes the
+recipe half (the consumer-side guard already landed in HemaSuite `d1e73d53`).
+
+## Scope
+- `h-mad/scripts/h_mad_audit_cycle.py` — `_collected_path()` / `collect()` gain an optional
+  `surface`; `_copy_collected_report` / `_write_collected_report` gain `overwrite` (default
+  `True`, so `audit-cycle`'s re-dispatch semantics are unchanged; the CLI passes `False`
+  unless `--force`).
+- New `h-mad/scripts/h_mad_collect_report.py` — CLI over `collect()`; `COLLECT:` contract.
+- `h-mad/scripts/h_mad_audit_gate.py` — defines `TRANSPORT_RE = ^audit_[^.]+\.report\.md$`
+  (the one transport grammar: `audit_` prefix, dot-free stem, `.report.md` suffix) and
+  refuses a basename matching it (NOT bare `*.report.md`: Phase-7 reports are
+  `<feature>.report.md`). Every refusal emits `[H-MAD] <feature> gate INVALID (transport
+  file …)`.
+- `h-mad/scripts/hmad-dispatch.sh` — `collect-report` verb delegating to the script.
+- `h-mad/SKILL.md`, `h-mad/references/orchestration-mode.md` — codex-leg recipe, registry
+  entry, verb table row, one sentence in step 9.
+- Tests + `h-mad/tests/mutation-specs/collect_report.json`.
+- User-visible behaviour: `audit-cycle` unchanged; a new verb; the gate now refuses one path
+  shape it used to score.
+
+## Goals
+- The docs copy is derived, never typed — FR-1, FR-2.
+- A report that was not collected (`COLLECT: MISSING|CONFLICT`) is never gated — FR-2, FR-5.
+- The codex leg has a mechanical collect step and a written recipe — FR-2, FR-4, FR-5.
+- A `/tmp`-only report cannot gate — FR-3.
+- A collected copy is byte-identical to its transport file and never silently overwrites a
+  committed report — FR-2 (AC-2.1, 2.4, 2.5).
+- Every guard is pinned RED and mutation-verified — FR-6.
+
+## Requirements
+- FR-1: surface-aware `_collected_path` — single derivation.
+- FR-2: `h_mad_collect_report.py` with `COLLECT: OK|MISSING path=<docs path>
+  delivered=report-file|out|none [forced=1]` +
+  `[H-MAD] <feature> collect <verdict>` on every verdict and `[H-MAD] … collect
+  readback_failed` on a readback disagreement (Marker discipline), exit 0 on any verdict /
+  2 on operational error; `--force` to overwrite a differing docs copy; internal contract
+  `CollectConflict` + optional `PassSpec.out_path`.
+- FR-3: gate refuses `TRANSPORT_RE` (`audit_` prefix, dot-free stem, `.report.md` suffix,
+  single-sourced in the gate; imported only by the tests — not by the CLI, not by
+  `_collected_path`) with exactly `GATE: INVALID must=0 should=0` + the `[H-MAD] <stem>
+  gate INVALID (transport file …)` marker (the feature slot carries the dot-free transport
+  stem verbatim — a transport name has no reliable feature grammar), exit 2; `<feature>.report.md` (Phase 7) still
+  scores; verdict preserved for every existing audit doc (AC-3.7, Backward compatibility).
+- FR-1 (AC-1.6): disjointness of the two grammars is a property test over adversarial
+  `(feature, surface)` pairs, not a production assert (an unreachable check cannot be
+  mutation-tested).
+- FR-4: `hmad-dispatch collect-report` wrapper verb.
+- FR-5: SKILL.md codex-leg recipe (halt `<phase>:report_not_collected` emits its `[H-MAD]`
+  marker, per Marker discipline) + helper-registry entry + step-9 sentence.
+- FR-6: tests for every AC including the incident replay (AC-2.9), operational errors
+  (AC-2.10) and readback (AC-2.12); mutation spec with 23 named-test mutations — every new
+  connection dropped AND forced on its fall-through path, plus the grammar-disjointness
+  property (regex loosened / docs pattern de-dotted); wrapper wiring test for the verb in both directions (AC-4.1, AC-4.3);
+  suite green.
+
+## Implementation Strategy
+Layers that change: the audit-cycle collector (python), the gate (python), the dispatch
+wrapper (bash, delegation only), and the recipe (markdown). Patterns followed: the
+verdict-token contract every h-mad gate uses (`h_mad_new_gate.py`'s three invariants — a
+cannot-judge carries no counts, exit 0 on any verdict, docs pinned bidirectionally); the
+`report-wait` delegation shape for the verb; one derivation function for the docs path.
+Deliberately not touched: `h_mad_report_wait.py`, `h_mad_extract_report.py`, `exec`'s flags,
+`audit-cycle`'s dispatch loop, `h_mad_cycle_counts.py` (its grammar is read, not changed).
+
+Order of work (each a RED→GREEN task in the impl-plan): (1) `_collected_path` + `collect()`
+surface threading and the `overwrite` keyword on both writers; (2) the gate refusal
+(`TRANSPORT_RE` + the AC-1.6 / AC-3.5a grammar tests); (3) the CLI; **then the
+AC-2.9 tracer** — it needs (2)'s refusal for its step (i) and (3)'s CLI for step (ii), so it
+cannot run earlier — against a real `/tmp` survivor copied into a scratch project root;
+(4) the wrapper verb; (5) docs + docs-tests; (6) mutation spec.
+
+## Architecture Considerations
+- **One copier.** `audit-cycle` already calls `collect()`; the CLI calls the same function.
+  Two copiers would drift on the fallback ladder (report-file → `--out` → none) and on the
+  clobber rule.
+- **The transport-file grammar is a name, not a directory — prefix `audit_` plus suffix
+  `.report.md`, defined once.** The cycle-1 rule (bare `*.report.md`) was wrong because Phase-7
+  reports are `<feature>.report.md`; the cycle-2 rule (a `_cycle<N>[_tok]` stem) was wrong
+  because the field hand-stages transport files without `_cycle<N>` and a surface token may
+  carry `_`; the cycle-3 rule (`^audit_.*\.report\.md$`) still overlapped a derivable docs
+  name (`feature="audit_f"`, `surface="report"` → `audit_f.plan.audit.v8.report.md`). The
+  v1.3 grammar requires a **dot-free stem**: every docs audit name carries `.audit.v<N>`,
+  every transport name observed has no dot before `.report.md`, so the sets are disjoint by
+  construction. That property is pinned by a test over adversarial `(feature, surface)`
+  pairs (AC-1.6) rather than by a production assert: the v1.3 draft put an assert in
+  `_collected_path`, and cycle 6 showed it could never fire under the dot rule — an
+  unreachable guard cannot be mutation-tested and would have shipped as the appearance of
+  coverage. All corrections came from executing the candidate regex over the real `/tmp`
+  and `docs/` listings (Assumption table). `TRANSPORT_RE` lives in `h_mad_audit_gate.py`;
+  only the tests import it (the CLI and `_collected_path` have no use for it), and one
+  two-direction corpus fixture is asserted against it and against `_VERSION_RE` so the two
+  grammars cannot drift apart silently. Deliberately not
+  `startswith("/tmp")` — pytest's `tmp_path` lives under `/tmp` on Linux.
+- **Backward compatibility is measured, not argued.** The invariant preserves the PASS of
+  every audit DOC. A transport path is not an audit doc — no recipe, test or doc ever gated
+  one (grep: 0) — and its bytes keep their verdict at the docs path. AC-3.7 runs
+  `is_transport_path()` over every `*.audit.v*.md` in this repo's `docs/` (live + archive)
+  and requires False, so the change is provably verdict-neutral for the existing corpus.
+  The refusal itself is an operator decision (2026-09-02: "refuse, not warn").
+- **Conflict policy and readback cover both delivery rungs.** `_copy_collected_report`
+  (report-file) and `_write_collected_report` (`--out` extract) both take `overwrite` and
+  both re-read what they wrote; the docs-path marker removal re-checks `exists()`. A
+  readback that disagrees is an operational failure (exit 2, no `COLLECT:` line).
+- **A non-`OK` collect never reaches the gate.** `MISSING` and `CONFLICT` exit 0 (verdicts),
+  so the recipe must read the token: anything but `OK` halts `<phase>:report_not_collected`
+  and the gate is not invoked — otherwise a `CONFLICT` (preserved, DIFFERENT docs bytes)
+  followed by "gate the printed path" scores the stale report. `audit-cycle` is unaffected:
+  it overwrites its own per-pass file on purpose (a re-dispatched cycle replaces the prior
+  attempt), so `overwrite=True` stays its default and `CollectConflict` is raised only when
+  the CLI asks for `overwrite=False`.
+- **Signal discipline.** `COLLECT: MISSING` and `CONFLICT` are verdicts, so they exit 0;
+  the teeth are in the gate (FR-3), not in the collector's exit code. `audit_cycle.gate()`
+  already maps rc 2 → `INVALID` → `UNVERIFIED`, so no consumer gains a new word.
+- **Docs-path-as-RP is a real workaround in the field.** The live `pin-agents-tail-banner`
+  run points `$RP` at the docs file directly, leaving `.done` litter in `docs/`. The
+  collector must treat that as already-collected (AC-2.8) rather than as a self-copy.
+- **The live run reads the OLD recipe.** `~/.claude/skills/h-mad` resolves to the main
+  checkout; this worktree's edits reach it only at merge. This feature's own codex audit
+  passes must therefore run the collect step by hand until the CLI exists, and via the CLI
+  from this worktree's path afterwards.
+
+## Assumption verification (evidence, 2026-09-02)
+| Assumption | Evidence |
+|---|---|
+| The agy leg is already persisted by the verb | 23 `nlm-cli-version-pin.plan.audit.v*.p1.md` in HemaSuite docs; `h_mad_audit_cycle.py::_copy_collected_report` |
+| The codex leg has no recipe step | `grep -c 'exec codex.*audit\|\.codex\.md' h-mad/SKILL.md h-mad/references/*.md` → 0; recipe found only in two memory files |
+| `exec` has no `--report-file` | `_cmd_exec` option loop (`hmad-dispatch.sh:2493-2499`): `--cd --model --out --log --timeout --sandbox --effort` only |
+| Nothing gates a transport file today | `grep -rn 'audit_gate.*report\.md' h-mad/tests h-mad/SKILL.md h-mad/references` → 0; `audit_cycle.gate()` is only called on `collected_path` |
+| `*.report.md` is NOT transport-only | `ls docs/04-report/features/*.report.md` → 7 Phase-7 reports (e.g. `gate-blindness-hardening.report.md`); `docs/archive/2026-08/audit-cycle-verb/audit-cycle-verb.report.md` — a suffix rule would refuse them, hence prefix+suffix |
+| Re-dispatching a cycle overwrites its collected file | `_copy_collected_report`: `unlink(missing_ok=True)` then write; the low-evidence remedy is "re-dispatch that pass" at the SAME cycle number |
+| `_gate_token` requires the exact INVALID shape | `GATE_RE = ^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)\s*$`; gate prints `GATE: INVALID must=0 should=0` |
+| Surface grammar is one dot-free token, `p<i>` never co-occurs; `_` is legal in a surface | executed `_VERSION_RE.search` (2026-09-02): `f.plan.audit.v8.p1.md`→True, `….v8.codex.md`→True, `….v8.codex_draft.md`→**True**, `….v8.codex.draft.md`→False, `f.report.md`→False, `audit_f_plan_cycle8_codex.report.md`→False |
+| Transport names in the field always carry `audit_` + `.report.md`, NOT always `_cycle<N>` | `ls /tmp \| grep -E '^audit_.*\.report\.md$'` (2026-09-02): 144 `_p1`, 129 `_p2`, 36 `_codex`, 14 `_agy`, 1 `_agy_p2`, and 7 hand-staged `audit_hnag_c28_agy.report.md` / `audit_hnag_implplan_c11.report.md` …; executed candidate regexes: the `_cycle<N>` stem matched 0 of those 7 and missed `_codex_draft`; `^audit_.*\.report\.md$` matched all |
+| No docs artifact starts with `audit_` | `find docs -name 'audit_*'` → 0 (this repo); same under HemaSuite `docs/` → 0; all 7 `docs/04-report/features/*.report.md` basenames match `^[a-z0-9-]+\.report\.md$` |
+| Transport stems are dot-free; docs names always carry `.audit.v<N>` | executed 2026-09-02: `ls /tmp \| grep -E '^audit_.*\.report\.md$' \| grep -E '^audit_[^.]*\..*\.report\.md$'` → 0 of 331; `^audit_[^.]+\.report\.md$` on `audit_f.plan.audit.v8.report.md` → False while `_VERSION_RE` → True; on `audit_hnag_c28_agy.report.md` → True / False; on `f.plan.audit.v8.p1.md` → False / True |
+| The `--out` rung also clobbers | `grep -n unlink h_mad_audit_cycle.py` → lines 92 (`_copy_collected_report`) AND 169 (`_write_collected_report`) |
+| Unknown verb is a fall-through, not an exec | `hmad-dispatch collect-reportx` → `hmad-dispatch: unknown verb 'collect-reportx'` |
+| Transport and docs copies are byte-identical in the field | 21/21 overlapping `nlm-cli-version-pin` codex cycles `cmp -s` equal |
+| `/tmp` decays | 31 codex reports at handover (2026-09-02 morning) → 21 the same day |
+
+## Deliverables
+| Deliverable | Type | Satisfies |
+|---|---|---|
+| `_collected_path(surface=None)` + `collect(surface=None)` | module change | FR-1 |
+| `_copy_collected_report` conflict-safe | module change | FR-2 (AC-2.5) |
+| `h_mad_collect_report.py` | CLI | FR-2 |
+| `TRANSPORT_RE` + `is_transport_path()` + refusal in the gate | module change | FR-3 |
+| `hmad-dispatch collect-report` | CLI verb | FR-4 |
+| SKILL.md codex-leg block, registry entry, step-9 sentence; orchestration-mode verb row | docs | FR-5 |
+| `tests/test_h_mad_collect_report.py` (incl. incident replay AC-2.9, operational errors AC-2.10), gate tests (AC-3.1–3.6), docs tests (AC-5.1–5.4) | tests | FR-6 |
+| wrapper wiring test: `collect-report` verb → script (severed route fails) | test | FR-4, FR-6 |
+| `tests/mutation-specs/collect_report.json` — 23 mutations, drop/force pairs per connection incl. fall-through paths and the grammar-disjointness property | mutation spec | FR-6 |
+| two-direction name corpus fixture asserted against `TRANSPORT_RE` and `_VERSION_RE`; verdict-preservation sweep over `docs/**/*.audit.v*.md` | tests | FR-3 (AC-3.5a, 3.7) |
+
+## Risks and Mitigation
+| Risk | Impact | Mitigation |
+|---|---|---|
+| This run's own codex audits lose their docs copy (old recipe live) | the defect recurs inside the feature fixing it | hand-collect + `cmp -s` before reading any codex GATE line, every cycle; after task 2, use the worktree CLI |
+| `_collected_path` signature change breaks a caller | suite red | keyword-only `surface=None`; grep every caller (`audit_cycle.py` only) |
+| `test_h_mad_audit_cycle_slices.py` slices SKILL.md by exact anchors | docs test red | insert outside `## Audit prompt assembly`→`## Putting …` and `6.6.`→`\n7.`; run that test after each edit |
+| Mutation-spec tests refuse a spec without named failure tests | test red | each task's RED names the tests its mutations will cite; task 6 assembles the spec from them and runs `--check-anchors` |
+| Tracer scheduled before the code it exercises exists | replay cannot pass at its scheduled point | tracer is ordered after tasks (1)–(3); the impl-plan carries it as its own checkpoint between task 3 and task 4 |
+| Transport grammar drifts from what gets staged (a future naming change silently un-guards) | transport files score again | one grammar (`TRANSPORT_RE`), one corpus fixture in both directions, the wrapper's staged `--report-file` asserted against it under the stub harness, the 6.6 literal asserted too (AC-3.5a) |
+| `CONFLICT` followed by a hand-run gate scores stale bytes | wrong verdict on a preserved old report | recipe halt on non-`OK` (AC-5.3 docs test); `--force` is the only overwrite path |
+| `--out` extract is not byte-identical to any `/tmp` file | a byte-identity test would fail | assert identity only for `delivered=report-file`; token carries `delivered=` |
+| bkit heredoc-in-substitution hook denies the commit idiom | commit refused | `git commit -F <file>` |
+
+## Convention Prerequisites
+- Work only in worktree `/Users/kimhawk/orca/workspaces/skills/audit-report-docs-copy`
+  (branch `BrightGold70/audit-report-docs-copy`); never edit `/Users/kimhawk/orca/skills`.
+- Feature claimed in this worktree's `docs/.bkit-memory.json`.
+- Codex authors Phase 5 via `hmad-dispatch exec codex` (TDD gate armed at 5a).
+- Run the suite from the repo root: `python3 -m pytest h-mad/tests -q`.
+- Mutation anchors checked with `h_mad_mutation_harness.py --check-anchors` before push
+  (pre-push hook sweeps them).
+
+## Success Criteria
+- All 40 unique ACs in the spec pass automated tests (AC-2.9's hand replay is recorded, its suite half asserted).
+- `MUTATION: ALL_CAUGHT` on `collect_report.json` (25 mutations, every connection dropped
+  AND forced, fall-through paths included).
+- Incident replay (AC-2.9) passes in the suite and once by hand against a real `/tmp`
+  survivor in a scratch root, transcript in Version History.
+- `h-mad/tests` suite green from this worktree; `audit-cycle` output byte-identical on the
+  existing stub suite.
+- The codex leg of THIS feature's Phase 4/5b audits is collected by the new verb and each
+  docs copy is `cmp -s`-identical to its `/tmp` report.
+
+## Out-of-Scope (confirmed from spec)
+- `audit-cycle --agents` (codex as an in-verb pass).
+- Changes to `h_mad_report_wait.py`, `h_mad_extract_report.py`, `exec` flags.
+- Deleting `/tmp` transport files after collection (only the AC-2.8 docs-path marker).
+- Back-filling historical surface-named audits; `h_mad_cycle_counts` changes.
+
+## Next Steps
+Operator approves v1.0 → Phase 3 audit cycle (agy via `audit-cycle --passes 1` + codex via
+assemble/exec/hand-collect) until `must=0 should=0` on the union → Phase 4 design.
+
+## Version History
+- v1.0: Initial plan draft.
+- v1.1: Audit v1 fixes from audit-report-docs-copy.plan.audit.v1.p1.md (agy) + .v1.codex.md — verb wiring test in Deliverables; transport refusal is the audit_*_cycle<N> STEM, not *.report.md (Phase-7 reports share the suffix — corpus claim corrected); recipe halts on non-OK COLLECT; 11 bidirectional mutations; incident-replay tracer; collector contract (CollectConflict, optional out_path, --force).
+- v1.2: Audit v2 fixes from audit-report-docs-copy.plan.audit.v2.codex.md (agy v2 clean) — transport grammar single-sourced as TRANSPORT_RE (prefix+suffix; hand-staged field names have no _cycle<N>, surfaces may carry _); conflict policy + readback on both rungs; force mutants for CLI/verb fall-through; two-direction corpus + verdict-preservation sweep for Backward compatibility; Assumption rows now cite executed probe output; AC census by command.
+- v1.3: Audit v3 fixes from .plan.audit.v3.p1.md (agy: [H-MAD] markers named in Requirements) + .v3.codex.md (TRANSPORT_RE stem is dot-free so the grammars are disjoint by construction; _collected_path asserts it, AC-1.6, 17 mutations; the CLI does not import the regex).
+- v1.4: Audit v4 fixes from .plan.audit.v4.codex.md (agy v4 clean, low-evidence) — work order reordered so the gate refusal (task 2) precedes the CLI (task 3) and the AC-2.9 tracer runs after task 3, the first point at which both its steps can pass.
+- v1.5: Audit v6 fixes from .plan.audit.v6.codex.md (agy v6 clean, low-evidence) — AC-1.6 is a grammar-disjointness property test, not an unreachable production assert; forced=1 in the FR-2 contract line; Scope wording distinguishes the CLI's no-clobber default from audit-cycle's unchanged overwrite.
+- v1.6: Count sweep from design-audit v8 (agy): 19 mutations (marker-stripping mutants for separable output parts). No plan decision changed.
+- v1.7: Count sweep from 5b-audit v2 (codex): 23 mutations (exit-only/token-only mutants per guard). No plan decision changed.
+- v1.8: Count sweep from 5b-audit v3 (agy): 22 mutations (e′ unkillable, withdrawn). No plan decision changed.
+- v1.9: Count sweep from 5b-audit v8 (codex): e′ restored on the observable bad-project-root path → 23 mutations. No plan decision changed.
+- v1.10: Wording sweep from 5b-audit v10: the transport refusal marker's feature slot is the stem (matches design/impl-plan). No plan decision changed.
+- v1.11: AC-2.9h hand replay 2026-09-02 survivor=/tmp/audit_nlmpin_plan_cycle8_codex.report.md (scratch root, not HemaSuite): gate(RP)=GATE: INVALID must=0 should=0 rc=2 · collect=COLLECT: OK path=<R>/docs/01-plan/features/nlm-cli-version-pin.plan.audit.v8.codex.md delivered=report-file · cmp=identical · gate(docs)=GATE: FAIL must=3 should=1 rc=0
+
+Source spec: # Spec: audit-report-docs-copy
+
+## Executive Summary
+Every audit report the h-mad recipe gates must first exist in the feature's docs store at a
+path derived from `(feature, phase, cycle, surface)`, copied byte-for-byte from the transport
+file by the one collector that already knows that tuple, and the gate refuses to score a
+transport file at all.
+
+## Goal
+Make the docs copy of an audit report a mechanical step of the recipe — performed by
+`h_mad_audit_cycle.collect()` for every leg, exposed as a CLI for the codex leg run outside
+`audit-cycle` — so a `/tmp`-only report can neither be lost on reboot nor gate a phase.
+
+## Functional Requirements
+
+### FR-1: Surface-aware collected path — one derivation
+- **Description**: `h_mad_audit_cycle._collected_path()` accepts an optional `surface` token.
+  With `surface=None` it returns exactly what it returns today
+  (`docs/<dir>/<feature>.<phase>.audit.v<cycle>.p<index>.md`). With a surface it returns
+  `docs/<dir>/<feature>.<phase>.audit.v<cycle>.<surface>.md`. `collect()` threads the token
+  through unchanged. No other code derives an audit docs path.
+- **Acceptance Criteria**:
+  - AC-1.1: `_collected_path(project_root=r, feature="f", phase="plan", cycle=8, index=1)` and
+    the same call with `surface=None` return the identical `Path` ending `f.plan.audit.v8.p1.md`.
+  - AC-1.2: `_collected_path(..., cycle=8, index=1, surface="codex")` returns a `Path` ending
+    `docs/01-plan/features/f.plan.audit.v8.codex.md`; `phase="design"` maps to
+    `docs/02-design/features/`; `phase="impl-plan"` maps to `docs/01-plan/features/`.
+  - AC-1.3: A `surface` that does not match the single dot-free token grammar
+    (`h_mad_cycle_counts._VERSION_RE`'s discriminator: `[A-Za-z0-9][A-Za-z0-9_-]*`) or that
+    matches `^p\d+$` raises `ValueError` naming the token — the path is never built.
+  - AC-1.4: `collect(spec, ..., surface="codex")` writes its collected file at the AC-1.2 path;
+    `collect(spec, ...)` with no `surface` keyword writes at the AC-1.1 path (existing
+    `test_h_mad_audit_cycle.py` collect tests pass unchanged).
+  - AC-1.5: among the WRITE-path modules (`h_mad_audit_cycle.py`, `h_mad_collect_report.py`)
+    exactly one function builds a `.audit.v` docs-path string (`_collected_path`); the CLI
+    imports it rather than re-deriving. Reader modules (`h_mad_cycle_counts.py`,
+    `h_mad_do_preconditions.py`) build the same grammar to FIND audits and are out of scope
+    (v1.10: the v1.0 wording said all of `h-mad/scripts/*.py`, which was false — 5e Task 1
+    codex refusal upheld).
+  - AC-1.6: **Disjoint namespace, proven by property, not by a production assert.** A
+    derived docs basename always contains `.audit.v<N>` (dots) and `TRANSPORT_RE` requires a
+    dot-free stem, so the two grammars are disjoint by construction and no runtime check is
+    needed (a check that can never fire cannot be mutation-tested). The property is pinned by
+    a test: for every `(feature, surface)` in a fixture that includes the adversarial pairs
+    `("audit_f", "report")`, `("audit_x", "report_md")`, `("audit_", "p")` and ordinary ones,
+    `_collected_path(...)` basename matches `h_mad_cycle_counts._VERSION_RE` and does NOT
+    match `h_mad_audit_gate.TRANSPORT_RE`. Mutations: `TRANSPORT_RE` loosened to
+    `^audit_.*\.report\.md$` (the v1.2 grammar) → this test bites on `audit_f`/`report`;
+    the docs pattern loses its `.audit.v` dots (force) → AC-1.1/1.2 bite. `_collected_path`
+    imports nothing from the gate.
+
+### FR-2: `h_mad_collect_report.py` — the codex-leg collector
+- **Description**: A stdlib-only CLI over `collect()`:
+  `h_mad_collect_report.py --feature <f> --phase plan|design|impl-plan --cycle <N>
+  --surface <s> --report <RP> [--out <out>] --project-root <root> [--grace <s>]`.
+  It prints one contract line `COLLECT: OK|MISSING|CONFLICT path=<docs path>
+  delivered=report-file|out|none` followed by `[H-MAD] <feature> collect <verdict>`,
+  exits 0 on every verdict and 2 on an operational error (unreadable project root, bad
+  `--surface`, unwritable docs directory, missing required flag). `--out` is optional; when
+  omitted the `--out` fallback rung is skipped and a missing report is `MISSING`.
+  **Internal contract** (compatible with every existing caller): `PassSpec.out_path` may be
+  `None`, in which case `collect()` skips `_run_extract_report`; `_copy_collected_report`
+  gains a keyword `overwrite: bool = True` and, when `False` and the target exists with
+  different bytes, raises `CollectConflict(OperationalError)` without writing.
+  `audit-cycle` keeps `overwrite=True` (a re-dispatched cycle replaces its own collected
+  file); the CLI passes `overwrite=False` unless `--force` is given and renders the
+  exception as `COLLECT: CONFLICT`. **The policy covers BOTH delivery rungs**:
+  `_write_collected_report` (the `--out` extract rung) takes the same `overwrite` keyword
+  and raises the same `CollectConflict`. `collect()`'s `(delivered, collected_path)` return
+  is unchanged. **Every mutating step reads itself back** (base invariant "Mutation
+  verification"): after a copy or forced overwrite the collector re-reads the docs file and
+  compares bytes to the source; after removing a docs-path `.done` marker it re-checks
+  `exists()`; a disagreement is an operational failure — exit 2, no `COLLECT:` line, and
+  a `[H-MAD] … collect readback_failed` marker.
+- **Acceptance Criteria**:
+  - AC-2.1: With `<RP>` present, non-empty, `<RP>.done` present, and no existing docs file:
+    prints `COLLECT: OK path=<AC-1.2 path> delivered=report-file`, exit 0, and the docs file's
+    bytes equal `<RP>`'s bytes (`filecmp.cmp(shallow=False)` is True).
+  - AC-2.2: With `<RP>` absent and no `--out` (or `--out` absent/empty): prints
+    `COLLECT: MISSING path=<AC-1.2 path> delivered=none`, exit 0, and no file exists at the
+    docs path afterwards (RED direction: nothing to gate).
+  - AC-2.3: With `<RP>` present but `<RP>.done` absent, and `--grace 0`: verdict is `MISSING`
+    (the marker, not file existence, is completion — same contract as `report_wait`).
+  - AC-2.4: With the docs file already present and byte-identical to `<RP>`: `COLLECT: OK …
+    delivered=report-file`, exit 0, and the docs file's mtime is unchanged (no write).
+  - AC-2.5: With the docs file already present and DIFFERENT from `<RP>`: `COLLECT: CONFLICT
+    path=… delivered=report-file`, exit 0, and the docs file's bytes are unchanged (never
+    clobbered). With `--force` the same input prints `COLLECT: OK … forced=1` and the docs
+    file now equals `<RP>`.
+  - AC-2.6: With `<RP>` absent and `--out <out>` present containing a sentinel-wrapped report
+    for `(feature, phase, cycle)`: `COLLECT: OK … delivered=out`, exit 0, docs file holds the
+    extracted text (byte-identity to `<RP>` is NOT asserted for `delivered=out`).
+  - AC-2.6a: `<RP>` absent, `--out` valid, docs file present with DIFFERENT bytes →
+    `COLLECT: CONFLICT … delivered=out`, docs bytes unchanged; with `--force` → `OK …
+    delivered=out forced=1`, docs now equals the extracted text.
+  - AC-2.6b: `<RP>` absent, `--out` valid, docs file present and identical to the extracted
+    text → `COLLECT: OK … delivered=out`, mtime unchanged.
+  - AC-2.7: `--surface p2` (or any `p\d+`) → exit 2, stderr names the token, no `COLLECT:` line.
+    `--surface codex.draft` → exit 2 likewise.
+  - AC-2.8: When `--report` resolves (`Path.resolve()`) to the derived docs path itself:
+    no copy is attempted; verdict `OK` iff the file is non-empty and `<path>.done` exists;
+    the `.done` marker is removed and a detail line `marker: removed <path>.done` is printed;
+    otherwise `MISSING`.
+  - AC-2.9: **Incident replay** (suite test, synthetic bytes) — in an isolated project root
+    with NO docs copy: (i) `h_mad_audit_gate.py <RP>` → `GATE: INVALID`, exit 2 (cannot gate
+    before collection); (ii) `collect-report --surface codex` → `COLLECT: OK … delivered=
+    report-file`, docs file created, `filecmp.cmp(<RP>, docs, shallow=False)` True;
+    (iii) `h_mad_audit_gate.py <docs path>` → `GATE: PASS|FAIL …`, exit 0. The same three
+    steps are run once by hand against a real survivor (`/tmp/audit_nlmpin_plan_cycle8_codex.report.md`
+    copied into a scratch project root, never HemaSuite's live tree) and the transcript is
+    recorded in the plan's Version History.
+  - AC-2.10: Operational errors exit 2 and print **no** `COLLECT:` line: `--project-root`
+    that is not a directory; a docs directory that cannot be created or written (e.g. a
+    file at `docs/01-plan/features`); a missing required flag (`--surface`, `--report`).
+  - AC-2.12: Readback: with the writer patched to land wrong bytes (test seam), the CLI
+    exits 2, prints no `COLLECT:` line and prints `[H-MAD] … collect readback_failed`; with
+    the marker remover patched to a no-op, the AC-2.8 case exits 2 likewise.
+  - AC-2.11: Existing-identical docs file with `--surface` given and `<RP>.done` absent →
+    `COLLECT: OK … delivered=report-file` (the docs copy already IS the collected report; the
+    marker is only required when a copy must be made).
+
+### FR-3: The gate refuses a transport file
+- **Description**: `h_mad_audit_gate.py` refuses to score any path whose basename matches
+  the **transport grammar** `TRANSPORT_RE = ^audit_[^.]+\.report\.md$` — prefix `audit_`,
+  a dot-free stem, suffix `.report.md` — defined ONCE in `h_mad_audit_gate.py`; the only
+  other importers are the tests (AC-1.6, AC-3.5a). Neither the CLI nor `_collected_path`
+  imports it — no production code needs it besides the gate (base invariant "Single-source
+  contract"). The dot-free stem is what makes the two
+  grammars disjoint by construction: every docs audit name contains `.audit.v<N>` (dots),
+  every transport name observed in `/tmp` (2026-09-02, 331 files) has no dot before
+  `.report.md`.
+  It prints exactly `GATE: INVALID must=0 should=0` and `[H-MAD] <feature> gate INVALID
+  (transport file — collect it into docs first: h_mad_collect_report.py)`, exit 2.
+  Why prefix+suffix and not a `_cycle<N>` stem: the field stages transport files by hand
+  too — observed in `/tmp` on 2026-09-02: `audit_hnag_c28_agy.report.md`,
+  `audit_hnag_implplan_c11.report.md`, `audit_x_cycle8_agy_p2.report.md` — none carrying
+  `_cycle<N>`, all carrying the prefix and suffix; and a surface token may contain `_`
+  (`_VERSION_RE` accepts `[A-Za-z0-9_-]`), which a `[A-Za-z0-9-]` stem would miss. A bare
+  `*.report.md` is NOT refused: Phase-7 reports are `<feature>.report.md` with hyphenated
+  slugs (`docs/04-report/features/*.report.md`: 7 files, 0 starting `audit_`; this feature's
+  own will be `audit-report-docs-copy.report.md`, hyphen). A docs artifact whose feature
+  happens to start with `audit_` and whose surface is `report`
+  (`audit_f.plan.audit.v8.report.md`) is NOT transport (it has dots) — AC-1.6 pins that no
+  derived name can be. **Backward compatibility**: the
+  base invariant preserves the PASS verdict of every audit DOC; a transport file is not an
+  audit doc, no recipe or test gated one (grep: 0), and the same bytes at their docs path
+  keep their verdict — pinned by AC-3.7.
+- **Acceptance Criteria**:
+  - AC-3.1: `h_mad_audit_gate.py /tmp/audit_f_plan_cycle3_codex.report.md` on a well-formed
+    report (has `## Must-fix`/`## Should-fix`) prints `GATE: INVALID must=0 should=0`, the
+    `[H-MAD]` line contains `transport file`, exit 2. The same for the hand-staged shapes
+    `audit_hnag_c28_agy.report.md`, `audit_hnag_implplan_c11.report.md`,
+    `audit_f_plan_cycle8_codex_draft.report.md`, `audit_f_plan_cycle8_agy_p2.report.md`.
+  - AC-3.2: The same bytes at `docs/01-plan/features/f.plan.audit.v3.codex.md` gate normally
+    (`GATE: PASS|FAIL …`, exit 0).
+  - AC-3.3: `h_mad_audit_cycle.gate()` handed a transport-stem path returns
+    `("INVALID", 0, 0, [])` (rc 2 is already mapped) and `combine()` renders `UNVERIFIED`
+    with reason `no_gate_sections:p<i>` — no new verdict word.
+  - AC-3.4: `h_mad_do_preconditions.py` is unaffected: it reads docs paths only (existing
+    tests pass).
+  - AC-3.5: The refusal is by **basename grammar**, not directory: `audit_f_plan_cycle3_codex.report.md`
+    is refused wherever it sits, including under `docs/`; `f.report.md`,
+    `gate-blindness-hardening.report.md`, `audit-report-docs-copy.report.md` (hyphen) and any
+    `.md` under `/tmp` not matching `TRANSPORT_RE` are scored normally, and so is
+    `audit_f.plan.audit.v8.report.md` (dots in the stem) (force-refusal mutation: a gate
+    that refuses every `.report.md` breaks this test).
+  - AC-3.5a: **Shared corpus, both directions** — one fixture list of names with an expected
+    `transport: True|False` per name (every staged shape above, every docs shape:
+    `.audit.v<N>.md`, `.audit.v<N>.p<i>.md`, `.audit.v<N>.codex.md`, `.audit.v<N>.codex_draft.md`,
+    `<feature>.report.md`, and the collision candidates `audit_f.plan.audit.v8.report.md` /
+    `audit_f.plan.audit.v8.codex.md`) is asserted against `TRANSPORT_RE` **and** against
+    `h_mad_cycle_counts._VERSION_RE` (every fixture entry tagged as a docs AUDIT artifact —
+    the `*.audit.v<N>[.tok].md` shapes — must match `_VERSION_RE` and not `TRANSPORT_RE`;
+    every entry tagged transport the reverse; other non-transport names such as
+    `<feature>.report.md` and `x.md` are only asserted NOT to match `TRANSPORT_RE`; NO name
+    in the fixture matches both). The stem the wrapper stages is pinned by
+    running `audit-cycle` under the existing stub harness and asserting the `--report-file`
+    the stub received matches `TRANSPORT_RE`; the SKILL.md 6.6 literal is asserted to match
+    it too.
+  - AC-3.7: **Verdict preservation** — for every `*.audit.v*.md` under this repo's `docs/`
+    (live and archive), `is_transport_path()` is False, so the gate's verdict for every
+    existing audit doc is unchanged by this feature.
+  - AC-3.6: A Phase-7 report path (`docs/04-report/features/x.report.md` with gate sections)
+    gates normally (`GATE: PASS|FAIL`, exit 0).
+
+### FR-4: `hmad-dispatch collect-report` wrapper verb
+- **Description**: A thin verb delegating to the script, exactly as `report-wait` delegates to
+  `h_mad_report_wait.py`, so the SKILL.md recipe stays in `hmad-dispatch` vocabulary.
+- **Acceptance Criteria**:
+  - AC-4.1: `hmad-dispatch collect-report <args…>` execs `python3 <here>/h_mad_collect_report.py
+    <args…>` and propagates its exit code and stdout unchanged — pinned by a wrapper test
+    that runs the verb against a stub script dir (`HMAD_AUDIT_CYCLE_SCRIPT_DIR`, the same
+    hook the audit-cycle tests use) and fails when the route is severed.
+  - AC-4.2: The verb is listed in the wrapper's header verb list (line 3) and in
+    `references/orchestration-mode.md`'s verb table beside `report-wait`.
+  - AC-4.3: Negative route: `hmad-dispatch collect-reportx …` prints `unknown verb` and does
+    NOT exec the script (stub script dir records zero invocations).
+
+### FR-5: The codex-leg recipe exists in SKILL.md
+- **Description**: SKILL.md gains a block (beside the `audit-cycle` documentation, outside the
+  slices `test_h_mad_audit_cycle_docs.py` pins) documenting the second-surface leg:
+  assemble with `--report-file "$RP"` → `exec codex … --out --log` → `hmad-dispatch
+  collect-report --surface codex …` → **read the `COLLECT:` token**: anything but `OK` halts
+  `<phase>:report_not_collected` with an `[H-MAD]` marker and the gate is NOT run → on `OK`,
+  gate the **printed** docs path, never `$RP`. The helper registry gains an
+  `h_mad_collect_report.py` entry. Step 9 gains one sentence: the gate refuses the transport
+  stem.
+- **Acceptance Criteria**:
+  - AC-5.1: `grep -c 'collect-report' h-mad/SKILL.md` ≥ 2 (recipe block + registry).
+  - AC-5.2: `test_h_mad_audit_cycle_docs.py` passes unchanged (anchors intact).
+  - AC-5.3: A docs test asserts the recipe block orders `exec codex` before `collect-report`
+    before a `COLLECT:`-token read that names `report_not_collected` before
+    `h_mad_audit_gate.py`, and that the gate line in the block does not contain `$RP`.
+  - AC-5.4: The registry entry names the token set `COLLECT: OK|MISSING|CONFLICT` and the
+    exit contract (0 on verdict / 2 on operational error).
+
+### FR-6: Pinned both directions, mutation-verified
+- **Description**: Tests and a mutation spec make the guard's absence visible.
+- **Acceptance Criteria**:
+  - AC-6.1: `tests/test_h_mad_collect_report.py` covers AC-2.1–2.8 and AC-1.1–1.4.
+  - AC-6.2: `tests/test_h_mad_audit_gate.py` (or a new file) covers AC-3.1, 3.2, 3.5.
+  - AC-6.3: `tests/mutation-specs/collect_report.json` has ≥ 8 mutations, each with a named
+    `test`, pairing every new connection in BOTH directions (base invariant "Connection
+    enforcement"): (a) the copy writes an empty file → AC-2.1 bites; (b) CONFLICT branch
+    replaced by overwrite → AC-2.5 bites; (b′) overwrite forced to refuse even with `--force`
+    → AC-2.5 force case bites; (c) surface validation removed → AC-2.7 bites; (c′) surface
+    validation forced to reject every token → AC-2.1 bites; (d) `_collected_path` ignores
+    `surface` (drop) → AC-1.2 bites; (d′) `_collected_path` emits `.<surface>` even when
+    `surface=None` (force) → AC-1.1 bites; (e) CLI no longer calls `collect()` (delegation
+    severed: returns a hard-coded `OK`) → AC-2.2 bites; (e′) the CLI enters `collect()` on the bad-`--project-root` fall-through
+    (`is_dir()` refusal neutralized) → AC-2.10 bites with a wrong `MISSING`/exit 0; (f) `hmad-dispatch collect-report` route severed
+    (execs nothing / wrong script) → AC-4.1 bites; (f′) the wrapper routes the fall-through
+    (an unknown verb such as `collect-reportx`) to the script (force) → AC-4.3 bites; (g)
+    gate transport refusal removed → AC-3.1 bites; (g′) gate refuses every `.report.md`
+    (force) → AC-3.5/3.6 bite; (h) copy readback removed → AC-2.12 bites; (h′) out-rung
+    conflict check removed → AC-2.6a bites; (i) `TRANSPORT_RE` loosened to the v1.2 `.*`
+    stem → AC-1.6 property bites; (i′) `_collected_path` docs pattern loses its `.audit.v`
+    dots (force toward transport shape) → AC-1.1/1.2 bite; (j) gate refusal keeps exit 2 +
+    token but drops its `[H-MAD]` marker → AC-3.1 bites; (j′) CLI operational-error path
+    drops its marker → AC-2.10 bites; (k) gate refusal exits 0 → AC-3.1 bites; (k′) gate
+    refusal prints a PASS token → AC-3.1 bites; (l) CLI error path exits 0 → AC-2.10 bites;
+    (l′) CLI error path prints a `COLLECT:` line → AC-2.10 bites. 23 mutations.
+    `h_mad_mutation_harness.py` reports `MUTATION: ALL_CAUGHT`.
+  - AC-6.4: `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` and
+    `…_name_existing_failure_tests` pass with the new spec present.
+  - AC-6.5: Full `h-mad/tests` suite green from this worktree.
+
+## Non-Functional Requirements
+- Performance: N/A (one file copy per audit pass).
+- Security: no new external dependency; stdlib only; no network.
+- Compatibility: `_collected_path`/`collect()` default-argument change is source-compatible
+  with every existing caller; `audit-cycle` output is byte-identical when no surface is given.
+  Filenames stay inside the documented grammar (`SKILL.md` §"Audit filename grammar").
+
+## Out-of-Scope
+- Teaching `audit-cycle` to dispatch codex as a pass (`--agents`) — deferred by operator
+  decision 2026-09-02.
+- Any change to `h_mad_report_wait.py`, `h_mad_extract_report.py`, or `exec`'s flag surface.
+- Consuming or deleting `/tmp` transport files after collection (they stay; `/tmp` is the
+  agent's channel, not ours) — except the AC-2.8 docs-path `.done` marker.
+- Back-filling the 98 historically surface-named audits or changing `h_mad_cycle_counts`.
+
+## Assumptions
+- The transport-file basename grammar is `^audit_[^.]+\.report\.md$` (prefix, dot-free stem,
+  suffix): every recipe-staged AND hand-staged transport file observed in `/tmp` on
+  2026-09-02 (331) matches it, and no docs audit name can — they all carry `.audit.v<N>`
+  (`find docs -name 'audit_*'` → 0; Phase-7 reports are `<feature>.report.md` with hyphenated
+  slugs). v1.0 claimed the bare suffix was transport-only (false: Phase 7); v1.1 claimed a
+  `_cycle<N>` stem (false: hand-staged names); v1.2's `^audit_.*` overlapped a derivable docs
+  name (`audit_f` + `report`) — hence the dot rule and the AC-1.6 disjointness property test.
+- `h_mad_audit_cycle.gate()`'s rc-2 → `INVALID` mapping and `_gate_token`'s regex remain as
+  read on 2026-09-02.
+- The live run in the main checkout keeps reading `~/.claude/skills/h-mad` (main checkout);
+  this worktree's edits are invisible to it until merge.
+
+## Version History
+- v1.10: AC-1.5 scoped to the write-path modules (5e Task 1: codex refused a GREEN that would have required editing reader modules; the AC premise was wrong).
+- v1.9: 5b-audit v8 sweep: e′ restored on the bad-project-root path → 23 mutations.
+- v1.0: Initial specification draft.
+- v1.8: 5b-audit v5 sweep: AC-3.5a's `_VERSION_RE` assertion scoped to docs audit-artifact names.
+- v1.7: 5b-audit v3 sweep: e′ withdrawn as unkillable → 22 mutations.
+- v1.6: 5b-audit v2 sweep: exit-only/token-only mutants (k, k′, l, l′) → 23.
+- v1.5: Design-audit v8 sweep: marker-stripping mutants (j)/(j′) → 19 mutations (Mutation verification: one mutant per separable output part).
+- v1.4: Plan-audit v6 fix (codex): the AC-1.6 production assert was unreachable under the dot-free grammar (a check that can never fire cannot be mutation-tested) — replaced by a property test over adversarial `(feature, surface)` pairs; `TRANSPORT_RE` is imported only by the gate and the tests; mutation (i) loosens the regex instead of removing an assert.
+- v1.3: Plan-audit v3 fixes (codex): `TRANSPORT_RE` stem is dot-free (`^audit_[^.]+\.report\.md$`) so the grammars are disjoint by construction; `_collected_path` asserts it never derives a transport-shaped name (AC-1.6, mutations i/i′ → 17); the CLI does not import the regex — `_collected_path` and the tests do; collision candidates added to the AC-3.5a corpus.
+- v1.2: Plan-audit v2 fixes (codex): transport grammar is `TRANSPORT_RE = ^audit_.*\.report\.md$`, single-sourced in the gate — hand-staged names in the field carry no `_cycle<N>` and a surface may contain `_`; conflict policy + readback on BOTH rungs (AC-2.6a/2.6b/2.12); force-direction mutants for the CLI and the verb (e′, f′, AC-4.3); shared two-direction corpus (AC-3.5a) and verdict preservation over the repo's audit docs (AC-3.7) for the Backward-compatibility invariant.
+- v1.1: Plan-audit v1 fixes (agy p1 + codex): collector contract (`CollectConflict`, `out_path` optional, `--force`); transport refusal narrowed to the `audit_*_cycle<N>*.report.md` stem — `*.report.md` collides with Phase-7 `<feature>.report.md`; recipe halts on non-`OK` `COLLECT:`; AC-2.9 is an incident replay; AC-2.10/2.11/3.6 added; AC-6.3 is 11 bidirectional mutations; AC-4.1 pinned by a wrapper wiring test.
+
+
+Audit rubric (TWO axes, both mandatory):
+
+Axis A — Generic adversarial:
+- Contradictions inside the doc
+- Gaps (missing error paths, untestable AC, unstated assumptions)
+- Weak claims (load-bearing decisions without justification)
+- Scope creep (work outside the stated feature boundary)
+
+Axis B — Invariant compliance (any breach = must-fix, you cannot downgrade).
+Two layers, both binding:
+
+### Base invariants (workflow-universal; non-overridable by any project file — but the operator `## Acknowledged-not-fixed` sidecar still applies to base findings):
+
+# H-MAD Base Invariants — Axis B (workflow-universal)
+
+> Shipped with the `/h-mad` skill. The orchestrator inlines this file verbatim into the
+> `INLINE_BASE_INVARIANTS` slot (name written bare — a bracketed mention inside an inlined
+> file survives substitution and reaches the reviewer as an unfilled-looking placeholder)
+> of every plan / design / impl-plan audit, **before** the
+> per-project `<PROJECT_ROOT>/.h-mad/invariants.md` domain layer. These rules apply to every
+> project that uses `/h-mad` and are **non-overridable by any project file**: a project's
+> invariants file may add domain rules but may not downgrade or delete a base rule. The
+> operator `## Acknowledged-not-fixed` sidecar escape hatch still applies to base findings
+> (a base item listed under that section in a sidecar `.audit.v<N+1>.md` is a conscious,
+> audited deferral — it is excluded from the gate count exactly like any other layer's item).
+>
+> Axis A (generic adversarial review) is covered by the audit-prompt template — not repeated here.
+
+## Audit-gate signal discipline
+- Any gate/check whose verdict the orchestrator consumes MUST communicate PASS/FAIL via an
+  explicit **stdout token** and **exit 0** on a normal verdict (PASS or FAIL). Using a non-zero
+  process exit to mean "FAIL" is a violation — a non-zero exit registers as a Claude Code tool
+  failure (`PostToolUseFailure`) and leaks into coexisting plugins' error handling. A non-zero
+  exit is permitted ONLY for genuine operational errors (missing/unreadable input).
+
+## Single-source contract
+- A rule applied by more than one surface (e.g. an audit blocking-item count read by both the
+  orchestrator gate step and a precondition checker) MUST have exactly one authoritative
+  implementation that all surfaces call, OR a test asserting byte-equivalence across surfaces.
+  Independent re-implementations that can silently diverge are a violation.
+- A contract stated in a template (e.g. an empty-section sentinel) MUST match what the consuming
+  gate logic treats as that case. Template guidance and gate behavior disagreeing is a violation.
+
+## Standalone / no plugin dependency
+- The skill MUST NOT acquire a **runtime dependency** on any other plugin (OMC, bkit,
+  context-mode, etc.) or external skill (spec-kit, b-mad, pdca). Coexistence accommodations
+  (sharing a state filename, conforming doc structure to an external validator's required
+  sections) are allowed; *requiring another plugin installed at runtime* is a violation.
+
+## No new external dependency
+- Scripts MUST use only Python stdlib plus tooling already depended upon by the skill (the
+  agent dispatch substrate (cmux or orca, via `hmad-dispatch`); `jq` where the existing hook
+  already uses it; `pytest`).
+  Introducing a new third-party package or new CLI is a violation.
+- **Dispatched agent CLIs are not script dependencies.** `codex`, `agy` and `grok` are optional
+  runtime *agents*: reached only through a `hmad-dispatch` verb (`exec`, `send`, …), never imported,
+  required, or invoked by a script or test for its own work — tests reach them through stubs, and an
+  absent agent CLI is a dispatch-time condition the verb reports, never a failure of the skill.
+  The list is closed: adding an agent to it is an operator decision recorded here, not something a
+  document or a dispatch may assume. (`grok` added 2026-09-28, operator decision on
+  `grok-codex-fallback` design audit v2.)
+
+## Portable time bounds
+- A time-bounded command MUST NOT be written as `timeout <s> <cmd>` or `gtimeout <s> <cmd>`.
+  **Neither is a macOS system component**, so the form is unportable in both directions.
+  A stock box ships neither and the call fails at 127; a box carrying `brew install coreutils`
+  runs it fine and the bound silently rests on a CLI h-mad cannot assume is there.
+  **What your box has is not an input to this rule.** h-mad already owns a time-bounder that
+  reachable wherever `hmad-dispatch` is, so the form is forbidden unconditionally — not because
+  of what happens downstream. (Reachable, not universal: where the wrapper itself cannot be
+  called the rule below still applies — halt, do not drop the bound.) Do not reason from a local probe to an exemption. For anything committed
+  or dispatched the form is additionally a new external CLI dependency (§"No new external
+  dependency"); a downstream 127 is how that eventually surfaces, never the reason.
+  Do not settle the question by probing: a local `command -v timeout` that succeeds is not
+  licence, it proves only that this box has coreutils, and it means the 127 that would have
+  exposed the improvisation never fires. Use `hmad-dispatch run --timeout <s> -- <cmd...>`,
+  which exits 124 at the deadline.
+- Where a 127 does fire, its aftermath is worse than the 127 itself. Measured: the reflex after `timeout: command not found`
+  is to re-run the same command **unbounded** and call it "checking directly". That does not fail
+  at the deadline, it hangs the phase, and in every log h-mad reads a hang and slow work are the
+  same bytes. A plan, a design, or a prompt that leaves an agent no reachable time-bounder is a
+  violation; the correct behaviour when none exists is to **halt**, not to drop the bound.
+
+## Doc-template superset compliance
+- Generated phase documents whose type is validated by an external doc-structure validator
+  (e.g. bkit PDCA: `plan` → `docs/01-plan/...`, `design` → `docs/02-design/...`,
+  `report` → `docs/04-report/...`) MUST be supersets that satisfy that validator's required
+  sections AND retain the existing h-mad sections. Dropping an h-mad section or failing the
+  validator is a violation.
+- The contract binds the **saved document**, not only the template it came from. Where such a
+  validator reclassifies a document by a substring of its *content* — bkit's `isPlanPlus` promotes
+  a plan to a larger required-section list on seeing `Plan-Plus`, `Plan Plus`, `plan-plus`,
+  `Brainstorming-Enhanced`, or `Intent Discovery` anywhere in the file — a generated document
+  carrying that substring is a violation even though the template is clean. Guard it mechanically
+  (`scripts/h_mad_doc_shape_check.py`); the literals are unremarkable prose, so an author cannot
+  be expected to avoid them from memory.
+
+## Operator-override preservation
+- The `## Acknowledged-not-fixed` sidecar override mechanism MUST remain functional for all
+  layers (base + project). Any gate change that causes overridden items to still count as
+  blocking, or that ignores the sidecar, is a violation.
+
+## Backward compatibility
+- A change to the audit gate MUST preserve the PASS verdict for audit docs that passed before
+  the change. Flipping a historically-passing audit to FAIL (absent a real new blocking item)
+  is a violation.
+
+## Marker discipline
+- Orchestrator phase transitions and halts MUST emit `[H-MAD]` log markers so a run is
+  diagnosable from logs alone. Silent state transitions are a violation.
+
+## Mutation verification
+- A step that mutates state (a git operation, a file write, a remote/CLI call) MUST verify the
+  mutation by **re-reading the resulting state**; an **exit code is not evidence that a mutation
+  occurred**. A plan, design, or implementation that treats a zero exit — or an echoed success
+  string such as `Sent N bytes` or `{"ok":true}` — as proof of the intended effect is a violation.
+- The failure this blocks is silent and looks exactly like success: two `zsh` no-ops (backtick
+  execution inside `-m`, a leading-dash path) both exited 0 while doing nothing, and a dispatch
+  reported `Sent 7293 bytes` into a dead pane. Where a command reports on its own behaviour, the
+  check must read the *thing it was supposed to change*, from a separate call.
+- **When several mutations target the SAME line, vary one field and keep the anchor shared.** A
+  guard whose failure has separable parts — exit code, stream routing, message content — needs one
+  mutation per part, each replacing the same anchor. That shape is what proves a content assertion
+  load-bearing: the mutants that keep exit and stream and strip only the text are exactly the ones a
+  returncode-only test survives. Two discriminators worth writing into the spec: a
+  first-vs-last-occurrence mutant survives whenever the sought item is last in BOTH regions, so the
+  discriminating fixture must put the decoys between the markers and leave the tail empty; and
+  `survived` has four distinct causes — missing guard, equivalent mutant, weak test, and a mutant
+  that never ran — which the verdict token collapses into one word. Diagnose which before acting.
+
+## Test discrimination
+- A test or guard MUST be **observed failing against the unfixed code** before it is trusted.
+  For a regression test, revert the fix and re-run; for a guard, stub it to its permissive value
+  and re-run the suite. **Zero failures is a finding, not a reassurance** — it means the check is
+  unenforced, not that the code is safe. Keeping a check that has never been seen to fail is a
+  violation.
+- A check that cannot fail is decoration, and it is worse than no check because it reports
+  coverage that does not exist. Two guards shipped green this way and were caught only by
+  stubbing: one passed solely because an unrelated helper stripped the env var its subject read,
+  and a documentation test passed with the documented guidance deleted, because both of its
+  component words already appeared in nearby prose. Neither was visible to review or to a green run.
+- The mutation must itself be verified (§"Mutation verification"): a `.replace()` that matches
+  nothing exits 0 and reports the guard as enforced.
+- **A criterion that cannot discriminate in EITHER direction is vacuous, and it survives both a
+  green run and a mutation battery.** The stronger case of the bullet above: not "this check never
+  fails" but "this check returns the same observation whether the behaviour is present or absent".
+  Measured on AC-2.5b, which spied on `is_cli_available` *returning* `False` — the forced-`True`
+  mutation emits an identical record and returns the same value, so neither the passing run nor the
+  mutated run could tell the two states apart. AC-7.5c was the same shape. **Neither audit leg saw
+  either one**; the revising author found AC-2.5b while fixing an unrelated must. A document audit
+  reads prose and cannot ask "does this pin discriminate?", so the question has to be asked where the
+  criterion is written: **name the observation that differs between the implemented and unimplemented
+  states, and if you cannot name one, the criterion is decoration** — delete it or replace it with a
+  positive assertion only the implemented behaviour produces. Spying on a return value that both
+  states produce is the recurring form.
+- **Mutating a path-resolution function can disable the suite's own isolation.** Tests usually
+  isolate by pointing an env override at a temp path, and that override is honoured by a branch —
+  the same kind of branch a mutation deletes. Stubbing the override branch in `_pin_file` redirected
+  every pin write in the suite onto the developer's live session file and replaced two real agent
+  handles, while the run reported 642 passed. Before mutating anything that decides *where* state is
+  written, snapshot the real target and restore it, or run in a sandboxed working directory.
+- **A stub must model the step the real system CONSUMES.** The rules above are about asserting the
+  right thing; this one is about the fixture telling the truth. A stub that replays state the real
+  system consumes once makes a test pass before the fix exists: an orca stub replayed an acked
+  delivery forever, so a sibling-cache test re-matched from the queue, pinned nothing, and passed
+  against unmodified code. Cardinality is part of the model — a fake that writes a path once where
+  production writes it twice let a verb never dispatch with 57 tests green. Before trusting a stub,
+  ask which of its effects are destructive in production and make the stub destroy them too.
+
+## Verifying a review finding
+- **A review finding has three separable parts — facts, concern, prescription — and they fail
+  INDEPENDENTLY.** Before applying a prescription, diff it against the RED tests and the spec's
+  acceptance criteria. A finding that matches the design doc but breaks tests means the DESIGN
+  drifted, not the implementation. Measured: one pass's prescription broke a guard (1 failed, 53
+  passed) while its concern was entirely real, and another review's prescription was backwards.
+- Test a prescription by applying it as a mutation and reverting it. When two passes dissent, ask
+  what the codebase ALREADY does — twice the house pattern beat both readings.
+
+## Guard narrowing
+- When a change **deliberately makes a guard accept something it used to reject**, the relaxation
+  MUST be shown to be *exactly* the intended case: run a corpus of inputs through the old and new
+  logic and diff the verdicts, then account for **every** input whose verdict softened. A green
+  suite is not evidence here — it encodes the cases someone already thought of, which is the wrong
+  population when the question is "what else did this let through?". This is the inverse of
+  §"Mutation verification": that proves a guard still bites, this proves a loosening did not widen.
+- The relaxation MUST rest on a **guarantee of the thing being parsed**, not on a heuristic that
+  re-implements it. Narrowing a scanner by "ignoring quoted regions" means re-deriving the target
+  language's quoting rules in a regex, which is how a bypass gets introduced; narrowing it by a rule
+  the language itself guarantees is safe. Verify that guarantee **against the real interpreter**,
+  not its documentation (§"Assumption verification").
+- Both halves were load-bearing when this was written. Narrowing a heredoc scanner so it stopped
+  denying inert prose, a 23-input differential corpus flagged one case as a regression; running the
+  shape through real `bash` showed the body genuinely never expands, so the *test expectation* was
+  wrong and the code was right. Without the corpus that case ships as either an unnoticed hole or a
+  "fix" applied to correct behaviour — and nothing else would have distinguished them. The same run
+  confirmed the intended relaxations numbered exactly two, and that the remaining 21 verdicts were
+  untouched.
+- A narrowing is scoped by **which checks consult the reduced input**, not by the reduction itself.
+  Exempting the quoted region from *one* class of check while every other class kept scanning the
+  full input is what kept the change from widening; a blanket exemption would have disabled
+  detections that were still correct for reasons unrelated to the false positive.
+
+## Connection enforcement
+- A task whose deliverable is a **connection** — a call site, an import, a registration, a route, a
+  flag or value propagated across a boundary — MUST ship a test that **fails when the connection
+  alone is removed and the callee is left intact**. A test that exercises the callee directly is not
+  evidence that the callee is reached. Shipping a connection with no such test is a violation.
+- **A whole-module revert cannot establish this**, because it removes both sides: the RED split
+  returns identically for a wired and an unwired build. The same blindness runs through every other
+  layer — a RED phase goes red because the callee is *absent*, an anti-gaming audit finds a
+  callee-scoped unit test perfectly discriminating, and a review of the diff sees a call site that is
+  *present* and therefore reads as correct. **Presence is not enforcement.** Measured across two
+  consecutive wiring tasks: each shipped its single load-bearing decision untested through every
+  audit cycle and through the RED phase, and only a mutation scoped to the connection caught it.
+- Mutate the connection in **both directions**: remove it → the wire test must fail; force it to fire
+  unconditionally → the fall-through/negative test must fail. One direction certifies a connection
+  that exists but is unconditional. Verify the mutation landed before trusting the run
+  (§"Mutation verification") — a revert that never happened reports as a pass.
+
+## Incident replay
+- A fix motivated by a specific observed incident MUST be **replayed against the real artifacts
+  already on disk** that motivated it, not only against cases authored alongside the fix.
+  **Synthetic cases alone are a violation** whenever such artifacts exist and are reachable.
+- Cases written next to a fix inherit the author's model of the bug, so they agree with it by
+  construction. A detector validated on 14 handcrafted samples rejected the real historical label
+  it was written to accept; the same replay then measured the true rate (7 of 13), which reclassified
+  the defect from a one-off into the majority case. Replay is how a fix is told from a belief.
+
+## Assumption verification
+- Every **load-bearing assumption** in a plan or design — an API's accepted inputs, a command's
+  output shape, a boundary, a default — MUST be **executed as a throwaway command before it is
+  written into the design**, and the design **cites the observed output**. An assumption asserted
+  without evidence, where evidence was one command away, is a violation.
+- Design review cannot catch a wrong assumption: it reads as reasonable, and the implementation
+  and its tests are then both built from the same wrong model, so they agree with each other and
+  pass. Tracer-bulleting the assumptions of one feature confirmed a `--porcelain` boundary,
+  confirmed a base-ref chain, and found a truncation hole — all before any code existed. Separately,
+  a selector grammar assumed from a wrapper's own code was wrong in a way that had already let a
+  destructive verb run unguarded.
+- The evidence belongs in the document, not only in the author's terminal. A cited output is
+  checkable by a reviewer; "I verified this" is not.
+- **Attributing a failure to a cause requires the controlled PAIR, not just the repro.** Run the
+  case with the blamed step and the case without it, and require the observable to differ. A repro
+  that reproduces confirms the symptom, never the cause. Measured four times: pane readiness was
+  blamed for an `injected:false` that a missing `--inject` flag fully explained, and that causality
+  shipped in a doc and a PR body; a title-only reading concluded "no agents running" and the
+  operator corrected it; and two carried repros were each falsified by a control that removed the
+  step they blamed. Re-run the MEASUREMENT as well as the claim — a brief's conclusion can be right
+  while its method is wrong.
+
+- **A contract to RECOGNISE something needs a real instance of it, captured from the running
+  system, before any gate scores it clean** — a banner, a log line, a response shape.
+  `pin-agents-tail-banner` passed 2663 tests, 49 mutations and 53 audit cycles while its matcher
+  hit 0 of 5 real agent banners: all 12 corpus positives were written by hand. The fixture corpus must include at
+  least one captured sample with its capture command cited; an idealised fixture is not a sample.
+
+## Behavioural premises carry their command
+- A premise about **behaviour** — "X currently does Y", "this guard fires when Z", "the suite
+  collects N", "the parser rejects W" — MUST carry the exact command that produced it, inline and
+  runnable, beside the observed output. An output recorded without its command is not
+  re-derivable, and a premise that cannot be cheaply re-run gets re-READ instead, cycle after
+  cycle, by every reviewer in turn. Measured: one false behavioural premise survived **10** audit
+  cycles that way.
+- Narrower than §"Assumption verification" and it fails at a different moment: there the evidence
+  was never gathered; here it was gathered once, written down as a conclusion, and thereby made
+  uncheckable. Both readers are then reasoning about prose.
+- **The command belongs in the document even when the answer is one number**, because the number
+  alone does not say what was counted. Measured: two readers measuring "the same" census got **3**
+  and **23**, having run different commands, and neither could tell which was wrong until the
+  command was written down beside it. `git grep -l '```' -- '*.py'` is the census; "21 files" is
+  a claim about one.
+- A premise whose command has become expensive to re-run is not exempt. Say so, and say what the
+  cheap proxy is — an unrunnable premise is a premise no later cycle can falsify.
+
+## Counts a dispatch reports
+- **Re-derive every COUNT a dispatched agent reports; never carry it into a document, a commit
+  message or a verdict on the agent's word.** A report that is right about its actions can still be
+  wrong about its numbers, and the two failures look identical from outside — the prose is accurate,
+  the figures are confident, and nothing in the report signals which is which.
+- Measured 2026-08-26: an `exec codex` report stated an anchor sweep as `mutations=238` when the
+  tree held **244**, with every spec byte-identical to HEAD and every other figure in the same
+  report checking out. Nothing had changed; the number was invented. The cheap control existed the
+  whole time — `--check-anchors` prints the count in about a second.
+- This is narrower than §"Assumption verification" and it applies at a different moment: there the
+  risk is an assumption written without evidence, here it is evidence that was produced, looks
+  right, and is false. Prefer a count you can re-derive with one command over any count a
+  dispatch hands you, and when a count is load-bearing for a verdict, re-derive it before recording
+  the verdict rather than after.
+
+## Wrapper–runtime reconciliation
+- A wrapper verb over an **external runtime's CLI** MUST be exercised **live against that runtime**
+  — a full create → list → remove cycle, or the verb's own equivalent round trip — before it ships,
+  and its **output-key extraction fixed against the observed envelope**. Shipping a verb whose
+  response shape is known only from stub fixtures is a violation, however green the suite is.
+- Stub fixtures encode the author's model of the envelope, so the wrapper and its tests agree with
+  each other and both are wrong together — the Incident-replay gap, applied to response parsing.
+  Four occurrences: a create-response `.id` read from the envelope (a per-request correlation uuid
+  that always exists, so it yielded a plausible but useless handle) in two different verbs; then
+  probing a live response for a delivery-id field surfaced `run_required` — the whole structured
+  path had been **dead at its first mutation**, and no stub test could see it because the stub had
+  no concept of a Run binding. Later the same day the real ack key proved to be `deliveryId` while
+  the extraction chain led with `delivery_id`, and the only test covering that loop pinned the
+  spelling the runtime never sends.
+- The live probe is what finds these, not the review: each was invisible to design review, to the
+  suite, and to a careful reading of the vendor guide. Where a live run is impossible (destructive
+  verb, no credentials), say so in the doc and name what stayed unverified — an unmeasured shape is
+  an open risk, not a pass.
+
+## Regression provenance
+- When a change makes an existing test fail, the plan or design MUST establish whether that test
+  **asserts current behaviour that the change is fixing** before proposing to edit it. **Changing an
+  existing test to pass is a violation unless** the doc states that the test pinned a defect (or
+  stale contract) as correct, and cites what it asserted.
+- The reflex "make the failing test pass" preserves the bug when the test *was* the bug. Three tests
+  in one session asserted the defect as an acceptance criterion — a forwarded selector a live
+  runtime rejects, a create-response handle the pane never has, a cwd-relative path — and each would
+  have survived a naive "adjust the test" edit. A red pre-existing test is evidence about the test as
+  often as about the change.
+
+## Both halves of a doc change
+- Removing a documented instruction, flag, or capability MUST be paired with **the executable
+  replacement landed** (or an explicit statement that the capability is intentionally dropped, with
+  the reason). A test asserting only that the old text is *gone* passes for a deletion that silently
+  lost the capability.
+- An unexecutable instruction was deleted in one session; a test checking only its absence would
+  have gone green while the run lost the ability it named. The gate is: assert the new path works in
+  the same change that removes the old one.
+
+## Reimplementation parity
+- Replacing a third-party dependency (validator, parser, formatter) with an in-tree implementation
+  MUST ship a **differential test asserting identical results against the original** across a corpus
+  that covers every construct in use, AND against the **real artifacts on disk**. Shipping the
+  reimplementation with tests that exercise only itself is a violation.
+- A hand-rolled reimplementation is worth exactly what its differential test catches. A bundled
+  JSON-Schema validator agreed with the library on a construct-complete corpus and on the live state
+  records; the traps it had to match (annotation-only `format`, `bool` is not `integer`) were
+  invisible without the library beside it. Parity on a synthetic corpus alone repeats the
+  Incident-replay gap: the corpus shares the author's model of the reimplementation.
+
+---
+
+## How agy uses this file
+agy reads this verbatim as the **base** portion of the Axis B rubric, before the project layer.
+Any finding that violates a base rule is auto-classified `## Must-fix` and cannot be downgraded.
+
+
+### Project invariants (domain rules for this repository):
+
+# H-MAD Project Invariants — Axis B (BrightGold70/skills repo, domain layer)
+
+> Inlined by `/h-mad` as the **project (domain)** portion of Axis B, AFTER the
+> workflow-universal `invariants.base.md`. The base layer already enforces the
+> universal rules (audit-gate signal discipline, single-source contract,
+> no-plugin-dependency, doc-template superset compliance, operator-override
+> preservation, backward-compatibility, marker discipline) — they are NOT repeated
+> here. This file holds only rules specific to this repository (a collection of
+> Claude Code skills: `SKILL.md` + `references/*.md` + `scripts/*.py` + `hooks/*.sh`).
+
+## Skill self-containment
+- A skill MUST remain runnable from a bare clone: no import of another skill's
+  internals, no hardcoded path outside the skill's own directory (except documented
+  host install locations: `~/.claude/...` for Claude Code, `~/.agents/skills/...` for
+  Codex, `~/.gemini/config/skills/...` for the Antigravity CLI (agy), each overridable
+  by its documented environment variable). Cross-skill coupling is a violation.
+  (Operator decision 2026-09-28, multi-host-runtime.)
+
+## Skill manifest integrity
+- Every skill's `SKILL.md` MUST carry valid frontmatter with `name` and `description`.
+  A skill whose entry behavior is changed without updating its `SKILL.md` contract is
+  a violation.
+
+---
+
+## How agy uses this file
+agy reads this as the domain portion of Axis B, after the base layer. Domain-rule
+violations are `## Must-fix`. If this repo has no domain-specific concern for a given
+feature, this layer may legitimately add nothing beyond the base rules.
+
+
+Axis C — Spec reconciliation.
+
+The spec is the source of truth for what this feature must do. A plan or design
+is derived from it and may legitimately argue for a narrower reading — but it
+may not do so silently, because every downstream phase then measures the
+implementation against a spec the design already walked away from.
+
+Read the spec above and reconcile it against the target document **by
+identifier**, not by impression:
+
+**Design audits — every acceptance criterion.** For each `AC-N.M` in the spec,
+classify the design as exactly one of:
+
+| Classification | Meaning |
+|---|---|
+| `implemented-as-written` | the design covers the AC in its spec form |
+| `restated` | the design covers it in a different, usually narrower form |
+| `absent` | the design does not address it at all |
+
+**Plan audits — every functional requirement.** Same three classifications at
+`FR-N` granularity. A plan is a strategy document and is not expected to restate
+each AC; it *is* expected to address every FR or explicitly defer it.
+
+Reporting rules:
+
+- For every `restated` item, **quote both forms** — the spec's wording and the
+  design's — so the divergence is auditable rather than asserted. Then say which
+  is narrower and in what respect.
+- `restated` and `absent` are **must-fix**. This is not a judgement that the
+  design is wrong: a narrowing may be well-argued and may be the right call. It
+  is a judgement that the divergence must be explicit and must land in the spec
+  before the gate clears, so the operator decides deliberately rather than
+  discovering it at verification.
+- An AC whose narrowing the spec **already reflects** is
+  `implemented-as-written`, not `restated`. That is the loop closing correctly.
+- Do not infer coverage from a section heading or a passing reference in a risk
+  or rationale table. An AC is covered when the document says what will satisfy
+  it.
+
+Report Axis C as a table in your `## Summary`, then raise each `restated` or
+`absent` item as its own `## Must-fix` bullet.
+
+Effort contract (binding on you either way; MEASURED only on some dispatches):
+
+- **Sweep the whole document. Do not stop at the first blocking finding.** Measured
+  over 83 design / 74 plan / 34 impl-plan cycles on one feature: the median pass
+  returned **one** must-fix against a prompt asking for all of them, which turns every
+  defect into its own round trip and is most of why those numbers are that large.
+- **Read the tree before asserting what is in it.** The documents are inlined above,
+  which is exactly why a pass can look thorough having opened nothing. Their claims are
+  *about* the tree — a `path:symbol`, a signature, a test name, a count against its own
+  list — and those are the claims that turn out to be wrong.
+- **When you re-derive a published figure, four things must match or your reading answers a
+  different question. Each has been got wrong here by an auditor, not only by the orchestrator:**
+  - *Commit.* Presence at a sha is not provenance. "X was introduced in revision N" needs the
+    needle PRESENT at N's landing commit **and ABSENT at N-1's** — two readings return N and
+    N+1 alike. `git rev-list <base>..<sha> -- <path>` first: if that commit does not touch the
+    file, it is not the figure's provenance.
+  - *Corpus.* **Run the command the document DEFINES, not one that reproduces the document's
+    number.** A head-scoped series verified whole-blob agreed for four shas and then did not;
+    the gating auditor re-ran it, reported it reproduced, and the scope was wrong the whole
+    time. Agreement with a published value is evidence about arithmetic, never about scope.
+  - *Grammar.* `grep -c` answers "how many lines contain this string", never "how many
+    instances of this concept exist". Print the matching lines and classify them before you
+    publish a count — a Python kwarg and a diagnostic field spell identically. Over markdown,
+    collapse newlines and admit the inline-code delimiters (`` ` ``): a needle that cannot
+    match across a backtick reported 2 sites where there are 4.
+  - *Shell.* Take each control in its own invocation; a `cd` in a chained command is not
+    scoped to that command.
+- **If a document publishes a screen with `# expect 0`, RUN IT** rather than reporting that it
+  is present. Three sheet entries certified "no scoped census moved" over a commit at which the
+  document's own trip-wire read 8.
+- **An ABSENCE claim is a figure.** "No corpus instance …", "the corpus has none", "nothing in
+  this repository" — hold each to the same command and sha as a count; both that shipped here
+  were false. A zero bounded only by some *unrelated* constraint is a defect: the document says
+  why it is zero and whether that reason is load-bearing.
+- **A stated PROPERTY of a screen is a claim about code — execute it.** "No working-file edit can
+  move this" was false of the shipped line. Do the thing it says cannot move it, and re-run. A
+  control over an ALTERNATION tests the alternation, never its branches: a healthy sibling covers
+  a sick one (one boundary repair was half-applied three rounds running and passed every time).
+- **Your report is held to this too.** Every count carries its UNIT (`grep -n` lines are not
+  occurrences); a population you prescribe is derived once and cited twice; and your PRESCRIPTION
+  is a claim about the tree — one prescribed naming an enclosing function for a line that has
+  none. Check it or mark it unchecked, and give every alternative repair rather than the best-
+  reading one.
+- **A pass at or below two successful tool calls cannot certify a clean.** Writing the
+  report and its marker costs those two by itself, so at that floor nothing was read.
+  When your transcript is captured — an `audit-cycle` dispatch — the combiner enforces
+  this and scores the cycle `UNVERIFIED` rather than clean. When it is not captured,
+  **nothing measures you and the rule binds you anyway**: say what you read. Findings
+  count at any effort; this bounds what a *clean* is worth, never what a finding is.
+- **State your evidence** on its own line in `## Summary`: `Evidence: <N> files opened,
+  <M> greps run.`
+
+Output framing (mandatory — the orchestrator extracts on these markers):
+
+Emit your report bracketed by these two lines, each alone on its line, with
+nothing before the first or after the second:
+
+    AUDIT-audit-report-docs-copy-plan-v3-BEGIN
+    ...your report...
+    AUDIT-audit-report-docs-copy-plan-v3-END
+
+Your report is read by scraping this terminal, and the previous cycle's report
+is usually still visible above the prompt. The markers are how the orchestrator
+tells your new report from that old one — omit them and the audit cannot be
+scored. Emit them even if you have nothing to report.
+
+Output schema (exact, no other top-level sections):
+
+## Summary
+<2-3 sentences>
+
+## Must-fix
+- <issue> — <why it breaks invariant or creates a hard gap>
+  *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
+
+## Should-fix
+- <issue> — <why it matters but isn't a hard gate>
+  *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
+
+## Nit
+- <style/clarity issue>
+  *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
+
+Class rule (Must-fix and Should-fix): **every bullet carries a `class:` continuation line**, `build` or
+`measurement`, under the bullet and never as a `- ` bullet of its own (a leading `- ` is a second
+finding). The test is one question: **would the code or tests a 5d/5e implementer writes differ if this finding were fixed?** Yes → `class: build` (an interface, a contract, a
+predicate, a fixture, a test's assertion or RED/GREEN count, a false premise about the platform). No →
+`class: measurement` (a published number, stamp, ledger row, sha series, pointer or self-count that is
+stale or mis-derived; the tree is unchanged by fixing it). An untagged bullet is scored as `build`, so
+omitting the line never softens a finding — it only costs the orchestrator the triage. Put the `class:` line directly under its bullet (before or after `quote:`); do not indent a sub-bullet between a finding and its `class:` line, which leaves the finding untagged.
+
+    - <issue> — <why>
+      class: build
+      quote: <path/to/file.md> › `<span copied verbatim from that file>`
+
+Quoting rule (Must-fix and Should-fix): **if a finding asserts what a document says, prove it.**
+Add an indented `quote:` line under that bullet naming the file and carrying the span copied
+verbatim out of it:
+
+    - <issue> — <why it breaks the invariant>
+      quote: <path/to/file.md> › `<span copied verbatim from that file>`
+
+The `quote:` line is a continuation of its bullet, never a new `- ` bullet — a leading `- ` would
+be scored as a second finding. Use one `quote:` line per document the finding names.
+
+This exists because backticks alone are ambiguous. Reviewers correctly backtick three other kinds
+of span — code they are **proposing** as the fix, test inputs they **constructed**, and commands
+they **ran** — and those legitimately do not occur in the document. Measured over 37 must-fixes:
+43% of *real* findings carry a backticked span absent from the document, so absence alone proves
+nothing and no automatic check can be built on it. `quote:` is the marker that separates a claim
+about the document from everything else you are entitled to write in backticks.
+
+A finding that asserts document content with no `quote:` line is not rejected automatically, but it
+is the first thing the orchestrator re-derives from source — and a `quote:` span that does not occur
+in the file it names is a finding withdrawn, not a finding to argue.
+
+Report file (preferred delivery under Orca — the orchestrator fills the path below, or leaves it empty):
+
+/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261023T110325Z/roots/gas-root-d1-s1-w1yzs15g/.hmad-report/audit_audit-report-docs-copy_plan_cycle3_run20261023T112335Z-33510_p1.report.md
+
+If a path appears above, your **final two actions** are: (1) write your report — the exact `## Summary` / `## Must-fix` / `## Should-fix` / `## Nit` schema above; the `AUDIT-audit-report-docs-copy-plan-v3` brackets are optional inside the file — to that exact path. Write it **directly** — do not stage it via `<path>.tmp` and `mv`. The marker ordering below is already the completeness guarantee, so staging adds two tool calls and buys nothing, and it has been refused outright at least once (agy: "`<path>.report.md.tmp` is not a valid artifact path"). Then (2) create the marker `<that-path>.done` (e.g. `: > "<path>.done"`). The coordinator reads the file, not your terminal, so the file must be complete before the marker exists. If the path is empty, ignore this section and deliver via the terminal sentinels above.

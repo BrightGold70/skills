@@ -1,0 +1,55 @@
+AUDIT-audit-report-docs-copy-plan-v1-BEGIN
+## Summary
+FR-1, FR-4, FR-5, and FR-6 are covered in the spec's form, and the spec holds 40 unique ACs (counted from the `AC-` bullets above Non-Functional Requirements). FR-2 and FR-3 are restated: the plan's collector contract drops `CONFLICT`, and its gate marker fills the feature slot with the transport stem. The same plan also sets a success criterion of 25 mutations against an enumerated 23, and points the SKILL.md anchor guard at a test file that is not in the tree.
+
+| FR | Classification |
+|---|---|
+| FR-1 | implemented-as-written |
+| FR-2 | restated |
+| FR-3 | restated |
+| FR-4 | implemented-as-written |
+| FR-5 | implemented-as-written |
+| FR-6 | implemented-as-written |
+
+Evidence: 6 files opened, 19 greps run.
+
+## Must-fix
+- FR-2 restates the collector stdout contract. The spec's contract line is `OK|MISSING|CONFLICT`; the plan's Requirements line is `OK|MISSING` only, so a CLI grammar copied from that line rejects `COLLECT: CONFLICT`, which AC-2.5 requires and which this plan's Goals and Architecture still treat as an exit-0 verdict.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `COLLECT: OK|MISSING path=<docs path>`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `COLLECT: OK|MISSING|CONFLICT path=<docs path>`
+- FR-3 restates the transport-refusal marker. The spec prints `[H-MAD] <feature> gate INVALID` with the parenthetical that names `h_mad_collect_report.py`. The plan's Requirements put the dot-free transport stem in that slot and shorten the parenthetical to `transport file …`, while Scope in the same plan still writes `<feature>`. The marker bytes are three different strings.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `[H-MAD] <stem>`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `gate INVALID (transport file …)`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `[H-MAD] <feature> gate INVALID (transport`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `[H-MAD] <feature> gate INVALID`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `(transport file — collect it into docs first: h_mad_collect_report.py)`
+- Success Criteria require 25 mutations on `collect_report.json`. Requirements, the deliverables row, version history v1.9, and spec AC-6.3 all fix the set at 23 (labels a through l′, with a unprimed: 23). A done-check written from Success Criteria fails a spec-complete mutation spec, or it demands two mutants the enumerated list does not contain.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `(25 mutations, every connection dropped`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `mutation spec with 23 named-test mutations`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `23 mutations.`
+- The SKILL.md slice guard is named `test_h_mad_audit_cycle_slices.py`, and that file is absent under `h-mad/tests/`. The anchors in the same risk row (`## Audit prompt assembly`, `6.6.`, `\n7.`) live in `h-mad/tests/test_h_mad_audit_cycle_docs.py`, which is the file spec AC-5.2 says must pass unchanged. Running the plan's named test does not exercise the guard.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `test_h_mad_audit_cycle_slices.py` slices SKILL.md by exact anchors`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `test_h_mad_audit_cycle_docs.py` passes unchanged`
+- The overview's "seven of eight" skip rate is a behavioural premise with no inline command and no observed output. Base invariant "Behavioural premises carry their command" requires the runnable command beside the figure; without it a later cycle cannot re-derive the count.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `Seven of eight consecutive plan cycles on HemaSuite`
+
+## Should-fix
+- The assumption row's command `ls docs/04-report/features/*.report.md` now lists 4 files, and the cited example `gate-blindness-hardening.report.md` is at `docs/archive/2026-08/gate-blindness-hardening/gate-blindness-hardening.report.md`. The prefix-plus-suffix decision still holds for the 4 hyphenated names in that directory (`find docs -name 'audit_*'` is 0), but the published 7 and the example path are not what that command returns.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `→ 7 Phase-7 reports`
+- The risk row says to use the worktree CLI after task 2. Order of work places the gate at (2) and the CLI at (3), so that sentence points at a task where `h_mad_collect_report.py` does not exist yet.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `after task 2, use the worktree CLI`
+- Implementation Strategy tells the author to follow `h_mad_new_gate.py`'s "cannot-judge carries no counts", while FR-3 and the `_gate_token` assumption require the counted line `GATE: INVALID must=0 should=0` (exit 2). A token built from the strategy sentence fails `GATE_RE` in `h_mad_audit_cycle.py`.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `cannot-judge carries no counts, exit 0 on any verdict, docs pinned bidirectionally`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `GATE: INVALID must=0 should=0`
+
+## Nit
+- The deliverables row that satisfies AC-2.5 names only `_copy_collected_report` as conflict-safe. Scope and Architecture also put `overwrite` on `_write_collected_report`; the table omits that rung.
+AUDIT-audit-report-docs-copy-plan-v1-END
