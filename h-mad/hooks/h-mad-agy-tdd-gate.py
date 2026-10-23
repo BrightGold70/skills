@@ -15,6 +15,8 @@ import time
 CLASS_A: frozenset[str] = frozenset({
     "view_file", "list_dir", "grep_search", "find_by_name", "command_status",
     "read_url_content", "search_web", "ask_question", "finish", "wait", "wait_5_seconds",
+    # Executed by agy but absent from its advertised init inventory.
+    "read_file",
 })
 CLASS_B: frozenset[str] = frozenset({
     "write_to_file", "replace_file_content", "multi_replace_file_content", "sed_file", "notebook_edit",
