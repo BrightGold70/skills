@@ -1625,6 +1625,197 @@ class TestGatePhaseSpec:
         assert "tests/ignored scope.py" not in block
 
 
+# --- A gate task whose deliverable is a new test file (HemaSuite #207 Tasks 20-22) ---
+
+AUTHORED_PATHS = ["tests/gate probes/test first.py", "tests/gate probes/test second.py"]
+
+
+def gate_authors_directive(paths: list[str]) -> str:
+    return (
+        "**THIS DISPATCH IS A GATE TASK THAT AUTHORS A TEST (no RED/GREEN).** Do not "
+        "modify production code. Create exactly these new test files and make no other "
+        "test edit: " + ", ".join(f"`{p}`" for p in paths) + ". Run every probe the "
+        "task names, each with its control, and quote every `PROBE:` line verbatim. "
+        "Measure, never tune: a FAIL is a reading to report, not a defect to fix. "
+        "Do not commit."
+    )
+
+
+class TestGateAuthorsTestSpec:
+    def test_cli_authoring_gate_permits_the_named_files_and_states_their_counts(
+        self, gate_plan: Path, tmp_path: Path
+    ) -> None:
+        import shlex
+
+        args = []
+        for path in AUTHORED_PATHS:
+            args += ["--authors-test", path]
+        proc = assembler_spec_cli(gate_plan, tmp_path, "gate", *args,
+                                  "--expect-fail", "0", "--expect-pass", "3", task="Task 4")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        filled = (tmp_path / "spec prompt.txt").read_text(encoding="utf-8")
+        assert gate_authors_directive(AUTHORED_PATHS) in filled
+        assert GATE_DIRECTIVE not in filled, "an authoring gate must not also forbid tests"
+        assert GATE_PROBE_HANDOFF_PARAGRAPH in filled, "the gate PROBE: contract is kept"
+        assert "PROBE: latency=12ms control=0ms" in filled
+        assert "**Expected after this dispatch:** 0 failing, 3 passing." in filled
+        assert (f"**Run the tests as:** `{PYTHON} -m pytest "
+                f"{' '.join(AUTHORED_PATHS)} -v`") in filled
+        assert "Regression guards" not in filled
+        assert GATE_RERUN_COMMENT in proc.stdout.splitlines()
+        rerun = next(line for line in proc.stdout.splitlines() if "-m pytest" in line)
+        assert shlex.split(rerun[1:-1]) == [
+            "cd", str(tmp_path), "&&", PYTHON, "-m", "pytest", *AUTHORED_PATHS, "-v",
+        ]
+
+    def test_plain_gate_still_forbids_test_edits(self, gate_plan: Path, tmp_path: Path) -> None:
+        # Negative control: the relaxation exists only when --authors-test names a file.
+        filled, _ = call(gate_plan, tmp_path, task_id="Task 4", phase="gate",
+                         test_path=AUTHORED_PATHS, expect_fail=None, expect_pass=None)
+        assert GATE_DIRECTIVE in filled
+        assert "AUTHORS A TEST" not in filled and "Create exactly" not in filled
+        for path in AUTHORED_PATHS:
+            assert path not in filled
+
+    @pytest.mark.parametrize(
+        "counts", [(), ("--expect-fail", "0"), ("--expect-pass", "3")],
+        ids=["none", "fail-only", "pass-only"],
+    )
+    def test_cli_authoring_gate_requires_both_counts(
+        self, gate_plan: Path, tmp_path: Path, counts: tuple[str, ...]
+    ) -> None:
+        proc = assembler_spec_cli(gate_plan, tmp_path, "gate", "--authors-test",
+                                  AUTHORED_PATHS[0], *counts, task="Task 4")
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "ASSEMBLE-TDD: HALT counts_required" in proc.stdout
+        assert not (tmp_path / "spec prompt.txt").exists()
+
+    @pytest.mark.parametrize("phase", ["red", "green"])
+    def test_cli_authors_test_is_refused_outside_a_gate(
+        self, plan: Path, tmp_path: Path, phase: str
+    ) -> None:
+        proc = assembler_spec_cli(plan, tmp_path, phase, "--test-path", "tests/test_mod.py",
+                                  "--authors-test", AUTHORED_PATHS[0],
+                                  "--expect-fail", "1", "--expect-pass", "0")
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "ASSEMBLE-TDD: HALT authors_test_not_gate" in proc.stdout
+        assert not (tmp_path / "spec prompt.txt").exists()
+
+    def test_an_existing_file_cannot_be_authored(self, gate_plan: Path, tmp_path: Path) -> None:
+        existing = tmp_path / AUTHORED_PATHS[1]
+        existing.parent.mkdir(parents=True)
+        existing.write_text("def test_kept():\n    assert True\n", encoding="utf-8")
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=AUTHORED_PATHS, expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "authors_test_exists"
+        assert AUTHORED_PATHS[1] in exc.value.detail
+
+    def test_a_misrooted_authored_path_halts(self, gate_plan: Path, tmp_path: Path) -> None:
+        actual = tmp_path / "sub project" / AUTHORED_PATHS[0]
+        actual.parent.mkdir(parents=True)
+        actual.write_text("", encoding="utf-8")
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "test_path_misrooted"
+
+    # --- Review findings on 11b3b5fe (change-reviewer, 2026-10-25) ---
+
+    def test_authoring_gate_probes_the_interpreter_for_pytest(
+        self, gate_plan: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # An authoring gate runs pytest, so the plain gate's probe exemption must not apply.
+        monkeypatch.setattr("h_mad_assemble_tdd.interpreter_has_pytest", lambda python: False)
+        monkeypatch.setattr("h_mad_assemble_tdd.find_interpreters_with_pytest", lambda: [])
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "interpreter_has_no_pytest"
+
+    def test_a_dangling_symlink_counts_as_existing(self, gate_plan: Path, tmp_path: Path) -> None:
+        link = tmp_path / AUTHORED_PATHS[0]
+        link.parent.mkdir(parents=True)
+        link.symlink_to(tmp_path / "nowhere" / "missing.py")
+        assert not link.exists() and link.is_symlink()
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "authors_test_exists"
+
+    @pytest.mark.parametrize(
+        "kind", ["empty", "absolute", "parent", "nested-parent", "duplicate"],
+    )
+    def test_an_invalid_authored_path_halts(
+        self, gate_plan: Path, tmp_path: Path, kind: str
+    ) -> None:
+        paths = {
+            "empty": [""],
+            "absolute": [str(tmp_path / "outside" / "test_abs.py")],
+            "parent": ["../test_escape.py"],
+            "nested-parent": ["tests/../../test_escape.py"],
+            "duplicate": [AUTHORED_PATHS[0], AUTHORED_PATHS[0]],
+        }[kind]
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=paths, expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "authors_test_invalid"
+
+    def test_test_path_is_refused_on_an_authoring_gate(
+        self, gate_plan: Path, tmp_path: Path
+    ) -> None:
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate",
+                 test_path=["tests/guard_t.py"], authors_test=[AUTHORED_PATHS[0]],
+                 expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "test_path_not_applicable"
+
+    def test_guards_reach_an_authoring_gate(self, gate_plan: Path, tmp_path: Path) -> None:
+        filled, _ = call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                         authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1,
+                         guards=["tests/test_kept.py::test_unchanged"])
+        assert ("**Regression guards (must pass from the first run — do NOT manufacture "
+                "a failure):** tests/test_kept.py::test_unchanged") in filled
+
+    def test_env_known_failures_on_an_authoring_gate_are_expected_not_measured(
+        self, gate_plan: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                         authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1,
+                         env_known_failures=["tests/test_new_socket.py::test_bind"])
+        assert "the stated counts are expected OUTSIDE the sandbox" in filled
+        assert "measured OUTSIDE the sandbox" not in filled
+
+    def test_a_misrooted_authored_path_names_its_own_flag(
+        self, gate_plan: Path, tmp_path: Path
+    ) -> None:
+        actual = tmp_path / "sub project" / AUTHORED_PATHS[0]
+        actual.parent.mkdir(parents=True)
+        actual.write_text("", encoding="utf-8")
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1)
+        assert f"--authors-test {AUTHORED_PATHS[0]} does not exist" in exc.value.detail
+
+    def test_authoring_gate_command_reruns_the_authored_files(self, tmp_path: Path) -> None:
+        import shlex
+
+        block = command_block(
+            feature="f", module="m", phase="gate",
+            prompt=tmp_path / "spec prompt.txt", out=tmp_path / "spec output.txt",
+            log=tmp_path / "spec log.txt", timeout=900,
+            python="/opt/my python/bin/python3", test_path=[],
+            project_root=tmp_path / "My Projects", authors_test=AUTHORED_PATHS,
+        )
+        assert GATE_RERUN_COMMENT in block.splitlines()
+        assert GATE_PROBE_HANDOFF_COMMENT in block.splitlines()
+        rerun = next(line for line in block.splitlines() if "-m pytest" in line)
+        assert shlex.split(rerun[1:-1]) == [
+            "cd", str(tmp_path / "My Projects"), "&&", "/opt/my python/bin/python3",
+            "-m", "pytest", *AUTHORED_PATHS, "-v",
+        ]
+
+
 # --- Gate probes refused by the Phase-5 shell gate (r2538) ---
 
 GATE_PROBE_HANDOFF_PARAGRAPH = (

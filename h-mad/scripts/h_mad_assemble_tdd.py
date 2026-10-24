@@ -379,7 +379,11 @@ def assemble(
     template: Path,
     mutation_spec: str | None = None,
     env_known_failures: list[str] | None = None,
+    authors_test: list[str] | None = None,
 ) -> tuple[str, dict]:
+    authors_test = list(authors_test or [])
+    if authors_test and phase != "gate":  # M:AT-AUTHORS-NOT-GATE
+        raise Halt("authors_test_not_gate", "--authors-test is only valid for --phase gate")
     env_known = list(env_known_failures or [])
     for node in env_known:
         # A whole FILE is refused on purpose: declaring every test in it would hide a
@@ -406,9 +410,35 @@ def assemble(
     if phase == "gate":
         if shape != "gate":
             raise Halt("phase_shape_mismatch", f"task={task_id} shape={shape}; gate required")
-        if expect_fail is not None or expect_pass is not None:
+        if authors_test:
+            for authored_path in authors_test:
+                if not authored_path:  # M:AT-AUTHORS-INVALID
+                    raise Halt("authors_test_invalid", "--authors-test path is empty")
+                if os.path.isabs(authored_path):
+                    raise Halt("authors_test_invalid",
+                               f"--authors-test path {authored_path!r} must be relative")
+                if ".." in Path(authored_path).parts:
+                    raise Halt("authors_test_invalid",
+                               f"--authors-test path {authored_path!r} must not contain '..'")
+            seen_authored_paths: set[str] = set()
+            for authored_path in authors_test:
+                if authored_path in seen_authored_paths:
+                    raise Halt("authors_test_invalid",
+                               f"--authors-test path {authored_path!r} is duplicated")
+                seen_authored_paths.add(authored_path)
+            if test_paths:  # M:AT-AUTHORS-NO-TESTPATH
+                raise Halt(
+                    "test_path_not_applicable",
+                    "--test-path cannot be used together with --authors-test on a gate",
+                )
+        if authors_test and (expect_fail is None or expect_pass is None):  # M:AT-AUTHORS-COUNTS
+            raise Halt(
+                "counts_required",
+                "an authoring gate requires --expect-fail and --expect-pass",
+            )
+        if not authors_test and (expect_fail is not None or expect_pass is not None):
             raise Halt("counts_not_applicable", "gate tasks do not take --expect-fail/--expect-pass")
-        test_paths = []
+        test_paths = list(authors_test) if authors_test else []  # M:AT-AUTHORS-SCOPE
     elif not test_paths:
         raise Halt("test_path_required", "RED/GREEN requires at least one --test-path")
 
@@ -437,7 +467,7 @@ def assemble(
             "half a split states nothing, and the half given would be dropped",
         )
 
-    if phase != "gate" and not interpreter_has_pytest(python):
+    if (phase != "gate" or authors_test) and not interpreter_has_pytest(python):
         suggestions = find_interpreters_with_pytest()
         raise Halt(
             "interpreter_has_no_pytest",
@@ -452,14 +482,22 @@ def assemble(
     # exist yet. A path that exists somewhere ELSE is, because that is a
     # subproject-relative path given where a root-relative one was needed.
     for test_path in test_paths:
-        if (project_root / test_path).exists():
+        if phase == "gate" and authors_test:
+            path_exists = os.path.lexists(project_root / test_path)  # M:AT-AUTHORS-EXISTS
+        else:
+            path_exists = (project_root / test_path).exists()
+        if path_exists:
+            if phase == "gate" and authors_test:  # M:AT-AUTHORS-EXISTS
+                raise Halt("authors_test_exists", f"--authors-test {test_path} already exists under {project_root}")
             continue
         elsewhere = misrooted_candidates(project_root, test_path)
         if elsewhere:
             raise Halt(
                 "test_path_misrooted",
-                f"--test-path {test_path} does not exist under {project_root}, "
-                f"but {' and '.join(elsewhere)} does — --test-path is relative "
+                f"--{'authors-test' if phase == 'gate' and authors_test else 'test-path'} "
+                f"{test_path} does not exist under {project_root}, "
+                f"but {' and '.join(elsewhere)} does — "
+                f"--{'authors-test' if phase == 'gate' and authors_test else 'test-path'} is relative "
                 f"to --project-root, not to the subproject. A misrooted path "
                 f"makes pytest exit 4, or 5 when a same-named directory exists, "
                 f"and a dispatch that collected nothing reports no error.",
@@ -478,6 +516,15 @@ def assemble(
                 "never tune: a FAIL is a reading to report, not a defect to fix. "
                 "Do not commit.",
     }[phase]
+    if phase == "gate" and authors_test:  # M:AT-AUTHORS-DIRECTIVE
+        directive = (
+            "**THIS DISPATCH IS A GATE TASK THAT AUTHORS A TEST (no RED/GREEN).** Do not "
+            "modify production code. Create exactly these new test files and make no "
+            "other test edit: " + ", ".join(f"`{path}`" for path in authors_test) + ". "
+            "Run every probe the task names, each with its control, and quote every "
+            "`PROBE:` line verbatim. Measure, never tune: a FAIL is a reading to "
+            "report, not a defect to fix. Do not commit."
+        )
 
     lines = [directive, ""]
     if phase == "gate":  # M:AT-GATE-PROBE-HANDOFF
@@ -532,9 +579,13 @@ def assemble(
     # fail there and pass outside it. The exception is declared per node id rather than
     # hand-appended, and it stays bounded: every OTHER discrepancy is still a stop.
     if env_known:  # M:AT-ENV
+        counts_context = (
+            "the stated counts are expected OUTSIDE the sandbox."
+            if phase == "gate" and authors_test
+            else "the stated counts were measured OUTSIDE the sandbox."
+        )
         lines.append(
-            "**Environment-known failures:** the stated counts were measured OUTSIDE the "
-            "sandbox. Inside your sandbox these tests may also fail, for an environmental "
+            "**Environment-known failures:** " + counts_context + " Inside your sandbox these tests may also fail, for an environmental "
             "reason (e.g. loopback socket binding is denied), not a code one: "
             + ", ".join(f"`{n}`" for n in env_known)
             + ". Do not modify them and do not count them as a discrepancy. A failure in "
@@ -542,7 +593,7 @@ def assemble(
             "with STATUS: BLOCKED. The orchestrator re-runs this scope outside the sandbox, "
             "and that run is the gate."
         )
-    if guards and phase != "gate":
+    if guards and (phase != "gate" or authors_test):
         lines.append(
             "**Regression guards (must pass from the first run — do NOT manufacture "
             "a failure):** " + ", ".join(guards)
@@ -551,14 +602,14 @@ def assemble(
         lines.append("**Regression guards:** none in this task.")
     # Every 5d runs before any 5e, so a guard naming an earlier task's code that
     # is not GREEN yet is red by construction (HemaSuite 2026-10-05).
-    if guards and phase != "gate":  # M:AT-GUARD-SCOPE
+    if guards and (phase != "gate" or authors_test):  # M:AT-GUARD-SCOPE
         lines.append(
             "**Guard scope:** a guard is behaviour that exists at this RED base. A listed "
             "guard that fails only because an earlier task's GREEN has not built its code "
             "yet is `guard-not-yet-built`: report it with its failure; do not weaken it "
             "and do not implement it."
         )
-    if phase != "gate":
+    if phase != "gate" or authors_test:  # M:AT-AUTHORS-RUNLINE
         lines.append("")
         lines.append(f"**Run the tests as:** `{python} -m pytest {' '.join(test_paths)} -v`")
         lines.append(
@@ -608,6 +659,7 @@ def assemble(
         "inlined_sections": [heading for heading, _ in sections],
         "inlined_lines": sum(len(s.splitlines()) for _, s in sections),
         "unresolved_refs": unresolved_refs,
+        "authors_test": list(authors_test or []),
     }
 
 
@@ -615,12 +667,14 @@ def command_block(
     *, feature: str, module: str, phase: str, prompt: Path, out: Path,
     log: Path, timeout: int, python: str, test_path: str | list[str],
     project_root: Path, model: str | None = None, effort: str | None = None,
-    agent: str = "codex",
+    agent: str = "codex", authors_test: list[str] | None = None,
 ) -> str:
     key = "STATUS"
     step = "5e" if phase == "green" else "5d"
     q = shlex.quote
     test_paths = [test_path] if isinstance(test_path, str) else test_path
+    authors_test = list(authors_test or [])
+    rerun_paths = authors_test if phase == "gate" and authors_test else test_paths
     # Overrides only. Unset means "whatever the codex CLI is configured to use",
     # which is the point — see mistake 1.
     over = ""
@@ -652,14 +706,14 @@ def command_block(
                      "Record each PROBE: line.")
         # The verdict extractor reads only the key's line, not multiline argv.
         lines.append(f"sed -n '/^PROBE-COMMANDS:/,/^STATUS:/p' {q(str(out))}")
-    else:
+    if phase != "gate" or authors_test:  # M:AT-AUTHORS-RERUN
         # A subshell: the dispatch above is `--cd`'d to the project root but
         # this line was not, so a correct root-relative path still failed for
         # an operator whose shell was elsewhere. The parens keep the `cd` from
         # leaking into whatever they run next.
         lines += [
             "# The verdict says what the agent claims. Re-run the tests yourself:",
-            f"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in test_paths)} -v)",
+            f"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in rerun_paths)} -v)",
         ]
     block = "\n".join(lines)
     prefix = "hmad-dispatch exec codex "
@@ -704,6 +758,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--module", required=True)
     ap.add_argument("--test-path", action="append", default=[],
                     help="scoped pytest path — an unscoped run measures the wrong tree")
+    ap.add_argument("--authors-test", action="append", default=[],
+                    help="gate only: a new test file this gate task creates; repeatable")
     ap.add_argument("--impl-plan", type=Path,
                     help="default: <project-root>/docs/01-plan/features/<feature>.impl-plan.md")
     ap.add_argument("--python", default=sys.executable,
@@ -786,6 +842,7 @@ def main(argv: list[str] | None = None) -> int:
             guards=args.guard, report_file=args.report_file, template=args.template,
             mutation_spec=args.mutation_spec,  # M:AT-MUT-WIRE
             env_known_failures=env_known,  # M:AT-ENV-WIRE
+            authors_test=args.authors_test,  # M:AT-AUTHORS-WIRE
         )
     except Halt as exc:
         print(f"{TOKEN}: HALT {exc.reason}")
@@ -819,6 +876,7 @@ def main(argv: list[str] | None = None) -> int:
         out=out, log=log, timeout=timeout, model=args.model, effort=args.effort,
         python=args.python, test_path=args.test_path, project_root=args.project_root,
         agent=args.agent,
+        authors_test=args.authors_test,  # M:AT-AUTHORS-BLOCK-WIRE
     ))
     print(f"[H-MAD] {args.feature} tdd-assemble {args.phase} {meta['task']}")
     return 0
