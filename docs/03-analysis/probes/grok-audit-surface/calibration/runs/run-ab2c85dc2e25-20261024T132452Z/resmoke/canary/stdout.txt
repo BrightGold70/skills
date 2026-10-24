@@ -1,0 +1,3 @@
+PLANT: READY cwd=/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/roots/gas-canary-c5e5c163d1d7097b
+DONE
+GROK-CANARY: PASS

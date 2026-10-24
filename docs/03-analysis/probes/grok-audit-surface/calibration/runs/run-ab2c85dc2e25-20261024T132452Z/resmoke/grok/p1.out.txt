@@ -1,0 +1,52 @@
+AUDIT-audit-report-docs-copy-plan-v1-BEGIN
+## Summary
+FR-1, FR-4, FR-5, and FR-6 are covered in the spec's form. FR-2's requirements contract drops `CONFLICT` from the token set, and FR-3's requirements slot is `<stem>` while the spec and this plan's Scope still say `<feature>`. The strategy section also prescribes a count-free, exit-0 cannot-judge, which the same plan's `GATE: INVALID must=0 should=0` / exit 2 token does not match, and Success Criteria asks for 25 mutations where the enumerated list is 23.
+
+| FR | Classification |
+|---|---|
+| FR-1 | implemented-as-written |
+| FR-2 | restated |
+| FR-3 | restated |
+| FR-4 | implemented-as-written |
+| FR-5 | implemented-as-written |
+| FR-6 | implemented-as-written |
+
+Evidence: 9 files opened, 20 greps run.
+
+## Must-fix
+- FR-2 is restated narrower in the requirements contract. That bullet's token alternation is `OK|MISSING`. The spec's contract line is `OK|MISSING|CONFLICT`, and AC-2.5 / AC-5.4 require a `CONFLICT` verdict with exit 0. A collector grammar copied from the requirements bullet rejects `CONFLICT`. Goals and Architecture in this plan still name `CONFLICT`, so the requirements line is the divergent form and has to be reconciled in the spec or rewritten to the spec's three-verdict line.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `COLLECT: OK|MISSING path=<docs path>`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `COLLECT: OK|MISSING|CONFLICT path=<docs path>`
+- FR-3 is restated on the refusal marker's first slot. The spec prints `[H-MAD] <feature> gate INVALID`, and this plan's Scope repeats `<feature>`. Requirements require `[H-MAD] <stem>` and say the slot carries the dot-free transport stem verbatim. Those are different strings. The gate's existing feature slot is `name.split(".")[0]`, which `h-mad/tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring` asserts, so `audit_f_plan_cycle3_codex.report.md` yields `audit_f_plan_cycle3_codex`. Reading "stem" as the `[^.]+\` group inside `TRANSPORT_RE` drops the `audit_` prefix. The spec does not record either reading, so the marker an implementer prints is not one contract.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `[H-MAD] <stem>`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `[H-MAD] <feature> gate INVALID (transport`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `[H-MAD] <feature> gate INVALID`
+- Implementation Strategy tells the implementer to follow `h_mad_new_gate.py`'s cannot-judge shape: no counts, and exit 0 on any verdict. FR-3 requires the counted token `GATE: INVALID must=0 should=0` and exit 2. Live `h_mad_audit_cycle.GATE_RE` (`h-mad/scripts/h_mad_audit_cycle.py` line 55) matches only a line that carries `must=` and `should=`. `_gate_token` raises `OperationalError` when that match is absent, so `gate()` never returns `("INVALID", 0, 0, [])` for a count-free line and AC-3.3 does not hold. The audit gate's missing-sections path already prints the counted INVALID line and returns 2 (`h_mad_audit_gate.py` around the `has_gate_sections` refusal).
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `cannot-judge carries no counts, exit 0 on any verdict`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `GATE: INVALID must=0 should=0`
+- Success Criteria demands 25 mutations on `collect_report.json`. This plan's FR-6 and spec AC-6.3 enumerate 23 labels (`a` through `l′`). `h-mad/tests/mutation-specs/collect_report.json` has 23 `name` entries. A done-check for 25 cannot pass on the list the plan and the spec define.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `25 mutations, every connection dropped`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `23 named-test mutations`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `23 mutations.`
+
+## Should-fix
+- The docs-anchor risk names `test_h_mad_audit_cycle_slices.py`. That module is absent. The slicer is `h-mad/tests/test_h_mad_audit_cycle_docs.py`, which spec AC-5.2 names. Its anchors are `## Audit prompt assembly` through `## Putting \`hmad-dispatch\` on PATH`, and inside that, `6.6.` through `\n7.`. Running the name in the risk table does not exercise that test.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `test_h_mad_audit_cycle_slices.py`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `test_h_mad_audit_cycle_docs.py`
+- The assumption table's `GATE_RE` stops at `should=(\d+)\s*$`. Live `GATE_RE` in `h_mad_audit_cycle.py` line 55 is `^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)(?:\s+\S+)*\s*$`, which accepts `GATE: PASS must=0 should=0 gated=1`. The feature token `GATE: INVALID must=0 should=0` still matches both. Copying the table's regex as the contract rejects a legal trailing field.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `GATE_RE = ^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)\s*$`
+- The Phase-7 census command in the assumption table, `ls docs/04-report/features/*.report.md`, now lists 4 files: `exec-missing-report-recovery.report.md`, `orca-native-orchestration.report.md`, `orca-native-transport.report.md`, `tdd-dispatch-verification-discipline.report.md`. The cited example `gate-blindness-hardening.report.md` is at `docs/archive/2026-08/gate-blindness-hardening/gate-blindness-hardening.report.md`. None of the 4 current basenames match `^audit_`, so a bare-suffix refusal would still hit Phase-7 reports. The published count and the example's directory are stale.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `→ 7 Phase-7 reports`
+
+## Nit
+- Assumption-table line pointers have moved. `grep -n unlink h_mad_audit_cycle.py` is not lines 92 and 169: the shared write `unlink` is `_finalize_write` at line 271, and the docs-path marker `unlink` is line 290. `_cmd_exec`'s option loop is at lines 3063–3071. That loop still has no `--report-file` (`--cd`, `--model`, `--out`, `--log`, `--timeout`, `--sandbox`, `--effort` only).
+- Next Steps still tells the operator to approve v1.0 and open Phase 3. Version History is at v1.11 and already records the AC-2.9 hand replay and the 5b mutation-count sweeps.
+- The overview calls this plan the recipe half because HemaSuite `d1e73d53` already landed a consumer guard. Scope also adds the h-mad gate refusal (`TRANSPORT_RE` in `h_mad_audit_gate.py`). The scope list is the work list.
+AUDIT-audit-report-docs-copy-plan-v1-END

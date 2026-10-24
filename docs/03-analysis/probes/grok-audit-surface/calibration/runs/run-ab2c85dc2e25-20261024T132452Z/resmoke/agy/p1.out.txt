@@ -1,0 +1,37 @@
+AUDIT-audit-report-docs-copy-plan-v2-BEGIN
+## Summary
+Evidence: 10 files opened, 0 greps run.
+Spec reconciliation (Axis C): `FR-1`: `implemented-as-written`; `FR-2`: `restated` (plan Requirements omits `CONFLICT` from the `COLLECT:` verdict alternation); `FR-3`: `restated` (plan Requirements specifies `[H-MAD] <stem> gate INVALID` whereas both spec FR-3 and plan Scope specify `[H-MAD] <feature> gate INVALID`); `FR-4`: `implemented-as-written`; `FR-5`: `implemented-as-written`; `FR-6`: `implemented-as-written` (save for an internal `25` vs `23` mutation-count contradiction in Success Criteria). The plan has four Must-fix issues: two `build`-class contract contradictions across spec and plan sections (`FR-2` `COLLECT:` verdict token set and `FR-3` `[H-MAD]` transport-refusal slot), and two `measurement`-class defects (`25` vs `23` mutations in `collect_report.json` and stale line pins / uncommanded census in the assumption and success criteria sections).
+
+## Must-fix
+- `FR-2` in `docs/01-plan/features/audit-report-docs-copy.plan.md` (`restated` vs `docs/01-plan/features/audit-report-docs-copy.spec.md` and internally inconsistent with the plan's own Goals and Architecture Considerations) narrows the `COLLECT:` contract line to `COLLECT: OK|MISSING path=<docs path> delivered=report-file|out|none [forced=1]`, omitting the `CONFLICT` verdict required by `spec.md` FR-2 (`COLLECT: OK|MISSING|CONFLICT path=<docs path> delivered=report-file|out|none`) and referenced in `plan.md` Goals (`COLLECT: MISSING|CONFLICT`) — an implementer following the Requirements summary for `FR-2` omits the `CONFLICT` token from the contract grammar.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › - FR-2: `h_mad_collect_report.py` with `COLLECT: OK|MISSING path=<docs path>
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › It prints one contract line `COLLECT: OK|MISSING|CONFLICT path=<docs path>
+- `FR-3` has an internal contradiction in `docs/01-plan/features/audit-report-docs-copy.plan.md` and a `restated` divergence against `docs/01-plan/features/audit-report-docs-copy.spec.md` over the `[H-MAD]` marker's feature slot on transport-file refusal: `plan.md` Scope and `spec.md` FR-3 specify `[H-MAD] <feature> gate INVALID (transport file …)`, whereas `plan.md` Requirements FR-3 specifies `[H-MAD] <stem> gate INVALID (transport file …)` carrying the full dot-free transport stem (e.g. `audit_f_plan_cycle3_codex`) verbatim — leaving callers and tests with two incompatible marker schemas depending on which section is read.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › Every refusal emits `[H-MAD] <feature> gate INVALID (transport
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › with exactly `GATE: INVALID must=0 should=0` + the `[H-MAD] <stem>
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › It prints exactly `GATE: INVALID must=0 should=0` and `[H-MAD] <feature> gate INVALID
+- `docs/01-plan/features/audit-report-docs-copy.plan.md` contradicts itself, `docs/01-plan/features/audit-report-docs-copy.spec.md`, and `h-mad/tests/mutation-specs/collect_report.json` on the mutation count: `plan.md` Success Criteria claims `25 mutations` in `collect_report.json`, whereas `plan.md` Requirements FR-6, Deliverables, Version History, `spec.md` AC-6.3, and `h-mad/tests/mutation-specs/collect_report.json` all have `23` mutations — violating internal consistency and the Base Invariant on derived counts.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › - `MUTATION: ALL_CAUGHT` on `collect_report.json` (25 mutations, every connection dropped
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › - FR-6: tests for every AC including the incident replay (AC-2.9), operational errors (AC-2.10) and readback (AC-2.12); mutation spec with 23 named-test mutations
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › (l′) CLI error path prints a `COLLECT:` line → AC-2.10 bites. 23 mutations.
+  quote: h-mad/tests/mutation-specs/collect_report.json › "name": "cli_error_emits_collect_contract_line",
+- `docs/01-plan/features/audit-report-docs-copy.plan.md` violates Base Invariants (`Line-pin rule` and `Behavioural premises carry their command`): the Assumption verification table pins stale line numbers (`hmad-dispatch.sh:2493-2499`, which in `h-mad/scripts/hmad-dispatch.sh` is inside `_exec_stamp()` while `_cmd_exec`'s option loop is at lines 3063–3072; and `h_mad_audit_cycle.py` lines `92` and `169`, which in `h-mad/scripts/h_mad_audit_cycle.py` are not `unlink` sites—`unlink` is in `_finalize_write` at line 271 and `_copy_collected_report` at line 290), and Success Criteria states `All 40 unique ACs in the spec` without writing the census command alongside the number.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › | `exec` has no `--report-file` | `_cmd_exec` option loop (`hmad-dispatch.sh:2493-2499`): `--cd --model --out --log --timeout --sandbox --effort` only |
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › | The `--out` rung also clobbers | `grep -n unlink h_mad_audit_cycle.py` → lines 92 (`_copy_collected_report`) AND 169 (`_write_collected_report`) |
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › - All 40 unique ACs in the spec pass automated tests (AC-2.9's hand replay is recorded, its suite half asserted).
+  quote: h-mad/scripts/hmad-dispatch.sh › _cmd_exec() {
+  quote: h-mad/scripts/h_mad_audit_cycle.py › def _finalize_write(
+
+## Should-fix
+- In `docs/01-plan/features/audit-report-docs-copy.plan.md`, the `## Deliverables` table row `| _copy_collected_report conflict-safe | module change | FR-2 (AC-2.5) |` omits `_write_collected_report` and `AC-2.6a`, even though `## Scope` and `## Architecture Considerations` state that `overwrite` and conflict safety apply to both `_copy_collected_report` and `_write_collected_report`.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › | `_copy_collected_report` conflict-safe | module change | FR-2 (AC-2.5) |
+
+## Nit
+None
+AUDIT-audit-report-docs-copy-plan-v2-END

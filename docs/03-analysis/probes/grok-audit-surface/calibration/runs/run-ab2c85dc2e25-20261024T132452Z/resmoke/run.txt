@@ -1,0 +1,1 @@
+RUN: checkout=/Users/kimhawk/orca/skills home=/Users/kimhawk

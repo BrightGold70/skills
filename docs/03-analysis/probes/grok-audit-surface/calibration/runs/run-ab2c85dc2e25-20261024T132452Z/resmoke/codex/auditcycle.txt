@@ -1,0 +1,11 @@
+GATED: DERIVED path=docs/01-plan/features/audit-report-docs-copy.plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=2 should=1 passes=1 p1=2/1 delivered=report-file size_status=verified
+Effort:
+- p1 not measured (codex-text log; the effort counters read agy stream-json only) targets: paths=19 code=16 other=3 unmeasured=3
+Premise checklist:
+- p1 must (no citation): The transport refusal is a normal `INVALID` gate verdict, yet the plan requires exit 2; non-zero is reserved for operational errors, and the plan's own stated gate contract requires exit 0 for any verdict. Align the plan and spec with the base signal discipline (emit the verdict token and exit 0).
+- p1 must (no citation): The incident replay is reported as completed, but its history entry records outputs only; it omits the exact commands required to re-derive this behavioral premise. Record the commands alongside the observations.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/roots/gas-root-d1-s1-szujeqyy/docs/01-plan/features/audit-report-docs-copy.plan.audit.v3.p1.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] audit-report-docs-copy audit-cycle FAIL
