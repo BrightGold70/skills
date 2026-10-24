@@ -1720,6 +1720,83 @@ class TestGateAuthorsTestSpec:
                  authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1)
         assert exc.value.reason == "test_path_misrooted"
 
+    # --- Review findings on 11b3b5fe (change-reviewer, 2026-10-25) ---
+
+    def test_authoring_gate_probes_the_interpreter_for_pytest(
+        self, gate_plan: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # An authoring gate runs pytest, so the plain gate's probe exemption must not apply.
+        monkeypatch.setattr("h_mad_assemble_tdd.interpreter_has_pytest", lambda python: False)
+        monkeypatch.setattr("h_mad_assemble_tdd.find_interpreters_with_pytest", lambda: [])
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "interpreter_has_no_pytest"
+
+    def test_a_dangling_symlink_counts_as_existing(self, gate_plan: Path, tmp_path: Path) -> None:
+        link = tmp_path / AUTHORED_PATHS[0]
+        link.parent.mkdir(parents=True)
+        link.symlink_to(tmp_path / "nowhere" / "missing.py")
+        assert not link.exists() and link.is_symlink()
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "authors_test_exists"
+
+    @pytest.mark.parametrize(
+        "kind", ["empty", "absolute", "parent", "nested-parent", "duplicate"],
+    )
+    def test_an_invalid_authored_path_halts(
+        self, gate_plan: Path, tmp_path: Path, kind: str
+    ) -> None:
+        paths = {
+            "empty": [""],
+            "absolute": [str(tmp_path / "outside" / "test_abs.py")],
+            "parent": ["../test_escape.py"],
+            "nested-parent": ["tests/../../test_escape.py"],
+            "duplicate": [AUTHORED_PATHS[0], AUTHORED_PATHS[0]],
+        }[kind]
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=paths, expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "authors_test_invalid"
+
+    def test_test_path_is_refused_on_an_authoring_gate(
+        self, gate_plan: Path, tmp_path: Path
+    ) -> None:
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate",
+                 test_path=["tests/guard_t.py"], authors_test=[AUTHORED_PATHS[0]],
+                 expect_fail=0, expect_pass=1)
+        assert exc.value.reason == "test_path_not_applicable"
+
+    def test_guards_reach_an_authoring_gate(self, gate_plan: Path, tmp_path: Path) -> None:
+        filled, _ = call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                         authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1,
+                         guards=["tests/test_kept.py::test_unchanged"])
+        assert ("**Regression guards (must pass from the first run — do NOT manufacture "
+                "a failure):** tests/test_kept.py::test_unchanged") in filled
+
+    def test_env_known_failures_on_an_authoring_gate_are_expected_not_measured(
+        self, gate_plan: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                         authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1,
+                         env_known_failures=["tests/test_new_socket.py::test_bind"])
+        assert "the stated counts are expected OUTSIDE the sandbox" in filled
+        assert "measured OUTSIDE the sandbox" not in filled
+
+    def test_a_misrooted_authored_path_names_its_own_flag(
+        self, gate_plan: Path, tmp_path: Path
+    ) -> None:
+        actual = tmp_path / "sub project" / AUTHORED_PATHS[0]
+        actual.parent.mkdir(parents=True)
+        actual.write_text("", encoding="utf-8")
+        with pytest.raises(Halt) as exc:
+            call(gate_plan, tmp_path, task_id="Task 4", phase="gate", test_path=[],
+                 authors_test=[AUTHORED_PATHS[0]], expect_fail=0, expect_pass=1)
+        assert f"--authors-test {AUTHORED_PATHS[0]} does not exist" in exc.value.detail
+
     def test_authoring_gate_command_reruns_the_authored_files(self, tmp_path: Path) -> None:
         import shlex
 
