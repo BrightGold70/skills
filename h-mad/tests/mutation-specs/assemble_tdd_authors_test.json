@@ -1,0 +1,59 @@
+{
+  "_why": "HemaSuite #207 Tasks 20-22: --authors-test lets a gate task create exactly the named new test files (operator option b, 2026-10-24).",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_assemble_tdd.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "authors-not-gate-dropped",
+      "_mechanism": "--authors-test is accepted on a RED/GREEN dispatch.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if authors_test and phase != \"gate\":  # M:AT-AUTHORS-NOT-GATE",
+      "replace": "    if False:  # M:AT-AUTHORS-NOT-GATE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_cli_authors_test_is_refused_outside_a_gate[red]"
+    },
+    {
+      "name": "authors-counts-dropped",
+      "_mechanism": "An authoring gate stages without stating the authored files' counts.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if authors_test and (expect_fail is None or expect_pass is None):  # M:AT-AUTHORS-COUNTS",
+      "replace": "        if False:  # M:AT-AUTHORS-COUNTS",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_cli_authoring_gate_requires_both_counts[none]"
+    },
+    {
+      "name": "authors-exists-dropped",
+      "_mechanism": "An existing test file can be named as authored, so the gate may overwrite it.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            if phase == \"gate\" and authors_test:  # M:AT-AUTHORS-EXISTS",
+      "replace": "            if False:  # M:AT-AUTHORS-EXISTS",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_an_existing_file_cannot_be_authored"
+    },
+    {
+      "name": "authors-directive-dropped",
+      "_mechanism": "The plain gate banner is kept, which forbids the very file the task must write.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if phase == \"gate\" and authors_test:  # M:AT-AUTHORS-DIRECTIVE",
+      "replace": "    if False:  # M:AT-AUTHORS-DIRECTIVE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_cli_authoring_gate_permits_the_named_files_and_states_their_counts"
+    },
+    {
+      "name": "authors-wire-cut",
+      "_mechanism": "main stops passing --authors-test to assemble.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            authors_test=args.authors_test,  # M:AT-AUTHORS-WIRE",
+      "replace": "            authors_test=[],  # M:AT-AUTHORS-WIRE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_cli_authoring_gate_permits_the_named_files_and_states_their_counts"
+    }
+  ]
+}

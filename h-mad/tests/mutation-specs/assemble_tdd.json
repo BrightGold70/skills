@@ -147,8 +147,8 @@
       "name": "unquote-the-interpolated-paths",
       "_mechanism": "A path with a space becomes two shell arguments and the pasted block silently runs the wrong thing. Re-anchored 2026-09-21 when the re-run line gained its project-root subshell \u2014 the project_root interpolation is now a third unquoted path on the same line, and the mutation must unquote all three or it stops being the mistake it names.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "            f\"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in test_paths)} -v)\",",
-      "replace": "            f\"(cd {project_root} && {python} -m pytest {' '.join(test_paths)} -v)\",",
+      "find": "            f\"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in rerun_paths)} -v)\",",
+      "replace": "            f\"(cd {project_root} && {python} -m pytest {' '.join(rerun_paths)} -v)\",",
       "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_a_path_with_spaces_is_quoted_in_the_block"
     },
     {
@@ -315,8 +315,8 @@
       "name": "drop-the-rerun-subshell-root",
       "_mechanism": "The half the handover brief did not name. The dispatch is --cd'd to the project root but the operator's re-run line was not, so one path string had to be correct against two different working directories. Measured from $HOME: rooted rc=0, unrooted rc=4 on the identical correct path.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "            f\"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in test_paths)} -v)\",\n",
-      "replace": "            f\"{q(python)} -m pytest {' '.join(q(path) for path in test_paths)} -v\",\n",
+      "find": "            f\"(cd {q(str(project_root))} && {q(python)} -m pytest {' '.join(q(path) for path in rerun_paths)} -v)\",\n",
+      "replace": "            f\"{q(python)} -m pytest {' '.join(q(path) for path in rerun_paths)} -v\",\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestTheTestPathIsRootedAtTheProjectRoot::test_the_operator_rerun_line_is_rooted_at_the_project_root"
     },
     {
@@ -404,8 +404,8 @@
       "_mechanism": "Quoting the joined scope merges separate pytest paths into one nonexistent path when the operator reruns the dispatch.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "symbol": "command_block",
-      "find": "{' '.join(q(path) for path in test_paths)}",
-      "replace": "{q(' '.join(test_paths))}",
+      "find": "{' '.join(q(path) for path in rerun_paths)}",
+      "replace": "{q(' '.join(rerun_paths))}",
       "test": "tests/test_h_mad_assemble_tdd.py::TestRepeatableTestPathSpec::test_rerun_quotes_each_path_as_its_own_argument[red]"
     },
     {
@@ -431,7 +431,7 @@
       "_mechanism": "Skipping the gate counts refusal admits even a zero-valued split into a task that has no RED/GREEN counts.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "symbol": "assemble",
-      "find": "        if expect_fail is not None or expect_pass is not None:\n",
+      "find": "        if not authors_test and (expect_fail is not None or expect_pass is not None):\n",
       "replace": "        if False:\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGatePhaseSpec::test_cli_gate_refuses_any_supplied_counts_even_zero[both]"
     },
