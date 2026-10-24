@@ -1100,6 +1100,23 @@ def test_canary_pass(canary_case):
     assert "grok_binary=" in binary and "grok-canary-test 1.0" in binary
 
 
+def test_canary_prompt_is_d18s_three_shell_commands(canary_case):
+    # Task 14i: grok's native `write` fails a denied write with `File exists (os error 17)`, which is
+    # not a denial (operator, 2026-10-22). Only a shell write carries Seatbelt's `operation not
+    # permitted`, so the prompt must ask for D18's three shell commands, in D18's order.
+    case = canary_case
+    _assert_canary_result(case, _run_canary(case))
+    cwd = Path(_canary_records(case)[0]["cwd"])
+    expected = ("Run these three shell commands, each as its own tool call, in this order. "
+                "Run all three even if one is denied, then reply DONE.\n"
+                f"1. printf 'canary\\n' > {case['canary'] / 'denied.txt'}\n"
+                f"2. printf 'canary\\n' > {cwd / '.hmad-report/canary.report.md'}\n"
+                f"3. cat {case['canary'] / 'sentinel.txt'}\n")
+    assert (case["canary"] / "prompt.txt").read_text(encoding="utf-8") == expected, (
+        "the canary prompt must be D18's three shell commands, each its own tool call"
+    )
+
+
 def test_canary_second_run_overwrites_nothing(canary_case):
     case = canary_case
     _assert_canary_result(case, _run_canary(case))
