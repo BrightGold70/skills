@@ -65,7 +65,14 @@ Run 8 depends on Task 14h.
 
 ## Calibration (Task 14h, AC-T14h.4)
 
-Pending: this is run after GREEN, before run 8. Every recorded grok log is re-scanned under the 14h
-scanner and its `require` outcome is listed. Run 7's d1 `p3.log` must read
-`OUT_OF_ROOT … checkout=0` → `REQUIRE: OK`. The positive control, the old S2 d5 v1 `p3.log`, must
-still read `checkout>0` and still refuse.
+Run after GREEN and before run 8. Each recorded grok pass log under `~/.local/state/h-mad/grok-audit-surface` went through two pipelines, each against its recorded root and checkout:
+
+- the 14g scanner (`bae6f97b`) with the old `require --verb toolscan`;
+- the 14h scanner (working tree) with the new `require`.
+
+The logs were every S1 log, every re-smoke log, and the S2 `p3` logs of each run. Both pipelines used the real CLIs, with scratch halt files. Script: `calibrate_14h.py`, in the session scratchpad.
+
+- **25 logs. Exactly one `require` outcome changed:** run 7's S2 d1 v1 `p3.log` went from `OUT_OF_ROOT out=1 chk=0`, `STOP` (14g) to `OUT_OF_ROOT out=1 chk=0`, `REQUIRE: OK` (14h). That is the intended fix: the shell `HOME=/tmp` reference is published, not halted.
+- **The 14 pre-route-b escape logs** (`run-ab2c85dc2e25` S1 and S2, and run 2's re-smoke) still read `STOP` under 14h. Most now count **more** contamination, because the h-mad state tree and other grok session dirs are new contamination classes. For example, S1 goes from `chk=10` to `15` and S2 d6 v2 from `4` to `13`. S2 d5 v2 goes from `out=5 chk=0` to `chk=3`: it was strict-halted under 14g and is contamination-halted under 14h.
+- **Positive control** (old S2 d5 v1 `p3.log`): `chk=14` under 14g and `chk=21` under 14h. It still stops.
+- **The other 10 logs** (the re-smokes and S2 cycles of runs 3–7) read `CLEAN`, `REQUIRE: OK` under both pipelines.

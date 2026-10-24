@@ -100,7 +100,8 @@ def _append_halt(path: str | None, reason: str) -> None:
 def require(args: argparse.Namespace) -> int:
     line = read_last_line(args.token_file)
     if args.verb == "toolscan":
-        ok = line.startswith("TOOLSCAN: CLEAN surface=grok ")  # M:REQUIRE-OK-TOOLSCAN
+        ok = (line.startswith("TOOLSCAN: CLEAN surface=grok ") or
+              (line.startswith("TOOLSCAN: OUT_OF_ROOT surface=grok ") and " checkout=0 " in line))  # M:REQUIRE-OK-TOOLSCAN
     elif args.verb == "grok-canary":
         ok = line == "GROK-CANARY: PASS"  # M:REQUIRE-OK-CANARY
     elif args.verb == "assembler":

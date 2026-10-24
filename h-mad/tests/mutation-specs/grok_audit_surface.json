@@ -1585,6 +1585,70 @@
       "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_write_content_naming_an_outside_path_is_clean"
     },
     {
+      "name": "require-ok-toolscan-contamination-only-dropped",
+      "_mechanism": "Halt an uncontaminated OUT_OF_ROOT scan again (Task 14h).",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "              (line.startswith(\"TOOLSCAN: OUT_OF_ROOT surface=grok \") and \" checkout=0 \" in line))  # M:REQUIRE-OK-TOOLSCAN",
+      "replace": "              False)  # M:REQUIRE-OK-TOOLSCAN",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_require_toolscan_out_of_root_without_contamination_is_ok"
+    },
+    {
+      "name": "require-ok-toolscan-checkout-ignored",
+      "_mechanism": "Accept any grok OUT_OF_ROOT scan, contaminated or not.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "              (line.startswith(\"TOOLSCAN: OUT_OF_ROOT surface=grok \") and \" checkout=0 \" in line))  # M:REQUIRE-OK-TOOLSCAN",
+      "replace": "              line.startswith(\"TOOLSCAN: OUT_OF_ROOT surface=grok \"))  # M:REQUIRE-OK-TOOLSCAN",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_require_toolscan_contamination_still_stops[checkout-1]"
+    },
+    {
+      "name": "require-ok-toolscan-surface-ignored",
+      "_mechanism": "Accept an uncontaminated OUT_OF_ROOT token of another surface.",
+      "file": "scripts/h_mad_grok_containment.py",
+      "find": "              (line.startswith(\"TOOLSCAN: OUT_OF_ROOT surface=grok \") and \" checkout=0 \" in line))  # M:REQUIRE-OK-TOOLSCAN",
+      "replace": "              (line.startswith(\"TOOLSCAN: OUT_OF_ROOT \") and \" checkout=0 \" in line))  # M:REQUIRE-OK-TOOLSCAN",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_require_toolscan_contamination_still_stops[codex-surface]"
+    },
+    {
+      "name": "p-contain-contamination-only-dropped",
+      "_mechanism": "Refuse every OUT_OF_ROOT scan again, contaminated or not (Task 14h).",
+      "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
+      "find": "            if scan[\"word\"] == \"OUT_OF_ROOT\" and scan[\"checkout\"] > 0:  # M:GAS-CONTAIN-OUT-OF-ROOT",
+      "replace": "            if scan[\"word\"] == \"OUT_OF_ROOT\":  # M:GAS-CONTAIN-OUT-OF-ROOT",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_probe_tmp_only_escape_is_published_not_refused"
+    },
+    {
+      "name": "toolscan-state-tree-dropped",
+      "_mechanism": "The h-mad state tree no longer counts as contamination.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            in_state_tree = any(_below(path, home + \"/.local/state/h-mad\") for path in outside)  # M:TOOLSCAN-STATE-TREE",
+      "replace": "            in_state_tree = False  # M:TOOLSCAN-STATE-TREE",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_state_tree_path_of_another_run_counts_checkout"
+    },
+    {
+      "name": "toolscan-state-tree-widened",
+      "_mechanism": "All of ~/.local/state counts as contamination.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            in_state_tree = any(_below(path, home + \"/.local/state/h-mad\") for path in outside)  # M:TOOLSCAN-STATE-TREE",
+      "replace": "            in_state_tree = any(_below(path, home + \"/.local/state\") for path in outside)  # M:TOOLSCAN-STATE-TREE",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_state_tree_sibling_prefix_is_not_contamination"
+    },
+    {
+      "name": "toolscan-sessions-contamination-dropped",
+      "_mechanism": "Other grok session dirs no longer count as contamination.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            in_grok_sessions = any(_below(path, home + \"/.grok/sessions\") for path in outside)  # M:TOOLSCAN-SESSIONS-CONTAMINATION",
+      "replace": "            in_grok_sessions = False  # M:TOOLSCAN-SESSIONS-CONTAMINATION",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_other_session_dir_is_out_of_root"
+    },
+    {
+      "name": "toolscan-sessions-contamination-widened",
+      "_mechanism": "All of ~/.grok counts as contamination.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            in_grok_sessions = any(_below(path, home + \"/.grok/sessions\") for path in outside)  # M:TOOLSCAN-SESSIONS-CONTAMINATION",
+      "replace": "            in_grok_sessions = any(_below(path, home + \"/.grok\") for path in outside)  # M:TOOLSCAN-SESSIONS-CONTAMINATION",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_grok_settings_is_out_of_root_but_not_contamination"
+    },
+    {
       "name": "toolscan-own-session-disarmed",
       "_mechanism": "Disable the own-session exemption.",
       "file": "scripts/h_mad_tool_calls.py",
@@ -2332,8 +2396,8 @@
       "name": "require-ok-toolscan-narrowed",
       "_mechanism": "Reject the verb's valid token.",
       "file": "scripts/h_mad_grok_containment.py",
-      "find": "        ok = line.startswith(\"TOOLSCAN: CLEAN surface=grok \")  # M:REQUIRE-OK-TOOLSCAN",
-      "replace": "        ok = False  # M:REQUIRE-OK-TOOLSCAN",
+      "find": "        ok = (line.startswith(\"TOOLSCAN: CLEAN surface=grok \") or",
+      "replace": "        ok = (False or",
       "test": "tests/test_grok_audit_surface_containment.py::test_require_ok_per_verb[toolscan]"
     },
     {
@@ -2356,16 +2420,16 @@
       "name": "require-ok-toolscan-widened",
       "_mechanism": "Accept refused scan tokens.",
       "file": "scripts/h_mad_grok_containment.py",
-      "find": "        ok = line.startswith(\"TOOLSCAN: CLEAN surface=grok \")  # M:REQUIRE-OK-TOOLSCAN",
-      "replace": "        ok = line.startswith(\"TOOLSCAN: \")  # M:REQUIRE-OK-TOOLSCAN",
+      "find": "        ok = (line.startswith(\"TOOLSCAN: CLEAN surface=grok \") or",
+      "replace": "        ok = (line.startswith(\"TOOLSCAN: \") or",
       "test": "tests/test_grok_audit_surface_containment.py::test_require_stop_on_another_token[toolscan]"
     },
     {
       "name": "require-ok-toolscan-any-surface",
       "_mechanism": "Accept a clean token for another surface.",
       "file": "scripts/h_mad_grok_containment.py",
-      "find": "        ok = line.startswith(\"TOOLSCAN: CLEAN surface=grok \")  # M:REQUIRE-OK-TOOLSCAN",
-      "replace": "        ok = line.startswith(\"TOOLSCAN: CLEAN \")  # M:REQUIRE-OK-TOOLSCAN",
+      "find": "        ok = (line.startswith(\"TOOLSCAN: CLEAN surface=grok \") or",
+      "replace": "        ok = (line.startswith(\"TOOLSCAN: CLEAN \") or",
       "test": "tests/test_grok_audit_surface_containment.py::test_require_stop_on_another_token[toolscan-codex-clean]"
     },
     {
@@ -2979,10 +3043,10 @@
     },
     {
       "name": "p-contain-scan-forced",
-      "_mechanism": "Replace every grok scan with an out-of-root result.",
+      "_mechanism": "Replace every grok scan with a contaminated out-of-root result (Task 14h: an uncontaminated one no longer refuses).",
       "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
       "find": "            scan = h_mad_tool_calls.scan_log(text, \"grok\", root=root, checkout=run_fields[\"checkout\"], home=run_fields[\"home\"], needle_dirs=needles) if text is not None else {\"word\": \"UNREADABLE\"}  # M:GAS-CONTAIN-SCAN",
-      "replace": "            scan = {\"word\": \"OUT_OF_ROOT\", \"calls\": 0, \"out_of_root\": 0, \"checkout\": 0, \"exempt\": 0, \"nonjson\": 0, \"mcp_unmeasured\": 0}  # M:GAS-CONTAIN-SCAN",
+      "replace": "            scan = {\"word\": \"OUT_OF_ROOT\", \"calls\": 1, \"out_of_root\": 1, \"checkout\": 1, \"exempt\": 0, \"nonjson\": 0, \"mcp_unmeasured\": 0}  # M:GAS-CONTAIN-SCAN",
       "test": "tests/test_grok_audit_surface_probe.py::test_clean_grok_log_does_not_refuse"
     },
     {
@@ -2997,7 +3061,7 @@
       "name": "p-contain-out-of-root",
       "_mechanism": "Do not refuse an OUT_OF_ROOT grok scan.",
       "file": "../docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py",
-      "find": "            if scan[\"word\"] == \"OUT_OF_ROOT\":  # M:GAS-CONTAIN-OUT-OF-ROOT",
+      "find": "            if scan[\"word\"] == \"OUT_OF_ROOT\" and scan[\"checkout\"] > 0:  # M:GAS-CONTAIN-OUT-OF-ROOT",
       "replace": "            if False:  # M:GAS-CONTAIN-OUT-OF-ROOT",
       "test": "tests/test_grok_audit_surface_probe.py::test_out_of_root_absolute_path_outside_the_root"
     },

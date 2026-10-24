@@ -190,8 +190,9 @@ def test_scan_mixed_exempt_and_out_of_root_counts_out_of_root(scan_module, scan_
 
 def test_scan_codex_own_looking_session_path_is_out_of_root(scan_module, scan_case, capsys):
     text = f"exec\ncat '{_own_session(scan_case)}/history.json'\n succeeded in 1ms:\n"
+    # Task 14h: a grok session dir is contamination whichever surface reads it.
     _assert_scan(scan_module, scan_case, capsys, text,
-                 _token("codex", "OUT_OF_ROOT", out_of_root=1), surface="codex")
+                 _token("codex", "OUT_OF_ROOT", out_of_root=1, checkout=1), surface="codex")
 
 
 def test_scan_codex_no_call_is_unmeasured(scan_module, scan_case, capsys):

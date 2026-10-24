@@ -1219,7 +1219,7 @@ def containment_checks(s2_dir: Path, sources: dict[str, str]) -> None:
                 text = None
             root = roots[pass_index - 1]["path"]
             scan = h_mad_tool_calls.scan_log(text, "grok", root=root, checkout=run_fields["checkout"], home=run_fields["home"], needle_dirs=needles) if text is not None else {"word": "UNREADABLE"}  # M:GAS-CONTAIN-SCAN
-            if scan["word"] == "OUT_OF_ROOT":  # M:GAS-CONTAIN-OUT-OF-ROOT
+            if scan["word"] == "OUT_OF_ROOT" and scan["checkout"] > 0:  # M:GAS-CONTAIN-OUT-OF-ROOT
                 raise Refusal(f"out_of_root:{cycle.parent.name}.{cycle.name}")
             if scan["word"] == "UNREADABLE":  # M:GAS-CONTAIN-UNREADABLE
                 raise Refusal(f"out_of_root:{cycle.parent.name}.{cycle.name}")

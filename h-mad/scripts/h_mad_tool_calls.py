@@ -165,7 +165,9 @@ def scan_log(text: str, surface: str, *, root: str, checkout: str,
             outside = [path for path, kind in zip(paths, classes) if kind == "out"]
             in_checkout = any(_below(path, checkout) for path in outside)  # M:TOOLSCAN-CHECKOUT
             in_needle = any(needle + "/" in path for path in outside for needle in needle_dirs)  # M:TOOLSCAN-NEEDLE
-            if in_checkout or in_needle:
+            in_state_tree = any(_below(path, home + "/.local/state/h-mad") for path in outside)  # M:TOOLSCAN-STATE-TREE
+            in_grok_sessions = any(_below(path, home + "/.grok/sessions") for path in outside)  # M:TOOLSCAN-SESSIONS-CONTAMINATION
+            if in_checkout or in_needle or in_state_tree or in_grok_sessions:
                 result["checkout"] += 1
         elif "exempt" in classes:
             result["exempt"] += 1
