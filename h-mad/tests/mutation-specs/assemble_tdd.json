@@ -51,7 +51,7 @@
       "name": "skip-the-interpreter-probe",
       "_mechanism": "Mistake 2. A bare python3 is 3.14 here and the independent re-run errors instead of measuring.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "    if phase != \"gate\" and not interpreter_has_pytest(python):",
+      "find": "    if (phase != \"gate\" or authors_test) and not interpreter_has_pytest(python):",
       "replace": "    if False:",
       "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_2_an_interpreter_without_pytest_is_refused_with_a_suggestion"
     },
@@ -211,16 +211,16 @@
       "name": "collapse-the-guards-back-into-the-else-arm",
       "_mechanism": "The filed defect, restored exactly: the WIRE lines REPLACE the guards block instead of preceding it, so --guard is parsed, validated and then dropped on every wiring task with no warning and an ASSEMBLE-TDD: PASS. An implementer told by the template that guards are labelled, and then shown no labels, has the impl-plan's count as its only authority \u2014 the manufactured-failure path the template's own paragraph exists to close.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "    if guards and phase != \"gate\":\n        lines.append(\n            \"**Regression guards (must pass from the first run \u2014 do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    elif phase != \"gate\":\n        lines.append(\"**Regression guards:** none in this task.\")\n",
-      "replace": "    if shape != \"wiring\" and phase != \"gate\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run \u2014 do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
+      "find": "    if guards and (phase != \"gate\" or authors_test):\n        lines.append(",
+      "replace": "    if guards and phase != \"gate\" and shape != \"wiring\":\n        lines.append(",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_wiring_task_states_its_guard_labels"
     },
     {
       "name": "emit-the-guards-only-for-wiring",
       "_mechanism": "The over-correction. A repair that moved the guards block under the wiring arm instead of out of the conditional would pass every wiring-shaped test and silently drop the labels for new-behaviour and refactor tasks \u2014 the same defect with the shapes exchanged, which is why both directions are pinned.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "    if guards and phase != \"gate\":\n        lines.append(\n            \"**Regression guards (must pass from the first run \u2014 do NOT manufacture \"\n            \"a failure):** \" + \", \".join(guards)\n        )\n    elif phase != \"gate\":\n        lines.append(\"**Regression guards:** none in this task.\")\n",
-      "replace": "    if shape == \"wiring\" and phase != \"gate\":\n        if guards:\n            lines.append(\n                \"**Regression guards (must pass from the first run \u2014 do NOT manufacture \"\n                \"a failure):** \" + \", \".join(guards)\n            )\n        else:\n            lines.append(\"**Regression guards:** none in this task.\")\n",
+      "find": "    if guards and (phase != \"gate\" or authors_test):\n        lines.append(",
+      "replace": "    if guards and shape == \"wiring\" and (phase != \"gate\" or authors_test):\n        lines.append(",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGuardsAndCountsAreOrthogonalToShape::test_a_new_behaviour_task_still_states_its_guard_labels"
     },
     {
@@ -440,7 +440,7 @@
       "_mechanism": "Requiring pytest on a probe-only gate refuses valid gate dispatches and runs an interpreter probe the task never needs.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "symbol": "assemble",
-      "find": "    if phase != \"gate\" and not interpreter_has_pytest(python):",
+      "find": "    if (phase != \"gate\" or authors_test) and not interpreter_has_pytest(python):",
       "replace": "    if not interpreter_has_pytest(python):",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGatePhaseSpec::test_gate_skips_the_pytest_interpreter_probe"
     },
@@ -449,7 +449,7 @@
       "_mechanism": "skill-candidates row (d): the guard-scope line is not emitted, so a guard on an earlier task's not-yet-GREEN code is again demanded to pass at RED.",
       "file": "scripts/h_mad_assemble_tdd.py",
       "symbol": "assemble",
-      "find": "    if guards and phase != \"gate\":  # M:AT-GUARD-SCOPE\n",
+      "find": "    if guards and (phase != \"gate\" or authors_test):  # M:AT-GUARD-SCOPE",
       "replace": "    if False:  # M:AT-GUARD-SCOPE\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestAssembles::test_guards_are_scoped_to_behaviour_existing_at_the_red_base"
     },

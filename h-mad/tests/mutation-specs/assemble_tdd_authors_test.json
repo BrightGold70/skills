@@ -54,6 +54,94 @@
       "find": "            authors_test=args.authors_test,  # M:AT-AUTHORS-WIRE",
       "replace": "            authors_test=[],  # M:AT-AUTHORS-WIRE",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_cli_authoring_gate_permits_the_named_files_and_states_their_counts"
+    },
+    {
+      "name": "authors-empty-path-accepted",
+      "_mechanism": "An empty --authors-test path is accepted.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "                if not authored_path:  # M:AT-AUTHORS-INVALID",
+      "replace": "                if False:  # M:AT-AUTHORS-INVALID",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_an_invalid_authored_path_halts[empty]"
+    },
+    {
+      "name": "authors-absolute-path-accepted",
+      "_mechanism": "An absolute --authors-test path authorises a write outside the root.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "                if os.path.isabs(authored_path):",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_an_invalid_authored_path_halts[absolute]"
+    },
+    {
+      "name": "authors-dotdot-path-accepted",
+      "_mechanism": "A '..'-escaping --authors-test path is accepted.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "                if \"..\" in Path(authored_path).parts:",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_an_invalid_authored_path_halts[nested-parent]"
+    },
+    {
+      "name": "authors-duplicate-accepted",
+      "_mechanism": "A duplicated --authors-test path is accepted.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "                if authored_path in seen_authored_paths:",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_an_invalid_authored_path_halts[duplicate]"
+    },
+    {
+      "name": "authors-testpath-silently-dropped",
+      "_mechanism": "--test-path on an authoring gate is dropped with a PASS.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            if test_paths:  # M:AT-AUTHORS-NO-TESTPATH",
+      "replace": "            if False:  # M:AT-AUTHORS-NO-TESTPATH",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_test_path_is_refused_on_an_authoring_gate"
+    },
+    {
+      "name": "authors-pytest-probe-skipped",
+      "_mechanism": "An authoring gate keeps the plain gate's probe exemption, so a pytest-less interpreter stages PASS.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if (phase != \"gate\" or authors_test) and not interpreter_has_pytest(python):",
+      "replace": "    if phase != \"gate\" and not interpreter_has_pytest(python):",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_authoring_gate_probes_the_interpreter_for_pytest"
+    },
+    {
+      "name": "authors-exists-follows-symlinks",
+      "_mechanism": "exists() follows a dangling symlink, so it reads as absent.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            path_exists = os.path.lexists(project_root / test_path)  # M:AT-AUTHORS-EXISTS",
+      "replace": "            path_exists = (project_root / test_path).exists()  # M:AT-AUTHORS-EXISTS",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_a_dangling_symlink_counts_as_existing"
+    },
+    {
+      "name": "authors-runline-dropped",
+      "_mechanism": "The prompt states no run line for the authored files.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if phase != \"gate\" or authors_test:  # M:AT-AUTHORS-RUNLINE",
+      "replace": "    if phase != \"gate\":  # M:AT-AUTHORS-RUNLINE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_cli_authoring_gate_permits_the_named_files_and_states_their_counts"
+    },
+    {
+      "name": "authors-rerun-dropped",
+      "_mechanism": "The command block re-runs nothing for an authoring gate.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if phase != \"gate\" or authors_test:  # M:AT-AUTHORS-RERUN",
+      "replace": "    if phase != \"gate\":  # M:AT-AUTHORS-RERUN",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_authoring_gate_command_reruns_the_authored_files"
+    },
+    {
+      "name": "authors-scope-empty",
+      "_mechanism": "The authored files are not the run scope.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        test_paths = list(authors_test) if authors_test else []  # M:AT-AUTHORS-SCOPE",
+      "replace": "        test_paths = []  # M:AT-AUTHORS-SCOPE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_cli_authoring_gate_permits_the_named_files_and_states_their_counts"
+    },
+    {
+      "name": "authors-block-wire-cut",
+      "_mechanism": "main stops passing --authors-test to command_block.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        authors_test=args.authors_test,  # M:AT-AUTHORS-BLOCK-WIRE",
+      "replace": "        authors_test=[],  # M:AT-AUTHORS-BLOCK-WIRE",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateAuthorsTestSpec::test_cli_authoring_gate_permits_the_named_files_and_states_their_counts"
     }
   ]
 }
