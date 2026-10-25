@@ -1,0 +1,71 @@
+## Summary
+The plan is the spec-v1.7 strategy: decisions stop at D-14, state gains four fields, and review attribution is read from the implementation dispatch. The spec file is v1.10; `python3 h-mad/scripts/h_mad_ac_census.py docs/01-plan/features/agy-coder-fallback.spec.md` prints `ACS: OK count=21 frs=9`, against the plan's cited `count=19`. FR-3 and FR-8 match the spec. FR-1, FR-2, FR-4, FR-5, FR-6, FR-7, FR-9 and FR-10 are restated, so a 5d/5e implementer following the plan would ship a different schema, gate, exit code and author record than the spec requires.
+
+| FR | Classification |
+|---|---|
+| FR-1 | restated |
+| FR-2 | restated |
+| FR-3 | implemented-as-written |
+| FR-4 | restated |
+| FR-5 | restated |
+| FR-6 | restated |
+| FR-7 | restated |
+| FR-8 | implemented-as-written |
+| FR-9 | restated |
+| FR-10 | restated |
+
+Evidence: 2 files opened, 9 greps run.
+
+## Must-fix
+- FR-1 is restated as four optional fields. Spec FR-1 adds a fifth, `implementation_authors` (`{module, agent}`, D-15), with AC-1.3 on both validator paths. The plan's scope, G1 and stage 1 never declare it, so a record written to the plan's schema cannot store the author log FR-7 reads. The spec's owed line already says a plan that carries the field list gains this field and AC-1.3.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `Declare the four fields.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `no implementation dispatch recorded`
+- FR-2 is restated as the resolution function plus a `--record` write. Spec FR-2 (v1.10) gives the verb's caller exactly three halts: `step5:implementer_invalid`, `step5:implementer_unresolved` and `step5:implementer_switch_unrecorded`. Stage 2 does not name them, so the orchestrator has no halt for an invalid record, a missing record, or a failed switch write.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `moves out of the hook into the judge.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `The verb's caller has exactly three halts,`
+- FR-4 is restated as G4's test-first rule plus a deny for unknown tools. Spec v1.8 requires every deny to end in one `kind=` from a closed list (AC-4.2), and the three-valued scan fires those denies on `unknown` as well as `active`. Spec v1.10 D-16 (deliberate difference 6, AC-4.1) denies a class-(b) target that names an existing directory when the scan is `active` or `unknown`. The plan's decisions stop at D-14 and stage 5 does not mention kinds, the unknown scan, or a directory target, so those fixtures would not be written.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `Tools the gate does not know are denied, and the shell gets Codex's`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `Every deny carries a kind (S1, v1.8).`
+- FR-5 is restated on the exit code the stage tells the implementer to pin. The same bullet says operational errors exit 2 and then says `AGY-GATE: UNREADABLE` exits 1 from the check. Spec FR-5's table says that check exits 2, and AC-5.2 asserts the token and the exit code separately, so the plan's fixture would go green on the wrong code. The stage also mirrors the v1.4 table only: it does not carry v1.10's rule that a `--self-check` verdict FAIL prints its token and exits 0, which AC-5.2 now fixtures.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `exits 1 from the check, and the`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `, then the check line | 2 | operational:`
+- FR-6's unknown-scan short-circuit is absent. The shared-module move into `h_mad_target_identity.py` matches D-12, but spec FR-6 denies every `run_command` without judging it when the scan reads `unknown`. That branch is gate composition, not the command-shape helper. Stage 4 and G4 never state it, so an agy gate can judge a shell command in the state the spec refuses outright.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `Codex-gate behaviour does not change.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `is denied without judging its command, as the Codex gate denies`
+- FR-7 is restated. Stage 7 reads the entry's implementer from the successful implementation dispatch and fixtures only the stored `implementer_switch.to=agy` case. Spec FR-7 reads the author set from `implementation_authors`, including after the dispatch context is gone, and AC-7.3 adds the multi-author, pre-field, 5d-RED and unaccepted-dispatch fixtures. The plan's Owed section still says the spec owes that criterion (`AC-7.1 and AC-7.2 do not name the Attribution fixture`), which is the reverse of spec v1.8/v1.9.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `read from that dispatch.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `(D-15). It is never read from`
+- FR-9 is restated on the AC-9.1 sweep and the AC-9.4 control. The plan's re-run is the union of the line grep and the joined-literal reading, and it says that reading cannot see `.py` comments. Spec FR-9 joins comment tokens because a phrase wrapped across two `#` lines is invisible to a one-line grep, and AC-9.1 says the joined reading takes in `.py` comment text. Separately, the plan's control is six mutation rows, one per copy. AC-9.4 also requires the control once per sentence of the block in at least one copy, so a test that binds only the first sentence still satisfies the plan.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `of the line grep and the joined-literal reading`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `lines is seen only when the comment text is joined.`
+- FR-10 is restated. Its doc pins cover the neutral Phase-5 section, `exec agy`, the Phase-7 WARNING lines, the agy gate section and the teammate-audit bullet. Spec FR-10 also requires the SKILL.md Phase-5 steps to append `implementation_authors` on an accepted 5e GREEN or fix dispatch and to read attribution from that field before each review leg. Stage 7 only tells the orchestrator to add a review-independence entry after each leg.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `add an entry after each leg, for every implementer.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `a 5e GREEN or fix dispatch, and the attribution read from it before each review leg`
+
+## Should-fix
+- Success Criteria's "every AC" list omits AC-9.4, while the requirements sentence includes it. The equivalence test is still specified in stage 6, but a close-out that checks only the success list does not require that AC.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `AC-9.1, AC-9.2 and AC-X as automated tests`
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `AC-9.3 and AC-9.4, plus AC-X`
+- The requirements sentence says "21 acceptance criteria", then names 20 tokens (19 ACs plus AC-X) and cites `ACS: OK count=19 frs=9`. The same census command on the current spec prints `ACS: OK count=21 frs=9`. The two missing numbered criteria are AC-1.3 and AC-7.3, already covered above; the published 21/20/19 disagreement is a stale count.
+  class: measurement
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `with the 21 acceptance criteria`
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `ACS: OK count=19 frs=9`
+- Stage 6 adds a fifth corpus case, `other-symbol` (a typo that is neither caller nor callee), and requires the changed-verdict set over that five-case corpus to be exactly `{new-caller}`. AC-9.2 names four cases. Spec FR-9 allows a fifth fixture only when the rule text treats `NameError` differently from `ImportError`/`AttributeError`.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `adds a fifth,`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `differential corpus runs all four cases`
+- The FR-10 locator is given as `h-mad/tests/doc_sections.py`. That path is not in the tree (`ls` reports no such file). The section's `$Q` command imports `docsections`, and `h-mad/tests/docsections.py` is the module the cited doc tests import. A test written against the prose path would not load.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `h-mad/tests/doc_sections.py`
+
+## Nit
+None

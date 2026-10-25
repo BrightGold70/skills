@@ -1,0 +1,16 @@
+## Summary
+Task 20 contains a blocking contradiction: its amendment narrows capture to three tools, while the remaining task text still requires six samples and five class-(b) payload tests. Task 22 also leaves the input to its timeout formula underspecified. Evidence: 2 files opened, 5 greps run.
+
+## Must-fix
+- Reconcile Task 20 with its v1.3 amendment: the task still requires capturing all six tools, tests six required samples and five class-(b) tools, and requires all six samples for AC-8.1, despite the amendment narrowing capture and coverage to three tools and 8 new nodes. As written, the post-merge task requires captures the amendment says could not be obtained and its acceptance criteria cannot pass as specified.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `The required set becomes the three captured tools: `write_to_file`, `replace_file_content`, `run_command`.`
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `a temporary capture hook records one real `toolCall` envelope **for each of the six required tools**`
+
+## Should-fix
+- Define which Task 21 timing reading constitutes the “slower turn” and how it is computed before applying Task 22's formula; without that definition, the timeout probe and expected test value are not reproducible from the stated procedure.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `max(900, 3 × slower turn)` rounded up to a multiple of 60, over the readings Task 21 committed.
+
+## Nit
+None

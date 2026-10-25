@@ -1,0 +1,29 @@
+AUDIT-agy-coder-fallback-design-v1-BEGIN
+## Summary
+`docs/02-design/features/agy-coder-fallback.design.md` (v1.4) settles DO-1 through DO-7 thoroughly across FR-1..FR-10, but contains two internal/cross-document build contradictions in FR-5 and FR-2 that would misdirect an implementer. Specifically, §"FR-5" instructs the assembler's `UNWIRED` branch to `exit 2` (violating `Audit-gate signal discipline`, spec FR-5/AC-5.2, and the design's own docstring and mutation rules two paragraphs below), and §"FR-2" "The caller's halts (v1.4)" enumerates only two halt outcomes (`step5:implementer_switch_unrecorded` and `step5:implementer_invalid`), omitting `step5:implementer_unresolved` for `no-record` and `unreadable` tokens despite claiming in v1.4's version history to have adopted all three. Two non-blocking cross-document synchronization items between `design.md`, `spec.md` (v1.10), and `plan.md` (v1.6) are recorded under Should-fix.
+
+## Must-fix
+- In `docs/02-design/features/agy-coder-fallback.design.md` §"FR-5 — the wiring check, the assembler, and the worktree (DO-6)", the assembler dispatch bullet for `UNWIRED` specifies `Write no prompt, exit 2;` — this directly violates `h-mad/invariants.base.md` §"Audit-gate signal discipline" (which requires exit 0 on a normal FAIL verdict), contradicts `docs/01-plan/features/agy-coder-fallback.spec.md` §"FR-5" and AC-5.2 (which require assembler exit 0 on `AGY-GATE: UNWIRED` and a mutation test killing an `UNWIRED` return of 2), and contradicts the design's own paragraph immediately below (`exit 0 on PASS and on HALT agy_tdd_hook_unverified after AGY-GATE: UNWIRED; 2 on every other HALT`) and its FR-5 mutation row (`UNWIRED returning 2 → the AC-5.2 exit fixture`).
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › two spaces, as existing HALT details are. Write no prompt, exit 2;
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › shows check exit 0, and assembler
+  quote: h-mad/invariants.base.md › on a normal verdict (PASS or FAIL). Using a non-zero
+- In `docs/02-design/features/agy-coder-fallback.design.md` §"FR-2 — `resolve_implementer` and the `implementer` verb", the subsection **The caller's halts (v1.4)** states that the orchestrator never dispatches on "these two outcomes" and lists only ` record=failed` → `step5:implementer_switch_unrecorded` and `invalid field=` → `step5:implementer_invalid`, omitting the third halt `step5:implementer_unresolved` for `TDD-IMPLEMENTER: no-record feature=<pct>` and `TDD-IMPLEMENTER: unreadable file=<pct> error=<name>` — this leaves two of the six verb output rows in FR-2's table without a caller halt in §"FR-2" and contradicts both `docs/01-plan/features/agy-coder-fallback.spec.md` §"FR-2" (`Halts (v1.10, adopted from impl-plan v1.1 Task 16)`) and the design's own v1.4 Version History note claiming §"FR-2" adopted all three halts (`step5:implementer_switch_unrecorded, step5:implementer_invalid, step5:implementer_unresolved`).
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › dispatches on these two outcomes, adopting the impl-plan's names:
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › The verb's caller has exactly three halts,
+
+## Should-fix
+- `docs/01-plan/features/agy-coder-fallback.plan.md` (v1.6) has not been synchronized with the D-15 (`implementation_authors`) and v1.8/v1.9 additions in `docs/01-plan/features/agy-coder-fallback.spec.md` and `docs/02-design/features/agy-coder-fallback.design.md`: `plan.md` §"Goals" (G1), §"Requirements", §"Implementation Strategy" (Stage 1), §"Deliverables", and §"Success Criteria" still list only four FR-1 state fields and 19 ACs (omitting `implementation_authors`, `AC-1.3`, and `AC-7.3`), while `design.md` §"Owed by other documents" only notes that the plan lacks AC-7.3's other fixtures and E7 re-anchors rather than `implementation_authors` and `AC-1.3` as `spec.md` §"Owed by other documents" requires.
+  class: measurement
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › This plan satisfies FR-1 through FR-10 of the spec, with the 19 acceptance criteria AC-1.1, AC-1.2,
+  quote: docs/02-design/features/agy-coder-fallback.design.md › v1.1's plan items (M-4's 31 rows, DO-2's log version, D-12/D-13) are landed in plan
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › If the plan carries FR-1's field list or AC-7.3's fixtures, it gains
+- `docs/02-design/features/agy-coder-fallback.design.md` §"Owed by other documents" still lists **Spec (v1.4 items)** (`OD-2 (T2a, with its residual)`, `FR-2 naming step5:implementer_invalid and step5:implementer_unresolved`, and `FR-4/FR-5 self-check: a verdict FAIL exits 0`) as owed by the spec, and its header `Sources:` line still cites `spec v1.6 (c853b207), plan v1.4 (29ae3e7b)`, whereas `docs/01-plan/features/agy-coder-fallback.spec.md` is at v1.10 on disk and has already landed all three v1.4 items (as D-16, FR-2 Halts v1.10, and FR-5 `--self-check` v1.10).
+  class: measurement
+  quote: docs/02-design/features/agy-coder-fallback.design.md › Lines recording OD-2 (T2a, with its residual); FR-2 naming
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › v1.10: Owed lines from impl-plan v1.1 (Phase 5b), final corrective revision, not re-audited (2026-10-16).
+
+## Nit
+- In `docs/02-design/features/agy-coder-fallback.design.md` §"FR-5", `check_agy` step 1 formats `UNREADABLE file=<pct> error=<name>` using `urllib.parse.quote(str(p), safe='')` (percent-encoding `/`), whereas §"FR-2" and `h_mad_tdd_judge.py` `_enc` use `urllib.parse.quote(s, safe="/._-")`; noting that difference explicitly in §"FR-5" would avoid reader confusion over `<pct>`.
+AUDIT-agy-coder-fallback-design-v1-END

@@ -1,0 +1,32 @@
+AUDIT-audit-report-docs-copy-plan-v1-BEGIN
+## Summary
+Adversarial consistency and spec-reconciliation audit of `docs/01-plan/features/audit-report-docs-copy.plan.md` against `docs/01-plan/features/audit-report-docs-copy.spec.md` and the repository implementation (`h_mad_audit_cycle.py`, `h_mad_collect_report.py`, `h_mad_audit_gate.py`, `hmad-dispatch.sh`, `SKILL.md`, and `collect_report.json`). The plan's architecture, transport-grammar disjointness rationale, and work ordering align with the spec, but two defects break consistency: `Requirements` FR-2 omits `CONFLICT` from the `COLLECT:` verdict contract token (`COLLECT: OK|MISSING` instead of `COLLECT: OK|MISSING|CONFLICT`), and `Success Criteria` states `25 mutations` for `collect_report.json` against `23` in Requirements, Deliverables, Version History, and Spec AC-6.3.
+
+Evidence: 12 files opened, 0 greps run.
+
+| Spec item | Plan coverage | Status |
+|---|---|---|
+| FR-1 | Scope (lines 18–21), Goals (line 36), Requirements (lines 45, 58–60), Architecture Considerations (lines 90–107), Deliverables (line 158) | implemented-as-written |
+| FR-2 | Scope (lines 19–22), Goals (lines 36–38, 40–41), Requirements (lines 46–51), Architecture Considerations (lines 87–89, 114–130), Deliverables (lines 159–160); Requirements line 46 omits `CONFLICT` from `COLLECT: OK\|MISSING\|CONFLICT` | diverged |
+| FR-3 | Scope (lines 23–27), Goals (line 39), Requirements (lines 52–57), Architecture Considerations (lines 90–113), Deliverables (lines 161, 167) | implemented-as-written |
+| FR-4 | Scope (line 28), Goals (line 38), Requirements (line 61), Deliverables (lines 162, 165) | implemented-as-written |
+| FR-5 | Scope (lines 29–30), Goals (lines 37–38), Requirements (lines 62–63), Architecture Considerations (lines 118–124), Deliverables (line 163) | implemented-as-written |
+| FR-6 | Goals (line 42), Requirements (lines 64–68), Deliverables (lines 164–167), Success Criteria (lines 192–198); Success Criteria line 193 cites `25 mutations` instead of `23 mutations` | diverged |
+
+## Must-fix
+- `Requirements` FR-2 drops `CONFLICT` from the `COLLECT:` contract line (`COLLECT: OK|MISSING` instead of `COLLECT: OK|MISSING|CONFLICT`) — Under `## Requirements`, the `FR-2` bullet specifies the CLI stdout token contract as `COLLECT: OK|MISSING path=<docs path> delivered=report-file|out|none [forced=1]`, omitting the `CONFLICT` verdict required by `docs/01-plan/features/audit-report-docs-copy.spec.md` (FR-2, AC-2.5, AC-2.6a, AC-5.4) and referenced elsewhere in `docs/01-plan/features/audit-report-docs-copy.plan.md` (Goals line 37 and Architecture Considerations lines 118–125). Because FR-2 defines the CLI output contract and helper-registry token set, an implementer or test author following Requirements FR-2 literally would omit `CONFLICT` from the token grammar.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `COLLECT: OK|MISSING path=<docs path>`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `COLLECT: OK|MISSING|CONFLICT path=<docs path>`
+- `Success Criteria` cites `25 mutations` in `collect_report.json`, contradicting `23 mutations` in Requirements, Deliverables, Version History, and Spec AC-6.3 — In `docs/01-plan/features/audit-report-docs-copy.plan.md`, `## Success Criteria` line 193 requires `MUTATION: ALL_CAUGHT` on `collect_report.json` with `(25 mutations, every connection dropped AND forced, fall-through paths included)`, whereas `## Requirements` FR-6 (line 65), `## Deliverables` (line 166), `## Version History` (lines 220 and 222), and `docs/01-plan/features/audit-report-docs-copy.spec.md` AC-6.3 (line 242) all specify `23` mutations.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `(25 mutations, every connection dropped`
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `AC-2.10 bites. 23 mutations.`
+
+## Should-fix
+None
+
+## Nit
+- In `docs/01-plan/features/audit-report-docs-copy.plan.md`, `## Scope` (line 26) writes `[H-MAD] <feature> gate INVALID (transport file …)` whereas `## Requirements` FR-3 (line 54) and `## Version History` v1.10 (line 223) clarify that the marker's feature slot carries `<stem>` verbatim (`[H-MAD] <stem> gate INVALID (transport file …)`).
+- In `docs/01-plan/features/audit-report-docs-copy.plan.md`, the `## Deliverables` row on line 159 lists `_copy_collected_report conflict-safe` for `FR-2 (AC-2.5)` without naming `_write_collected_report` (`AC-2.6a`), even though `## Scope` (line 19) and `## Architecture Considerations` (line 115) cover both writers.
+AUDIT-audit-report-docs-copy-plan-v1-END

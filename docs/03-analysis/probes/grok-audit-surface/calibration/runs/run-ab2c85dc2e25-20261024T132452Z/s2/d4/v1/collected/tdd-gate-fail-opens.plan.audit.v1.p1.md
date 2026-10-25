@@ -1,0 +1,31 @@
+## Summary
+The plan covers FR-2 and FR-4–FR-8 as written, but leaves two material FR-1/FR-3 contracts incomplete for implementation. The FR-1 gap is the v1.6 rule that drops `.` before resolving a later `..`; the FR-3 gap is unconditional refusal when the project root is absent, not a directory, or not traversable.
+
+| Spec requirement | Classification | Plan coverage |
+|---|---|---|
+| FR-1 | restated | Shared component walk is planned, but the v1.6 `.`/`..` ordering and its regression case are not specified. |
+| FR-2 | implemented-as-written | Both gates fold `.py` before production and basename checks. |
+| FR-3 | restated | Governed target refusal is covered; the unconditional, pre-state-lookup root refusal is omitted. |
+| FR-4 | implemented-as-written | Codex header split, trim set, markers, controls, and self-check are covered. |
+| FR-5 | implemented-as-written | Bounded reap, six-field result, kind propagation and priority are covered. |
+| FR-6 | implemented-as-written | Pinned cells and equal decision/kind differential are specified. |
+| FR-7 | implemented-as-written | Per-guard mutation census and floor are specified. |
+| FR-8 | implemented-as-written | Parser flag, safe-list equality, adapter changes and named tests are assigned. |
+
+Evidence: 2 files opened, 4 greps run.
+
+## Must-fix
+- FR-1 is narrower than the spec: T1 says only “component walk” and its T0/T6 corpora omit the `tests/./../src/prod.py` regression case, leaving the ordering that prevents `.` from absorbing `..` unspecified. Add the ordering explicitly and pin the case in the relevant gate tests (and differential if included in its domain); otherwise the known v1.6 fail-open can recur. 
+  class: build
+  quote: docs/01-plan/features/tdd-gate-fail-opens.spec.md › `.` components are dropped from the walk first, so a `.` never absorbs the next `..` — v1.6, N-1
+  quote: docs/01-plan/features/tdd-gate-fail-opens.plan.md › Shared canonicaliser: component walk, F_GETPATH on existing directories
+- FR-3 omits the spec’s unconditional project-root refusal. T2/T3 condition FR-3 refusal on an active/unreadable or active/unknown state, but the spec requires both gates to reject an absent, non-directory, or non-traversable root before any state lookup, whatever the phase. Add that branch and tests across phase states; otherwise an unenterable root can fall through the governed-only behavior and fail open. 
+  class: build
+  quote: docs/01-plan/features/tdd-gate-fail-opens.spec.md › Both gates then refuse `judge-error` ("project root … cannot be entered") whatever the phase, before any state lookup.
+  quote: docs/01-plan/features/tdd-gate-fail-opens.plan.md › FR-3 refusal (both arms) gated on `_any_phase5_status` ∈ {`active`, `unknown`}
+
+## Should-fix
+None
+
+## Nit
+None

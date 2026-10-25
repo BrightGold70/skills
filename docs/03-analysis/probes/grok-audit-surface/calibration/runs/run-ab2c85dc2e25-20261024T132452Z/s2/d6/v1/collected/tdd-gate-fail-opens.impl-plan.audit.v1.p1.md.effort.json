@@ -1,0 +1,21 @@
+{
+  "agy_events": 0,
+  "collected": "tdd-gate-fail-opens.impl-plan.audit.v1.p1.md",
+  "failed": 0,
+  "log": "/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/stem/s2-d6-v1/audit_tdd-gate-fail-opens_impl-plan_cycle1_run20261024T145716Z-74767_p1.log",
+  "log_retained": "/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/roots/gas-root-d6-s2v1-hdh7r5em/.h-mad/pass-logs/tdd-gate-fail-opens.impl-plan.audit.v1.p1.md.log",
+  "log_sha256": "27153865ca1253fe29c6de79d86fbd3edc9426d91b0e12fbd83c407b6ab5ffa1",
+  "ok": 0,
+  "pass": 1,
+  "readable": true,
+  "shape": "codex-text",
+  "status": null,
+  "targets": {
+    "code": 5,
+    "other": 2,
+    "paths": 7,
+    "unmeasured": 2
+  },
+  "thinking": 0,
+  "tools": 0
+}

@@ -1,0 +1,27 @@
+## Summary
+Task 20 still contains two capture contracts. The v1.3 amendment requires the three tools agy 1.4.0 actually declared, an 8-node RED split, and a `PATH_KEYS` entry only for `replace_file_content`; the description, capture gate, 14-node RED split, and AC-8.1 still require all six samples and stop the task on a subset. That subset is the case the amendment says cannot be captured, and design D-FR8-1 matches only the three-tool contract. The other tasks' RED arithmetic, wire rows, anchors, and verdict exits agree with each other.
+Evidence: 12 files opened, 18 greps run.
+
+## Must-fix
+- Task 20 gives the implementer two incompatible procedures for the same RED commit. The amendment sets the required samples to `write_to_file`, `replace_file_content`, and `run_command` (item 1 is 3 nodes, item 2 is 2, RED is 1 F and 7 P, GREEN adds only `"replace_file_content": ("TargetFile",)`), because `multi_replace_file_content`, `sed_file`, and `notebook_edit` were never declared. The body still requires six fixture files, says a missing sample stops the task, derives a 14-node split (6 + 5 + 2 + 1) that can be capture-only when F is 0, and AC-8.1 still checks "all six samples". Following the body halts a task the amendment says to finish; following the amendment writes different tests and a different `PATH_KEYS`. Design D-FR8-1 records the three-tool capture. Rewrite the description, tests, RED split, and AC so only that contract remains.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `The capture does not pass on a subset.`
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `All six samples must exist before the RED dispatch.`
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `Step 1 captures the three declared tools; the`
+
+## Should-fix
+- Task 9's AC-X gates `hook_wiring_agy.json` on 9 rows, but the task names 8 (the seven `fr5-*` reason rows plus `fr5-timeout-floor-hardcoded-60`) and the ledger counts Task 9 as 7 design rows plus 1 connection row. A row-count gate rejects the spec the named list tells the implementer to write. The tree's spec has those 8 names.
+  class: measurement
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `plus 1 connection row (I3), 8 rows in`
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `(9 rows)`
+- Task 5 item 9 says to patch `_safe_shell_command` so it returns true, and Task 4's working pattern is to patch that name on the gate module. Task 5 also puts the policy import inside `main`'s `try`, so the self-check binds the identity module's function locally. A gate-module patch does not reach it, and the shell-policy id stays red at GREEN. The test has to patch `h_mad_target_identity._safe_shell_command` before `main()`.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `policy names are imported inside that`
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `The fixture imports the policy, so it is not item 7's import failure.`
+- Task 12 tells the implementer to retarget five existing `test_h_mad_phase7_preconditions.py` guards onto a `REVIEWED` record and cites `acf_5d_task12_decisions.md` for which ones. That file is not in the tree, and the five test names are not listed. The wrong set either leaves `review_independence_unrecorded` firing on a guard that expected no warnings, or loosens a guard that should have stayed on `READY`.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `tests assert no warnings or the exact pre-FR-7 set on the`
+
+## Nit
+- The Source line still says design v1.3 (`4e4b5ded`); Version History v1.2 aligns this plan to design v1.4 (`2cd5d7f1`) and spec v1.10 (`c283bb63`). Tasks 4, 6, and 7 already cite v1.4.
+- Version History has no entry for the Task 20 v1.3 amendment. The v1.1 and v1.2 entries still describe Task 20 as six samples and 14 nodes.

@@ -1,0 +1,32 @@
+AUDIT-audit-report-docs-copy-design-v1-BEGIN
+## Summary
+Axis C sweep: all listed acceptance criteria are addressed except AC-3.1, whose required exit behavior is inconsistent between the specification and design; the design also contradicts itself about the number of CLI markers. The transport refusal is a normal `INVALID` verdict, so the specified nonzero exit conflicts with the base audit-gate signal discipline.
+
+| ACs | Classification |
+|---|---|
+| AC-1.1–1.6 | implemented-as-written |
+| AC-2.1–2.12 | implemented-as-written |
+| AC-3.1 | restated |
+| AC-3.2–3.7, including AC-3.5a | implemented-as-written |
+| AC-4.1–4.3 | implemented-as-written |
+| AC-5.1–5.4 | implemented-as-written |
+| AC-6.1–6.5 | implemented-as-written |
+
+Evidence: 2 files opened (design and spec), 5 targeted searches run.
+
+## Must-fix
+- Resolve the gate refusal’s exit contract across spec, design, and the base signal invariant: AC-3.1 specifies exit 2, while the design’s code returns 1 and its downstream prose says 2; either is nonzero for the normal `GATE: INVALID` verdict and violates the invariant that nonzero is reserved for operational errors. Align the spec and design on exit 0 for this verdict, or define and justify an operational-error condition instead. This is the AC-3.1 restatement requiring explicit spec reconciliation.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.spec.md › `prints `GATE: INVALID must=0 should=0`, the `[H-MAD]` line contains `transport file`, exit 2.`
+  quote: docs/02-design/features/audit-report-docs-copy.design.md › `return 1`
+
+- Choose one marker-count contract for the collector CLI: D2 says every exit path carries exactly one `[H-MAD]` marker, but the Error Handling Strategy says exactly two. Implementers and tests cannot satisfy both requirements.
+  class: build
+  quote: docs/02-design/features/audit-report-docs-copy.design.md › `so every exit path carries exactly one [H-MAD] marker` / `Every CLI exit path — verdict or operational error — carries exactly two [H-MAD] … collect`
+
+## Should-fix
+None
+
+## Nit
+None
+AUDIT-audit-report-docs-copy-design-v1-END

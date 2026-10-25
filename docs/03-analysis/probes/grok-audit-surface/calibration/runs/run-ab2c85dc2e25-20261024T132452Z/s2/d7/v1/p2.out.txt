@@ -1,0 +1,43 @@
+AUDIT-agy-coder-fallback-plan-v1-BEGIN
+## Summary
+Plan v1.6 is aligned only through Spec v1.7 (`c117a695`) and has not incorporated the build-affecting changes from Spec v1.8, v1.9 (`D-15`), and v1.10 (`D-16`), leaving out the fifth FR-1 state field (`implementation_authors` and `AC-1.3`), the `implementation_authors`-backed FR-7 attribution rules and four of the five `AC-7.3` fixtures, the FR-4/FR-6 `unknown`-scan, `kind=`-on-every-deny, empty-path-key, and directory-target (`D-16`) rules in `AC-4.1`/`AC-4.2`, and the `--self-check` exit-0 discipline in FR-5/`AC-5.2`. In addition, Stage 5 directly contradicts Spec FR-5 and `AC-5.2` by stating that `AGY-GATE: UNREADABLE` exits `1` from the check instead of `2`, and §"Success Criteria" drops `AC-1.3`, `AC-7.3`, and `AC-9.4` from the automated-test gate list.
+
+## Must-fix
+- Plan v1.6 omits the fifth FR-1 state field `implementation_authors` and `AC-1.3` added in Spec v1.9 (`D-15`) — Spec FR-1 declares five optional fields (`implementer`, `agy_status`, `implementer_switch`, `review_independence`, and `implementation_authors`) and pins `implementation_authors` on both validator paths in `AC-1.3`, whereas the plan still specifies only four FR-1 fields across §"Scope", §"Goals" (G1), Stage 1, and §"Deliverables" and omits `AC-1.3` altogether.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › Declare the four fields.
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › One entry per accepted implementation dispatch, so FR-7 §"Attribution" can recover a module's
+- Stage 7 (`FR-7`) and Stage 6 (`FR-10`) omit `implementation_authors` attribution recovery, the three closed unrecoverable-author-set cases, the SKILL.md Phase-5 `implementation_authors` step, and four of the five `AC-7.3` fixtures from Spec v1.8/v1.9 (`D-15`) — Spec FR-7 reads a module's author set from `implementation_authors` on every review leg, writes no entry when that set is unrecoverable (field absent, no entry for the module, or malformed), updates SKILL.md's Phase-5 orchestrator steps (FR-10), and pins five fixtures in `AC-7.3`, whereas Plan Stage 7 describes reading directly from the dispatch, carries only the single `implementer_switch.to=agy` fixture, and omits the FR-10 Phase-5 step.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › implementation dispatch produced the code the leg reviews, read from that dispatch. It is
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › If the plan carries FR-1's field list or AC-7.3's fixtures, it gains
+- Stage 5 (`FR-5`) contradicts Spec FR-5 and `AC-5.2` on the wiring-check exit code for `AGY-GATE: UNREADABLE` (`1` vs `2`) and omits Spec v1.10's `--self-check` exit-0 verdict rule and `AC-5.2` fixture/mutant — Under "Operational errors exit 2", Stage 5 says `AGY-GATE: UNREADABLE` exits `1` from the check, contradicting Spec FR-5's table and `AC-5.2` which require the check to exit `2`; Stage 5 also omits Spec v1.10's rule that a `--self-check` `FAIL` verdict prints its token on stdout and exits `0` (including correcting the Codex gate's `FAIL shell-policy` branch) and its corresponding `AC-5.2` fixture and mutation check.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › exits 1 from the check, and the
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › with exit 2, and the assembler
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › and so is one that returns 2 on a self-check
+- Stage 5 (`FR-4`, `FR-6`) and §"Requirements" omit Spec v1.8 and v1.10 (`D-16`) gate rules and `AC-4.1`/`AC-4.2` fixtures — The plan does not carry (1) FR-4's rule that every deny path ends `reason` with a closed-list `kind=<kind>` pinned per deny path in `AC-4.2`, (2) the two-layer activity scan where `_any_phase5_status(root) == "unknown"` fires every step5-gated deny including FR-6's `run_command` while `"inactive"` still checks `read_chain` for a class-(b) production `.py` target (`AC-4.1`), (3) the rule treating an empty or non-string path key value as no path key (`FR-4` E5, `AC-4.1`), or (4) `D-16` (FR-4 deliberate difference 6, `AC-4.1`), which denies a class-(b) directory target with `kind=judge-error` under `active`/`unknown` and allows it under `inactive`.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › 5. **agy gate (FR-4), then its wiring check and assembler enforcement (FR-5).** The gate imports
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › A class-(b) target that names an existing directory
+- §"Requirements" and §"Success Criteria" omit `AC-1.3` and `AC-7.3` (and §"Success Criteria" also omits `AC-9.4`) from the required acceptance criteria — §"Requirements" claims "21 acceptance criteria" while listing only 19 numbered ACs plus `AC-X` (omitting `AC-1.3` and `AC-7.3`, and listing `D-1..D-14` instead of `D-1..D-16`), and §"Success Criteria" drops `AC-9.4` as well as `AC-1.3` and `AC-7.3` from the automated-test pass gate.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › This plan satisfies FR-1 through FR-10 of the spec, with the 21 acceptance criteria AC-1.1, AC-1.2,
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › AC-5.1, AC-5.2, AC-6.1, AC-7.1, AC-7.2, AC-9.1, AC-9.2 and AC-X as automated tests, and
+
+## Should-fix
+- Stage 2 (`FR-2`) omits the three caller halt tokens and `failure-recovery.md` residual adopted in Spec v1.10 — Spec FR-2 names the exact caller halts (`step5:implementer_invalid`, `step5:implementer_unresolved`, and `step5:implementer_switch_unrecorded`) and notes that `failure-recovery.md` rows for them are deferred, whereas Stage 2 mentions only the resolution function and `--record` write path.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › moves out of the hook into the judge.
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › The verb's caller has exactly three halts,
+- §"Success Criteria" cites `h-mad/tests/doc_sections.py` instead of `h-mad/tests/docsections.py` — Line 832 names `h-mad/tests/doc_sections.py` (with an underscore), which does not exist in the repository; the helper module imported on line 845 (`import docsections as d`) is `h-mad/tests/docsections.py`.
+  class: measurement
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › A section under an ATX heading is located with
+- Plan provenance stamps, AC census count, and §"Owed by other documents" lag behind Spec v1.10 — The header states that v1.6 mirrors spec v1.7 at `c117a695`, §"Requirements" cites `ACS: OK count=19 frs=9`, and §"Owed by other documents" still flags the FR-7 Attribution fixture as open for the spec, whereas the spec in the tree is at v1.10 with 21 numbered ACs (`AC-1.3` and `AC-7.3` added) and `D-15`/`D-16` settled.
+  class: measurement
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › v1.6 mirrors spec
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › Open for the spec:
+
+## Nit
+None
+AUDIT-agy-coder-fallback-plan-v1-END

@@ -1,0 +1,2 @@
+ASSEMBLE: PASS /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/stem/s2-d1-v1/audit_audit-report-docs-copy_plan_cycle1_run20261024T134805Z-90950_p2.txt 89959B (87.9 KB) sentinel=AUDIT-audit-report-docs-copy-plan-v1 size_status=verified
+  ~ 87.9 KB is approaching the largest prompt confirmed answered on the pane path (89.9 KB) — a non-issue via `hmad-dispatch exec`; on the pane path, inlining only the spec's '## Functional Requirements' section saves ~7 KB and loses no AC (SKILL.md step 5.5)

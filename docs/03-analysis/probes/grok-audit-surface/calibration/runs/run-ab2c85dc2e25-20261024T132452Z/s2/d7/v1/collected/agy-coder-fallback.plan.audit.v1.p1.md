@@ -1,0 +1,48 @@
+## Summary
+The plan covers FR-3, FR-6, FR-8 and FR-9 as written, but it reflects spec v1.7 and narrows or omits requirements added in v1.10; the FR-1, FR-2, FR-4, FR-5, FR-7 and FR-10 gaps need to be carried into the plan. Axis C classification:
+| FR | Classification |
+|---|---|
+| FR-1 | restated |
+| FR-2 | restated |
+| FR-3 | implemented-as-written |
+| FR-4 | restated |
+| FR-5 | restated |
+| FR-6 | implemented-as-written |
+| FR-7 | restated |
+| FR-8 | implemented-as-written |
+| FR-9 | implemented-as-written |
+| FR-10 | restated |
+
+Evidence: 2 files opened, 5 greps run.
+
+## Must-fix
+- FR-1 omits the durable `implementation_authors` field and its validation/append contract, so the schema work and fixtures would not satisfy the current requirement. The plan also does not carry AC-1.3.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `The schema declares `implementer`, `agy_status`, `implementer_switch` and `review_independence` as optional.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `| `implementation_authors` | array of objects `{module, agent}` (D-15) | no implementation dispatch recorded |`
+- FR-2 leaves the caller's three required halts unspecified, including the halt when `--record` fails; an implementer could dispatch after an invalid, unresolved or unrecorded switch while following the plan.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `The env-var and `PATH` evaluation moves out of the hook into the judge. The `--record` write goes through `h_mad_state_write.py`'s write path.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `The verb's caller has exactly three halts, one per failure class of the token above: `step5:implementer_invalid` ... `step5:implementer_unresolved` ... and `step5:implementer_switch_unrecorded``
+- FR-4 omits the D-16 rule for existing-directory targets and its active/unknown versus inactive behavior. The plan's broad tool-denial goal does not give the implementer this target predicate or its fixtures.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `agy cannot write a production `.py` without a failing test during active step5, through any tool. Tools the gate does not know are denied`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `A class-(b) target that names an existing directory (`.`, `src/`, the root itself, or a symlink to a directory) denies `kind=judge-error` when the scan reads `active` or `unknown`, and is allowed when it reads `inactive` (D-16, OD-2).`
+- FR-5 does not carry the v1.10 contract for the gate's own `--self-check`: a normal FAIL must print its token to stdout and exit 0, and the Codex gate's FAIL-shell-policy path must be corrected. The wiring check's `self-check-failed` verdict alone does not specify these behaviors or their tests.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `AGY-GATE: WIRED and every AGY-GATE: UNWIRED reason=… (all seven reasons, no-hooks-file and self-check-failed included) exit 0 from the check.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `A normal `FAIL` verdict ... prints its `FAIL` token and exits 0; only an operational error ... exits nonzero.`
+- FR-7 describes attribution from an implementation dispatch but does not establish the durable author set required by D-15. Without it, the specified resumed-review and multi-author cases cannot recover authorship reliably; AC-7.3 and its fixtures are also absent.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `An entry's `implementer` is the agent whose successful implementation dispatch produced the code the leg reviews, read from that dispatch.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `The orchestrator reads a module's author set from FR-1's `implementation_authors`: the distinct `agent` values of the entries whose `module` equals it`
+- FR-10 omits the SKILL.md instructions to append each accepted implementation dispatch to `implementation_authors` and read that record before each review leg. Its planned review-entry instructions do not cover this separate authorship record, leaving the operator workflow incomplete.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `The stage also writes the SKILL.md text that tells the orchestrator to add an entry after each leg, for every implementer.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `the `implementation_authors` append on accepting a 5e GREEN or fix dispatch, and the attribution read from it before each review leg, per FR-1 and FR-7 (D-15).`
+
+## Should-fix
+None
+
+## Nit
+None

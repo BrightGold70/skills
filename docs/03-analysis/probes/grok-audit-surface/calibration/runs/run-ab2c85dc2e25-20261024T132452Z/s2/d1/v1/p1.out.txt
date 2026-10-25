@@ -1,0 +1,31 @@
+AUDIT-audit-report-docs-copy-plan-v1-BEGIN
+## Summary
+FR reconciliation:
+
+| FR | Classification |
+|---|---|
+| FR-1 | implemented-as-written |
+| FR-2 | implemented-as-written |
+| FR-3 | implemented-as-written |
+| FR-4 | implemented-as-written |
+| FR-5 | implemented-as-written |
+| FR-6 | implemented-as-written |
+
+The plan addresses each spec requirement, but its mutation-count gate conflicts internally and its motivating incident-rate claim is not re-derivable from the cited text.  
+Evidence: 5 files opened, 4 greps run.
+
+## Must-fix
+- Resolve the required mutation count: the plan specifies 23 mutations in FR-6 and Deliverables but requires 25 in Success Criteria, so implementers cannot tell which count the gate expects.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `mutation spec with 23 named-test mutations`
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `MUTATION: ALL_CAUGHT on collect_report.json (25 mutations, every connection dropped`
+- Make the motivating 7-of-8 result reproducible and distinguish the stated cause: the Overview gives a rate and attributes the surviving reports to `/tmp` retention without an inline command/output or a control showing the reports would have been lost absent that retention.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `Seven of eight consecutive plan cycles on HemaSuite `nlm-cli-version-pin` skipped it; the reports survived only because `/tmp` had not been wiped yet.`
+
+## Should-fix
+None
+
+## Nit
+None
+AUDIT-audit-report-docs-copy-plan-v1-END

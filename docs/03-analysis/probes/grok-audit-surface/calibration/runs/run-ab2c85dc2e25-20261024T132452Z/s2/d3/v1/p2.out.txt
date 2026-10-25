@@ -1,0 +1,30 @@
+AUDIT-audit-report-docs-copy-impl-plan-v1-BEGIN
+## Summary
+The implementation plan is well-structured across the six ordered tasks, but contains three build-affecting inconsistencies against its own code blocks, paired design, and the live repository: Task 6's mutation table pins `e′` (`cli-collects-on-bad-root`) to a test under which the mutant survives, Task 2 AC-3.1 requires `exit 1` instead of `exit 2` for the gate transport refusal, and Task 5 AC-3.5a (along with paired design D5) prescribes an `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` literal that omits the `_run$RUN` token actually present in `h-mad/SKILL.md`. Additionally, Task 6 AC-6.3 contradicts itself and the 23-row table by stating `the spec has exactly the 24 mutations above` alongside `mutations=23 caught=23`.
+Evidence: 16 files opened, 0 greps run.
+
+## Must-fix
+- Task 6 mutation table row `e′` (`cli-collects-on-bad-root`) names `tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback` instead of `tests/test_h_mad_collect_report.py::test_cli_absent_project_root_refuses_and_creates_nothing` — `test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback` passes an existing regular file (`tmp_path / "not-a-directory"`) as `--project-root` and an existing report, so when `if not project_root.is_dir():` is mutated to `if False:`, the later `mkdir(parents=True, exist_ok=True)` raises `NotADirectoryError` (`OSError`), which the outer handler still turns into exit 2 and `[H-MAD] f collect operational_error`, letting the mutant survive; only `test_cli_absent_project_root_refuses_and_creates_nothing` (which passes an absent directory and no report, matching Task 6's own prose at lines 288–291 and `h-mad/tests/mutation-specs/collect_report.json`) kills `e′`.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.impl-plan.md › `tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback`
+  quote: h-mad/tests/mutation-specs/collect_report.json › `"test": "tests/test_h_mad_collect_report.py::test_cli_absent_project_root_refuses_and_creates_nothing"`
+  quote: h-mad/tests/test_h_mad_collect_report.py › `def test_cli_absent_project_root_refuses_and_creates_nothing(tmp_path: Path):`
+- Task 2 AC-3.1 specifies `exit 1` for the gate transport refusal on `<tmp>/audit_f_plan_cycle3_codex.report.md` and the four companion transport names — this contradicts Task 2's own Description (`returns 2`) and Code structure (`return 2`), Task 3 AC-2.9/AC-2.9h (`exit 2` / `rc=2`), Task 6 row `k` (`transport branch return 2 → return 0`), paired design D3 (`return 2`), and the Audit-gate signal discipline invariant under which `GATE: INVALID` exits 2 so `h_mad_audit_cycle.gate()` (which accepts `rc ∈ {0, 2}`) classifies it as `INVALID` rather than raising `OperationalError`.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.impl-plan.md › `exit 1; likewise for`
+  quote: docs/01-plan/features/audit-report-docs-copy.impl-plan.md › `#   if is_transport_path(args.audit_file): print(...INVALID...); return 2`
+  quote: docs/02-design/features/audit-report-docs-copy.design.md › `        print(f"[H-MAD] {feature} gate INVALID (transport file — collect it into docs first: "`
+- Task 5 AC-3.5a (docs half) and paired design D5 / Test Strategy specify reading the literal `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` from `h-mad/SKILL.md` step 6.6 and `RP=/tmp/audit_<feature>_<phase>_cycle<N>_codex.report.md` from `## Second surface — the codex leg` — in `h-mad/SKILL.md`, both step 6.6 and `## Second surface — the codex leg` include the per-dispatch `_run$RUN` suffix (`RP=/tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.report.md` and `RP=/tmp/audit_<feature>_<phase>_cycle<N>_codex_run$RUN.report.md`), so a test regex built from the plan's literal fails to match `h-mad/SKILL.md`.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.impl-plan.md › `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md`
+  quote: docs/02-design/features/audit-report-docs-copy.design.md › `RP=/tmp/audit_<feature>_<phase>_cycle<N>_codex.report.md; rm -f "$RP" "$RP.done"`
+  quote: h-mad/SKILL.md › `RP=/tmp/audit_<feature>_<phase>_cycle<N>_run$RUN.report.md`
+
+## Should-fix
+- Task 6 AC-6.3 states `the spec has exactly the 24 mutations above` in its opening clause while the table above has 23 rows, the second clause of AC-6.3 expects `MUTATION: ALL_CAUGHT mutations=23 caught=23 survived=0 refused=0 unreadable=0`, and AC-6.3a asserts `exactly the 23 mutation names in the table above` — a stale self-count in AC-6.3 that contradicts the rest of Task 6.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.impl-plan.md › `- [ ] AC-6.3: the spec has exactly the 24 mutations above, each with`
+
+## Nit
+None
+AUDIT-audit-report-docs-copy-impl-plan-v1-END

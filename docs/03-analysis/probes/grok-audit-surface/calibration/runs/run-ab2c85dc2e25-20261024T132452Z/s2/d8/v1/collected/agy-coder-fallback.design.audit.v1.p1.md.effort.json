@@ -1,0 +1,21 @@
+{
+  "agy_events": 0,
+  "collected": "agy-coder-fallback.design.audit.v1.p1.md",
+  "failed": 0,
+  "log": "/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/stem/s2-d8-v1/audit_agy-coder-fallback_design_cycle1_run20261024T152438Z-24160_p1.log",
+  "log_retained": "/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/roots/gas-root-d8-s2v1-ldcma_p9/.h-mad/pass-logs/agy-coder-fallback.design.audit.v1.p1.md.log",
+  "log_sha256": "0897cf238c3ce7fc6f76cf78edd967e5d931f833961e51591e860adedf2eac1e",
+  "ok": 0,
+  "pass": 1,
+  "readable": true,
+  "shape": "codex-text",
+  "status": null,
+  "targets": {
+    "code": 4,
+    "other": 3,
+    "paths": 7,
+    "unmeasured": 3
+  },
+  "thinking": 0,
+  "tools": 0
+}

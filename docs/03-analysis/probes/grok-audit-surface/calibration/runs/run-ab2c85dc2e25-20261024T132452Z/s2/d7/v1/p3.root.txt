@@ -1,0 +1,1 @@
+ROOT: READY doc=d7 purpose=s2v1 path=/Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/roots/gas-root-d7-s2v1-jev07wj7 calibration=ab2c85dc2e25be31dcc13740ee9e71a0703d8cc7 list_commit=2d8d7b2d2dc40954eb25d20d478251256b685d26 list_blob=b78b7f3b2a5893fdd4cd83d591efed83f2069203 absent=0

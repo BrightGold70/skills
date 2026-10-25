@@ -1,0 +1,23 @@
+AUDIT-agy-coder-fallback-design-v1-BEGIN
+## Summary
+The design covers the stated work broadly, but omits one specified caller halt and leaves AC-7.3 without an executable attribution surface. Axis C: `implemented-as-written` — AC-1.1, AC-1.2, AC-1.3, AC-2.1, AC-2.2, AC-3.1, AC-3.2, AC-4.1, AC-4.2, AC-5.1, AC-5.2, AC-6.1, AC-7.1, AC-7.2, AC-8.1, AC-8.2, AC-9.1, AC-9.2, AC-9.3, AC-9.4, AC-X; `restated` — AC-7.3. Evidence: 3 files opened, 2 greps run.
+
+## Must-fix
+- The caller contract omits `step5:implementer_unresolved` for `no-record` and `unreadable`, despite the spec requiring that halt; downstream orchestration could proceed without resolving a record.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `TDD-IMPLEMENTER: no-record feature=<pct-encoded> | no such feature in the state file | halt `step5:implementer_unresolved`; the feature name or root is wrong`
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `The orchestrator (SKILL.md, §"FR-10") reads the token and never dispatches on these two outcomes`
+- AC-7.3 is restated without an executable surface: the design says attribution remains prose and its five fixtures have “no code surface to drive.” The spec requires those fixtures to fail against named mutants and pass on the rule, so AC-7.3 cannot be verified as written until an executable surface is assigned or the spec changes.
+  class: build
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `AC-7.3 (v1.8): FR-7 §"Attribution" is pinned by fixtures, each RED against the mutant it names and GREEN on the rule`
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `they still have no code surface to drive, since attribution is orchestrator prose, and that surface is owed to the impl-plan`
+- Load-bearing behavior claims cite deleted scratch probes without exact commands and observed outputs, including directory canonicalisation, containment exceptions, empty-path resolution, invalid `Path` inputs, and hard-link production detection. Those premises cannot be re-derived to validate the target sequence.
+  class: measurement
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `T6 has no name to judge (scratch call at `84ec2133`, deleted). A symlink to a directory is a directory here`
+
+## Should-fix
+None
+
+## Nit
+None
+AUDIT-agy-coder-fallback-design-v1-END

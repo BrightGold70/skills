@@ -1,0 +1,27 @@
+AUDIT-agy-coder-fallback-impl-plan-v1-BEGIN
+## Summary
+`docs/01-plan/features/agy-coder-fallback.impl-plan.md` is comprehensive, concrete, and well-aligned with `docs/02-design/features/agy-coder-fallback.design.md`, with exact file paths, complete test and mutation specifications, and clear RED/GREEN splits across Tasks 0–22. No blocking `Must-fix` issues were found. Three `Should-fix` documentation and ledger consistency items remain: a stale row count (`9 rows` vs `8 rows`) in Task 9's `AC-X` checkbox, an inline `v1.3` amendment in Task 20 whose body checkboxes and `## Version History` were not updated to match, and stale cross-document version/owed-item citations between the impl-plan header and the design document.
+
+## Must-fix
+None
+
+## Should-fix
+- Task 9 (`check_agy` and `--agy`) has an internal row-count contradiction for `hook_wiring_agy.json`: its **Mutation rows** section and the **Mutation-row ledger** table both specify 8 rows (7 reason-check rows plus 1 connection row `fr5-timeout-floor-hardcoded-60`), whereas Task 9's **Acceptance Criteria** (`AC-X`) states `(9 rows)` — leaving the Task 9 AC-X expectation inconsistent with the 8-row specification in the same task and ledger.
+  class: measurement
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `plus 1 connection row (I3), 8 rows in all:`
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `- [ ] AC-X: `hook_wiring_agy.json` (9 rows) → `MUTATION: ALL_CAUGHT`; `ANCHORS: ANCHORS_OK` over`
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `| 9 | 7 | 0 | 0 | 1 (connection, I3) |`
+- Task 20 prepends an inline `v1.3 amendment (D-FR8-1, operator decision 2026-10-17)` superseding the six-tool scope to three tools and stating that `AC-8.1 reads "all three samples" for "all six samples"`, but leaves Task 20's **Description**, **Capture gate**, **Tests**, **RED split** (`Total 14 nodes (6 + 5 + 2 + 1).`), and **Acceptance Criteria** checkbox (`all six samples`) unedited below the note, and omits a `- v1.3:` entry from `## Version History` — creating contradictory figures inside Task 20 and an incomplete version history.
+  class: measurement
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `**v1.3 amendment (D-FR8-1, operator decision 2026-10-17) — supersedes the six-tool scope below.**`
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `- [ ] AC-8.1 (the payload capture, stamped with the sha and `agy --version`): all six samples and`
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `- v1.2: Impl-plan audit cycle 2, final corrective revision, not re-audited (2026-10-16), answering codex p1 (4 must, 1 should; agy p2 clean) against v1.1 (fc92becf), tree at 84ec2133, design v1.4 (2cd5d7f1), spec v1.10 (c283bb63).`
+- The impl-plan header provenance block still cites `design.md` v1.3 (`4e4b5ded`) and spec v1.9 (`4bef0e76`), even though Tasks 5, 6, 7, 16, the Mutation-row ledger, and Version History v1.2 align to `design v1.4 (2cd5d7f1)` and `spec v1.10 (c283bb63)`; conversely, `agy-coder-fallback.design.md` §"Owed by other documents" still records a stale `Impl-plan (v1.4 item)` claiming Task 4 corrects only `FAIL shell-policy` when Task 4 already corrects both `FAIL parser` and `FAIL shell-policy` — leaving cross-document provenance and owed-item tracking out of sync.
+  class: measurement
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `> Source: `docs/02-design/features/agy-coder-fallback.design.md` v1.3 (`4e4b5ded`), spec v1.9`
+  quote: docs/01-plan/features/agy-coder-fallback.impl-plan.md › `Design v1.4 (`2cd5d7f1`) §"Mutation rows (AC-X)" lists 60 new rows, counted from its list:`
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `- **Impl-plan (v1.4 item).** The Codex gate's `FAIL parser` is a verdict FAIL that returns 2 like`
+
+## Nit
+None
+AUDIT-agy-coder-fallback-impl-plan-v1-END

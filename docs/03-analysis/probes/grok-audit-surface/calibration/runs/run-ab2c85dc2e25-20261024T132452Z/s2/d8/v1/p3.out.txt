@@ -1,0 +1,74 @@
+AUDIT-agy-coder-fallback-design-v1-BEGIN
+## Summary
+
+Design v1.4 covers the spec's acceptance criteria except two restatements: AC-5.2's UNWIRED verdict is told to exit 2, and AC-7.2 treats a malformed `6a-prime` entry as unrecorded. Three further spec requirements are not what an implementer would build: the caller never halts `step5:implementer_unresolved`, class (d) under an `unknown` scan denies `judge-error`, and three class-(b) tools keep no path keys after FR-8 capture.
+
+| AC | Classification |
+|---|---|
+| AC-1.1 | implemented-as-written |
+| AC-1.2 | implemented-as-written |
+| AC-1.3 | implemented-as-written |
+| AC-2.1 | implemented-as-written |
+| AC-2.2 | implemented-as-written |
+| AC-3.1 | implemented-as-written |
+| AC-3.2 | implemented-as-written |
+| AC-4.1 | implemented-as-written |
+| AC-4.2 | implemented-as-written |
+| AC-5.1 | implemented-as-written |
+| AC-5.2 | restated |
+| AC-6.1 | implemented-as-written |
+| AC-7.1 | implemented-as-written |
+| AC-7.2 | restated |
+| AC-7.3 | implemented-as-written |
+| AC-8.1 | implemented-as-written |
+| AC-8.2 | implemented-as-written |
+| AC-9.1 | implemented-as-written |
+| AC-9.2 | implemented-as-written |
+| AC-9.3 | implemented-as-written |
+| AC-9.4 | implemented-as-written |
+| AC-X | implemented-as-written |
+
+Evidence: 5 files opened, 11 greps run. This workspace has no `.git`, so sha-stamped tree counts were not re-run.
+
+## Must-fix
+
+- AC-5.2 is restated: the assembler procedure exits 2 on `AGY-GATE: UNWIRED`, a normal FAIL verdict, while the spec exit table, the plan, and the audit-gate signal discipline require exit 0 from the check and from the assembler. The same section pins a docstring sentence that exits 0 on that HALT, and the mutation list treats `UNWIRED` returning 2 as the mutant the AC-5.2 fixture kills, so the procedure is the mutant. Check reasons 2–7 name the reason and state no exit code, so only `no-hooks-file` is pinned at exit 0. AC-5.2 also requires a mutant that returns 2 on a self-check verdict FAIL; the mutation rows do not list it.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `Write no prompt, exit 2;`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `UNWIRED reason=<any of the seven>` | 0 | `ASSEMBLE-TDD: HALT agy_tdd_hook_unverified`, then the check line | 0 | verdict, fail`
+  quote: docs/01-plan/features/agy-coder-fallback.plan.md › `on `UNWIRED` writes no prompt and`
+  quote: h-mad/invariants.base.md › `**exit 0** on a normal verdict (PASS or FAIL)`
+- Class (d) under an `unknown` scan denies `kind=judge-error`. The spec tool-class table is headed for `active` or `unknown` and sets class (d) to `kind=tool-not-admitted`. An AC-4.1 unknown fixture written from the design asserts a different kind than one written from the spec.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `| class (d) | `unknown` | `judge-error` |`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `With it `active` or `unknown`:`
+- The caller's halt set is closed at two outcomes and omits `step5:implementer_unresolved`. Spec FR-2 halts a `no-record` line and an `unreadable` line under that name and does not dispatch. The verb table prints both lines, and version history says the third halt was adopted, but the procedure an implementer copies does not halt on them.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `dispatches on these two outcomes`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `step5:implementer_unresolved` (a `no-record` or`
+- AC-7.2 is restated: a malformed entry whose `leg` is `6a-prime` also raises `review_independence_unrecorded`. The spec fires that warning only when no `leg=6a-prime` entry exists, and it fires `review_independence_malformed` separately. The design's mutant "a malformed 6a-prime entry counted as recorded" locks the opposite negative case.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `A malformed 6a-prime entry does not count as recorded, so it raises both warnings.`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `when a `leg=6a-prime` entry exists`
+- D-FR8-1 permanently leaves `multi_replace_file_content`, `sed_file`, and `notebook_edit` with no `PATH_KEYS` entry, so they deny under active step5 after capture. Spec FR-8 step 1 records one real `toolCall` per class-(b) tool, and spec FR-4 says that capture fixes the keys those tools leave open. The design does not put this narrowing on the spec's owed list, so later phases still measure against "fixes them."
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `other three keep no `PATH_KEYS` entry and deny under active step5`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `The tracer's payload capture (FR-8 step 1) fixes them.`
+
+## Should-fix
+
+- The AC-9.2 corpus adds `other-symbol` beside the spec's four defined cases and never says what is missing, whether the callee resolves, or which exception the RED raises. The caller-condition control says that case changes together with `unrelated-import`, so the two fixtures have to differ, and the design does not say how.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `other-symbol`, it builds a fixture`
+- §"Owed by other documents" still assigns the spec the v1.4 lines for OD-2, `step5:implementer_invalid`, `step5:implementer_unresolved`, and self-check exit 0. Spec v1.10 already records D-16, those halt names, and the self-check exit rule, so the pointer is stale.
+  class: measurement
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `**Spec (v1.4 items).** Lines recording OD-2`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `D-16 Directory target refused`
+- The impl-plan owed line still lets Task 4 correct the Codex gate's `FAIL parser` branch. Spec FR-5 says that branch is not reached by the self-check decision and stays unchanged. An impl-plan that takes the "correct both" option edits a gate the spec leaves alone.
+  class: build
+  quote: docs/02-design/features/agy-coder-fallback.design.md › `Either Task 4 corrects both, or the`
+  quote: docs/01-plan/features/agy-coder-fallback.spec.md › `unchanged and unclassified here.`
+
+## Nit
+None
+AUDIT-agy-coder-fallback-design-v1-END

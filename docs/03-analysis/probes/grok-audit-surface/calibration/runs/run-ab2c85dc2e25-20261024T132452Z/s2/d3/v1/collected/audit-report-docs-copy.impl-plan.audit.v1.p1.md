@@ -1,0 +1,23 @@
+## Summary
+The plan contains three build-level gaps: one mutation is paired with a nondiscriminating test, the gate exit contract conflicts, and the collector contract omits an existing delivery outcome. It also gives incompatible mutation counts.
+Evidence: 7 files opened, 5 greps run.
+
+## Must-fix
+- Mutation `cli-collects-on-bad-root` is paired with a test that uses an existing project-root file; removing the root guard still fails later during directory creation with the same operational error, so the mutation is not discriminated. Pair it with the absent-root case, which exposes the documented fall-through. — the mutation can survive while its spec claims enforcement.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `"test": "tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback"`
+- AC-3.1 requires exit 1 for a transport-named report, while Task 2's branch and the paired design require exit 2. The implementer cannot satisfy both, and exit 1 violates the operational-error signal contract. — gate behavior and downstream handling would differ.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `exit 1; likewise for audit_hnag_c28_agy.report.md, audit_hnag_implplan_c11.report.md, audit_f_plan_cycle8_codex_draft.report.md, audit_f_plan_cycle8_agy_p2.report.md.`
+- The stated collector return contract excludes an existing `unscorable:<reason>` delivery outcome, and the CLI token contract omits its corresponding `COLLECT: INVALID` verdict. The current collector can return that outcome and the current CLI handles it; following this plan literally risks converting a refused report into OK/MISSING or mishandling the return value. — the new CLI must preserve this existing guard.
+  class: build
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › ``collect()` returns `(delivered, collected_path)` with `delivered ∈ {"report-file","out","none"}```
+- AC-6.3 says the spec contains exactly 24 mutations, but the table and required harness verdict specify 23. Resolve the count so the acceptance criterion is satisfiable and agrees with the enumerated mutation set.
+  class: measurement
+  quote: docs/01-plan/features/audit-report-docs-copy.plan.md › `AC-6.3: the spec has exactly the 24 mutations above`
+
+## Should-fix
+None
+
+## Nit
+None

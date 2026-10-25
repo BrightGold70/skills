@@ -1,0 +1,30 @@
+AUDIT-tdd-gate-fail-opens-impl-plan-v1-BEGIN
+## Summary
+The plan is not aligned with the paired design’s v1.6 root-access and canonical path-walk decisions, leaving known fail-open cases without task-level implementation and mutation coverage. The plan also labels an older design revision as the contract.
+
+Evidence: 2 files opened, 5 greps run.
+
+## Must-fix
+- Carry the final root-access rules into T2/T3 and their verification: the plan lets an arm-2 Codex root allow when status is inactive and lets Claude allow any ungoverned unresolvable root, while the current design requires non-traversable roots to refuse before state lookup; add the mode-000/mis-cased cases and their named mutations to the tasks and census. — Otherwise both implementations can preserve the documented mode-000 fail-open.
+  class: build
+  quote: docs/01-plan/features/tdd-gate-fail-opens.impl-plan.md › `"active" and "unknown" return the judge-error deny naming root.component, and inactive returns 0.`
+  quote: docs/01-plan/features/tdd-gate-fail-opens.impl-plan.md › `Governed refuses judge-error with reason unresolvable arm=N component=...`. Otherwise _allow.`
+  quote: docs/02-design/features/tdd-gate-fail-opens.design.md › `before any state walk, the Codex gate refuses judge-error ("project root cannot be entered") when the selected root is not traversable (os.access(root, X_OK) false), whatever the phase.`
+  quote: docs/02-design/features/tdd-gate-fail-opens.design.md › `the mode-000 and mis-cased mode-000 members are pinned by test_mode_000_project_dir_refuses[as-on-disk|mis-cased]`
+- Specify and pin the v1.6 lexical walk behavior in T1, its caller tests, and T8: the plan’s generic lstat/stat walk and existing dot-dot-after-symlink case do not cover skipping `.` before `..` or handling an x-only existing directory without opening it. The paired design records the `tests/./../src/prod.py` fail-open and names dedicated guards and a mutation; its history uses both TI10 and TI9 for that mutation, so settle the row identifier too. — Without these cases, the canonicaliser can ship the known lexical traversal defect and the census will not measure its fix.
+  class: build
+  quote: docs/01-plan/features/tdd-gate-fail-opens.impl-plan.md › `canonicalise does the lstat/stat walk.`
+  quote: docs/01-plan/features/tdd-gate-fail-opens.impl-plan.md › `AC-1.2: test_claude_dotdot_after_symlink_denies (M-6).`
+  quote: docs/02-design/features/tdd-gate-fail-opens.design.md › `The walk skips . components (mutation TI10; pins test_dot_component_does_not_shift_dotdot, test_claude_dot_then_dotdot_into_production_denies)`
+  quote: docs/02-design/features/tdd-gate-fail-opens.design.md › `N-1: in the canonicaliser's .. rule, an existing non-symlink directory takes os.path.dirname(current) and does not open it, so an x-only directory on the way is not arm 2`
+  quote: docs/02-design/features/tdd-gate-fail-opens.design.md › `mutations CG-ROOT-CONJ, CG-ROOT-000, CX-ROOT-ENTER, TI9.`
+
+## Should-fix
+- Update the plan’s source revision pointer to the paired design’s current revision so implementers can identify the governing contract; the plan header says v1.2 while the design history includes v1.6 decisions that this plan does not carry through. — The stale pointer makes the source of implementation requirements ambiguous.
+  class: measurement
+  quote: docs/01-plan/features/tdd-gate-fail-opens.impl-plan.md › `Source: docs/02-design/features/tdd-gate-fail-opens.design.md v1.2 (48d639f7), the contract.`
+  quote: docs/02-design/features/tdd-gate-fail-opens.design.md › `v1.6: Post-merge operator decisions (2026-09-30; report §"Carry Items").`
+
+## Nit
+None
+AUDIT-tdd-gate-fail-opens-impl-plan-v1-END

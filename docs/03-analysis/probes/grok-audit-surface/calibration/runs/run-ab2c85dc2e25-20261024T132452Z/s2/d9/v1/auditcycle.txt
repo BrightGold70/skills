@@ -1,0 +1,13 @@
+GATED: DERIVED path=docs/01-plan/features/agy-coder-fallback.impl-plan.md
+STAMP: NOT-EXPECTED reason=no_passing_leg
+AUDITCYCLE: FAIL must=2 should=7 passes=3 p1=1/1 p2=0/3 p3=1/3 delivered=report-file,out,report-file size_status=unverified
+Effort:
+- p1 not measured (codex-text log; the effort counters read agy stream-json only) targets: paths=9 code=6 other=3 unmeasured=2
+- p2 tools=39 ok=19 failed=20 thinking=6387 paths=12 code=0 other=12 unmeasured=0
+- p3 tools=79 ok=77 unresolved=2 thinking=48085 format=grok paths=24 code=4 other=20 unmeasured=0
+Premise checklist:
+- p1 must (no citation): Reconcile Task 20 with its v1.3 amendment: the task still requires capturing all six tools, tests six required samples and five class-(b) tools, and requires all six samples for AC-8.1, despite the amendment narrowing capture and coverage to three tools and 8 new nodes. As written, the post-merge task requires captures the amendment says could not be obtained and its acceptance criteria cannot pass as specified.
+- p3 must (no citation): Task 20 gives the implementer two incompatible procedures for the same RED commit. The amendment sets the required samples to `write_to_file`, `replace_file_content`, and `run_command` (item 1 is 3 nodes, item 2 is 2, RED is 1 F and 7 P, GREEN adds only `"replace_file_content": ("TargetFile",)`), because `multi_replace_file_content`, `sed_file`, and `notebook_edit` were never declared. The body still requires six fixture files, says a missing sample stops the task, derives a 14-node split (6 + 5 + 2 + 1) that can be capture-only when F is 0, and AC-8.1 still checks "all six samples". Following the body halts a task the amendment says to finish; following the amendment writes different tests and a different `PATH_KEYS`. Design D-FR8-1 records the three-tool capture. Rewrite the description, tests, RED split, and AC so only that contract remains.
+reports: /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/roots/gas-root-d9-s2v1-prgcyptq/docs/01-plan/features/agy-coder-fallback.impl-plan.audit.v1.p1.md /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/roots/gas-root-d9-s2v1-prgcyptq/docs/01-plan/features/agy-coder-fallback.impl-plan.audit.v1.p2.md /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/roots/gas-root-d9-s2v1-prgcyptq/docs/01-plan/features/agy-coder-fallback.impl-plan.audit.v1.p3.md
+note: must=/should= are sums across passes and may double-count a finding both passes reported
+[H-MAD] agy-coder-fallback audit-cycle FAIL

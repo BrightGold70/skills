@@ -1,0 +1,37 @@
+AUDIT-tdd-gate-fail-opens-design-v1-BEGIN
+## Summary
+The design covers the full spec surface, but two M-18 unfixed-state expectations are stale and its Codex root-refusal section contradicts itself, leaving implementers without one reliable behavior. The table classifies all 44 spec acceptance criteria; the implementation and its root tests support the phase-independent root refusal.
+
+| Spec ACs | Classification |
+|---|---|
+| AC-1.1–AC-1.11 | implemented-as-written |
+| AC-2.1–AC-2.5 | implemented-as-written |
+| AC-3.1–AC-3.2 | implemented-as-written |
+| AC-3.3 | restated |
+| AC-3.4–AC-3.6 | implemented-as-written |
+| AC-4.1–AC-4.7 | implemented-as-written |
+| AC-5.1–AC-5.5 | implemented-as-written |
+| AC-6.1 | restated |
+| AC-6.2–AC-6.3 | implemented-as-written |
+| AC-7.1 | implemented-as-written |
+| AC-8.1–AC-8.6 | implemented-as-written |
+
+Evidence: 6 files opened, 3 greps run.
+
+## Must-fix
+- AC-3.3: correct the design’s M-18 unfixed expectation. The spec says the Codex M-14 step3 case denies `judge-error` on the unfixed tree, while the design says M-18 allows fixed and unfixed; this changes the differential fixture’s expected result.
+  class: build
+  quote: docs/01-plan/features/tdd-gate-fail-opens.spec.md › `Unfixed: both allow, except the Codex gate on M-14, which denies judge-error`; docs/02-design/features/tdd-gate-fail-opens.design.md › `M-18 both allow, fixed and unfixed`
+- AC-6.1: include the M-18 M-14 case in the unfixed differential’s exact failure set. The spec requires that cell to fail both gate-equality and expectation-table assertions; the design’s “exactly” list omits it, so the planned RED evidence would be weaker than specified.
+  class: build
+  quote: docs/01-plan/features/tdd-gate-fail-opens.spec.md › `M-18's M-14 cell additionally fails both assertions on the unfixed tree (Claude allows, Codex denies judge-error; v1.6, D-4).`; docs/02-design/features/tdd-gate-fail-opens.design.md › `its gate-equality assertion fails on exactly M-4, M-5, M-6, M-7, M-8, M-11 and M-12`
+- Reconcile the Codex non-enterable-root behavior and remove or clearly mark the stale contradictory account. The design first says v1.6 requires a refusal before state lookup, then says the real gate allows a mode-000 root and that the design does not close the gap; these cannot both guide T2. The spec requires refusal on either gate regardless of phase.
+  class: build
+  quote: docs/01-plan/features/tdd-gate-fail-opens.spec.md › `Both gates then refuse \`judge-error\` ("project root … cannot be entered") whatever the phase, before any state lookup.`; docs/02-design/features/tdd-gate-fail-opens.design.md › `before any state walk, the Codex gate refuses judge-error`; `Mode-\`000\` \`CODEX_PROJECT_DIR\` holding \`step5\` state`; `the gate allows`
+
+## Should-fix
+None
+
+## Nit
+None
+AUDIT-tdd-gate-fail-opens-design-v1-END
