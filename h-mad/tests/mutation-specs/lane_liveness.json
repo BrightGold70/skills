@@ -270,8 +270,17 @@
       "name": "a-lane-commit-counts-as-the-owners-proof",
       "_mechanism": "Owner proof also accepts the lane's newest commit, which in a shared checkout is any session's: a sibling's commit reads a crashed owner live.",
       "file": "scripts/h_mad_state_ownership.py",
-      "find": "    commands = ps_commands()\n    if commands is not None and any(_argv_names(command, owner) for command in commands):\n        return \"ps\"\n    return None",
-      "replace": "    commands = ps_commands()\n    if commands is not None and any(_argv_names(command, owner) for command in commands):\n        return \"ps\"\n    stamp = read_commit_ts(None)\n    return \"commit\" if stamp is not None and reference - stamp <= OWNERSHIP_STALE_AFTER_SECONDS else None",
+      "find": "        return f\"transcript:{int(reference - mtime)}s\"\n    return None",
+      "replace": "        return f\"transcript:{int(reference - mtime)}s\"\n    stamp = read_commit_ts(None)\n    return \"commit\" if stamp is not None and reference - stamp <= OWNERSHIP_STALE_AFTER_SECONDS else None",
+      "test": "tests/test_h_mad_lane_liveness.py::test_oracle_claim_and_release_agree_on_a_stale_heartbeat",
+      "symbol": "owner_proven_live"
+    },
+    {
+      "name": "ps-counts-as-the-owners-proof",
+      "_mechanism": "A ps argv naming the owner's session counts as proof again, though it can be the claimant's own wrapping shell: a dead owner reads owned_elsewhere.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "        return f\"transcript:{int(reference - mtime)}s\"\n    return None",
+      "replace": "        return f\"transcript:{int(reference - mtime)}s\"\n    commands = read_ps_commands()\n    return \"ps\" if commands and any(_argv_names(c, owner) for c in commands) else None",
       "test": "tests/test_h_mad_lane_liveness.py::test_oracle_claim_and_release_agree_on_a_stale_heartbeat",
       "symbol": "owner_proven_live"
     }

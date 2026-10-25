@@ -346,10 +346,13 @@ def _refuse_if_owner_proven_live(state_path: Path, feature: str, session_id: str
         return  # the heartbeat gate refuses this one, with its own message
     evidence = owner_proven_live(record, now)
     if evidence is not None:  # M:CLAIM-REFUSES-LIVE
+        # An unidentified caller may BE the owner: name the routine remedy, as the
+        # heartbeat refusal in `release` does, not `force`.
+        remedy = ("pass --session-id <your session> (if this is your own claim)"
+                  if session_id is None else "Coordinate, or pass force to take over")
         raise StateWriteError(
             f"cannot {verb} {feature!r}: owned by session {held_by!r}, whose heartbeat is "
-            f"stale but whose own clocks show it running ({evidence}). Coordinate, or "
-            f"pass force to take over."
+            f"stale but whose own transcript shows it running ({evidence}). {remedy}."
         )
 
 

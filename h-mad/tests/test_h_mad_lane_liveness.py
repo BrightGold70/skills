@@ -421,7 +421,7 @@ def test_a_stale_heartbeat_with_a_LIVE_clock_is_refused_without_force(
     state = lane / "docs" / ".bkit-memory.json"
     _clocks(monkeypatch, transcript=time_ago(30), commit=time_ago(COLD), ps=[])
 
-    with pytest.raises(StateWriteError, match=r"own clocks show it running \(transcript:.*force"):
+    with pytest.raises(StateWriteError, match=r"own transcript shows it running \(transcript:.*force"):
         claim(state, "alpha", "intruder")
     assert _owner(state, "alpha") == OWNER
 
@@ -565,7 +565,7 @@ def _oracle(state: Path, feature: str, session: str) -> str:
 
 @pytest.mark.parametrize("clocks,owned", [
     (dict(transcript="fresh", commit="cold", ps=[]), True),          # owner's own transcript
-    (dict(transcript="cold", commit="cold", ps=["claude --resume OWNER"]), True),  # owner in ps
+    (dict(transcript="cold", commit="cold", ps=["claude --resume OWNER"]), False),  # ps alone: could be the claimant's own shell
     (dict(transcript="cold", commit="fresh", ps=[]), False),         # someone ELSE committed
     (dict(transcript="cold", commit="cold", ps=[]), False),          # QUIET
     (dict(transcript=None, commit="cold", ps=[]), False),            # UNKNOWN: crashed owner
@@ -601,3 +601,14 @@ def test_the_owner_releases_its_own_claim_whatever_the_clocks(tmp_path: Path, mo
     _clocks(monkeypatch, transcript=time_ago(30), commit=time_ago(30), ps=[])
     release(lane / "docs" / ".bkit-memory.json", "alpha", session_id=OWNER)
     assert _owner(lane / "docs" / ".bkit-memory.json", "alpha") is None
+
+
+def test_an_anonymous_release_of_an_owner_proven_claim_names_session_id(tmp_path: Path, monkeypatch) -> None:
+    """Re-review 2026-10-25: the caller may be the owner itself; the remedy is
+    --session-id, never force (release's own docstring and --help)."""
+    from h_mad_state_write import StateWriteError, release
+    lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    _clocks(monkeypatch, transcript=time_ago(30), commit=time_ago(COLD), ps=[])
+    with pytest.raises(StateWriteError, match="--session-id") as err:
+        release(lane / "docs" / ".bkit-memory.json", "alpha")
+    assert "force" not in str(err.value)

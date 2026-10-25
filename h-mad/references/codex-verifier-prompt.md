@@ -34,8 +34,8 @@ Under the Phase-5 TDD gate, the read-only commands the gate admits are exactly: 
 allowed `hmad-dispatch` verbs, the h-mad scripts it allow-lists (e.g. `h_mad_mutation_harness.py
 --check-anchors`), and any prefix the operator declared in `.h-mad/phase5-shell-allow`. Everything
 else is refused, including `sed`, `nl`, `awk`, `find`, `git` and `python -c`. So the git revert in
-step 1b, and an env-assignment prefix such as `MPLBACKEND=Agg …`, need that allowlist or a run
-outside the gate. A command must be one simple command made only of letters, digits, spaces, quotes and
+step 1b, and an env-assignment prefix such as `MPLBACKEND=Agg …`, cannot run under the gate (the
+allowlist matches commands, and an `=` head is refused before it). Report those ACs as unmeasured. A command must be one simple command made only of letters, digits, spaces, quotes and
 `_ . / : @ % + = , -`. A `|`, `;`, `&`, redirect, `$`, `^`, `\`, `(`/`)`, `[`/`]`, `{`/`}`, `~`, `!`,
 `#` or glob is refused, so a grep pattern like `"^def x("` is refused too.
 If an AC needs a measurement none of these can take, such as a `git diff`, report it as unmeasured

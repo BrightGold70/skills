@@ -172,21 +172,20 @@ def liveness_evidence(record, lane, now: str | None = None, *, transcript_mtime=
             f"commit_age={shown(ages['commit'])} window={window}s")
 
 
-def owner_proven_live(record, now: str | None = None, *, transcript_mtime=None,
-                      ps_commands=None) -> "str | None":
+def owner_proven_live(record, now: str | None = None, *, transcript_mtime=None) -> "str | None":
     """Evidence that the OWNER itself is running, or None. Never raises.
 
     The gate `--claim`, `--release` and the resume oracle share, so the three
-    cannot disagree. It reads only clocks the owner produces: its own transcript
-    inside the window, or a `ps` argv naming its session. NOT the lane's newest
-    commit: in a shared checkout that is any session's, and it read a crashed
+    cannot disagree. It reads only the owner's own transcript inside the window.
+    NOT `ps`: an argv naming the session can be the CLAIMANT's own wrapping shell,
+    or a `--fork-session` resume that carries the old id (review 2026-10-25). NOT
+    the lane's newest commit: in a shared checkout that is any session's, and it read a crashed
     owner LIVE because a sibling committed (review 2026-10-25). An unreadable
     clock is not proof, so a crashed owner whose transcript aged out stays
     takeable without `force`. `liveness_evidence` remains the fuller reading an
     operator sees.
     """
     transcript_mtime = transcript_mtime or read_transcript_mtime
-    ps_commands = ps_commands or read_ps_commands
     record = record if isinstance(record, dict) else {}
     owner = record.get("owner_session_id")
     if not isinstance(owner, str) or not owner.strip():
@@ -195,9 +194,6 @@ def owner_proven_live(record, now: str | None = None, *, transcript_mtime=None,
     mtime = transcript_mtime(owner)
     if mtime is not None and reference - mtime <= OWNERSHIP_STALE_AFTER_SECONDS:
         return f"transcript:{int(reference - mtime)}s"
-    commands = ps_commands()
-    if commands is not None and any(_argv_names(command, owner) for command in commands):
-        return "ps"
     return None
 
 

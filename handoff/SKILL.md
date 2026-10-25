@@ -563,7 +563,7 @@ No state file means no claim to release. Say so and move on; do not invent one.
 Each block runs as its own tool call in a fresh shell, so an assignment made here has already
 expired by the next one; `--state ""` then fails outright, or worse, reads as "no claim".
 
-**Then ask who holds it — do not eyeball the timestamp.** `h_mad_resume_decision.py` is the liveness oracle, and it applies the *same* liveness reading the writer does, so its answer and `--claim`'s and `--release`'s behaviour cannot disagree. That reading is the heartbeat window plus the owner's own transcript and `ps` (`owner_proven_live`), and never the lane's shared commit clock:
+**Then ask who holds it — do not eyeball the timestamp.** `h_mad_resume_decision.py` is the liveness oracle, and it applies the *same* liveness reading the writer does, so its answer and `--claim`'s and `--release`'s behaviour cannot disagree. That reading is the heartbeat window plus the owner's own transcript (`owner_proven_live`; never `ps`), and never the lane's shared commit clock:
 
 ```bash
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_decision.py" \
