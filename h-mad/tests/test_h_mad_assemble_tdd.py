@@ -1948,3 +1948,18 @@ class TestGateProbeHandoffSpec:
         assert GATE_PROBE_HANDOFF_COMMENT not in block
         assert "/^PROBE-COMMANDS:/,/^STATUS:/p" not in block
         assert "-m pytest tests/test_mod.py -v)" in block
+
+
+def test_the_pass_output_names_the_prompt_and_the_dispatch_output_distinctly(tmp_path):
+    """skill-candidates row: `--out` reads as "where to write the prompt" and was
+    misused once. It names the AGENT'S reply; the prompt has `--prompt`."""
+    result = TestModulePathSlug()._cli(tmp_path, "mod.py")
+    lines = result.stdout.splitlines()
+    pass_line = next(l for l in lines if l.startswith("ASSEMBLE-TDD: PASS"))
+    prompt_path = pass_line.split()[2]
+    err = result.stderr.splitlines()
+    assert f"  prompt (written, --prompt): {prompt_path}" in err, result.stderr
+    out_line = next((l for l in err if l.startswith("  dispatch output (--out")), None)
+    assert out_line and "NOT the prompt" in out_line, result.stderr
+    help_text = run_cli("--help").stdout
+    assert "the agent's reply" in help_text and "assembled prompt is written" in help_text, help_text

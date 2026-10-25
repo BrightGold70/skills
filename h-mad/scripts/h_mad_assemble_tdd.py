@@ -774,9 +774,13 @@ def main(argv: list[str] | None = None) -> int:
                     help="one node id per line; blank lines and # comments ignored")
     ap.add_argument("--mutation-spec", default=None,
                     help="5e: the spec GREEN appends its mutation rows to")
-    ap.add_argument("--out", type=Path)
-    ap.add_argument("--log", type=Path)
-    ap.add_argument("--prompt", type=Path)
+    ap.add_argument("--out", type=Path,
+                    help="where the dispatch writes the agent's reply (NOT the prompt; "
+                         "default /tmp/exec_<slug>.out)")
+    ap.add_argument("--log", type=Path,
+                    help="where the dispatch writes its log (default /tmp/exec_<slug>.log)")
+    ap.add_argument("--prompt", type=Path,
+                    help="where the assembled prompt is written (default /tmp/h_mad_<slug>.txt)")
     ap.add_argument("--report-file", default="")
     ap.add_argument("--agent", choices=("codex", "grok", "agy"), default="codex")
     ap.add_argument("--timeout", type=int, default=None)
@@ -862,6 +866,10 @@ def main(argv: list[str] | None = None) -> int:
         f"{TOKEN}: PASS {prompt} {size}B phase={args.phase} "
         f"task={meta['task']} shape={meta['shape']}"
     )
+    # Both paths are named, because `--out` read as "where the prompt goes" and
+    # was misused once. On stderr: stdout is parsed, and pinned byte-for-byte.
+    print(f"  prompt (written, --prompt): {prompt}", file=sys.stderr)
+    print(f"  dispatch output (--out, the agent's reply — NOT the prompt): {out}", file=sys.stderr)
     # Under the PASS line, never on it: the PASS line is parsed. Inlined size is
     # reported rather than capped, since a truncated section is a silent cut.
     if meta["inlined_sections"]:
