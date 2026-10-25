@@ -407,19 +407,52 @@ def test_the_suite_runs_with_host_clocks_off() -> None:
     assert os.environ.get(ownership.CLOCKS_OFF_ENV) == "1"
 
 
-def test_a_stale_takeover_prints_the_liveness_reading(tmp_path: Path, monkeypatch,
-                                                      capsys) -> None:
-    """SF6: incident 2 was a plain --claim on a cold heartbeat; it must not be silent."""
+def test_a_stale_heartbeat_with_a_LIVE_clock_is_refused_without_force(
+        tmp_path: Path, monkeypatch) -> None:
+    """SF6, reversed by operator decision 2026-10-25 (skill-candidates row
+    "claim-writer refuses a LIVE takeover without --force"). Incident 2 was a
+    plain --claim on a cold heartbeat while the owner's transcript was seconds
+    old. Printing LIVE and taking over anyway let the writer disagree with its
+    own evidence. Only positive proof of life refuses: QUIET and UNKNOWN keep
+    the stale takeover (see below), so `--force` stays the verb for a session
+    that is demonstrably running."""
+    from h_mad_state_write import StateWriteError, claim
+    lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    state = lane / "docs" / ".bkit-memory.json"
+    _clocks(monkeypatch, transcript=time_ago(30), commit=time_ago(COLD), ps=[])
+
+    with pytest.raises(StateWriteError, match=r"own transcript shows it running \(transcript:.*force"):
+        claim(state, "alpha", "intruder")
+    assert _owner(state, "alpha") == OWNER
+
+
+def test_force_still_takes_a_LIVE_stale_claim_and_prints_the_reading(
+        tmp_path: Path, monkeypatch, capsys) -> None:
     from h_mad_state_write import claim
     lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
     _clocks(monkeypatch, transcript=time_ago(30), commit=time_ago(COLD), ps=[])
 
-    record = claim(lane / "docs" / ".bkit-memory.json", "alpha", "intruder")
+    record = claim(lane / "docs" / ".bkit-memory.json", "alpha", "intruder", force=True)
 
-    assert record["owner_session_id"] == "intruder"  # the gate itself is unchanged
+    assert record["owner_session_id"] == "intruder"
     err = capsys.readouterr().err
     assert f"STATE-WRITE: TAKEOVER feature=alpha from={OWNER[:8]}" in err, err
     assert "LIVENESS: LIVE evidence=transcript:" in err, err
+
+
+@pytest.mark.parametrize("cold_transcript,reading", [(True, "QUIET"), (False, "UNKNOWN")])
+def test_a_stale_claim_that_is_not_LIVE_is_still_taken_without_force(
+        tmp_path: Path, monkeypatch, capsys, cold_transcript, reading) -> None:
+    """The crashed-session case must not need --force (that trains the reflex)."""
+    from h_mad_state_write import claim
+    transcript = time_ago(COLD) if cold_transcript else None
+    lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    _clocks(monkeypatch, transcript=transcript, commit=time_ago(COLD), ps=[])
+
+    record = claim(lane / "docs" / ".bkit-memory.json", "alpha", "intruder")
+
+    assert record["owner_session_id"] == "intruder"
+    assert f"LIVENESS: {reading}" in capsys.readouterr().err
 
 
 def test_liveness_is_read_outside_the_store_lock(tmp_path: Path, monkeypatch) -> None:
@@ -447,7 +480,10 @@ def test_liveness_is_read_outside_the_store_lock(tmp_path: Path, monkeypatch) ->
 
     with pytest.raises(StateWriteError):
         claim(state, "alpha", "intruder")
-    claim(state, "beta", "intruder")
+    # beta's heartbeat is cold but the probe's transcript is 5s old: LIVE, so it
+    # is now refused too -- and that pre-write reading must also be lock-free.
+    with pytest.raises(StateWriteError):
+        claim(state, "beta", "intruder")
 
     assert held == [False, False], held
 
@@ -506,3 +542,73 @@ def _lane(root: Path, feature: str, session: str | None, heartbeat_age: float = 
             "%Y-%m-%dT%H:%M:%SZ")
         state.write_text(json.dumps(data), encoding="utf-8")
     return root
+
+
+def _owner(state: Path, feature: str) -> str | None:
+    data = json.loads(state.read_text(encoding="utf-8"))
+    return data["orchestrator_state"][feature].get("owner_session_id")
+
+
+# --- review 2026-10-25: one owner-attributable reading for oracle, claim, release ---
+#
+# The first cut refused on `liveness_evidence` LIVE, which (a) the heartbeat-only
+# oracle did not share, so the router said free and --claim refused; (b) counts
+# the LANE's newest commit by ANY session, so a sibling's commit read a crashed
+# owner LIVE; (c) --release did not share, so release-then-claim walked past it.
+# Gating now reads only clocks the OWNER produces: its transcript and a ps argv
+# naming its session.
+
+def _oracle(state: Path, feature: str, session: str) -> str:
+    from h_mad_resume_decision import decide
+    return decide(state, feature, session_id=session)
+
+
+@pytest.mark.parametrize("clocks,owned", [
+    (dict(transcript="fresh", commit="cold", ps=[]), True),          # owner's own transcript
+    (dict(transcript="cold", commit="cold", ps=["claude --resume OWNER"]), False),  # ps alone: could be the claimant's own shell
+    (dict(transcript="cold", commit="fresh", ps=[]), False),         # someone ELSE committed
+    (dict(transcript="cold", commit="cold", ps=[]), False),          # QUIET
+    (dict(transcript=None, commit="cold", ps=[]), False),            # UNKNOWN: crashed owner
+])
+def test_oracle_claim_and_release_agree_on_a_stale_heartbeat(
+        tmp_path: Path, monkeypatch, clocks, owned) -> None:
+    from h_mad_state_write import StateWriteError, claim, release
+    lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    state = lane / "docs" / ".bkit-memory.json"
+    pick = {"fresh": time_ago(30), "cold": time_ago(COLD), None: None}
+    _clocks(monkeypatch, transcript=pick[clocks["transcript"]], commit=pick[clocks["commit"]],
+            ps=[c.replace("OWNER", OWNER) for c in clocks["ps"]])
+
+    assert (_oracle(state, "alpha", "intruder") == "owned_elsewhere") is owned
+
+    def allowed(action) -> bool:
+        try:
+            action()
+            return True
+        except StateWriteError:
+            return False
+
+    assert allowed(lambda: release(state, "alpha", session_id="intruder")) is (not owned)
+    if not owned:   # released: put the cold claim back so --claim meets the same record
+        state.unlink()
+        lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    assert allowed(lambda: claim(state, "alpha", "intruder")) is (not owned)
+
+
+def test_the_owner_releases_its_own_claim_whatever_the_clocks(tmp_path: Path, monkeypatch) -> None:
+    from h_mad_state_write import release
+    lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    _clocks(monkeypatch, transcript=time_ago(30), commit=time_ago(30), ps=[])
+    release(lane / "docs" / ".bkit-memory.json", "alpha", session_id=OWNER)
+    assert _owner(lane / "docs" / ".bkit-memory.json", "alpha") is None
+
+
+def test_an_anonymous_release_of_an_owner_proven_claim_names_session_id(tmp_path: Path, monkeypatch) -> None:
+    """Re-review 2026-10-25: the caller may be the owner itself; the remedy is
+    --session-id, never force (release's own docstring and --help)."""
+    from h_mad_state_write import StateWriteError, release
+    lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    _clocks(monkeypatch, transcript=time_ago(30), commit=time_ago(COLD), ps=[])
+    with pytest.raises(StateWriteError, match="--session-id") as err:
+        release(lane / "docs" / ".bkit-memory.json", "alpha")
+    assert "force" not in str(err.value)

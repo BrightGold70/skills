@@ -121,8 +121,8 @@ def liveness_evidence(record, lane, now: str | None = None, *, transcript_mtime=
     The four readers are injectable; by default they are this module's
     `read_transcript_mtime`, `read_commit_ts`, `read_ps_commands` and
     `read_minted_owner`, looked up at call time. `owner_is_live` and its callers
-    are unchanged: this is the evidence an operator reads, not the gate
-    `--claim` applies.
+    are unchanged. Since 2026-10-25 `--claim` also reads this, but only to refuse
+    a cold-heartbeat takeover on LIVE; QUIET and UNKNOWN never gate a claim.
     """
     transcript_mtime = transcript_mtime or read_transcript_mtime
     commit_ts = commit_ts or read_commit_ts
@@ -170,6 +170,31 @@ def liveness_evidence(record, lane, now: str | None = None, *, transcript_mtime=
     return (f"LIVENESS: QUIET heartbeat_age={shown(ages['heartbeat'])} "
             f"transcript_age={'n/a' if minted else shown(ages['transcript'])} "
             f"commit_age={shown(ages['commit'])} window={window}s")
+
+
+def owner_proven_live(record, now: str | None = None, *, transcript_mtime=None) -> "str | None":
+    """Evidence that the OWNER itself is running, or None. Never raises.
+
+    The gate `--claim`, `--release` and the resume oracle share, so the three
+    cannot disagree. It reads only the owner's own transcript inside the window.
+    NOT `ps`: an argv naming the session can be the CLAIMANT's own wrapping shell,
+    or a `--fork-session` resume that carries the old id (review 2026-10-25). NOT
+    the lane's newest commit: in a shared checkout that is any session's, and it read a crashed
+    owner LIVE because a sibling committed (review 2026-10-25). An unreadable
+    clock is not proof, so a crashed owner whose transcript aged out stays
+    takeable without `force`. `liveness_evidence` remains the fuller reading an
+    operator sees.
+    """
+    transcript_mtime = transcript_mtime or read_transcript_mtime
+    record = record if isinstance(record, dict) else {}
+    owner = record.get("owner_session_id")
+    if not isinstance(owner, str) or not owner.strip():
+        return None
+    reference = (parse_ts(now) or datetime.now(timezone.utc)).timestamp()
+    mtime = transcript_mtime(owner)
+    if mtime is not None and reference - mtime <= OWNERSHIP_STALE_AFTER_SECONDS:
+        return f"transcript:{int(reference - mtime)}s"
+    return None
 
 
 def _argv_names(command: str, session_id: str) -> bool:

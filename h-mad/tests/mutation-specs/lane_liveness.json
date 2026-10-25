@@ -209,7 +209,7 @@
       "file": "scripts/h_mad_state_write.py",
       "find": "    if prior:\n        print(f\"STATE-WRITE: TAKEOVER",
       "replace": "    if False:\n        print(f\"STATE-WRITE: TAKEOVER",
-      "test": "tests/test_h_mad_lane_liveness.py::test_a_stale_takeover_prints_the_liveness_reading",
+      "test": "tests/test_h_mad_lane_liveness.py::test_force_still_takes_a_LIVE_stale_claim_and_prints_the_reading",
       "symbol": "claim"
     },
     {
@@ -238,6 +238,51 @@
       "replace": "    if live:\n        print(\"  a skill change lands",
       "test": "tests/test_h_mad_lane_liveness.py::test_live_runs_unjudged_claim_gets_the_hold_advice",
       "symbol": "main"
+    },
+    {
+      "name": "claim-takes-a-LIVE-stale-claim",
+      "_mechanism": "The pre-write reading still prints LIVE but no longer refuses, so a cold heartbeat over a running owner is taken without --force -- the writer disagreeing with its own evidence again (row: claim-writer refuses a LIVE takeover).",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "    if evidence is not None:  # M:CLAIM-REFUSES-LIVE\n",
+      "replace": "    if False:  # M:CLAIM-REFUSES-LIVE\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_a_stale_heartbeat_with_a_LIVE_clock_is_refused_without_force",
+      "symbol": "_refuse_if_owner_proven_live"
+    },
+    {
+      "name": "oracle-ignores-the-owners-own-clocks",
+      "_mechanism": "The resume oracle reads the heartbeat alone again, so it calls a claim free that --claim refuses -- the writer/oracle disagreement the row asked to remove.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "            or owner_proven_live(feat_state, now) is not None)",
+      "replace": "            or False)",
+      "test": "tests/test_h_mad_lane_liveness.py::test_oracle_claim_and_release_agree_on_a_stale_heartbeat",
+      "symbol": "_owned_elsewhere"
+    },
+    {
+      "name": "release-skips-the-owner-liveness-check",
+      "_mechanism": "--release takes a cold-heartbeat claim whose owner is provably running, so release-then-claim walks past the claim refusal with no force.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        _refuse_if_owner_proven_live(Path(state_file), feature, session_id, None, \"release\")",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_lane_liveness.py::test_oracle_claim_and_release_agree_on_a_stale_heartbeat",
+      "symbol": "release"
+    },
+    {
+      "name": "a-lane-commit-counts-as-the-owners-proof",
+      "_mechanism": "Owner proof also accepts the lane's newest commit, which in a shared checkout is any session's: a sibling's commit reads a crashed owner live.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "        return f\"transcript:{int(reference - mtime)}s\"\n    return None",
+      "replace": "        return f\"transcript:{int(reference - mtime)}s\"\n    stamp = read_commit_ts(None)\n    return \"commit\" if stamp is not None and reference - stamp <= OWNERSHIP_STALE_AFTER_SECONDS else None",
+      "test": "tests/test_h_mad_lane_liveness.py::test_oracle_claim_and_release_agree_on_a_stale_heartbeat",
+      "symbol": "owner_proven_live"
+    },
+    {
+      "name": "ps-counts-as-the-owners-proof",
+      "_mechanism": "A ps argv naming the owner's session counts as proof again, though it can be the claimant's own wrapping shell: a dead owner reads owned_elsewhere.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "        return f\"transcript:{int(reference - mtime)}s\"\n    return None",
+      "replace": "        return f\"transcript:{int(reference - mtime)}s\"\n    commands = read_ps_commands()\n    return \"ps\" if commands and any(_argv_names(c, owner) for c in commands) else None",
+      "test": "tests/test_h_mad_lane_liveness.py::test_oracle_claim_and_release_agree_on_a_stale_heartbeat",
+      "symbol": "owner_proven_live"
     }
   ]
 }

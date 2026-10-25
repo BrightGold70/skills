@@ -285,7 +285,7 @@ shared checkout any session's commit reads LIVE. The `--claim` gate itself still
 the heartbeat window; the evidence is what you read before acting on it, and a LIVE line
 after a TAKEOVER means stop and coordinate.
 
-**A claim that is never beaten looks abandoned two hours after Phase 0 (#126).** `--claim` was the only heartbeat writer, so a claim beat once and then aged toward the staleness window while its owner was busiest — measured live: one beat, then nothing for hours — and a stale-looking live claim is takeable by any other session with a plain `--claim`, which is the collision the window exists to prevent. Two writers now beat it: **pass `--session-id "<session-id>"` on every `--set`** (a phase write by the owner is a sign of life and refreshes the heartbeat in the same write; a bystander's `--set` still lands but refreshes nothing), and `--beat --session-id "<session-id>"` between long dispatch stretches. A beat never claims: it refuses an unowned feature (that is `--claim`'s job) and a claim held by another session, so it cannot keep a dead claim alive. Residual: the beat still depends on the orchestrator writing state; wiring it into `hmad-dispatch exec`'s own watchdog heartbeat is the follow-up.
+**A claim that is never beaten looks abandoned two hours after Phase 0 (#126).** `--claim` was the only heartbeat writer, so a claim beat once and then aged toward the staleness window while its owner was busiest — measured live: one beat, then nothing for hours — and a stale-looking live claim is takeable by any other session with a plain `--claim`, which is the collision the window exists to prevent. Since 2026-10-25, `--claim`, `--release` and the resume oracle also refuse such a claim when the OWNER's own transcript proves it running inside the window (`owner_proven_live`). It never uses `ps`, which can be the claimant's own shell, so a Codex or agy owner, which has no transcript, is heartbeat-only. The lane's newest commit never counts, because in a shared checkout it can be anyone's. So `--beat` remains the reliable signal, and that check is a backstop. Two writers now beat it: **pass `--session-id "<session-id>"` on every `--set`** (a phase write by the owner is a sign of life and refreshes the heartbeat in the same write; a bystander's `--set` still lands but refreshes nothing), and `--beat --session-id "<session-id>"` between long dispatch stretches. A beat never claims: it refuses an unowned feature (that is `--claim`'s job) and a claim held by another session, so it cannot keep a dead claim alive. Residual: the beat still depends on the orchestrator writing state; wiring it into `hmad-dispatch exec`'s own watchdog heartbeat is the follow-up.
 
 **Do not reach for `--create` on a resume route to make an error go away.** There,
 `ERROR: no such feature` is a typo guard: the record is supposed to exist, so the
@@ -504,11 +504,19 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
   **Use this exact sequence to revert and restore.** The production code at this point is *uncommitted*, so a careless revert destroys it permanently: `git restore` / `git checkout --` **deletes** the new implementation with no way back. Stash is the safe direction, but only in the `-u` form — `git stash push -- <paths>` **refuses an untracked path**, and `git add -N` does not rescue it but breaks it (see the measured table below):
 
   ```bash
+  before=$(git rev-parse -q --verify refs/stash || true)
   git stash push -u -- <production-paths>   # the revert; -u is what reaches an untracked file
+  mine=$(git rev-parse -q --verify refs/stash || true)
+  if [ "$mine" = "$before" ]; then mine=""; echo "NOTHING WAS STASHED — the target is unchanged; do not pop"; fi
   [ ! -e <one-production-path> ] || echo "REVERT DID NOT LAND — do not trust this run"
   # ... run the module tests here; the RED split must return EXACTLY ...
-  git stash pop                             # restore
+  if [ -n "$mine" ]; then                   # restore ONLY the stash this step created
+    ref=$(git stash list --format='%gd %H' | while read -r name sha; do [ "$sha" = "$mine" ] && { echo "$name"; break; }; done)
+    if [ -n "$ref" ]; then git stash pop "$ref"; else echo "STASH $mine IS GONE — restore by hand: git stash apply $mine"; fi
+  fi
   ```
+
+  **Never pop a stash this step did not create.** When the target is unchanged, `git stash push` stashes nothing ("No local changes to save", and rtk still prints `ok stashed`), and an unconditional `pop` applies whatever sat on top. Measured: a foreign `resolved-model` stash left `UU handoff/SKILL.md`. Pop **by the stash commit this step made**, never `stash@{0}`. `refs/stash` is shared by every worktree of the repo, so another lane's push during the test window takes the top slot. A count delta cannot tell whose entry it is.
 
   **Assert the revert landed with an EXISTENCE check, never `git diff --quiet`.** For an untracked file `git diff --quiet` is trivially clean — measured: it reported CLEAN with the file sitting in the worktree, i.e. a *false* "revert landed" — so it is exactly the readback that cannot see this failure. A revert that never happened reports as a pass, the same class of silent no-op the mutation harness refuses an unlanded anchor for.
 

@@ -390,3 +390,26 @@ def test_dot_component_does_not_shift_dotdot(identity, root, relative):
     assert os.path.samefile(str(root) + "/" + relative, referent), "kernel precondition"
     result = identity.canonicalise(str(root), relative)
     assert result.target == str(referent), f"observed: {result!r}"
+
+
+# --- the Codex prompts name exactly the read verbs the gate admits ---------
+#
+# Every dispatch needed a hand preface listing them, or Codex burned turns on
+# `sed`/`nl`/`python -c` and pipelines the gate refuses (skill-candidates row
+# "assembled Codex prompts omit the allowed read verbs"). The list lives in the
+# templates as prose, so pin it to the gate's own set.
+
+_REFS = Path(__file__).resolve().parents[1] / "references"
+_READ_VERBS_LINE = re.compile(r"read-only commands the gate admits are exactly: (.+?)\.", re.S)
+
+
+@pytest.mark.parametrize("template", ["codex-implementer-prompt.md", "codex-verifier-prompt.md"])
+def test_codex_templates_name_exactly_the_gate_read_verbs(template: str) -> None:
+    import h_mad_target_identity as identity
+    text = (_REFS / template).read_text(encoding="utf-8")
+    match = _READ_VERBS_LINE.search(text)
+    assert match, f"{template} does not list the read verbs the gate admits"
+    named = set(re.findall(r"`([a-z]+)`", match.group(1)))
+    assert named == identity.READ_ONLY_COMMANDS, (named ^ identity.READ_ONLY_COMMANDS)
+    after = text[match.end():match.end() + 1000]
+    assert "sed" in after and "|" in after, f"{template} must also say what is refused"
