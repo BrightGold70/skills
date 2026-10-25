@@ -46,7 +46,7 @@ resume step 11 on the Mac Studio.**
 
 ## Next Steps
 
-1. **On the Mac Studio, Task 15 step 11.** First `git pull` (to `da1584c7`), then follow
+1. **On the Mac Studio, Task 15 step 11.** First `git pull` (to `66e22a08` or later), then follow
    `2026-10-25-main__step11-extract-done-blind-labels.md` Next Steps 1-7 unchanged: rebuild the
    label package, lock `$RUN`, dispatch the 9 blind labellers, merge, check the labels, restore,
    then the score commit. **Ask the operator before the push.** The run state is
@@ -62,9 +62,13 @@ resume step 11 on the Mac Studio.**
    - row 16: Policy B;
    - row 19: progressive disclosure;
    - row 28: the 14d AC.5 module split;
-   - row 47: the agy live smoke;
-   - row 9: delete `origin/fix/gate-task-authors-test`, which is merged;
-   - row 53: keep or delete the untracked `grok-audit-surface.plan.delta-review…md.txt`.
+   - row 47: the agy live smoke.
+
+   Rows 9 and 53 were closed on 2026-10-26 (`66e22a08`). `origin/fix/gate-task-authors-test` and
+   five other remote branches already merged into main were deleted, and the untracked
+   delta-review stub was deleted.
+5. **After step 11, delete `origin/feature/218-grok-audit-surface`.** Its tip is already in `main`,
+   but it was kept because it is the Task 15 branch on the Mac Studio.
 
 ## Open / Blocked Items
 
@@ -97,7 +101,8 @@ evidence in `docs/03-analysis/2026-10-25-backlog-triage.md`):
 - **bkit G-001 local patch:** closed in `c0c73e51`, and issue #161 was filed (see above).
 - **Skill-candidates reconcile:** closed in `4e4a3b04`. This session also closed 8 rows; the
   census reads OPEN 24.
-- **Worktree `../skills-gate-authoring`:** closed (gone). The remote branch is still open (row 9).
+- **Worktree `../skills-gate-authoring`:** closed (gone). The remote branch was deleted on 2026-10-26
+  (row 9).
 - **Codex pin `term_134b0865…` is stale:** unchanged. Re-pin before any codex dispatch.
 - **Run 8 attempts 1-2 are evidence; never score them:** unchanged.
 - **Everything carried from `2026-10-24-main__task15-runs4-7-14h-green.md`:** unchanged. Each
@@ -131,11 +136,11 @@ evidence in `docs/03-analysis/2026-10-25-backlog-triage.md`):
 
 **Worktree:** only `/Users/kimhawk/orca/skills` on `main` remains.
 
-**Uncommitted changes:** none of mine. The foreign untracked `grok-audit-surface.plan.delta-review…md.txt` stays unstaged.
+**Uncommitted changes:** none. The working tree is clean; the foreign delta-review stub was deleted on 2026-10-26.
 
 **To resume (Mac Studio):**
 ```bash
-cd /Users/kimhawk/orca/skills && git pull --ff-only            # -> da1584c7
+cd /Users/kimhawk/orca/skills && git pull --ff-only            # -> 66e22a08 or later
 export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py --state docs/.bkit-memory.json --feature grok-audit-surface --session-id <id>
 source ~/.local/state/h-mad/grok-audit-surface/run-current.env && ls "$READING"   # extract.txt findings.jsonl key.jsonl, no labels.jsonl
