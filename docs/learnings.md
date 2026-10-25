@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-25 · gotcha · [0.5] · `grok-audit-surface,blinding,labels,handoff:2026-10-25-step11-extract-done-blind-labels` — Blind-labeller copy of an h-mad export root must exclude the run's own outputs (.hmad-report/, .h-mad/pass-logs/, graft/.cache/, <feat>.<phase>.audit.v1.pN.md) and chmod 000 the run dir — same-uid subagents can read the key otherwise
 - 2026-10-25 · gotcha · [0.5] · `h-mad,claims,state-write,handoff:2026-10-25-run8-done-authors-test-merged` — --claim printed 'TAKEOVER ... LIVENESS: LIVE' yet exited 0 without --force while the resume oracle said halted. Never infer a claim was released from a handoff's prose; read owner_session_id.
 - 2026-10-25 · gotcha · [0.7] · `bkit,hooks,g-001,handoff:2026-10-25-run8-done-authors-test-merged` — bkit G-001 regex runs over raw Bash text: a git commit -m naming the Python recursive-removal identifier is blocked as Recursive delete. Write the message to a file and use -F until patched.
 - 2026-10-25 · gotcha · [0.5] · `h-mad,mutation,codex,handoff:2026-10-25-run8-done-authors-test-merged` — After Codex re-anchors mutation rows, diff each row's replace, not just ANCHORS_OK: a rewritten mutant can keep matching once while no longer exercising what its test pins.
