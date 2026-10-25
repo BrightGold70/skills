@@ -4989,3 +4989,19 @@ def test_masked_hint_is_never_emitted_for_ineligible_rows_existing_guard(
     assert sum(command == data["command"] and source != original
                for command, _, source in calls) == int(kind == "untargeted-survivor")
     assert (tmp_path / "guard.py").read_bytes() == original
+
+
+def test_harness_source_compiles_without_a_syntax_warning() -> None:
+    """A `return` inside `finally` swallows any exception in flight (PEP 765).
+
+    `_isolate`'s failed-removal path returned from inside its `finally`, so an
+    interrupt or unexpected error raised in the body was silently converted to
+    exit 2, and Python 3.14 printed a SyntaxWarning on every harness call --
+    noise on stderr of a tool whose stdout tokens are read by machines.
+    """
+    import warnings
+
+    source = HARNESS.read_text(encoding="utf-8")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SyntaxWarning)
+        compile(source, str(HARNESS), "exec")

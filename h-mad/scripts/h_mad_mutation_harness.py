@@ -2297,8 +2297,11 @@ def _isolate(argv: list[str], spec_paths: list[Path]) -> int:
                     removed = False
                 if not removed or worktree.exists():
                     print(f"MUTATION: UNREADABLE reason=isolate-not-removed path={worktree}")
-                    return 2
-                print("ISOLATE: removed=yes", flush=True)
+                    # Assigned, not returned: a `return` here would swallow any
+                    # exception still in flight from the body (PEP 765).
+                    status = 2
+                else:
+                    print("ISOLATE: removed=yes", flush=True)
         finally:
             for signum, handler in handlers.items():
                 signal.signal(signum, handler)
