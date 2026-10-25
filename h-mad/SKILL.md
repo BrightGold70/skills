@@ -511,7 +511,7 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
   [ ! -e <one-production-path> ] || echo "REVERT DID NOT LAND — do not trust this run"
   # ... run the module tests here; the RED split must return EXACTLY ...
   if [ -n "$mine" ]; then                   # restore ONLY the stash this step created
-    ref=$(git stash list --format='%gd %H' | awk -v h="$mine" '$2 == h {print $1; exit}')
+    ref=$(git stash list --format='%gd %H' | while read -r name sha; do [ "$sha" = "$mine" ] && { echo "$name"; break; }; done)
     if [ -n "$ref" ]; then git stash pop "$ref"; else echo "STASH $mine IS GONE — restore by hand: git stash apply $mine"; fi
   fi
   ```
