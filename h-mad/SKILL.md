@@ -504,11 +504,16 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
   **Use this exact sequence to revert and restore.** The production code at this point is *uncommitted*, so a careless revert destroys it permanently: `git restore` / `git checkout --` **deletes** the new implementation with no way back. Stash is the safe direction, but only in the `-u` form — `git stash push -- <paths>` **refuses an untracked path**, and `git add -N` does not rescue it but breaks it (see the measured table below):
 
   ```bash
+  before=$(git stash list | wc -l)
   git stash push -u -- <production-paths>   # the revert; -u is what reaches an untracked file
+  created=$(( $(git stash list | wc -l) > before ))
+  [ "$created" = 1 ] || echo "NOTHING WAS STASHED — the target is unchanged; do not pop"
   [ ! -e <one-production-path> ] || echo "REVERT DID NOT LAND — do not trust this run"
   # ... run the module tests here; the RED split must return EXACTLY ...
-  git stash pop                             # restore
+  [ "$created" = 1 ] && git stash pop       # restore ONLY the stash this step created
   ```
+
+  **Never pop a stash this step did not create.** When the target is unchanged, `git stash push` stashes nothing ("No local changes to save", and rtk still prints `ok stashed`), and an unconditional `pop` applies whatever sat on top. Measured: a foreign `resolved-model` stash left `UU handoff/SKILL.md`. The count delta is the only reliable signal.
 
   **Assert the revert landed with an EXISTENCE check, never `git diff --quiet`.** For an untracked file `git diff --quiet` is trivially clean — measured: it reported CLEAN with the file sitting in the worktree, i.e. a *false* "revert landed" — so it is exactly the readback that cannot see this failure. A revert that never happened reports as a pass, the same class of silent no-op the mutation harness refuses an unlanded anchor for.
 

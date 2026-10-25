@@ -245,3 +245,55 @@ def test_signal_discipline_is_still_stated_where_it_is_owned(path: Path, label: 
     assert "never `$?`" in text or "exit 0" in text, (
         f"{label} no longer states the token-not-exit-code rule the fixes rely on"
     )
+
+
+def _revert_block() -> str:
+    text = SKILL.read_text(encoding="utf-8")
+    anchor = text.index("**Use this exact sequence to revert and restore.**")
+    start = text.index("```bash\n", anchor) + len("```bash\n")
+    return text[start:text.index("```", start)]
+
+
+def test_the_revert_recipe_never_pops_a_stash_it_did_not_create(tmp_path) -> None:
+    """skill-candidates row "5e revert recipe pops a foreign stash": with the
+    target unchanged, `git stash push` stashes nothing, and an unconditional
+    `git stash pop` applied whatever sat on top -- measured as a foreign
+    `resolved-model` stash leaving `UU handoff/SKILL.md`. Run the DOCUMENTED
+    block against exactly that state."""
+    import subprocess as sp
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = lambda *a: sp.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+    git("init", "-q")
+    for name in ("mod.py", "other.txt"):
+        (repo / name).write_text("v1\n", encoding="utf-8")
+    git("add", "-A")
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base")
+    (repo / "other.txt").write_text("foreign work\n", encoding="utf-8")
+    git("-c", "user.email=t@t", "-c", "user.name=t", "stash", "push", "-q", "-m", "foreign")
+    block = (_revert_block().replace("<production-paths>", "mod.py")
+             .replace("<one-production-path>", "mod.py"))
+    out = sp.run(["bash", "-c", block], cwd=repo, capture_output=True, text=True)
+    stashes = git("stash", "list").stdout
+    assert "foreign" in stashes, f"the recipe popped a stash it did not create:\n{out.stdout}{out.stderr}"
+    assert (repo / "other.txt").read_text(encoding="utf-8") == "v1\n"
+    assert "NOTHING WAS STASHED" in out.stdout, out.stdout + out.stderr
+
+
+def test_the_revert_recipe_still_reverts_and_restores_a_changed_target(tmp_path) -> None:
+    import subprocess as sp
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = lambda *a: sp.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+    git("init", "-q")
+    (repo / "keep.txt").write_text("v1\n", encoding="utf-8")
+    git("add", "-A")
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base")
+    (repo / "new.py").write_text("impl\n", encoding="utf-8")   # untracked new module
+    block = (_revert_block().replace("<production-paths>", "new.py")
+             .replace("<one-production-path>", "new.py")
+             .replace("# ... run the module tests here", "[ ! -e new.py ] && echo REVERTED #"))
+    out = sp.run(["bash", "-c", block], cwd=repo, capture_output=True, text=True)
+    assert "REVERTED" in out.stdout and "NOTHING WAS STASHED" not in out.stdout, out.stdout + out.stderr
+    assert (repo / "new.py").read_text(encoding="utf-8") == "impl\n", "the work was not restored"
+    assert git("stash", "list").stdout == "", "the step's own stash was left behind"
