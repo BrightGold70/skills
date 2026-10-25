@@ -1161,3 +1161,35 @@ class TestWireRunner:
         assert not registry_path.exists() or registry.load(registry_path) == []
         assert "registration: registered=0 skipped=1" in out, out
         assert "registration skipped: Task 1" in out and why in out, out
+
+
+class TestWireRunnerReview:
+    """Review 2026-10-25: the template's own spelling, numbering and conflicts."""
+
+    def test_the_template_spelling_with_its_qualifier_is_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        task = _task(1, pin=E2E).replace(
+            "\n**Acceptance Criteria**",
+            "**WIRE-RUNNER** (optional, `wiring` shape only): `playwright`\n\n**Acceptance Criteria**", 1)
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        _run_main_with_registration_args(monkeypatch, _plan(tmp_path, task), registry_path)
+        (record,) = registry.load(registry_path)
+        assert record["runner"] == "playwright"
+
+    @pytest.mark.parametrize("lines,why", [
+        (["**WIRE-RUNNER 1**: `playwright`"], "one runner per task"),
+        (["**WIRE-RUNNER**: `playwright`", "**WIRE-RUNNER**: `pytest`"], "conflicting"),
+        (["**WIRE-RUNNER**: `play_wright`"], "play_wright"),
+    ])
+    def test_an_unusable_wire_runner_line_skips_registration_loudly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str], lines: list[str], why: str,
+    ) -> None:
+        task = _task(1, pin=E2E).replace(
+            "\n**Acceptance Criteria**", "\n".join(lines) + "\n\n**Acceptance Criteria**", 1)
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        _run_main_with_registration_args(monkeypatch, _plan(tmp_path, task), registry_path)
+        out = capsys.readouterr().out
+        assert "registration: registered=0 skipped=1" in out, out
+        assert why in out, out

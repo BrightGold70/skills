@@ -1839,3 +1839,45 @@ def test_an_absent_registry_reports_unverifiable_zero(tmp_path: Path) -> None:
     result = registry.verify(tmp_path / "absent.jsonl", "HEAD", tmp_path, tmp_path)
     assert result["unverifiable"] == 0
     assert result["token"].endswith(" unverifiable=0"), result["token"]
+
+
+# --- review 2026-10-25: the dodge must be closed at the READER too ---------
+#
+# `register` validated, but `verify` read records through `load()`, which only
+# parses JSON -- so a hand-edited record parked a real pytest FAIL in
+# `unverifiable` and 5f said PASS. And the `.py` rule saw only pins that carry
+# a file part, so a bare pytest name could claim playwright through the plan.
+
+@pytest.mark.parametrize("runner,pin", [
+    ("playwright", "tests/test_run.py::test_x"),
+    ("playwright", "test_run_calls_measure"),
+    ("vitest", E2E_PIN),
+    ("Pytest", E2E_PIN),
+    (None, E2E_PIN),
+    (["playwright"], E2E_PIN),
+])
+def test_verify_refuses_a_hand_edited_record_with_a_bad_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runner: object, pin: str
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path, _entry(id="hand-edited", runner=runner, pin=pin))
+    with pytest.raises(registry.RegistryError, match="runner"):
+        _verify_with(monkeypatch, path, {"tests/test_run.py::test_run_calls_measure"})
+
+
+@pytest.mark.parametrize("pin", [
+    "test_run_calls_measure",          # bare name: resolves against the pytest collection
+    "TestRun::test_x",                 # class-qualified, no file
+    "tests/test_x.PY::t",              # case
+    "tests/test_x.py ::t",             # whitespace
+    ["web/e2e/a.spec.ts::t", "test_run_calls_measure"],
+])
+def test_a_non_pytest_pin_must_name_a_non_py_file(pin: object) -> None:
+    problem = registry.runner_problem(_entry(runner="playwright", pin=pin))
+    assert problem is not None and "file" in problem, problem
+
+
+def test_a_non_string_runner_is_a_problem_not_a_crash() -> None:
+    assert "invalid runner" in registry.runner_problem(_entry(runner=["playwright"]))
+    with pytest.raises(registry.RegistryError, match="runner"):
+        registry.validate_record(_entry(runner={"x": 1}, pin=E2E_PIN, registered_ts="t"))

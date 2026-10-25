@@ -1,0 +1,109 @@
+{
+  "_why": "The runner field adds a cannot-judge bucket to a gate whose whole job is to fail on a cut wire, so every new branch is a place a real FAIL could hide. M1-M2 are the bucket itself (a playwright pin read as missing again; a renamed one dropped from it). M3-M5 are the dodge: a pytest pin parked as playwright, or an unknown runner, reaching 5f where nothing judges it. M6-M7 are the 5b writer: the field silently not recorded, or a bad record aborting the whole registration batch with a traceback. Review 2026-10-25 added M8-M10: the reader-side check, numbered/conflicting labels, and the template's own spelling.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_wire_registry.py",
+    "tests/test_h_mad_wire_pin_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "M1: unverifiable split dropped -- every record reaches the pytest partition",
+      "_mechanism": "A playwright pin can never be collected, so it reads `missing` and the verdict is FAIL by construction -- the defect the field exists to remove.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    judgeable = [record for record in head if record_runner(record) in RESOLVED_RUNNERS]",
+      "replace": "    judgeable = list(head)",
+      "test": "tests/test_h_mad_wire_registry.py::test_verify_counts_a_playwright_record_unverifiable_not_missing",
+      "symbol": "verify"
+    },
+    {
+      "name": "M2: renamed tombstone excluded from the unverifiable bucket",
+      "_mechanism": "A renamed playwright record is neither judged nor counted, so it vanishes from the token -- a silent PASS rather than a named cannot-judge.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "             or record.get(\"removal_provenance\") == \"renamed\")",
+      "replace": "             )",
+      "test": "tests/test_h_mad_wire_registry.py::test_a_renamed_playwright_record_is_unverifiable_not_an_unverified_rename",
+      "symbol": "verify"
+    },
+    {
+      "name": "M3: a pytest pin may claim playwright (the non-.py-file rule removed)",
+      "_mechanism": "A failing .py or bare-name pytest pin re-labelled playwright moves from FAIL to unverifiable -- the dodge the decision rejected option 3 for.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "        if bad:  # M:RUNNER-FILE\n",
+      "replace": "        if False:  # M:RUNNER-FILE\n",
+      "test": "tests/test_h_mad_wire_registry.py::test_a_non_pytest_pin_must_name_a_non_py_file",
+      "symbol": "runner_problem"
+    },
+    {
+      "name": "M4: an unknown runner is accepted",
+      "_mechanism": "`runner: vitest` is not resolved, so it lands in unverifiable -- any typo becomes a free pass at 5f.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    if not isinstance(runner, str) or runner not in VALID_RUNNERS:  # M:RUNNER-VALID\n",
+      "replace": "    if False:  # M:RUNNER-VALID\n",
+      "test": "tests/test_h_mad_wire_registry.py::test_an_unknown_runner_is_refused",
+      "symbol": "runner_problem"
+    },
+    {
+      "name": "M5: validate_record stops consulting runner_problem",
+      "_mechanism": "register() stops refusing a bad runner: the plan path writes a vitest or bare-name playwright record that only the 5f reader would catch.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    problem = runner_problem(record)\n    if problem:\n        raise RegistryError(problem)\n    return record",
+      "replace": "    return record",
+      "test": "tests/test_h_mad_wire_registry.py::test_an_unknown_runner_is_refused",
+      "symbol": "validate_record"
+    },
+    {
+      "name": "M6: the gate does not write WIRE-RUNNER into the record",
+      "_mechanism": "The plan says playwright, the record says nothing, and 5f reads the pin as a missing pytest test -- the field is decorative.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "            if runner and runner != h_mad_wire_registry.DEFAULT_RUNNER:\n",
+      "replace": "            if False:\n",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestWireRunner::test_wire_runner_is_written_into_the_record",
+      "symbol": "_register_wiring_tasks"
+    },
+    {
+      "name": "M7: a bad runner is not skipped at registration",
+      "_mechanism": "The entry reaches register(), whose RegistryError aborts the whole batch with a traceback and loses every sibling wire.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "            if problem:\n                skipped += 1\n",
+      "replace": "            if False:\n                skipped += 1\n",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestWireRunner::test_a_bad_runner_skips_registration_loudly",
+      "symbol": "_register_wiring_tasks"
+    },
+    {
+      "name": "M8: verify stops validating the records it reads",
+      "_mechanism": "load() only parses JSON, so a hand-edited .py pin with runner playwright lands in unverifiable and 5f reads PASS.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "        if problem:  # M:RUNNER-READ\n",
+      "replace": "        if False:  # M:RUNNER-READ\n",
+      "test": "tests/test_h_mad_wire_registry.py::test_verify_refuses_a_hand_edited_record_with_a_bad_runner",
+      "symbol": "verify"
+    },
+    {
+      "name": "M9: the gate ignores a numbered or conflicting WIRE-RUNNER",
+      "_mechanism": "`WIRE-RUNNER 1` or two disagreeing lines register silently under the last value, hiding a mixed-runner task the design cannot express.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "            problem = task.get(\"runner_error\") or h_mad_wire_registry.runner_problem(entry)\n",
+      "replace": "            problem = h_mad_wire_registry.runner_problem(entry)\n",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestWireRunnerReview::test_an_unusable_wire_runner_line_skips_registration_loudly",
+      "symbol": "_register_wiring_tasks"
+    },
+    {
+      "name": "M10: the template's parenthetical qualifier is not tolerated",
+      "_mechanism": "`**WIRE-RUNNER** (optional, ...): playwright` -- the spelling the template prints -- is ignored, so the record is pytest and 5f reads missing.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "    r\"\\s*(?:\\([^)]*\\))?\\s*\\*{0,2}\\s*:\\s*(?P<value>.*)$\",\n    re.IGNORECASE,\n)\n\n_PATHS_FIELD_RE",
+      "replace": "    r\"\\s*\\*{0,2}\\s*:\\s*(?P<value>.*)$\",\n    re.IGNORECASE,\n)\n\n_PATHS_FIELD_RE",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestWireRunnerReview::test_the_template_spelling_with_its_qualifier_is_read"
+    }
+  ]
+}

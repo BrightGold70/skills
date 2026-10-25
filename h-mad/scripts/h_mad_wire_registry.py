@@ -15,6 +15,13 @@ from h_mad_audit_gate import _acknowledged_from_text, suite_busy_line
 
 VALID_KINDS: frozenset[str] = frozenset({"wire"})
 VALID_PROVENANCE: frozenset[str] = frozenset({"superseded", "pinned-a-defect", "renamed"})
+# A record names the runner its pin belongs to; absent means pytest, so every
+# record written before the field existed reads back unchanged. Only a runner in
+# RESOLVED_RUNNERS can be judged here: the rest are counted `unverifiable` at
+# 5f -- cannot-judge, never `missing` (decision 2026-10-25, runner field).
+DEFAULT_RUNNER = "pytest"
+VALID_RUNNERS: frozenset[str] = frozenset({"pytest", "playwright"})
+RESOLVED_RUNNERS: frozenset[str] = frozenset({"pytest"})
 DEFAULT_REGISTRY = ".h-mad/wires.jsonl"
 
 
@@ -98,6 +105,46 @@ def _validate_pin_field(record: dict, field: str) -> None:
         raise RegistryError(f"{field} list must not repeat a pin")
 
 
+def record_runner(record: dict) -> str:
+    return record.get("runner", DEFAULT_RUNNER)
+
+
+def _names_a_non_py_file(pin: object) -> bool:
+    """A non-pytest pin must be `<file>::<test>`, and the file must not be Python.
+
+    A bare name (`test_x`, `TestRun::test_x`) resolves against the pytest
+    collection by suffix, so it is a pytest pin whatever runner it claims.
+    """
+    if not isinstance(pin, str) or "::" not in pin:
+        return False
+    file = pin.split("::", 1)[0]
+    name = file.rsplit("/", 1)[-1]
+    return file == file.strip() and "." in name and not name.lower().endswith(".py")
+
+
+def runner_problem(record: dict) -> str | None:
+    """Why the record's runner is unacceptable, or None. Never raises.
+
+    A pytest pin may not claim another runner: `unverifiable` stands down at 5f,
+    so a pytest pin carrying it would park a real FAIL where nothing judges it.
+    The gate calls this to skip a bad record loudly, `validate_record` to refuse
+    one at write time, and `verify` to refuse a hand-edited one at read time.
+    """
+    runner = record_runner(record)
+    if not isinstance(runner, str) or runner not in VALID_RUNNERS:  # M:RUNNER-VALID
+        return f"invalid runner: {runner!r} (one of {', '.join(sorted(VALID_RUNNERS))})"
+    if runner == DEFAULT_RUNNER:
+        return None
+    for field in ("pin", "successor_pin"):
+        if not isinstance(record.get(field), (str, list)):
+            continue
+        bad = [pin for pin in pins(record, field) if not _names_a_non_py_file(pin)]
+        if bad:  # M:RUNNER-FILE
+            return (f"runner {runner!r} needs every {field} to name a non-.py file "
+                    f"(`<file>::<test>`): {', '.join(map(str, bad))}")
+    return None
+
+
 def validate_record(record: dict) -> dict:
     """Return the record, or raise RegistryError naming the offending field."""
     if not isinstance(record, dict):
@@ -121,6 +168,9 @@ def validate_record(record: dict) -> dict:
             if not record.get("successor_pin"):
                 raise RegistryError("missing successor_pin")
             _validate_pin_field(record, "successor_pin")
+    problem = runner_problem(record)
+    if problem:
+        raise RegistryError(problem)
     return record
 
 
@@ -704,7 +754,8 @@ def verify(
         return {
             "verdict": "PASS", "registered": 0, "verified": 0, "broken": 0,
             "missing": 0, "ambiguous": 0, "unverified_renames": 0, "undeclared_removals": 0,
-            "token": "WIREREG: PASS registered=0 verified=0 broken=0 missing=0 ambiguous=0 unverified_renames=0 undeclared_removals=0",
+            "unverifiable": 0,
+            "token": "WIREREG: PASS registered=0 verified=0 broken=0 missing=0 ambiguous=0 unverified_renames=0 undeclared_removals=0 unverifiable=0",
             "remedy": None,
         }
     if probe_interpreter and not _interpreter_has_pytest(python):
@@ -723,8 +774,27 @@ def verify(
     tracked, remedy = trackedness(registry, repo)
     head = load(registry)
     base_records = load_base(base, _registry_base_path(registry, repo), repo)
+    # `load()` only parses JSON, so a hand-edited record never met `register`'s
+    # validation: refuse a bad runner HERE, or it parks a real FAIL in
+    # `unverifiable` and 5f reads PASS. A RegistryError reports UNREADABLE.
+    for record in head:
+        problem = runner_problem(record)
+        if problem:  # M:RUNNER-READ
+            raise RegistryError(
+                f"{record.get('owning_feature')}::{record.get('id')}: {problem}")
+    # Split BEFORE partition: a pin with no resolver here can never appear in the
+    # pytest collection, so letting it reach `partition` reports it `missing` by
+    # construction. `compare` below still sees every head record, so removing an
+    # unverifiable record without a tombstone is caught like any other.
+    judgeable = [record for record in head if record_runner(record) in RESOLVED_RUNNERS]
+    unverifiable = [
+        record for record in head
+        if record_runner(record) not in RESOLVED_RUNNERS
+        and (record.get("status", "active") == "active"
+             or record.get("removal_provenance") == "renamed")
+    ]
     collected = collect(rootdir, testpaths, python)
-    resolving, missing, ambiguous, unverified_renames = partition(head, collected)
+    resolving, missing, ambiguous, unverified_renames = partition(judgeable, collected)
     verified, broken = run_pins(resolving, rootdir, python)
     undeclared = [record for record in compare(base_records, head) if record.get("status", "active") == "active"]
 
@@ -752,17 +822,23 @@ def verify(
         drivers.append("step5f:registry_untracked")
     for reason in drivers:
         print(f"[H-MAD] {reason}")
+    # Named, never a driver: cannot-judge is not a regression, and a PASS
+    # carrying unverifiable>0 says only that the judged records held.
+    for record in unverifiable:
+        print(f"[H-MAD] step5f:wire_pin_unverifiable:{_record_label(record)} runner={record_runner(record)}")
     verdict = "UNTRACKED" if not tracked else "FAIL" if drivers else "PASS"
     token = (
         f"WIREREG: {verdict} registered={len(head)} verified={len(verified)} "
         f"broken={len(broken)} missing={len(missing)} "
         f"ambiguous={len(ambiguous)} "
-        f"unverified_renames={len(unverified_renames)} undeclared_removals={len(undeclared)}"
+        f"unverified_renames={len(unverified_renames)} undeclared_removals={len(undeclared)} "
+        f"unverifiable={len(unverifiable)}"
     )
     return {
         "verdict": verdict, "registered": len(head), "verified": len(verified),
         "broken": len(broken), "missing": len(missing), "ambiguous": len(ambiguous),
         "unverified_renames": len(unverified_renames), "undeclared_removals": len(undeclared),
+        "unverifiable": len(unverifiable), "unverifiable_records": unverifiable,
         "token": token, "remedy": remedy,
         "verified_records": verified, "broken_records": broken, "missing_records": missing,
         "ambiguous_records": ambiguous,

@@ -1,6 +1,8 @@
 # Decision — a non-pytest WIRE-PIN carries a `runner` field; no resolver yet
 
-**Date:** 2026-10-25 · **Decided by:** operator · **Status:** decided, not implemented
+**Date:** 2026-10-25 · **Decided by:** operator · **Status:** implemented on branch `feat/wire-pin-runner`
+(the runner comes from an explicit `**WIRE-RUNNER**:` field, one per task; a non-pytest pin must
+name a non-`.py` file; `verify` re-validates every record it reads)
 **Origin:** handoff `docs/handoffs/2026-10-25-main__wire-registry-and-bkit-g001.md` Next Step 2
 (HemaSuite PR BrightGold70/HemaSuite#52).
 **Example record:** HemaSuite `document-intake-source-review::Task 6`, pin
