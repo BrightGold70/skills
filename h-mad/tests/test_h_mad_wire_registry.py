@@ -1733,3 +1733,109 @@ def test_no_warning_when_the_registry_used_IS_the_root_one(tmp_path):
     r = _register(repo)
     assert "ambiguous_default" not in r.stdout, r.stdout
     assert "WIREREG: REGISTER" in r.stdout, r.stdout
+
+
+# --- runner: a pin pytest cannot collect is unverifiable, never missing -----
+#
+# Decision 2026-10-25 (docs/03-analysis/wire-registry.decision-2026-10-25-runner-field.md).
+# A Playwright pin can never appear in a pytest collection, so before `runner`
+# existed it read as `missing` and failed 5f — a regression report produced by
+# construction. A record now names its runner; one with no resolver is counted
+# and named as cannot-judge, and neither fails the gate nor passes it silently.
+
+E2E_PIN = "web/e2e/source-review.spec.ts::opens_every_fragment"
+
+
+def _verify_with(monkeypatch: pytest.MonkeyPatch, path: Path, collected: set[str]) -> dict:
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [])
+    monkeypatch.setattr(registry, "collect", lambda *args: set(collected))
+    monkeypatch.setattr(registry, "run_pins", lambda resolving, *args: (list(resolving), []))
+    return registry.verify(path, "HEAD", path.parent, path.parent)
+
+
+@pytest.mark.parametrize("runner", ["pytest", "playwright"])
+def test_a_known_runner_is_accepted(runner: str) -> None:
+    pin = "test_run_calls_measure" if runner == "pytest" else E2E_PIN
+    assert registry.validate_record(_entry(runner=runner, pin=pin, registered_ts="t"))["runner"] == runner
+
+
+def test_a_record_without_runner_is_still_valid_and_reads_as_pytest() -> None:
+    record = registry.validate_record(_entry(registered_ts="t"))
+    assert "runner" not in record
+    assert registry.record_runner(record) == "pytest"
+
+
+def test_an_unknown_runner_is_refused() -> None:
+    with pytest.raises(registry.RegistryError, match="runner"):
+        registry.validate_record(_entry(runner="vitest", pin=E2E_PIN, registered_ts="t"))
+
+
+@pytest.mark.parametrize("pin", ["tests/test_run.py::test_x", ["web/e2e/a.spec.ts::t", "tests/test_b.py::t"]])
+def test_a_py_pin_cannot_claim_a_non_pytest_runner(pin: object) -> None:
+    """Otherwise a failing pytest pin could be parked as playwright to dodge a FAIL."""
+    with pytest.raises(registry.RegistryError, match=r"\.py"):
+        registry.validate_record(_entry(runner="playwright", pin=pin, registered_ts="t"))
+
+
+def test_runner_problem_names_the_defect_without_raising() -> None:
+    assert registry.runner_problem(_entry()) is None
+    assert "vitest" in registry.runner_problem(_entry(runner="vitest"))
+    assert ".py" in registry.runner_problem(_entry(runner="playwright", pin="tests/test_x.py::t"))
+
+
+def test_verify_counts_a_playwright_record_unverifiable_not_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path, _entry(), _entry(id="wire-e2e", runner="playwright", pin=E2E_PIN))
+
+    result = _verify_with(monkeypatch, path, {"tests/test_run.py::test_run_calls_measure"})
+
+    assert result["verdict"] == "PASS", result
+    assert (result["verified"], result["missing"], result["unverifiable"]) == (1, 0, 1)
+    assert result["token"].endswith(" unverifiable=1"), result["token"]
+    out = capsys.readouterr().out
+    assert "[H-MAD] step5f:wire_pin_unverifiable:regression-provenance-ledger::wire-e2e runner=playwright" in out
+    assert "wire_pin_missing" not in out
+
+
+def test_an_unverifiable_record_does_not_mask_a_real_pytest_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path, _entry(), _entry(id="wire-e2e", runner="playwright", pin=E2E_PIN))
+
+    result = _verify_with(monkeypatch, path, set())
+
+    assert result["verdict"] == "FAIL"
+    assert (result["missing"], result["unverifiable"]) == (1, 1)
+
+
+def test_a_renamed_playwright_record_is_unverifiable_not_an_unverified_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    renamed = _entry(id="wire-e2e", runner="playwright", pin=E2E_PIN, status="removed",
+                     removal_provenance="renamed", removed_by_feature="x",
+                     successor_pin="web/e2e/source-review.spec.ts::renamed")
+    _valid_registry(path, renamed)
+
+    result = _verify_with(monkeypatch, path, set())
+
+    assert result["verdict"] == "PASS", result
+    assert (result["unverified_renames"], result["unverifiable"]) == (0, 1)
+
+
+def test_a_plain_registry_reports_unverifiable_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path, _entry())
+    result = _verify_with(monkeypatch, path, {"tests/test_run.py::test_run_calls_measure"})
+    assert result["unverifiable"] == 0
+    assert result["token"].endswith(" unverifiable=0"), result["token"]
+
+
+def test_an_absent_registry_reports_unverifiable_zero(tmp_path: Path) -> None:
+    result = registry.verify(tmp_path / "absent.jsonl", "HEAD", tmp_path, tmp_path)
+    assert result["unverifiable"] == 0
+    assert result["token"].endswith(" unverifiable=0"), result["token"]
