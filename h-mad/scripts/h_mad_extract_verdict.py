@@ -25,6 +25,9 @@ import re
 import sys
 from pathlib import Path
 
+# Markdown emphasis an agent may wrap a verdict line in; never part of the value.
+_EMPH = r"(?:\*\*|__)?"
+
 CONTRACTS = {
     "STATUS": ["DONE", "DONE_WITH_CONCERNS", "BLOCKED", "NEEDS_CONTEXT"],
     "VERDICT": ["COMPLIANT", "DRIFT"],
@@ -77,11 +80,13 @@ def extract_verdict(
     """
     if after is not None:
         scrape = slice_after_boundary(scrape, after)
-    # Optional `**`/`__` emphasis around the key or the whole line: agents write
-    # markdown, and `**STATUS: DONE**` read as no verdict at all.
-    emph = r"(?:\*\*|__)?"
+    # Optional `**`/`__` emphasis on the key, the value, or the whole line:
+    # agents write markdown, and `**STATUS: DONE**` read as no verdict at all.
+    # `_SECTION_START` below must accept the same spellings, or a bold STATUS
+    # line stops ending a `Concerns:` section (J10).
+    emph = _EMPH
     pattern = re.compile(
-        rf"^[ \t]*{emph}[ \t]*{re.escape(key)}:{emph}[ \t]*(.*?)[ \t]*{emph}[ \t]*$",
+        rf"^[ \t]*{emph}[ \t]*{re.escape(key)}{emph}:{emph}[ \t]*{emph}(.*?){emph}[ \t]*{emph}[ \t]*$",
         re.MULTILINE,
     )
     matches = pattern.findall(scrape)
@@ -107,7 +112,8 @@ def extract_verdict(
 # name no concern anywhere.
 
 _LABEL_WORD = re.compile(r"\b(?:concerns?|blockers?)\b", re.I)
-_SECTION_START = re.compile(r"^(?:#{1,6}[ \t]|STATUS:|VERDICT:|ASSESSMENT:)")
+_SECTION_START = re.compile(
+    rf"^(?:#{{1,6}}[ \t]|{_EMPH}[ \t]*(?:STATUS|VERDICT|ASSESSMENT){_EMPH}:)")
 _NEGATIONS = {
     "", "-", "none", "n a", "na", "no", "nil", "nothing",
     "no concern", "no concerns", "no blockers", "not applicable",
@@ -218,8 +224,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # Scoped to ONE key and ONE value, so the VERDICT: and ASSESSMENT: contracts
-    # cannot become collateral damage. extract_verdict() itself is unchanged: it
-    # answers "what is the last value of this key", and widening it to read
+    # cannot become collateral damage. extract_verdict() answers only "what is the
+    # last value of this key" (emphasis aside), and widening it to read
     # surrounding prose would make its name a lie.
     if (
         args.key == "STATUS"

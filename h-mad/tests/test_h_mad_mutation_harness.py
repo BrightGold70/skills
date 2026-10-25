@@ -5046,3 +5046,21 @@ def test_the_override_replaces_only_a_python_argv0(monkeypatch, tmp_path: Path) 
     assert loaded["target_command"] == ["bash", "-c", "python3.11 -m pytest"]
     assert json.loads(spec_path.read_text(encoding="utf-8"))["command"][0] == "python3.11", (
         "the override is applied at load time, never written back to the spec")
+
+
+def test_python_flag_does_not_leak_past_main_and_is_traced(monkeypatch, tmp_path: Path, capsys) -> None:
+    """Review 2026-10-25: main() set the env var and never restored it, so any
+    later in-process spec load inherited the override; and nothing recorded it."""
+    import h_mad_mutation_harness as harness
+    monkeypatch.delenv("HMAD_MUTATION_PYTHON", raising=False)
+    monkeypatch.chdir(tmp_path)
+    seen: list[str | None] = []
+    monkeypatch.setattr(harness, "_check_anchors",
+                        lambda specs: seen.append(os.environ.get("HMAD_MUTATION_PYTHON")) or 0)
+    spec_path = _project(tmp_path / "p", [_kills_the_guard()])
+
+    assert harness.main(["--python", "venv/bin/python", "--check-anchors", str(spec_path)]) == 0
+
+    assert seen == [str(tmp_path / "venv/bin/python")], "a relative --python must be made absolute"
+    assert "HMAD_MUTATION_PYTHON" not in os.environ, "the override leaked past main()"
+    assert "INTERPRETER: override=" in capsys.readouterr().err

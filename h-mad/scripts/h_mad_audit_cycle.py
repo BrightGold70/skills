@@ -1163,7 +1163,11 @@ def main(argv: list[str] | None = None) -> int:
         help="run the project suite ONCE for this cycle and forward the verdict to "
              "every per-leg gate call (#91). A scoped root, never the repo root.",
     )
-    from h_mad_audit_gate import suite_argv
+    def suite_argv(text: str) -> list[str]:
+        # Lazy, as before: only a `--suite-cmd` run pays for importing the gate.
+        from h_mad_audit_gate import suite_argv as parse
+        return parse(text)
+
     parser.add_argument("--suite-cmd", type=suite_argv, help="override the suite command, shell-quoted")
 
     try:

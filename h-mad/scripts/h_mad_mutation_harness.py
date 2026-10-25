@@ -2321,7 +2321,9 @@ def _isolate(argv: list[str], spec_paths: list[Path]) -> int:
                 if not removed or worktree.exists():
                     print(f"MUTATION: UNREADABLE reason=isolate-not-removed path={worktree}")
                     # Assigned, not returned: a `return` here would swallow any
-                    # exception still in flight from the body (PEP 765).
+                    # exception still in flight from the body (PEP 765). So an
+                    # interrupted run whose worktree leaked prints this token AND
+                    # re-raises (exit 130/143, not 2); callers read the token.
                     status = 2
                 else:
                     print("ISOLATE: removed=yes", flush=True)
@@ -2359,12 +2361,33 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--python", metavar="INTERPRETER",
-        help="replace a spec's python argv[0] (e.g. python3.11) with this interpreter",
+        help="replace a spec's python argv[0] (a basename python, python3, python3.11, "
+             "or an absolute pin to one) with this interpreter; any other head "
+             "(env, bash, pytest) is left as written",
     )
     args = parser.parse_args(argv)
+    previous = os.environ.get(PYTHON_OVERRIDE_ENV)
     if args.python:
-        # The environment, not a parameter, so `--sweep`/`--isolate` children inherit it.
-        os.environ[PYTHON_OVERRIDE_ENV] = args.python
+        # The environment, not a parameter, so `--sweep`/`--isolate` children inherit
+        # it. Absolute, because spec commands run with cwd=root (a temp worktree
+        # under --isolate), where a caller-relative path names nothing.
+        os.environ[PYTHON_OVERRIDE_ENV] = (
+            os.path.abspath(args.python) if "/" in args.python else args.python)
+    if os.environ.get(PYTHON_OVERRIDE_ENV):
+        # On stderr: a verdict measured under another interpreter than the spec
+        # pins must not read like one on the spec as written.
+        print(f"INTERPRETER: override={os.environ[PYTHON_OVERRIDE_ENV]}", file=sys.stderr)
+    try:
+        return _run_main(args, argv)
+    finally:
+        # Restored, so an in-process caller's later spec loads are not overridden.
+        if previous is None:
+            os.environ.pop(PYTHON_OVERRIDE_ENV, None)
+        else:
+            os.environ[PYTHON_OVERRIDE_ENV] = previous
+
+
+def _run_main(args: argparse.Namespace, argv: list[str] | None) -> int:
     if args.isolate:
         return _isolate(list(sys.argv[1:] if argv is None else argv), args.spec)
 
