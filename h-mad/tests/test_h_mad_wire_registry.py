@@ -1788,7 +1788,7 @@ def test_verify_counts_a_playwright_record_unverifiable_not_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     path = tmp_path / "wires.jsonl"
-    _valid_registry(path, _entry(), _entry(id="wire-e2e", runner="playwright", pin=E2E_PIN))
+    _valid_registry(path, _entry(), _entry(id="wire-e2e", runner="playwright", pin=E2E_PIN, registered_ts="t"))
 
     result = _verify_with(monkeypatch, path, {"tests/test_run.py::test_run_calls_measure"})
 
@@ -1804,7 +1804,7 @@ def test_an_unverifiable_record_does_not_mask_a_real_pytest_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "wires.jsonl"
-    _valid_registry(path, _entry(), _entry(id="wire-e2e", runner="playwright", pin=E2E_PIN))
+    _valid_registry(path, _entry(), _entry(id="wire-e2e", runner="playwright", pin=E2E_PIN, registered_ts="t"))
 
     result = _verify_with(monkeypatch, path, set())
 
@@ -1816,7 +1816,7 @@ def test_a_renamed_playwright_record_is_unverifiable_not_an_unverified_rename(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "wires.jsonl"
-    renamed = _entry(id="wire-e2e", runner="playwright", pin=E2E_PIN, status="removed",
+    renamed = _entry(id="wire-e2e", runner="playwright", pin=E2E_PIN, status="removed", registered_ts="t",
                      removal_provenance="renamed", removed_by_feature="x",
                      successor_pin="web/e2e/source-review.spec.ts::renamed")
     _valid_registry(path, renamed)
@@ -1881,3 +1881,33 @@ def test_a_non_string_runner_is_a_problem_not_a_crash() -> None:
     assert "invalid runner" in registry.runner_problem(_entry(runner=["playwright"]))
     with pytest.raises(registry.RegistryError, match="runner"):
         registry.validate_record(_entry(runner={"x": 1}, pin=E2E_PIN, registered_ts="t"))
+
+
+def test_verify_fully_validates_a_runner_record_it_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A playwright record with no pin read PASS-with-unverifiable; without the
+    runner the same record crashed. Read time runs the whole validate_record."""
+    path = tmp_path / "wires.jsonl"
+    record = _entry(id="no-pin", runner="playwright")
+    del record["pin"]
+    _valid_registry(path, record)
+    with pytest.raises(registry.RegistryError):
+        _verify_with(monkeypatch, path, set())
+
+
+def test_a_judged_base_record_cannot_become_unverifiable_at_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Same identity, pytest at base, playwright at head: the wire stops being
+    judged with no tombstone. That is a removal in disguise, so it FAILs."""
+    path = tmp_path / "wires.jsonl"
+    base = _entry(pin="tests/test_run.py::test_x", registered_ts="t")
+    _valid_registry(path, _entry(runner="playwright", pin=E2E_PIN, registered_ts="t"))
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [base])
+    monkeypatch.setattr(registry, "collect", lambda *args: set())
+    monkeypatch.setattr(registry, "run_pins", lambda resolving, *args: (list(resolving), []))
+    result = registry.verify(path, "HEAD", tmp_path, tmp_path)
+    assert result["verdict"] == "FAIL", result["token"]
+    assert "[H-MAD] step5f:runner_downgraded:regression-provenance-ledger::wire-1" in capsys.readouterr().out

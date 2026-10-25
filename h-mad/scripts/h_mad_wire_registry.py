@@ -782,6 +782,16 @@ def verify(
         if problem:  # M:RUNNER-READ
             raise RegistryError(
                 f"{record.get('owning_feature')}::{record.get('id')}: {problem}")
+        if "runner" in record:
+            # A runner record is new with this field, so it gets the whole
+            # write-time validation: a playwright record with NO pin otherwise
+            # read PASS-with-unverifiable, where the same record without a runner
+            # crashed. Older records keep `load()`'s parse-only contract.
+            try:
+                validate_record(dict(record))
+            except RegistryError as exc:
+                raise RegistryError(
+                    f"{record.get('owning_feature')}::{record.get('id')}: {exc}") from None
     # Split BEFORE partition: a pin with no resolver here can never appear in the
     # pytest collection, so letting it reach `partition` reports it `missing` by
     # construction. `compare` below still sees every head record, so removing an
@@ -818,6 +828,15 @@ def verify(
     if unverified_renames:
         for record in unverified_renames:
             drivers.append(f"step5f:unverified_rename:{_record_label(record)}")
+    # A wire judged at base that is unjudged at head under the same identity is
+    # a removal in disguise: no tombstone, and its regression stops being seen.
+    judged_at_base = {
+        _record_key(record) for record in base_records
+        if record.get("status", "active") == "active" and record_runner(record) in RESOLVED_RUNNERS
+    }
+    for record in unverifiable:
+        if _record_key(record) in judged_at_base:  # M:RUNNER-DOWNGRADE
+            drivers.append(f"step5f:runner_downgraded:{_record_label(record)}")
     if not tracked:
         drivers.append("step5f:registry_untracked")
     for reason in drivers:

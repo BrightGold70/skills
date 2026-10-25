@@ -1,5 +1,5 @@
 {
-  "_why": "The runner field adds a cannot-judge bucket to a gate whose whole job is to fail on a cut wire, so every new branch is a place a real FAIL could hide. M1-M2 are the bucket itself (a playwright pin read as missing again; a renamed one dropped from it). M3-M5 are the dodge: a pytest pin parked as playwright, or an unknown runner, reaching 5f where nothing judges it. M6-M7 are the 5b writer: the field silently not recorded, or a bad record aborting the whole registration batch with a traceback. Review 2026-10-25 added M8-M10: the reader-side check, numbered/conflicting labels, and the template's own spelling.",
+  "_why": "The runner field adds a cannot-judge bucket to a gate whose whole job is to fail on a cut wire, so every new branch is a place a real FAIL could hide. M1-M2 are the bucket itself (a playwright pin read as missing again; a renamed one dropped from it). M3-M5 are the dodge: a pytest pin parked as playwright, or an unknown runner, reaching 5f where nothing judges it. M6-M7 are the 5b writer: the field silently not recorded, or a bad record aborting the whole registration batch with a traceback. Review 2026-10-25 added M8-M10: the reader-side check, numbered/conflicting labels, and the template's own spelling. Re-review added M11-M13: runner downgrade at head, read-time full validation, and the template placeholder.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -104,6 +104,32 @@
       "find": "    r\"\\s*(?:\\([^)]*\\))?\\s*\\*{0,2}\\s*:\\s*(?P<value>.*)$\",\n    re.IGNORECASE,\n)\n\n_PATHS_FIELD_RE",
       "replace": "    r\"\\s*\\*{0,2}\\s*:\\s*(?P<value>.*)$\",\n    re.IGNORECASE,\n)\n\n_PATHS_FIELD_RE",
       "test": "tests/test_h_mad_wire_pin_gate.py::TestWireRunnerReview::test_the_template_spelling_with_its_qualifier_is_read"
+    },
+    {
+      "name": "M11: a judged base record may silently become unverifiable at head",
+      "_mechanism": "Same identity, pytest at base, playwright at head: the wire stops being judged with no tombstone, and 5f reads PASS.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "        if _record_key(record) in judged_at_base:  # M:RUNNER-DOWNGRADE\n",
+      "replace": "        if False:  # M:RUNNER-DOWNGRADE\n",
+      "test": "tests/test_h_mad_wire_registry.py::test_a_judged_base_record_cannot_become_unverifiable_at_head",
+      "symbol": "verify"
+    },
+    {
+      "name": "M12: a runner record read at 5f skips full validation",
+      "_mechanism": "A playwright record with no pin reads PASS-with-unverifiable, where the same record without a runner crashed loudly.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "        if \"runner\" in record:\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_wire_registry.py::test_verify_fully_validates_a_runner_record_it_reads",
+      "symbol": "verify"
+    },
+    {
+      "name": "M13: the template WIRE-RUNNER line carries a real value again",
+      "_mechanism": "An author who keeps the optional line verbatim gets a pytest task skipped from registration while 5b reads PASS.",
+      "file": "references/inline-protocols.md",
+      "find": "`<playwright — only when the pin is not a pytest test>`",
+      "replace": "`playwright` when the pin is not a pytest test.",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_the_template_wire_runner_line_copied_verbatim_changes_nothing"
     }
   ]
 }

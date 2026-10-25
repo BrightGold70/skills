@@ -1193,3 +1193,19 @@ class TestWireRunnerReview:
         out = capsys.readouterr().out
         assert "registration: registered=0 skipped=1" in out, out
         assert why in out, out
+
+
+def test_the_template_wire_runner_line_copied_verbatim_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-review 2026-10-25: the template line printed a real-looking value, so a
+    pytest author who kept it verbatim had the task SKIPPED from registration
+    while 5b still read PASS. The template value is a placeholder now."""
+    refs = Path(__file__).resolve().parents[1] / "references" / "inline-protocols.md"
+    line = next(l.strip() for l in refs.read_text(encoding="utf-8").splitlines()
+                if l.strip().startswith("**WIRE-RUNNER**"))
+    task = _task(1).replace("\n**Acceptance Criteria**", f"{line}\n\n**Acceptance Criteria**", 1)
+    registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+    _run_main_with_registration_args(monkeypatch, _plan(tmp_path, task), registry_path)
+    (record,) = registry.load(registry_path)
+    assert "runner" not in record

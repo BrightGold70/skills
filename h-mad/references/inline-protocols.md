@@ -300,8 +300,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    while declaring either is still reported as a mislabel.
    **WIRE** (`wiring` shape only): `<caller/path.py>:<symbol>` → `<callee-symbol>`
    **WIRE-PIN** (`wiring` shape only): `<test id that fails when ONLY the wire is removed, callee intact>`
-   **WIRE-RUNNER** (optional, `wiring` shape only): `playwright` when the pin is not a pytest test.
-   Omit it for pytest. It is never inferred, since `.spec.ts` can be Playwright or vitest. The 5f
+   **WIRE-RUNNER** (optional, `wiring` shape only): `<playwright — only when the pin is not a pytest test>`
+   The value is exactly `playwright`. Omit the line for pytest; left as this placeholder it is
+   ignored, like any unfilled template field. It is never inferred, since `.spec.ts` can be Playwright or vitest. The 5f
    registry reports such a pin as `unverifiable`, not `missing`. A Playwright pin must name its file
    (`<file>::<test>`), and that file must not be `.py`. One runner per task: a task that wires both
    a pytest and a Playwright pin is two tasks.
