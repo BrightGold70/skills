@@ -344,3 +344,38 @@ def test_run_suite_table_row(tmp_path: Path, body: str, expected: str) -> None:
 )
 def test_suite_summary_reads_the_line(source: str, expected: tuple | None) -> None:
     assert gate._suite_summary(source) == expected
+
+
+# --- --suite-cmd is shell-parsed, not str.split() -------------------------
+#
+# `-k "a or b"`, a path with a space, `env -u X ...`: `str.split()` tore every
+# quoted argument into bogus tokens, so SUITE: measured a different command than
+# the one typed. Both the gate and the cycle driver parse it with one helper.
+
+def _argv_recorder(tmp_path: Path) -> tuple[Path, Path]:
+    log = tmp_path / "argv.txt"
+    sh = fake_suite(tmp_path, "rec.sh",
+                    f'for a in "$@"; do printf "%s\\n" "$a" >> "{log}"; done\necho "1 passed in 0.1s"')
+    return sh, log
+
+
+def test_suite_argv_keeps_a_quoted_argument_whole() -> None:
+    assert gate.suite_argv('pytest -k "a or b" "my tests"') == ["pytest", "-k", "a or b", "my tests"]
+
+
+def test_a_quoted_suite_cmd_argument_reaches_the_suite_as_one_argv(tmp_path: Path) -> None:
+    audit = tmp_path / "f.plan.audit.v1.codex.md"
+    audit.write_text(CLEAN, encoding="utf-8")
+    sh, log = _argv_recorder(tmp_path)
+    result = run(str(audit), "--project-tests", str(tmp_path), "--suite-cmd", f'{sh} "two words" plain')
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert log.read_text(encoding="utf-8").splitlines() == ["two words", "plain"]
+
+
+def test_an_unbalanced_suite_cmd_is_a_usage_error_not_a_traceback(tmp_path: Path) -> None:
+    audit = tmp_path / "f.plan.audit.v1.codex.md"
+    audit.write_text(CLEAN, encoding="utf-8")
+    result = run(str(audit), "--project-tests", str(tmp_path), "--suite-cmd", 'pytest -k "a or b')
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "--suite-cmd" in result.stderr
+    assert "Traceback" not in result.stdout + result.stderr
