@@ -77,7 +77,13 @@ def extract_verdict(
     """
     if after is not None:
         scrape = slice_after_boundary(scrape, after)
-    pattern = re.compile(rf"^[ \t]*{re.escape(key)}:[ \t]*(.*)$", re.MULTILINE)
+    # Optional `**`/`__` emphasis around the key or the whole line: agents write
+    # markdown, and `**STATUS: DONE**` read as no verdict at all.
+    emph = r"(?:\*\*|__)?"
+    pattern = re.compile(
+        rf"^[ \t]*{emph}[ \t]*{re.escape(key)}:{emph}[ \t]*(.*?)[ \t]*{emph}[ \t]*$",
+        re.MULTILINE,
+    )
     matches = pattern.findall(scrape)
     if not matches:
         raise VerdictError(
