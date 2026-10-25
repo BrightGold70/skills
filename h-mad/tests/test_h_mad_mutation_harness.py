@@ -5089,18 +5089,22 @@ def test_only_with_an_unknown_name_measures_nothing(tmp_path: Path) -> None:
     assert "ALL_CAUGHT" not in out.stdout and "no such row" in out.stdout + out.stderr, out.stdout
 
 
-def test_only_scopes_the_baseline_to_the_selected_rows_tests(tmp_path: Path) -> None:
-    """The spec's whole-suite `command` is red here; the selected row's own test is green."""
-    spec_path = _project(tmp_path, [{**_kills_the_guard(), "test": "test_guard.py::test_guard"}])
-    (tmp_path / "test_guard.py").write_text(
-        "def test_guard():\n    assert 'THRESHOLD = 5' in open('guard.py').read()\n", encoding="utf-8")
+def test_only_keeps_the_specs_full_command_for_baseline_and_survivor_checks(tmp_path: Path) -> None:
+    """Review 2026-10-25: narrowing `command` to the row's tests also narrowed the
+    survivor probe and the restore check. A red full command still refuses."""
+    spec_path = _project(tmp_path, [_kills_the_guard()])
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
-    spec["target_command"] = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
     spec["command"] = [sys.executable, "-c", "import sys; sys.exit(1)"]
     spec_path.write_text(json.dumps(spec), encoding="utf-8")
-    assert "ALL_CAUGHT" not in _cli(str(spec_path)).stdout
     out = _cli("--only", "raise the threshold", str(spec_path))
-    assert "MUTATION: ALL_CAUGHT mutations=1" in out.stdout, out.stdout + out.stderr
+    assert "ALL_CAUGHT" not in out.stdout, out.stdout
+
+
+def test_a_run_with_no_spec_is_a_usage_error_not_a_traceback(tmp_path: Path) -> None:
+    """`_run_main` called `parser.error` with no `parser` in scope: NameError."""
+    out = subprocess.run([sys.executable, str(HARNESS), "--only", "x"], capture_output=True,
+                         text=True, cwd=tmp_path)
+    assert out.returncode == 2 and "Traceback" not in out.stderr, out.stdout + out.stderr
 
 
 def test_only_is_refused_with_sweep(tmp_path: Path) -> None:

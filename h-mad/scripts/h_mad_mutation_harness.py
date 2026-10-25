@@ -2120,10 +2120,10 @@ def _check_anchors(spec_paths: list[Path]) -> int:
 def _select_rows(spec: dict, only: list[str] | None) -> dict:
     """The spec narrowed to the `--only` rows, or unchanged when none were named.
 
-    When every selected row names a `test` and the spec has a `target_command`,
-    the baseline becomes `target_command + those tests`: re-scoring one row
-    otherwise still paid the whole spec's suite, which memory pressure killed.
-    A name matching no row is a SpecError, never an empty run that reads green.
+    Only the ROWS are narrowed. `command` stays the spec's own: it is also the
+    survivor probe and the post-restore check, and narrowing it (review
+    2026-10-25) reported a row caught by another test as "whole suite: nothing
+    bites". A name matching no row is a SpecError, never an empty green run.
     """
     if not only:
         return spec
@@ -2132,11 +2132,7 @@ def _select_rows(spec: dict, only: list[str] | None) -> dict:
     unknown = sorted(wanted - {m["name"] for m in selected})
     if unknown:  # M:ONLY-UNKNOWN
         raise SpecError(f"--only names no mutation in this spec: {', '.join(unknown)}")
-    narrowed = {**spec, "mutations": selected}
-    tests = [m.get("test") for m in selected]
-    if spec.get("target_command") and all(tests):  # M:ONLY-SCOPED-BASELINE
-        narrowed["command"] = [*spec["target_command"], *dict.fromkeys(tests)]
-    return narrowed
+    return {**spec, "mutations": selected}
 
 
 def run_spec(spec_path: Path, *, reachability: bool = False,
@@ -2390,8 +2386,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--only", action="append", metavar="NAME",
-        help="score only the named mutation row(s) of ONE spec; when every selected "
-             "row names a `test`, the baseline runs just those tests",
+        help="score only the named mutation row(s) of ONE spec (the baseline and "
+             "survivor checks still run the spec's full command)",
     )
     args = parser.parse_args(argv)
     if args.only and (args.sweep or args.check_anchors):
@@ -2409,7 +2405,7 @@ def main(argv: list[str] | None = None) -> int:
         # pins must not read like one on the spec as written.
         print(f"INTERPRETER: override={os.environ[PYTHON_OVERRIDE_ENV]}", file=sys.stderr)
     try:
-        return _run_main(args, argv)
+        return _run_main(args, argv, parser)
     finally:
         # Restored, so an in-process caller's later spec loads are not overridden.
         if previous is None:
@@ -2418,7 +2414,8 @@ def main(argv: list[str] | None = None) -> int:
             os.environ[PYTHON_OVERRIDE_ENV] = previous
 
 
-def _run_main(args: argparse.Namespace, argv: list[str] | None) -> int:
+def _run_main(args: argparse.Namespace, argv: list[str] | None,
+              parser: argparse.ArgumentParser) -> int:
     if args.isolate:
         return _isolate(list(sys.argv[1:] if argv is None else argv), args.spec)
 

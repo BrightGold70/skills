@@ -868,6 +868,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     # Both paths are named, because `--out` read as "where the prompt goes" and
     # was misused once. On stderr: stdout is parsed, and pinned byte-for-byte.
+    sys.stdout.flush()  # so 2>&1 shows these after the PASS line, not before it
     print(f"  prompt (written, --prompt): {prompt}", file=sys.stderr)
     print(f"  dispatch output (--out, the agent's reply — NOT the prompt): {out}", file=sys.stderr)
     # Under the PASS line, never on it: the PASS line is parsed. Inlined size is
