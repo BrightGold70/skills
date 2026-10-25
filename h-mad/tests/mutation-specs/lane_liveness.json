@@ -209,7 +209,7 @@
       "file": "scripts/h_mad_state_write.py",
       "find": "    if prior:\n        print(f\"STATE-WRITE: TAKEOVER",
       "replace": "    if False:\n        print(f\"STATE-WRITE: TAKEOVER",
-      "test": "tests/test_h_mad_lane_liveness.py::test_a_stale_takeover_prints_the_liveness_reading",
+      "test": "tests/test_h_mad_lane_liveness.py::test_force_still_takes_a_LIVE_stale_claim_and_prints_the_reading",
       "symbol": "claim"
     },
     {
@@ -238,6 +238,15 @@
       "replace": "    if live:\n        print(\"  a skill change lands",
       "test": "tests/test_h_mad_lane_liveness.py::test_live_runs_unjudged_claim_gets_the_hold_advice",
       "symbol": "main"
+    },
+    {
+      "name": "claim-takes-a-LIVE-stale-claim",
+      "_mechanism": "The pre-write reading still prints LIVE but no longer refuses, so a cold heartbeat over a running owner is taken without --force -- the writer disagreeing with its own evidence again (row: claim-writer refuses a LIVE takeover).",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "    if evidence.startswith(\"LIVENESS: LIVE\"):  # M:CLAIM-REFUSES-LIVE\n",
+      "replace": "    if False:  # M:CLAIM-REFUSES-LIVE\n",
+      "test": "tests/test_h_mad_lane_liveness.py::test_a_stale_heartbeat_with_a_LIVE_clock_is_refused_without_force",
+      "symbol": "_refuse_a_live_stale_claim"
     }
   ]
 }

@@ -317,6 +317,37 @@ def drop_undeclared(state_file: Path, feature: str) -> tuple[dict, list[str]]:
     return _mutate(state_file, feature, apply), removed
 
 
+def _refuse_a_live_stale_claim(state_path: Path, feature: str, session_id: str,
+                               lane: Path, now: str | None) -> None:
+    """Refuse a cold-heartbeat claim that another clock proves is LIVE.
+
+    Operator decision 2026-10-25: printing `LIVENESS: LIVE` and taking over
+    anyway let the writer disagree with its own evidence (incident 2). Only
+    positive proof refuses -- QUIET and UNKNOWN keep the stale takeover, so a
+    crashed session never needs `force`. Read WITHOUT the store lock, like the
+    TAKEOVER line, so a hung `ps` cannot block the owner's own --beat; the locked
+    write below still applies the heartbeat gate, so a race only loses advice.
+    """
+    try:
+        record = _load(state_path)["orchestrator_state"].get(feature)
+    except (OSError, StateWriteError):
+        return  # the locked write reports an unreadable store properly
+    if not isinstance(record, dict):
+        return
+    held_by = record.get("owner_session_id")
+    if not held_by or held_by == session_id:
+        return
+    if owner_is_live(record.get("owner_heartbeat_ts"), now):
+        return  # the heartbeat gate refuses this one, with its own message
+    evidence = liveness_evidence(record, lane, now)
+    if evidence.startswith("LIVENESS: LIVE"):  # M:CLAIM-REFUSES-LIVE
+        raise StateWriteError(
+            f"{feature!r} is owned by session {held_by!r}: its heartbeat is stale "
+            f"but another clock shows it running. Coordinate, or pass force to "
+            f"take over. {evidence}"
+        )
+
+
 def claim(
     state_file: Path,
     feature: str,
@@ -371,6 +402,8 @@ def claim(
     refused: list = []
     state_path = Path(state_file)
     lane = state_path.parent.parent if state_path.parent.name == "docs" else state_path.parent
+    if not force:
+        _refuse_a_live_stale_claim(state_path, feature, session_id, lane, now)
     # Every clock, not the heartbeat alone, is what an operator reads before
     # forcing or taking over (row 1406) — read after the store lock is released,
     # so a hung `ps` never holds the lock against the owner's own --beat.

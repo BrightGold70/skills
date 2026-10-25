@@ -121,8 +121,8 @@ def liveness_evidence(record, lane, now: str | None = None, *, transcript_mtime=
     The four readers are injectable; by default they are this module's
     `read_transcript_mtime`, `read_commit_ts`, `read_ps_commands` and
     `read_minted_owner`, looked up at call time. `owner_is_live` and its callers
-    are unchanged: this is the evidence an operator reads, not the gate
-    `--claim` applies.
+    are unchanged. Since 2026-10-25 `--claim` also reads this, but only to refuse
+    a cold-heartbeat takeover on LIVE; QUIET and UNKNOWN never gate a claim.
     """
     transcript_mtime = transcript_mtime or read_transcript_mtime
     commit_ts = commit_ts or read_commit_ts
