@@ -357,3 +357,50 @@ class TestTheConcernShapeIsSpelled:
         after = text.split("`Concerns:`", 1)[1]
         assert "prose" in after and "contentless" in after, (
             f"{name} names the label but not that prose-only is rejected")
+
+
+# --- a bold verdict line is still a verdict ------------------------------
+#
+# Agents write markdown, and `**STATUS: DONE**` read as NO verdict: the anchor
+# `^[ \t]*STATUS:` cannot see past the asterisks. Every hand preface had to say
+# "not bold" to dodge it. The emphasis is decoration, never part of the value.
+
+@pytest.mark.parametrize("line", [
+    "**STATUS: DONE**",
+    "**STATUS:** DONE",
+    "__STATUS: DONE__",
+    "  **STATUS:**   DONE  ",
+])
+def test_a_bold_status_line_is_read_as_its_value(line: str) -> None:
+    from h_mad_extract_verdict import extract_verdict
+    assert extract_verdict(f"report\n{line}\n", "STATUS", ["DONE", "BLOCKED"]) == "DONE"
+
+
+def test_a_bold_label_with_no_value_is_still_empty() -> None:
+    from h_mad_extract_verdict import VerdictError, extract_verdict
+    with pytest.raises(VerdictError, match="empty"):
+        extract_verdict("**STATUS:**\n", "STATUS")
+
+
+def test_bold_does_not_widen_the_key_match() -> None:
+    """Emphasis is stripped only around THIS key -- `**SUBSTATUS: DONE**` is not it."""
+    from h_mad_extract_verdict import VerdictError, extract_verdict
+    with pytest.raises(VerdictError, match="no STATUS"):
+        extract_verdict("**SUBSTATUS: DONE**\n", "STATUS")
+
+
+def test_a_bold_status_line_still_ends_an_empty_concerns_section(tmp_path) -> None:
+    """Review 2026-10-25: the J10 section scan kept the unbolded anchor, so a bold
+    STATUS line was read as the concern's own text and a contentless
+    DONE_WITH_CONCERNS exited 0 -- refused before the bold fix, passed after it."""
+    scrape = tmp_path / "scrape.txt"
+    scrape.write_text("Concerns:\n\n**STATUS: DONE_WITH_CONCERNS**\n", encoding="utf-8")
+    result = subprocess.run([sys.executable, str(SCRIPT), "--key", "STATUS", str(scrape)],
+                            capture_output=True, text=True)
+    assert result.returncode == 2, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("line", ["**STATUS**: DONE", "STATUS: **DONE**", "__STATUS__: __DONE__"])
+def test_bold_on_the_key_alone_or_the_value_alone_is_read(line: str) -> None:
+    from h_mad_extract_verdict import extract_verdict
+    assert extract_verdict(f"{line}\n", "STATUS", ["DONE"]) == "DONE"

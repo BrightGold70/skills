@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -556,6 +557,18 @@ def suite_busy_line(returncode: int | None, output: str) -> str | None:
     return match.group(0) if match else None
 
 
+def suite_argv(text: str) -> list[str]:
+    """`--suite-cmd` as argv, shell-parsed: `str.split()` tore `-k "a or b"` apart.
+
+    The argparse `type=` for `--suite-cmd` in this gate AND the cycle driver, so
+    the two sites cannot drift, and an unbalanced quote is a usage error (exit 2).
+    """
+    try:
+        return shlex.split(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"not shell-parseable: {exc}") from exc
+
+
 def run_suite(test_root: Path, command: list[str] | None = None,
               timeout: int = 3600) -> dict:
     """Run the project suite once. Returns a verdict dict; raises nothing.
@@ -888,7 +901,8 @@ def main(argv: list[str] | None = None) -> int:
              "import mismatches (SKILL.md 5f).",
     )
     parser.add_argument(
-        "--suite-cmd", help="override the suite command (default: pytest <root> -q)",
+        "--suite-cmd", type=suite_argv,
+        help="override the suite command, shell-quoted (default: pytest <root> -q)",
     )
     parser.add_argument(
         "--suite-result", choices=("PASS", "FAIL", "UNREADABLE"), metavar="VERDICT",
@@ -1053,7 +1067,7 @@ def main(argv: list[str] | None = None) -> int:
         suite = args.suite_result
         print(f"SUITE: {suite} source=cycle")
     elif args.project_tests is not None:
-        command = args.suite_cmd.split() if args.suite_cmd else None
+        command = args.suite_cmd or None
         outcome = run_suite(args.project_tests, command)
         suite = outcome["verdict"]
         print(suite_line(suite, outcome))

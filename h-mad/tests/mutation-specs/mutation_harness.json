@@ -564,7 +564,7 @@
       "name": "host-skipped-summary-field-dropped",
       "_mechanism": "Drop the appended field; ordinary summaries must preserve all earlier fields and end in host_skipped=0.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
+      "symbol": "_run_main",
       "find": "            f\" host_skipped={len(result.get('host_skipped', []))}\"",
       "replace": "",
       "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_summary_appends_host_skipped_after_every_existing_field_even_without_requires"
@@ -573,7 +573,7 @@
       "name": "host-skipped-detail-dropped",
       "_mechanism": "Hide the unavailable host and probe reason; a summary alone cannot explain which mutation measured nothing.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
+      "symbol": "_run_main",
       "find": "        print(f\"  host-skipped: {entry}\")",
       "replace": "        pass",
       "test": "tests/test_h_mad_mutation_harness.py::TestHostBoundMutationRows::test_failed_requires_is_bounded_host_skipped_and_never_applied"
@@ -591,7 +591,7 @@
       "name": "reachability-single-run-not-forwarded",
       "_mechanism": "Parse the flag but leave single-spec execution untraced; a caught unexecuted span must be reported.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
+      "symbol": "_run_main",
       "find": "            result = run_spec(args.spec, reachability=True)",
       "replace": "            result = run_spec(args.spec)",
       "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
@@ -609,7 +609,7 @@
       "name": "reachability-sweep-not-forwarded",
       "_mechanism": "Drop the flag before starting the corpus sweep.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
+      "symbol": "_run_main",
       "find": "        return _sweep(specs, reachability=True) if args.reachability else _sweep(specs)",
       "replace": "        return _sweep(specs)",
       "test": "tests/test_h_mad_mutation_harness.py::test_reachability_sweep_forwards_flag_and_per_spec_appended_counts"
@@ -636,7 +636,7 @@
       "name": "reachability-summary-leaks-into-opt-out",
       "_mechanism": "Append the new field without opting in; single and sweep output must remain byte-identical.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
+      "symbol": "_run_main",
       "find": "               if args.reachability else \"\")",
       "replace": "               if True else \"\")",
       "test": "tests/test_h_mad_mutation_harness.py::test_reachability_disabled_preserves_exact_output_existing_guard"
@@ -645,7 +645,7 @@
       "name": "reachability-summary-count-hidden",
       "_mechanism": "Keep diagnoses internally but publish zero unreachable kills.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
+      "symbol": "_run_main",
       "find": "            + (f\" unreachable_kills={len(result.get('unreachable_kills', []))}\"",
       "replace": "            + (f\" unreachable_kills={0}\"",
       "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
@@ -654,7 +654,7 @@
       "name": "reachability-unreachable-detail-hidden",
       "_mechanism": "A count alone omits the mutation, original span and named test.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
+      "symbol": "_run_main",
       "find": "        print(f\"  unreachable-kill: {entry}\")",
       "replace": "        pass",
       "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
@@ -663,7 +663,7 @@
       "name": "reachability-unmeasured-detail-hidden",
       "_mechanism": "Do not silently treat ineligible rows as measured.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
+      "symbol": "_run_main",
       "find": "        print(f\"  reachability: {entry}\")",
       "replace": "        pass",
       "test": "tests/test_h_mad_mutation_harness.py::test_reachability_ineligible_rows_are_not_measured_or_counted"
@@ -942,7 +942,7 @@
       "name": "masked-hint-cli-omits-detail",
       "_mechanism": "The CLI must publish the masked-hint detail while preserving the existing summary.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
+      "symbol": "_run_main",
       "find": "        if name in result.get(\"masked_hints\", {}):",
       "replace": "        if False:",
       "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_real_named_survivor_prints_actionable_detail[other-test-failed]"

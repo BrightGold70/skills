@@ -1163,7 +1163,12 @@ def main(argv: list[str] | None = None) -> int:
         help="run the project suite ONCE for this cycle and forward the verdict to "
              "every per-leg gate call (#91). A scoped root, never the repo root.",
     )
-    parser.add_argument("--suite-cmd", help="override the suite command")
+    def suite_argv(text: str) -> list[str]:
+        # Lazy, as before: only a `--suite-cmd` run pays for importing the gate.
+        from h_mad_audit_gate import suite_argv as parse
+        return parse(text)
+
+    parser.add_argument("--suite-cmd", type=suite_argv, help="override the suite command, shell-quoted")
 
     try:
         args = parser.parse_args(argv)
@@ -1216,8 +1221,7 @@ def main(argv: list[str] | None = None) -> int:
     suite_result = None
     if args.project_tests is not None:
         from h_mad_audit_gate import run_suite, suite_line
-        outcome = run_suite(args.project_tests,
-                            args.suite_cmd.split() if args.suite_cmd else None)
+        outcome = run_suite(args.project_tests, args.suite_cmd or None)
         suite_result = outcome["verdict"]
         print(suite_line(suite_result, outcome))
 

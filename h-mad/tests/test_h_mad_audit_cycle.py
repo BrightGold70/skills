@@ -3314,3 +3314,21 @@ def test_the_derived_gate_target_sits_beside_the_collected_report(phase, tmp_pat
         project_root=tmp_path, feature="f", phase=phase, cycle=1, index=1
     )
     assert derived.parent == collected.parent, (derived, collected)
+
+
+def test_the_cycle_driver_passes_a_quoted_suite_cmd_argument_whole(
+    capsys: pytest.CaptureFixture, tmp_path: Path
+) -> None:
+    """Same parse as the gate: one helper, so the two sites cannot drift."""
+    ac = audit_cycle()
+    log = tmp_path / "argv.txt"
+    script = tmp_path / "rec.sh"
+    script.write_text(f'#!/bin/sh\nfor a in "$@"; do printf "%s\\n" "$a" >> "{log}"; done\n'
+                      'echo "1 passed in 0.1s"\n', encoding="utf-8")
+    script.chmod(0o755)
+    rc, out, _ = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=_two_leg_reports(tmp_path),
+        extra_args=["--project-tests", str(tmp_path), "--suite-cmd", f'{script} "two words" plain'],
+    )
+    assert rc == 0, out
+    assert log.read_text(encoding="utf-8").splitlines() == ["two words", "plain"]

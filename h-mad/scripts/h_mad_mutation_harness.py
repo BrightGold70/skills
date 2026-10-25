@@ -333,7 +333,30 @@ def _load_spec(spec_path: Path) -> dict:
         # half-wired spec that would otherwise silently fall back to whole-suite
         # scoring and report a per-test verdict it never computed.
         raise SpecError("a mutation names a `test` but the spec has no `target_command`")
-    return spec
+    return _override_interpreter(spec)
+
+
+PYTHON_OVERRIDE_ENV = "HMAD_MUTATION_PYTHON"
+_PYTHON_ARGV0 = re.compile(r"python(?:\d+(?:\.\d+)*)?")
+
+
+def _override_interpreter(spec: dict) -> dict:
+    """Swap a `python…` argv[0] in `command`/`target_command` for `--python`.
+
+    Every committed spec pins `python3.11`, and a host without it reads a red
+    baseline. Applied at LOAD time and never written back, so the spec stays the
+    portable record. Set through the environment so `--sweep` and `--isolate`
+    children inherit it. Any other argv[0] (`bash`, `pytest`) is left as written.
+    """
+    python = os.environ.get(PYTHON_OVERRIDE_ENV)
+    if not python:
+        return spec
+
+    def swap(argv: list[str]) -> list[str]:
+        head = os.path.basename(argv[0])
+        return [python, *argv[1:]] if _PYTHON_ARGV0.fullmatch(head) else list(argv)
+
+    return {**spec, **{key: swap(spec[key]) for key in ("command", "target_command") if spec.get(key)}}
 
 
 def _resolve_root(spec: dict, spec_path: Path) -> Path:
@@ -2297,8 +2320,13 @@ def _isolate(argv: list[str], spec_paths: list[Path]) -> int:
                     removed = False
                 if not removed or worktree.exists():
                     print(f"MUTATION: UNREADABLE reason=isolate-not-removed path={worktree}")
-                    return 2
-                print("ISOLATE: removed=yes", flush=True)
+                    # Assigned, not returned: a `return` here would swallow any
+                    # exception still in flight from the body (PEP 765). So an
+                    # interrupted run whose worktree leaked prints this token AND
+                    # re-raises (exit 130/143, not 2); callers read the token.
+                    status = 2
+                else:
+                    print("ISOLATE: removed=yes", flush=True)
         finally:
             for signum, handler in handlers.items():
                 signal.signal(signum, handler)
@@ -2331,7 +2359,35 @@ def main(argv: list[str] | None = None) -> int:
         "--isolate", action="store_true",
         help="run in a temporary detached worktree with dirty files copied in",
     )
+    parser.add_argument(
+        "--python", metavar="INTERPRETER",
+        help="replace a spec's python argv[0] (a basename python, python3, python3.11, "
+             "or an absolute pin to one) with this interpreter; any other head "
+             "(env, bash, pytest) is left as written",
+    )
     args = parser.parse_args(argv)
+    previous = os.environ.get(PYTHON_OVERRIDE_ENV)
+    if args.python:
+        # The environment, not a parameter, so `--sweep`/`--isolate` children inherit
+        # it. Absolute, because spec commands run with cwd=root (a temp worktree
+        # under --isolate), where a caller-relative path names nothing.
+        os.environ[PYTHON_OVERRIDE_ENV] = (
+            os.path.abspath(args.python) if "/" in args.python else args.python)
+    if os.environ.get(PYTHON_OVERRIDE_ENV):
+        # On stderr: a verdict measured under another interpreter than the spec
+        # pins must not read like one on the spec as written.
+        print(f"INTERPRETER: override={os.environ[PYTHON_OVERRIDE_ENV]}", file=sys.stderr)
+    try:
+        return _run_main(args, argv)
+    finally:
+        # Restored, so an in-process caller's later spec loads are not overridden.
+        if previous is None:
+            os.environ.pop(PYTHON_OVERRIDE_ENV, None)
+        else:
+            os.environ[PYTHON_OVERRIDE_ENV] = previous
+
+
+def _run_main(args: argparse.Namespace, argv: list[str] | None) -> int:
     if args.isolate:
         return _isolate(list(sys.argv[1:] if argv is None else argv), args.spec)
 
