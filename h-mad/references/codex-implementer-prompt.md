@@ -52,6 +52,12 @@ allow-listed h-mad script, or the project's `.venv` python running pytest. So
 `hmad-dispatch run --timeout 600 -- python3 -m pytest <tests> -q` is the bounded test run to use,
 and wrapping any other command in `run` is refused the same as running it bare.
 
+The read-only commands the gate admits are exactly: `cat`, `grep`, `head`, `jq`, `ls`, `pwd`,
+`shasum`, `tail`, `wc`. Anything else is refused, including `sed`, `nl`, `awk`, `find` and
+`python -c`. A command must also be one simple command: a `|`, `;`, `&&`, redirect, `$` or glob
+is refused even when every part is allowed. Read with these, or run the tests. Do not spend
+turns probing what else might pass.
+
 ## Your Job
 
 For RED phase (5d): write failing tests for this module based on the impl-plan task above. Tests should be exhaustive but bounded to the task's scope. Verify they FAIL by running `pytest <test_path> -v`.

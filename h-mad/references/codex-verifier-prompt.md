@@ -28,6 +28,12 @@ Production file(s) under test: `<INLINE_PROD_PATHS>`.
 Stated properties the plan pins (verify each against source): `<INLINE_PROPERTIES>`.
 Connection under test (`wiring` tasks; empty otherwise): `<INLINE_WIRE>`.
 Wire pin — the test that must fail when that connection alone is removed: `<INLINE_WIRE_PIN>`.
+
+Under the Phase-5 TDD gate, the read-only commands the gate admits are exactly: `cat`, `grep`,
+`head`, `jq`, `ls`, `pwd`, `shasum`, `tail`, `wc`. Anything else is refused, including `sed`, `nl`,
+`awk`, `find`, `git` and `python -c`. A command must also be one simple command: a `|`, `;`, `&&`,
+redirect, `$` or glob is refused. If an AC needs a measurement these cannot take, such as a
+`git diff`, report it as unmeasured with `STATUS: NEEDS_CONTEXT`. Do not guess.
 Full-suite reference number (pre-change baseline): `<INLINE_SUITE_REFERENCE>`.
 
 ## Do this, in order
