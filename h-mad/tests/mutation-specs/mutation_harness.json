@@ -592,8 +592,8 @@
       "_mechanism": "Parse the flag but leave single-spec execution untraced; a caught unexecuted span must be reported.",
       "file": "scripts/h_mad_mutation_harness.py",
       "symbol": "_run_main",
-      "find": "            result = run_spec(args.spec, reachability=True)",
-      "replace": "            result = run_spec(args.spec)",
+      "find": "            result = run_spec(args.spec, reachability=True, only=args.only)",
+      "replace": "            result = run_spec(args.spec, only=args.only)",
       "test": "tests/test_h_mad_mutation_harness.py::test_reachability_unexecuted_caught_span_is_reported_but_still_caught"
     },
     {

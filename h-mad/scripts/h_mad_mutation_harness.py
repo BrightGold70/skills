@@ -2117,10 +2117,33 @@ def _check_anchors(spec_paths: list[Path]) -> int:
 
 
 
-def run_spec(spec_path: Path, *, reachability: bool = False) -> dict:
+def _select_rows(spec: dict, only: list[str] | None) -> dict:
+    """The spec narrowed to the `--only` rows, or unchanged when none were named.
+
+    When every selected row names a `test` and the spec has a `target_command`,
+    the baseline becomes `target_command + those tests`: re-scoring one row
+    otherwise still paid the whole spec's suite, which memory pressure killed.
+    A name matching no row is a SpecError, never an empty run that reads green.
+    """
+    if not only:
+        return spec
+    wanted = set(only)
+    selected = [m for m in spec["mutations"] if m["name"] in wanted]
+    unknown = sorted(wanted - {m["name"] for m in selected})
+    if unknown:  # M:ONLY-UNKNOWN
+        raise SpecError(f"--only names no mutation in this spec: {', '.join(unknown)}")
+    narrowed = {**spec, "mutations": selected}
+    tests = [m.get("test") for m in selected]
+    if spec.get("target_command") and all(tests):  # M:ONLY-SCOPED-BASELINE
+        narrowed["command"] = [*spec["target_command"], *dict.fromkeys(tests)]
+    return narrowed
+
+
+def run_spec(spec_path: Path, *, reachability: bool = False,
+             only: list[str] | None = None) -> dict:
     """`_run_spec_holding_the_tree`, serialised against other runs on this tree."""
     spec_path = Path(spec_path)
-    spec = _load_spec(spec_path)
+    spec = _select_rows(_load_spec(spec_path), only)
     root = _resolve_root(spec, spec_path)
     try:
         with tree_lock(root, spec_path):
@@ -2365,7 +2388,15 @@ def main(argv: list[str] | None = None) -> int:
              "or an absolute pin to one) with this interpreter; any other head "
              "(env, bash, pytest) is left as written",
     )
+    parser.add_argument(
+        "--only", action="append", metavar="NAME",
+        help="score only the named mutation row(s) of ONE spec; when every selected "
+             "row names a `test`, the baseline runs just those tests",
+    )
     args = parser.parse_args(argv)
+    if args.only and (args.sweep or args.check_anchors):
+        parser.error("--only scores rows of ONE spec; it cannot be combined with "
+                     "--sweep or --check-anchors")
     previous = os.environ.get(PYTHON_OVERRIDE_ENV)
     if args.python:
         # The environment, not a parameter, so `--sweep`/`--isolate` children inherit
@@ -2420,9 +2451,9 @@ def _run_main(args: argparse.Namespace, argv: list[str] | None) -> int:
 
     try:
         if args.reachability:
-            result = run_spec(args.spec, reachability=True)
+            result = run_spec(args.spec, reachability=True, only=args.only)
         else:
-            result = run_spec(args.spec)
+            result = run_spec(args.spec, only=args.only)
     except SpecError as exc:
         # Same reasoning as the wire-pin gate's UNREADABLE: the caller's contract
         # is to read the token, so an error announced only on stderr is silence.
