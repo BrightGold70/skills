@@ -78,6 +78,16 @@ _FIELD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Separate from `_FIELD_RE` for the reason `_PATHS_FIELD_RE` is: that pattern is
+# pinned byte-for-byte (`test_field_re_is_unchanged`). It tolerates the same
+# parenthetical qualifier the template prints, and CAPTURES a numbered suffix
+# only so registration can refuse it: one runner per task, never silently.
+_RUNNER_FIELD_RE = re.compile(
+    r"^\s*(?:[-*•]\s+)?\*{0,2}\s*WIRE-RUNNER(?:\s*(?P<suffix>[0-9][\w.]*))?\s*\*{0,2}"
+    r"\s*(?:\([^)]*\))?\s*\*{0,2}\s*:\s*(?P<value>.*)$",
+    re.IGNORECASE,
+)
+
 _PATHS_FIELD_RE = re.compile(
     r"^\s*(?:[-*•]\s+)?\*{0,2}\s*(?P<label>Production(?:\s+files?)?|Test(?:\s+files?)?)"
     r"\s*(?::\s*\*{0,2}|\*{0,2}\s*:)\s*(?P<value>.*)$",
@@ -180,6 +190,10 @@ def _parse_tasks(text: str) -> list[dict]:
                 "pin": None,
                 "wires": [],
                 "pins": [],
+                # `**WIRE-RUNNER**:` -- explicit only, never inferred from the pin's
+                # file: `.spec.ts` is Playwright OR vitest. None means pytest.
+                "runner": None,
+                "runner_error": None,
                 "production": [],
                 "tests": [],
             }
@@ -189,6 +203,20 @@ def _parse_tasks(text: str) -> list[dict]:
             continue
         field = _FIELD_RE.match(line)
         if not field:
+            runner = _RUNNER_FIELD_RE.match(line)
+            if runner is not None:
+                if _is_real_value(runner.group("value")):
+                    # Not `_clean`: it strips `_`, which would read `play_wright`
+                    # as `playwright` -- unknown values are refused, not repaired.
+                    value = runner.group("value").replace("`", "").replace("*", "").strip().lower()
+                    if runner.group("suffix"):
+                        current["runner_error"] = (
+                            f"WIRE-RUNNER {runner.group('suffix')}: one runner per task, not per wire")
+                    elif current["runner"] not in (None, value):
+                        current["runner_error"] = (
+                            f"conflicting WIRE-RUNNER values: {current['runner']!r} and {value!r}")
+                    current["runner"] = value
+                continue
             paths = _PATHS_FIELD_RE.match(line)
             if paths is not None and _NONE_VALUE_RE.match(paths.group("value")) is None:
                 key = "production" if paths.group("label").lower().startswith("production") else "tests"
@@ -368,16 +396,27 @@ def _register_wiring_tasks(
             # A bare `**WIRE**:` keeps the plain task id, so every record already
             # in a registry keeps its identity and no migration is needed.
             wire_id = task["id"] if wire_suffix is None else f"{task['id']} (WIRE {wire_suffix})"
-            entries.append(
-                {
-                    "kind": "wire",
-                    "id": wire_id,
-                    "caller": caller,
-                    "callee": callee,
-                    "pin": pin,
-                    "owning_feature": feature,
-                }
-            )
+            entry = {
+                "kind": "wire",
+                "id": wire_id,
+                "caller": caller,
+                "callee": callee,
+                "pin": pin,
+                "owning_feature": feature,
+            }
+            # A pytest task writes no `runner` key, so its record reads back
+            # byte-identical to one registered before the field existed.
+            runner = task.get("runner")
+            if runner and runner != h_mad_wire_registry.DEFAULT_RUNNER:
+                entry["runner"] = runner
+            # Checked here, not left to `register`: its RegistryError would abort
+            # the whole batch with a traceback, losing every sibling wire.
+            problem = task.get("runner_error") or h_mad_wire_registry.runner_problem(entry)
+            if problem:
+                skipped += 1
+                print(f"  registration skipped: {task['id']} ({task['name']}): {problem}")
+                continue
+            entries.append(entry)
     if entries:
         h_mad_wire_registry.register(entries, registry)
     return len(entries), skipped

@@ -1104,3 +1104,108 @@ class TestOneWireManyPins:
         assert not any(isinstance(p, list) and len(p) == 2 for p in pins), (
             f"a bare pin list was claimed by an ambiguous wire: {pins!r}"
         )
+
+
+# --- WIRE-RUNNER ---------------------------------------------------------
+#
+# Decision 2026-10-25: a pin pytest cannot collect names its runner explicitly.
+# Inference was rejected — `.spec.ts`/`.test.ts` is Playwright OR vitest/jest —
+# so a forgotten field stays the loud 5f `missing` it is today, never a guess.
+
+E2E = "`web/e2e/source-review.spec.ts::opens_every_fragment`"
+
+
+def _with_runner(task: str, runner: str) -> str:
+    return task.replace("\n**Acceptance Criteria**", f"**WIRE-RUNNER**: `{runner}`\n\n**Acceptance Criteria**", 1)
+
+
+class TestWireRunner:
+    def test_wire_runner_is_written_into_the_record(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        plan = _plan(tmp_path, _with_runner(_task(1, pin=E2E), "playwright"))
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        _run_main_with_registration_args(monkeypatch, plan, registry_path)
+        (record,) = registry.load(registry_path)
+        assert record["runner"] == "playwright"
+        assert record["pin"] == "web/e2e/source-review.spec.ts::opens_every_fragment"
+
+    @pytest.mark.parametrize("runner", [None, "pytest"])
+    def test_a_pytest_task_writes_no_runner_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runner: str | None
+    ) -> None:
+        """Existing records carry no runner; a pytest task must read back the same."""
+        task = _task(1) if runner is None else _with_runner(_task(1), runner)
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        _run_main_with_registration_args(monkeypatch, _plan(tmp_path, task), registry_path)
+        (record,) = registry.load(registry_path)
+        assert "runner" not in record
+
+    def test_wire_runner_does_not_change_the_gate_verdict(self, tmp_path: Path) -> None:
+        result = check(_plan(tmp_path, _with_runner(_task(1, pin=E2E), "playwright")))
+        assert result["verdict"] == "PASS", result
+
+    @pytest.mark.parametrize(
+        "runner,pin,why",
+        [("vitest", E2E, "vitest"), ("playwright", "`tests/test_run.py::test_x`", ".py")],
+    )
+    def test_a_bad_runner_skips_registration_loudly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str], runner: str, pin: str, why: str,
+    ) -> None:
+        plan = _plan(tmp_path, _with_runner(_task(1, pin=pin), runner))
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert not registry_path.exists() or registry.load(registry_path) == []
+        assert "registration: registered=0 skipped=1" in out, out
+        assert "registration skipped: Task 1" in out and why in out, out
+
+
+class TestWireRunnerReview:
+    """Review 2026-10-25: the template's own spelling, numbering and conflicts."""
+
+    def test_the_template_spelling_with_its_qualifier_is_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        task = _task(1, pin=E2E).replace(
+            "\n**Acceptance Criteria**",
+            "**WIRE-RUNNER** (optional, `wiring` shape only): `playwright`\n\n**Acceptance Criteria**", 1)
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        _run_main_with_registration_args(monkeypatch, _plan(tmp_path, task), registry_path)
+        (record,) = registry.load(registry_path)
+        assert record["runner"] == "playwright"
+
+    @pytest.mark.parametrize("lines,why", [
+        (["**WIRE-RUNNER 1**: `playwright`"], "one runner per task"),
+        (["**WIRE-RUNNER**: `playwright`", "**WIRE-RUNNER**: `pytest`"], "conflicting"),
+        (["**WIRE-RUNNER**: `play_wright`"], "play_wright"),
+    ])
+    def test_an_unusable_wire_runner_line_skips_registration_loudly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str], lines: list[str], why: str,
+    ) -> None:
+        task = _task(1, pin=E2E).replace(
+            "\n**Acceptance Criteria**", "\n".join(lines) + "\n\n**Acceptance Criteria**", 1)
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        _run_main_with_registration_args(monkeypatch, _plan(tmp_path, task), registry_path)
+        out = capsys.readouterr().out
+        assert "registration: registered=0 skipped=1" in out, out
+        assert why in out, out
+
+
+def test_the_template_wire_runner_line_copied_verbatim_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-review 2026-10-25: the template line printed a real-looking value, so a
+    pytest author who kept it verbatim had the task SKIPPED from registration
+    while 5b still read PASS. The template value is a placeholder now."""
+    refs = Path(__file__).resolve().parents[1] / "references" / "inline-protocols.md"
+    line = next(l.strip() for l in refs.read_text(encoding="utf-8").splitlines()
+                if l.strip().startswith("**WIRE-RUNNER**"))
+    task = _task(1).replace("\n**Acceptance Criteria**", f"{line}\n\n**Acceptance Criteria**", 1)
+    registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+    _run_main_with_registration_args(monkeypatch, _plan(tmp_path, task), registry_path)
+    (record,) = registry.load(registry_path)
+    assert "runner" not in record
