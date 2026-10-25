@@ -225,6 +225,20 @@ command); each row now carries a dated `RE-PROBED 2026-10-03` note naming what r
 1 LANDED (`positive pane ID via terminal read`), 15 PARTIAL, 34 OPEN — census OPEN 50 to 49. None of
 the four fixes shipped on 2026-10-04 (`25855d08`, `a1bd6a84`, `2a0cc74d`, `ffd72e4e`) closes a row
 here; they came from handoff carry-forward, not from this file. Re-run the census for live numbers.
+
+**Reconcile of 2026-10-25 12:09 at `0f237971` — all 26 open `yes` rows re-probed against source; none
+closed.** Census before and after: `candidates=317 OPEN(yes+maybe)=32 yes=26 maybe=6`. Four read-only
+agents probed every `yes` row (all filed 2026-10-18 onward, lines ~2666–2724) for the mechanism it asks
+for, not its rule; each verdict cites a path:line or an empty probe. The `maybe` rows were not
+re-probed, per the scout rule. Four rows carry a new `RE-CHECKED 2026-10-25 12:09` note because a grep
+hit could be misread as a closure: `live-slot warning` (option 1 was refused at `c6db3dd5`, option 2
+was never built), `pytest wrapper the Codex gate refuses` and `gate refuses the read-only checks`
+(both cite admits from `92b00839`/`86479f73` dated 2026-10-01, which PREDATE the rows; the refusals
+happened anyway), and `one --test-path` (repeatable since `c046bc38`, but the verifier template and
+counts were not carried). The other 22 are confirmed absent and carry no note, to keep the file lean.
+Two of them are not fixable in this repo: `parameterised Task-15 run driver` (the drivers were never
+checked in) and the `phase5-shell-allow` row (the allowlist only adds permissions, so its silence on
+`run` may be by design).
 ## 2026-07-20 — orca-adaptation-tiers
 
 - **agy/codex poll-until-idle dispatch**: assemble prompt -> hmad-dispatch send -> background poll on idle marker ("? for shortcuts" present, "esc to cancel" absent) + schema token -> parse verdict — recurrence: 12+ (every audit/TDD/arch-review this session) — candidate: **LANDED** 2026-07-24 — `hmad-dispatch ask` (send + wait-idle + full-buffer read; extraction stays a separate `h_mad_extract_verdict.py` call). Live-dogfooded against agy
@@ -2680,6 +2694,11 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
 ## 2026-10-18 — grok-audit-surface-phase3-exit (scout)
 
 - **live-slot warning fires on prose that names a slot**: `hmad-dispatch` warns `prompt carries live template slots: <INLINE_PAIRED_DESIGN> <INLINE_PAIRED_PLAN> <INLINE_PAIRED_SPEC>` on every pass of all three grok-audit-surface plan cycles, because the plan's own text names the slots inside backticks (assembled prompt line 341). The assembler already refused real residual slots (`ASSEMBLE: PASS`), so the advisory is a false positive every cycle and trains the reader to ignore it. Fix direction: skip a slot token that sits inside a backtick span, or defer to the assembler's own residual check when the prompt was assembled. — recurrence: 3 — candidate: yes
+  — **RE-CHECKED 2026-10-25 12:09 (scout): still open, half refused.** Option 1, skipping backticked
+  slots, was refused on measurement at `c6db3dd5` (2026-09-13, `hmad-dispatch.sh:3034-3050`): it would
+  silence 17 of the 18 live slots in the hand-shipped `codex-verifier-prompt.md`. It is pinned by
+  `test_a_BACKTICKED_live_slot_is_still_detected`. Option 2, deferring when the prompt was assembled,
+  was not built: the warning at `:3051-3058` runs on every prompt. Only option 2 remains open.
 - **orchestrator writes during the cycle suite read as tree_moved**: cycles 1 and 3 reported `SUITE: … tree_moved=` from the orchestrator's own writes (handoff commits; origins appends and the delta-review report) made while the cycle's suite ran, so the suite reading was unusable for the exit check. Fix direction: run the cycle suite in a detached snapshot worktree of the cycle commit, or have the driver print a hold-writes notice while the suite runs. — recurrence: 2 — candidate: maybe
 
 ## 2026-10-19 — grok-audit-surface-resume-claim (scout)
@@ -2689,9 +2708,23 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
 ## 2026-10-20 — grok-audit-surface-phase5-tasks-4-14 (filed)
 
 - **TDD assembler prescribes a pytest wrapper the Codex gate refuses**: `h_mad_assemble_tdd.py` prints the operator re-run and the in-prompt run as `hmad-dispatch run --timeout … -- <pytest>`, but the Codex Phase-5 gate's `_safe_argv` denies that form and any interpreter outside `TRUSTED_BIN_DIRS` (`/opt/anaconda3/bin` included). Every GREEN/RED prompt in Tasks 1–13 needed a hand-appended "run pytest directly" note plus a gitignored `.h-mad/phase5-shell-allow` line. Fix direction: the assembler emits the direct `<interp> -m pytest <path>` form when the gate is armed, or the gate admits the wrapper verb. — recurrence: 13 — candidate: yes
+  — **RE-CHECKED 2026-10-25 12:09 (scout): still open.** The gate has admitted the `run --timeout N --`
+  shape since `92b00839` (2026-10-01, `M:CX-RUN` at `h_mad_target_identity.py:511-516`), which is BEFORE
+  this row, so that admit is not a closure. The inner command must itself pass `_safe_argv`, and
+  `TRUSTED_BIN_DIRS` (`:263-269`) still lacks `/opt/anaconda3/bin`. `codex-implementer-prompt.md:52`
+  still prescribes `hmad-dispatch run --timeout 600 -- python3 -m pytest`.
 - **5e revert recipe in SKILL.md pops a foreign stash on an unchanged file**: SKILL.md §5e prescribes `git stash push -u -- <paths>` then `git stash pop`; when the target file is unchanged nothing is stashed (rtk still printed `ok stashed`) and the pop applies whatever stash sits on top — here a foreign `resolved-model` stash, leaving `UU handoff/SKILL.md`. Fix direction: prescribe the HEAD-copy revert (back up, `git show HEAD:<p> > <p>`, test, restore, `cmp`), guarded by a non-empty `git diff HEAD -- <p>` check; never pop a stash the step did not create. — recurrence: 1 — candidate: yes
 - **Phase-5 Codex gate refuses the read-only checks GREEN and the verifier are told to run**: in every GREEN of Tasks 4–13 the gate rejected `h_mad_mutation_harness.py --check-anchors`, and in the 5e verifier it rejected `git diff`/`git show`, so the verifier returned BLOCKED/NEEDS_CONTEXT on ACs it could not measure (AC-T10.4 spec-unchanged, AC-T12.1 scripts-unchanged, AC-T13.2 exact-diff) and the orchestrator measured them by hand each time. Fix direction: admit the read-only harness mode and read-only git verbs in the gate's allowlist, or have the verifier prompt carry the orchestrator's measured values. — recurrence: 10 — candidate: yes
+  — **RE-CHECKED 2026-10-25 12:09 (scout): still open.** The gate has admitted `--check-anchors` since
+  `86479f73` (2026-10-01, `M:CX-MUT-ANCHORS` at `h_mad_target_identity.py:420-425`), which predates the
+  refusals this row records, so that admit is not the fix. The cause is not identifiable from the tree.
+  Git verbs are still absent: `READ_ONLY_COMMANDS` (`:225`) has no `git`. The verifier prompt carries
+  no measured values.
 - **TDD assembler takes one `--test-path` but Tasks span two test modules**: Task 7 (smoke + probe modules), Task 11/12 (wrapper + audit-cycle/gate-pins) needed a hand-written split note because `--expect-fail/--expect-pass` describe one module; the 5e verifier template likewise named only the first test file (Task 12's verifier counted 8 of 14 tests and reported AC-T12.1 false). Fix direction: make `--test-path` repeatable and carry every path into the counts, the re-run line and the verifier prompt. — recurrence: 4 — candidate: yes
+  — **RE-CHECKED 2026-10-25 12:09 (scout): still open, part landed.** `--test-path` has been repeatable
+  since `c046bc38` (`h_mad_assemble_tdd.py:759`), and the re-run line joins every path. Still missing:
+  `--expect-fail/--expect-pass` are single ints, and `codex-verifier-prompt.md:26,35` has one
+  `<INLINE_TEST_PATH>`. `SKILL.md:501` says the assembler does not stage the verifier.
 
 ## 2026-10-23 — document-intake-source-review Phase 5 (filed from HemaSuite)
 
