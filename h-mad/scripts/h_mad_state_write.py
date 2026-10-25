@@ -50,7 +50,7 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from h_mad_state_ownership import liveness_evidence, owner_is_live  # noqa: E402
+from h_mad_state_ownership import liveness_evidence, owner_is_live, owner_proven_live  # noqa: E402
 from h_mad_state_validate import classify, undeclared_keys  # noqa: E402
 
 
@@ -248,7 +248,9 @@ def beat(state_file: Path, feature: str, session_id: str | None,
     Phase 0 — and then aged toward the two-hour staleness window while the owner
     was busiest (#126; measured: one beat, then nothing for hours, on a live
     session). A stale-looking live claim is takeable by any other session with a
-    plain `--claim`, which is the collision the window exists to prevent.
+    plain `--claim`, which is the collision the window exists to prevent. (Since
+    2026-10-25 the owner's own transcript or ps refuses that too; see
+    `_refuse_if_owner_proven_live`. The beat remains the reliable signal.)
 
     Fails closed in both other cases, and names the right verb each time:
       * unowned -> refused; a beat must not create a claim (`--claim` does that);
@@ -317,16 +319,19 @@ def drop_undeclared(state_file: Path, feature: str) -> tuple[dict, list[str]]:
     return _mutate(state_file, feature, apply), removed
 
 
-def _refuse_a_live_stale_claim(state_path: Path, feature: str, session_id: str,
-                               lane: Path, now: str | None) -> None:
-    """Refuse a cold-heartbeat claim that another clock proves is LIVE.
+def _refuse_if_owner_proven_live(state_path: Path, feature: str, session_id: str | None,
+                                 now: str | None, verb: str) -> None:
+    """Refuse a stale-heartbeat claim or release the OWNER's own clocks prove live.
 
     Operator decision 2026-10-25: printing `LIVENESS: LIVE` and taking over
-    anyway let the writer disagree with its own evidence (incident 2). Only
-    positive proof refuses -- QUIET and UNKNOWN keep the stale takeover, so a
-    crashed session never needs `force`. Read WITHOUT the store lock, like the
-    TAKEOVER line, so a hung `ps` cannot block the owner's own --beat; the locked
-    write below still applies the heartbeat gate, so a race only loses advice.
+    anyway let the writer disagree with its own evidence (incident 2). The
+    reading is `owner_proven_live`, the same one the resume oracle applies, so
+    the router never calls free what this refuses. `--release` shares it, or a
+    release-then-claim would walk past the guard. Only owner-produced proof
+    refuses: a crashed owner whose clocks are cold or unreadable stays takeable
+    without `force`. Read WITHOUT the store lock, like the TAKEOVER line, so a
+    hung `ps` cannot block the owner's own --beat; the locked write still
+    applies the heartbeat gate, so a race only loses this advice.
     """
     try:
         record = _load(state_path)["orchestrator_state"].get(feature)
@@ -339,12 +344,12 @@ def _refuse_a_live_stale_claim(state_path: Path, feature: str, session_id: str,
         return
     if owner_is_live(record.get("owner_heartbeat_ts"), now):
         return  # the heartbeat gate refuses this one, with its own message
-    evidence = liveness_evidence(record, lane, now)
-    if evidence.startswith("LIVENESS: LIVE"):  # M:CLAIM-REFUSES-LIVE
+    evidence = owner_proven_live(record, now)
+    if evidence is not None:  # M:CLAIM-REFUSES-LIVE
         raise StateWriteError(
-            f"{feature!r} is owned by session {held_by!r}: its heartbeat is stale "
-            f"but another clock shows it running. Coordinate, or pass force to "
-            f"take over. {evidence}"
+            f"cannot {verb} {feature!r}: owned by session {held_by!r}, whose heartbeat is "
+            f"stale but whose own clocks show it running ({evidence}). Coordinate, or "
+            f"pass force to take over."
         )
 
 
@@ -403,7 +408,7 @@ def claim(
     state_path = Path(state_file)
     lane = state_path.parent.parent if state_path.parent.name == "docs" else state_path.parent
     if not force:
-        _refuse_a_live_stale_claim(state_path, feature, session_id, lane, now)
+        _refuse_if_owner_proven_live(state_path, feature, session_id, now, "claim")
     # Every clock, not the heartbeat alone, is what an operator reads before
     # forcing or taking over (row 1406) — read after the store lock is released,
     # so a hung `ps` never holds the lock against the owner's own --beat.
@@ -450,7 +455,13 @@ def release(
     is the ad-hoc terminal case, which is where the accidental release happens, and
     the refusal names `--session-id` rather than `--force` so the routine remedy is
     the one an operator reaches for.
+
+    "Live" includes a stale heartbeat whose OWNER's clocks prove it running
+    (`owner_proven_live`), the same reading `--claim` and the resume oracle use:
+    otherwise release-then-claim would walk past the claim's refusal.
     """
+    if not force:
+        _refuse_if_owner_proven_live(Path(state_file), feature, session_id, None, "release")
 
     def apply(records: dict):
         if feature not in records:

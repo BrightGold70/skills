@@ -297,3 +297,41 @@ def test_the_revert_recipe_still_reverts_and_restores_a_changed_target(tmp_path)
     assert "REVERTED" in out.stdout and "NOTHING WAS STASHED" not in out.stdout, out.stdout + out.stderr
     assert (repo / "new.py").read_text(encoding="utf-8") == "impl\n", "the work was not restored"
     assert git("stash", "list").stdout == "", "the step's own stash was left behind"
+
+
+def test_the_revert_recipe_pops_its_own_stash_when_another_lane_stashes_meanwhile(tmp_path) -> None:
+    """Review 2026-10-25: `refs/stash` is shared by every worktree, and a count
+    delta plus a bare `pop` applied ANOTHER lane's stash pushed during the test
+    window. The block must pop the entry it created, by its commit."""
+    import subprocess as sp
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = lambda *a: sp.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+    git("init", "-q")
+    (repo / "other.txt").write_text("v1\n", encoding="utf-8")
+    git("add", "-A")
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base")
+    (repo / "new.py").write_text("impl\n", encoding="utf-8")
+    meanwhile = ("echo 'lane B' > other.txt && git -c user.email=t@t -c user.name=t "
+                 "stash push -q -m laneB -- other.txt #")
+    block = (_revert_block().replace("<production-paths>", "new.py")
+             .replace("<one-production-path>", "new.py")
+             .replace("# ... run the module tests here", meanwhile))
+    out = sp.run(["bash", "-c", block], cwd=repo, capture_output=True, text=True)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert (repo / "new.py").read_text(encoding="utf-8") == "impl\n", out.stdout + out.stderr
+    assert (repo / "other.txt").read_text(encoding="utf-8") == "v1\n", "lane B's stash was popped"
+    assert "laneB" in git("stash", "list").stdout
+
+
+def test_the_no_op_revert_block_exits_zero(tmp_path) -> None:
+    import subprocess as sp
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = lambda *a: sp.run(["git", "-C", str(repo), *a], check=True, capture_output=True, text=True)
+    git("init", "-q")
+    (repo / "mod.py").write_text("v1\n", encoding="utf-8")
+    git("add", "-A")
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base")
+    block = _revert_block().replace("<production-paths>", "mod.py").replace("<one-production-path>", "mod.py")
+    assert sp.run(["bash", "-ec", block], cwd=repo, capture_output=True, text=True).returncode == 0

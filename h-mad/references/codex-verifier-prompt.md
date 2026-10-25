@@ -30,10 +30,16 @@ Connection under test (`wiring` tasks; empty otherwise): `<INLINE_WIRE>`.
 Wire pin — the test that must fail when that connection alone is removed: `<INLINE_WIRE_PIN>`.
 
 Under the Phase-5 TDD gate, the read-only commands the gate admits are exactly: `cat`, `grep`,
-`head`, `jq`, `ls`, `pwd`, `shasum`, `tail`, `wc`. Anything else is refused, including `sed`, `nl`,
-`awk`, `find`, `git` and `python -c`. A command must also be one simple command: a `|`, `;`, `&&`,
-redirect, `$` or glob is refused. If an AC needs a measurement these cannot take, such as a
-`git diff`, report it as unmeasured with `STATUS: NEEDS_CONTEXT`. Do not guess.
+`head`, `jq`, `ls`, `pwd`, `shasum`, `tail`, `wc`. It also admits pytest through the interpreter, the
+allowed `hmad-dispatch` verbs, the h-mad scripts it allow-lists (e.g. `h_mad_mutation_harness.py
+--check-anchors`), and any prefix the operator declared in `.h-mad/phase5-shell-allow`. Everything
+else is refused, including `sed`, `nl`, `awk`, `find`, `git` and `python -c`. So the git revert in
+step 1b, and an env-assignment prefix such as `MPLBACKEND=Agg …`, need that allowlist or a run
+outside the gate. A command must be one simple command made only of letters, digits, spaces, quotes and
+`_ . / : @ % + = , -`. A `|`, `;`, `&`, redirect, `$`, `^`, `\`, `(`/`)`, `[`/`]`, `{`/`}`, `~`, `!`,
+`#` or glob is refused, so a grep pattern like `"^def x("` is refused too.
+If an AC needs a measurement none of these can take, such as a `git diff`, report it as unmeasured
+with `STATUS: NEEDS_CONTEXT`. Do not guess.
 Full-suite reference number (pre-change baseline): `<INLINE_SUITE_REFERENCE>`.
 
 ## Do this, in order
@@ -54,7 +60,9 @@ Perform the revert test defined in SKILL.md §5e.
    (rc=1), and `git add -N` beforehand breaks the stash rather than enabling it — measured on git
    2.50.1, `add -N` then `stash push` (with or without `-u`) fails `Entry '<f>' not uptodate`.
    Read it back with an **existence** check (`[ ! -e <path> ]`), never `git diff --quiet`, which is
-   trivially clean for an untracked file. Restore with `git stash pop`, then
+   trivially clean for an untracked file. Restore with the guarded block in h-mad SKILL.md §5e: pop
+   the stash commit you created, never a bare `git stash pop`, because another lane's stash may sit
+   on top. Then
    mutate the other direction: force the connection to fire unconditionally and confirm the
    fall-through/negative test fails. A green module suite under either mutation is a FAILED property
    → `STATUS: BLOCKED`; the connection is unenforced and no other Phase-5 gate is scoped to see it.

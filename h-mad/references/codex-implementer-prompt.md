@@ -53,9 +53,11 @@ allow-listed h-mad script, or the project's `.venv` python running pytest. So
 and wrapping any other command in `run` is refused the same as running it bare.
 
 The read-only commands the gate admits are exactly: `cat`, `grep`, `head`, `jq`, `ls`, `pwd`,
-`shasum`, `tail`, `wc`. Anything else is refused, including `sed`, `nl`, `awk`, `find` and
-`python -c`. A command must also be one simple command: a `|`, `;`, `&&`, redirect, `$` or glob
-is refused even when every part is allowed. Read with these, or run the tests. Do not spend
+`shasum`, `tail`, `wc`. Besides those, the gate admits only pytest, the allowed `hmad-dispatch`
+verbs, the h-mad scripts it allow-lists, and any prefix in `.h-mad/phase5-shell-allow`. Anything
+else is refused, including `sed`, `nl`, `awk`, `find` and `python -c`. A command must be one simple command made only of letters, digits, spaces, quotes and
+`_ . / : @ % + = , -`. A `|`, `;`, `&`, redirect, `$`, `^`, `\`, `(`/`)`, `[`/`]`, `{`/`}`, `~`, `!`,
+`#` or glob is refused, so a grep pattern like `"^def x("` is refused too. Read with these, or run the tests. Do not spend
 turns probing what else might pass.
 
 ## Your Job

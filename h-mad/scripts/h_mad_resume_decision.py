@@ -48,6 +48,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from h_mad_state_ownership import (  # noqa: E402
     OWNERSHIP_STALE_AFTER_SECONDS,  # noqa: F401  (re-exported: callers import it from here)
     owner_is_live,
+    owner_proven_live,
 )
 from h_mad_host import classify_host  # noqa: E402
 
@@ -118,7 +119,10 @@ def _owned_elsewhere(feat_state: dict, session_id: str | None, now: str | None) 
     owner = feat_state.get("owner_session_id")
     if not owner or owner == session_id:
         return False
-    return owner_is_live(feat_state.get("owner_heartbeat_ts"), now)
+    # The heartbeat OR the owner's own clocks: the same reading `--claim` and
+    # `--release` refuse on, so the router never calls free what they refuse.
+    return (owner_is_live(feat_state.get("owner_heartbeat_ts"), now)
+            or owner_proven_live(feat_state, now) is not None)
 
 
 CANNOT_JUDGE_WITHOUT_SESSION = "cannot_judge"

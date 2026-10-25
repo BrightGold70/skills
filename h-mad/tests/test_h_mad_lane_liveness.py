@@ -421,7 +421,7 @@ def test_a_stale_heartbeat_with_a_LIVE_clock_is_refused_without_force(
     state = lane / "docs" / ".bkit-memory.json"
     _clocks(monkeypatch, transcript=time_ago(30), commit=time_ago(COLD), ps=[])
 
-    with pytest.raises(StateWriteError, match=r"force.*LIVENESS: LIVE evidence=transcript:"):
+    with pytest.raises(StateWriteError, match=r"own clocks show it running \(transcript:.*force"):
         claim(state, "alpha", "intruder")
     assert _owner(state, "alpha") == OWNER
 
@@ -485,7 +485,7 @@ def test_liveness_is_read_outside_the_store_lock(tmp_path: Path, monkeypatch) ->
     with pytest.raises(StateWriteError):
         claim(state, "beta", "intruder")
 
-    assert held and not any(held), held
+    assert held == [False, False], held
 
 
 def test_cli_a_lane_with_no_claim_is_NONE_not_UNKNOWN(tmp_path: Path, capsys) -> None:
@@ -547,3 +547,57 @@ def _lane(root: Path, feature: str, session: str | None, heartbeat_age: float = 
 def _owner(state: Path, feature: str) -> str | None:
     data = json.loads(state.read_text(encoding="utf-8"))
     return data["orchestrator_state"][feature].get("owner_session_id")
+
+
+# --- review 2026-10-25: one owner-attributable reading for oracle, claim, release ---
+#
+# The first cut refused on `liveness_evidence` LIVE, which (a) the heartbeat-only
+# oracle did not share, so the router said free and --claim refused; (b) counts
+# the LANE's newest commit by ANY session, so a sibling's commit read a crashed
+# owner LIVE; (c) --release did not share, so release-then-claim walked past it.
+# Gating now reads only clocks the OWNER produces: its transcript and a ps argv
+# naming its session.
+
+def _oracle(state: Path, feature: str, session: str) -> str:
+    from h_mad_resume_decision import decide
+    return decide(state, feature, session_id=session)
+
+
+@pytest.mark.parametrize("clocks,owned", [
+    (dict(transcript="fresh", commit="cold", ps=[]), True),          # owner's own transcript
+    (dict(transcript="cold", commit="cold", ps=["claude --resume OWNER"]), True),  # owner in ps
+    (dict(transcript="cold", commit="fresh", ps=[]), False),         # someone ELSE committed
+    (dict(transcript="cold", commit="cold", ps=[]), False),          # QUIET
+    (dict(transcript=None, commit="cold", ps=[]), False),            # UNKNOWN: crashed owner
+])
+def test_oracle_claim_and_release_agree_on_a_stale_heartbeat(
+        tmp_path: Path, monkeypatch, clocks, owned) -> None:
+    from h_mad_state_write import StateWriteError, claim, release
+    lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    state = lane / "docs" / ".bkit-memory.json"
+    pick = {"fresh": time_ago(30), "cold": time_ago(COLD), None: None}
+    _clocks(monkeypatch, transcript=pick[clocks["transcript"]], commit=pick[clocks["commit"]],
+            ps=[c.replace("OWNER", OWNER) for c in clocks["ps"]])
+
+    assert (_oracle(state, "alpha", "intruder") == "owned_elsewhere") is owned
+
+    def allowed(action) -> bool:
+        try:
+            action()
+            return True
+        except StateWriteError:
+            return False
+
+    assert allowed(lambda: release(state, "alpha", session_id="intruder")) is (not owned)
+    if not owned:   # released: put the cold claim back so --claim meets the same record
+        state.unlink()
+        lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    assert allowed(lambda: claim(state, "alpha", "intruder")) is (not owned)
+
+
+def test_the_owner_releases_its_own_claim_whatever_the_clocks(tmp_path: Path, monkeypatch) -> None:
+    from h_mad_state_write import release
+    lane = _lane(tmp_path / "lane", "alpha", OWNER, heartbeat_age=COLD)
+    _clocks(monkeypatch, transcript=time_ago(30), commit=time_ago(30), ps=[])
+    release(lane / "docs" / ".bkit-memory.json", "alpha", session_id=OWNER)
+    assert _owner(lane / "docs" / ".bkit-memory.json", "alpha") is None

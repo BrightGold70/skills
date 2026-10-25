@@ -411,5 +411,5 @@ def test_codex_templates_name_exactly_the_gate_read_verbs(template: str) -> None
     assert match, f"{template} does not list the read verbs the gate admits"
     named = set(re.findall(r"`([a-z]+)`", match.group(1)))
     assert named == identity.READ_ONLY_COMMANDS, (named ^ identity.READ_ONLY_COMMANDS)
-    after = text[match.end():match.end() + 400]
+    after = text[match.end():match.end() + 1000]
     assert "sed" in after and "|" in after, f"{template} must also say what is refused"

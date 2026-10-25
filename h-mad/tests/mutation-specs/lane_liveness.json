@@ -243,10 +243,37 @@
       "name": "claim-takes-a-LIVE-stale-claim",
       "_mechanism": "The pre-write reading still prints LIVE but no longer refuses, so a cold heartbeat over a running owner is taken without --force -- the writer disagreeing with its own evidence again (row: claim-writer refuses a LIVE takeover).",
       "file": "scripts/h_mad_state_write.py",
-      "find": "    if evidence.startswith(\"LIVENESS: LIVE\"):  # M:CLAIM-REFUSES-LIVE\n",
+      "find": "    if evidence is not None:  # M:CLAIM-REFUSES-LIVE\n",
       "replace": "    if False:  # M:CLAIM-REFUSES-LIVE\n",
       "test": "tests/test_h_mad_lane_liveness.py::test_a_stale_heartbeat_with_a_LIVE_clock_is_refused_without_force",
-      "symbol": "_refuse_a_live_stale_claim"
+      "symbol": "_refuse_if_owner_proven_live"
+    },
+    {
+      "name": "oracle-ignores-the-owners-own-clocks",
+      "_mechanism": "The resume oracle reads the heartbeat alone again, so it calls a claim free that --claim refuses -- the writer/oracle disagreement the row asked to remove.",
+      "file": "scripts/h_mad_resume_decision.py",
+      "find": "            or owner_proven_live(feat_state, now) is not None)",
+      "replace": "            or False)",
+      "test": "tests/test_h_mad_lane_liveness.py::test_oracle_claim_and_release_agree_on_a_stale_heartbeat",
+      "symbol": "_owned_elsewhere"
+    },
+    {
+      "name": "release-skips-the-owner-liveness-check",
+      "_mechanism": "--release takes a cold-heartbeat claim whose owner is provably running, so release-then-claim walks past the claim refusal with no force.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        _refuse_if_owner_proven_live(Path(state_file), feature, session_id, None, \"release\")",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_lane_liveness.py::test_oracle_claim_and_release_agree_on_a_stale_heartbeat",
+      "symbol": "release"
+    },
+    {
+      "name": "a-lane-commit-counts-as-the-owners-proof",
+      "_mechanism": "Owner proof also accepts the lane's newest commit, which in a shared checkout is any session's: a sibling's commit reads a crashed owner live.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    commands = ps_commands()\n    if commands is not None and any(_argv_names(command, owner) for command in commands):\n        return \"ps\"\n    return None",
+      "replace": "    commands = ps_commands()\n    if commands is not None and any(_argv_names(command, owner) for command in commands):\n        return \"ps\"\n    stamp = read_commit_ts(None)\n    return \"commit\" if stamp is not None and reference - stamp <= OWNERSHIP_STALE_AFTER_SECONDS else None",
+      "test": "tests/test_h_mad_lane_liveness.py::test_oracle_claim_and_release_agree_on_a_stale_heartbeat",
+      "symbol": "owner_proven_live"
     }
   ]
 }
