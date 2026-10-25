@@ -58,7 +58,7 @@ So this Mac's resume checker answers against week-old state. The `resume_manual`
 | brief | Taken-Over-By | claim here | items |
 |---|---|---|---|
 | `2026-10-25-main__wire-registry-and-bkit-g001.md` (from HemaSuite `c1e6df26`) | session `40f31cca`, 2026-10-25 (`59d1174c`) | **none.** No record; the checker returns `start_fresh`. Any claim is on the other Mac. | G-001: CLOSED (`c0c73e51`). Playwright pin: CLOSED as a decision (`8118f6fc`), implementation on `feat/wire-pin-runner`. `missing=268`: BLOCKED-HEMASUITE (row 5). |
-| `2026-10-24-main__gate-task-authors-test.md` (from HemaSuite `245c1f4a`) | session `40f31cca`, 2026-10-24 | none | CLOSED: merged in `7373cb1b`. Worktree and local branch gone. The remote branch remains (row 9). |
+| `2026-10-24-main__gate-task-authors-test.md` (from HemaSuite `245c1f4a`) | session `40f31cca`, 2026-10-24 | none | CLOSED: merged in `7373cb1b`. Worktree and local branch gone. The remote branch was deleted 2026-10-26 (row 9). |
 
 Both briefs are stamped and committed, so neither will be offered again.
 
@@ -81,7 +81,7 @@ The quickest are marked ⚡.
 | 38 | 7 older `yes` rows (2666, 2667, 2672, 2673, 2677, 2678, 2682), plus the agy install-check gap at `:2673` | T15:105; R3:118-119 | Re-probed in `4e4a3b04`; still open | Work them as features |
 | 39 | Mutation-harness interpreter row, `backlog_cycle` LOW residuals, census `--help` | T15:106-109 | Not re-run | Fix after the current suite |
 | 44 | Meta: handoff WRITE does not verify the state it claims | T15:115; R8:105 | `docs/skill-candidates.md` row, `yes` | Make WRITE read `owner_session_id` before writing "released". Today's stale-state finding is a fresh instance of this. |
-| 9 | Remote branch `origin/fix/gate-task-authors-test` still exists | S11:93; R8:67 | `2d087a39`, already merged into `origin/main` | Delete it once the operator OKs: `git push origin --delete fix/gate-task-authors-test` |
+| 9 | Remote branch `origin/fix/gate-task-authors-test` still exists | S11:93; R8:67 | `2d087a39`, already merged into `origin/main` | **CLOSED 2026-10-26:** deleted on origin with the operator's OK, along with 5 other merged remote branches |
 | 6 | Playwright WIRE-PIN: implementation | S11:90; WR:50 | Decision `8118f6fc`; branch `feat/wire-pin-runner` | Finish the branch (task #7) |
 
 Rows 6 and 9 are counted as CLOSED in the summary, because their original items are done; the
@@ -125,7 +125,7 @@ open work listed here is what follows from them. The 18 OPEN-ACTIONABLE rows are
 | 6 | Playwright WIRE-PIN representation (the decision) | `8118f6fc` |
 | 7 | bkit G-001 heredoc false positive | `c0c73e51`. Fixed upstream in 2.1.40; a new bare-tag false negative was patched locally and filed as ww-w-ai/bkit-claude-code#161. |
 | 8 | Skill-candidates reconcile (26 `yes` rows; also V02's "reconcile not run") | `4e4a3b04` |
-| 9 | Worktree `../skills-gate-authoring` and local branch `fix/gate-task-authors-test` | Both gone. The remote branch is still open (see Actionable). |
+| 9 | Worktree `../skills-gate-authoring` and local branch `fix/gate-task-authors-test` | Both gone. The remote branch was deleted 2026-10-26 (see Actionable). |
 | 37 | HemaSuite PID 70888 and escape-diff backup | `ps -p 70888` finds no process |
 
 ## Unverifiable (3)
@@ -162,7 +162,8 @@ do.
 
 `docs/03-analysis/grok-audit-surface.plan.delta-review.5b2df07-20261018T130440Z.md.txt` has been
 untracked in this working tree since at least the start of this session, and every handoff says
-not to stage it. **Next action:** the operator decides whether to keep it, commit it, or delete it.
+not to stage it. **CLOSED 2026-10-26:** deleted on the operator's instruction. It was a 1 KB
+dispatch stub for an advisory delta review (dated 2026-10-18), with no findings in it.
 
 ## Plan docs without a report (not deep-checked)
 
@@ -205,6 +206,6 @@ The census moved from OPEN 32 (yes 26) to **OPEN 24**: 8 rows closed, and 248 ar
 base should be normalized. Row 15 was skipped for the same reason (calibration prompt).
 
 **Still open:** all BLOCKED-OTHER-MAC rows (1, 2, 23, 24, 26, 34), all BLOCKED-HEMASUITE rows
-(5, 41, 49, 50, 52), all NEEDS-DECISION rows (16, 19, 28, 47), the remote branch deletion (9),
-row 53, and the actionable rows not reached: 17, 18, 27, 29, 33, 35, 38 (the remaining older `yes`
-rows), 39 (except the interpreter row), 44 and 46.
+(5, 41, 49, 50, 52), all NEEDS-DECISION rows (16, 19, 28, 47), and the actionable rows not
+reached: 17, 18, 27, 29, 33, 35, 38 (the remaining older `yes`
+rows), 39 (except the interpreter row), 44 and 46. Rows 9 and 53 were closed on 2026-10-26.
