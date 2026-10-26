@@ -103,7 +103,7 @@ class TestEveryTokenIsClassified:
             r"(?m)^- \*\*one of (.+?)\*\* → no live owner\. Safe to proceed\.", BODY
         )
         assert safe
-        for token in ("owned_elsewhere", "cannot_judge", "state_lost"):
+        for token in ("owned_elsewhere", "cannot_judge", "state_lost", "migrated_by_bkit"):
             assert f"`{token}`" not in safe.group(1), (
                 f"`{token}` was moved into the safe set; it must STOP the caller"
             )

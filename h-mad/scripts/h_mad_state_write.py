@@ -50,6 +50,7 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
+from h_mad_bkit_guard import holds_orchestrator_state, restore_hint, seed as seed_bkit_target  # noqa: E402
 from h_mad_state_ownership import liveness_evidence, owner_is_live, owner_proven_live  # noqa: E402
 from h_mad_state_validate import classify, undeclared_keys  # noqa: E402
 
@@ -160,6 +161,13 @@ def _mutate(state_file: Path, feature: str, apply) -> dict:
     """
     state_file = Path(state_file)
     if not state_file.is_file():
+        migrated = holds_orchestrator_state(state_file)
+        if migrated is not None:
+            # bkit's SessionStart migration renames docs/.bkit-memory.json to
+            # .bkit/state/memory.json when the latter is absent; say so, or the
+            # operator reads "no such state file" as a lost store.
+            raise StateWriteError(f"no such state file: {state_file}. "
+                                  f"{restore_hint(state_file, migrated)}")
         raise StateWriteError(f"no such state file: {state_file}")
 
     lock_path = state_file.with_suffix(state_file.suffix + ".lock")
@@ -176,6 +184,8 @@ def _mutate(state_file: Path, feature: str, apply) -> dict:
                     )
                 records[feature] = record
                 _atomic_write(state_file, data)
+                # After the bytes land, never before: a seed failure only warns.
+                seed_bkit_target(state_file)  # M:SW-BKIT-SEED
             return records.get(feature, {})
         finally:
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

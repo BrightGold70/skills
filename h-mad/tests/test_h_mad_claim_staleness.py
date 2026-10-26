@@ -206,8 +206,9 @@ def test_skill_documents_that_a_released_claim_is_takeable() -> None:
             "the guarantee is the whole point of the fix",
         ),
         (
-            "`cannot_judge` and `state_lost` STOP before any claim",
-            "the guarantee is false for the two no-record STOP tokens (2026-10-07)",
+            "`cannot_judge`, `state_lost` and `migrated_by_bkit` STOP before any claim",
+            "the guarantee is false for the no-record STOP tokens (2026-10-07; "
+            "migrated_by_bkit 2026-10-26)",
         ),
         (
             "treat needing it on any other route as a bug, not as the usual step",

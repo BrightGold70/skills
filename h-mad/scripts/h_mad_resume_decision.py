@@ -2,7 +2,7 @@
 """h_mad_resume_decision.py — read state file + feature; print decision token.
 
 Tokens: start_fresh | resume_manual | enter_autonomous | halted | complete
-        | owned_elsewhere | cannot_judge | state_lost
+        | owned_elsewhere | cannot_judge | state_lost | migrated_by_bkit
 
 `cannot_judge` is the one token that is not a decision. It means the state file
 EXISTS and could not be read -- truncated mid-write, invalid JSON, unreadable --
@@ -28,6 +28,15 @@ tree that cannot be searched is `cannot_judge`, not "no documents" -- and so is 
 `--state` that is not directly inside a `docs/` directory (there is nowhere to look),
 or a feature name that would probe outside it.
 
+`migrated_by_bkit` is the one absent-file case with a known cause. bkit's
+SessionStart hook renames `<root>/docs/.bkit-memory.json` (its LEGACY path, which
+h-mad uses) to `<root>/.bkit/state/memory.json` whenever the latter is absent, so the
+first session started in a fresh worktree moves the store away. When the state file
+is missing and that target parses and holds a record for the feature, the answer is
+`migrated_by_bkit` -- a STOP, like `state_lost` -- and stderr carries the restore
+command (by COPY, so bkit keeps a target and does not migrate again). An unreadable
+or unusable target is not evidence of anything and falls through to the logic above.
+
 v2.2 thresholds:
 - complete: last_completed_phase >= 7 (was 9 in v1)
 - enter_autonomous: last_completed_phase >= 4 (was 6 in v1)
@@ -51,6 +60,7 @@ from h_mad_state_ownership import (  # noqa: E402
     owner_proven_live,
 )
 from h_mad_host import classify_host  # noqa: E402
+from h_mad_bkit_guard import migrated_record, restore_hint  # noqa: E402
 
 
 GIT_DIR_BOUND_S = 10.0
@@ -174,6 +184,12 @@ def _has_phase_docs(state_file: Path, feature: str) -> bool:
 
 
 def _no_record(state_file: Path, feature: str) -> str:
+    if not state_file.is_file():
+        # Only for a MISSING file: a parsed file without the record was not moved.
+        migrated = migrated_record(state_file, feature)
+        if migrated is not None:  # M:RD-BKIT-MIGRATED
+            print(restore_hint(state_file, migrated), file=sys.stderr)
+            return "migrated_by_bkit"
     try:
         lost = _has_phase_docs(state_file, feature)
     except OSError:

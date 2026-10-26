@@ -141,7 +141,7 @@ the active feature name when executing these lines. The resume oracle decides th
 before any state write; use `--create --claim` only for its `start_fresh` verdict, or to
 reconstruct a lost record after `state_lost` exactly as the decision table in `SKILL.md`
 prescribes (restore the file from git first if it is tracked). `state_lost` and `cannot_judge`
-otherwise STOP: neither is a free claim.
+otherwise STOP: neither is a free claim. `migrated_by_bkit` STOPs too: the record is intact in `.bkit/state/memory.json` (bkit's SessionStart migration moved it); restore it by COPY with the `cp` command the oracle prints on stderr, never by `--create`, then re-run the oracle.
 
 ```bash
 ( set -C; python3 -c 'import uuid; print(uuid.uuid4())' > "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>" ) && echo "SID: MINTED" || echo "SID: NOT_MINTED"

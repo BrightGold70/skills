@@ -232,8 +232,8 @@ Bootstrap does NOT touch existing files, modify git config, or author plan/desig
 Run: `python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py --state docs/.bkit-memory.json --feature "<feature>" --session-id "<this session's id>"`
 
 Pass `--session-id` so the collision check runs; omitting it opts out and you
-will not see `owned_elsewhere`. On any token other than `owned_elsewhere`, `cannot_judge`
-or `state_lost` (all three STOP — see the table below), claim the feature before working
+will not see `owned_elsewhere`. On any token other than `owned_elsewhere`, `cannot_judge`,
+`state_lost` or `migrated_by_bkit` (all four STOP — see the table below), claim the feature before working
 it, and release when you stop:
 
 ```bash
@@ -257,7 +257,7 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.js
 ```
 
 **A non-`owned_elsewhere` token guarantees the claim will be accepted** — among the tokens
-that route to a claim at all; `cannot_judge` and `state_lost` STOP before any claim (there is
+that route to a claim at all; `cannot_judge`, `state_lost` and `migrated_by_bkit` STOP before any claim (there is
 no readable record to claim, and `--claim` exits 2 with `no such feature`). The router
 and `--claim` read the SAME staleness window (`h_mad_state_ownership`), so a claim
 the router judged abandoned is takeable without `--force`. They used to disagree: the
@@ -322,6 +322,7 @@ yourself and correct the record with `h_mad_state_write.py`.
 | `owned_elsewhere` | Another session holds this feature and was seen within the staleness window. **Stop and surface it** — print the owner id, heartbeat and the `h_mad_lane_liveness.py` reading, and ask whether to coordinate, take over (`--claim <id> --force`), or pick a different feature. Never proceed silently: two sessions on one feature produce contradictory conclusions on the same branch. |
 | `cannot_judge` | The state file EXISTS and could not be read — truncated mid-write, invalid JSON, unreadable. **Stop. Do NOT initialize and do NOT resume.** This is the absence of evidence, not evidence of absence: the store may hold dozens of records and a live owner for this very feature. Inspect the file by hand, restore it from `git`/backup if it is corrupt, and only then re-run the oracle. It is deliberately not `start_fresh` — that token would have you create a record over a feature another session is working. **Second cause:** a declared or unknown non-Claude host (`HMAD_HOST` set to anything other than empty or `claude`) called without `--session-id` — the oracle cannot check ownership, so it refuses to route; pass the session id your adapter's §"Context budget and claims" names, do not repair the file. |
 | `state_lost` | There is no record for this feature — no state file, or a file that parsed without it — **but its live phase documents exist** (`docs/01-plan/features/<feature>-brainstorm.md`, `.spec.md`, `.plan.md`, `.impl-plan.md`, or `docs/02-design/features/<feature>.design.md`). **Stop. Do NOT initialize and do NOT enter Phase 1.** The record was lost, not never written: measured 2026-10-07, a vanished `docs/.bkit-memory.json` (only its `.lock` left) over a feature with documents through Phase 6 answered `start_fresh` and would have restarted it from brainstorm. Restore the file from `git` if it is tracked; otherwise reconstruct the record — `h_mad_state_write.py --create --claim <session-id>`, then `--set last_completed_phase=<N>` inferred from which phase documents and audits exist — and re-run the oracle. `docs/archive/` is not consulted: an archived feature with no record closed its cycle and answers `start_fresh`. |
+| `migrated_by_bkit` | The state file is missing, but `<root>/.bkit/state/memory.json` parses and holds this feature's record: **bkit's SessionStart migration moved it.** bkit (vendor plugin, `hooks/startup/migration.js`) renames `docs/.bkit-memory.json` — its legacy path, which h-mad uses — to `.bkit/state/memory.json` whenever the latter is absent, so the first session started in a fresh worktree moves the store away (reproduced 2026-10-26). **Stop. Do NOT initialize, do NOT reconstruct, do NOT claim.** The record is intact: restore it by **COPY**, never move — `cp <root>/.bkit/state/memory.json <root>/docs/.bkit-memory.json` (the oracle prints the exact command on stderr) — so bkit keeps a target and does not migrate again, then re-run the oracle. Every successful `h_mad_state_write.py` write and every `hmad-dispatch worktree-create` that learns the new path seeds `.bkit/state/memory.json` as `{}` when absent, so the migration has nothing to do; this token covers the stores that predate the seed. An unreadable or unusable `.bkit/state/memory.json` is not evidence and falls through to `state_lost` / `start_fresh`. |
 | `start_fresh` | Initialize `orchestrator_state[<feature>]`. Enter Phase 1. Reached when there is no state file at all, or the file parsed and holds no record for this feature — and no live phase document for it exists (else `state_lost`) — which legitimately means nothing is claimed. |
 | `resume_manual` | Print current phase + last marker. Ask "continue from phase <N>?" |
 | `enter_autonomous` | Print "all manual checkpoints clear; entering autonomous block." Enter Phase 5. |

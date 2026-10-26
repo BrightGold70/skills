@@ -1584,6 +1584,24 @@ _cmd_worktree_comment() {  # [<selector>] <text>
   _orca_json '' worktree set --worktree "$sel" --comment "$text" --json
 }
 
+_seed_bkit_target() {  # $1 = project root (a new worktree path); never fails the caller
+  # bkit's SessionStart hook RENAMES <root>/docs/.bkit-memory.json (h-mad's state
+  # file, bkit's legacy path) to <root>/.bkit/state/memory.json whenever the latter
+  # is absent -- so the first session started in a fresh worktree moves h-mad's
+  # store away. An existing target makes bkit skip. Seed `{}`; never overwrite;
+  # never create the worktree directory itself. Mirrors h_mad_bkit_guard.seed_root.
+  local root="${1:-}" target
+  [ -n "$root" ] && [ -d "$root" ] || return 0
+  target="$root/.bkit/state/memory.json"
+  if [ -e "$target" ] || [ -L "$target" ]; then return 0; fi
+  if mkdir -p "$root/.bkit/state" 2>/dev/null && ( set -C; printf '{}\n' > "$target" ) 2>/dev/null; then
+    echo "[H-MAD] bkit_target_seeded path=$target" >&2
+  else
+    echo "hmad-dispatch: WARNING could not seed bkit target $target; bkit may migrate docs/.bkit-memory.json away" >&2
+  fi
+  return 0
+}
+
 _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file <path>] [--repo <sel>|--project <id>]
   # NOTE: no --workspace here. `orca automations create` accepts --workspace (and
   # --workspace-mode), but `orca worktree create` does NOT -- its full option set is
@@ -1620,10 +1638,15 @@ _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file 
   fi
   args+=(--json)
 
-  local sel rc=0
-  sel="$(_orca_json '.result.worktree.id // .result.worktree.selector // .result.worktree.handle' "${args[@]}")" || rc=$?
+  # One orca call yields both the selector (stdout, unchanged) and, when the
+  # runtime reports it, the new checkout's path -- used to seed bkit's target.
+  local out sel wt_path rc=0
+  out="$(_orca_json '((.result.worktree.id // .result.worktree.selector // .result.worktree.handle // "") | tostring) + "\t" + ((.result.worktree.path // .result.worktree.worktreePath // "") | tostring)' "${args[@]}")" || rc=$?
   [ $rc -eq 0 ] || return $rc
+  sel="${out%%$'\t'*}"
+  wt_path=""; case "$out" in *$'\t'*) wt_path="${out#*$'\t'}" ;; esac
   [ -n "$sel" ] && printf '%s\n' "$sel"
+  _seed_bkit_target "$wt_path"
 
   if [ -n "$pf" ]; then
     local tid

@@ -574,6 +574,7 @@ python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_
 - **`owned_elsewhere`** → the owner is **LIVE**. The work is not yours to hand over. Stop and surface it — releasing here would yank a feature out from under a running session.
 - **`cannot_judge`** → the state file exists and could not be READ. Not a live owner and not a free claim: it is the absence of evidence either way, so treat it exactly as the predicate rule says and STOP. Releasing or claiming against a file you cannot parse is how a second session takes a feature the first is working.
 - **`state_lost`** → no record for the feature, but its live phase documents exist on disk: the state file or the record was LOST, not never written. Not a free claim — creating a record here restarts a mid-flight feature at Phase 1. STOP and surface it; restore or reconstruct the record per h-mad's decision table, then re-run the oracle.
+- **`migrated_by_bkit`** → the state file is missing because bkit's session-start migration MOVED it to `<root>/.bkit/state/memory.json`, where this feature's record is intact. Not a free claim and not a lost record — STOP and surface it; restore by COPY with the `cp` command the oracle prints on stderr (never move: bkit would migrate it again), then re-run the oracle.
 - **one of `enter_autonomous`, `resume_manual`, `halted`, `start_fresh`, `complete`** → no live owner. Safe to proceed.
 
   `complete` was **missing from this list for the life of the file**, and the omission was not
@@ -837,7 +838,7 @@ python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_
   --state ./docs/.bkit-memory.json --feature "<feature>" --session-id "<your-session-id>"
 ```
 
-`state_lost` (or `cannot_judge`) → STOP and surface it; do not create a state file. `start_fresh` →
+`state_lost`, `migrated_by_bkit` (or `cannot_judge`) → STOP and surface it; do not create a state file. `start_fresh` →
 nothing is claimed: say so, skip to point 2, and do not invent one. Otherwise pass the path it printed:
 
 **If the brief names NO feature but a state file exists, CREATE the record and claim it.** Use the
@@ -850,7 +851,7 @@ python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_state_w
 ```
 
 Run the oracle for that name first, exactly as above — `state_lost` (no record, but the name's phase
-documents exist) STOPS you like `cannot_judge`; on a name with no record and no documents it answers
+documents exist) and `migrated_by_bkit` (the record sits in `.bkit/state/memory.json`) STOP you like `cannot_judge`; on a name with no record and no documents it answers
 `start_fresh`, and `owned_elsewhere` **still stops** you; the create path is a way to own unclaimed
 work, never a way around the live-owner check.
 
@@ -870,6 +871,7 @@ python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_
 
 - `owned_elsewhere` → someone **live** holds it. Do not take it; surface the collision. The handover may have raced another session, and that is a real finding, not a formality.
 - `cannot_judge` or `state_lost` → STOP, exactly as HANDOVER Step 2 says. A lost record is not an unclaimed one, and a claim against a file you cannot read is a guess.
+- `migrated_by_bkit` → STOP, exactly as HANDOVER Step 2 says: the record was moved by bkit, not lost. Restore it by COPY with the oracle's `cp` hint; a claim here would create a second record over the moved one.
 - anything else → claim it:
 
 ```bash
