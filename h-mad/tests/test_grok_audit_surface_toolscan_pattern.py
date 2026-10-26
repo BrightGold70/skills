@@ -301,7 +301,7 @@ def test_a_bare_slash_needle_dir_counts_every_out_path(scan_module, scan_case, c
     ("checkout", "/live/skills-other/x.md"),
     ("needle", "/elsewhere/export/docs/archive/2099-020/x.md"),
     ("home", "/users/auditor/.local/state/h-mad-other/x.md"),
-])
+], ids=["checkout", "needle", "home"])
 def test_a_trailing_slash_base_matches_no_sibling_prefix(scan_module, scan_case, capsys, base, target):
     # Guard: normalising a base must not widen it to a sibling sharing its prefix.
     case = scan_case
@@ -311,3 +311,63 @@ def test_a_trailing_slash_base_matches_no_sibling_prefix(scan_module, scan_case,
         case[base] = case[base] + "/"
     _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=target),
                  _token(word="OUT_OF_ROOT", out_of_root=1))
+
+
+# Task 14j fix: a base is normalised the way `named_paths` normalises a path (`posixpath.normpath`),
+# so an interior `//` or `/./` no longer fails the count open, and a leading `//`, which `normpath`
+# keeps, folds to `/`: the path grammar never extracts a `//`-led path, and `~/` paths are rebuilt
+# from the normalised home. Every target is built from the normal base.
+def _respell(base, separator):
+    cut = base.index("/", 1)
+    return base[:cut] + separator + base[cut:]
+
+
+@pytest.mark.parametrize("separator", ["/", "/."], ids=["double-slash", "dot"])
+@pytest.mark.parametrize("base", ["home", "checkout", "needle"])
+def test_an_unnormal_base_still_counts_contamination(scan_module, scan_case, capsys, base, separator):
+    case = scan_case
+    target = {
+        "home": case["home"] + "/.local/state/h-mad/grok-audit-surface/run-other/data/p3.report.md",
+        "checkout": case["checkout"] + "/docs/answer-key.md",
+        "needle": "/elsewhere/export/docs/archive/2099-02/paper-lantern/design.md",
+    }[base]
+    if base == "needle":
+        case["needle_dirs"] = [_respell("docs/archive/2099-02", separator)]
+    else:
+        case[base] = _respell(case[base], separator)
+    _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=target),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+@pytest.mark.parametrize("which", ["root-child", "own-session"])
+@pytest.mark.parametrize("separator", ["/", "/."], ids=["double-slash", "dot"])
+def test_an_unnormal_root_keeps_its_own_paths(scan_module, scan_case, capsys, separator, which):
+    case = scan_case
+    target, token = {
+        "root-child": (case["root"] + "/docs/design.md", _token()),
+        "own-session": (_own_session(case) + "/history.json", _token(exempt=1)),
+    }[which]
+    case["root"] = _respell(case["root"], separator)
+    _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=target), token)
+
+
+@pytest.mark.parametrize("base", ["home", "checkout", "root"])
+def test_a_leading_double_slash_base_matches_its_single_slash_paths(scan_module, scan_case, capsys,
+                                                                    base):
+    case = scan_case
+    target, token = {
+        "home": (case["home"] + "/.grok/sessions/another-root/history.json",
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1)),
+        "checkout": (case["checkout"] + "/docs/answer-key.md",
+                     _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1)),
+        "root": (case["root"] + "/docs/design.md", _token()),
+    }[base]
+    case[base] = "/" + case[base]
+    _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=target), token)
+
+
+def test_an_empty_needle_dir_counts_every_out_path(scan_module, scan_case, capsys):
+    # Guard: `normpath("")` is ".", and a needle "." matches nothing; "" keeps meaning every path.
+    scan_case["needle_dirs"] = [""]
+    _assert_scan(scan_module, scan_case, capsys, _tool("read_file", target_file="/elsewhere/x.md"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))

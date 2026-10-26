@@ -2832,11 +2832,12 @@ metacharacter breaks the redirect, and the write then fails without a denial, wh
 
 ## Task 14j: scan_log normalises every comparison base
 
-**Production file**: `h-mad/scripts/h_mad_tool_calls.py` (`scan_log`, four lines after the usage
-check, ~L151–156)
+**Production file**: `h-mad/scripts/h_mad_tool_calls.py` (`_base`, after `_below`, ~L50–57;
+`scan_log`, four lines after the usage check, ~L161–166)
 **Test files**: `h-mad/tests/test_grok_audit_surface_containment.py` (1 test, 2 ids, from the parked
-commit `60635019`); `h-mad/tests/test_grok_audit_surface_toolscan_pattern.py` (extend, 6 tests, 10 ids);
-`h-mad/tests/mutation-specs/grok_audit_surface.json` (6 rows added after GREEN)
+commit `60635019`); `h-mad/tests/test_grok_audit_surface_toolscan_pattern.py` (extend, 10 tests, 24 ids: 6 tests and 10
+ids, then 4 tests and 14 ids in the review-fix round); `h-mad/tests/mutation-specs/grok_audit_surface.json`
+(11 rows added after GREEN: 6, then 5 in the review-fix round, which also re-anchors the first 6)
 **Task shape**: `defect-fix` (operator decision 2026-10-26: normalise every comparison base once at the
 top of `scan_log`, not a CLI refusal)
 **Implements**: the Task 14h residual, backlog triage row 14
@@ -2860,13 +2861,26 @@ strips its directory before its prefix test, but `scan_log` used its four bases 
   and its test pins the direction it actually fails.
 
 **Change.** Insert four lines after `raise UsageError("unknown surface")` and before `result = dict(…)`,
-each with its own marker, so a mutation can drop one base at a time:
+each with its own marker, so a mutation can drop one base at a time. As first shipped (8beda5d4) each
+line was `<base>.rstrip("/")`; the review-fix round replaced `rstrip` with one helper, `_base`, after
+`_below`, whose every step carries its own marker:
 
 ```python
-    home = home.rstrip("/")  # M:TOOLSCAN-BASE-HOME
-    root = root.rstrip("/")  # M:TOOLSCAN-BASE-ROOT
-    checkout = checkout.rstrip("/")  # M:TOOLSCAN-BASE-CHECKOUT
-    needle_dirs = [needle.rstrip("/") for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE
+def _base(value: str) -> str:
+    """Normalise a comparison base as `named_paths` normalises a path, without a trailing `/`."""
+    if not value:  # M:TOOLSCAN-BASE-EMPTY
+        return ""
+    value = posixpath.normpath(value)  # M:TOOLSCAN-BASE-NORMPATH
+    if value.startswith("//"):  # M:TOOLSCAN-BASE-LEADING
+        value = value[1:]
+    return value.rstrip("/")  # M:TOOLSCAN-BASE-STRIP
+```
+
+```python
+    home = _base(home)  # M:TOOLSCAN-BASE-HOME
+    root = _base(root)  # M:TOOLSCAN-BASE-ROOT
+    checkout = _base(checkout)  # M:TOOLSCAN-BASE-CHECKOUT
+    needle_dirs = [_base(needle) for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE
 ```
 
 The 14h lines (`# M:TOOLSCAN-CHECKOUT`, `-NEEDLE`, `-STATE-TREE`, `-SESSIONS-CONTAMINATION`) are
@@ -2875,16 +2889,31 @@ byte-identical, so their rows keep their anchors. `named_paths` and `classify_pa
 Normalising in `scan_log`, not `main()`, keeps the CLI and the probe's direct `scan_log` calls on one
 path (`test_scan_cli_and_function_agree`).
 
-**The bare `/`.** `"/".rstrip("/")` is `""`, and `""` is the correct normal form, not `"/"`: every
-consumer appends `/` to its base. With `""`, `"" + "/.local/state/h-mad"` is the state tree, needle `""`
+**The bare `/`.** `_base("/")` is `""` (`normpath` keeps `/`, and the strip removes it), and `""` is
+the correct normal form, not `"/"`: every consumer appends `/` to its base. With `""`, `"" + "/.local/state/h-mad"` is the state tree, needle `""`
 gives `"/" in path` (everything, which is what a needle of `/` means), and `_below(path, "")` matches
-every absolute path. The tempting `rstrip("/") or "/"` rebuilds the `//` prefix for home and needle, so
+every absolute path. The tempting `_base(<base>) or "/"` rebuilds the `//` prefix for home and needle, so
 it fails open again; two rows pin it. Before this Task, `HOME=/` and `--needle-dir /` already failed
 open, so the bare-`/` tests are RED too.
 
-**No new match.** Normalising cannot widen a base to a sibling sharing its prefix: `_below` and the
-needle test both append `/` after the base. Three guards pin this for a trailing-slash checkout, needle
-and home, as `test_state_tree_sibling_prefix_is_not_contamination` does for 14h.
+**Interior and leading slashes** (review-fix round, change review should-fix 1). The paths are
+`posixpath.normpath`ed in `named_paths`, and the `~/` spellings are rebuilt there from the `home` that
+`scan_log` passes down, so a base is normalised the same way: an interior `//` or `/./` (`/u//x`,
+`/u/x/.`) failed open for home, checkout and needle (`checkout=0`) and closed for root, and now folds.
+`normpath` keeps a leading `//` (POSIX), but the path grammar never extracts a `//`-led path (the first
+component is `[A-Za-z0-9._-]+`), and the `~/` paths are rebuilt from the already-folded home, so `_base`
+folds a leading `//` to `/` and both sides agree. `..` folds lexically on both sides. The one input that
+`normpath` makes worse than `rstrip` did is `""`, which it turns into `.`; the `if not value` guard keeps `""`,
+which still means every path, as `rstrip` did.
+
+**No sibling match.** Normalising cannot widen a base to a right-hand sibling sharing its prefix:
+`_below` and the needle test both append `/` after the base. Three guards pin this for a trailing-slash
+checkout, needle and home, as `test_state_tree_sibling_prefix_is_not_contamination` does for 14h, and the
+row `toolscan-needle-separator-dropped` measures the needle guard. The needle test is an unanchored
+substring test, so a needle also matches on its left: before this Task, a trailing-slash needle
+`docs/archive/2099-02/` matched nothing, and it now also matches `/e/mydocs/archive/2099-02/x`. That is
+D19's `contains <needle>/` rule, and it fails closed. The three guards passed at RED only because a
+trailing-slash base then matched nothing at all, so their RED pass says nothing about the normalisation.
 
 **Live callers.** The probe passes `run_fields["checkout"]` and `run_fields["home"]` from the run's env
 file, and its needles are `f"{directory}/{feature}"`; neither builds a trailing slash in a recorded run,
@@ -2910,34 +2939,57 @@ reviewed with row 14 and left as designed: an unquoted path that breaks the redi
 - The 3 guards pass at RED and GREEN: `test_a_trailing_slash_base_matches_no_sibling_prefix`
   `[checkout]`, `[needle]` and `[home]`.
 
-**GREEN** (Codex). The four lines above, no other edit. Both modules pass (containment 88,
-toolscan_pattern 35), and the full suite shows no new failure.
+**GREEN** (Codex). The four `rstrip` lines and a two-line comment above them, no other edit. Both
+modules pass (containment 88, toolscan_pattern 35), and the full suite shows no new failure.
+
+**Review-fix RED** (orchestrator, test-only). **13 failed**: containment 0 failed / 88 passed,
+toolscan_pattern 13 failed / 36 passed.
+- `test_an_unnormal_base_still_counts_contamination`, `[home|checkout|needle]` × `[double-slash|dot]`
+  (6 ids), each reads `checkout=0`;
+- `test_an_unnormal_root_keeps_its_own_paths`, `[double-slash|dot]` × `[root-child|own-session]` (4 ids):
+  the child reads `OUT_OF_ROOT out_of_root=1` where `CLEAN` is expected, and the own session reads
+  `OUT_OF_ROOT … checkout=1` where `exempt=1` is expected;
+- `test_a_leading_double_slash_base_matches_its_single_slash_paths`, `[home]` and `[checkout]` read
+  `checkout=0`, `[root]` reads `OUT_OF_ROOT` where `CLEAN` is expected (3 ids).
+- The guard `test_an_empty_needle_dir_counts_every_out_path` passes at RED and GREEN.
+
+**Review-fix GREEN** (Codex). `_base` after `_below`, and the four lines and their comment in `scan_log`
+rewritten to call it (the comment now says that `classify_path` also quotes `root` into the own-session
+key), no other edit: the file matched the intended text byte for byte. Both modules pass (containment 88,
+toolscan_pattern 49), and the full suite shows no new failure.
 
 **After GREEN** (orchestrator, test-side; mutation rows):
 
 | row | find | replace | caught by |
 |---|---|---|---|
-| `toolscan-base-home-dropped` | `home = home.rstrip("/")` | `home = home` | `test_a_trailing_slash_home_still_counts_contamination` (containment) |
-| `toolscan-base-root-dropped` | `root = root.rstrip("/")` | `root = root` | `test_a_trailing_slash_root_keeps_its_own_paths` |
-| `toolscan-base-checkout-dropped` | `checkout = checkout.rstrip("/")` | `checkout = checkout` | `test_a_trailing_slash_checkout_still_counts_the_checkout_itself` |
-| `toolscan-base-needle-dropped` | `needle_dirs = [needle.rstrip("/") for …]` | `needle_dirs = list(needle_dirs)` | `test_a_trailing_slash_needle_dir_still_counts_contamination` |
-| `toolscan-base-home-bare-slash-kept` | `home = home.rstrip("/")` | `home = home.rstrip("/") or "/"` | `test_a_bare_slash_home_still_counts_contamination` |
-| `toolscan-base-needle-bare-slash-kept` | `needle_dirs = [needle.rstrip("/") for …]` | `[needle.rstrip("/") or "/" for …]` | `test_a_bare_slash_needle_dir_counts_every_out_path` |
+| `toolscan-base-home-dropped` | `home = _base(home)` | `home = home` | `test_a_trailing_slash_home_still_counts_contamination` (containment) |
+| `toolscan-base-root-dropped` | `root = _base(root)` | `root = root` | `test_a_trailing_slash_root_keeps_its_own_paths` |
+| `toolscan-base-checkout-dropped` | `checkout = _base(checkout)` | `checkout = checkout` | `test_a_trailing_slash_checkout_still_counts_the_checkout_itself` |
+| `toolscan-base-needle-dropped` | `needle_dirs = [_base(needle) for …]` | `needle_dirs = list(needle_dirs)` | `test_a_trailing_slash_needle_dir_still_counts_contamination` |
+| `toolscan-base-home-bare-slash-kept` | `home = _base(home)` | `home = _base(home) or "/"` | `test_a_bare_slash_home_still_counts_contamination` |
+| `toolscan-base-needle-bare-slash-kept` | `needle_dirs = [_base(needle) for …]` | `[_base(needle) or "/" for …]` | `test_a_bare_slash_needle_dir_counts_every_out_path` |
+| `toolscan-base-normpath-dropped` | `value = posixpath.normpath(value)` | `value = value` | `test_an_unnormal_base_still_counts_contamination[home-double-slash]` |
+| `toolscan-base-leading-kept` | `if value.startswith("//"):` | `if False:` | `test_a_leading_double_slash_base_matches_its_single_slash_paths[checkout]` |
+| `toolscan-base-empty-guard-dropped` | `if not value:` | `if False:` | `test_an_empty_needle_dir_counts_every_out_path` |
+| `toolscan-base-strip-dropped` | `return value.rstrip("/")` | `return value` | `test_a_bare_slash_home_still_counts_contamination` |
+| `toolscan-needle-separator-dropped` | `in_needle = any(needle + "/" in path …)` | `any(needle in path …)` | `test_a_trailing_slash_base_matches_no_sibling_prefix[needle]` |
 
 Each `find` is the whole marked line. Then run anchors, each new row with `--only`, the full spec run and
 the full suite, never the suite and the harness at once (they share a lock).
 
-**Residuals.** Only trailing slashes are normalised. A base spelled with an interior `//` or `/./`
-(`/u//x`, `/u/x/.`) still differs from the `normpath`-ed paths and would fail open the same way. No
-recorded run builds one; `normpath` was not adopted because it turns `""` into `.`.
+**Residuals.** As first shipped, only trailing slashes were normalised, and the reason given for not
+adopting `normpath` (it turns `""` into `.`) was not a blocker: a one-line guard handles it. The
+review-fix round adopted it. The normalisation is lexical, like the classification: a base reached
+through a symlink is not resolved, on either side.
 
 **Acceptance Criteria**:
-- [ ] AC-T14j.1: The RED split is 9 failed: containment 2/86, toolscan_pattern 7/28. Each failure reads
-  `checkout=0`, or for root the out classification, never a fixture error.
-- [ ] AC-T14j.2: After GREEN, containment passes 88/88 and toolscan_pattern 35/35, and the full suite
-  shows no new failure.
-- [ ] AC-T14j.3: `ANCHORS_OK`; each of the six rows is caught under `--only`; and the full spec run reads
-  `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/440` (AC-T16.3's PASS total).
+- [ ] AC-T14j.1: The RED split is 9 failed: containment 2/86, toolscan_pattern 7/28; the review-fix
+  RED is 13 failed: containment 0/88, toolscan_pattern 13/36. Each failure reads `checkout=0`, or for
+  root the out classification, never a fixture error.
+- [ ] AC-T14j.2: After the review-fix GREEN, containment passes 88/88 and toolscan_pattern 49/49, and the
+  full suite shows no new failure.
+- [ ] AC-T14j.3: `ANCHORS_OK`; each of the eleven rows is caught under `--only`; and the full spec run
+  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/445` (AC-T16.3's PASS total).
 
 **Dependencies on other tasks**: Task 14h (the four contamination lines) and the parked commit
 `60635019`. Nothing depends on it.
@@ -3201,8 +3253,9 @@ only (1 more): `test_never_gate_section_keeps_two_surface_routing_off_pass`.
   The base is 432: it was 421 after Task 14d (AC-T14d.4) and grew through Tasks 14f–14i (422 at
   14f, 423 at 14g, 431 at 14h, 432 at 14i). Until v1.18 of this plan these read 423 and 425, and
   until v1.7 378 and 380, which predate the two post-S0c fix rows and Tasks 14a–14c. Task 14j, which
-  runs after this Task's publish, adds 6 rows: the base becomes 438, and the spec then reads
-  `untargeted=0/440` on PASS (this run's outcome) or a smoke failure, `0/442` on MISS or INCONCLUSIVE.
+  runs after this Task's publish, adds 11 rows (6, then 5 in its review-fix round): the base becomes
+  443, and the spec then reads `untargeted=0/445` on PASS (this run's outcome) or a smoke failure,
+  `0/447` on MISS or INCONCLUSIVE.
   The 0/434 above is what this Task measured at its own commit.
 - [ ] AC-T16.5: The doc cites the incident record and the superseded `f7520e72` smoke on every
   published outcome, and its re-run command carries `--run-id` and `--work-dir`.
@@ -4718,3 +4771,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.17: 2026-10-24. Adds Task 14i (defect-fix), from the operator ruling on run 8 (attempt 2 `run-ab2c85dc2e25-20261024T120234Z`, `GROK-CANARY: REFUSED reason=no_denial` with containment intact; `docs/03-analysis/grok-audit-surface.incident-2026-10-24-run8-canary-no-denial.md`). The canary prompt now asks for design D18's three shell commands, each its own tool call, in D18's order. The Task 23 prompt never did, so grok's native `write`, which fails a denied write with `File exists (os error 17)`, could decide the canary. The judge, spec AC-11.4 and the 2026-10-22 os-error-17 decision are unchanged. 1 test, 1 row re-anchored, 1 row added (432). Sole author, not audited. Run 8 is relaunched after GREEN.
 - v1.18: 2026-10-26. Restates AC-T16.3's counts as `untargeted=0/434` on PASS or a smoke failure and `0/436` on MISS or INCONCLUSIVE, from the Task 16 change review: the base grew 421→432 through Tasks 14f–14i (422, 423, 431, 432), which stated only `untargeted=0` without a total, so the 0/423 and 0/425 went stale. No Task, test or row changes. Sole author, not audited.
 - v1.19: 2026-10-26. Adds Task 14j (defect-fix), from the operator decision of 2026-10-26 on backlog triage row 14: `scan_log` normalises its four comparison bases (`home`, `root`, `checkout`, `needle_dirs`) once with `rstrip("/")`, each on its own marked line, so a trailing slash no longer fails the contamination count open. It folds in the parked commit `60635019` (`park/grok-14h-home-rstrip`, the `home` case and its test) and the security review's widening. Root fails closed, not open, and its test pins that direction; a bare `/` normalises to `""`, and two rows pin the `or "/"` alternative as wrong. Triage row 15 (unquoted canary prompt paths, Task 14i) was reviewed and left as designed. RED 9 failed (containment 2/86, toolscan_pattern 7/28); 6 mutation rows, so AC-T16.3's base becomes 438 (`0/440` on PASS, `0/442` on MISS or INCONCLUSIVE). Sole author, not audited.
+- v1.20: 2026-10-27. Answers the Task 14j change review (0 must, 3 should, 3 nits). Should 1: `scan_log` normalises its bases with a new helper `_base` (`posixpath.normpath`, a leading `//` folded to `/`, trailing `/` stripped, `""` kept), so an interior `//` or `/./` no longer fails the count open; the residual's `""`-to-`.` reason was not a blocker. Review-fix RED 13 failed (toolscan_pattern 13/36), 4 tests and 14 ids. Should 2: spec v1.24 (AC-6.6) and design v1.19 (D19, **The bases**) state the normalisation and the normalised own-session key. Should 3: row `toolscan-needle-separator-dropped` measures the needle guard. Nits: GREEN names the comment, the comment names the own-session quote, and **No new match** becomes **No sibling match**, with the needle's left-hand match stated. The 6 rows are re-anchored and 5 added, so AC-T16.3's base becomes 443 (`0/445` on PASS, `0/447` on MISS or INCONCLUSIVE). Sole author, not audited.

@@ -1668,7 +1668,7 @@
       "name": "toolscan-base-home-dropped",
       "_mechanism": "A trailing-slash home builds // state-tree and sessions prefixes; contamination fails open.",
       "file": "scripts/h_mad_tool_calls.py",
-      "find": "    home = home.rstrip(\"/\")  # M:TOOLSCAN-BASE-HOME",
+      "find": "    home = _base(home)  # M:TOOLSCAN-BASE-HOME",
       "replace": "    home = home  # M:TOOLSCAN-BASE-HOME",
       "test": "tests/test_grok_audit_surface_containment.py::test_a_trailing_slash_home_still_counts_contamination"
     },
@@ -1676,7 +1676,7 @@
       "name": "toolscan-base-root-dropped",
       "_mechanism": "A trailing-slash root reads its own directory and own session as out.",
       "file": "scripts/h_mad_tool_calls.py",
-      "find": "    root = root.rstrip(\"/\")  # M:TOOLSCAN-BASE-ROOT",
+      "find": "    root = _base(root)  # M:TOOLSCAN-BASE-ROOT",
       "replace": "    root = root  # M:TOOLSCAN-BASE-ROOT",
       "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_a_trailing_slash_root_keeps_its_own_paths"
     },
@@ -1684,7 +1684,7 @@
       "name": "toolscan-base-checkout-dropped",
       "_mechanism": "A trailing-slash checkout no longer counts a call naming the checkout itself.",
       "file": "scripts/h_mad_tool_calls.py",
-      "find": "    checkout = checkout.rstrip(\"/\")  # M:TOOLSCAN-BASE-CHECKOUT",
+      "find": "    checkout = _base(checkout)  # M:TOOLSCAN-BASE-CHECKOUT",
       "replace": "    checkout = checkout  # M:TOOLSCAN-BASE-CHECKOUT",
       "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_a_trailing_slash_checkout_still_counts_the_checkout_itself"
     },
@@ -1692,25 +1692,65 @@
       "name": "toolscan-base-needle-dropped",
       "_mechanism": "A trailing-slash needle dir builds a // needle that no path contains.",
       "file": "scripts/h_mad_tool_calls.py",
-      "find": "    needle_dirs = [needle.rstrip(\"/\") for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE",
+      "find": "    needle_dirs = [_base(needle) for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE",
       "replace": "    needle_dirs = list(needle_dirs)  # M:TOOLSCAN-BASE-NEEDLE",
       "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_a_trailing_slash_needle_dir_still_counts_contamination"
     },
     {
       "name": "toolscan-base-home-bare-slash-kept",
-      "_mechanism": "HOME=/ normalises to / instead of the empty string, rebuilding the // prefixes.",
+      "_mechanism": "HOME=/ normalises to / instead of the empty string at the call site, rebuilding the // prefixes.",
       "file": "scripts/h_mad_tool_calls.py",
-      "find": "    home = home.rstrip(\"/\")  # M:TOOLSCAN-BASE-HOME",
-      "replace": "    home = home.rstrip(\"/\") or \"/\"  # M:TOOLSCAN-BASE-HOME",
+      "find": "    home = _base(home)  # M:TOOLSCAN-BASE-HOME",
+      "replace": "    home = _base(home) or \"/\"  # M:TOOLSCAN-BASE-HOME",
       "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_a_bare_slash_home_still_counts_contamination"
     },
     {
       "name": "toolscan-base-needle-bare-slash-kept",
       "_mechanism": "A needle dir / normalises to / instead of the empty string, so it matches nothing.",
       "file": "scripts/h_mad_tool_calls.py",
-      "find": "    needle_dirs = [needle.rstrip(\"/\") for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE",
-      "replace": "    needle_dirs = [needle.rstrip(\"/\") or \"/\" for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE",
+      "find": "    needle_dirs = [_base(needle) for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE",
+      "replace": "    needle_dirs = [_base(needle) or \"/\" for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE",
       "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_a_bare_slash_needle_dir_counts_every_out_path"
+    },
+    {
+      "name": "toolscan-base-normpath-dropped",
+      "_mechanism": "A base keeps an interior // or /./, which no normpath-ed path contains; contamination fails open.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    value = posixpath.normpath(value)  # M:TOOLSCAN-BASE-NORMPATH",
+      "replace": "    value = value  # M:TOOLSCAN-BASE-NORMPATH",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_an_unnormal_base_still_counts_contamination[home-double-slash]"
+    },
+    {
+      "name": "toolscan-base-leading-kept",
+      "_mechanism": "normpath keeps a leading //, which no extracted path starts with; a //-led checkout counts nothing.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if value.startswith(\"//\"):  # M:TOOLSCAN-BASE-LEADING",
+      "replace": "    if False:  # M:TOOLSCAN-BASE-LEADING",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_a_leading_double_slash_base_matches_its_single_slash_paths[checkout]"
+    },
+    {
+      "name": "toolscan-base-empty-guard-dropped",
+      "_mechanism": "normpath turns an empty base into '.', so an empty needle matches nothing instead of every path.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if not value:  # M:TOOLSCAN-BASE-EMPTY",
+      "replace": "    if False:  # M:TOOLSCAN-BASE-EMPTY",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_an_empty_needle_dir_counts_every_out_path"
+    },
+    {
+      "name": "toolscan-base-strip-dropped",
+      "_mechanism": "normpath leaves a bare / as /, so HOME=/ rebuilds the // prefixes.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    return value.rstrip(\"/\")  # M:TOOLSCAN-BASE-STRIP",
+      "replace": "    return value  # M:TOOLSCAN-BASE-STRIP",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_a_bare_slash_home_still_counts_contamination"
+    },
+    {
+      "name": "toolscan-needle-separator-dropped",
+      "_mechanism": "The needle test drops its / separator, so a needle matches a sibling directory sharing its prefix.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            in_needle = any(needle + \"/\" in path for path in outside for needle in needle_dirs)  # M:TOOLSCAN-NEEDLE",
+      "replace": "            in_needle = any(needle in path for path in outside for needle in needle_dirs)  # M:TOOLSCAN-NEEDLE",
+      "test": "tests/test_grok_audit_surface_toolscan_pattern.py::test_a_trailing_slash_base_matches_no_sibling_prefix[needle]"
     },
     {
       "name": "toolscan-own-session-disarmed",
