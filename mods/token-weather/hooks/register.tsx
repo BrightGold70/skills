@@ -62,10 +62,21 @@ export const register: Register = on => {
       forecastRow.push(<Text dimColor>{`  +${short(grew)} last turn`}</Text>)
     }
 
+    // What the plugins beneath draw in this band (next-steps, say): kept below
+    // the forecast rather than replaced by it.
+    const below = await next(e)
+
     const stored = await read($, segments)
     const parts = stored.filter(s => !isBuffer(s))
     const reserve = stored.filter(isBuffer)
-    if (parts.length === 0) return <Box>{forecastRow}</Box>
+    if (parts.length === 0) {
+      return (
+        <Box flexDirection="column">
+          <Box>{forecastRow}</Box>
+          {below}
+        </Box>
+      )
+    }
 
     // The bar spans the band's width (one cell short, so it never wraps), laid
     // out as /context lays it out: each element's share of the window in its
@@ -107,6 +118,7 @@ export const register: Register = on => {
         <Box>{forecastRow}</Box>
         <Box>{bar}</Box>
         <Box flexWrap="wrap">{legend}</Box>
+        {below}
       </Box>
     )
   })

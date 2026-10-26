@@ -12,6 +12,10 @@ const BAND_PROPS = {
   view: {},
 }
 
+// Stands for the plugins beneath this one in the band (next-steps, say), whose
+// tree the band must keep rather than replace.
+const BENEATH = { type: 'Text' as const, props: {}, children: ['beneath: next-steps'] }
+
 const ROWS: ContextCategory[] = [
   { name: 'System prompt', tokens: 12_000, kind: 'used', color: 'promptBorder', isDeferred: false },
   { name: 'Messages', tokens: 120_000, kind: 'used', color: 'permission', isDeferred: false },
@@ -76,6 +80,7 @@ test('short renders compactly', () => {
 })
 
 test('the band forecasts from a live reading on every surface', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, () => BENEATH)
   on('session.usage', () => ({
     value: { startedAt: 0, context: { tokens: 162_000, window: 200_000, percent: 81 }, rateLimits: [] },
   }))
@@ -138,6 +143,7 @@ test('the bar width follows the band width', () => {
 })
 
 test('the drawn bar fills the screen width at any size', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, () => BENEATH)
   on('session.usage', () => ({
     value: {
       startedAt: 0,
@@ -164,6 +170,7 @@ test('the drawn bar fills the screen width at any size', async ($, on) => {
 })
 
 test('the forecast row carries no sparkline, only the last turn\'s growth', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, () => BENEATH)
   // The sparkline was removed: the forecast row is the icon, the fill, the token counts and
   // what the last turn added.
   let tokens = 10_000
@@ -189,7 +196,8 @@ test('the forecast row carries no sparkline, only the last turn\'s growth', asyn
   const text = (node: unknown): string =>
     typeof node === 'string' ? node : ((node as { children?: unknown[] }).children ?? []).map(text).join('')
   const tree = (await ui.drawn()) as { children: unknown[] }
-  const rows = tree.children.map(text)
+  // The band's own rows; the plugins beneath append theirs as parts of their own.
+  const rows = tree.children.filter(c => (c as { part?: unknown }).part === undefined).map(text)
   expect(rows.length).toBe(3)
   expect(rows[0]).not.toMatch(/[\u2800-\u28FF▁▂▃▄▅▆▇█]/)
   expect(rows[0]).toMatch(/\+180k last turn/)
@@ -197,6 +205,7 @@ test('the forecast row carries no sparkline, only the last turn\'s growth', asyn
 })
 
 test('after a measurement the band draws each element in its /context colour', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, () => BENEATH)
   on('session.usage', () => ({
     value: {
       startedAt: 0,
@@ -242,6 +251,7 @@ test('after a measurement the band draws each element in its /context colour', a
 })
 
 test('free space is a background track so it never blends with a grey element or the buffer', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, () => BENEATH)
   on('session.usage', () => ({
     value: {
       startedAt: 0,
@@ -266,4 +276,24 @@ test('free space is a background track so it never blends with a grey element or
   // The coloured elements and the buffer stay filled.
   expect((await ui.find({ type: 'Text', text: /^ +12% +$/ }))?.props).toMatchObject({ color: 'permission', inverse: true })
   await ui.unmount()
+})
+
+test('the band keeps what the plugins beneath it draw', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, () => BENEATH)
+  on('session.usage', () => ({
+    value: { startedAt: 0, context: { tokens: 162_000, window: 200_000, percent: 81 }, rateLimits: [] },
+  }))
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({
+      plugin: 'token-weather',
+      surface,
+      component: 'AbovePrompt',
+      props: BAND_PROPS,
+      viewport: { columns: 100, rows: 30 },
+    })
+    expect(await ui.find({ type: 'Text', text: /81% of context/ })).toBeDefined()
+    // find() searches this plugin's own parts; the beneath tree is another plugin's part.
+    expect(JSON.stringify(await ui.drawn())).toContain('beneath: next-steps')
+    await ui.unmount()
+  }
 })
