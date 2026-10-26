@@ -172,7 +172,9 @@ RESMOKED_HEAD = (
     "The audit path (the `exec grok` audit leg, the event vocabulary, `scan_grok` "
     "and report delivery) was re-smoked against grok "
 )
-SMOKE_FAILED = re.compile(r"The audit path re-smoke against grok \S+ failed")
+# Any one sentence saying a (re-)smoke failed, however worded; ". " ends a
+# sentence, so a version such as 1.0.62 does not.
+SMOKE_FAILED = re.compile(r"(?i)smoke(?:(?!\.\s).)*?\bfailed\b")
 AC39_PHRASE = "measured with the calibration-only path-scope clause (AC-3.9)"
 NOT_RUN = (
     "Not run: second quarantine, fresh S2, positive control, CONTAINMENT lines "
@@ -375,7 +377,12 @@ def test_measurement_doc_on_smoke_failure_marks_later_stages_not_run() -> None:
         if re.search(r" checkout=[1-9]\d* ", line)
     ]
     assert positive, "a scored doc must carry the positive-control TOOLSCAN: line (checkout above 0)"
-    assert _token_lines(doc, "CONTAINMENT: "), "a scored doc must carry every CONTAINMENT: line"
+    cycles = re.findall(r"(?m)^d\d+: AUDITCYCLE: .* passes=(\d+) ", doc)
+    assert cycles, "a scored doc must carry the S2 AUDITCYCLE: lines"
+    passes = sum(map(int, cycles))
+    assert len(_token_lines(doc, "CONTAINMENT: ")) == passes, (
+        f"a scored doc must carry every CONTAINMENT: line, one per S2 pass ({passes})"
+    )
     assert _token_lines(doc, "Codex and agy passes with `checkout=` above 0:"), (
         "a scored doc must name the codex and agy passes with checkout= above 0"
     )

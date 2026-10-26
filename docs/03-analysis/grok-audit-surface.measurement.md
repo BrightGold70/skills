@@ -164,6 +164,7 @@ SPLIT: grok class=C4 recall=3/7
 
 All nine documents ran one first cycle `v1`, `--passes 3 --surfaces codex,agy,grok` (p1 codex, p2 agy,
 p3 grok), each pass in its own root. No document needed an AC-3.4 re-dispatch, so no `v2` exists.
+Each line below is that document's `auditcycle.txt` token line with a `dN: ` prefix added here.
 
 ```text
 d1: AUDITCYCLE: FAIL must=8 should=3 passes=3 p1=2/0 p2=2/0 p3=4/3 delivered=report-file,out,report-file size_status=verified
@@ -346,14 +347,14 @@ token was read by `python3 h-mad/scripts/h_mad_grok_containment.py require`. Eac
 is recorded as a `LAST_STEP=` line in `$KEEP/run-current.env`, and its token lines are the files
 this doc quotes.
 
-1. Setup (D8 "Setup"): `RUN`, `READING`, `$RUN/{roots,work,stem,canary,assembler}`,
+- **Step 1.** Setup (D8 "Setup"): `RUN`, `READING`, `$RUN/{roots,work,stem,canary,assembler}`,
    `$READING/resmoke`, `$READING/s2`; `$RUN/run.txt` (`RUN: checkout=/Users/kimhawk/orca/skills
    home=/Users/kimhawk`) copied into both reading directories.
-2. The codex tracer pair (above): cell pass/pass, codex shape.
-3. First quarantine: `QUARANTINE: VERIFIED moved=0 …`, `REQUIRE: OK`.
-4. Canary: `h-mad/bin/hmad-dispatch grok-canary --run-dir "$RUN"`: `GROK-CANARY: PASS`,
+- **Step 2.** The codex tracer pair (above): cell pass/pass, codex shape.
+- **Step 3.** First quarantine: `QUARANTINE: VERIFIED moved=0 …`, `REQUIRE: OK`.
+- **Step 4.** Canary: `h-mad/bin/hmad-dispatch grok-canary --run-dir "$RUN"`: `GROK-CANARY: PASS`,
    `REQUIRE: OK`; `$RUN/canary/` copied into `$READING/resmoke/canary/`.
-5. Re-smoke (AC-1.9), `--doc d1 --purpose s1`: `assembler-read > "$RUN/assembler/start.txt"`, then
+- **Step 5.** Re-smoke (AC-1.9), `--doc d1 --purpose s1`: `assembler-read > "$RUN/assembler/start.txt"`, then
    versions, then the grok cycle (`--cycle 1 --passes 1 --surfaces grok`, `--root-record`), its
    `record-cycle`, `wall_seconds.txt`, `resolved_model.txt`, and its scan into
    `$READING/resmoke/grok/p1.scan.txt` (`REQUIRE: OK`); the agy cycle (`--cycle 2`, `--reset
@@ -362,28 +363,28 @@ this doc quotes.
    and the selection after its `record-cycle` and before the codex block; then the codex cycle
    (`--cycle 3`, `--reset`). Every cycle carried `--halt-file "$RUN/HALT"`, `--pass-root "$ROOT_1"`
    and `--timeout 1800`.
-6. Smoke: `python3 "$PROBE" smoke --data "$READING/resmoke"`: `SMOKE: PASS`. The `SMOKE: UNREADABLE`
+- **Step 6.** Smoke: `python3 "$PROBE" smoke --data "$READING/resmoke"`: `SMOKE: PASS`. The `SMOKE: UNREADABLE`
    remedy is to restore the named input and derive again. Carry 10: an UNREADABLE caused by a
    non-grok (wrong-file) Effort item is not cleared by that remedy; only a new smoke, in a new run,
    clears it. This run did not reach that case.
-7. Re-smoke commit: calibration-ref precondition (no `STOP`), forced fetch of the calibration ref,
+- **Step 7.** Re-smoke commit: calibration-ref precondition (no `STOP`), forced fetch of the calibration ref,
    `ls-remote` confirm, `commit-data --parent "$TIP" --src "$RUN/data"`: `COMMIT: OK sha=8f8deaf1b6971f1ef5a54028fdd9c51e671f722b ref=refs/heads/calibration/grok-audit-surface`; pushed
    without force and confirmed.
-8. Second quarantine: `QUARANTINE: VERIFIED moved=1 …`, `REQUIRE: OK`.
-9. Fresh S2: nine documents, `v1` each, `--passes 3 --surfaces codex,agy,grok`, one
+- **Step 8.** Second quarantine: `QUARANTINE: VERIFIED moved=1 …`, `REQUIRE: OK`.
+- **Step 9.** Fresh S2: nine documents, `v1` each, `--passes 3 --surfaces codex,agy,grok`, one
    `build-root --purpose s2v1 --dest-parent "$RUN/roots"` per pass passed as `--pass-root` in pass
    order, `--project-root "$ROOT_1" --halt-file "$RUN/HALT"`; `record-cycle` with one
    `--pass-root-record` per pass; the p3 (grok) scan of each cycle read `REQUIRE: OK`. No halt.
-9a. Assembler pin: `assembler-read > "$RUN/assembler/end.txt"`, `assembler-check … --stems
+- **Step 9a.** Assembler pin: `assembler-read > "$RUN/assembler/end.txt"`, `assembler-check … --stems
    "$RUN/stem" --stages resmoke,s2 > "$RUN/assembler/check.txt"`, `require --verb assembler`:
    `REQUIRE: OK`.
-10. Positive control: `h_mad_tool_calls.py scan --surface grok --log
+- **Step 10.** Positive control: `h_mad_tool_calls.py scan --surface grok --log
     "$KEEP/run-ab2c85dc2e25/data/s2/d5/v1/p3.log"` with that cycle's root, the live checkout and
     `--home "$HOME"`: `checkout=21`.
-11. Extract, labels, score sha: `SEED=773509911`; `/Users/kimhawk/orca/skills/docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py extract --repo . --base-sha 8f8deaf1b6971f1ef5a54028fdd9c51e671f722b --work-dir /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/work --s2 /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/data/runs/run-ab2c85dc2e25-20261024T132452Z/s2 --shuffle-seed 773509911 --out /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/data/runs/run-ab2c85dc2e25-20261024T132452Z`; labels into
+- **Step 11.** Extract, labels, score sha: `SEED=773509911`; `/Users/kimhawk/orca/skills/docs/03-analysis/probes/grok-audit-surface/grok_audit_probe.py extract --repo . --base-sha 8f8deaf1b6971f1ef5a54028fdd9c51e671f722b --work-dir /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/work --s2 /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/data/runs/run-ab2c85dc2e25-20261024T132452Z/s2 --shuffle-seed 773509911 --out /Users/kimhawk/.local/state/h-mad/grok-audit-surface/run-ab2c85dc2e25-20261024T132452Z/data/runs/run-ab2c85dc2e25-20261024T132452Z`; labels into
     `$READING/labels.jsonl` (see Residuals); calibration-ref precondition, fetch, confirm,
     `commit-data`: score sha `05cc39355cb3a68ddebb177c4bd1e215054cc4ad`; pushed and confirmed.
-16. Rescore and main leak from `main` at `e50e7331abce9478268ed247219e530ceaf27d37` (Task 16): the re-run command below with
+- **Task 16.** Rescore and main leak from `main` at `e50e7331abce9478268ed247219e530ceaf27d37` (Task 16): the re-run command below with
     `--work-dir /Users/kimhawk/.local/state/h-mad/grok-audit-surface/work-task16`, and `main-leak` with the same shas.
 
 ## Re-run command (AC-6.4)
@@ -417,10 +418,13 @@ refuses any other. The run id is `run-ab2c85dc2e25-20261024T132452Z`. Run it fro
   30 HIT and 56 REAL, should-fixes 12 HIT and 32 REAL. A prior measurement counted 6 fabrications in
   37 must-fixes (`docs/03-analysis/hmad-audit-evidence-gate.measurement.md`). The PASS holds on D3's
   equal-fabrication clause (0/38 = 0/23) with recall 12 > 10: one grok must-fix relabelled
-  FABRICATED, or two grok HITs relabelled REAL, would turn it to MISS.
+  FABRICATED, or two grok HITs relabelled REAL, would turn it to MISS; one grok must-fix relabelled
+  UNDECIDABLE would turn it to INCONCLUSIVE (`reason=undecidable_flips`), since grok's pessimistic
+  fabrication bound becomes 1/38 while its optimistic bound stays 0/38.
 - **Hint cross-check.** The labels agreed with 32 of the 33 `candidate-hit` hints; the one
-  disagreement is `F5a289f55` (grok, d6), hinted `candidate-hit:d6-s3` and labelled REAL. The 30
-  `candidate-fabrication` hint lines fall on 29 distinct findings, all codex or agy and none grok:
-  `F5de7554d` (codex, d8) carries both `candidate-fabrication` and `candidate-hit:d8-s1` and is
-  labelled `HIT:d8-s1`. Every one of the 29 was labelled HIT or REAL, each with a line-cited reason.
+  disagreement is one grok finding in d6, hinted `candidate-hit` and labelled REAL. The 30
+  `candidate-fabrication` hint lines fall on 30 distinct findings, 17 codex and 13 agy and none
+  grok. Every one of the 30 was labelled HIT or REAL (21 REAL, 9 HIT), each with a line-cited
+  reason. One codex finding in d8 carries both a `candidate-fabrication` and a `candidate-hit` hint
+  and was labelled a HIT.
 - The operator chose to publish PASS as measured (2026-10-26).
