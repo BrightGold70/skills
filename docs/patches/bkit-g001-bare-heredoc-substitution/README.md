@@ -2,6 +2,10 @@
 
 **Status:** APPLIED locally to bkit `2.1.40` on 2026-10-25 (Hawui-Macmini). This patch only makes
 the guard stricter.
+**Also APPLIED** to bkit `2.1.40` on 2026-10-26 (Hawk-MacStudio), after updating from `2.1.38`:
+`verify.js` exit 1 before (patch MISSING, upstream not fixed), sha256 `a27278dcc8938e36` →
+`a19e24ac606adbad`, then `verify.js` exit 0 (9/11, 2 known gaps); unit 20/20, regression 32/32,
+QA heredoc all PASS.
 **Upstream:** [ww-w-ai/bkit-claude-code#161](https://github.com/ww-w-ai/bkit-claude-code/issues/161),
 filed 2026-10-25. See `UPSTREAM-FOLLOWUP.md`.
 **Target file:** `~/.claude/plugins/cache/bkit-marketplace/bkit/<version>/lib/control/destructive-detector.js`
