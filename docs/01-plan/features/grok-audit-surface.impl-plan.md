@@ -3082,10 +3082,11 @@ only (1 more): `test_never_gate_section_keeps_two_surface_routing_off_pass`.
 - [ ] AC-T16.2: `test_unmeasured_sites_match_the_outcome` fails when the doc has no `GROK-BINARY:` line,
   when it reads `GROK-BINARY: unrecorded`, or when D14's slot rule yields no version on a smoke failure.
 - [ ] AC-T16.3: `--check-anchors` reads `ANCHORS: ANCHORS_OK` after the K2 re-anchor, and the spec run
-  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/423` on PASS or a smoke
-  failure (K6 and K7 below), or `untargeted=0/425` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below).
-  The base is 421 after Task 14d (AC-T14d.4); until v1.7 of this plan these read 378 and 380, which
-  predate the two post-S0c fix rows and Tasks 14a–14c.
+  reads `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/434` on PASS or a smoke
+  failure (K6 and K7 below), or `untargeted=0/436` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below).
+  The base is 432: it was 421 after Task 14d (AC-T14d.4) and grew through Tasks 14f–14i (422 at
+  14f, 423 at 14g, 431 at 14h, 432 at 14i). Until v1.18 of this plan these read 423 and 425, and
+  until v1.7 378 and 380, which predate the two post-S0c fix rows and Tasks 14a–14c.
 - [ ] AC-T16.5: The doc cites the incident record and the superseded `f7520e72` smoke on every
   published outcome, and its re-run command carries `--run-id` and `--work-dir`.
 - [ ] AC-T16.6 (D21): in the doc, `grep -c '^assembler='` prints 1 and `grep -c '^ASSEMBLER-READING: '`
@@ -4598,3 +4599,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.15: 2026-10-23. Adds Task 14g (defect-fix), which generalises 14f into a named table of grok payload arguments (`grep.pattern`, `write.content`, `search_replace.old_string`/`new_string`) that are not path sources. Run 6 (`run-ab2c85dc2e25-20261023T081135Z`, smoke commit `533ed0c5`) halted at S2 d3 on `write.content` prose naming `/tmp`. A calibration re-scan of every recorded grok log runs before run 7. RED: 2 failed / 8 passed. Operator ruling; sole author, not audited.
 - v1.16: 2026-10-24. Adds Task 14h (defect-fix / policy), from the operator ruling on run 7 (`run-ab2c85dc2e25-20261023T110325Z`, smoke commit `0b1dbb8d`): contamination-only halt. Run 7 halted at S2 d1 v1 on `OUT_OF_ROOT … out_of_root=1 checkout=0`, from a shell `HOME=/tmp`. `checkout` becomes the contamination count, adding `<home>/.local/state/h-mad` and `<home>/.grok/sessions` (not the own session). `require --verb toolscan` accepts a grok `OUT_OF_ROOT` with `checkout=0`. The probe refuses `out_of_root:<cycle>` only when `checkout>0` or the scan is UNREADABLE. The Task 27 and require text is amended to match. Spec v1.23, design v1.18. Sole author, not audited. Run 8 follows GREEN and calibration.
 - v1.17: 2026-10-24. Adds Task 14i (defect-fix), from the operator ruling on run 8 (attempt 2 `run-ab2c85dc2e25-20261024T120234Z`, `GROK-CANARY: REFUSED reason=no_denial` with containment intact; `docs/03-analysis/grok-audit-surface.incident-2026-10-24-run8-canary-no-denial.md`). The canary prompt now asks for design D18's three shell commands, each its own tool call, in D18's order. The Task 23 prompt never did, so grok's native `write`, which fails a denied write with `File exists (os error 17)`, could decide the canary. The judge, spec AC-11.4 and the 2026-10-22 os-error-17 decision are unchanged. 1 test, 1 row re-anchored, 1 row added (432). Sole author, not audited. Run 8 is relaunched after GREEN.
+- v1.18: 2026-10-26. Restates AC-T16.3's counts as `untargeted=0/434` on PASS or a smoke failure and `0/436` on MISS or INCONCLUSIVE, from the Task 16 change review: the base grew 421→432 through Tasks 14f–14i (422, 423, 431, 432), which stated only `untargeted=0` without a total, so the 0/423 and 0/425 went stale. No Task, test or row changes. Sole author, not audited.

@@ -156,3 +156,253 @@ def test_agent_substrate_grok_row_states_the_strict_default():
         "agent-substrate exec grok command must expose the strict-default override"
     )
     assert expected in row, "agent-substrate exec grok row must state the verbatim FR-11 contract"
+
+
+# S3 publish (Task 16): every-outcome pins on the measurement doc, the two
+# AC-6.2 sites in SKILL.md and grok-runtime.md's outcome sentence (design D14,
+# D15, D21). Each test reads the outcome from the doc's token lines.
+
+MEASUREMENT_REL = "docs/03-analysis/grok-audit-surface.measurement.md"
+MEASUREMENT = REPO / MEASUREMENT_REL
+GROK_RUNTIME = REPO / "h-mad/references/grok-runtime.md"
+EXEC_SECTION = "Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot"
+TEAMMATE_SECTION = "Teammate audit leg — when codex is unavailable"
+HOST_SENTENCE = "These mappings were checked against grok 1.0.41."
+RESMOKED_HEAD = (
+    "The audit path (the `exec grok` audit leg, the event vocabulary, `scan_grok` "
+    "and report delivery) was re-smoked against grok "
+)
+# Any one sentence saying a (re-)smoke failed, however worded; ". " ends a
+# sentence, so a version such as 1.0.62 does not.
+SMOKE_FAILED = re.compile(r"(?i)smoke(?:(?!\.\s).)*?\bfailed\b")
+AC39_PHRASE = "measured with the calibration-only path-scope clause (AC-3.9)"
+NOT_RUN = (
+    "Not run: second quarantine, fresh S2, positive control, CONTAINMENT lines "
+    "(smoke failed)"
+)
+SEED_RESIDUAL = (
+    "The seeds are build-class shapes from the four classes of spec AC-2.1, and "
+    "whether recall on real defects would match is not measured."
+)
+CLAUSE_RESIDUAL = (
+    "The measurement was taken with the calibration-only path-scope clause "
+    "(AC-3.9): the calibration prompt is the production prompt plus exactly that "
+    "clause, inserted once at the head of the audit body; production grok legs do "
+    "not receive it, and whether a production grok leg without it behaves the "
+    "same is not measured."
+)
+
+
+def _collapse(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _measurement() -> str:
+    assert MEASUREMENT.is_file(), f"the S3 measurement doc must exist: {MEASUREMENT_REL}"
+    return MEASUREMENT.read_text(encoding="utf-8")
+
+
+def _token_lines(doc: str, prefix: str) -> list[str]:
+    return [line for line in doc.splitlines() if line.startswith(prefix)]
+
+
+def _outcome(doc: str) -> str:
+    """`SMOKE_FAIL`, or the verdict word of the doc's one `SEEDSCORE:` line."""
+    smoke = _token_lines(doc, "SMOKE: ")
+    assert len(smoke) == 1, "the measurement doc must carry exactly one SMOKE: line"
+    if smoke[0].split()[1] == "FAIL":
+        return "SMOKE_FAIL"
+    scores = _token_lines(doc, "SEEDSCORE: ")
+    assert len(scores) == 1, "a scored measurement doc must carry exactly one SEEDSCORE: line"
+    verdict = scores[0].split()[1]
+    assert verdict in {"PASS", "MISS", "INCONCLUSIVE"}, scores[0]
+    return verdict
+
+
+def _grok_version(doc: str) -> str:
+    """D14's slot rule: the first field after `grok` in GROK-BINARY's version."""
+    lines = _token_lines(doc, "GROK-BINARY:")
+    assert len(lines) == 1, "the measurement doc must carry exactly one GROK-BINARY: line"
+    match = re.fullmatch(r"GROK-BINARY: path=.+? version=(.+)", lines[0])
+    assert match, f"GROK-BINARY: line names no recorded version: {lines[0]}"
+    fields = match.group(1).split()
+    assert len(fields) >= 2 and fields[0] == "grok", (
+        f"D14's slot rule yields no version from: {lines[0]}"
+    )
+    return fields[1]
+
+
+def _surface(doc: str, name: str) -> tuple[str, str]:
+    lines = _token_lines(doc, f"SURFACE: {name} ")
+    assert len(lines) == 1, f"the measurement doc must carry one SURFACE: {name} line"
+    recall = re.search(r" recall=(\d+/27) ", lines[0])
+    fab = re.search(r" fab_rate=(\d+/\d+) ", lines[0])
+    assert recall and fab, lines[0]
+    return recall.group(1), fab.group(1)
+
+
+def _exec_grok_bullet() -> str:
+    lines = titled_section(SKILL_MD.read_text(encoding="utf-8"), EXEC_SECTION).splitlines()
+    start = next(
+        index
+        for index, line in enumerate(lines)
+        if "**`exec grok`** — an explicit RED/GREEN implementer fallback" in line
+    )
+    end = next(
+        (
+            index
+            for index in range(start + 1, len(lines))
+            if lines[index].lstrip().startswith("- **")
+        ),
+        len(lines),
+    )
+    return _collapse(" ".join(lines[start:end]))
+
+
+def _ac62_sites() -> dict[str, str]:
+    teammate = titled_section(SKILL_MD.read_text(encoding="utf-8"), TEAMMATE_SECTION)
+    return {"exec grok bullet": _exec_grok_bullet(), "teammate section": _collapse(teammate)}
+
+
+def test_both_unmeasured_sites_point_to_the_measurement_doc() -> None:
+    _measurement()
+    for name, site in _ac62_sites().items():
+        assert f"`{MEASUREMENT_REL}`" in site, (
+            f"the {name} must point to the measurement doc {MEASUREMENT_REL}"
+        )
+
+
+def test_measurement_doc_states_the_transfer_residual() -> None:
+    doc = _collapse(_measurement())
+    assert SEED_RESIDUAL in doc, "the measurement doc must state the seed-shape transfer residual"
+    assert CLAUSE_RESIDUAL in doc, (
+        "the measurement doc must state the AC-3.9 path-scope transfer residual"
+    )
+
+
+def test_unmeasured_sites_match_the_outcome() -> None:
+    doc = _measurement()
+    outcome = _outcome(doc)
+    version = _grok_version(doc)
+    if outcome == "SMOKE_FAIL":
+        expected = f"the grok {version} audit-path smoke failed"
+    else:
+        grok_recall, grok_fab = _surface(doc, "grok")
+        agy_recall, agy_fab = _surface(doc, "agy")
+        fractions = (
+            f"recall {grok_recall} against agy's {agy_recall}, fabrication {grok_fab} "
+            f"against agy's {agy_fab} (`SEEDSCORE: {outcome}`), {AC39_PHRASE}"
+        )
+        if outcome == "INCONCLUSIVE":
+            reason = re.search(r" reason=(\S+)", _token_lines(doc, "SEEDSCORE: ")[0])
+            assert reason, "an INCONCLUSIVE SEEDSCORE: line must carry its reason="
+            expected = (
+                "audit precision measured on 27 seeds but not decidable on this seed "
+                f"set (`reason={reason.group(1)}`): {fractions}, so grok stays fallback-only"
+            )
+        else:
+            expected = f"audit precision measured on 27 seeds: {fractions}"
+    for name, site in _ac62_sites().items():
+        assert expected in site, f"the {name} must read, for {outcome}: {expected}"
+        assert "**unmeasured**" in site, (
+            f"the {name} must keep GREEN, mutation and wiring **unmeasured**"
+        )
+        precision_unmeasured = re.search(
+            r"audit precision (are|remain) \*\*unmeasured\*\*", site
+        )
+        if outcome == "SMOKE_FAIL":
+            assert precision_unmeasured, (
+                f"on a smoke failure the {name} must keep audit precision unmeasured"
+            )
+        else:
+            assert not precision_unmeasured, (
+                f"on {outcome} the {name} must retire audit precision from the "
+                "unmeasured list"
+            )
+
+
+def test_grok_runtime_states_the_outcome_sentence() -> None:
+    section = _collapse(
+        titled_section(GROK_RUNTIME.read_text(encoding="utf-8"), "Version and compatibility")
+    )
+    assert HOST_SENTENCE in section, (
+        "grok-runtime.md must keep the host-mapping sentence unchanged: " + HOST_SENTENCE
+    )
+    pointer = f"`{MEASUREMENT_REL}`"
+    scored_shape = RESMOKED_HEAD in section
+    smoke_shape = SMOKE_FAILED.search(section) is not None
+    assert scored_shape or smoke_shape, (
+        "grok-runtime.md §Version and compatibility must state the AC-1.5 "
+        "re-smoked sentence or the AC-1.8 smoke-failure sentence"
+    )
+    doc = _measurement()
+    outcome = _outcome(doc)
+    version = _grok_version(doc)
+    if outcome == "SMOKE_FAIL":
+        match = re.search(
+            rf"The audit path re-smoke against grok {re.escape(version)} failed[^.]*"
+            rf"{re.escape(pointer)}",
+            section,
+        )
+        assert match, (
+            f"on a smoke failure grok-runtime.md must say the re-smoke against grok "
+            f"{version} failed and name {MEASUREMENT_REL}"
+        )
+        assert RESMOKED_HEAD not in section, (
+            "on a smoke failure the AC-1.5 re-smoked sentence must not ship"
+        )
+    else:
+        sentence = f"{RESMOKED_HEAD}{version}; see {pointer}."
+        assert sentence in section, f"grok-runtime.md must state: {sentence}"
+        assert not smoke_shape, (
+            f"on {outcome} the AC-1.8 smoke-failure sentence must not ship"
+        )
+
+
+def test_measurement_doc_on_smoke_failure_marks_later_stages_not_run() -> None:
+    doc = _measurement()
+    lines = doc.splitlines()
+    if _outcome(doc) == "SMOKE_FAIL":
+        assert NOT_RUN in lines, f"a smoke-failure doc must state the line: {NOT_RUN}"
+        assert not _token_lines(doc, "CONTAINMENT:"), "a smoke-failure doc has no CONTAINMENT: line"
+        assert not _token_lines(doc, "SEEDSCORE:"), "a smoke-failure doc has no SEEDSCORE: line"
+        return
+    assert not _token_lines(doc, "Not run:"), "a scored doc must not carry a Not run: line"
+    assert len(_token_lines(doc, "QUARANTINE: VERIFIED ")) == 2, (
+        "a scored doc must carry both QUARANTINE: VERIFIED lines"
+    )
+    positive = [
+        line
+        for line in _token_lines(doc, "TOOLSCAN: ")
+        if re.search(r" checkout=[1-9]\d* ", line)
+    ]
+    assert positive, "a scored doc must carry the positive-control TOOLSCAN: line (checkout above 0)"
+    cycles = re.findall(r"(?m)^d\d+: AUDITCYCLE: .* passes=(\d+) ", doc)
+    assert cycles, "a scored doc must carry the S2 AUDITCYCLE: lines"
+    passes = sum(map(int, cycles))
+    assert len(_token_lines(doc, "CONTAINMENT: ")) == passes, (
+        f"a scored doc must carry every CONTAINMENT: line, one per S2 pass ({passes})"
+    )
+    assert _token_lines(doc, "Codex and agy passes with `checkout=` above 0:"), (
+        "a scored doc must name the codex and agy passes with checkout= above 0"
+    )
+
+
+def test_measurement_doc_publishes_the_exclusion_list() -> None:
+    doc = _measurement()
+    blobs = re.findall(r"(?m)^list_blob=([0-9a-f]{40})$", doc)
+    assert len(blobs) == 1, "the stamp must state exactly one list_blob= line"
+    section = titled_section(doc, "Exclusion list").splitlines()
+    fences = [index for index, line in enumerate(section) if line.startswith("```")]
+    assert len(fences) >= 2, "the Exclusion list section must hold a fenced block"
+    published = "".join(line + "\n" for line in section[fences[0] + 1 : fences[1]])
+    blob = subprocess.run(
+        ["git", "cat-file", "blob", blobs[0]],
+        cwd=REPO,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert published == blob, (
+        "the published exclusion list must equal git cat-file blob of list_blob byte for byte"
+    )

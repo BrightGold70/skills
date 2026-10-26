@@ -628,9 +628,12 @@ resolved implementer and the independent review assignment:
   prose, so it comes back as a well-formed `STATUS: BLOCKED`, not as an error.
 - **`exec grok`** — an explicit RED/GREEN implementer fallback when both peers are out
   and `fallback_agent=grok`. Stage with `h_mad_assemble_tdd.py --agent grok`;
-  its default timeout is 1500 seconds. Grok's GREEN, mutation, wiring, and audit
-  precision are **unmeasured** (D4), so its verdict remains a claim until the
-  independent checks run. From FR-11, `exec grok` always runs `--sandbox strict`:
+  its default timeout is 1500 seconds. Grok's GREEN, mutation, and wiring are
+  **unmeasured** (D4), and audit precision measured on 27 seeds: recall 12/27
+  against agy's 10/27, fabrication 0/38 against agy's 0/23 (`SEEDSCORE: PASS`),
+  measured with the calibration-only path-scope clause (AC-3.9)
+  (`docs/03-analysis/grok-audit-surface.measurement.md`), so its verdict remains
+  a claim until the independent checks run. From FR-11, `exec grok` always runs `--sandbox strict`:
   a weaker or unknown `--sandbox` value exits 2 unless
   `--allow-weaker-sandbox` is also given, which is recorded in `<log>.profile`,
   and `GROK_SANDBOX` is removed from grok's environment. In a git work tree it
@@ -3046,9 +3049,12 @@ fi
 
 If `codex_status` records Codex unavailable and `fallback_agent=grok`, prefer
 Grok as the independent stand-in: dispatch the audit with
-`hmad-dispatch audit-cycle --feature <feature> --phase <phase> --cycle <N> --project-root <root> --passes 2 --surfaces agy,grok`. Grok's GREEN, mutation, wiring, and
-audit precision remain **unmeasured** (D4); check its reported evidence against
-source. This audit routing is an orchestrator decision, not a script reading
+`hmad-dispatch audit-cycle --feature <feature> --phase <phase> --cycle <N> --project-root <root> --passes 2 --surfaces agy,grok`.
+Grok's GREEN, mutation, and wiring remain **unmeasured** (D4); audit precision
+measured on 27 seeds: recall 12/27 against agy's 10/27, fabrication 0/38 against
+agy's 0/23 (`SEEDSCORE: PASS`), measured with the calibration-only path-scope
+clause (AC-3.9) (`docs/03-analysis/grok-audit-surface.measurement.md`). Check its
+reported evidence against source. This audit routing is an orchestrator decision, not a script reading
 `fallback_agent` for you. A codex audit round is still owed when Codex returns.
 Switching the leg from `doc-auditor` to `grok` changes the stamped leg set: the
 exit check reports `legs_changed:` once, starts a new baseline, and needs two
