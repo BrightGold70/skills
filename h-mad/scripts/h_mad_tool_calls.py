@@ -148,6 +148,12 @@ def scan_log(text: str, surface: str, *, root: str, checkout: str,
     """Return per-call counts and the surface's verdict word."""
     if surface not in ("grok", "agy", "codex"):
         raise UsageError("unknown surface")
+    # Once, here: every check below joins a base with `/`, and a trailing slash built `//`
+    # paths that no normalised path matches. `/` becomes "", which is right for the same reason.
+    home = home.rstrip("/")  # M:TOOLSCAN-BASE-HOME
+    root = root.rstrip("/")  # M:TOOLSCAN-BASE-ROOT
+    checkout = checkout.rstrip("/")  # M:TOOLSCAN-BASE-CHECKOUT
+    needle_dirs = [needle.rstrip("/") for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE
     result = dict(surface=surface, calls=0, out_of_root=0, checkout=0,
                   exempt=0, nonjson=0, mcp_unmeasured=0)
     if surface == "codex":

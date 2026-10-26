@@ -175,6 +175,21 @@ def test_scan_sessions_dir_itself_is_out_of_root(scan_module, scan_case, capsys)
                  _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
 
 
+@pytest.mark.parametrize("tail", [
+    "/.local/state/h-mad/grok-audit-surface/run-current.env",
+    "/.grok/sessions/another-root/history.json",
+])
+def test_a_trailing_slash_home_still_counts_contamination(scan_module, scan_case, capsys, tail):
+    # Paths are normalised with `home.rstrip("/")`, but the state-tree and
+    # sessions checks joined `home + "/…"` raw: HOME=/users/auditor/ built
+    # `/users/auditor//.local/…`, which no normalised path matches, so a read of
+    # the run's answer key reported checkout=0 -- the containment check failing open.
+    home = scan_case["home"]
+    scan_case["home"] = home + "/"
+    _assert_scan(scan_module, scan_case, capsys, _grok(home + tail),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
 def test_scan_other_grok_path_is_out_of_root(scan_module, scan_case, capsys):
     case = scan_case
     # locations is an independent path source, not agent narration or rawOutput.

@@ -2830,6 +2830,120 @@ metacharacter breaks the redirect, and the write then fails without a denial, wh
 
 ---
 
+## Task 14j: scan_log normalises every comparison base
+
+**Production file**: `h-mad/scripts/h_mad_tool_calls.py` (`scan_log`, four lines after the usage
+check, ~L151–156)
+**Test files**: `h-mad/tests/test_grok_audit_surface_containment.py` (1 test, 2 ids, from the parked
+commit `60635019`); `h-mad/tests/test_grok_audit_surface_toolscan_pattern.py` (extend, 6 tests, 10 ids);
+`h-mad/tests/mutation-specs/grok_audit_surface.json` (6 rows added after GREEN)
+**Task shape**: `defect-fix` (operator decision 2026-10-26: normalise every comparison base once at the
+top of `scan_log`, not a CLI refusal)
+**Implements**: the Task 14h residual, backlog triage row 14
+(`docs/03-analysis/2026-10-25-backlog-triage.md`), and the parked fix `60635019` on
+`park/grok-14h-home-rstrip`, widened by the security review. Runs after step 11; no Task depends on it.
+
+**Why.** `named_paths` and `classify_path` build every path from `home.rstrip("/")`, and `_below`
+strips its directory before its prefix test, but `scan_log` used its four bases raw:
+- `home + "/.local/state/h-mad"` and `home + "/.grok/sessions"` (14h). `HOME=/u/x/` built `/u/x//…`,
+  which no normalised path matches, so a read of the run's answer key counted `checkout=0`. This is the
+  parked commit's finding, and the containment check failing open.
+- `needle + "/" in path`. A `--needle-dir docs/archive/2099-02/` built `…/2099-02//`, which no path
+  contains: `checkout=0` for every read of the needle.
+- `_below(path, checkout)`. Children of a trailing-slash checkout were already counted, because `_below`
+  strips the slash for its prefix branch. Its equality branch did not, so a call naming the checkout
+  directory itself (`git -C /live/skills log`) counted `checkout=0`. The fail-open is narrow but real.
+- `root`. `_below` classifies the root's children `inside` correctly. The root directory itself
+  classified `out`, and `quote(root, safe="")` gained a trailing `%2F`, so the own-session exemption
+  stopped matching and the own session counted as sessions contamination. Both are false positives:
+  `root` fails **closed**, not open as the security review said. It is normalised for the same reason,
+  and its test pins the direction it actually fails.
+
+**Change.** Insert four lines after `raise UsageError("unknown surface")` and before `result = dict(…)`,
+each with its own marker, so a mutation can drop one base at a time:
+
+```python
+    home = home.rstrip("/")  # M:TOOLSCAN-BASE-HOME
+    root = root.rstrip("/")  # M:TOOLSCAN-BASE-ROOT
+    checkout = checkout.rstrip("/")  # M:TOOLSCAN-BASE-CHECKOUT
+    needle_dirs = [needle.rstrip("/") for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE
+```
+
+The 14h lines (`# M:TOOLSCAN-CHECKOUT`, `-NEEDLE`, `-STATE-TREE`, `-SESSIONS-CONTAMINATION`) are
+byte-identical, so their rows keep their anchors. `named_paths` and `classify_path` keep their own
+`rstrip`, which is now idempotent. `needle_dirs` is rebound to a new list, never mutated in place.
+Normalising in `scan_log`, not `main()`, keeps the CLI and the probe's direct `scan_log` calls on one
+path (`test_scan_cli_and_function_agree`).
+
+**The bare `/`.** `"/".rstrip("/")` is `""`, and `""` is the correct normal form, not `"/"`: every
+consumer appends `/` to its base. With `""`, `"" + "/.local/state/h-mad"` is the state tree, needle `""`
+gives `"/" in path` (everything, which is what a needle of `/` means), and `_below(path, "")` matches
+every absolute path. The tempting `rstrip("/") or "/"` rebuilds the `//` prefix for home and needle, so
+it fails open again; two rows pin it. Before this Task, `HOME=/` and `--needle-dir /` already failed
+open, so the bare-`/` tests are RED too.
+
+**No new match.** Normalising cannot widen a base to a sibling sharing its prefix: `_below` and the
+needle test both append `/` after the base. Three guards pin this for a trailing-slash checkout, needle
+and home, as `test_state_tree_sibling_prefix_is_not_contamination` does for 14h.
+
+**Live callers.** The probe passes `run_fields["checkout"]` and `run_fields["home"]` from the run's env
+file, and its needles are `f"{directory}/{feature}"`; neither builds a trailing slash in a recorded run,
+so no recorded verdict is expected to change. This is not re-scanned; there is no calibration step.
+
+**Not changed (triage row 15).** The canary prompt's paths are unquoted (Task 14i, Residuals). This was
+reviewed with row 14 and left as designed: an unquoted path that breaks the redirect fails closed as
+`no_denial`, and changing the prompt would change the calibration prompt.
+
+**RED** (orchestrator, test-only). Expected RED: **9 failed**.
+- `containment` reads 2 failed / 86 passed. The parked
+  `test_a_trailing_slash_home_still_counts_contamination` (`HOME=/users/auditor/`), both ids (the
+  state-tree `run-current.env` and another root's session), read `checkout=0`.
+- `toolscan_pattern` reads 7 failed / 28 passed:
+  - `test_a_trailing_slash_checkout_still_counts_the_checkout_itself` reads `checkout=0`;
+  - `test_a_trailing_slash_needle_dir_still_counts_contamination` reads `checkout=0`;
+  - `test_a_trailing_slash_root_keeps_its_own_paths[root-itself]` reads `OUT_OF_ROOT out_of_root=1`
+    where `CLEAN` is expected, and `[own-session]` reads `OUT_OF_ROOT … checkout=1` where `exempt=1`
+    is expected (the fail-closed direction);
+  - `test_a_bare_slash_home_still_counts_contamination`, both ids (state tree and sessions), read
+    `checkout=0`;
+  - `test_a_bare_slash_needle_dir_counts_every_out_path` reads `checkout=0`.
+- The 3 guards pass at RED and GREEN: `test_a_trailing_slash_base_matches_no_sibling_prefix`
+  `[checkout]`, `[needle]` and `[home]`.
+
+**GREEN** (Codex). The four lines above, no other edit. Both modules pass (containment 88,
+toolscan_pattern 35), and the full suite shows no new failure.
+
+**After GREEN** (orchestrator, test-side; mutation rows):
+
+| row | find | replace | caught by |
+|---|---|---|---|
+| `toolscan-base-home-dropped` | `home = home.rstrip("/")` | `home = home` | `test_a_trailing_slash_home_still_counts_contamination` (containment) |
+| `toolscan-base-root-dropped` | `root = root.rstrip("/")` | `root = root` | `test_a_trailing_slash_root_keeps_its_own_paths` |
+| `toolscan-base-checkout-dropped` | `checkout = checkout.rstrip("/")` | `checkout = checkout` | `test_a_trailing_slash_checkout_still_counts_the_checkout_itself` |
+| `toolscan-base-needle-dropped` | `needle_dirs = [needle.rstrip("/") for …]` | `needle_dirs = list(needle_dirs)` | `test_a_trailing_slash_needle_dir_still_counts_contamination` |
+| `toolscan-base-home-bare-slash-kept` | `home = home.rstrip("/")` | `home = home.rstrip("/") or "/"` | `test_a_bare_slash_home_still_counts_contamination` |
+| `toolscan-base-needle-bare-slash-kept` | `needle_dirs = [needle.rstrip("/") for …]` | `[needle.rstrip("/") or "/" for …]` | `test_a_bare_slash_needle_dir_counts_every_out_path` |
+
+Each `find` is the whole marked line. Then run anchors, each new row with `--only`, the full spec run and
+the full suite, never the suite and the harness at once (they share a lock).
+
+**Residuals.** Only trailing slashes are normalised. A base spelled with an interior `//` or `/./`
+(`/u//x`, `/u/x/.`) still differs from the `normpath`-ed paths and would fail open the same way. No
+recorded run builds one; `normpath` was not adopted because it turns `""` into `.`.
+
+**Acceptance Criteria**:
+- [ ] AC-T14j.1: The RED split is 9 failed: containment 2/86, toolscan_pattern 7/28. Each failure reads
+  `checkout=0`, or for root the out classification, never a fixture error.
+- [ ] AC-T14j.2: After GREEN, containment passes 88/88 and toolscan_pattern 35/35, and the full suite
+  shows no new failure.
+- [ ] AC-T14j.3: `ANCHORS_OK`; each of the six rows is caught under `--only`; and the full spec run reads
+  `MUTATION: ALL_CAUGHT` with `crash_kills=0` and `untargeted=0/440` (AC-T16.3's PASS total).
+
+**Dependencies on other tasks**: Task 14h (the four contamination lines) and the parked commit
+`60635019`. Nothing depends on it.
+
+---
+
 ## Task 15: the live sequence after S0c (operator)
 
 **Production files**: none on `main` (calibration data goes only to `calibration/grok-audit-surface`, by Task 6's `commit-data`)
@@ -3086,7 +3200,10 @@ only (1 more): `test_never_gate_section_keeps_two_surface_routing_off_pass`.
   failure (K6 and K7 below), or `untargeted=0/436` on MISS or INCONCLUSIVE (K4, K5, K6 and K7 below).
   The base is 432: it was 421 after Task 14d (AC-T14d.4) and grew through Tasks 14f–14i (422 at
   14f, 423 at 14g, 431 at 14h, 432 at 14i). Until v1.18 of this plan these read 423 and 425, and
-  until v1.7 378 and 380, which predate the two post-S0c fix rows and Tasks 14a–14c.
+  until v1.7 378 and 380, which predate the two post-S0c fix rows and Tasks 14a–14c. Task 14j, which
+  runs after this Task's publish, adds 6 rows: the base becomes 438, and the spec then reads
+  `untargeted=0/440` on PASS (this run's outcome) or a smoke failure, `0/442` on MISS or INCONCLUSIVE.
+  The 0/434 above is what this Task measured at its own commit.
 - [ ] AC-T16.5: The doc cites the incident record and the superseded `f7520e72` smoke on every
   published outcome, and its re-run command carries `--run-id` and `--work-dir`.
 - [ ] AC-T16.6 (D21): in the doc, `grep -c '^assembler='` prints 1 and `grep -c '^ASSEMBLER-READING: '`
@@ -4600,3 +4717,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.16: 2026-10-24. Adds Task 14h (defect-fix / policy), from the operator ruling on run 7 (`run-ab2c85dc2e25-20261023T110325Z`, smoke commit `0b1dbb8d`): contamination-only halt. Run 7 halted at S2 d1 v1 on `OUT_OF_ROOT … out_of_root=1 checkout=0`, from a shell `HOME=/tmp`. `checkout` becomes the contamination count, adding `<home>/.local/state/h-mad` and `<home>/.grok/sessions` (not the own session). `require --verb toolscan` accepts a grok `OUT_OF_ROOT` with `checkout=0`. The probe refuses `out_of_root:<cycle>` only when `checkout>0` or the scan is UNREADABLE. The Task 27 and require text is amended to match. Spec v1.23, design v1.18. Sole author, not audited. Run 8 follows GREEN and calibration.
 - v1.17: 2026-10-24. Adds Task 14i (defect-fix), from the operator ruling on run 8 (attempt 2 `run-ab2c85dc2e25-20261024T120234Z`, `GROK-CANARY: REFUSED reason=no_denial` with containment intact; `docs/03-analysis/grok-audit-surface.incident-2026-10-24-run8-canary-no-denial.md`). The canary prompt now asks for design D18's three shell commands, each its own tool call, in D18's order. The Task 23 prompt never did, so grok's native `write`, which fails a denied write with `File exists (os error 17)`, could decide the canary. The judge, spec AC-11.4 and the 2026-10-22 os-error-17 decision are unchanged. 1 test, 1 row re-anchored, 1 row added (432). Sole author, not audited. Run 8 is relaunched after GREEN.
 - v1.18: 2026-10-26. Restates AC-T16.3's counts as `untargeted=0/434` on PASS or a smoke failure and `0/436` on MISS or INCONCLUSIVE, from the Task 16 change review: the base grew 421→432 through Tasks 14f–14i (422, 423, 431, 432), which stated only `untargeted=0` without a total, so the 0/423 and 0/425 went stale. No Task, test or row changes. Sole author, not audited.
+- v1.19: 2026-10-26. Adds Task 14j (defect-fix), from the operator decision of 2026-10-26 on backlog triage row 14: `scan_log` normalises its four comparison bases (`home`, `root`, `checkout`, `needle_dirs`) once with `rstrip("/")`, each on its own marked line, so a trailing slash no longer fails the contamination count open. It folds in the parked commit `60635019` (`park/grok-14h-home-rstrip`, the `home` case and its test) and the security review's widening. Root fails closed, not open, and its test pins that direction; a bare `/` normalises to `""`, and two rows pin the `or "/"` alternative as wrong. Triage row 15 (unquoted canary prompt paths, Task 14i) was reviewed and left as designed. RED 9 failed (containment 2/86, toolscan_pattern 7/28); 6 mutation rows, so AC-T16.3's base becomes 438 (`0/440` on PASS, `0/442` on MISS or INCONCLUSIVE). Sole author, not audited.
