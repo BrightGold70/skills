@@ -1434,11 +1434,27 @@
     },
     {
       "name": "teammate-unmeasured-pin",
-      "_mechanism": "Claim measured audit precision so the teammate evidence caveat guard must fail.",
+      "_mechanism": "K2, re-anchored at S3: claim GREEN, mutation and wiring measured so the teammate evidence caveat guard must fail.",
       "file": "SKILL.md",
-      "find": "audit precision remain **unmeasured** (D4)",
-      "replace": "audit precision remain **measured** (D4)",
+      "find": "Grok's GREEN, mutation, and wiring remain **unmeasured** (D4)",
+      "replace": "Grok's GREEN, mutation, and wiring remain **measured** (D4)",
       "test": "tests/test_grok_fallback_docs.py::test_teammate_section_documents_the_grok_leg"
+    },
+    {
+      "name": "grok-runtime-host-sentence-changed",
+      "_mechanism": "K6: change the host-mapping version so the unchanged 1.0.41 sentence assertion must fail.",
+      "file": "references/grok-runtime.md",
+      "find": "These mappings were checked against grok 1.0.41.",
+      "replace": "These mappings were checked against grok 1.0.40.",
+      "test": "tests/test_grok_audit_surface_docs.py::test_grok_runtime_states_the_outcome_sentence"
+    },
+    {
+      "name": "grok-runtime-other-branch-sentence-added",
+      "_mechanism": "K7: append the AC-1.8 smoke-failure sentence on a scored outcome so the other-branch absence assertion must fail.",
+      "file": "references/grok-runtime.md",
+      "find": "These mappings were checked against grok 1.0.41.",
+      "replace": "These mappings were checked against grok 1.0.41. The audit path re-smoke against grok 1.0.62 failed (`reason=<r>`); see `docs/03-analysis/grok-audit-surface.measurement.md`.",
+      "test": "tests/test_grok_audit_surface_docs.py::test_grok_runtime_states_the_outcome_sentence"
     },
     {
       "name": "never-gate-surfaces-pin",

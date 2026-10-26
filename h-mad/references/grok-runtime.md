@@ -8,6 +8,9 @@ Use this adapter when the active H-MAD host is grok. It supplies host mechanics 
 These mappings were checked against grok 1.0.41. Use `grok inspect`, especially its
 Harness Compatibility section, to check the active installation. Record a newer
 version at live smoke time instead of assuming it behaves the same way.
+The audit path (the `exec grok` audit leg, the event vocabulary, `scan_grok` and
+report delivery) was re-smoked against grok 1.0.62; see
+`docs/03-analysis/grok-audit-surface.measurement.md`.
 The Claude skill and hook bridges are `compat.claude.skills` and
 `compat.claude.hooks`, with environment toggles `GROK_CLAUDE_SKILLS_ENABLED` and
 `GROK_CLAUDE_HOOKS_ENABLED` respectively. Verify the active settings before relying
