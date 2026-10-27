@@ -209,3 +209,18 @@ base should be normalized. Row 15 was skipped for the same reason (calibration p
 (5, 41, 49, 50, 52), all NEEDS-DECISION rows (16, 19, 28, 47), and the actionable rows not
 reached: 17, 18, 27, 29, 33, 35, 38 (the remaining older `yes`
 rows), 39 (except the interpreter row), 44 and 46. Rows 9 and 53 were closed on 2026-10-26.
+
+## Outcome — 2026-10-26/27 (Hawk-MacStudio)
+
+| row | outcome |
+|---|---|
+| 2 | Closed. Task 16's measurement doc records the labeller-package deviation (merged `2614364b`). |
+| 14 | Closed. Folded in as Task 14j, which normalizes every `scan_log` comparison base (merged `c0300c1c`; parked `60635019` superseded, branch deleted). |
+| 15 | Left as designed (Task 14i), reviewed inside Task 14j. |
+| 16 | **Operator 2026-10-27: dropped.** The audit path never needs Policy B (agy reads and delivers via `out`). Reopen only if agy must write or run commands outside a git tree. |
+| 19 | **Operator 2026-10-27: kept deferred.** Do it only as a planned feature with a before-and-after invocation measurement (82+ test modules couple to SKILL.md's text). |
+| 28 | **Operator 2026-10-27: split.** Move the two real-cycle test ids out of the path-scope module so the judged module stays well under the 40 s `JUDGE_BUDGET_S`. Open, actionable. |
+| 47 | **Operator 2026-10-27: dropped.** Superseded by Task 15's 9 live agy audit passes (delivered=9, CONTAINMENT CLEAN on all 9). |
+
+Task 15 step 11 and Task 16 are done: score sha `05cc3935`, `SEEDSCORE: PASS`. The Mac Studio's
+bkit is now 2.1.40 with the G-001 patch applied (`9e5b39d0`).
