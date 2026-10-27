@@ -2222,7 +2222,15 @@ environment.
   only). `sha` is the stdout of `git -C <here> rev-parse --verify HEAD` when it is exactly 40
   lowercase hex, else `unreadable` (`# M:ASSEMBLER-READ-SHA`). `dirty` is `unknown` when
   `git -C <here>/.. status --porcelain --untracked-files=all -- .` fails, `yes` when it prints
-  anything, `no` otherwise (`# M:ASSEMBLER-READ-DIRTY`). `script_dir_env` is `set` when
+  anything, `no` otherwise (`# M:ASSEMBLER-READ-DIRTY`). **As implemented (v1.21,
+  operator-accepted deviation):** the status runs in
+  `status_dir = here.parent if here.name == "scripts" else here`
+  (`h-mad/scripts/h_mad_grok_containment.py:135`, commit `9f8c96c6`), not always in `<here>/..`.
+  The rule above contradicts this Task's own `test_assembler_read_sha256_repository_reads_unreadable`:
+  it passes `--here <repo root>` and expects `dirty=no`, but `git -C <repo root>/..` runs in the
+  test's parent directory, which is not a repository, so it would read `dirty=unknown`. Production
+  is unchanged, because `here` is always `…/h-mad/scripts`, whose parent is `h-mad/`. Phase 6 should
+  read this as recorded, not as drift (R3 Open Items; backlog triage row 29). `script_dir_env` is `set` when
   `HMAD_AUDIT_CYCLE_SCRIPT_DIR` is in the environment, an empty value included
   (`# M:ASSEMBLER-READ-ENV`). An escaping exception prints
   `ASSEMBLER-READING: unreadable reason=internal:<ExceptionName>`, exit 2. A usage error prints
@@ -4772,3 +4780,4 @@ classes S0c adds to, so they are not frozen here; Task 29 derives them.
 - v1.18: 2026-10-26. Restates AC-T16.3's counts as `untargeted=0/434` on PASS or a smoke failure and `0/436` on MISS or INCONCLUSIVE, from the Task 16 change review: the base grew 421→432 through Tasks 14f–14i (422, 423, 431, 432), which stated only `untargeted=0` without a total, so the 0/423 and 0/425 went stale. No Task, test or row changes. Sole author, not audited.
 - v1.19: 2026-10-26. Adds Task 14j (defect-fix), from the operator decision of 2026-10-26 on backlog triage row 14: `scan_log` normalises its four comparison bases (`home`, `root`, `checkout`, `needle_dirs`) once with `rstrip("/")`, each on its own marked line, so a trailing slash no longer fails the contamination count open. It folds in the parked commit `60635019` (`park/grok-14h-home-rstrip`, the `home` case and its test) and the security review's widening. Root fails closed, not open, and its test pins that direction; a bare `/` normalises to `""`, and two rows pin the `or "/"` alternative as wrong. Triage row 15 (unquoted canary prompt paths, Task 14i) was reviewed and left as designed. RED 9 failed (containment 2/86, toolscan_pattern 7/28); 6 mutation rows, so AC-T16.3's base becomes 438 (`0/440` on PASS, `0/442` on MISS or INCONCLUSIVE). Sole author, not audited.
 - v1.20: 2026-10-27. Answers the Task 14j change review (0 must, 3 should, 3 nits). Should 1: `scan_log` normalises its bases with a new helper `_base` (`posixpath.normpath`, a leading `//` folded to `/`, trailing `/` stripped, `""` kept), so an interior `//` or `/./` no longer fails the count open; the residual's `""`-to-`.` reason was not a blocker. Review-fix RED 13 failed (toolscan_pattern 13/36), 4 tests and 14 ids. Should 2: spec v1.24 (AC-6.6) and design v1.19 (D19, **The bases**) state the normalisation and the normalised own-session key. Should 3: row `toolscan-needle-separator-dropped` measures the needle guard. Nits: GREEN names the comment, the comment names the own-session quote, and **No new match** becomes **No sibling match**, with the needle's left-hand match stated. The 6 rows are re-anchored and 5 added, so AC-T16.3's base becomes 443 (`0/445` on PASS, `0/447` on MISS or INCONCLUSIVE). Sole author, not audited.
+- v1.21: 2026-10-27. Task 14c records the operator-accepted deviation in `assembler-read`'s `dirty` reading: git status runs in `here.parent` only when `here` is named `scripts`, else in `here` (`h-mad/scripts/h_mad_grok_containment.py:135`, commit `9f8c96c6`). The plan's unconditional `git -C <here>/..` contradicted Task 14c's own sha256 fixture (`--here <repo root>`, `dirty=no`), and production is unchanged because `here` is always `…/h-mad/scripts`. From the R3 handoff's Open Items, backlog triage row 29. No test, row or count changes. Design v1.20 carries the same note. Sole author, not audited.

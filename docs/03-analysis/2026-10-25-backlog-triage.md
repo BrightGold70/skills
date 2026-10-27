@@ -224,3 +224,12 @@ rows), 39 (except the interpreter row), 44 and 46. Rows 9 and 53 were closed on 
 
 Task 15 step 11 and Task 16 are done: score sha `05cc3935`, `SEEDSCORE: PASS`. The Mac Studio's
 bkit is now 2.1.40 with the G-001 patch applied (`9e5b39d0`).
+
+## Outcome — 2026-10-27, rows 27 and 29 (Hawk-MacStudio, branch `docs/backlog-rows-27-29`)
+
+Every item was re-probed at `190939a8` before it was filed.
+
+| row | outcome |
+|---|---|
+| 27 | Closed. `docs/skill-candidates.md` §"2026-10-27 — backlog-triage-row-27 (filed)" files 7 new rows: #3, #7, #8, #11, the judge-mapping defect, F1, and F2+F3 as one row. Cross-referenced instead of filed: #1 (= HS2), #2 (= HS7), #4 (agy half fixed by 14e `84d069ed`, codex half on HS1), #5 (= HS6), each with a 2026-10-27 RE-PROBED note on its `f2a37a71` row; #10 is the 2026-10-20 `--check-anchors` row, now with its cause (the gate does not trust the interpreter the assembler writes). Not filed: #6 (already handled by `change-reviewer`), #9 (row 16, dropped), #12 (row 28, split), F4 (bkit's writer targets `.bkit/state/memory.json`, not h-mad's file; the rename that made them share it is guarded by `951c99f2`), and the agy-1.4.6 test (passed again on agy 1.4.7; stays row 51). |
+| 29 | Closed. Impl-plan v1.21 (Task 14c `assembler-read`) and design v1.20 (D21) record the operator-accepted `status_dir = here.parent if here.name == "scripts" else here` at `h-mad/scripts/h_mad_grok_containment.py:135` (commit `9f8c96c6`; R3 says `:134`), and the reason: the plan's `git -C <here>/..` contradicts Task 14c's own sha256 fixture. |
