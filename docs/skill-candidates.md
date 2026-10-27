@@ -2723,6 +2723,15 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
   refusals this row records, so that admit is not the fix. The cause is not identifiable from the tree.
   Git verbs are still absent: `READ_ONLY_COMMANDS` (`:225`) has no `git`. The verifier prompt carries
   no measured values.
+  — **RE-PROBED 2026-10-27 at `190939a8` (backlog triage row 27, skills defect #10): OPEN, cause
+  identified.** The refusal is the interpreter, not the flag. `h_mad_assemble_tdd.py:633` writes the
+  check as `{python} {harness} --check-anchors {spec}`, where `{python}` is the pytest-capable
+  `--python` (`/opt/anaconda3/bin/python3` here), and `_safe_argv` (`h_mad_target_identity.py:492`)
+  admits only a contained venv or a `TRUSTED_BIN_DIRS` executable (`:263-269`). Probe, with the gate
+  module under `/usr/bin/python3` and under Homebrew 3.15, a spec inside the root:
+  `/opt/anaconda3/bin/python3 <harness> --check-anchors <spec>` → `False`; the same with `python3` or
+  `/usr/bin/python3` → `True`. Fix direction: the assembler emits the anchor check with a trusted
+  interpreter (it needs no pytest), or the gate trusts the interpreter the operator configured.
 - **TDD assembler takes one `--test-path` but Tasks span two test modules**: Task 7 (smoke + probe modules), Task 11/12 (wrapper + audit-cycle/gate-pins) needed a hand-written split note because `--expect-fail/--expect-pass` describe one module; the 5e verifier template likewise named only the first test file (Task 12's verifier counted 8 of 14 tests and reported AC-T12.1 false). Fix direction: make `--test-path` repeatable and carry every path into the counts, the re-run line and the verifier prompt. — recurrence: 4 — candidate: yes
   — **RE-CHECKED 2026-10-25 12:09 (scout): still open, part landed.** `--test-path` has been repeatable
   since `c046bc38` (`h_mad_assemble_tdd.py:759`), and the re-run line joins every path. Still missing:
@@ -2734,13 +2743,38 @@ builds what an open row asks for. `fecae140`/`67dc3b62` change branch-evidence s
 Carried in HemaSuite handoffs 2026-10-22 and 2026-10-23 (`docs/handoffs/2026-10-23-BrightGold70-hemasuite-document-workbench__intake-a1-task2-red.md`, Open Items) and filed here unverified against current skill HEAD. Re-probe each before acting on it.
 
 - **codex audit leg blind in step5** (HemaSuite document-intake-source-review): the codex audit leg ran with no readable view of the Phase-5 tree, so its verdict carried no code reads — candidate: maybe
+  — **RE-PROBED 2026-10-27 at `190939a8` (triage row 27): OPEN; this row also carries skills defect #4,
+  codex half.** The agy half of #4 (agy source reads refused under the Phase-5 hook) was fixed by Task
+  14e (`84d069ed`). For codex, the prompts now name the admitted read verbs (`4fb77879`, the
+  read-verbs row below), but `READ_ONLY_COMMANDS` (`h_mad_target_identity.py:225`) still has no
+  `sed`, and a codex Bash read outside that set is refused.
 - **Phase-5 allowlist not consulted for the inner command of `hmad-dispatch run`**: `.h-mad/phase5-shell-allow` lists `/opt/anaconda3/bin/python -m pytest`, but `hmad-dispatch run -- .venv/bin/python -m pytest` was accepted, so the allowlist does not govern what the wrapper executes — candidate: yes
+  — **RE-PROBED 2026-10-27 at `190939a8` (triage row 27): OPEN; same defect as skills #1.** The inner
+  command IS checked, but only by `_safe_argv` (`M:CX-RUN-INNER`, `h_mad_target_identity.py:511-516`,
+  since `92b00839`), which trusts a contained `.venv` (that is why `.venv/bin/python` passed) or a
+  `TRUSTED_BIN_DIRS` executable. The allow file is matched by `_operator_allowed` (`M:SA-PREFIX`,
+  `:481`) against the OUTER argv only. Probe with the allow file holding
+  `/opt/anaconda3/bin/python3 -m pytest`: the bare command → safe `False`, operator `True` (admitted);
+  `hmad-dispatch run --timeout 60 -- <same>` → safe `False`, operator `False` (refused). An operator
+  allowance is lost as soon as the command is bounded. Related: the 2026-10-20 row "TDD assembler
+  prescribes a pytest wrapper the Codex gate refuses".
 - **a collection-time ImportError deadlocks the first production write**: a RED test that imports the production module at module top makes pytest score `pytest-error`, which the TDD judge DENYs, so the module that would fix the import can never be written. The lazy-import rule in the impl-plan is prose only; nothing lints a RED test file for a module-top production import — candidate: yes
 - **path-label shape unenforced at 5b**: the impl-plan `**Production files**:` / `**Test files**:` field shape that `h_mad_wire_pin_gate._PATHS_FIELD_RE` parses is only discovered at the first 5d dispatch; the 5b impl-plan audit does not check it — candidate: yes
 - **assembled Codex prompts omit the allowed read verbs**: every dispatch needed a hand preface listing `cat/grep/head/tail/wc/ls/jq` and that `sed`/`nl`/`python -c` are refused, otherwise Codex burns turns on refused commands — candidate: yes
   — **LANDED 2026-10-25** — `references/codex-implementer-prompt.md` and `codex-verifier-prompt.md` both state the exact read verbs the gate admits (`READ_ONLY_COMMANDS`) and what is refused (`sed`/`nl`/`awk`/`find`/`python -c`; the verifier also names `git`; any `|`/`;`/redirect/glob). The verifier is told to answer NEEDS_CONTEXT rather than guess. Pinned against the gate's set by `test_codex_templates_name_exactly_the_gate_read_verbs`, so the prose cannot drift from the code. Branch `fix/batch-2`.
 - **spec-review drift with no pinning test has no documented test-first route**: when agy spec review finds behaviour the design states but no test pins, the skill gives no route (amend RED first vs. fix in GREEN), and the orchestrator improvised — candidate: maybe
+  — **RE-PROBED 2026-10-27 at `190939a8` (triage row 27): OPEN; it also carries skills defect #5**
+  (the test-passing DENY has no path for a behaviour-preserving fix). `score()` returns `test-passing`
+  (`h_mad_tdd_judge.py:405`) and `judge()` turns it into a DENY (`:458-466`). SKILL.md:499 covers only
+  a refactor-shaped RED. No route is documented for a marker, comment or behaviour-preserving rework
+  of a module that is already green.
 - **TDD judge falls back to a `python3` with no pytest**: same class as the LANDED wire-registry `verify` row (2026-10-17); re-probe whether `h_mad_tdd_judge.py` got the same interpreter probe — candidate: maybe
+  — **RE-PROBED 2026-10-27 at `190939a8` (triage row 27): OPEN, it did not; same defect as skills #2.**
+  `judge()` defaults `fallback_interpreter=sys.executable` (`h_mad_tdd_judge.py:433`), and
+  `select_interpreter` (`:369-382`) returns it unprobed when no contained `.venv` is found. A missing
+  pytest is only scored afterwards, as a DENY `pytest-missing` (`:393`). Both Python gates are
+  `#!/usr/bin/env python3`. On this Mac only `/opt/anaconda3/bin/python3` of the four `python3` on
+  PATH imports pytest (Homebrew, `/usr/bin` and `/usr/local/bin` do not).
 - **verdict extractor rejects a bold `STATUS`**: `**STATUS: DONE**` from an agent reads as no verdict; either accept it or say "not bold" in every assembled prompt (the hand prefaces currently do) — candidate: yes
   — **LANDED 2026-10-25** — `h_mad_extract_verdict.py` `extract_verdict` accepts `**`/`__` emphasis on the key, the value, or the whole line (`**STATUS: DONE**`, `**STATUS**: DONE`, `STATUS: **DONE**`), and the J10 `Concerns:` section scan (`_SECTION_START`) recognises the same spellings. **Scope: this extractor only.** `hmad-dispatch.sh` exec recovery (`_recovered_has_verdict`, `_verdict_after_boundary`) and `h_mad_archreview_cycle.py::_extract_assessment` still require an unbolded line, which fails safe (no verdict, never a wrong one). Keep "not bold" in the prefaces until they are widened. Pinned by `test_a_bold_status_line_is_read_as_its_value` and `test_bold_does_not_widen_the_key_match`, on branch `fix/independent-bugs`.
 - **`h_mad_assemble_tdd.py --out` names the dispatch output, not the assembled prompt**: the prompt always lands in `/tmp/h_mad_<feature>_<module>_<phase>.txt`; `--out` reads as "where to write the prompt" and was misused once — candidate: yes (rename or print both paths distinctly)
@@ -2766,3 +2800,34 @@ Carried in HemaSuite handoffs 2026-10-22 and 2026-10-23 (`docs/handoffs/2026-10-
 - **commit messages via -F under bkit G-001**: G-001 matches raw command text, so a `-m` naming a recursive-removal identifier is blocked. A local bkit patch (beside `docs/patches/bkit-enh310-quoted-heredoc-body/`) is tracked as todo; the scout note is that this is the second raw-text-matching rule (after ENH-310) — recurrence: 2 — candidate: maybe
 
 ## 2026-10-25 — fixes-merged-back-to-studio — no candidates
+
+## 2026-10-27 — backlog-triage-row-27 (filed)
+
+Todo #4 / backlog triage row 27 (`docs/03-analysis/2026-10-25-backlog-triage.md`): the skills lane's
+h-mad defects 1–12 (handoff `2026-10-23-main__grok-run3-agy-gate-halt.md` Next Step 4; items 1–6
+are worded most exactly in `docs/03-analysis/grok-audit-surface.phase5-s0c-notes.md`), the
+judge-mapping defect (`2026-10-24-main__task15-runs4-7-14h-green.md` Key Learnings), the TLA+
+claim-model findings F1–F4 (local-only `.claude/skills/verify-hmad-claims/SKILL.md` §Findings) and
+the agy-1.4.6 progress test. Every item was re-probed at `190939a8` before filing. Dedupe against
+HemaSuite's `f2a37a71` rows (the 2026-10-23 section above): #1 = HS2 (allowlist not consulted for
+the inner command), #2 = HS7 (judge python3 with no pytest), #4 ≈ HS1/HS5 (agy half fixed by Task
+14e, `84d069ed`), #5 ≈ HS6 (no test-first route); each carries a 2026-10-27 RE-PROBED note on that
+row instead of a new row here. #10 is the 2026-10-20 `--check-anchors` row, now with its cause. Not
+filed: #6 (subagent replies truncate at about 4 KB), already handled by the `change-reviewer` agent
+(review-report-chunk-relay, 2026-10-04) and by the 2026-10-24 vendor row on swallowed reports; #9
+(the agy gate fails closed outside a repo), triage row 16, which the operator dropped on 2026-10-27;
+#12 (14d AC.5 judge budget under load), triage row 28, where the operator chose the module split on
+2026-10-27; F4 (bkit's unlocked read-modify-write), because bkit 2.1.38 and 2.1.40 both read and
+write `STATE_PATHS.memory()` = `.bkit/state/memory.json` (`lib/core/paths.js:29`,
+`lib/pdca/status-core.js:505,525`, no fallback to the legacy `docs/.bkit-memory.json`). They share
+h-mad's file only after bkit's SessionStart rename, which `951c99f2` now prevents; the unlocked
+write itself is vendor code; and the agy-1.4.6 progress test, which passed again (agy 1.4.7, `1 passed
+in 8.75s`), so it stays a watch item (triage row 51) to file only if it recurs.
+
+- **bare `--python` is echoed into prompts the shell allowlist cannot match** (skills defect #3): `h_mad_assemble_tdd.py` writes `--python` verbatim into the prompt's run line (`:614`), the anchor check (`:633`) and the operator re-run (`:716`), and it never resolves the value to an absolute path. Its own suggestion list offers bare names (`"python3.13"`, `"python3.12"`, `"python3.11"`, `:354`). `_operator_allowed` compares argv words literally (`h_mad_target_identity.py:481`), so an allow line written with an absolute path never matches the bare spelling. Probe at `190939a8`, allow file `/opt/anaconda3/bin/python3 -m pytest`: `python3.11 -m pytest x.py` → safe `False`, operator `False`; `/opt/anaconda3/bin/python3 -m pytest x.py` → operator `True`. Fix direction: resolve `--python` with `shutil.which` and write the absolute path (or refuse a bare name), and make the suggestions absolute — recurrence: 1 (carried in four handoffs since s0c) — candidate: yes
+- **the TDD judge's 40 s budget still has no override for one slow file** (skills defect #7): the LANDED (e) row (2026-10-18) fixed candidate ORDER only and says "No budget override added". `JUDGE_BUDGET_S = 40.0` (`h_mad_tdd_judge.py:29`) is fixed, and no hook passes `judge(budget_s=…)`. A single test file slower than the budget times out under `-x` before a RED near its end is reached; s0c moved the RED to the top of the file to get through. Measured 2026-10-27 at load 7.9: `test_grok_audit_surface_containment.py` run as the judge runs it (`-x -q --no-header`) gave `88 passed in 44.04s`, over the budget. Triage row 28 splits one other module (path-scope) and leaves the class open. Fix direction: a per-target budget declared in the impl-plan Task, or a budget the operator sets, printed in the DENY — recurrence: 2 (s0c containment, 14d path-scope) — candidate: maybe
+- **wire-pin and TDD gates see only `.py`, so a `.sh` production file is never mapped or judged** (skills defect #8): `_PY_TOKEN_RE = re.compile(r"`([^`]+\.py)`")` (`h_mad_wire_pin_gate.py:96`, used `:223`) is also the TDD judge's task parser (`h_mad_tdd_judge.py:22`, `from h_mad_wire_pin_gate import _parse_tasks`). Probe at `190939a8`: a synthetic Task whose **Production files** list `h-mad/bin/hmad-dispatch.sh` and `h-mad/scripts/a.py` parses to `['h-mad/scripts/a.py']`; the `.sh` file is dropped. The write gates skip non-`.py` targets (`h-mad-tdd-gate.sh:318`; the codex gate judges only `_is_production_python`, `h-mad-codex-tdd-gate.py:335`), so a `.sh` change in Phase 5 passes no TDD judge and no wire-pin check. `h-mad/scripts/hmad-dispatch.sh` (258 KB) is twice the size of h-mad's largest `.py` file. Fix direction: parse every backticked path and gate any listed production file by its task, not by suffix — recurrence: 1 — candidate: yes
+- **`implementation_authors` is append-only with no correction route** (skills defect #11): `APPEND_ONLY = ("review_independence", "implementation_authors")` (`h_mad_state_write.py:58`); `--set` on either key raises `… is append-only: use --append` (`:225-227`), and no verb retracts or supersedes an entry. A mistaken entry is permanent and read as the author set at 6a-prime (SKILL.md:353). Live instance: the `path_scope_wire` misattribution carried open since the 2026-10-24 handoff. Fix direction: an append-only `supersedes`/`retracts` entry that the author-set reader honours, so history is kept and the reading is correct — recurrence: 1 — candidate: yes
+- **the Phase-5 judge has no test mapping for h-mad's own files** (judge-mapping defect): with no impl-plan Task naming the target, the judge falls to `h_mad_derive_test_path.sh` (`NAME_MAP`, `h_mad_tdd_judge.py:32`, run at `:337`), which maps only `hematology-paper-writer/`, `clinical-statistics-analyzer/` and `shared/`. `bash h-mad/scripts/h_mad_derive_test_path.sh h-mad/scripts/h_mad_tdd_judge.py` prints nothing, so the write is DENYed `no-test-resolved` (`:344-345`). Every gate fix in grok-audit-surface's Phase 5 needed its own Task 14x before Codex could write it. Fix direction: a `h-mad/scripts/<x>.py` → `h-mad/tests/test_<x>*.py` map, or a named-test override for gate files — recurrence: 1 (one session, every gate fix in it) — candidate: maybe
+- **a displaced claim owner's phase writes are still accepted** (TLA+ F1): after an owner loses its claim (cold heartbeat, or F2 below), its `--set … --session-id <old owner>` still lands with exit 0; only the heartbeat refresh is skipped (`h_mad_state_write.py:236-237`), and only `--beat` refuses (`:279-289`). Replayed at `190939a8` on a scratch store: owner moved s1 → s2, then `--set current_phase=6 --session-id s1` → rc 0, `STATE-WRITE: OK`. The LANDED `owner_proven_live` fix (claim-writer row, 2026-10-25) stops a takeover of a provably live Claude owner; it does not refuse the displaced session's writes. Fix direction: a `--set` that carries `--session-id` refuses when the record's owner is a different session — recurrence: 1 — candidate: yes
+- **`--set owner_session_id` / `--set owner_heartbeat_ts` bypass the claim protocol** (TLA+ F2 and F3): `merge_fields` guards only `APPEND_ONLY` keys, so both owner fields are writable by a plain `--set` with no `--force`. Replayed at `190939a8`: after `--create --claim s1`, `--set owner_session_id=s2` → rc 0, owner s2 inheriting s1's fresh heartbeat, and s1's next `--beat` → rc 2 "owned by session 's2'" (F2). Then `--set owner_heartbeat_ts=null` → rc 0, and from then on a plain `--claim s3` → rc 2 (`LIVENESS: UNKNOWN`) and an anonymous `--release` → rc 2, because `owner_is_live(None)` is True by design (F3); only `--force` or the owner's id frees it. The claim-writer LIVE row (2026-10-25) names F2 as related, but its fix touched `--claim`, `--release` and the oracle, not `--set`, so F2 is not landed. Fix direction: refuse `--set owner_*` (route ownership only through `--claim`, `--release`, `--beat`), and treat an owned record with a null heartbeat as unknown-age, not live — recurrence: 1 — candidate: yes
