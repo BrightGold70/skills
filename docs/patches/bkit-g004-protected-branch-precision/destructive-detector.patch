@@ -1,0 +1,19 @@
+--- a/lib/control/destructive-detector.js
++++ b/lib/control/destructive-detector.js
+@@ -86,7 +86,15 @@
+      * branch. The porcelain commands that DO move a branch are exactly the
+      * un-hyphenated four, so excluding the hyphen form is the whole fix.
+      */
+-    pattern: /\bgit\s+(commit|merge|rebase|push)(?!-)\b.*\b(main|master|release|production)\b/i,
++    /*
++     * LOCAL PATCH (orca/skills docs/patches/bkit-g004-protected-branch-precision):
++     * an ordinary commit/merge/pull/push on a protected branch is routine and
++     * reversible; asking on it trained the operator to click through. G-004 now
++     * asks only for the acts that rewrite or remove a protected branch: a rebase
++     * naming one, a `+refspec` force push, a `:refspec` or `--delete`/`-d` delete.
++     * `-f`/`--force` pushes stay with G-002 (deny on a protected branch).
++     */
++    pattern: /\bgit\s+(?:rebase(?!-)\b.*\b(?:main|master|release|production)\b|push\b[^\n;|&]*\s(?:\+|:)\S*\b(?:main|master|release|production)\b|push\b[^\n;|&]*\s(?:--delete|-d)\b[^\n;|&]*\b(?:main|master|release|production)\b)/i,
+     severity: 'high',
+     defaultAction: 'ask'
+   },
