@@ -243,3 +243,131 @@ def test_probe_state_tree_in_a_shell_command_refuses(containment_score_case, cap
     _t27_log(case, "d1", 3).write_text(_terminal_call(
         "ls /tmp/grok-audit-home/.local/state/h-mad/grok-audit-surface"), encoding="utf-8")
     _t27_refusal(case, capsys)
+
+
+# Task 14j: `scan_log` normalises every comparison base once, with `rstrip("/")`. A trailing
+# slash on `--checkout` or `--needle-dir` failed the contamination count open (`checkout=0`); on
+# `--root` it failed closed (the root and its own session read as out). `--home` is the parked
+# 60635019 test in the containment module. A bare `/` normalises to the empty string, because
+# every consumer appends `/` to its base.
+def test_a_trailing_slash_checkout_still_counts_the_checkout_itself(scan_module, scan_case, capsys):
+    case = scan_case
+    checkout = case["checkout"]
+    case["checkout"] = checkout + "/"
+    _assert_scan(scan_module, case, capsys,
+                 _tool("run_terminal_command", command=f"git -C {checkout} log -1"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+def test_a_trailing_slash_needle_dir_still_counts_contamination(scan_module, scan_case, capsys):
+    scan_case["needle_dirs"] = ["docs/archive/2099-01", "docs/archive/2099-02/"]
+    _assert_scan(scan_module, scan_case, capsys,
+                 _tool("read_file",
+                       target_file="/elsewhere/export/docs/archive/2099-02/paper-lantern/design.md"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+@pytest.mark.parametrize("which", ["root-itself", "own-session"])
+def test_a_trailing_slash_root_keeps_its_own_paths(scan_module, scan_case, capsys, which):
+    # Built from the slash-free root, before the slash is appended.
+    case = scan_case
+    target, token = {
+        "root-itself": (case["root"], _token()),
+        "own-session": (_own_session(case) + "/history.json", _token(exempt=1)),
+    }[which]
+    case["root"] = case["root"] + "/"
+    _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=target), token)
+
+
+@pytest.mark.parametrize("tail", [
+    "/.local/state/h-mad/grok-audit-surface/run-other/data/p3.report.md",
+    "/.grok/sessions/another-root/history.json",
+])
+def test_a_bare_slash_home_still_counts_contamination(scan_module, scan_case, capsys, tail):
+    # `/` normalises to "", so `"" + "/.local/state/h-mad"` is the state tree; `"/"` would
+    # rebuild the `//` prefix that no path matches.
+    scan_case["home"] = "/"
+    _assert_scan(scan_module, scan_case, capsys, _tool("read_file", target_file=tail),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+def test_a_bare_slash_needle_dir_counts_every_out_path(scan_module, scan_case, capsys):
+    scan_case["needle_dirs"] = ["/"]
+    _assert_scan(scan_module, scan_case, capsys, _tool("read_file", target_file="/elsewhere/x.md"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+@pytest.mark.parametrize("base, target", [
+    ("checkout", "/live/skills-other/x.md"),
+    ("needle", "/elsewhere/export/docs/archive/2099-020/x.md"),
+    ("home", "/users/auditor/.local/state/h-mad-other/x.md"),
+], ids=["checkout", "needle", "home"])
+def test_a_trailing_slash_base_matches_no_sibling_prefix(scan_module, scan_case, capsys, base, target):
+    # Guard: normalising a base must not widen it to a sibling sharing its prefix.
+    case = scan_case
+    if base == "needle":
+        case["needle_dirs"] = ["docs/archive/2099-02/"]
+    else:
+        case[base] = case[base] + "/"
+    _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=target),
+                 _token(word="OUT_OF_ROOT", out_of_root=1))
+
+
+# Task 14j fix: a base is normalised the way `named_paths` normalises a path (`posixpath.normpath`),
+# so an interior `//` or `/./` no longer fails the count open, and a leading `//`, which `normpath`
+# keeps, folds to `/`: the path grammar never extracts a `//`-led path, and `~/` paths are rebuilt
+# from the normalised home. Every target is built from the normal base.
+def _respell(base, separator):
+    cut = base.index("/", 1)
+    return base[:cut] + separator + base[cut:]
+
+
+@pytest.mark.parametrize("separator", ["/", "/."], ids=["double-slash", "dot"])
+@pytest.mark.parametrize("base", ["home", "checkout", "needle"])
+def test_an_unnormal_base_still_counts_contamination(scan_module, scan_case, capsys, base, separator):
+    case = scan_case
+    target = {
+        "home": case["home"] + "/.local/state/h-mad/grok-audit-surface/run-other/data/p3.report.md",
+        "checkout": case["checkout"] + "/docs/answer-key.md",
+        "needle": "/elsewhere/export/docs/archive/2099-02/paper-lantern/design.md",
+    }[base]
+    if base == "needle":
+        case["needle_dirs"] = [_respell("docs/archive/2099-02", separator)]
+    else:
+        case[base] = _respell(case[base], separator)
+    _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=target),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))
+
+
+@pytest.mark.parametrize("which", ["root-child", "own-session"])
+@pytest.mark.parametrize("separator", ["/", "/."], ids=["double-slash", "dot"])
+def test_an_unnormal_root_keeps_its_own_paths(scan_module, scan_case, capsys, separator, which):
+    case = scan_case
+    target, token = {
+        "root-child": (case["root"] + "/docs/design.md", _token()),
+        "own-session": (_own_session(case) + "/history.json", _token(exempt=1)),
+    }[which]
+    case["root"] = _respell(case["root"], separator)
+    _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=target), token)
+
+
+@pytest.mark.parametrize("base", ["home", "checkout", "root"])
+def test_a_leading_double_slash_base_matches_its_single_slash_paths(scan_module, scan_case, capsys,
+                                                                    base):
+    case = scan_case
+    target, token = {
+        "home": (case["home"] + "/.grok/sessions/another-root/history.json",
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1)),
+        "checkout": (case["checkout"] + "/docs/answer-key.md",
+                     _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1)),
+        "root": (case["root"] + "/docs/design.md", _token()),
+    }[base]
+    case[base] = "/" + case[base]
+    _assert_scan(scan_module, case, capsys, _tool("read_file", target_file=target), token)
+
+
+def test_an_empty_needle_dir_counts_every_out_path(scan_module, scan_case, capsys):
+    # Guard: `normpath("")` is ".", and a needle "." matches nothing; "" keeps meaning every path.
+    scan_case["needle_dirs"] = [""]
+    _assert_scan(scan_module, scan_case, capsys, _tool("read_file", target_file="/elsewhere/x.md"),
+                 _token(word="OUT_OF_ROOT", out_of_root=1, checkout=1))

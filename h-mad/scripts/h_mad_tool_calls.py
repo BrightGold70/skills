@@ -47,6 +47,16 @@ def _below(path: str, directory: str) -> bool:
     return path == directory or path.startswith(directory.rstrip("/") + "/")
 
 
+def _base(value: str) -> str:
+    """Normalise a comparison base as `named_paths` normalises a path, without a trailing `/`."""
+    if not value:  # M:TOOLSCAN-BASE-EMPTY
+        return ""
+    value = posixpath.normpath(value)  # M:TOOLSCAN-BASE-NORMPATH
+    if value.startswith("//"):  # M:TOOLSCAN-BASE-LEADING
+        value = value[1:]
+    return value.rstrip("/")  # M:TOOLSCAN-BASE-STRIP
+
+
 def classify_path(path: str, surface: str, *, root: str, home: str) -> str:
     """Classify one normalized path without inspecting the filesystem."""
     if _below(path, root):  # M:TOOLSCAN-INSIDE
@@ -148,6 +158,12 @@ def scan_log(text: str, surface: str, *, root: str, checkout: str,
     """Return per-call counts and the surface's verdict word."""
     if surface not in ("grok", "agy", "codex"):
         raise UsageError("unknown surface")
+    # Once, here, as the paths are normalised: the checks below append `/` to a base, and
+    # `classify_path` quotes `root` into the own-session key. `/` becomes "", so `/` is appended once.
+    home = _base(home)  # M:TOOLSCAN-BASE-HOME
+    root = _base(root)  # M:TOOLSCAN-BASE-ROOT
+    checkout = _base(checkout)  # M:TOOLSCAN-BASE-CHECKOUT
+    needle_dirs = [_base(needle) for needle in needle_dirs]  # M:TOOLSCAN-BASE-NEEDLE
     result = dict(surface=surface, calls=0, out_of_root=0, checkout=0,
                   exempt=0, nonjson=0, mcp_unmeasured=0)
     if surface == "codex":
