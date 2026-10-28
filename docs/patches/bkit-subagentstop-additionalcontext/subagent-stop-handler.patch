@@ -1,0 +1,15 @@
+--- a/scripts/subagent-stop-handler.js	2026-10-28 16:30:40
++++ b/scripts/subagent-stop-handler.js	2026-10-28 16:30:40
+@@ -132,7 +132,11 @@
+       agentName,
+       agentType,
+       status,
+-      ...(nextActionHint ? { additionalContext: nextActionHint } : {}),
++      // Local patch bkit-subagentstop-additionalcontext (orca/skills docs/patches/):
++      // no additionalContext here. Claude Code documents SubagentStop additionalContext
++      // as feedback that KEEPS THE SUBAGENT RUNNING, so returning the hint re-woke every
++      // subagent up to 8 times per stop (cap resets on any tool call). The hint still
++      // reaches the user through systemMessage above.
+     }
+   };
+ 
