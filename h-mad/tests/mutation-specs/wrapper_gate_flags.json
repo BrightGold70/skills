@@ -43,6 +43,22 @@
       "find": "    *) _unknown_opt audit-cycle \"$1\"; return $? ;;",
       "replace": "    *) shift 2 ;;",
       "test": "tests/test_h_mad_audit_cycle.py::test_an_unknown_flag_is_still_rejected"
+    },
+    {
+      "name": "the-wrapper-rejects-suite-timeout",
+      "_mechanism": "`--suite-timeout` falls through to `_unknown_opt`, so the only supported entry point cannot raise the bound.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    --suite-timeout) _need_val audit-cycle --suite-timeout $# || return $?; suite_timeout=\"$2\"; shift 2 ;;",
+      "replace": "",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_wrapper_accepts_every_gate_flag[--suite-timeout-60]"
+    },
+    {
+      "name": "suite-timeout-is-parsed-and-then-dropped",
+      "_mechanism": "Accepted by the option loop and never forwarded: the caller believes the bound applied while the driver runs at the default.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  [ -n \"$suite_timeout\" ] && helper_args+=(--suite-timeout \"$suite_timeout\")",
+      "replace": "  :",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_wrapper_forwards_each_gate_flag_to_the_driver"
     }
   ]
 }

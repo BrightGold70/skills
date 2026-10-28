@@ -1170,6 +1170,16 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.add_argument("--suite-cmd", type=suite_argv, help="override the suite command, shell-quoted")
 
+    def suite_timeout(text: str) -> int:
+        from h_mad_audit_gate import suite_timeout as parse
+        return parse(text)
+
+    parser.add_argument(
+        "--suite-timeout", type=suite_timeout, metavar="SECONDS",
+        help="wall-clock bound on the --project-tests run (default 3600, the "
+             "gate's DEFAULT_SUITE_TIMEOUT); past it the suite reads UNREADABLE",
+    )
+
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
@@ -1186,6 +1196,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.gated and args.no_gate:
         print("ERROR: --no-gate is refused beside an explicit --gated", file=sys.stderr)
+        return 2
+
+    if args.suite_timeout is not None and args.project_tests is None:
+        # A bound on a suite this cycle will not run is a flag silently dropped.
+        print("ERROR: --suite-timeout requires --project-tests — there is no suite "
+              "run here to bound", file=sys.stderr)
         return 2
 
     # `--gated` DEFAULTS to the document this phase audits (#18). `cf39879` taught the
@@ -1221,7 +1237,9 @@ def main(argv: list[str] | None = None) -> int:
     suite_result = None
     if args.project_tests is not None:
         from h_mad_audit_gate import run_suite, suite_line
-        outcome = run_suite(args.project_tests, args.suite_cmd or None)
+        from h_mad_audit_gate import DEFAULT_SUITE_TIMEOUT
+        bound = DEFAULT_SUITE_TIMEOUT if args.suite_timeout is None else args.suite_timeout
+        outcome = run_suite(args.project_tests, args.suite_cmd or None, bound)
         suite_result = outcome["verdict"]
         print(suite_line(suite_result, outcome))
 

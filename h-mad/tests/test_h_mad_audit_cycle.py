@@ -2949,6 +2949,7 @@ def _parse_probe(*extra: str) -> str:
     ("--legs", "codex"),
     ("--project-tests", "."),
     ("--suite-cmd", "true"),
+    ("--suite-timeout", "60"),
 ])
 def test_the_wrapper_accepts_every_gate_flag(flag: str, value: str) -> None:
     """SKILL.md §"Drive the gate through `h_mad_audit_cycle.py`" says to pass these
@@ -2978,6 +2979,7 @@ def test_the_wrapper_forwards_each_gate_flag_to_the_driver() -> None:
     assert 'helper_args+=(--legs "$l")' in body
     assert 'helper_args+=(--project-tests "$project_tests")' in body
     assert 'helper_args+=(--suite-cmd "$suite_cmd")' in body
+    assert 'helper_args+=(--suite-timeout "$suite_timeout")' in body
 
 
 class TestGatedDefaultsToThePhaseDocument:
@@ -3314,6 +3316,35 @@ def test_the_derived_gate_target_sits_beside_the_collected_report(phase, tmp_pat
         project_root=tmp_path, feature="f", phase=phase, cycle=1, index=1
     )
     assert derived.parent == collected.parent, (derived, collected)
+
+
+def test_the_cycle_driver_bounds_the_suite_by_suite_timeout(
+    capsys: pytest.CaptureFixture, tmp_path: Path
+) -> None:
+    """The driver measures the suite once per cycle, so the bound must reach THERE:
+    a `--suite-timeout` the driver ignored would leave every cycle at 3600 s."""
+    ac = audit_cycle()
+    script = tmp_path / "slow.sh"
+    script.write_text("#!/bin/sh\nexec sleep 30\n", encoding="utf-8")
+    script.chmod(0o755)
+    rc, out, _ = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=_two_leg_reports(tmp_path),
+        extra_args=["--project-tests", str(tmp_path), "--suite-cmd", str(script),
+                    "--suite-timeout", "1"],
+    )
+    assert "SUITE: UNREADABLE reason=timeout_after_1s" in out, out
+
+
+def test_the_cycle_driver_refuses_suite_timeout_without_project_tests(
+    capsys: pytest.CaptureFixture, tmp_path: Path
+) -> None:
+    ac = audit_cycle()
+    rc, out, err = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=_two_leg_reports(tmp_path),
+        extra_args=["--suite-timeout", "60"],
+    )
+    assert rc == 2, out
+    assert "requires --project-tests" in err, err
 
 
 def test_the_cycle_driver_passes_a_quoted_suite_cmd_argument_whole(

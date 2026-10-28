@@ -86,6 +86,46 @@
       "find": "    elif args.project_tests is not None:",
       "replace": "    elif True:",
       "test": "tests/test_h_mad_audit_suite_gate.py::TestTheGateNowExecutes::test_without_the_flag_nothing_runs_and_the_output_is_unchanged"
+    },
+    {
+      "name": "gate-ignores-suite-timeout",
+      "_mechanism": "The flag parses and the gate still bounds the suite at the default: every long suite reads timeout_after_3600s again, the defect this flag exists to close.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        bound = DEFAULT_SUITE_TIMEOUT if args.suite_timeout is None else args.suite_timeout\n        outcome = run_suite(args.project_tests, command, bound)",
+      "replace": "        outcome = run_suite(args.project_tests, command)",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_suite_timeout_bounds_the_suite_run"
+    },
+    {
+      "name": "suite-timeout-accepts-zero",
+      "_mechanism": "A zero bound kills every suite at once and reads UNREADABLE forever; it must be a usage error, not a configuration.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if value <= 0:",
+      "replace": "    if value < 0:",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_a_bad_suite_timeout_is_a_usage_error_not_a_traceback[0]"
+    },
+    {
+      "name": "suite-timeout-accepts-fractions",
+      "_mechanism": "`int(float(...))` silently truncates 1.5 to 1 and lets `inf` raise OverflowError as a traceback; whole seconds or a usage error.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        value = int(text)",
+      "replace": "        value = int(float(text))",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_a_bad_suite_timeout_is_a_usage_error_not_a_traceback[1.5]"
+    },
+    {
+      "name": "gate-drops-the-orphan-refusal",
+      "_mechanism": "--suite-timeout without --project-tests is accepted and ignored: a flag silently dropped, so the caller believes a bound applied.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if args.suite_timeout is not None and args.project_tests is None:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_suite_timeout_without_project_tests_is_refused"
+    },
+    {
+      "name": "the-default-bound-moves",
+      "_mechanism": "Every existing caller that passes no --suite-timeout changes behaviour; the default is pinned at 3600.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "DEFAULT_SUITE_TIMEOUT = 3600",
+      "replace": "DEFAULT_SUITE_TIMEOUT = 1800",
+      "test": "tests/test_h_mad_audit_suite_gate.py::test_the_default_suite_timeout_is_unchanged"
     }
   ]
 }
