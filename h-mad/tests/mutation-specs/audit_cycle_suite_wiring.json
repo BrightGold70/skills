@@ -54,6 +54,22 @@
       "find": "GATE_RE = re.compile(r\"^GATE:\\s+(\\S+)\\s+must=(\\d+)\\s+should=(\\d+)(?:\\s+\\S+)*\\s*$\")",
       "replace": "GATE_RE = re.compile(r\"^GATE:\\s+(\\S+)\\s+must=(\\d+)\\s+should=(\\d+)\\s*$\")",
       "test": "tests/test_h_mad_audit_cycle.py::test_a_gated_GATE_line_still_parses"
+    },
+    {
+      "name": "driver-ignores-suite-timeout",
+      "_mechanism": "The driver measures the suite once per cycle; if it drops the bound, the gate-level flag never matters on the path that runs.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        outcome = run_suite(args.project_tests, args.suite_cmd or None, bound)",
+      "replace": "        outcome = run_suite(args.project_tests, args.suite_cmd or None)",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_cycle_driver_bounds_the_suite_by_suite_timeout"
+    },
+    {
+      "name": "driver-drops-the-orphan-refusal",
+      "_mechanism": "Same silently-dropped flag, at the driver.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    if args.suite_timeout is not None and args.project_tests is None:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_cycle_driver_refuses_suite_timeout_without_project_tests"
     }
   ]
 }

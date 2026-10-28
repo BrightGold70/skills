@@ -569,8 +569,28 @@ def suite_argv(text: str) -> list[str]:
         raise argparse.ArgumentTypeError(f"not shell-parseable: {exc}") from exc
 
 
+# The suite's wall-clock ceiling unless the caller names one with `--suite-timeout`.
+# A project whose suite runs longer than this reads `SUITE: UNREADABLE
+# reason=timeout_after_<N>s` on every cycle (HemaSuite's HPW suite does), and an
+# unmeasured suite cannot contribute to an exit streak, so the ceiling is the
+# caller's to raise rather than a constant.
+DEFAULT_SUITE_TIMEOUT = 3600
+
+
+def suite_timeout(text: str) -> int:
+    """`--suite-timeout` as whole positive seconds; the argparse `type=` for both the
+    gate and the cycle driver, so the two sites cannot disagree on what is valid."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a whole number of seconds: {text!r}") from None
+    if value <= 0:
+        raise argparse.ArgumentTypeError(f"must be positive, got {value}")
+    return value
+
+
 def run_suite(test_root: Path, command: list[str] | None = None,
-              timeout: int = 3600) -> dict:
+              timeout: int = DEFAULT_SUITE_TIMEOUT) -> dict:
     """Run the project suite once. Returns a verdict dict; raises nothing.
 
     The test root is NAMED, never inferred: `SKILL.md` step 5f already documents
@@ -905,6 +925,11 @@ def main(argv: list[str] | None = None) -> int:
         help="override the suite command, shell-quoted (default: pytest <root> -q)",
     )
     parser.add_argument(
+        "--suite-timeout", type=suite_timeout, metavar="SECONDS",
+        help=f"wall-clock bound on the --project-tests run (default "
+             f"{DEFAULT_SUITE_TIMEOUT}); past it the suite reads UNREADABLE, never PASS",
+    )
+    parser.add_argument(
         "--suite-result", choices=("PASS", "FAIL", "UNREADABLE"), metavar="VERDICT",
         help="record a suite verdict measured ONCE for the whole cycle instead of "
              "running one here. The cycle driver calls this gate once per LEG, and "
@@ -1059,6 +1084,11 @@ def main(argv: list[str] | None = None) -> int:
         print("ERROR: --suite-result and --project-tests are mutually exclusive — "
               "one field, one source", file=sys.stderr)
         return 2
+    if args.suite_timeout is not None and args.project_tests is None:
+        # A bound on a suite this call will not run is a flag silently dropped.
+        print("ERROR: --suite-timeout requires --project-tests — there is no suite "
+              "run here to bound", file=sys.stderr)
+        return 2
 
     suite = SUITE_UNMEASURED
     if args.suite_result:
@@ -1068,7 +1098,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"SUITE: {suite} source=cycle")
     elif args.project_tests is not None:
         command = args.suite_cmd or None
-        outcome = run_suite(args.project_tests, command)
+        bound = DEFAULT_SUITE_TIMEOUT if args.suite_timeout is None else args.suite_timeout
+        outcome = run_suite(args.project_tests, command, bound)
         suite = outcome["verdict"]
         print(suite_line(suite, outcome))
 

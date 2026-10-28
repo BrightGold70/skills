@@ -3585,7 +3585,7 @@ _cmd_audit_cycle() {
   local here feature="" phase="" cycle="" root="" ack_file="" report_grace="5" timeout="900"
   local passes="2"   # spec AC-3.1: default pass count is 2, so the flag is optional
   local surfaces=""  # csv, one agent per pass; empty = every pass on agy (legacy)
-  local project_tests="" suite_cmd=""
+  local project_tests="" suite_cmd="" suite_timeout=""
   local pass_root_count=0 halt_file=""
   local -a prompt report out log asm tok rc pids pass_args agent gated legs pass_root pass_root_phys
   pass_args=(); gated=(); legs=(); pass_root=()
@@ -3617,6 +3617,7 @@ _cmd_audit_cycle() {
     --legs) _need_val audit-cycle --legs $# || return $?; legs+=("$2"); shift 2 ;;
     --project-tests) _need_val audit-cycle --project-tests $# || return $?; project_tests="$2"; shift 2 ;;
     --suite-cmd) _need_val audit-cycle --suite-cmd $# || return $?; suite_cmd="$2"; shift 2 ;;
+    --suite-timeout) _need_val audit-cycle --suite-timeout $# || return $?; suite_timeout="$2"; shift 2 ;;
     *) _unknown_opt audit-cycle "$1"; return $? ;;
   esac; done
 
@@ -3894,6 +3895,7 @@ _cmd_audit_cycle() {
   for l in ${legs[@]+"${legs[@]}"};  do helper_args+=(--legs  "$l"); done
   [ -n "$project_tests" ] && helper_args+=(--project-tests "$project_tests")
   [ -n "$suite_cmd" ] && helper_args+=(--suite-cmd "$suite_cmd")
+  [ -n "$suite_timeout" ] && helper_args+=(--suite-timeout "$suite_timeout")
   python3 "$here/h_mad_audit_cycle.py" "${helper_args[@]}"
   # Propagate the helper rc either way; explicit exit prevents main() fall-through.
   exit $?

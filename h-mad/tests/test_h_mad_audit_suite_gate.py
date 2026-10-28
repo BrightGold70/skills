@@ -379,3 +379,56 @@ def test_an_unbalanced_suite_cmd_is_a_usage_error_not_a_traceback(tmp_path: Path
     assert result.returncode == 2, result.stdout + result.stderr
     assert "--suite-cmd" in result.stderr
     assert "Traceback" not in result.stdout + result.stderr
+
+
+# --- --suite-timeout: the 3600 s ceiling is the CALLER's, not a constant -------
+#
+# `run_suite` hardcoded `timeout=3600`. HemaSuite's HPW suite runs longer than an
+# hour, so every cycle that measured it read `SUITE: UNREADABLE
+# reason=timeout_after_3600s` and the exit gate refused it as unmeasured — the
+# suite gate (#91) unreachable for the one project whose suite is longest. The
+# default stays 3600 so no existing caller's behaviour moves.
+
+def test_the_default_suite_timeout_is_unchanged() -> None:
+    assert gate.DEFAULT_SUITE_TIMEOUT == 3600
+    assert gate.run_suite.__defaults__[-1] == gate.DEFAULT_SUITE_TIMEOUT
+
+
+def test_suite_timeout_bounds_the_suite_run(tmp_path: Path) -> None:
+    audit = tmp_path / "f.plan.audit.v1.codex.md"
+    audit.write_text(CLEAN, encoding="utf-8")
+    sh = fake_suite(tmp_path, "slow.sh", 'exec sleep 30')
+    result = run(str(audit), "--project-tests", str(tmp_path), "--suite-cmd", str(sh),
+                 "--suite-timeout", "1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert token(result.stdout, "SUITE:") == "SUITE: UNREADABLE reason=timeout_after_1s"
+
+
+def test_a_suite_inside_its_timeout_is_still_measured(tmp_path: Path) -> None:
+    """The positive control: a raised bound must not turn a real run into a timeout."""
+    audit = tmp_path / "f.plan.audit.v1.codex.md"
+    audit.write_text(CLEAN, encoding="utf-8")
+    sh = fake_suite(tmp_path, "ok.sh", 'echo "2 passed in 0.1s"')
+    result = run(str(audit), "--project-tests", str(tmp_path), "--suite-cmd", str(sh),
+                 "--suite-timeout", "7200")
+    assert token(result.stdout, "SUITE:") == "SUITE: PASS passed=2 failed=0"
+
+
+@pytest.mark.parametrize("value", ["0", "-5", "abc", "1.5", "inf"])
+def test_a_bad_suite_timeout_is_a_usage_error_not_a_traceback(tmp_path: Path, value: str) -> None:
+    audit = tmp_path / "f.plan.audit.v1.codex.md"
+    audit.write_text(CLEAN, encoding="utf-8")
+    result = run(str(audit), "--project-tests", str(tmp_path), f"--suite-timeout={value}")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "--suite-timeout" in result.stderr
+    assert "unrecognized arguments" not in result.stderr, "refused as an UNKNOWN flag, not as a bad value"
+    assert "Traceback" not in result.stdout + result.stderr
+
+
+def test_suite_timeout_without_project_tests_is_refused(tmp_path: Path) -> None:
+    """A bound on a suite that will not run is a flag silently dropped. Refuse it."""
+    audit = tmp_path / "f.plan.audit.v1.codex.md"
+    audit.write_text(CLEAN, encoding="utf-8")
+    result = run(str(audit), "--suite-timeout", "60")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "requires --project-tests" in result.stderr, result.stderr
