@@ -1,0 +1,17 @@
+--- a/scripts/sprint-skill-stop.js	2026-10-29 07:37:13
++++ b/scripts/sprint-skill-stop.js	2026-10-29 07:37:13
+@@ -114,6 +114,14 @@
+  */
+ function buildResponse(hookContext) {
+   const input = hookContext || {};
++  // Local patch bkit-sprint-stop-hook-active (orca/skills docs/patches/): Claude Code
++  // sets stop_hook_active when this turn is already continuing because a Stop hook
++  // blocked. Surfacing the summary again would block again; one continuation is
++  // enough. run()'s finally still clears the active-skill marker.
++  if (input && input.stop_hook_active === true) {
++    debugLog('Skill:sprint:Stop', 'stop_hook_active — clean stop, no re-surface', {});
++    return {};
++  }
+   const inputText = typeof input === 'string' ? input : JSON.stringify(input);
+   const projectDir = resolveProjectDir();
+ 

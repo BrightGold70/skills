@@ -89,6 +89,9 @@ The same read-only `spec-author` probe (told to make no tool call after `DONE`),
 ## Upstream
 
 Filed 2026-10-28 as https://github.com/ww-w-ai/bkit-claude-code/issues/162 (the repository moved
-from `popup-studio-ai`). Posted text: `UPSTREAM-REPORT.md`. It also names the five `Stop` handlers
+from `popup-studio-ai`). Posted text: `UPSTREAM-REPORT.md`. It also named five `Stop` handlers
 that return `decision:block` without a `stop_hook_active` guard, and the sticky
-`session.lastSkill` fallback in `unified-stop.js`.
+`session.lastSkill` fallback in `unified-stop.js`. **Correction (2026-10-29):** only
+`sprint-skill-stop.js` of those five is reachable from the Stop hook; the other four return at
+their bare-require guard. Posted as a comment on #162; the sprint guard is carried in
+`../bkit-sprint-stop-hook-active/`.
