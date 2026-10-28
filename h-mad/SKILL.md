@@ -2033,14 +2033,20 @@ When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,grok`
 for the independent audit legs (§"Teammate audit leg").
 
 **Which two surfaces — routed by whether codex can run, and by whether this is the document's
-first gate.** First gating cycle of a document, codex available: `codex` + `agy` (or `codex` +
-`doc-auditor` full pass where agy is not dispatched — #77). Codex unavailable (§"Teammate audit
+first gate.** First gating cycle of a document, codex available: `codex` + `agy` + `grok` via
+`--passes 3` and `--surfaces codex,agy,grok` (`docs/03-analysis/grok-audit-surface.measurement.md`;
+or `codex` + `doc-auditor` full pass where agy is not dispatched — #77). If `command -v grok` fails, the first gate runs `--passes 2 --surfaces codex,agy`.
+If the grok pass is the `pN` named in `UNVERIFIED reason=…:pN` on both the first run and its one
+re-dispatch, the cycle is re-run as `--passes 2 --surfaces codex,agy`. Either way the stamp records the
+legs that actually ran. A grok must-fix goes through §"Verifying a review finding before acting on it"
+before it is acted on, and a rejected one is recorded per §"Record a rejected finding in the rejections
+ledger, never in a gated document". Codex unavailable (§"Teammate audit
 leg"): `grok` + `agy` when `fallback_agent=grok`; otherwise `doc-auditor` teammate + `agy`.
 The stand-in holds codex's leg and **gates**.
 **Revision cycles** (§"Document-audit round cap"): `codex` gates and the `doc-auditor` reviews the
 DIFF (§"Delta self-review", advisory) — the delta review is the second surface, not a second full
 pass. Never two full passes of one surface, and never the teammate full pass *plus* codex on the
-same phase at the same cycle — that is three reports, of which two share a model family, and the
+same phase at the same cycle — in that case two reports share a model family, and the
 union stops meaning what the rule below says it means.
 
 Prefer two **different** surfaces. Measured across 15 cycles on one feature: a clean verdict was

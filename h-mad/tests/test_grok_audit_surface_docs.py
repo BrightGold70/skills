@@ -406,3 +406,103 @@ def test_measurement_doc_publishes_the_exclusion_list() -> None:
     assert published == blob, (
         "the published exclusion list must equal git cat-file blob of list_blob byte for byte"
     )
+
+
+# S4 route (Task 17, PASS only): three-surface first gate, availability and
+# twice-UNVERIFIED fallbacks, and grok must-fix falsification in SKILL.md
+# §"Never gate on one audit pass" (spec AC-7.1, AC-7.2, AC-8.3; design D14).
+
+NEVER_GATE_SECTION = "Never gate on one audit pass"
+GROK_UNAVAILABLE_FALLBACK = (
+    "If `command -v grok` fails, the first gate runs `--passes 2 --surfaces codex,agy`."
+)
+GROK_TWICE_UNVERIFIED_FALLBACK = (
+    "If the grok pass is the `pN` named in `UNVERIFIED reason=…:pN` on both the "
+    "first run and its one re-dispatch, the cycle is re-run as "
+    "`--passes 2 --surfaces codex,agy`. Either way the stamp records the legs that "
+    "actually ran."
+)
+GROK_FALSIFICATION = (
+    'A grok must-fix goes through §"Verifying a review finding before acting on it" '
+    'before it is acted on, and a rejected one is recorded per §"Record a rejected '
+    'finding in the rejections ledger, never in a gated document".'
+)
+
+
+def _never_gate_section() -> str:
+    return _collapse(titled_section(SKILL_MD.read_text(encoding="utf-8"), NEVER_GATE_SECTION))
+
+
+def test_never_gate_section_names_three_surface_first_gate() -> None:
+    section = _never_gate_section()
+    assert "`--surfaces codex,agy,grok`" in section, (
+        "§Never gate on one audit pass must name `--surfaces codex,agy,grok` for the "
+        "first gate when codex is available"
+    )
+    assert f"`{MEASUREMENT_REL}`" in section, (
+        f"§Never gate on one audit pass must point to `{MEASUREMENT_REL}`"
+    )
+    assert "that is three reports, of which two share a model family" not in section, (
+        "§Never gate on one audit pass must reword the prohibition so it is on two "
+        "reports sharing a model family, not on three reports"
+    )
+    assert "never the teammate full pass *plus* codex on the same phase at the same cycle" in section, (
+        "§Never gate on one audit pass must keep the teammate-full-pass-plus-codex "
+        "case prohibited"
+    )
+    assert "share a model family" in section, (
+        "§Never gate on one audit pass must state that two reports sharing a model "
+        "family is what is prohibited"
+    )
+
+
+def test_never_gate_section_names_grok_falsification() -> None:
+    raw = SKILL_MD.read_text(encoding="utf-8")
+    section = _collapse(titled_section(raw, NEVER_GATE_SECTION))
+    assert GROK_FALSIFICATION in section, (
+        "§Never gate on one audit pass must state the D14 grok must-fix "
+        f"falsification sentence verbatim: {GROK_FALSIFICATION}"
+    )
+    cited_titles = re.findall(r'§"([^"]+)"', GROK_FALSIFICATION)
+    assert len(cited_titles) == 2, cited_titles
+    heading_titles = {
+        match.group(1)
+        for match in re.finditer(r"(?m)^#{2,6}\s+(.+?)\s*$", raw)
+    }
+    for title in cited_titles:
+        assert title in heading_titles, (
+            f"cited heading {title!r} must exist as a heading line in h-mad/SKILL.md"
+        )
+
+
+def test_never_gate_section_names_the_grok_unavailable_fallback() -> None:
+    section = _never_gate_section()
+    assert "`command -v grok`" in section, (
+        "§Never gate on one audit pass must name `command -v grok` for the "
+        "availability check"
+    )
+    assert "`--passes 2 --surfaces codex,agy`" in section, (
+        "§Never gate on one audit pass must name `--passes 2 --surfaces codex,agy` "
+        "when grok is unavailable"
+    )
+    assert GROK_UNAVAILABLE_FALLBACK in section, (
+        "§Never gate on one audit pass must state the D14 unavailable fallback "
+        f"sentence verbatim: {GROK_UNAVAILABLE_FALLBACK}"
+    )
+
+
+def test_never_gate_section_names_the_twice_unverified_grok_fallback() -> None:
+    section = _never_gate_section()
+    assert "UNVERIFIED reason=…:pN" in section and "one re-dispatch" in section, (
+        "§Never gate on one audit pass must name the twice-UNVERIFIED re-dispatch "
+        "fallback"
+    )
+    assert "codex,agy" in section, (
+        "§Never gate on one audit pass must name `codex,agy` for the twice-UNVERIFIED "
+        "fallback"
+    )
+    assert GROK_TWICE_UNVERIFIED_FALLBACK in section, (
+        "§Never gate on one audit pass must state the D14 twice-UNVERIFIED fallback "
+        f"sentences verbatim: {GROK_TWICE_UNVERIFIED_FALLBACK}"
+    )
+

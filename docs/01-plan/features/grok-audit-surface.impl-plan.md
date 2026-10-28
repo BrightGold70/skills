@@ -3338,7 +3338,7 @@ lines of `h-mad/SKILL.md` at `30917a1a` (`## Verifying a review finding before a
 `test_never_gate_section_names_the_twice_unverified_grok_fallback`.
 
 **Acceptance Criteria**:
-- [ ] AC-T17.1: The four tests pass; `tests/test_grok_fallback_docs.py` still passes (K3's pin
+- [x] AC-T17.1: The four tests pass; `tests/test_grok_fallback_docs.py` still passes (K3's pin
   survives the edit, and `--check-anchors` reads `ANCHORS: ANCHORS_OK`).
 
 **RED split**: 4 nodes; 4 F, 0 P.
