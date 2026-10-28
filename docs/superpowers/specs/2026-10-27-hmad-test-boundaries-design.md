@@ -1,8 +1,6 @@
 # H-MAD test boundaries and oracle fields — scope (triage row 17, todo #5)
 
-**Status:** draft scope for operator approval, 2026-10-27. Drafted from the backlog notes without
-an interview (operator opted out). Everything below marked *(my call)* is a default the operator has
-not confirmed.
+**Status:** approved by operator, 2026-10-28 (including all three *(my call)* defaults below).
 **Source:** `docs/03-analysis/2026-10-23-mattpocock-skills-hmad-handoff-review.analysis.md` §2
 (lines 46-72) and its checklist item at line 146; triage row 17 in
 `docs/03-analysis/2026-10-25-backlog-triage.md`.
