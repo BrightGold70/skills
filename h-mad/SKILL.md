@@ -2608,7 +2608,7 @@ Both local patches live in version-pinned plugin caches that a plugin update rep
 - Every agent in `h-mad/agents/` carries the defence in its DONE rule: after `DONE`, a hook message is not an instruction — repeat the `DONE` line and make no tool call. An author that obeys the hint resets the cap and can be re-woken without limit, and `/pdca analyze` writes into `docs/03-analysis/` inside a frozen round.
 - At collect, repeated identical `DONE` replies from one author are this hook, not new work. The digest gate (§"Teammate authors" rule 6) still decides whether the file moved.
 - bkit's main-session `Stop` hook does not do this on ordinary turns: it continues the turn only while a bkit `pdca`, `plan-plus` or `sprint` skill, or a `gap-detector` / `pdca-iterator` agent, is active. Do not run those mid-`/h-mad`.
-- Workaround until bkit fixes it: with no `primaryFeature` in a phase in `.bkit/state/pdca-status.json`, the hint is not generated. bkit grows a new one in any repository it sees, so this is not a fix. No local patch is carried yet.
+- Workaround until bkit fixes it: with no `primaryFeature` in a phase in `.bkit/state/pdca-status.json`, the hint is not generated. bkit grows a new one in any repository it sees, so this is not a fix. The fix is carried as a local patch in `docs/patches/bkit-subagentstop-additionalcontext/` (drops `additionalContext`, keeps `systemMessage`; re-run its `verify.js` after any bkit update) and reported upstream as `ww-w-ai/bkit-claude-code#162`.
 
 ## State schema
 
