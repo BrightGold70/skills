@@ -37,7 +37,7 @@ BRANCH_SAMPLES = {
     "skill-call": ["Skill("],
     "advisor": ["advisor()"],
     "send-message": ["SendMessage"],
-    "hook-event": ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "SessionStart", "Stop-hook"],
+    "hook-event": ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest", "SessionStart", "SubagentStop", "Stop-hook"],
     "task-tools": ["TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite"],
     "tool-search": ["ToolSearch"],
     "session-id-env": ["CLAUDE_CODE_SESSION_ID"],

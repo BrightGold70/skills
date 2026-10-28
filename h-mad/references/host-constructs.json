@@ -35,7 +35,7 @@
     },
     {
       "id": "hook-event",
-      "pattern": "\\b(?:PreToolUse|PostToolUse|PostToolUseFailure|PermissionRequest|SessionStart)\\b|\\bStop(?=-hook\\b)",
+      "pattern": "\\b(?:PreToolUse|PostToolUse|PostToolUseFailure|PermissionRequest|SessionStart|SubagentStop)\\b|\\bStop(?=-hook\\b)",
       "skills": [
         "h-mad"
       ],

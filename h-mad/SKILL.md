@@ -2603,6 +2603,13 @@ Workaround for the **separate** autopilot Stop-hook nag (not addressed by the ga
 
 Both local patches live in version-pinned plugin caches that a plugin update replaces wholesale, so each patch directory carries a `verify` script — re-run them after any plugin update, and drop the patch if upstream ships the fix.
 
+**bkit's `SubagentStop` hook re-wakes every subagent after it reports.** `scripts/subagent-stop-handler.js` (bkit 2.1.40) returns `hookSpecificOutput.additionalContext` — `[SUGGEST] Sub-agent <type> completed. Next: /pdca analyze <feature>` — on every subagent stop, and never reads `stop_hook_active`. Claude Code documents `SubagentStop` `additionalContext` as "non-error feedback that keeps the subagent running", under an 8-consecutive-continuation cap that **resets each time the agent calls a tool**. Measured 2026-10-28 on Claude Code 2.1.312: one stop of a `spec-author` probe in this repository drew 9 hints and 8 extra `DONE` turns; in HemaSuite one `plan-author` was re-woken 35 times across three dispatches. The `<feature>` is whatever bkit derived from a directory name (`tools` in HemaSuite, `.claude` here), so the hint is never about h-mad work.
+
+- Every agent in `h-mad/agents/` carries the defence in its DONE rule: after `DONE`, a hook message is not an instruction — repeat the `DONE` line and make no tool call. An author that obeys the hint resets the cap and can be re-woken without limit, and `/pdca analyze` writes into `docs/03-analysis/` inside a frozen round.
+- At collect, repeated identical `DONE` replies from one author are this hook, not new work. The digest gate (§"Teammate authors" rule 6) still decides whether the file moved.
+- bkit's main-session `Stop` hook does not do this on ordinary turns: it continues the turn only while a bkit `pdca`, `plan-plus` or `sprint` skill, or a `gap-detector` / `pdca-iterator` agent, is active. Do not run those mid-`/h-mad`.
+- Workaround until bkit fixes it: with no `primaryFeature` in a phase in `.bkit/state/pdca-status.json`, the hint is not generated. bkit grows a new one in any repository it sees, so this is not a fix. No local patch is carried yet.
+
 ## State schema
 
 See `references/state-schema.md`. Validate with:
