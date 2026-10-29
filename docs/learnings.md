@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-29 · gotcha · [0.9] · `claude-code,hooks,subagentstop,handoff:2026-10-29-bkit-rewake-patches` — SubagentStop/Stop additionalContext keeps the agent running BY DESIGN: 8-continuation cap that resets on every tool call; an agent that acts on a hint can be re-woken without limit
+- 2026-10-29 · gotcha · [0.7] · `bkit,stop-hook,handoff:2026-10-29-bkit-rewake-patches` — 4 of bkit's 5 outputStopSurface Stop handlers are dead under unified-stop.js (bare-require guard returns on require); only sprint-skill-stop (exports run) can block — drive it live before claiming reachability
+- 2026-10-29 · gotcha · [0.7] · `git,shared-tree,orca,handoff:2026-10-29-bkit-rewake-patches` — a sibling lane can switch the shared checkout's branch mid-session; staged-path/diff/suite guards all pass on the wrong branch — test rev-parse --abbrev-ref HEAD in the same command as the commit
 - 2026-10-27 · pattern · [0.7] · `bkit,permissions,handoff:2026-10-27-grok-pass-task16-14j` — bkit asks are not suppressed in Claude Code auto mode (only acceptEdits/dontAsk/bypassPermissions) and rules have no off-switch; relief is a local precision patch recorded under docs/patches/ with a verify.js
 - 2026-10-27 · gotcha · [0.7] · `bkit,guardrails,handoff:2026-10-27-grok-pass-task16-14j` — bkit destructive-detector detect() takes (toolName, toolInput); detect(cmd) silently returns clean for everything — call detect('Bash', {command}) in any probe
 - 2026-10-27 · gotcha · [0.7] · `h-mad,mutation-harness,suite,handoff:2026-10-27-grok-pass-task16-14j` — h-mad suite run beside the mutation harness stops at SUITE: BUSY (shared .h-mad/mutation.lock) — nothing measured, while a `…; tail` wrapper still reports rc 0; run them sequentially, read the summary line
