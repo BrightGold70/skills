@@ -542,11 +542,20 @@ def test_quarantine_never_deletes(containment_module, containment_home, monkeypa
         assert len(locations) == 1, "each directory must remain in exactly the store or quarantine"
         assert locations[0].stat().st_ino == inodes[entry.name], "moves must preserve directory identity"
         assert (locations[0] / "history [a]*.txt").read_text(encoding="utf-8") == _hostile_text()
-    source = CONTAINMENT_SCRIPT.read_text(encoding="utf-8")
+    import ast
     import re
 
-    assert not re.search(r"shutil\.(copy|rmtree)|os\.(unlink|remove|rmdir)", source), (
-        "AC-T22.2: quarantine source must contain no copy or delete calls before Task 23"
+    source = CONTAINMENT_SCRIPT.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    quarantine_fns = {
+        node.name: ast.get_source_segment(source, node) or ""
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name in {"quarantine", "_names", "_matches"}
+    }
+    assert set(quarantine_fns) == {"quarantine", "_names", "_matches"}
+    quarantine_source = "\n".join(quarantine_fns.values())
+    assert not re.search(r"shutil\.(copy|rmtree)|os\.(unlink|remove|rmdir)", quarantine_source), (
+        "AC-T22.2: quarantine source must contain no copy or delete calls"
     )
 
 

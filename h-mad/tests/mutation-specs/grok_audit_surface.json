@@ -2186,6 +2186,14 @@
       "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_leaves_git_status_unchanged"
     },
     {
+      "name": "grok-tmp-rmguard-always",
+      "_mechanism": "Drop the prefix check on S so the EXIT trap deletes any path stored in S.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  trap 'if [ -n \"$T\" ] && [[ \"$S\" == \"$T/.h-mad/tmp/hmad_exec_grok.\"* ]]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
+      "replace": "  trap 'if [ -n \"$T\" ]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_rmguard_refuses_to_remove_outside_staging_prefix"
+    },
+    {
       "name": "grok-tmpdir-dropped",
       "_mechanism": "Omit the child's staging TMPDIR assignment.",
       "file": "scripts/hmad-dispatch.sh",

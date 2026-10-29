@@ -428,3 +428,12 @@ refuses any other. The run id is `run-ab2c85dc2e25-20261024T132452Z`. Run it fro
   reason. One codex finding in d8 carries both a `candidate-fabrication` and a `candidate-hit` hint
   and was labelled a HIT.
 - The operator chose to publish PASS as measured (2026-10-26).
+- **Phase 5 measurement-class notes (backlog triage row 35 in `docs/03-analysis/2026-10-25-backlog-triage.md`; `docs/archive/2026-10/grok-audit-surface/grok-audit-surface.phase5-s0c-notes.md`).**
+  - **T19 `mktemp -t` / `TMPDIR`:** macOS `/usr/bin/mktemp -t` ignores `TMPDIR` when `_CS_DARWIN_USER_TEMP_DIR` is set, so the T19 prompt-leak test snapshots the real system temp directory instead of relying on a `TMPDIR` override.
+  - **T19 AC-T19.4 grep scoping:** a whole-file grep for `git` in `hmad-dispatch.sh` matches 4 pre-existing lines (3 tree-delta `git` calls and 1 comment) both before and after T19; scoped to staging calls, the count is 0.
+  - **T20 `audit_cycle_connections.mutation.json` re-anchor:** inserting `M:PASS-ROOT-CD` as the first line inside the pass subshell split two multi-line anchors (`verb-exec-drop-p2`, `verb-exec-force-2`) in `h-mad/tests/specs/audit_cycle_connections.mutation.json`; resolved by re-anchoring those two rows (`2/2` caught).
+  - **T25 add-only fixture ruling:** `test_commit_data_never_touches_work_tree_or_index` originally re-committed a modified `s1/grok/p1.log`, which D9 v1.6 add-only refuses (`would_replace:`); per orchestrator ruling (a), the fixture's second commit adds `s1/grok/p2.log` while preserving every index/work-tree assertion.
+  - **T26 RED split 29/3 and `unrecorded_*` → `unrecorded`:** `test_score_without_run_id_on_a_namespaced_reading_refuses` already passed at base via `cycle_token` refusal (no top-level `s2/`), yielding a 29F/3P RED split instead of 30F/2P, and the `unrecorded_*` reason tokens were unified to `unrecorded`.
+  - **Plan marker count 177:** the impl-plan's marker inventory across the Phase 5 tasks totals 177 markers.
+  - **D18 `cannot_run:truncated` and `no_denial` casefold:** `cannot_run:truncated` is only reachable by synthetic/direct invocation (not on the live wrapper path), and D18 step 6 (`no_denial`) matches `operation not permitted` case-insensitively (`casefold()`) over `rawOutput`/`content` because `zsh` emits lowercase `(eval):1: operation not permitted: <denied>`.
+

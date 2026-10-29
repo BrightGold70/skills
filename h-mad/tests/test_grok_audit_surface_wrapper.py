@@ -554,6 +554,27 @@ def test_exec_grok_in_a_work_tree_leaves_git_status_unchanged(tmp_path, monkeypa
     assert not staging.exists(), "exec grok must remove the entire work-tree staging directory"
 
 
+def test_exec_grok_rmguard_refuses_to_remove_outside_staging_prefix(tmp_path, monkeypatch):
+    case = _staging_case(tmp_path, monkeypatch, work_tree=True)
+    outside = tmp_path / "outside_rmguard_dir"
+    outside.mkdir()
+    sentinel = outside / "sentinel.txt"
+    sentinel.write_text("must survive\n", encoding="utf-8")
+    real_mktemp = shutil.which("mktemp") or "/usr/bin/mktemp"
+    mktemp_stub = case["bindir"] / "mktemp"
+    mktemp_stub.write_text(
+        f'#!/bin/sh\nif [ "$1" = "-d" ]; then\n  printf "%s\\n" {str(outside)!r}\n  exit 0\nfi\nexec {real_mktemp!r} "$@"\n',
+        encoding="utf-8",
+    )
+    mktemp_stub.chmod(0o755)
+    row = _staging_child(case, _run_staging(case))
+    assert Path(row["tmpdir"]) == outside
+    assert outside.is_dir() and sentinel.exists(), (
+        "M:GROK-TMP-RMGUARD must refuse to rm -rf a staging path outside <top>/.h-mad/tmp/hmad_exec_grok.*"
+    )
+
+
+
 def test_exec_grok_two_dispatches_get_distinct_staging_dirs(tmp_path, monkeypatch):
     case = _staging_case(tmp_path, monkeypatch, work_tree=True)
     first = _staging_child(case, _run_staging(case))

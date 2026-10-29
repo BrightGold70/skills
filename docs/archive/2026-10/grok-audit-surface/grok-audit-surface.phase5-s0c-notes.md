@@ -39,7 +39,9 @@
 
 ## Residuals carried
 - Task 19: RMGUARD refusal direction has no fixture; a signal between creation and removal leaves S (D16).
+  — **CLOSED 2026-10-29 (backlog triage row 33):** `test_exec_grok_rmguard_refuses_to_remove_outside_staging_prefix` in `h-mad/tests/test_grok_audit_surface_wrapper.py` + `grok-tmp-rmguard-always` in `h-mad/tests/mutation-specs/grok_audit_surface.json`.
 - ~179 `hmad_exec_prompt.*` files leaked in system temp by baseline (pre-Task-19) runs; not cleaned.
+  — **CLOSED 2026-10-29 (backlog triage row 34):** verified 0 `hmad_exec_prompt.*` files remain in `/private/tmp` and `$TMPDIR`.
 - Task 20: plan self-contradiction — M:PASS-ROOT-CD "new first line inside the subshell" splits two
   multi-line anchors (`verb-exec-drop-p2`, `verb-exec-force-2`) in
   h-mad/tests/specs/audit_cycle_connections.mutation.json, breaking AC-T20.1. Resolved by a bounded
@@ -55,6 +57,7 @@
   in a separate bounded commit before Task 23 (see Task 23 report). `require` usage error prints
   `REQUIRE: STOP reason=internal:UsageError` + halt file line (test-chosen contract, plan silent).
   test_quarantine_never_deletes greps the whole production file → AC-T22.2 pinned permanently.
+  — **CLOSED 2026-10-29 (backlog triage row 33):** `test_quarantine_never_deletes` in `h-mad/tests/test_grok_audit_surface_containment.py` now scopes its deletion-call check to the AST function spans of `quarantine`, `_names`, and `_matches`.
 - Foreign untracked `hemasuite/docs/research/pdfcraft-application-priorities.md` appeared mid-run
   (another session). Not ours; never stage it.
 - Task 22 D20 order fix landed: RED 00657372, GREEN 2bff499a (one statement moved; t22 rows 26/26).
