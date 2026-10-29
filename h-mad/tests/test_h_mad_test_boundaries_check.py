@@ -501,8 +501,11 @@ class TestCliAndTableValidation:
 class TestSpecAcCoverageAndNonTestRows:
     def test_extract_spec_acs_reference_counts_and_retired_filtering(self):
         checker = _checker()
+        live_or_archived_spec = ROOT / "docs/01-plan/features/hmad-test-boundaries.spec.md"
+        if not live_or_archived_spec.is_file():
+            live_or_archived_spec = next(ROOT.glob("docs/archive/*/hmad-test-boundaries/hmad-test-boundaries.spec.md"))
         references = [
-            (ROOT / "docs/01-plan/features/hmad-test-boundaries.spec.md", 17, set(), set()),
+            (live_or_archived_spec, 17, set(), set()),
             (ROOT / "docs/archive/2026-08/exec-path-hardening/exec-path-hardening.spec.md", 24, set(), set()),
             (ROOT / "docs/archive/2026-09/audit-report-docs-copy/audit-report-docs-copy.spec.md", 40, set(), {"AC-2.6a", "AC-2.6b", "AC-3.5a"}),
             (ROOT / "docs/archive/2026-09/tdd-gate-fail-opens/tdd-gate-fail-opens.spec.md", 44, set(), {"AC-3.6"}),
@@ -843,6 +846,10 @@ class TestDesignAuthorAndSelfBootstrap:
         checker = _checker()
         design = ROOT / "docs/02-design/features/hmad-test-boundaries.design.md"
         spec = ROOT / "docs/01-plan/features/hmad-test-boundaries.spec.md"
+        if not design.is_file():
+            design = next(ROOT.glob("docs/archive/*/hmad-test-boundaries/hmad-test-boundaries.design.md"))
+        if not spec.is_file():
+            spec = next(ROOT.glob("docs/archive/*/hmad-test-boundaries/hmad-test-boundaries.spec.md"))
         result = checker.check_design(design, spec_path=spec, no_exempt=True)
         assert (result.status, result.exit_code, result.acs_covered, result.acs_total) == ("PASS", 0, 17, 17), result
         assert result.rows > 0 and result.issues == (), result
