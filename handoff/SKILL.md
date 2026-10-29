@@ -1060,6 +1060,7 @@ Before you write anything, collect these in parallel:
 
    For each pattern detected, add a candidate learning to Key Learnings with the detected category and suggested confidence noted inline (e.g., `[suggested gotcha, 0.5]`). These become inputs to the "Persist durable learnings" step — the user can confirm or discard via the handoff doc.
 8. **Proactive follow-ups** — after scanning plan backlog (item 4), look for plan items with `status: Draft` or `status: In-progress` that were NOT mentioned in the session. Append them to Next Steps as `[suggested]` items — concrete (cite the plan file path), brief, ≤3 items. The goal is a warm start for the next session, not a backlog dump. Skip if no plan structure exists.
+9. **Verify claimed state and files before drafting** — if the handoff mentions an H-MAD feature's ownership state (`released`, `claimed`, or an oracle verdict), run `h_mad_resume_decision.py` and read `owner_session_id` from `docs/.bkit-memory.json` (via `.get()`) before writing "released" or quoting an oracle token, and record the **observed** values in the doc rather than the intended ones. For every file path the handoff claims this session wrote or updated, verify it exists on disk (`ls -la` / `test -s`) before listing it in **Files touched this session** or **Session Summary**.
 
 Do **not** run tests, builds, or long-running commands just to populate the handoff. Use what was already observed in the session. If something wasn't verified, the handoff should say so — that's load-bearing information.
 
@@ -1079,6 +1080,8 @@ Use this structure exactly. Every section is required; write "None" (with a one-
 | `**Supersedes:**` | WRITE | Every doc this handoff absorbs, comma-separated — the branch predecessor **and** each taken-over brief whose items it carried. **It is a pointer, not a licence to drop what it holds** — see §"Carry the predecessor's open items forward". |
 | `**Handover-From:**` | HANDOVER Step 3 | Present only on a brief whose ownership moved from another lane. Makes the brief addressed to this **repo** rather than to a branch, which is why READ Step 1 scans for it separately. |
 | `**Taken-Over-By:**` | READ Step 3.5 | Stamped when someone picks the brief up. Its **absence** is what makes a brief show up in `pending-handovers`, so an unstamped brief is re-offered on every resume and a stamped one is never re-adopted. |
+| `**Next-Session Focus:**` | WRITE (optional) | One-line statement of the next session's primary goal or starting mode, so the reader can tailor its first action before walking the full backlog. |
+| `**Suggested-Skills:**` | WRITE (optional) | Comma-separated installed skills recommended for the next session, each with its purpose (`<skill-name> (<why>)`). Advisory recommendations only: the receiving session still applies current user instructions, checks availability, and routes through its host adapter without assuming every host exposes Claude's `Skill` tool. |
 
 **A field that is read must be defined here.** `**Supersedes:**` was in use across a real handoff chain for weeks while `grep -c -i supersede SKILL.md` returned **0** — the skill neither defined, wrote, nor audited it, and an unspecified convention became the mechanism by which content was dropped: the first doc in that chain to carry it went from 9 backlog mentions to 2, and four hops later to 0. A field nobody specified cannot be relied on, and cannot be checked.
 
@@ -1182,6 +1185,8 @@ The mirror rule matters just as much: name **only** what you actually consumed. 
 - **Open / Blocked Items**: name blockers explicitly. "Blocked on X" is useful. "In progress" alone is not. Parked work outside this repo/branch/session must carry its `repo · branch · worktree` and key artifact paths (see the template note) — a location-less parked item is a forensic hunt for the next session.
 - **In-Flight Processes**: omit if nothing is alive. If present, every row needs all seven columns.
 - **Context for Next Session**: the resume command should work. Test it mentally — if a future session ran exactly those commands in that order, would they be in the right state?
+- **Redaction check (before saving, indexing, stamping, or delivering)**: never copy secret values, API keys, bearer tokens, passwords, or private credentials from commands, environment dumps, or logs into the handoff file, `~/.claude/handoffs/INDEX.md`, Orca worktree comments, or HANDOVER briefs and delivery prompts. Preserve references to credential variable names (e.g. `$API_KEY`) or secret file locations (e.g. `~/.config/...`, `.env`) when needed for resumption.
+- **Reference artifacts instead of duplicating bodies**: link to committed specs, plans, ADRs, issues, commits, and diffs rather than pasting their full contents into explanatory prose, while still keeping an explicit entry (status, origin, location, and next action or closure evidence) for every inherited obligation under §"Carry the predecessor's open items forward".
 
 ---
 

@@ -80,12 +80,21 @@ Two traps worth naming, both hit on 2026-08-03:
 
 ### Where to write
 
+Classify each candidate by its **remedy class** before filing. For mechanical failures, prefer a deterministic check or existing-tool repair over another prompt instruction, and check first whether the required mechanism already exists:
+
+- `navigation-pointer` — a missing link, index entry, or reference pointer where the target already exists
+- `existing-tool-repair` — a bug or gap in an existing script, gate, or hook
+- `deterministic-check` — a mechanical invariant that a script, test, or gate should enforce instead of prose
+- `review-rule` — a judgment-based standard that requires an auditor or reviewer rubric
+- `tool-improvement` — a CLI flag, output token, or ergonomic shortcut on an existing tool
+- `skill-candidate` — a genuinely new multi-step workflow that warrants a standalone skill
+
 Append to `docs/skill-candidates.md` (create with `# Skill Candidates` header if absent):
 
 ```markdown
 ## YYYY-MM-DD — <session-slug>
 
-- **<pattern>**: <description> — recurrence: N — candidate: yes/maybe/no
+- **<pattern>**: <description> — remedy: <remedy-class> — recurrence: N — candidate: yes/maybe/no
 ```
 
 If zero candidates found, write: `## YYYY-MM-DD — <slug> — no candidates`.

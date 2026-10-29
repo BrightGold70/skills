@@ -494,3 +494,44 @@ class TestSupersedesNamesTheChainActuallyWrites:
         assert {Path(t.strip(hp._MARKUP)).name for t in loose.findall("`a.md`")} == {"a.md"}
         # end to end, unchanged
         assert hp._superseded_names(" `a.md`") == {"a.md"}
+
+
+class TestWriteVerifiesClaimedStateAndRedactionAndScoutRemedies:
+    """Rows 18 and 44 — WRITE verifies claimed state/files before drafting,
+    defines optional focus/suggested-skills headers and redaction guidance,
+    and automation-scout classifies candidates by remedy class.
+    """
+
+    def test_gather_context_verifies_claimed_state_and_files(self) -> None:
+        section = _norm(_section("## Gather context before drafting", "## Required template"))
+        assert "Verify claimed state and files before drafting" in section
+        assert "h_mad_resume_decision.py" in section
+        assert "owner_session_id" in section
+        assert "observed" in section
+        assert "test -s" in section
+
+    def test_header_fields_define_next_session_focus_and_suggested_skills(self) -> None:
+        section = _norm(_section("### The header fields", "## Carry the predecessor's open items forward"))
+        assert "**Next-Session Focus:**" in section
+        assert "**Suggested-Skills:**" in section
+        assert "Advisory recommendations only" in section
+
+    def test_writing_guidance_requires_redaction_check(self) -> None:
+        section = _norm(_section("## Writing guidance", "## After writing"))
+        assert "Redaction check (before saving, indexing, stamping, or delivering)" in section
+        assert "never copy secret values" in section
+        assert "credential variable names" in section
+
+    def test_automation_scout_defines_remedy_classes(self) -> None:
+        scout = (SKILL.parent / "references" / "automation-scout.md").read_text(encoding="utf-8")
+        for remedy in (
+            "navigation-pointer",
+            "existing-tool-repair",
+            "deterministic-check",
+            "review-rule",
+            "tool-improvement",
+            "skill-candidate",
+        ):
+            assert f"`{remedy}`" in scout
+        assert "remedy: <remedy-class>" in scout
+
