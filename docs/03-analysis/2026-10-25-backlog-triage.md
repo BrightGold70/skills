@@ -251,4 +251,6 @@ Every item was re-probed at `190939a8` before it was filed.
 | 39 | Closed (`066c34df`). `skill_candidates_census.py` `--help` / `-h` prints usage and exits 0 (`help-flag-treated-as-store-path` `ALL_CAUGHT 1/1`); all 5 LOW review residuals in `h_mad_backlog_cycle.py` fixed (`backlog_cycle.json` `ALL_CAUGHT 20/20`). |
 | 44 | Closed (`8597bce9`). `handoff/SKILL.md` §"Gather context before drafting" item 9 requires WRITE to run `h_mad_resume_decision.py`, read `owner_session_id` via `.get()`, and verify claimed files exist on disk before drafting; both `skill-candidates.md` rows stamped `LANDED`. |
 | 46 | Closed. `test_the_warn_and_target_fractions_still_match` in `h-mad/tests/test_h_mad_context_budget_docs.py` executed by name and passed (`1 passed in 2.65s`). |
+| 5, 41, 49, 50, 52 | **Handed over to `HemaSuite@main` (2026-10-30).** Ownership transferred to `/Users/kimhawk/orca/HemaSuite` (`main`) via `/Users/kimhawk/orca/HemaSuite/docs/handoffs/2026-10-30-main__skills-handover-todos-8-9-12.md` (along with `document-intake-source-review::Task 6` `WIRE-RUNNER` and the 5f nested-`--rootdir` note). |
+
 
