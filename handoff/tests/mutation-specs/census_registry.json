@@ -299,6 +299,15 @@
       "find": "    lines = re.findall(r\"[^\\n]*\\n|[^\\n]+\\Z\", text)",
       "replace": "    lines = text.splitlines(keepends=True)",
       "test": "tests/test_skill_candidates_census.py::test_apply_counts_lines_by_newline_only_past_unicode_separators"
+    },
+    {
+      "name": "help-flag-treated-as-store-path",
+      "_mechanism": "Dropping the -h/--help guard treats the help flag as a store path and crashes with FileNotFoundError.",
+      "file": "scripts/skill_candidates_census.py",
+      "symbol": "main",
+      "find": "    if \"-h\" in paths or \"--help\" in paths:",
+      "replace": "    if False:",
+      "test": "tests/test_skill_candidates_census.py::test_help_flag_prints_usage_and_exits_zero_without_opening_flag_as_path[--help]"
     }
   ]
 }

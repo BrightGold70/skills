@@ -381,3 +381,80 @@ def test_land_refuses_a_cycle_without_green(layout) -> None:
 
     assert result.returncode != 0
     assert _last(result) == "CYCLE: REFUSED reason=no-green row=alpha row"
+
+
+# 16: a record missing "commits"/"paths"/"specs" keys must not raise KeyError.
+def test_record_without_commits_key_refuses_no_green_instead_of_keyerror(layout) -> None:
+    record_path = _record(layout, "alpha row")
+    record_path.parent.mkdir(parents=True, exist_ok=True)
+    record_path.write_text(json.dumps({"row": "alpha row"}) + "\n")
+
+    result = _run(layout, "land", "--row", "alpha row",
+                  "--status", "**LANDED** 2026-10-18 done", "--no-push")
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "KeyError" not in result.stderr, result.stderr
+    assert _last(result) == "CYCLE: REFUSED reason=no-green row=alpha row"
+
+
+# 17: a concurrent store edit after the dirty check is not discarded on commit failure,
+# and git-failed names the path it failed on.
+def test_land_preserves_concurrent_store_edit_and_names_path_on_git_failed(layout) -> None:
+    repo = layout["repo"]
+    _cycle_through_green(layout, "alpha row", ("docs/guide.md", "guide v2\n"))
+    store = repo / "docs" / "skill-candidates.md"
+    consumers_script = layout["driver"].parent / "h_mad_doc_consumers.py"
+    consumers_script.write_text(
+        "from pathlib import Path\n"
+        f"s = Path({str(store)!r})\n"
+        "s.write_text(s.read_text() + '\\nconcurrent edit\\n')\n"
+    )
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+
+    failed = _run(layout, "land", "--row", "alpha row",
+                  "--status", "**LANDED** 2026-10-18 done", "--no-push")
+
+    assert failed.returncode == 2, failed.stdout + failed.stderr
+    assert _last(failed) == (
+        "CYCLE: REFUSED reason=git-failed command=commit -q path=docs/skill-candidates.md"
+    )
+    text = store.read_text()
+    assert text.endswith("\nconcurrent edit\n"), text
+    assert "**LANDED**" not in text, text
+
+
+# 18: --paths does not dereference a symlink inside the repo to its target.
+def test_repo_relative_does_not_dereference_symlink_in_paths(layout) -> None:
+    repo = layout["repo"]
+    link = repo / "tests" / "test_link.py"
+    link.symlink_to(repo / "src" / "shared.py")
+
+    result = _run(layout, "red", "--row", "alpha row", "--paths", "tests/test_link.py")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _committed_paths(repo) == {"tests/test_link.py"}
+    assert json.loads(_record(layout, "alpha row").read_text())["paths"] == ["tests/test_link.py"]
+
+
+# 19: a row or status ending in a backslash does not escape a table pipe.
+def test_trailing_backslash_in_status_does_not_escape_closing_pipe(layout) -> None:
+    repo = layout["repo"]
+    store_path = repo / "docs" / "skill-candidates.md"
+    store_path.write_text(
+        store_path.read_text()
+        + "\n- **slash row \\** (2026-10-18): trailing slash — recurrence: 2 — candidate: yes\n"
+    )
+    _git(repo, "add", "docs/skill-candidates.md")
+    _git(repo, "commit", "-q", "-m", "add slash row")
+    _cycle_through_green(layout, "slash row \\", ("src/shared.py", "X = 2\n"))
+
+    result = _run(layout, "land", "--row", "slash row \\",
+                  "--status", "**LANDED** 2026-10-18 trailing \\", "--no-push")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    store = store_path.read_text()
+    assert "  — **LANDED** 2026-10-18 trailing \\\n" in store
+
+

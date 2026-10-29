@@ -227,6 +227,12 @@ def main(argv=None):
     `sys.argv` or redirecting stdout first.
     """
     paths = list(sys.argv[1:] if argv is None else argv)
+    if "-h" in paths or "--help" in paths:
+        print(
+            "usage: skill_candidates_census.py [--list-open] [--rev <rev>] "
+            "[--apply <table.md>] <skill-candidates.md> [more...]"
+        )
+        return 0
     # `--list-open` names the rows behind the OPEN number. Nothing listed them,
     # so every session that wanted to reconcile the backlog re-derived the set
     # with an ad-hoc grep -- and this file has already been measured wrong twice

@@ -17,6 +17,7 @@ line is one verdict token; any refusal exits non-zero.
 import argparse
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -51,7 +52,7 @@ def tool(path: Path, *args: str) -> int:
 
 def repo_relative(repo: Path, path: str) -> str:
     """A --paths entry as typed (relative to cwd) -> repo-relative POSIX."""
-    absolute = (Path.cwd() / path).resolve()
+    absolute = Path(os.path.normpath(Path.cwd().resolve() / path))
     try:
         return absolute.relative_to(repo.resolve()).as_posix()
     except ValueError:
@@ -75,7 +76,12 @@ def check_row(store: Path, row: str) -> None:
 
 def load(repo: Path, row: str) -> dict | None:
     path = repo / RECORDS / f"{slug(row)}.json"
-    return json.loads(path.read_text()) if path.exists() else None
+    if not path.exists():
+        return None
+    record = json.loads(path.read_text())
+    for key in ("commits", "paths", "specs"):
+        record.setdefault(key, [])
+    return record
 
 
 def save(repo: Path, record: dict) -> None:
@@ -211,17 +217,26 @@ def cmd_land(repo: Path, args, passthrough: list[str]) -> str:
     if git(repo, "status", "--porcelain", "--", store_rel).stdout.strip():
         # Committing the store would sweep unrelated edits into the LANDED commit.
         raise Refused(f"store-dirty path={store_rel}")
+    head_bytes = args.store.read_bytes()
     changed = cycle_files(repo, record["commits"])
     run_consumers(repo, changed)
     run_mutation(repo, record, changed)
+    before_apply = args.store.read_bytes()
     apply_status(args.store, args.row, args.status)
+    stamped = args.store.read_bytes()
     try:
         sha = commit(repo, [store_rel], f"docs(candidates): LANDED — {args.row}")
     except subprocess.CalledProcessError:
         # Leave the row OPEN and the record in place, so a retry can land it.
         # From HEAD, not the index: commit() already staged the edit, and the
-        # store was clean before it, so HEAD is exactly what was there.
-        git(repo, "checkout", "HEAD", "--", store_rel)
+        # store was clean before it, so HEAD is exactly what was there — unless
+        # another process edited the store after the dirty check.
+        if before_apply == head_bytes and args.store.read_bytes() == stamped:
+            git(repo, "checkout", "HEAD", "--", store_rel)
+        else:
+            if args.store.read_bytes() == stamped:
+                args.store.write_bytes(before_apply)
+            git(repo, "reset", "HEAD", "--", store_rel)
         raise
     (repo / RECORDS / f"{slug(args.row)}.json").unlink()
     if args.no_push:
@@ -266,7 +281,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except subprocess.CalledProcessError as exc:
         sys.stderr.write(exc.stderr or "")
-        print(f"CYCLE: REFUSED reason=git-failed command={' '.join(exc.cmd[3:5])}")
+        tail = exc.cmd[exc.cmd.index("--") + 1:] if "--" in exc.cmd else []
+        suffix = f" path={','.join(tail)}" if tail else ""
+        print(f"CYCLE: REFUSED reason=git-failed command={' '.join(exc.cmd[3:5])}{suffix}")
         return 2
     print(verdict)
     return 1 if verdict.startswith("PUSH: REJECTED") else 0

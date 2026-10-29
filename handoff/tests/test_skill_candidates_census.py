@@ -1107,3 +1107,16 @@ def test_apply_valid_table_guard_preserves_escaped_cells_and_all_insertions(
         "  — reviewed; remains open\n"
     ).encode("utf-8")
     assert table.read_bytes() == table_before
+
+
+@pytest.mark.parametrize("flag", ["--help", "-h"])
+def test_help_flag_prints_usage_and_exits_zero_without_opening_flag_as_path(
+    flag: str,
+) -> None:
+    """Row 39: --help/-h must print usage and exit 0, not raise FileNotFoundError."""
+    result = run_flag(flag)
+    assert result.returncode == 0, f"{flag} must exit 0: {result.stderr}"
+    assert "usage: skill_candidates_census.py" in result.stdout, result.stdout
+    assert "--list-open" in result.stdout and "--apply" in result.stdout, result.stdout
+    assert result.stderr == "", result.stderr
+

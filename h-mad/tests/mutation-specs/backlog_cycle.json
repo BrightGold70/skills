@@ -149,9 +149,54 @@
       "_mechanism": "--paths typed relative to a subdirectory resolve against the repo root and name the wrong file.",
       "file": "scripts/h_mad_backlog_cycle.py",
       "symbol": "repo_relative",
-      "find": "absolute = (Path.cwd() / path).resolve()",
-      "replace": "absolute = (repo / path).resolve()",
+      "find": "absolute = Path(os.path.normpath(Path.cwd().resolve() / path))",
+      "replace": "absolute = Path(os.path.normpath(repo.resolve() / path))",
       "test": "tests/test_h_mad_backlog_cycle.py::test_paths_resolve_from_the_working_directory"
+    },
+    {
+      "name": "paths-follow-symlinks",
+      "_mechanism": "Calling .resolve() on the --paths entry dereferences a symlink inside the repo to its target path.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "repo_relative",
+      "find": "absolute = Path(os.path.normpath(Path.cwd().resolve() / path))",
+      "replace": "absolute = (Path.cwd() / path).resolve()",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_repo_relative_does_not_dereference_symlink_in_paths"
+    },
+    {
+      "name": "record-missing-commits-keyerror",
+      "_mechanism": "Without defaulting missing record keys in load(), a record without 'commits' raises KeyError.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "load",
+      "find": "    for key in (\"commits\", \"paths\", \"specs\"):\n        record.setdefault(key, [])",
+      "replace": "    pass",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_record_without_commits_key_refuses_no_green_instead_of_keyerror"
+    },
+    {
+      "name": "concurrent-store-edit-clobbered-on-commit-failure",
+      "_mechanism": "Unconditionally running git checkout HEAD -- store_rel on commit failure discards a concurrent edit made after the dirty check.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "cmd_land",
+      "find": "        if before_apply == head_bytes and args.store.read_bytes() == stamped:",
+      "replace": "        if True:",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_land_preserves_concurrent_store_edit_and_names_path_on_git_failed"
+    },
+    {
+      "name": "git-failed-omits-path",
+      "_mechanism": "Omitting the path suffix after '--' leaves git-failed without the path that failed.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "main",
+      "find": "        suffix = f\" path={','.join(tail)}\" if tail else \"\"",
+      "replace": "        suffix = \"\"",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_land_preserves_concurrent_store_edit_and_names_path_on_git_failed"
+    },
+    {
+      "name": "table-cell-omits-padding-before-closing-pipe",
+      "_mechanism": "Without a space before the closing pipe, a status ending in a backslash escapes the closing pipe and breaks the table cell.",
+      "file": "scripts/h_mad_backlog_cycle.py",
+      "symbol": "apply_status",
+      "find": "        table.write(f\"| name | status |\\n|---|---|\\n| {cell(row)} | {cell(status)} |\\n\")",
+      "replace": "        table.write(f\"| name | status |\\n|---|---|\\n|{cell(row)}|{cell(status)}|\\n\")",
+      "test": "tests/test_h_mad_backlog_cycle.py::test_trailing_backslash_in_status_does_not_escape_closing_pipe"
     }
   ]
 }
