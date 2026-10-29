@@ -245,6 +245,20 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    ## Test Plan
    <Specific test files, scenarios, and verification commands>
 
+   ## Test Boundaries
+   | Public interface | Acceptance criteria | Expected result source | Mocked dependencies | Exclusions |
+   |---|---|---|---|---|
+   | `<module.func or CLI command or verified by: audit\|live-run\|operator\|doc-review>` | `AC-1.1` | `<independent spec table / fixture / analytical formula / proving artifact path>` | `none` | `<what this boundary intentionally does not test>` |
+
+   <!--
+   Rules for ## Test Boundaries (enforced by h_mad_test_boundaries_check.py):
+   - Every active AC-X.Y (including lettered AC-X.Y[a-z]) in docs/01-plan/features/<feature>.spec.md must appear in Acceptance criteria in at least one row.
+   - Public interface names the module, class, function, CLI entrypoint, or script under test — or verified by: audit, verified by: live-run, verified by: operator, or verified by: doc-review for non-test rows.
+   - Expected result source states the independent source of truth for expected outputs (spec table, RFC/protocol fixture, golden corpus, analytical formula, or for a verified by: row, the concrete proving artifact path or command token) — never the implementation under test.
+   - Mocked dependencies lists only external boundaries (clocks, network, filesystem, subprocesses, external services) or none when no dependencies are mocked.
+   - Exclusions states what this boundary intentionally does not test (or which sibling row/layer covers it).
+   -->
+
    ## Invariant Compliance
    <Explicit statement for each Axis B rule: "complies because..." or
    "this design requires an invariant update: [proposed change]">

@@ -1,0 +1,18 @@
+# Design Audit Rejections — `hmad-test-boundaries`
+
+## Cycle 1 (`p1` / `codex`)
+
+- **Finding:** "The new checker changes the skill's entry behavior but the design explicitly leaves the skill manifest unchanged — the project invariant requires the SKILL.md contract to reflect changed entry behavior. Update the manifest and verify its instructions agree with the implemented gate."
+- **Verdict:** Rejected (premise does not hold against `.h-mad/invariants.md`, `h-mad/SKILL.md`, and `docs/01-plan/features/hmad-test-boundaries.spec.md`).
+- **Evidence:**
+  1. `.h-mad/invariants.md` (`## Skill manifest integrity`) states: *"Every skill's `SKILL.md` MUST carry valid frontmatter with `name` and `description`. A skill whose entry behavior is changed without updating its `SKILL.md` contract is a violation."*
+  2. `/h-mad`'s entry behavior (`h-mad/SKILL.md` frontmatter lines 1–4 and `## Activation surface` lines 26–35: `/h-mad "<feature>"`, `/h-mad do "<feature>"`, `/h-mad status [<feature>]`, `/h-mad reset "<feature>"`, `/h-mad bootstrap`) is unchanged by `hmad-test-boundaries`.
+  3. For Phase 4, `h-mad/SKILL.md` line 339 explicitly delegates the Phase 4 design contract to `references/inline-protocols.md §Phase 4` and `agents/design-author.md` (*"dispatch the `design-author` teammate (§'Teammate authors'); the inline design protocol (`references/inline-protocols.md §Phase 4`) is its contract"*), and delegates audit gating to `h_mad_audit_gate.py` (`h-mad/SKILL.md` line 3220). Those delegated contract files (`h-mad/references/inline-protocols.md`, `h-mad/agents/design-author.md`, `h-mad/audit-prompt.template.md`, `h-mad/agents/doc-auditor.md`, and `h-mad/scripts/h_mad_audit_gate.py`) are the exact 6 modified files scoped by `docs/01-plan/features/hmad-test-boundaries.spec.md` (`v1.4`) and `docs/01-plan/features/hmad-test-boundaries.plan.md` (`v1.3`, `## Scope — Residual`).
+
+## Cycle 2 (`p1` / `codex`)
+
+- **Finding:** "Preserve supported acknowledgements when introducing the auxiliary veto. Leaving report classification untouched does not preserve the override when the checker independently blocks the acknowledged defect. In an in-memory controlled comparison using the current gate and the exact proposed pre-stamp block, an acknowledged untagged boundary finding changed from `GATE: PASS must=0 should=0` to `GATE: FAIL must=0 should=0` when the auxiliary result was FAIL. Define how eligible acknowledgements apply to deterministic issues and test that path, retaining the existing refusal of explicitly build-tagged must-fixes."
+- **Verdict:** Rejected (contradicts `spec.md` `FR-4.2` / `AC-4.2` and `h-mad/SKILL.md` §"Finding class — build vs measurement").
+- **Evidence:**
+  1. `docs/01-plan/features/hmad-test-boundaries.spec.md` (`FR-4.2` and `AC-4.2`) explicitly specifies that when `h_mad_test_boundaries_check.py` returns `FAIL` or `UNREADABLE` on an activated candidate design, `h_mad_audit_gate.py` MUST return `GATE: FAIL` and suppress `.gated.json` stamping *even when the audit report markdown has `must=0 should=0`*.
+  2. Every `## Test Boundaries` violation is a `build`-class defect (`FR-5.1` — it changes the tests written in Phase 5d/5e). Per `h-mad/SKILL.md` §"Finding class — build vs measurement" (lines 1906–1912), build-class must-fixes are non-acknowledgeable by design (*"a build-class must is what 5d/5e would implement wrongly, and no operator note clears that"*), while the operator escape for pre-existing features without `## Test Boundaries` is `PRE_EXISTING_FEATURES` + `docs/archive/` (`FR-4.1`). Meanwhile, `## Acknowledged-not-fixed` in `h_mad_audit_gate.py` remains 100% functional for all eligible audit-report bullets.

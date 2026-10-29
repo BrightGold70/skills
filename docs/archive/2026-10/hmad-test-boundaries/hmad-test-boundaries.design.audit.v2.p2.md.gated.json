@@ -1,0 +1,11 @@
+{
+ "verdict": "PASS",
+ "files": {
+  "hmad-test-boundaries.design.md": "2253319f0d97dd1f55374d6b338c1e4b046fd6721dd6a08edd26aac41b5c8a65"
+ },
+ "suite": null,
+ "legs": [
+  "agy",
+  "codex"
+ ]
+}

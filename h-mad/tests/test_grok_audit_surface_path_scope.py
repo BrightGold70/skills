@@ -164,7 +164,7 @@ def test_switch_off_prompt_is_byte_identical_to_the_pinned_assembler(
         **kwargs, template=ref / "audit-prompt.template.md")
     # No path_scope keyword: switch-off must preserve the current call contract.
     current_text, current_problems = current.assemble(
-        **kwargs, template=SKILL_DIR / "audit-prompt.template.md")
+        **kwargs, template=ref / "audit-prompt.template.md")
 
     assert pinned_problems == current_problems == []
     assert current_text == pinned_text, (

@@ -57,6 +57,12 @@ point.
    is drift waiting to happen, and the shared checker also knows the exemptions a bare grep does
    not — a design grammar (`leftover: "<path>"`) is a declaration, not a hole.
 
+7a. **Populate `## Test Boundaries` for every active spec `AC-X.Y[a-z]` and run the deterministic boundary checker before reporting `DONE`.**
+    Every `docs/02-design/features/<feature>.design.md` you author or revise must carry a `## Test Boundaries` section containing the 5-column Markdown pipe table (`| Public interface | Acceptance criteria | Expected result source | Mocked dependencies | Exclusions |`) covering every active `AC-X.Y` (including lettered `AC-X.Y[a-z]`) in `docs/01-plan/features/<feature>.spec.md`. Before emitting `DESIGN-AUTHOR: DONE`, run:
+    `python3 <skill_dir>/scripts/h_mad_test_boundaries_check.py docs/02-design/features/<feature>.design.md --spec docs/01-plan/features/<feature>.spec.md`
+    (where <skill_dir> is the active H-MAD skill directory for the current host, e.g. h-mad in this checkout, `~/.claude/skills/h-mad`, `~/.agents/skills/h-mad`, or `~/.gemini/config/skills/h-mad`).
+    Read the `TEST-BOUNDARIES:` token, never `$?`. Fix any `TEST-BOUNDARIES: FAIL` (`TEST-BOUNDARIES-ISSUE:`) or `UNREADABLE` output until the checker prints `TEST-BOUNDARIES: PASS`.
+
 8. **Bump the Version History** with `h_mad_version_history.py` — never a hand-rolled substitution,
    which writes nothing and reports success when its anchor has drifted. Read the
    `VERSION-HISTORY:` token, not `$?`.
@@ -159,7 +165,7 @@ DESIGN-AUTHOR: DONE version=v1.N path=<the document you wrote> lines=N sha256=<6
 ```
 
 on the first line, then: what you changed and why, **every premise you verified with the
-command you used**, anything the tree contradicted, and anything another document owes. Keep the report tight, and never drop the tail to fit.
+command you used**, the `TEST-BOUNDARIES: PASS` verification output alongside those premise verification commands, anything the tree contradicted, and anything another document owes. Keep the report tight, and never drop the tail to fit.
 
 ## Where your report goes
 

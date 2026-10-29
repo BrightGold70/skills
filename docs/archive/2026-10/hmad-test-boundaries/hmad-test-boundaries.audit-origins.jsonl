@@ -1,0 +1,28 @@
+{"phase": "plan", "cycle": 1, "leg": "codex", "item": "FR-5 missing-section exemption qualification in plan", "origin": "propagation-gap", "by_cycle": 1, "verified_by_execution": true}
+{"phase": "plan", "cycle": 1, "leg": "codex", "item": "Phase 4 self-bootstrapping sequence for design-author and checker", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 1, "leg": "codex", "item": "Two-direction connection enforcement mutations per base invariants", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 1, "leg": "codex", "item": "Repeatable --gated candidate design selection rule in h_mad_audit_gate.py", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 1, "leg": "agy", "item": "Head-anchored AC extraction regex to avoid prose cross-reference ACs", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 1, "leg": "agy", "item": "Regex character class ordering [:.,\\s-]+ in retired-AC rule", "origin": "instrument", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 1, "leg": "agy", "item": "Disambiguate UNREADABLE exit 2 vs FAIL missing_spec exit 0", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 1, "leg": "agy", "item": "Stdout emission order GATE before TEST-BOUNDARIES in h_mad_audit_gate.py", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 1, "leg": "agy", "item": "Premise 2 Phase 4 template heading derivation command", "origin": "instrument", "by_cycle": null, "verified_by_execution": true}
+{"phase": "plan", "cycle": 2, "leg": "codex", "item": "Shared callable implementation + parity test for 3-arm gate activation", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-4.2/4.3 gate defaults activation to skill checkout root instead of project ro", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-2.1 workspace spec candidate uses parents[2] (docs dir) instead of parents[3]", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "AC-1.3 design-author command hardcodes ~/.claude/skills/h-mad instead of <skill_", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "Activation arm 3 reads paired spec without catching OSError/UnicodeDecodeError", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "SKILL.md manifest unchanged when new checker is added to Phase 4", "origin": "rejected", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-2.1 reconcile default --root project-root inference with spec", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": true}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-4.2 directory-valued design candidates filtered by is_file() instead of exist", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "Allow Acknowledged-not-fixed sidecar to override TEST-BOUNDARIES: FAIL", "origin": "rejected", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task 1 placeholder assertion on none explanation outside column 4", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Archive-root formula in infer_project_root for nested docs/archive paths", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task 2 template test must assert 5-column table header not just heading", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task 3 activated PASS and EXEMPT gate CLI cases for AC-4.3", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Non-interference corpus count 178 tracked JSON files not 40", "origin": "instrument", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "agy", "item": "Move all h_mad_test_boundaries_check.py tests into Task 1 for RED fail", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "agy", "item": "Remove fabricated I1/I4/I5/I7 IDs and <= 6 section count assertion", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "agy", "item": "Inline normalize_cell, is_tautological_oracle, and Issue coordinates in Task 1", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "agy", "item": "Re-derive Non-Interference table referencing specs and anchors", "origin": "instrument", "by_cycle": null, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 2, "leg": "codex", "item": "Operational-input UNREADABLE precedence before structural early returns", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": true}

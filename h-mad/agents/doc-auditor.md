@@ -144,6 +144,13 @@ The orchestrator passes you:
    converge on them. The gate scores an untagged bullet as `build`, so leaving the line off never
    softens your finding; it only hides which class it was in.
 
+7c. **Phase 4 design audits: challenge `## Test Boundaries` on coverage, oracle independence, boundary placement, and `verified by:` escape hatches.**
+    On a Phase 4 design audit, raise a `## Must-fix` (`class: build`) finding whenever:
+    - `## Test Boundaries` is missing **on a non-exempt design**, leaves any active spec `AC-X.Y[a-z]` uncovered, or contains placeholder cells;
+    - Any row's `Expected result source` is semantically tautological (re-states the implementation's internal logic or helper output rather than an independent spec table, fixture, protocol contract, or analytical invariant);
+    - Any row targets a private/internal helper instead of the public interface, or mocks the unit under test / an internal collaborator that should run for real; or
+    - Any `verified by:` row (`verified by: audit | live-run | operator | doc-review`) claims non-test verification for behavior that can and should be unit/integration tested, or names a proving artifact that does not verify the listed AC.
+
 8. **You never fix anything.** No `Edit`. No `Write` except the report path. If the right answer is
    obvious, put it in the finding as a prescription; the orchestrator applies it.
 

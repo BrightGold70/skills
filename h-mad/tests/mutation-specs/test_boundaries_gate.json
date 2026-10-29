@@ -1,0 +1,93 @@
+{
+  "_why": "hmad-test-boundaries: Phase 4 design test-boundaries checker and two-direction audit-gate connection enforcement.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_test_boundaries_check.py",
+    "-k",
+    "not test_mutation_spec_schema_and_check_anchors_pass",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "audit-gate-connection-removed-bypasses-test-boundaries",
+      "_mechanism": "Direction 1 connection removal: h_mad_audit_gate.py ignores a failing TEST-BOUNDARIES verdict and stamps PASS while h_mad_test_boundaries_check.py remains intact.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "symbol": "main",
+      "find": "    tb_ok, tb_lines = _run_design_boundaries_checks(args.audit_file, args.gated)\n    if not tb_ok:\n        verdict = \"FAIL\"",
+      "replace": "    tb_ok, tb_lines = _run_design_boundaries_checks(args.audit_file, args.gated)\n    if False:\n        verdict = \"FAIL\"",
+      "test": "tests/test_h_mad_test_boundaries_check.py::TestExemptionsAndAuditGateIntegration::test_gate_fails_and_suppresses_stamp_when_design_boundaries_fail"
+    },
+    {
+      "name": "audit-gate-connection-forced-unconditional-activation",
+      "_mechanism": "Direction 2 forced unconditional activation: h_mad_audit_gate.py runs h_mad_test_boundaries_check.py even when should_activate_design_check returns False, breaking synthetic tmp_path design fixtures.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "symbol": "_run_design_boundaries_checks",
+      "find": "        if not checker.should_activate_design_check(design_path, proj_root):\n            continue",
+      "replace": "        if False:\n            continue",
+      "test": "tests/test_h_mad_test_boundaries_check.py::TestExemptionsAndAuditGateIntegration::test_gate_does_not_activate_on_bare_synthetic_design_in_tmp_path"
+    },
+    {
+      "name": "checker-placeholder-guard-disabled",
+      "_mechanism": "Disables placeholder blocklist matching so placeholder cells like 'tbd' or 'n/a' pass.",
+      "file": "scripts/h_mad_test_boundaries_check.py",
+      "symbol": "is_placeholder_cell",
+      "find": "    if norm_cell in PLACEHOLDER_EXACT:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_test_boundaries_check.py::TestSeededBrokenFixtures::test_seeded_broken_placeholder_cell_rejected"
+    },
+    {
+      "name": "checker-tautological-oracle-guard-disabled",
+      "_mechanism": "Disables exact tautological-oracle detection so Expected result source = 'implementation' passes.",
+      "file": "scripts/h_mad_test_boundaries_check.py",
+      "symbol": "is_tautological_oracle",
+      "find": "    if cleaned in TAUTOLOGICAL_EXACT:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_test_boundaries_check.py::TestSeededBrokenFixtures::test_seeded_broken_implementation_oracle_rejected"
+    },
+    {
+      "name": "checker-uncovered-ac-guard-disabled",
+      "_mechanism": "Skips uncovered_ac emission when active spec ACs are missing from the table.",
+      "file": "scripts/h_mad_test_boundaries_check.py",
+      "symbol": "check_design",
+      "find": "        if missing_acs:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_test_boundaries_check.py::TestSeededBrokenFixtures::test_seeded_broken_uncovered_ac_rejected"
+    },
+    {
+      "name": "checker-invalid-non-test-row-guard-disabled",
+      "_mechanism": "Skips concrete proving artifact check on verified by: rows so 'manual inspection by reviewer' passes.",
+      "file": "scripts/h_mad_test_boundaries_check.py",
+      "symbol": "validate_non_test_row",
+      "find": "    if not oracle_had_basic_error and not has_proving_artifact(oracle_cell):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_test_boundaries_check.py::TestSeededBrokenFixtures::test_seeded_broken_non_test_row_without_artifact_rejected"
+    },
+    {
+      "name": "checker-retired-ac-filter-disabled",
+      "_mechanism": "Treats retired ACs in spec.md as active ACs, causing false uncovered_ac failures on grok-audit-surface AC-3.7.",
+      "file": "scripts/h_mad_test_boundaries_check.py",
+      "symbol": "extract_spec_acs",
+      "find": "        if RETIRED_LINE_RE.match(line):",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_test_boundaries_check.py::TestSpecAcCoverageAndNonTestRows::test_extract_spec_acs_reference_counts_and_retired_filtering"
+    },
+    {
+      "name": "checker-no-exempt-flag-ignored",
+      "_mechanism": "Ignores --no-exempt so pre-existing or archived designs without ## Test Boundaries still return EXEMPT instead of FAIL.",
+      "file": "scripts/h_mad_test_boundaries_check.py",
+      "symbol": "check_design",
+      "find": "    if not has_section and not no_exempt:",
+      "replace": "    if not has_section:",
+      "test": "tests/test_h_mad_test_boundaries_check.py::TestExemptionsAndAuditGateIntegration::test_pre_existing_and_archived_designs_exempt_unless_no_exempt"
+    }
+  ]
+}

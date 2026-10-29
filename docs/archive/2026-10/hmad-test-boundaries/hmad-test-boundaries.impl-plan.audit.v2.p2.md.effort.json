@@ -1,0 +1,21 @@
+{
+  "agy_events": 159,
+  "collected": "hmad-test-boundaries.impl-plan.audit.v2.p2.md",
+  "failed": 4,
+  "log": "/tmp/audit_hmad-test-boundaries_impl-plan_cycle2_run20261028T091736Z-23813_p2.log",
+  "log_retained": "/Users/kimhawk/orca/skills/.h-mad/pass-logs/hmad-test-boundaries.impl-plan.audit.v2.p2.md.log",
+  "log_sha256": "2d1827443e0f1450e9a3cb25f25f0f4ed64faf5d0c68964a1a42a3c82b831ce9",
+  "ok": 30,
+  "pass": 2,
+  "readable": true,
+  "shape": "parsed",
+  "status": "SUCCESS",
+  "targets": {
+    "code": 16,
+    "other": 8,
+    "paths": 24,
+    "unmeasured": 0
+  },
+  "thinking": 3433,
+  "tools": 34
+}
