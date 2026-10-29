@@ -78,15 +78,55 @@ def pin_labels(record: dict, offending: list[str]) -> list[str]:
     return [f"{label}#{pin}" for pin in offending]
 
 
-def unresolved_pins(record: dict, collected: set[str], field: str = "pin") -> list[str]:
-    """The pins of `record` that do not resolve to exactly one collected node id."""
-    offending: list[str] = []
-    for pin in pins(record, field):
+def _base_node_id(node_id: str) -> str:
+    """Strip a trailing `[...]` parameter suffix from the final `::` test segment."""
+    prefix, sep, tail = node_id.rpartition("::")
+    if sep and "[" in tail and tail.endswith("]"):
+        base_tail = tail.split("[", 1)[0]
+        if base_tail:
+            return f"{prefix}::{base_tail}"
+    return node_id
+
+
+def _resolve_pin(pin: str, collected: set[str]) -> tuple[list[str], str]:
+    """Resolve one pin against `collected` -> `(matched_node_ids, bucket)`.
+
+    An unparametrized pin resolves to all collected parameter cases that share a
+    single `_base_node_id` test identity; matching more than one distinct base
+    test identity is `"ambiguous"`, and matching none is `"missing"`.
+    """
+    if "[" in pin:
         if "::" in pin and pin in collected:
-            continue
-        if len([node for node in collected if node.endswith("::" + pin)]) != 1:
-            offending.append(pin)
-    return offending
+            return [pin], ""
+        matches = sorted(node_id for node_id in collected if node_id.endswith("::" + pin))
+        if len(matches) == 1:
+            return matches, ""
+        return ([], "ambiguous") if matches else ([], "missing")
+
+    if "::" in pin:
+        if pin in collected:
+            return [pin], ""
+        exact = sorted(node_id for node_id in collected if _base_node_id(node_id) == pin)
+        if exact:  # M:PARAM-EXACT
+            return exact, ""
+
+    groups: dict[str, list[str]] = {}
+    suffix = "::" + pin
+    for node_id in collected:
+        base = _base_node_id(node_id)
+        if base.endswith(suffix):
+            groups.setdefault(base, []).append(node_id)
+    if len(groups) == 1:  # M:PARAM-SUFFIX
+        return sorted(next(iter(groups.values()))), ""
+    return ([], "ambiguous") if groups else ([], "missing")
+
+
+def unresolved_pins(record: dict, collected: set[str], field: str = "pin") -> list[str]:
+    """The pins of `record` that do not resolve to a single collected test identity."""
+    return [
+        pin for pin in pins(record, field)
+        if _resolve_pin(pin, collected)[1] != ""
+    ]
 
 
 def _validate_pin_field(record: dict, field: str) -> None:
@@ -476,11 +516,6 @@ def partition(
     ambiguous: list[dict] = []
     unverified_renames: list[dict] = []
 
-    def resolve(pin: str) -> list[str]:
-        if "::" in pin and pin in collected:
-            return [pin]
-        return [node_id for node_id in collected if node_id.endswith("::" + pin)]
-
     def resolve_all(record: dict, field: str) -> tuple[list[str] | None, str]:
         """-> (node_ids, "") when EVERY pin resolves once, else (None, bucket).
 
@@ -494,10 +529,10 @@ def partition(
         node_ids: list[str] = []
         bucket = ""
         for pin in pins(record, field):
-            matches = resolve(pin)
-            if len(matches) == 1:
-                node_ids.append(matches[0])
-            elif matches:
+            matches, pin_bucket = _resolve_pin(pin, collected)
+            if not pin_bucket:
+                node_ids.extend(matches)
+            elif pin_bucket == "ambiguous":
                 bucket = "ambiguous"
             elif bucket != "ambiguous":
                 bucket = "missing"
@@ -579,6 +614,21 @@ def collect(repo: Path, testpaths: tuple[Path, ...] | list[Path], python: str = 
     return node_ids
 
 
+def _cli_pin(pin: str, repo: Path) -> str:
+    """Resolve a subproject-rooted node id to a `repo`-relative path for pytest."""
+    file_part, sep, rest = pin.partition("::")
+    if not sep or (repo / file_part).exists():
+        return pin
+    matches = sorted(
+        child / file_part
+        for child in repo.iterdir()
+        if child.is_dir() and not child.name.startswith(".") and (child / file_part).exists()
+    ) if repo.is_dir() else []
+    if len(matches) == 1:  # M:SUBPROJ-PIN
+        return f"{matches[0].relative_to(repo).as_posix()}::{rest}"
+    return pin
+
+
 def run_pins(resolving: list[dict], repo: Path, python: str = sys.executable) -> tuple[list[dict], list[dict]]:
     """Run resolving pytest pins and return (verified, broken)."""
     if not resolving:
@@ -590,8 +640,9 @@ def run_pins(resolving: list[dict], repo: Path, python: str = sys.executable) ->
 
     per_record = [_group(record) for record in resolving]
     all_pins = list(dict.fromkeys(pin for group in per_record for pin in group))
+    cli_pins = [_cli_pin(pin, repo) for pin in all_pins]
     result = subprocess.run(
-        [python, "-m", "pytest", "-q", "-rA", "-vv", *all_pins],
+        [python, "-m", "pytest", "-q", "-rA", "-vv", *cli_pins],
         cwd=repo,
         capture_output=True,
         text=True,

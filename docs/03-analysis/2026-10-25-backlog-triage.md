@@ -253,4 +253,16 @@ Every item was re-probed at `190939a8` before it was filed.
 | 46 | Closed. `test_the_warn_and_target_fractions_still_match` in `h-mad/tests/test_h_mad_context_budget_docs.py` executed by name and passed (`1 passed in 2.65s`). |
 | 5, 41, 49, 50, 52 | **Handed over to `HemaSuite@main` (2026-10-30).** Ownership transferred to `/Users/kimhawk/orca/HemaSuite` (`main`) via `/Users/kimhawk/orca/HemaSuite/docs/handoffs/2026-10-30-main__skills-handover-todos-8-9-12.md` (along with `document-intake-source-review::Task 6` `WIRE-RUNNER` and the 5f nested-`--rootdir` note). |
 
+## Outcome — 2026-10-30 (Hawk-MacStudio, HemaSuite takeover & closure of rows 5, 41, 49, 50, 52)
+
+| row | outcome |
+|---|---|
+| Todo #8 | Closed (`11874bce` on `BrightGold70/hemasuite-document-workbench`). `document-intake-source-review::Task 6` in `docs/archive/2026-10/document-intake-source-review/document-intake-source-review.impl-plan.md` now declares `**WIRE-RUNNER**: \`playwright\`` and `.h-mad/wires.jsonl` carries `"runner": "playwright"` (`WIREPIN: PASS tasks=7 wiring=2 unpinned=0 mislabeled=0`). |
+| 5 | Closed. Re-ran the `missing=268` repro in `/Users/kimhawk/orca/workspaces/HemaSuite/hemasuite-document-workbench`: the 268 records partition into **1** Playwright pin (`document-intake-source-review::Task 6`, now `unverifiable=1`), **5** `@pytest.mark.parametrize` pins (`document-intake-source-review::Task 5 (WIRE 1..5)`, Hypothesis (a) — 28 + 7 = 35 parametrized items), **262** foreign sub-project pins outside `--testpath hemasuite/tests` (255 `hematology-paper-writer` + 7 `clinical-statistics-analyzer`, Hypothesis (b)), and **0** collection errors (Hypothesis (c) false; `225 tests collected`, exit 0). Fixed `h_mad_wire_registry.py` (`_base_node_id`, `_resolve_pin`, `_cli_pin`) and `h-mad/SKILL.md:541` under TDD (`wire_registry_runner.json` `ALL_CAUGHT 16/16`); all 5 `document-intake-source-review::Task 5` records now resolve and verify (`verified=5 unverifiable=1`). |
+| 41 | Closed. Recorded explicit `--no-mutation` waiver on the 4 one-off analysis probe scripts (`docs/archive/2026-10/synopsis-path-preflight/probes/*.py`) in `docs/archive/2026-10/synopsis-path-preflight/synopsis-path-preflight.report.md` (v1.1); all production modules of `feature/204-synopsis-path-preflight` closed Phase 5 with `ALL_CAUGHT` on their mutation specs. |
+| 49 | Closed. Updated `docs/handoffs/2026-09-14-main__wsg-backlog-two-items-owed-here.md` (`202 matching lines / 341 AC-x.y occurrences / 96 distinct AC ids`) and recorded `## Closure`: Item 1 (`#56`) closed via `docs/04-report/features/wsg-56-impl-plan-ac-enumeration.probe.v1.md` (`015d2bd1`), Item 2 (wire registries) closed via `website-source-grounding.wire-registry-decision.md` (`c8b0ed79`). |
+| 50 | Closed. Recorded the sender-side pointer (`handed over to skills@main, brief docs/handoffs/2026-10-23-main__hemasuite-hmad-skill-defects.md; filed in orca/skills:docs/skill-candidates.md in commit f2a37a71`) in `docs/handoffs/2026-10-23-BrightGold70-hemasuite-document-workbench__intake-a1-task2-red.md` and committed it to `HemaSuite@main`. |
+| 52 | Closed. Verified `.mcp.json` clean and reverted the uncommitted `.gitignore` (`/graft/`) and `graft/` regeneration diffs in `/Users/kimhawk/orca/HemaSuite`. |
+
+
 

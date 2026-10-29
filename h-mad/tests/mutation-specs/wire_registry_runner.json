@@ -130,6 +130,33 @@
       "find": "`<playwright — only when the pin is not a pytest test>`",
       "replace": "`playwright` when the pin is not a pytest test.",
       "test": "tests/test_h_mad_wire_pin_gate.py::test_the_template_wire_runner_line_copied_verbatim_changes_nothing"
+    },
+    {
+      "name": "M14: path-qualified parametrized pins fail to resolve against stripped base node ids",
+      "_mechanism": "Restores the Triage Row 5 defect for path-qualified pins (`hemasuite/tests/test_api.py::test_quit_...`): `pytest --collect-only -q` emits `[case]` suffixes, so skipping `_base_node_id` exact matching leaves the pin missing.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "        if exact:  # M:PARAM-EXACT\n",
+      "replace": "        if False:  # M:PARAM-EXACT\n",
+      "test": "tests/test_h_mad_wire_registry.py::test_partition_resolves_unparametrized_pin_against_parametrized_collection_items",
+      "symbol": "_resolve_pin"
+    },
+    {
+      "name": "M15: bare parametrized pins fail to resolve when grouped by base node id",
+      "_mechanism": "Restores the Triage Row 5 defect for suffix-matched pins: a single parametrized test function with k cases is misclassified as ambiguous instead of resolving to its k cases.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    if len(groups) == 1:  # M:PARAM-SUFFIX\n",
+      "replace": "    if False:  # M:PARAM-SUFFIX\n",
+      "test": "tests/test_h_mad_wire_registry.py::test_partition_resolves_unparametrized_pin_against_parametrized_collection_items",
+      "symbol": "_resolve_pin"
+    },
+    {
+      "name": "M16: subproject-relative pins are not qualified under --rootdir",
+      "_mechanism": "Restores the 5f nested-rootdir trap: pytest collection roots at `subproject/pytest.ini` and emits `tests/test_wire.py::...`, which `run_pins` then invokes from `--rootdir` where `tests/test_wire.py` does not exist.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    if len(matches) == 1:  # M:SUBPROJ-PIN\n",
+      "replace": "    if False:  # M:SUBPROJ-PIN\n",
+      "test": "tests/test_h_mad_wire_registry.py::test_verify_runs_subproject_relative_pins_when_rootdir_is_monorepo_root",
+      "symbol": "_cli_pin"
     }
   ]
 }

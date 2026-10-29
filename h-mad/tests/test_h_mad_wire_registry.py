@@ -1911,3 +1911,100 @@ def test_a_judged_base_record_cannot_become_unverifiable_at_head(
     result = registry.verify(path, "HEAD", tmp_path, tmp_path)
     assert result["verdict"] == "FAIL", result["token"]
     assert "[H-MAD] step5f:runner_downgraded:regression-provenance-ledger::wire-1" in capsys.readouterr().out
+
+
+# --- Triage Row 5 / Todo #9: parametrized node IDs + nested subproject rootdir ---
+
+
+def test_partition_resolves_unparametrized_pin_against_parametrized_collection_items() -> None:
+    """An unparametrized pin resolves to all collected parameter cases of that single test function."""
+    collected = {
+        "hemasuite/tests/test_api.py::test_quit_stops_new_work[quit-sequence]",
+        "hemasuite/tests/test_api.py::test_quit_stops_new_work[quit-bounded-wait]",
+    }
+    qualified = _entry(
+        id="Task 5 (WIRE 5)",
+        pin="hemasuite/tests/test_api.py::test_quit_stops_new_work",
+    )
+    bare = _entry(
+        id="Task 5 (bare)",
+        pin="test_quit_stops_new_work",
+    )
+    resolving, missing, ambiguous, unverified = registry.partition([qualified, bare], collected)
+    assert missing == []
+    assert ambiguous == []
+    assert unverified == []
+    assert [r["id"] for r in resolving] == ["Task 5 (WIRE 5)", "Task 5 (bare)"]
+    expected_nodes = sorted(collected)
+    assert resolving[0]["node_ids"] == expected_nodes
+    assert resolving[1]["node_ids"] == expected_nodes
+    assert registry.unresolved_pins(qualified, collected) == []
+    assert registry.unresolved_pins(bare, collected) == []
+
+
+def test_partition_reports_ambiguous_when_two_files_define_parametrized_tests_with_same_bare_name() -> None:
+    """Two distinct test functions that share a bare name remain ambiguous even when parametrized."""
+    collected = {
+        "tests/test_alpha.py::test_same_name[case-1]",
+        "tests/test_alpha.py::test_same_name[case-2]",
+        "tests/test_beta.py::test_same_name[case-1]",
+    }
+    record = _entry(pin="test_same_name")
+    resolving, missing, ambiguous, _ = registry.partition([record], collected)
+    assert resolving == []
+    assert missing == []
+    assert [r["id"] for r in ambiguous] == ["wire-1"]
+    assert registry.unresolved_pins(record, collected) == ["test_same_name"]
+
+
+def test_partition_respects_explicit_parameter_suffix_when_pin_includes_brackets() -> None:
+    """A pin that explicitly names `[case]` matches only that parameter case."""
+    collected = {
+        "tests/test_hook.py::test_selector_raise[RoutingError]",
+        "tests/test_hook.py::test_selector_raise[ValueError]",
+    }
+    present = _entry(id="wire-present", pin="tests/test_hook.py::test_selector_raise[RoutingError]")
+    absent = _entry(id="wire-absent", pin="tests/test_hook.py::test_selector_raise[KeyError]")
+    resolving, missing, ambiguous, _ = registry.partition([present, absent], collected)
+    assert [r["id"] for r in resolving] == ["wire-present"]
+    assert resolving[0]["node_ids"] == ["tests/test_hook.py::test_selector_raise[RoutingError]"]
+    assert [r["id"] for r in missing] == ["wire-absent"]
+    assert ambiguous == []
+    assert registry.unresolved_pins(present, collected) == []
+    assert registry.unresolved_pins(absent, collected) == [
+        "tests/test_hook.py::test_selector_raise[KeyError]"
+    ]
+
+
+def test_verify_runs_subproject_relative_pins_when_rootdir_is_monorepo_root(
+    tmp_path: Path,
+) -> None:
+    """5f nested `--rootdir`: when `--rootdir <repo-root> --testpath <subproject/tests>` collects
+    against a sub-project with its own `pytest.ini`, pytest emits node IDs relative to `<subproject>`
+    (`tests/test_wire.py::test_sub_wire`). `run_pins` must qualify `tests/test_wire.py` under
+    `<subproject>` rather than failing with `file or directory not found` from `<repo-root>`.
+    """
+    repo = _git_repo(tmp_path)
+    sub = repo / "subproject"
+    (sub / "tests").mkdir(parents=True)
+    (sub / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n", encoding="utf-8")
+    (sub / "tests" / "test_wire.py").write_text(
+        "import pytest\n\n"
+        "@pytest.mark.parametrize('case', ['a', 'b'])\n"
+        "def test_sub_wire(case):\n"
+        "    assert case in ('a', 'b')\n",
+        encoding="utf-8",
+    )
+    record = _entry(pin="tests/test_wire.py::test_sub_wire", registered_ts="2026-10-30T00:00:00+00:00")
+    base = _commit_registry(repo, [record])
+
+    result = registry.verify(
+        repo / ".h-mad" / "wires.jsonl",
+        base,
+        rootdir=repo,
+        repo=repo,
+        testpaths=[Path("subproject/tests")],
+    )
+    assert result["verdict"] == "PASS", result["token"]
+    assert (result["verified"], result["broken"], result["missing"]) == (1, 0, 0)
+
