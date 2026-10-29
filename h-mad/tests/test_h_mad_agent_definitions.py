@@ -315,3 +315,19 @@ def test_the_value_sweep_squeezes_whitespace_runs_and_carries_a_control() -> Non
     # find a planted hit reads exactly like a document with no hits.
     assert "printf 'the needle\\n   word here\\n'" in raw
     assert "NO MATCH — the bug" in raw
+
+
+def test_bootstrap_item_3_states_same_session_general_purpose_fallback() -> None:
+    body = _norm(SKILL)
+    assert 'Agent(subagent_type: "general-purpose")' in body
+    assert "~/.claude/skills/h-mad/agents/<name>.md" in body
+    assert "symlinks created by bootstrap in the current session are not dispatchable by name" in body
+
+
+@pytest.mark.parametrize("name", sorted(AUTHOR_DONE))
+def test_author_version_history_rule_names_literal_audit_filename(name: str) -> None:
+    body = _norm(AGENTS / f"{name}.md")
+    assert "h_mad_version_history.py" in body, name
+    assert "literal phase-scoped filename (`<phase>.audit.v<N>[.<surface>].md`" in body, name
+    assert 'never an informal label ("codex p1")' in body, name
+

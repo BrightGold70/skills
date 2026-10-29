@@ -58,8 +58,10 @@ every one of those is a number about a tree that keeps moving. That is where thi
    is drift waiting to happen, and the shared checker also knows the exemptions a bare grep does
    not.
 
-9. **Bump the Version History** with `h_mad_version_history.py`, never a hand-rolled substitution.
-   Read the `VERSION-HISTORY:` token, not `$?`.
+9. **Bump the Version History** with `h_mad_version_history.py`, never a hand-rolled substitution,
+   naming any non-PASS audit cycle the revision answers by its literal phase-scoped filename
+   (`<phase>.audit.v<N>[.<surface>].md`, e.g. `plan.audit.v1.p1.md`), never an informal label
+   ("codex p1"). Read the `VERSION-HISTORY:` token, not `$?`.
 
 10. **Never call `advisor()`, and read in slices.** Measured 2026-09-05 (r17): the design author
     read a 3,500-line document whole more than once, then called `advisor()` — which forwards its

@@ -40,6 +40,7 @@ kind of action a preflight must not take.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from collections.abc import Iterable, Mapping
@@ -169,6 +170,28 @@ def split_agy_root(
     return issues, details
 
 
+def lock_pinned_names(skills_dir: Path) -> set[str]:
+    lock_file = skills_dir.parent / ".skill-lock.json"
+    try:
+        data = json.loads(lock_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    skills = data.get("skills") if isinstance(data, Mapping) else None
+    return {str(k) for k in skills} if isinstance(skills, Mapping) else set()
+
+
+def split_agents_root(
+    lines: Iterable[str], skills_dir: Path, names: Iterable[str], pinned: Iterable[str]
+) -> tuple[list[str], list[str]]:
+    name_list = list(names)
+    must_symlink = (set(name_list) - set(pinned)) | set(AGY_INSTALLED_NAMES)
+    issues, agy_details = split_agy_root(lines, skills_dir, name_list, must_symlink)
+    return issues, [
+        d.replace("AGY_SIBLING_COLLISION:", "AGENTS_SIBLING_COLLISION:", 1)
+        for d in agy_details
+    ]
+
+
 def check(
     skills_link: Path, hook_link: Path, repo: Path | None = None, *,
     agents_skills_dir: Path | str | None = None,
@@ -200,7 +223,13 @@ def check(
     if sibling_repo is not None:
         issues += check_siblings(sibling_repo, skills_link.parent)
         if agents_skills_dir is not None:
-            issues += check_siblings(sibling_repo, Path(agents_skills_dir).expanduser())
+            agents_root = Path(agents_skills_dir).expanduser()
+            agents_issues, agents_details = split_agents_root(
+                check_siblings(sibling_repo, agents_root), agents_root,
+                checkout_skill_names(sibling_repo), lock_pinned_names(agents_root))
+            issues += agents_issues
+            if details is not None:
+                details.extend(sorted(agents_details))
         if agy_skills_dir is not None:
             agy_root = Path(agy_skills_dir).expanduser()
             agy_issues, agy_details = split_agy_root(

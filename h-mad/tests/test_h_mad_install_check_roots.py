@@ -283,3 +283,45 @@ def test_split_prefix_does_not_capture_a_longer_name(tmp_path, hermetic_env):
                 agents=tmp_path / "absent-agents", agy=agy)
     assert _lines(proc) == ["INSTALL: PASS", "OK",
                             f"AGY_SIBLING_COLLISION:{agy / 'h-mad-x'} kind=NOT_SYMLINK"]
+
+
+def test_agents_root_lock_pinned_skill_is_collision_detail(tmp_path, hermetic_env):
+    repo, claude, hook = _install(tmp_path, ("h-mad", "handoff", "pdf", "skill-creator", "debugger"))
+    agents_parent = tmp_path / "dot-agents"
+    agents = agents_parent / "skills"
+    _state(agents, repo, "pdf", "copy")
+    _state(agents, repo, "skill-creator", "other-checkout")
+    (agents_parent / ".skill-lock.json").write_text(
+        '{"version": 3, "skills": {"pdf": {"source": "anthropics/skills"}, '
+        '"skill-creator": {"source": "anthropics/skills"}}}\n',
+        encoding="utf-8",
+    )
+    proc = _run(repo, claude, hook, hermetic_env,
+                agents=agents, agy=tmp_path / "absent-agy")
+    assert proc.returncode == 0, proc.stderr
+    assert _lines(proc) == [
+        "INSTALL: PASS",
+        "OK",
+        f"AGENTS_SIBLING_COLLISION:{agents / 'pdf'} kind=NOT_SYMLINK",
+        f"AGENTS_SIBLING_COLLISION:{agents / 'skill-creator'} kind=WRONG_CHECKOUT",
+    ]
+
+
+def test_agents_root_lock_pinned_core_skill_still_fails(tmp_path, hermetic_env):
+    repo, claude, hook = _install(tmp_path, ("h-mad", "handoff", "pdf"))
+    agents_parent = tmp_path / "dot-agents"
+    agents = agents_parent / "skills"
+    _state(agents, repo, "h-mad", "copy")
+    _state(agents, repo, "pdf", "copy")
+    (agents_parent / ".skill-lock.json").write_text(
+        '{"version": 3, "skills": {"h-mad": {}, "pdf": {}}}\n',
+        encoding="utf-8",
+    )
+    proc = _run(repo, claude, hook, hermetic_env,
+                agents=agents, agy=tmp_path / "absent-agy")
+    assert proc.returncode == 0, proc.stderr
+    lines = _lines(proc)
+    assert lines[:1] == ["INSTALL: FAIL issues=1"]
+    assert f"SIBLING_NOT_SYMLINK:{agents / 'h-mad'} " in proc.stdout
+    assert lines[-1] == f"AGENTS_SIBLING_COLLISION:{agents / 'pdf'} kind=NOT_SYMLINK"
+

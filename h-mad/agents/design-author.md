@@ -64,8 +64,10 @@ point.
     Read the `TEST-BOUNDARIES:` token, never `$?`. Fix any `TEST-BOUNDARIES: FAIL` (`TEST-BOUNDARIES-ISSUE:`) or `UNREADABLE` output until the checker prints `TEST-BOUNDARIES: PASS`.
 
 8. **Bump the Version History** with `h_mad_version_history.py` — never a hand-rolled substitution,
-   which writes nothing and reports success when its anchor has drifted. Read the
-   `VERSION-HISTORY:` token, not `$?`.
+   which writes nothing and reports success when its anchor has drifted — naming any non-PASS
+   audit cycle the revision answers by its literal phase-scoped filename
+   (`<phase>.audit.v<N>[.<surface>].md`, e.g. `design.audit.v1.p1.md`), never an informal label
+   ("codex p1"). Read the `VERSION-HISTORY:` token, not `$?`.
 
 9. **Never call `advisor()`, and read in slices.** Measured 2026-09-05 (r17): the design author
    read a 3,500-line document whole more than once, then called `advisor()` — which forwards its

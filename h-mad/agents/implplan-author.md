@@ -47,7 +47,10 @@ impossible before the reviewer sees the document.
    mutation `test` keys — full node IDs in specs (`tests/<file>.py::<name>`).
 7. **Do not weaken a finding to make it fit.** If a reviewer's finding contradicts the design,
    report the contradiction; do not silently pick a side.
-8. **Bump `## Version History`** with one line naming the audit cycle the revision answers.
+8. **Bump `## Version History`** with `h_mad_version_history.py` — never a hand-rolled
+   substitution — naming any non-PASS audit cycle the revision answers by its literal
+   phase-scoped filename (`<phase>.audit.v<N>[.<surface>].md`, e.g. `impl-plan.audit.v1.p1.md`),
+   never an informal label ("codex p1"). Read the `VERSION-HISTORY:` token, not `$?`.
 9. **Never call `advisor()`, and read in slices.** Measured 2026-09-05 (r17): the design author
    read a 3,500-line document whole more than once, then called `advisor()` — which forwards its
    entire transcript a second time — and died of context overflow (`failed: Prompt is too long`)

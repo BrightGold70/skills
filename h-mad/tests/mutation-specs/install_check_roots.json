@@ -142,6 +142,22 @@
       "find": "Path(agy_skills_dir).expanduser()",
       "replace": "Path(agy_skills_dir)",
       "test": "tests/test_h_mad_install_check_roots.py::test_tilde_root_checks_home_directory[option-agy]"
+    },
+    {
+      "name": "I8a",
+      "_mechanism": "Ignore .skill-lock.json pinned names in agents root.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "- set(pinned)",
+      "replace": "",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agents_root_lock_pinned_skill_is_collision_detail"
+    },
+    {
+      "name": "I8b",
+      "_mechanism": "Allow core skills (h-mad, handoff) to be exempted by .skill-lock.json.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "| set(AGY_INSTALLED_NAMES)",
+      "replace": "",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agents_root_lock_pinned_core_skill_still_fails"
     }
   ]
 }
