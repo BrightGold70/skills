@@ -74,6 +74,14 @@ Axis A — Generic adversarial:
   Flag silent drift, dropped FRs, undocumented design decisions that change
   plan-stated behavior.
 
+{{ONLY:design}}
+- Test Boundaries (`## Test Boundaries` 5-column table): raise a `## Must-fix` (`class: build`) finding whenever:
+  1. `## Test Boundaries` is missing **on a non-exempt design**, leaves any active spec `AC-X.Y[a-z]` uncovered, or contains placeholder cells;
+  2. Any row's `Expected result source` is semantically tautological (derives expected values from the implementation, helper, or formula under test rather than an independent specification, fixture, protocol rule, or analytical invariant);
+  3. Any row tests a private/internal helper instead of the public interface, or mocks the unit under test / an internal collaborator that should be exercised for real; or
+  4. Any `verified by:` row (`verified by: audit | live-run | operator | doc-review`) claims non-test verification for behavior that can and should be unit/integration tested, or names a proving artifact that does not actually verify the listed AC.
+{{END-ONLY}}
+
 Axis B — Invariant compliance (any breach = must-fix, you cannot downgrade).
 Two layers, both binding:
 

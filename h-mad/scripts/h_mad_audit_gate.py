@@ -902,6 +902,132 @@ def verify_stamp(audit_file: Path) -> dict:
     }
 
 
+_DESIGN_AUDIT_RE = re.compile(
+    r"^(?P<feature>.+)\.design\.audit\.v\d+(?:\.[a-z0-9_-]+)?\.md$"
+)
+_NON_DESIGN_AUDIT_RE = re.compile(
+    r"^.+\.(?:plan|impl-plan)\.audit\.v\d+(?:\.[a-z0-9_-]+)?\.md$"
+)
+
+
+def _load_test_boundaries_checker():
+    """Load sibling h_mad_test_boundaries_check.py via spec_from_file_location.
+
+    Never a top-level import: tree_lock_plugin.py loads h_mad_audit_gate.py by
+    file path without h-mad/scripts on sys.path.
+    """
+    import importlib.util
+
+    checker_path = Path(__file__).with_name("h_mad_test_boundaries_check.py")
+    spec = importlib.util.spec_from_file_location(
+        "_h_mad_test_boundaries_check", checker_path
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {checker_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module, checker_path
+
+
+def _candidate_design_paths(audit_file: Path, gated: list[Path]) -> list[Path]:
+    """Resolve deduplicated existing candidate .design.md paths in CLI order."""
+    if _NON_DESIGN_AUDIT_RE.match(audit_file.name):
+        return []
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for path in gated:
+        if path.name.endswith(".design.md") and path.exists():
+            resolved = path.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                out.append(path)
+    if out:
+        return out
+
+    m = _DESIGN_AUDIT_RE.match(audit_file.name)
+    if m is not None:
+        feature = m.group("feature")
+        abs_report = audit_file.resolve()
+        co_located = audit_file.parent / f"{feature}.design.md"
+        if co_located.exists():
+            candidate = co_located
+        elif (
+            len(abs_report.parts) >= 4
+            and abs_report.parts[-4:-1] == ("docs", "02-design", "features")
+        ):
+            canonical = (
+                abs_report.parents[3]
+                / "docs"
+                / "02-design"
+                / "features"
+                / f"{feature}.design.md"
+            )
+            candidate = (
+                canonical
+                if canonical.exists()
+                else Path("docs/02-design/features") / f"{feature}.design.md"
+            )
+        elif "docs" in abs_report.parts[:-1]:
+            docs_idx = len(abs_report.parts) - 2 - abs_report.parts[:-1][::-1].index("docs")
+            report_project_root = Path(*abs_report.parts[:docs_idx])
+            canonical = (
+                report_project_root
+                / "docs"
+                / "02-design"
+                / "features"
+                / f"{feature}.design.md"
+            )
+            candidate = (
+                canonical
+                if canonical.exists()
+                else Path("docs/02-design/features") / f"{feature}.design.md"
+            )
+        else:
+            candidate = Path("docs/02-design/features") / f"{feature}.design.md"
+        if candidate.exists():
+            resolved = candidate.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                out.append(candidate)
+    return out
+
+
+def _run_design_boundaries_checks(
+    audit_file: Path, gated: list[Path]
+) -> tuple[bool, list[str]]:
+    """Evaluate activated candidate .design.md paths before .gated.json stamping."""
+    candidates = [p for p in _candidate_design_paths(audit_file, gated) if p.exists()]
+    if not candidates:
+        return True, []
+
+    checker, checker_path = _load_test_boundaries_checker()
+    all_ok = True
+    lines: list[str] = []
+    for design_path in candidates:
+        proj_root = checker.infer_project_root(design_path)
+        if not checker.should_activate_design_check(design_path, proj_root):
+            continue
+        cmd = [sys.executable, str(checker_path), str(design_path)]
+        if proj_root is not None:
+            cmd.extend(["--root", str(proj_root)])
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        out_lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
+        lines.extend(out_lines)
+        primary = out_lines[0] if out_lines else ""
+        if proc.returncode != 0 or not (
+            primary.startswith("TEST-BOUNDARIES: PASS ")
+            or primary.startswith("TEST-BOUNDARIES: EXEMPT ")
+        ):
+            all_ok = False
+    return all_ok, lines
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the audit gate CLI."""
     parser = argparse.ArgumentParser(description="H-MAD audit gate")
@@ -1103,6 +1229,10 @@ def main(argv: list[str] | None = None) -> int:
         suite = outcome["verdict"]
         print(suite_line(suite, outcome))
 
+    tb_ok, tb_lines = _run_design_boundaries_checks(args.audit_file, args.gated)
+    if not tb_ok:
+        verdict = "FAIL"
+
     # Declared ABOVE `stamped` deliberately: `audit_suite_gate.json` anchors the
     # red-suite-hostage row on `stamped = ""` immediately followed by the `if`,
     # and splitting that pair drifts a neighbouring feature's mutation spec.
@@ -1171,6 +1301,8 @@ def main(argv: list[str] | None = None) -> int:
     # than once at the exit gate — which is what keeps H3 from being prose.
     if legs_line is not None:
         print(f"GATE-LEGS: {legs_line}")
+    for tb_line in tb_lines:
+        print(tb_line)
     print(f"[H-MAD] {feature} gate {verdict}")
     return 0
 

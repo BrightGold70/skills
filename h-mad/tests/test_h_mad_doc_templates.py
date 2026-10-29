@@ -65,6 +65,7 @@ PRIOR_HMAD_HEADINGS = {
         "API / Interface Changes",
         "Error Handling Strategy",
         "Test Strategy",
+        "Test Boundaries",
         "Invariant Compliance",
     ],
     "report": [
@@ -129,6 +130,29 @@ def test_bkit_validated_templates_have_required_superset_headings(doc_type: str)
         assert _has_heading_substring(headings, prior), (
             f"{doc_type} template dropped prior H-MAD heading containing {prior!r}"
         )
+
+
+def test_design_template_contains_test_boundaries_five_column_table() -> None:
+    block = _template_blocks()["design"]
+    headings = _headings(block)
+    assert len(headings) == 14, (
+        f"design template must have 14 headings including Test Boundaries, got {headings!r}"
+    )
+    tb_idx = headings.index("Test Boundaries")
+    assert headings[tb_idx - 1] == "Test Plan"
+    assert headings[tb_idx + 1] == "Invariant Compliance"
+    sec_match = re.search(
+        r"^\s*## Test Boundaries\s*\n(?P<body>.*?)(?=^\s*## Invariant Compliance\b)",
+        block,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert sec_match is not None, "missing ## Test Boundaries section body before ## Invariant Compliance"
+    sec_body = sec_match.group("body")
+    expected_header = (
+        "| Public interface | Acceptance criteria | Expected result source | Mocked dependencies | Exclusions |"
+    )
+    assert expected_header in sec_body
+    assert "|---|---|---|---|---|" in sec_body
 
 
 def test_template_blocks_do_not_contain_plan_plus_trigger_literals() -> None:
