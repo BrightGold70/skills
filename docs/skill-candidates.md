@@ -2841,3 +2841,7 @@ One threshold changed: `vendored-plugin patch kit` waited on a third vendored pa
 `claude-security-guidance-bare-exec`). Its threshold is met; the row stays open, now actionable.
 
 - **re-verify every vendored patch after a plugin update**: this session updated bkit 2.1.38 → 2.1.40 and had to find, re-run and re-apply each patch's `verify.js` by hand (G-001 re-applied; G-004 written and applied to both cache versions). A bkit update silently drops every local patch, and nothing reports it until a guard misfires. One command (or a SessionStart check) that runs every `docs/patches/*/verify.js` and names the ones reading MISSING would catch it. This is the concrete first slice of the patch-kit row above — recurrence: 2 (G-001 on 10-25 and 10-26; G-004 today) — candidate: yes
+  — **LANDED 2026-10-29** in `docs/patches/patch-verify-on-update.sh` (`d13f5e8f`), wired as a `SessionStart` hook that re-runs every `docs/patches/*/verify.js` whenever installed plugins or verify scripts change.
+
+## 2026-10-29 — hmad-test-boundaries-complete — no candidates
+

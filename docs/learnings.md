@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-10-29 · gotcha · [0.7] · `h-mad,assemble-audit,templates,handoff:2026-10-29-hmad-test-boundaries-complete` — Tests pinning historical assembler output against a past commit (PINNED) must read both the assembler script and any evolving template (audit-prompt.template.md) from PINNED when testing switch-off equivalence.
+- 2026-10-29 · gotcha · [0.7] · `h-mad,audit-gate,test-boundaries,handoff:2026-10-29-hmad-test-boundaries-complete` — When wiring a phase-specific check into h_mad_audit_gate.py, guard _candidate_design_paths against .plan.audit. and .impl-plan.audit. report filenames so cross-phase --gated test fixtures do not activate another phase's check.
 - 2026-10-29 · gotcha · [0.9] · `claude-code,hooks,subagentstop,handoff:2026-10-29-bkit-rewake-patches` — SubagentStop/Stop additionalContext keeps the agent running BY DESIGN: 8-continuation cap that resets on every tool call; an agent that acts on a hint can be re-woken without limit
 - 2026-10-29 · gotcha · [0.7] · `bkit,stop-hook,handoff:2026-10-29-bkit-rewake-patches` — 4 of bkit's 5 outputStopSurface Stop handlers are dead under unified-stop.js (bare-require guard returns on require); only sprint-skill-stop (exports run) can block — drive it live before claiming reachability
 - 2026-10-29 · gotcha · [0.7] · `git,shared-tree,orca,handoff:2026-10-29-bkit-rewake-patches` — a sibling lane can switch the shared checkout's branch mid-session; staged-path/diff/suite guards all pass on the wrong branch — test rev-parse --abbrev-ref HEAD in the same command as the commit
