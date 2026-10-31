@@ -42,6 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -192,11 +193,53 @@ def split_agents_root(
     ]
 
 
+def _hook_commands(node: object) -> Iterable[str]:
+    if isinstance(node, Mapping):
+        command = node.get("command")
+        if isinstance(command, str):
+            yield command
+        for value in node.values():
+            yield from _hook_commands(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _hook_commands(value)
+
+
+def check_agy_hook_targets(hooks_files: Iterable[Path], agy_root: Path) -> list[str]:
+    """Hook commands that name a missing file under the agy skills root.
+
+    An absent agy root adds no sibling line, which is right for an operator who
+    never installed agy — and wrong when a live `hooks.json` runs a gate from
+    under it. Measured 2026-10-18: `.agents/hooks.json` armed
+    `~/.gemini/config/skills/h-mad/hooks/h-mad-agy-tdd-gate.py`, the root was
+    absent, the hook exited 2 on every tool call, and `INSTALL:` said nothing.
+    """
+    issues: list[str] = []
+    for hooks_file in hooks_files:
+        try:
+            data = json.loads(Path(hooks_file).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for command in _hook_commands(data):
+            try:
+                tokens = shlex.split(command)
+            except ValueError:
+                continue
+            for token in tokens:
+                target = Path(os.path.expanduser(token))
+                if not target.is_relative_to(agy_root):
+                    continue
+                if not target.exists():
+                    issues.append(f"AGY_HOOK_TARGET_MISSING:{target}")
+    return issues
+
+
 def check(
     skills_link: Path, hook_link: Path, repo: Path | None = None, *,
     agents_skills_dir: Path | str | None = None,
     agy_skills_dir: Path | str | None = None,
     details: list[str] | None = None,
+    hooks_files: Iterable[Path] = (),
 ) -> list[str]:
     """All issues with the install shape; empty means healthy."""
     skill_issues, checkout = _check_skills_link(skills_link)
@@ -239,6 +282,9 @@ def check(
             if details is not None:
                 details.extend(sorted(agy_details))
 
+    if agy_skills_dir is not None:
+        issues += check_agy_hook_targets(hooks_files, Path(os.path.expanduser(agy_skills_dir)))
+
     return issues
 
 
@@ -256,6 +302,13 @@ def main() -> int:
     )
     parser.add_argument("--agents-skills-dir", default=None)
     parser.add_argument("--agy-skills-dir", default=None)
+    parser.add_argument(
+        "--hooks-json",
+        action="append",
+        default=None,
+        help="hooks.json whose commands may run from the agy skills root; "
+             "repeatable; defaults to the project's .agents/hooks.json",
+    )
     args = parser.parse_args()
 
     # The one genuine operational error: no path to check, so there is no
@@ -290,6 +343,7 @@ def main() -> int:
         agents_skills_dir=agents_dir,
         agy_skills_dir=agy_dir,
         details=details,
+        hooks_files=[Path(p) for p in (args.hooks_json or [Path.cwd() / ".agents" / "hooks.json"])],
     )
 
     if issues:
