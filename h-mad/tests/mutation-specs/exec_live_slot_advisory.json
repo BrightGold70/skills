@@ -46,6 +46,22 @@
       "find": "  if grep -qE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' \"$promptfile\" 2>/dev/null; then",
       "replace": "  if grep -qE '<INLINE_[A-Z_0-9]+>|<REPORT_FILE_PATH>' \"$promptfile\" 2>/dev/null; then",
       "test": "tests/test_hmad_dispatch_exec.py::test_a_live_template_slot_in_the_prompt_WARNS_without_changing_the_verdict"
+    },
+    {
+      "name": "the-assembled-receipt-is-ignored",
+      "_mechanism": "Skill-candidates row 'live-slot warning fires on prose that names a slot'. With the receipt ignored, every assembled prompt whose inlined document quotes a slot warns on every cycle, and the advisory trains its reader to scroll past it.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  _prompt_is_assembled \"$promptfile\" ||  # M:ASSEMBLED-SKIP",
+      "replace": "  false ||  # M:ASSEMBLED-SKIP",
+      "test": "tests/test_hmad_dispatch_exec.py::test_an_ASSEMBLED_prompt_that_quotes_a_slot_dispatches_without_the_advisory"
+    },
+    {
+      "name": "any-receipt-silences-the-advisory",
+      "_mechanism": "The receipt reduced to a marker: present means skip, whatever the bytes. A receipt copied onto the hand-shipped 5e verifier, or a slot hand-added after assembly, then dispatches silently -- the exact path this advisory exists to guard.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "sys.exit(0 if want == got else 1)  # M:ASSEMBLED-HASH-MATCH",
+      "replace": "sys.exit(0)  # M:ASSEMBLED-HASH-MATCH",
+      "test": "tests/test_hmad_dispatch_exec.py::test_a_receipt_COPIED_onto_a_hand_written_prompt_does_not_silence_it"
     }
   ]
 }

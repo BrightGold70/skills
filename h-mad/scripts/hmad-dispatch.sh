@@ -2989,6 +2989,18 @@ _codex_input_too_large() {  # <log> <pre_lines> -> "max_chars=N actual_chars=M" 
   printf 'max_chars=%s actual_chars=%s' "${maxc:-?}" "${actc:-?}"
 }
 
+_prompt_is_assembled() {  # <promptfile> -> 0 iff <promptfile>.assembled holds its sha256
+  # Any failure -- no receipt, unreadable file, python error -- answers "no", so
+  # the live-slot advisory stays armed. See the advisory in `_cmd_exec`.
+  [ -f "$1.assembled" ] || return 1
+  python3 - "$1" "$1.assembled" 2>/dev/null <<'PY'
+import hashlib, sys
+want = open(sys.argv[2], encoding="utf-8").read().strip()
+got = hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()
+sys.exit(0 if want == got else 1)  # M:ASSEMBLED-HASH-MATCH
+PY
+}
+
 _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox] [grok: --sandbox <profile> (default strict), --allow-weaker-sandbox]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
@@ -3072,6 +3084,15 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   # prompt that quotes a slot; the cure costs silence on the hand-shipped file
   # with seventeen live ones. Pinned by
   # `test_a_BACKTICKED_live_slot_is_still_detected`.
+  #
+  # What the row DID get: an ASSEMBLED prompt skips the advisory. The grok-audit-
+  # surface plan cycles warned `<INLINE_PAIRED_*>` on every pass because the
+  # inlined plan quotes those slots, after the assembler had already refused real
+  # residual ones. A flag (`exec --assembled`) attests nothing about the bytes and
+  # a marker line can be copied into a hand-written prompt, so the skip needs
+  # `<prompt>.assembled` (written by `stamp_assembled` on PASS) to hold the sha256
+  # of THIS file. Hand edits and copied receipts both fail the hash and warn.
+  _prompt_is_assembled "$promptfile" ||  # M:ASSEMBLED-SKIP
   if grep -qE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' "$promptfile" 2>/dev/null; then
     local _slots
     _slots=$(grep -oE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' "$promptfile" \

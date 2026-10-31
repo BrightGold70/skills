@@ -154,6 +154,39 @@ def fill_slots(text: str, slots: dict[str, str]) -> tuple[str, str]:
     return rx.sub(lambda m: slots[m.group(0)], text), rx.sub("", text)
 
 
+# `hmad-dispatch exec` warned `prompt carries live template slots` on every pass of
+# the grok-audit-surface plan cycles: the inlined plan QUOTES `<INLINE_PAIRED_*>` in
+# backticks, after this assembler had already refused real residual slots. Backtick
+# awareness there is refused (it blinds the hand-shipped 5e verifier), so the PASS
+# leaves a RECEIPT instead: `<prompt>.assembled`, the sha256 of the bytes written.
+# exec skips the advisory only when that hash matches the file it sends, so a hand
+# edit after assembly, or a receipt copied onto a hand-written prompt, re-arms it.
+#
+# Stamped only when the template residue is clean under DISPATCH's grammar, which is
+# wider than either assembler's own check (preflight tests `"<INLINE_" in`, the TDD
+# `RESIDUAL` has no `<AUDIT_SENTINEL>`). A residue slot one of them let through must
+# keep the advisory armed, or the skip would hide a slot nothing refused.
+DISPATCH_SLOT = re.compile(r"<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>")
+
+
+def stamp_assembled(prompt: Path, *, residue: str) -> bool:
+    """Write `<prompt>.assembled` iff `residue` holds no dispatch-grammar slot.
+
+    Never raises: a receipt that cannot be written only costs the skip, and must
+    not turn a PASS into an error. Any stale receipt is removed first.
+    """
+    receipt = Path(f"{prompt}.assembled")
+    try:
+        receipt.unlink(missing_ok=True)
+        if DISPATCH_SLOT.search(residue):  # M:ASSEMBLED-RESIDUE-CLEAN
+            return False
+        digest = hashlib.sha256(prompt.read_bytes()).hexdigest()
+        receipt.write_text(digest + "\n", encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
 def preflight(text: str, inlined: dict[str, str], slot_text: str | None = None) -> list[str]:
     """Return the reasons this prompt must not be dispatched (empty == clean).
 
@@ -450,11 +483,17 @@ def doc_path(feature: str, kind: str, project_root: Path, *,
     return base / f"{feature}.{kind}.md"
 
 
-def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
-             sentinel: str, report_file: str, template: Path,
-             design_dir: Path | None = None,
-             vh_tail: int | None = None,
-             path_scope: bool = False) -> tuple[str, list[str]]:
+def assemble(**kwargs) -> tuple[str, list[str]]:
+    text, problems, _residue = assemble_with_residue(**kwargs)
+    return text, problems
+
+
+def assemble_with_residue(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
+                          sentinel: str, report_file: str, template: Path,
+                          design_dir: Path | None = None,
+                          vh_tail: int | None = None,
+                          path_scope: bool = False) -> tuple[str, list[str], str]:
+    """`assemble`, plus the template residue `stamp_assembled` needs."""
     text = resolve(strip_orchestrator_note(_read(template, required=True)), phase)
 
     def doc(kind: str) -> Path:
@@ -497,7 +536,8 @@ def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
         text, sentinel=sentinel, report_file=report_file)
 
     return text, contract_problems + preflight(
-        text, {"base": base_md, "project": project_md}, slot_text=template_residue)
+        text, {"base": base_md, "project": project_md}, slot_text=template_residue), \
+        template_residue
 
 
 # --- report-path ownership -----------------------------------------------------
@@ -629,7 +669,7 @@ def main(argv: list[str] | None = None) -> int:
     rp = args.report_file
 
     try:
-        text, problems = assemble(
+        text, problems, residue = assemble_with_residue(
             feature=args.feature, phase=args.phase, project_root=args.project_root,
             docs_dir=docs_dir, design_dir=args.design_dir, sentinel=sentinel,
             report_file=args.report_file, template=args.template,
@@ -723,6 +763,7 @@ def main(argv: list[str] | None = None) -> int:
             _marker(rp).unlink(missing_ok=True)  # M:HANDED-WRITE-RELEASE
         print(f"hmad-assemble: cannot write the prompt — {exc}", file=sys.stderr)
         return 1
+    stamp_assembled(out, residue=residue)  # M:ASSEMBLED-STAMP-AUDIT
     size = len(text.encode())
     # J12: size travels ON the verdict line, not beside it. SKILL.md mandates
     # asserting `ASSEMBLE: PASS`, so a separate warning line is a signal nothing
