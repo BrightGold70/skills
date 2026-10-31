@@ -3092,6 +3092,8 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
   # a marker line can be copied into a hand-written prompt, so the skip needs
   # `<prompt>.assembled` (written by `stamp_assembled` on PASS) to hold the sha256
   # of THIS file. Hand edits and copied receipts both fail the hash and warn.
+  # It is NOT tamper-proof: whatever can rewrite the prompt can rewrite the
+  # receipt to match. The worst case is a missed advisory, never a gate opened.
   _prompt_is_assembled "$promptfile" ||  # M:ASSEMBLED-SKIP
   if grep -qE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' "$promptfile" 2>/dev/null; then
     local _slots

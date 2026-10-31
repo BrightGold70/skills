@@ -405,3 +405,45 @@ def test_agy_hook_target_outside_root_adds_no_line(tmp_path, hermetic_env):
     proc = _run_in(project, repo, claude, hook, hermetic_env, agy)
     assert _lines(proc) == ["INSTALL: PASS", "OK"]
 
+
+
+def test_agy_hook_disabled_hook_adds_no_line(tmp_path, hermetic_env):
+    # Review: a hook switched off with `"enabled": false` does not run, so a missing
+    # target under it breaks nothing and must not fail the install.
+    repo, claude, hook = _install(tmp_path)
+    agy = tmp_path / "agy-skills"
+    project = tmp_path / "project"
+    path = _hooks_json(project, f"python3 {agy.joinpath(*AGY_GATE)}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["h-mad-agy-tdd-gate"]["enabled"] = False
+    path.write_text(json.dumps(data), encoding="utf-8")
+    proc = _run_in(project, repo, claude, hook, hermetic_env, agy)
+    assert _lines(proc) == ["INSTALL: PASS", "OK"]
+
+
+@pytest.mark.parametrize("spelling", ["$HOME", "${HOME}"])
+def test_agy_hook_env_home_command_expands(tmp_path, hermetic_env, spelling):
+    # Review: hook commands run through a shell, so `$HOME` names the same root as `~`.
+    repo, claude, hook = _install(tmp_path)
+    home = tmp_path / "home"
+    agy = home / "agy-skills"
+    project = tmp_path / "project"
+    _hooks_json(project, f"python3 {spelling}/agy-skills/h-mad/hooks/h-mad-agy-tdd-gate.py")
+    proc = _run_in(project, repo, claude, hook, hermetic_env, "~/agy-skills",
+                   extra_env={"HOME": str(home)})
+    assert _lines(proc) == ["INSTALL: FAIL issues=1",
+                            f"AGY_HOOK_TARGET_MISSING:{agy.joinpath(*AGY_GATE)}"]
+
+
+def test_agy_hook_deeply_nested_hooks_json_still_prints_a_verdict(tmp_path, hermetic_env):
+    # Review: a pathologically nested hooks.json raised RecursionError and the check
+    # printed no INSTALL: token at all; it is treated like any unreadable hooks.json.
+    repo, claude, hook = _install(tmp_path)
+    agy = tmp_path / "agy-skills"
+    project = tmp_path / "project"
+    path = project / ".agents" / "hooks.json"
+    path.parent.mkdir(parents=True)
+    path.write_text('{"a":' * 5000 + "1" + "}" * 5000, encoding="utf-8")
+    proc = _run_in(project, repo, claude, hook, hermetic_env, agy)
+    assert proc.returncode == 0, proc.stderr
+    assert _lines(proc)[0].startswith("INSTALL: ")

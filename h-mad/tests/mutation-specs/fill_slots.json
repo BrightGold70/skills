@@ -91,6 +91,14 @@
       "replace": "        \"residue\": \"\",\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestAssembledReceipt::test_a_residue_sentinel_the_assembler_does_not_check_gets_no_receipt",
       "symbol": "assemble"
+    },
+    {
+      "name": "receipt-slot-pattern-drifts",
+      "_mechanism": "The assembler's receipt check stops recognising a slot hmad-dispatch's advisory flags (here <AUDIT_SENTINEL>), so a receipt is written for a prompt the advisory would warn on, and the skip hides it.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "DISPATCH_SLOT = re.compile(r\"<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>\")",
+      "replace": "DISPATCH_SLOT = re.compile(r\"<INLINE[^>]*>|<REPORT_FILE_PATH>\")",
+      "test": "tests/test_h_mad_assemble_audit.py::test_the_receipt_slot_pattern_is_hmad_dispatchs_own"
     }
   ]
 }

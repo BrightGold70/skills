@@ -208,6 +208,7 @@ def scan_log(text: str, surface: str, *, root: str, checkout: str,
             return dict(result, word="UNREADABLE", reason="no_event")
     result["calls"] = len(calls)
     explained = []
+    seen = set()  # order kept by `explained`; a list scan here was quadratic (review: 32 s on 80k calls)
     for line, tool, strings in calls:
         # Per string, so each path keeps its key; `named_paths` matches each string alone anyway.
         keyed = [(key, path) for key, string in strings for path in named_paths([string], home)]
@@ -218,7 +219,8 @@ def scan_log(text: str, surface: str, *, root: str, checkout: str,
             for (key, path), kind in zip(keyed, classes):
                 entry = (line, tool, key, path, _counted_as(path, checkout=checkout,
                                                             needle_dirs=needle_dirs, home=home))
-                if kind == "out" and entry not in explained:
+                if kind == "out" and entry not in seen:
+                    seen.add(entry)
                     explained.append(entry)
             outside = [path for path, kind in zip(paths, classes) if kind == "out"]
             in_checkout = any(_below(path, checkout) for path in outside)  # M:TOOLSCAN-CHECKOUT

@@ -195,6 +195,8 @@ def split_agents_root(
 
 def _hook_commands(node: object) -> Iterable[str]:
     if isinstance(node, Mapping):
+        if node.get("enabled") is False:  # M:AH-DISABLED a switched-off hook never runs
+            return
         command = node.get("command")
         if isinstance(command, str):
             yield command
@@ -218,15 +220,17 @@ def check_agy_hook_targets(hooks_files: Iterable[Path], agy_root: Path) -> list[
     for hooks_file in hooks_files:
         try:
             data = json.loads(Path(hooks_file).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            commands = list(_hook_commands(data))
+        except (OSError, ValueError, RecursionError):  # M:AH-UNREADABLE no verdict is worse than a skip
             continue
-        for command in _hook_commands(data):
+        for command in commands:
             try:
                 tokens = shlex.split(command)
             except ValueError:
                 continue
             for token in tokens:
-                target = Path(os.path.expanduser(token))
+                # Hook commands run through a shell: `$HOME` and `${HOME}` name the root too.
+                target = Path(os.path.expandvars(os.path.expanduser(token)))  # M:AH-ENVVARS
                 if not target.is_relative_to(agy_root):
                     continue
                 if not target.exists():

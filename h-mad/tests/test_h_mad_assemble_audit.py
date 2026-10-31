@@ -905,3 +905,15 @@ class TestAssembledReceipt:
         (tmp_path / "prompt.txt.assembled").write_text("stale\n")
         assert aa.stamp_assembled(out, residue="<AUDIT_SENTINEL>") is False
         assert not (tmp_path / "prompt.txt.assembled").exists()
+
+
+def test_the_receipt_slot_pattern_is_hmad_dispatchs_own():
+    # Review: the receipt is written only when the residue has no slot under
+    # DISPATCH_SLOT, and hmad-dispatch skips its advisory on that receipt. If the two
+    # patterns drift apart, a slot the advisory would flag is waved through unchecked.
+    import re
+    from h_mad_assemble_audit import DISPATCH_SLOT
+    dispatch = (Path(__file__).resolve().parents[1] / "scripts" / "hmad-dispatch.sh").read_text(encoding="utf-8")
+    advisory = re.findall(r"grep -[qo]E '([^']*)' \"\$promptfile\"", dispatch)
+    assert len(advisory) == 2, advisory
+    assert set(advisory) == {DISPATCH_SLOT.pattern}

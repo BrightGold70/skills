@@ -57,8 +57,10 @@ While any feature in this repository is at Phase 5 (step5), the Phase-5 TDD gate
 for this audit too. The read-only commands the gate admits are exactly: `cat`, `grep`, `head`,
 `jq`, `ls`, `pwd`, `shasum`, `tail`, `wc`. The list is `READ_ONLY_COMMANDS` in
 `h-mad/scripts/h_mad_target_identity.py`. Anything else is refused, including `sed`, `nl`, `awk`,
-`find`, `git` and `python -c`. A command must also be one simple command: a `|`, `;`, `&&`,
-redirect, `$` or glob is refused. A refused command is not evidence that the code is absent or
+`find`, `git` and `python -c`. A command must also be one simple command made only of letters,
+digits, spaces, quotes and `_ . / : @ % + = , -`; any other character is refused even inside
+quotes, so `|`, `;`, `&&`, redirects, `$`, globs, `(`, `[`, `^`, `\` and `~` all fail
+(`grep -n 'def foo(' a.py` is refused: search for `def foo` instead). A refused command is not evidence that the code is absent or
 unreadable. Read source with your file-read tool if you have one, or with the admitted commands,
 and do not spend turns probing what else might pass.
 

@@ -442,3 +442,21 @@ def test_audit_prompt_names_exactly_the_gate_read_verbs(identity, audit_type: st
     assert "sed" in after and "|" in after, "the audit prompt must also say what is refused"
     assert "READ_ONLY_COMMANDS" in after, "the audit prompt must name where the list lives"
     assert "not evidence" in after, "a refused read must not read as absent code"
+
+
+def test_audit_prompt_states_the_gates_lexical_rule():
+    """Review: the audit prompt named only pipes, chains, redirects, `$` and globs as
+    refused, yet the gate's SIMPLE_SHELL_COMMAND also refuses a quoted `(`, `[`, `^`,
+    `\\` or `~`. Every example the prompt lists as refused must really be refused,
+    and the example it lists as the fix must really pass."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "tid_lex", Path(__file__).resolve().parents[1] / "scripts" / "h_mad_target_identity.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    text = (Path(__file__).resolve().parents[1] / "audit-prompt.template.md").read_text(encoding="utf-8")
+    assert "`grep -n 'def foo(' a.py` is refused" in text
+    assert module.SIMPLE_SHELL_COMMAND.fullmatch("grep -n 'def foo(' a.py") is None
+    assert module.SIMPLE_SHELL_COMMAND.fullmatch("grep -n 'def foo' a.py") is not None
+    for char in "(^[\\~":
+        assert module.SIMPLE_SHELL_COMMAND.fullmatch(f"grep '{char}' a.py") is None, char

@@ -195,8 +195,8 @@
       "name": "AH5",
       "_mechanism": "Skip tilde expansion of hook-command tokens.",
       "file": "scripts/h_mad_install_check.py",
-      "find": "                target = Path(os.path.expanduser(token))",
-      "replace": "                target = Path(token)",
+      "find": "                target = Path(os.path.expandvars(os.path.expanduser(token)))  # M:AH-ENVVARS",
+      "replace": "                target = Path(os.path.expandvars(token))  # M:AH-ENVVARS",
       "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_tilde_command_expands_home"
     },
     {
@@ -206,6 +206,27 @@
       "find": "check_agy_hook_targets(hooks_files, Path(os.path.expanduser(agy_skills_dir)))",
       "replace": "check_agy_hook_targets(hooks_files, Path(agy_skills_dir))",
       "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_tilde_command_expands_home"
+    },
+    {
+      "name": "AH7: a disabled hook still fails the install",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        if node.get(\"enabled\") is False:  # M:AH-DISABLED a switched-off hook never runs\n            return\n",
+      "replace": "",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_disabled_hook_adds_no_line"
+    },
+    {
+      "name": "AH8: $HOME in a hook command is not expanded",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "target = Path(os.path.expandvars(os.path.expanduser(token)))  # M:AH-ENVVARS",
+      "replace": "target = Path(os.path.expanduser(token))  # M:AH-ENVVARS",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_env_home_command_expands[$HOME]"
+    },
+    {
+      "name": "AH9: a deeply nested hooks.json crashes before any INSTALL: token",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        except (OSError, ValueError, RecursionError):  # M:AH-UNREADABLE",
+      "replace": "        except (OSError, ValueError):  # M:AH-UNREADABLE",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_deeply_nested_hooks_json_still_prints_a_verdict"
     }
   ]
 }
