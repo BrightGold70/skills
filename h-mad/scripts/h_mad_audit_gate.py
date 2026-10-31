@@ -545,6 +545,24 @@ def suite_line(verdict: str, outcome: dict) -> str:
     return f"SUITE: {verdict} passed={outcome['passed']} failed={outcome['failed']}{moved}"
 
 
+def suite_hold_line(test_root: Path) -> str:
+    """The notice printed before the suite starts: cycles 1 and 3 read `tree_moved=`
+    from the orchestrator's own writes made while the suite ran, and nothing said a
+    suite was running. `SUITE-HOLD:` is its own token so every `startswith("SUITE:")`
+    reader still finds exactly one verdict line, and it names the git toplevel the
+    digest covers, not the test dir: the offending writes were docs outside it.
+    `tree=` is last so a path with spaces still parses to the end of the line."""
+    tree = os.path.realpath(str(test_root))  # never raises: `run_suite` raises nothing
+    try:
+        top = subprocess.run(["git", "-C", tree, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=30)
+        if top.returncode == 0 and top.stdout.strip():
+            tree = top.stdout.strip()  # M:hold-names-toplevel
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return f"SUITE-HOLD: hold writes to this tree until its SUITE verdict line prints tree={tree}"
+
+
 def suite_busy_line(returncode: int | None, output: str) -> str | None:
     """The `SUITE: BUSY` line when a pytest run was refused by the tree lock.
 
@@ -598,6 +616,10 @@ def run_suite(test_root: Path, command: list[str] | None = None,
     mismatches, and HemaSuite carries two suites under a monorepo root.
     """
     argv = command or [sys.executable, "-m", "pytest", str(test_root), "-q"]
+    # Here, not in either caller: this is where the suite starts, and both the gate's
+    # `--project-tests` and the cycle driver reach it. Flushed, because a reader
+    # tailing a redirected stdout would otherwise see it only after the verdict.
+    print(suite_hold_line(test_root), flush=True)  # M:hold-notice-flushed
     try:
         run = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:

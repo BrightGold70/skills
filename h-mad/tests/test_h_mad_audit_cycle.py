@@ -3347,6 +3347,28 @@ def test_the_cycle_driver_refuses_suite_timeout_without_project_tests(
     assert "requires --project-tests" in err, err
 
 
+def test_the_cycle_driver_prints_the_hold_notice_before_its_suite_line(
+    capsys: pytest.CaptureFixture, tmp_path: Path
+) -> None:
+    """Row `orchestrator writes during the cycle suite read as tree_moved`: the driver
+    is where the orchestrator watches a cycle, so the notice must reach it there,
+    ahead of the verdict, and leave exactly one `SUITE:` line for parsers."""
+    ac = audit_cycle()
+    script = tmp_path / "green.sh"
+    script.write_text('#!/bin/sh\necho "1 passed in 0.1s"\n', encoding="utf-8")
+    script.chmod(0o755)
+    rc, out, _ = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=_two_leg_reports(tmp_path),
+        extra_args=["--project-tests", str(tmp_path), "--suite-cmd", str(script)],
+    )
+    lines = out.splitlines()
+    holds = [i for i, l in enumerate(lines) if l.startswith("SUITE-HOLD: ")]
+    verdicts = [i for i, l in enumerate(lines) if l.startswith("SUITE:")]
+    assert len(holds) == 1 and len(verdicts) == 1, out
+    assert holds[0] < verdicts[0], out
+    assert lines[verdicts[0]] == "SUITE: PASS passed=1 failed=0", out
+
+
 def test_the_cycle_driver_passes_a_quoted_suite_cmd_argument_whole(
     capsys: pytest.CaptureFixture, tmp_path: Path
 ) -> None:
