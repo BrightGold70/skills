@@ -538,6 +538,22 @@
       "find": "        absolute = candidate if \"/\" in candidate else shutil.which(candidate)",
       "replace": "        absolute = candidate",
       "test": "tests/test_h_mad_assemble_tdd.py::TestPythonResolution::test_suggestions_are_absolute"
+    },
+    {
+      "name": "drop-the-counts-total-rider-on-a-multi-path-task",
+      "_mechanism": "A Task spanning two test modules states one split with nothing saying it is the sum over both, so the implementer reads it as one module's split; Task 7 and Task 11/12 needed a hand-written note for exactly that.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "               if len(test_paths) > 1 else \"\")  # M:AT-COUNTS-TOTAL",
+      "replace": "               if False else \"\")  # M:AT-COUNTS-TOTAL",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestRepeatableTestPathSpec::test_the_counts_line_says_the_split_is_a_total_across_every_path"
+    },
+    {
+      "name": "emit-the-counts-total-rider-on-a-single-path-task",
+      "_mechanism": "The rider is scoped to more than one path so a single-path RED/GREEN prompt stays byte-identical to the pre-repeatable rendering the gate-phase guard pins.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "               if len(test_paths) > 1 else \"\")  # M:AT-COUNTS-TOTAL",
+      "replace": "               if len(test_paths) > 0 else \"\")  # M:AT-COUNTS-TOTAL",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestGateProbeHandoffSpec::test_guard_red_green_prompt_bytes_are_unchanged"
     }
   ],
   "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."

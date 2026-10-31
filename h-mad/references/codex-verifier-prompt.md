@@ -23,7 +23,9 @@ property below is actually false — if so, STOP and report rather than fixing.
 
 Working directory: `<INLINE_REPO_ROOT>`.
 Interpreter / run command: `<INLINE_TEST_COMMAND>` (e.g. `MPLBACKEND=Agg PYTHONPATH=. <interp> -m pytest`).
-Module test file: `<INLINE_TEST_PATH>`.
+Module test file(s): `<INLINE_TEST_PATHS>` — every test path of the Task, space-separated, in the
+order the RED/GREEN dispatch named them (each `--test-path`). A Task whose tests span two modules
+lists both; naming only the first under-counts the Task.
 Production file(s) under test: `<INLINE_PROD_PATHS>`.
 Stated properties the plan pins (verify each against source): `<INLINE_PROPERTIES>`.
 Connection under test (`wiring` tasks; empty otherwise): `<INLINE_WIRE>`.
@@ -44,8 +46,9 @@ Full-suite reference number (pre-change baseline): `<INLINE_SUITE_REFERENCE>`.
 
 ## Do this, in order
 
-1. **Run the module tests and report the count.** Run `<INLINE_TEST_COMMAND> <INLINE_TEST_PATH> -q`
-   and quote the exact passed/failed number. Any failure here is a blocker — report it, do not fix.
+1. **Run the module tests and report the count.** Run `<INLINE_TEST_COMMAND> <INLINE_TEST_PATHS> -q`
+   and quote the exact passed/failed number — one run over every path, so the number is the total
+   across every test path, the same total the stated `--expect-fail`/`--expect-pass` split describes. Any failure here is a blocker — report it, do not fix.
 
 Perform the revert test defined in SKILL.md §5e.
 
