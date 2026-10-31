@@ -1488,6 +1488,26 @@ class TestRepeatableTestPathSpec:
         ]
         assert shlex.quote(" ".join(MULTI_TEST_PATHS)) not in rerun
 
+    def test_the_counts_line_says_the_split_is_a_total_across_every_path(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """A two-module Task needed a hand-written split note because the
+        counts read as describing one module. The prompt line that prints them
+        must say they are the sum over every --test-path."""
+        filled, _ = call(plan, tmp_path, test_path=MULTI_TEST_PATHS,
+                         expect_fail=8, expect_pass=6)
+        line = next(l for l in filled.splitlines()
+                    if l.startswith("**Expected after this dispatch:**"))
+        assert line.startswith("**Expected after this dispatch:** 8 failing, 6 passing.")
+        assert "totals across every test path" in line
+
+    def test_the_count_flags_help_says_they_are_totals_across_every_path(self) -> None:
+        proc = run_cli("--help")
+        assert proc.returncode == 0, proc.stderr
+        help_text = " ".join(proc.stdout.split())
+        assert "failing tests in total across every --test-path" in help_text
+        assert "passing tests in total across every --test-path" in help_text
+
     @pytest.mark.parametrize("offending_index", [0, 1], ids=["first", "second"])
     def test_every_path_is_checked_for_misrooting(
         self, plan: Path, tmp_path: Path, offending_index: int

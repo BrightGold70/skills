@@ -60,3 +60,16 @@ def test_skill_5e_wires_the_verifier_reference() -> None:
         "SKILL.md does not reference the bundled verifier template — the 5e "
         "anti-gaming verify would drift back to an ad-hoc scratchpad prompt"
     )
+
+
+def test_verifier_prompt_carries_every_test_path_of_the_task() -> None:
+    """A two-module Task's verifier named only the first test file and counted
+    8 of 14 tests. The slot is a list — every test path, space-separated — and
+    step 1 runs them all in one command, so the count is the Task's total."""
+    body = VERIFIER.read_text(encoding="utf-8")
+    assert "<INLINE_TEST_PATH>" not in body, "single-path slot still present"
+    flat = _norm(body)
+    assert "Module test file(s): `<INLINE_TEST_PATHS>`" in flat
+    assert "space-separated" in flat
+    assert "Run `<INLINE_TEST_COMMAND> <INLINE_TEST_PATHS> -q`" in flat
+    assert "the total across every test path" in flat
