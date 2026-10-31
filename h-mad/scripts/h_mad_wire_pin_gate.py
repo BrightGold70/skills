@@ -202,6 +202,10 @@ def _parse_tasks(text: str) -> list[dict]:
                 "runner_error": None,
                 "production": [],
                 "tests": [],
+                # Which path labels carry a declaration -- a path of ANY kind, or
+                # `none` -- judged on the raw value, since `production`/`tests`
+                # keep only `.py` tokens and a `.sh` production file is correct.
+                "path_labels": set(),
                 "judge_budget": None,
             }
             tasks.append(current)
@@ -229,6 +233,10 @@ def _parse_tasks(text: str) -> list[dict]:
                 current["judge_budget"] = int(budget.group("seconds"))
                 continue
             paths = _PATHS_FIELD_RE.match(line)
+            if paths is not None and (_NONE_VALUE_RE.match(paths.group("value"))
+                                      or _is_real_value(paths.group("value"))):
+                current["path_labels"].add(
+                    "production" if paths.group("label").lower().startswith("production") else "tests")
             if paths is not None and _NONE_VALUE_RE.match(paths.group("value")) is None:
                 key = "production" if paths.group("label").lower().startswith("production") else "tests"
                 current[key].extend(_PY_TOKEN_RE.findall(paths.group("value")))
@@ -261,9 +269,28 @@ def _unshaped_entry(task: dict) -> str:
     return task["id"]
 
 
+def _unlabeled_entries(tasks: list[dict]) -> list[str]:
+    """Tasks whose Production/Test path label is absent, filler or a placeholder.
+
+    A detail, not a FAIL cause: the summary token carries no count for it, and a
+    FAIL whose counts all read clean is the anti-pattern this gate avoids. It is
+    reported here because 5d is otherwise the first reader of these labels.
+    """
+    entries = []
+    for task in tasks:
+        for key, label in (("production", "Production file"), ("tests", "Test file")):
+            if key not in task["path_labels"]:
+                entries.append(
+                    f"{task['id']} ({task['name']}): no **{label}** path "
+                    "(name the path, or `none`)"
+                )
+    return entries
+
+
 def check(plan_path: Path) -> dict:
     """Classify an impl-plan. Raises OSError if the plan cannot be read."""
     tasks = _parse_tasks(plan_path.read_text(encoding="utf-8"))
+    unlabeled = _unlabeled_entries(tasks)
 
     if not any(task["shape"] for task in tasks):
         return {
@@ -273,6 +300,7 @@ def check(plan_path: Path) -> dict:
             "unpinned": [],
             "unshaped": [_unshaped_entry(task) for task in tasks],
             "mislabeled": [],
+            "unlabeled": unlabeled,
         }
 
     # The plan is shape-aware, so a task with no shape is a hiding place for a
@@ -325,6 +353,7 @@ def check(plan_path: Path) -> dict:
         "unpinned": unpinned,
         "unshaped": unshaped,
         "mislabeled": mislabeled,
+        "unlabeled": unlabeled,
     }
 
 
@@ -480,6 +509,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  unshaped: {item}")
     for item in result["mislabeled"]:
         print(f"  mislabeled: {item}")
+    for item in result["unlabeled"]:
+        print(f"  unlabeled: {item}")
     if result["verdict"] == "PASS":
         if args.feature:
             tasks = _parse_tasks(args.impl_plan.read_text(encoding="utf-8"))

@@ -3577,6 +3577,134 @@
       "find": "        ok = line.startswith(\"ASSEMBLER: PINNED sha=\")  # M:REQUIRE-OK-ASSEMBLER",
       "replace": "        ok = line.startswith(\"ASSEMBLER: \")  # M:REQUIRE-OK-ASSEMBLER",
       "test": "tests/test_grok_audit_surface_assembler_pin.py::test_require_assembler_ok_only_on_pinned[UNPINNED]"
+    },
+    {
+      "name": "toolscan-explain-without-flag",
+      "_mechanism": "Print the explain lines without --explain, so the default output is no longer the token alone.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "                   for line, tool, key, path, kind in result[\"explained\"]] if args.explain else []",
+      "replace": "                   for line, tool, key, path, kind in result[\"explained\"]] if True else []",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
+    },
+    {
+      "name": "toolscan-explain-tool-unescaped",
+      "_mechanism": "Print the agent-controlled tool name raw, so a newline in it forges a TOOLSCAN line.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "line={line} tool={json.dumps(tool)} arg=",
+      "replace": "line={line} tool={tool} arg=",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_escapes_agent_controlled_names"
+    },
+    {
+      "name": "toolscan-explain-not-only-out",
+      "_mechanism": "Explain inside and exempt paths too.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "                if kind == \"out\" and entry not in seen:",
+      "replace": "                if entry not in seen:",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
+    },
+    {
+      "name": "toolscan-explain-duplicates",
+      "_mechanism": "Explain an agy call's path once per event (ACTIVE and DONE) instead of once.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "                if kind == \"out\" and entry not in seen:",
+      "replace": "                if kind == \"out\":",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_agy_names_a_grouped_call_once"
+    },
+    {
+      "name": "toolscan-explain-checkout-class-dropped",
+      "_mechanism": "Never name a live-checkout path as the checkout class.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if _below(path, checkout):",
+      "replace": "    if False:",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
+    },
+    {
+      "name": "toolscan-explain-needle-class-dropped",
+      "_mechanism": "Never name a needle-dir path as the needle class.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if any(needle + \"/\" in path for needle in needle_dirs):",
+      "replace": "    if False:",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
+    },
+    {
+      "name": "toolscan-explain-state-tree-class-dropped",
+      "_mechanism": "Never name an h-mad state-tree path as the state_tree class.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if _below(path, home + \"/.local/state/h-mad\"):",
+      "replace": "    if False:",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
+    },
+    {
+      "name": "toolscan-explain-sessions-class-dropped",
+      "_mechanism": "Never name a grok session path as the grok_sessions class.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    if _below(path, home + \"/.grok/sessions\"):",
+      "replace": "    if False:",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
+    },
+    {
+      "name": "toolscan-explain-ndjson-line-off-by-one",
+      "_mechanism": "Number grok/agy log lines from 0.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    for number, line in enumerate(text.splitlines(), 1):",
+      "replace": "    for number, line in enumerate(text.splitlines()):",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
+    },
+    {
+      "name": "toolscan-explain-codex-line-from-boundary",
+      "_mechanism": "Number codex lines from the dispatch boundary instead of the top of the log.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "    for number, line in enumerate(lines[start:], start + 1):",
+      "replace": "    for number, line in enumerate(lines[start:], 1):",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_codex_names_the_exec_line"
+    },
+    {
+      "name": "toolscan-explain-codex-exec-line",
+      "_mechanism": "Name the line after the exec marker as the codex call's start.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            exec_line = number",
+      "replace": "            exec_line = number + 1",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_codex_names_the_exec_line"
+    },
+    {
+      "name": "toolscan-explain-agy-last-event-line",
+      "_mechanism": "Name an agy call by its last event's line instead of its first.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            origins.setdefault(key, (number, step.get(\"tool_name\")))",
+      "replace": "            origins[key] = (number, step.get(\"tool_name\"))",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_agy_names_a_grouped_call_once"
+    },
+    {
+      "name": "toolscan-explain-agy-tool-dropped",
+      "_mechanism": "Drop the agy tool name.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "(number, step.get(\"tool_name\")))",
+      "replace": "(number, None))",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_agy_names_a_grouped_call_once"
+    },
+    {
+      "name": "toolscan-explain-grok-tool-dropped",
+      "_mechanism": "Drop the grok tool name.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "            calls.append((number, event.get(\"toolName\"),",
+      "replace": "            calls.append((number, None,",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
+    },
+    {
+      "name": "toolscan-explain-dict-key-dropped",
+      "_mechanism": "Drop the parent from a dict member's argument key path.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "(f\"{key}.{name}\", child)",
+      "replace": "(name, child)",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
+    },
+    {
+      "name": "toolscan-explain-list-index-dropped",
+      "_mechanism": "Drop the index from a list member's argument key path.",
+      "file": "scripts/h_mad_tool_calls.py",
+      "find": "(f\"{key}[{index}]\", child)",
+      "replace": "(key, child)",
+      "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
     }
   ]
 }

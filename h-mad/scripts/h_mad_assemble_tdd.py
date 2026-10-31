@@ -68,7 +68,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # parser is how `h_mad_do_preconditions.py` and the audit gate drifted into
 # disagreeing verdicts on the same file (#39).
 from h_mad_wire_pin_gate import _TASK_RE, _parse_tasks  # noqa: E402
-from h_mad_assemble_audit import fill_slots  # noqa: E402
+from h_mad_assemble_audit import fill_slots, stamp_assembled  # noqa: E402
 
 TOKEN = "ASSEMBLE-TDD"
 TEMPLATE = SKILL_DIR / "references" / "codex-implementer-prompt.md"
@@ -588,6 +588,8 @@ def assemble(
     if expect_fail is not None and expect_pass is not None:
         lines.append(
             f"**Expected after this dispatch:** {expect_fail} failing, {expect_pass} passing."
+            + (" These are totals across every test path in this dispatch, not per file."
+               if len(test_paths) > 1 else "")  # M:AT-COUNTS-TOTAL
         )
         if shape == "wiring":
             lines.append(
@@ -682,6 +684,7 @@ def assemble(
         "inlined_lines": sum(len(s.splitlines()) for _, s in sections),
         "unresolved_refs": unresolved_refs,
         "authors_test": list(authors_test or []),
+        "residue": residue,  # for stamp_assembled: RESIDUAL here has no <AUDIT_SENTINEL>
     }
 
 
@@ -786,8 +789,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="default: <project-root>/docs/01-plan/features/<feature>.impl-plan.md")
     ap.add_argument("--python", default=sys.executable,
                     help="interpreter for the independent re-run; refused if it has no pytest")
-    ap.add_argument("--expect-fail", type=int)
-    ap.add_argument("--expect-pass", type=int)
+    ap.add_argument("--expect-fail", type=int,
+                    help="failing tests in total across every --test-path, not per file")
+    ap.add_argument("--expect-pass", type=int,
+                    help="passing tests in total across every --test-path, not per file")
     ap.add_argument("--guard", action="append", default=[],
                     help="a regression guard that must pass from the first run; repeatable")
     ap.add_argument("--env-known-failure", action="append", default=[],
@@ -883,6 +888,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{TOKEN}: HALT prompt_unwritable")
         print(f"  {prompt}: {exc}")
         return 2
+    stamp_assembled(prompt, residue=meta["residue"])  # M:ASSEMBLED-STAMP-TDD
 
     size = len(filled.encode("utf-8"))
     print(

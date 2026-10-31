@@ -1183,6 +1183,78 @@ def test_a_BACKTICKED_live_slot_is_still_detected(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# "live-slot warning fires on prose that names a slot" — the ASSEMBLED receipt
+# ---------------------------------------------------------------------------
+#
+# Every pass of the grok-audit-surface plan cycles warned `<INLINE_PAIRED_*>`
+# because the inlined plan QUOTES those slots in backticks -- after the assembler
+# had already refused real residual slots (`ASSEMBLE: PASS`). Backtick awareness
+# stays refused (test above). The fix is a content-bound receipt: on PASS the
+# assembler writes `<prompt>.assembled` holding the sha256 of the bytes it wrote,
+# and `exec` skips the advisory only when that hash matches the file it sends.
+
+def stamp_assembled(prompt, residue):
+    """The assembler's own stamper, imported at call time so a missing helper
+    fails these tests rather than the whole module's collection."""
+    sys.path.insert(0, str(SKILL / "scripts"))
+    from h_mad_assemble_audit import stamp_assembled as stamp
+    return stamp(prompt, residue=residue)
+
+QUOTING_PROMPT = ("Audit the plan below.\n\n"
+                  "The plan inlines `<INLINE_PAIRED_SPEC>` and `<INLINE_PAIRED_DESIGN>` "
+                  "by name.\n")
+
+
+def test_an_ASSEMBLED_prompt_that_quotes_a_slot_dispatches_without_the_advisory(tmp_path):
+    b = _bindir(tmp_path, ["codex"])
+    prompt = tmp_path / "assembled.txt"
+    prompt.write_text(QUOTING_PROMPT)
+    assert stamp_assembled(prompt, residue="no slots left in the template") is True
+
+    r = run(["exec", "codex", str(prompt), "--cd", str(tmp_path)], env=_env(b))
+
+    assert r.returncode == 0, r.stderr
+    assert "WARNING: prompt carries live template slots" not in r.stderr, (
+        "the assembler already refused residual slots; a quoted slot in its "
+        "output is prose, and warning on it every cycle trains the reader to "
+        "ignore the advisory", r.stderr)
+
+
+def test_an_assembled_prompt_EDITED_after_assembly_warns_again(tmp_path):
+    """The receipt attests the bytes the assembler checked, not the path. A slot
+    added by hand after assembly is one the assembler never saw."""
+    b = _bindir(tmp_path, ["codex"])
+    prompt = tmp_path / "assembled.txt"
+    prompt.write_text("Audit this. Everything is substituted.\n")
+    assert stamp_assembled(prompt, residue="") is True
+    prompt.write_text(prompt.read_text() + "Report to <REPORT_FILE_PATH>\n")
+
+    r = run(["exec", "codex", str(prompt), "--cd", str(tmp_path)], env=_env(b))
+
+    assert "WARNING: prompt carries live template slots" in r.stderr, r.stderr
+    assert "<REPORT_FILE_PATH>" in r.stderr, r.stderr
+
+
+def test_a_receipt_COPIED_onto_a_hand_written_prompt_does_not_silence_it(tmp_path):
+    """A marker the operator can copy is a marker that silences the 5e verifier,
+    the hand-shipped template this advisory exists for. A hash cannot be copied
+    across files."""
+    b = _bindir(tmp_path, ["codex"])
+    assembled = tmp_path / "assembled.txt"
+    assembled.write_text(QUOTING_PROMPT)
+    assert stamp_assembled(assembled, residue="") is True
+    hand = tmp_path / "hand.txt"
+    hand.write_text("Verify module `<INLINE_MODULE_NAME>`.\n")
+    (tmp_path / "hand.txt.assembled").write_text(
+        (tmp_path / "assembled.txt.assembled").read_text())
+
+    r = run(["exec", "codex", str(hand), "--cd", str(tmp_path)], env=_env(b))
+
+    assert "WARNING: prompt carries live template slots" in r.stderr, r.stderr
+    assert "<INLINE_MODULE_NAME>" in r.stderr, r.stderr
+
+
+# ---------------------------------------------------------------------------
 # #26 — an oversize prompt is refused with its own reason, not misreported
 # ---------------------------------------------------------------------------
 #
@@ -1372,3 +1444,29 @@ def test_unwritable_out_on_the_recovery_path_is_reported_not_silent(tmp_path):
     assert "verdict recovered from log" in r.stderr
     assert r.stdout.strip() == "STATUS: BLOCKED"
     assert "cannot write --out" in r.stderr
+
+
+def test_the_REAL_audit_assembly_of_a_plan_that_quotes_a_slot_dispatches_silently(tmp_path):
+    """The row end to end: the audit verb assembles `prompt[$i]` and hands that same
+    file to `_cmd_exec`, so the receipt written beside it by the real assembler is
+    the one exec reads. A plan naming `<INLINE_PAIRED_SPEC>` in prose PASSes the
+    assembler (it checks the template residue) and must not trip the advisory."""
+    docs = tmp_path / "docs/01-plan/features"
+    docs.mkdir(parents=True)
+    (tmp_path / "docs/02-design/features").mkdir(parents=True)
+    (docs / "demo.spec.md").write_text("# Spec: demo\n\n- FR-1 do the thing\n")
+    (docs / "demo.plan.md").write_text(
+        "# Plan: demo\n\nThe assembler inlines `<INLINE_PAIRED_SPEC>` here.\n")
+    prompt = tmp_path / "audit_prompt.txt"
+    asm = subprocess.run(
+        [sys.executable, str(SKILL / "scripts" / "h_mad_assemble_audit.py"),
+         "--feature", "demo", "--phase", "plan", "--project-root", str(tmp_path),
+         "--out", str(prompt)], capture_output=True, text=True)
+    assert asm.stdout.startswith("ASSEMBLE: PASS"), asm.stdout + asm.stderr
+    assert "`<INLINE_PAIRED_SPEC>`" in prompt.read_text(), "fixture must quote the slot"
+
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(prompt), "--cd", str(tmp_path)], env=_env(b))
+
+    assert r.returncode == 0, r.stderr
+    assert "WARNING: prompt carries live template slots" not in r.stderr, r.stderr

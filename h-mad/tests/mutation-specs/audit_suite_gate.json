@@ -126,6 +126,38 @@
       "find": "DEFAULT_SUITE_TIMEOUT = 3600",
       "replace": "DEFAULT_SUITE_TIMEOUT = 1800",
       "test": "tests/test_h_mad_audit_suite_gate.py::test_the_default_suite_timeout_is_unchanged"
+    },
+    {
+      "name": "the-hold-notice-is-never-printed",
+      "_mechanism": "Row `orchestrator writes during the cycle suite read as tree_moved`: the suite runs in the live tree and nothing tells the orchestrator to hold its writes, so its own handoff commits and report writes read as tree_moved again.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    print(suite_hold_line(test_root), flush=True)  # M:hold-notice-flushed",
+      "replace": "    pass  # M:hold-notice-flushed",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheSuiteAnnouncesItsTreeBeforeItRuns::test_the_hold_notice_is_flushed_before_the_suite_starts"
+    },
+    {
+      "name": "the-hold-notice-is-not-flushed",
+      "_mechanism": "Printed but buffered: on a redirected stdout the notice lands after the suite has already run, so a reader waiting for it holds nothing while the suite measures.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    print(suite_hold_line(test_root), flush=True)  # M:hold-notice-flushed",
+      "replace": "    print(suite_hold_line(test_root))  # M:hold-notice-flushed",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheSuiteAnnouncesItsTreeBeforeItRuns::test_the_hold_notice_is_flushed_before_the_suite_starts"
+    },
+    {
+      "name": "the-hold-notice-names-the-test-dir",
+      "_mechanism": "The notice names the test dir instead of the git toplevel the digest covers, so the operator reads doc writes outside it (the row's actual offenders) as safe.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "            tree = top.stdout.strip()  # M:hold-names-toplevel",
+      "replace": "            pass  # M:hold-names-toplevel",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheSuiteAnnouncesItsTreeBeforeItRuns::test_the_hold_notice_names_the_git_toplevel_not_the_test_dir"
+    },
+    {
+      "name": "the-hold-notice-reads-as-a-suite-verdict",
+      "_mechanism": "A notice under the `SUITE:` token gives every `startswith(\"SUITE:\")` reader two verdict lines, and the first one is not a verdict.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    return f\"SUITE-HOLD: hold writes",
+      "replace": "    return f\"SUITE: HOLD hold writes",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheGateNowExecutes::test_a_green_suite_is_reported_on_its_own_line"
     }
   ]
 }
