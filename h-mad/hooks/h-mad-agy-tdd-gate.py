@@ -20,8 +20,13 @@ CLASS_A: frozenset[str] = frozenset({
 })
 CLASS_B: frozenset[str] = frozenset({
     "write_to_file", "replace_file_content", "multi_replace_file_content", "sed_file", "notebook_edit",
+    # Executed by agy 1.4.12 but absent from its advertised init inventory.
+    "write_file", "edit_file",
 })
-PATH_KEYS: dict[str, tuple[str, ...]] = {"write_to_file": ("TargetFile",), "replace_file_content": ("TargetFile",)}
+PATH_KEYS: dict[str, tuple[str, ...]] = {
+    "write_to_file": ("TargetFile",), "replace_file_content": ("TargetFile",),
+    "write_file": ("Path",), "edit_file": ("Path",),
+}
 GATE_KINDS: frozenset[str] = frozenset({
     "judge-error", "tool-not-admitted", "target-outside-root", "allowance-file-write", "shell-not-admitted",
 })

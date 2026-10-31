@@ -15,5 +15,17 @@
     "workspacePaths_present": true,
     "command_key": "CommandLine",
     "workdir_key": "Cwd"
+  },
+  "write_file": {
+    "workspacePaths_present": true,
+    "path_keys": [
+      "Path"
+    ]
+  },
+  "edit_file": {
+    "workspacePaths_present": true,
+    "path_keys": [
+      "Path"
+    ]
   }
 }

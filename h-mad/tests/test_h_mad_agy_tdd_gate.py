@@ -32,9 +32,14 @@ CLASS_A = frozenset({
     "view_file", "list_dir", "grep_search", "find_by_name", "command_status",
     "read_url_content", "search_web", "ask_question", "finish", "wait", "wait_5_seconds",
 }) | UNADVERTISED_CLASS_A
+# agy 1.4.12 writes with these path-write tools while still advertising
+# write_to_file/replace_file_content. Captured live 2026-10-31
+# (fixtures/agy-payloads/{write_file,edit_file}.json); unlisted, the gate denied
+# every agy write as tool-not-admitted, test files included.
+UNADVERTISED_CLASS_B = frozenset({"write_file", "edit_file"})
 CLASS_B = frozenset({
     "write_to_file", "replace_file_content", "multi_replace_file_content", "sed_file", "notebook_edit",
-})
+}) | UNADVERTISED_CLASS_B
 GATE_KINDS = frozenset({
     "judge-error", "tool-not-admitted", "target-outside-root", "allowance-file-write", "shell-not-admitted",
 })
@@ -345,7 +350,9 @@ def test_self_check_fails_on_a_policy_import_failure(tmp_path):
     assert process.returncode == 2, "a self-check that could not import policy must exit 2"
 
 
-@pytest.mark.parametrize("name", ["write_to_file", "replace_file_content", "run_command"])
+@pytest.mark.parametrize("name", [
+    "write_to_file", "replace_file_content", "run_command", "write_file", "edit_file",
+])
 def test_capture_holds_every_required_sample(name):
     sample_path = PAYLOADS / f"{name}.json"
     assert sample_path.is_file(), f"required captured sample is missing: {name}"
@@ -357,7 +364,7 @@ def test_capture_holds_every_required_sample(name):
     assert present == ("workspacePaths" in sample)
 
 
-@pytest.mark.parametrize("name", ["write_to_file", "replace_file_content"])
+@pytest.mark.parametrize("name", ["write_to_file", "replace_file_content", "write_file", "edit_file"])
 def test_captured_payload_is_judged_by_its_recorded_key(tmp_path, name):
     root = _root(tmp_path, "active", name="repo Ω *? 'q'")
     production = _production_with_test(root, failing=False)
@@ -412,16 +419,20 @@ def test_classification_table_is_the_recorded_inventory(monkeypatch):
     recorded = set(names)
     assert len(names) == len(recorded) == 58, "the recorded first init must contain 58 distinct tool names"
     assert gate.CLASS_A == CLASS_A, "CLASS_A must contain exactly the 11 FR-4 read-only names plus read_file"
-    assert gate.CLASS_B == CLASS_B, "CLASS_B must contain exactly the five FR-4 path-write names"
+    assert gate.CLASS_B == CLASS_B, (
+        "CLASS_B must contain exactly the five FR-4 path-write names plus write_file and edit_file")
     assert isinstance(gate.CLASS_A, frozenset) and isinstance(gate.CLASS_B, frozenset)
     assert gate.PATH_KEYS == {
         "write_to_file": ("TargetFile",), "replace_file_content": ("TargetFile",),
+        "write_file": ("Path",), "edit_file": ("Path",),
     }, "path keys must stay limited to the observed contract"
     assert gate.GATE_KINDS == GATE_KINDS, "gate deny kinds must match FR-4's five-name closed set"
     assert isinstance(gate.GATE_KINDS, frozenset)
     assert UNADVERTISED_CLASS_A.isdisjoint(recorded), (
         "an unadvertised class (a) name now in the inventory belongs in the advertised set")
-    admitted = (CLASS_A - UNADVERTISED_CLASS_A) | CLASS_B | {"run_command"}
+    assert UNADVERTISED_CLASS_B.isdisjoint(recorded), (
+        "an unadvertised class (b) name now in the inventory belongs in the advertised set")
+    admitted = (CLASS_A - UNADVERTISED_CLASS_A) | (CLASS_B - UNADVERTISED_CLASS_B) | {"run_command"}
     assert admitted <= recorded, "every advertised class (a), (b), and (c) name must occur in the recorded inventory"
     remainder = recorded - admitted
     assert len(remainder) == 41, "the inventory remainder must contain exactly 41 class-(d) tools"

@@ -1,8 +1,19 @@
 {
   "root": "../..",
   "_why": "FR-4 Task 5: classifier, fail-closed output, workspace activity gating, and self-check signal discipline.",
-  "command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "tests/test_h_mad_agy_tdd_gate.py", "-q"],
-  "target_command": ["/opt/anaconda3/bin/python3", "-m", "pytest", "-q"],
+  "command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_agy_tdd_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python3",
+    "-m",
+    "pytest",
+    "-q"
+  ],
   "mutations": [
     {
       "name": "selfcheck-verdict-fail-exits-2",
@@ -183,6 +194,22 @@
       "find": "                    cwd = str(root / path if not path.is_absolute() else path)",
       "replace": "                    cwd = str(Path(__file__).resolve().parent / path if not path.is_absolute() else path)",
       "test": "tests/test_h_mad_agy_tdd_gate.py::test_relative_cwd_is_joined_against_the_root"
+    },
+    {
+      "name": "path-key-write-file-dropped",
+      "_mechanism": "agy 1.4.12's write_file keeps its class-(b) admission but loses its Path key, so a captured write_file write never reaches the production judge (denied as judge-error instead of test-first).",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "find": "\"write_file\": (\"Path\",)",
+      "replace": "\"write_file\": ()",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_captured_payload_is_judged_by_its_recorded_key[write_file]"
+    },
+    {
+      "name": "path-key-edit-file-dropped",
+      "_mechanism": "agy 1.4.12's edit_file keeps its class-(b) admission but loses its Path key, so a captured edit_file write never reaches the production judge (denied as judge-error instead of test-first).",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "find": "\"edit_file\": (\"Path\",)",
+      "replace": "\"edit_file\": ()",
+      "test": "tests/test_h_mad_agy_tdd_gate.py::test_captured_payload_is_judged_by_its_recorded_key[edit_file]"
     }
   ]
 }
