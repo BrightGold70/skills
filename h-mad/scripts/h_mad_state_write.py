@@ -56,6 +56,10 @@ from h_mad_state_validate import classify, undeclared_keys  # noqa: E402
 
 
 APPEND_ONLY = ("review_independence", "implementation_authors")
+# Ownership moves only through --claim / --release / --beat. A plain --set of
+# either field moved a claim with no --force, or nulled the heartbeat so that
+# owner_is_live(None) pinned the claim forever (TLA+ F2, F3).
+CLAIM_FIELDS = ("owner_session_id", "owner_heartbeat_ts")
 
 
 class StateWriteError(Exception):
@@ -212,9 +216,12 @@ def merge_fields(state_file: Path, feature: str, fields: dict[str, Any], *,
 
     A phase write by the session that HOLDS the claim is a sign of life, so when
     `session_id` names the current owner the heartbeat is refreshed in the same
-    write (#126). Without `session_id`, or from a session that is not the owner,
-    the write proceeds as before and the heartbeat is left alone: a bystander's
-    write must not manufacture liveness for a claim it does not hold.
+    write (#126). Without `session_id`, or on an unowned record, the write proceeds
+    and the heartbeat is left alone. A `session_id` that names a session other than
+    the record's owner is refused outright (TLA+ F1): that is a displaced owner still
+    writing phases, and letting it land would also let a bystander's write stand in
+    for the holder's. `owner_session_id` / `owner_heartbeat_ts` are never `--set`
+    (TLA+ F2, F3); ownership moves only through claim, release and beat.
 
     `fields` is an explicit dict, not `**kwargs`, so a `--set` key can never
     collide with this signature: with kwargs, `--set now=<ts>` was swallowed as
@@ -225,6 +232,8 @@ def merge_fields(state_file: Path, feature: str, fields: dict[str, Any], *,
     for key in fields:
         if key in APPEND_ONLY:
             raise StateWriteError(f"{key} is append-only: use --append")
+        if key in CLAIM_FIELDS:
+            raise StateWriteError(f"{key} is claim state: use --claim, --release or --beat")
     for key, _ in appends or []:
         if key in fields:
             raise StateWriteError(f"--set and --append name the same key: {key}")
@@ -232,6 +241,13 @@ def merge_fields(state_file: Path, feature: str, fields: dict[str, Any], *,
     def apply(records: dict):
         if feature not in records:
             raise StateWriteError(f"no such feature: {feature}")
+        holder = records[feature].get("owner_session_id")
+        if session_id and holder and holder != session_id:
+            # TLA+ F1: a displaced owner kept writing phases after losing its claim.
+            raise StateWriteError(
+                f"{feature!r} is owned by session {holder!r}, not {session_id!r}; "
+                "a write that names a session must come from the claim's holder"
+            )
         record = {**records[feature], **fields}
         if session_id and records[feature].get("owner_session_id") == session_id:
             record["owner_heartbeat_ts"] = now or _utc_now()
@@ -518,6 +534,24 @@ def _parse_value(raw: str) -> Any:
         return raw
 
 
+def _refuse_before_any_write(args: argparse.Namespace) -> None:
+    """Refusals `merge_fields` would raise, checked before --create/--claim land.
+
+    Each operation persists on its own, so a `--set` refused last left the earlier
+    `--create`/`--claim` in the store: a refused invocation that still took a claim.
+    """
+    for item in args.set:
+        key = item.partition("=")[0].strip()
+        if key in CLAIM_FIELDS:
+            raise StateWriteError(f"{key} is claim state: use --claim, --release or --beat")
+    if (args.claim and args.session_id and args.claim != args.session_id
+            and (args.set or args.append)):
+        raise StateWriteError(
+            f"--claim {args.claim!r} with a write as --session-id {args.session_id!r}: "
+            "the write would be refused as another session's, after the claim landed"
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the state write CLI."""
     parser = argparse.ArgumentParser(description="H-MAD orchestrator_state writer")
@@ -558,8 +592,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Who you are. With --release: a session releasing its OWN live claim "
              "needs this; a stale or unowned claim does not, and without it releasing "
              "a LIVE claim is refused rather than silently taking it (J45). With "
-             "--beat: required. With --set: when it names the current owner, the "
-             "write also refreshes the heartbeat — a phase write is a sign of life.",
+             "--beat: required. With --set/--append: when it names the current owner, "
+             "the write also refreshes the heartbeat — a phase write is a sign of life; "
+             "when it names any OTHER session on an owned record, the write is refused "
+             "(exit 2), so a displaced owner cannot keep writing phases.",
     )
     parser.add_argument(
         "--force", action="store_true",
@@ -569,6 +605,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        _refuse_before_any_write(args)
         if args.create:
             create_feature(args.state_file, args.feature, args.started_ts)
         if args.drop_undeclared:

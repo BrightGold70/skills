@@ -383,6 +383,96 @@ class TestUndeclaredKeys:
         assert read(p)["demo"]["owner_session_id"] is None
 
 
+class TestClaimProtocolEnforcement:
+    """TLA+ F1 and F2 (skill-candidates, 2026-10-25 model check).
+
+    F1: a session that lost its claim kept writing phases — `--set ... --session-id
+    <old owner>` landed at exit 0, only the heartbeat refresh was skipped.
+    F2: `--set owner_session_id=` / `--set owner_heartbeat_ts=` moved or froze a
+    claim with no `--force`, and a null heartbeat then pinned the claim as live
+    (`owner_is_live(None)` is True) so neither `--claim` nor an anonymous
+    `--release` could free it. Ownership moves only through claim/release/beat.
+    """
+
+    OWNED = dict(VALID, owner_session_id="s1", owner_heartbeat_ts="2026-07-22T00:00:00Z")
+
+    def test_a_displaced_owners_set_is_refused_and_writes_nothing(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED, owner_session_id="s2")})
+        before = p.read_bytes()
+        with pytest.raises(sw.StateWriteError) as exc:
+            sw.merge_fields(p, "demo", {"current_phase": 6}, session_id="s1")
+        assert "'s2'" in str(exc.value)
+        assert p.read_bytes() == before
+
+    def test_a_displaced_owners_append_is_refused(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED, owner_session_id="s2")})
+        before = p.read_bytes()
+        with pytest.raises(sw.StateWriteError) as exc:
+            sw.merge_fields(p, "demo", {}, session_id="s1",
+                            appends=[("implementation_authors", {"module": "m", "agent": "codex"})])
+        assert "'s2'" in str(exc.value), "refused for ownership, not for the entry's shape"
+        assert p.read_bytes() == before
+
+    def test_cli_displaced_owner_set_exits_2_and_writes_nothing(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED, owner_session_id="s2")})
+        before = p.read_bytes()
+        r = run(p, "--feature", "demo", "--set", "current_phase=6", "--session-id", "s1")
+        assert r.returncode == 2
+        assert "STATE-WRITE: OK" not in r.stdout
+        assert p.read_bytes() == before
+
+    def test_a_session_id_on_an_unowned_record_is_still_accepted(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        sw.merge_fields(p, "demo", {"current_phase": 6}, session_id="s1")
+        rec = read(p)["demo"]
+        assert rec["current_phase"] == 6
+        assert rec.get("owner_session_id") is None, "a set never claims"
+        assert rec.get("owner_heartbeat_ts") is None, "nor beats a claim nobody holds"
+
+    def test_claim_then_set_in_one_cli_call_is_the_owners_write(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        r = run(p, "--feature", "demo", "--claim", "s1", "--set", "current_phase=6",
+                "--session-id", "s1")
+        assert r.returncode == 0, r.stderr
+        assert read(p)["demo"]["current_phase"] == 6
+
+    @pytest.mark.parametrize("key,value", [("owner_session_id", "s2"),
+                                           ("owner_heartbeat_ts", None)])
+    def test_set_of_an_owner_field_is_refused(self, tmp_path, key, value):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        before = p.read_bytes()
+        with pytest.raises(sw.StateWriteError) as exc:
+            sw.merge_fields(p, "demo", {key: value})
+        assert "--claim" in str(exc.value)
+        assert p.read_bytes() == before
+
+    def test_cli_refuses_an_owner_field_before_create_or_claim_lands(self, tmp_path):
+        # Review finding: --create/--claim were persisted before the --set check ran,
+        # so a refused invocation still left a claim behind.
+        p = store(tmp_path)
+        before = p.read_bytes()
+        r = run(p, "--feature", "demo", "--create", "--claim", "s1",
+                "--set", "owner_session_id=s9")
+        assert r.returncode == 2
+        assert p.read_bytes() == before
+
+    def test_cli_refuses_a_claim_paired_with_another_sessions_write(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        before = p.read_bytes()
+        r = run(p, "--feature", "demo", "--claim", "s1", "--set", "current_phase=6",
+                "--session-id", "s2")
+        assert r.returncode == 2
+        assert p.read_bytes() == before, "the claim must not land when the write is refused"
+
+    @pytest.mark.parametrize("item", ["owner_session_id=s2", "owner_heartbeat_ts=null"])
+    def test_cli_set_of_an_owner_field_exits_2_even_from_the_owner(self, tmp_path, item):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        before = p.read_bytes()
+        r = run(p, "--feature", "demo", "--set", item, "--session-id", "s1")
+        assert r.returncode == 2
+        assert p.read_bytes() == before
+
+
 class TestHeartbeatBeats:
     """#126 — the heartbeat that did not beat.
 
@@ -442,11 +532,13 @@ class TestHeartbeatBeats:
         assert read(p)["demo"]["owner_heartbeat_ts"] == "2026-07-22T00:00:00Z"
 
     def test_a_set_by_a_bystander_does_not_manufacture_liveness(self, tmp_path):
+        # The write itself is now refused too (TLA+ F1, TestClaimProtocolEnforcement);
+        # what this test still pins is that the claim's heartbeat is untouched.
         p = store(tmp_path, {"demo": dict(self.OWNED)})
-        sw.merge_fields(p, "demo", {"current_phase": 6}, session_id="someone-else",
-                        now="2026-07-22T01:00:00Z")
+        with pytest.raises(sw.StateWriteError):
+            sw.merge_fields(p, "demo", {"current_phase": 6}, session_id="someone-else",
+                            now="2026-07-22T01:00:00Z")
         rec = read(p)["demo"]
-        assert rec["current_phase"] == 6, "the write itself is not refused"
         assert rec["owner_heartbeat_ts"] == "2026-07-22T00:00:00Z"
         assert rec["owner_session_id"] == "me"
 

@@ -491,7 +491,9 @@ def score(feature: str, state_file: Path, log_path: Path, review_path: Path,
     writer = SCRIPTS / "h_mad_state_write.py"
     # `--session-id` when the caller has one: this is a phase write by the owner,
     # and the owner's `--set` is what refreshes the heartbeat (#126). Without it
-    # the write still lands; only the beat is skipped.
+    # the write still lands; only the beat is skipped. A session id that is not the
+    # owner's is refused by the writer; the read-back below catches that only when
+    # the stored verdict differs from this one.
     argv = [sys.executable, str(writer), str(state_file), "--feature", feature,
             "--set", f"archreview={verdict}"]
     if session_id:

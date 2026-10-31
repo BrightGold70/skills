@@ -41,11 +41,35 @@
     },
     {
       "name": "a-bystanders-set-beats-too",
-      "_mechanism": "Any session's phase write refreshes the owner's heartbeat, so a claim is kept alive by work that is not the owner's.",
+      "_mechanism": "Any session's phase write refreshes the heartbeat. Since TLA+ F1 a foreign session id is refused before this line, so the reachable damage is on an UNOWNED record: a heartbeat with no owner, which the resume router cannot classify.",
       "file": "scripts/h_mad_state_write.py",
       "find": "        if session_id and records[feature].get(\"owner_session_id\") == session_id:\n            record[\"owner_heartbeat_ts\"] = now or _utc_now()",
       "replace": "        if session_id:\n            record[\"owner_heartbeat_ts\"] = now or _utc_now()",
-      "test": "tests/test_h_mad_state_write.py::TestHeartbeatBeats::test_a_set_by_a_bystander_does_not_manufacture_liveness"
+      "test": "tests/test_h_mad_state_write.py::TestClaimProtocolEnforcement::test_a_session_id_on_an_unowned_record_is_still_accepted"
+    },
+    {
+      "name": "a-displaced-owner-keeps-writing",
+      "_mechanism": "TLA+ F1 restored: a session that lost its claim still writes phases at exit 0.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if session_id and holder and holder != session_id:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_state_write.py::TestClaimProtocolEnforcement::test_a_displaced_owners_set_is_refused_and_writes_nothing"
+    },
+    {
+      "name": "set-moves-a-claim",
+      "_mechanism": "TLA+ F2/F3 restored: --set owner_session_id moves a claim with no --force, and --set owner_heartbeat_ts=null pins it live forever.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "            raise StateWriteError(f\"{key} is append-only: use --append\")\n        if key in CLAIM_FIELDS:",
+      "replace": "            raise StateWriteError(f\"{key} is append-only: use --append\")\n        if False:",
+      "test": "tests/test_h_mad_state_write.py::TestClaimProtocolEnforcement::test_set_of_an_owner_field_is_refused"
+    },
+    {
+      "name": "a-refused-invocation-still-claims",
+      "_mechanism": "The CLI preflight removed: --create/--claim persist before merge_fields refuses the --set, so a refused invocation leaves a claim behind.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        _refuse_before_any_write(args)\n",
+      "replace": "",
+      "test": "tests/test_h_mad_state_write.py::TestClaimProtocolEnforcement::test_cli_refuses_a_claim_paired_with_another_sessions_write"
     }
   ]
 }
