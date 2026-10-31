@@ -93,6 +93,12 @@ _PATHS_FIELD_RE = re.compile(
     r"\s*(?::\s*\*{0,2}|\*{0,2}\s*:)\s*(?P<value>.*)$",
     re.IGNORECASE,
 )
+# `**Judge budget**: 90s` -- a slower Task's TDD-judge budget (row 2833). Read by
+# h_mad_tdd_judge only; a value that is not a whole number of seconds is ignored.
+_BUDGET_FIELD_RE = re.compile(
+    r"^\s*(?:[-*•]\s+)?\*{0,2}\s*Judge\s+budget\s*\*{0,2}\s*:\s*\*{0,2}\s*(?P<seconds>\d{1,6})\s*s?\s*\*{0,2}\s*$",
+    re.IGNORECASE,
+)
 _PY_TOKEN_RE = re.compile(r"`([^`]+\.py)`")
 _NONE_VALUE_RE = re.compile(r"^[\s*_`]*none(?![\w/-]|\.\w)", re.IGNORECASE)
 
@@ -196,6 +202,7 @@ def _parse_tasks(text: str) -> list[dict]:
                 "runner_error": None,
                 "production": [],
                 "tests": [],
+                "judge_budget": None,
             }
             tasks.append(current)
             continue
@@ -216,6 +223,10 @@ def _parse_tasks(text: str) -> list[dict]:
                         current["runner_error"] = (
                             f"conflicting WIRE-RUNNER values: {current['runner']!r} and {value!r}")
                     current["runner"] = value
+                continue
+            budget = _BUDGET_FIELD_RE.match(line)
+            if budget is not None:
+                current["judge_budget"] = int(budget.group("seconds"))
                 continue
             paths = _PATHS_FIELD_RE.match(line)
             if paths is not None and _NONE_VALUE_RE.match(paths.group("value")) is None:

@@ -28,6 +28,9 @@ KINDS = frozenset({"red-measured", "no-test-resolved", "test-missing",
                    "judge-timeout", "judge-error"})
 STATE_VALUES = ("none", "active", "unreadable")
 JUDGE_BUDGET_S = 40.0
+# A Task's `**Judge budget**` may raise the budget for its targets (row 2833), never
+# past this: the judge runs inside a PreToolUse hook, and the write waits on it.
+JUDGE_BUDGET_CAP_S = 300.0
 REAP_GRACE_S = 1.0
 ESCAPE_STATUSES = frozenset({"unavailable", "exhausted"})
 NAME_MAP = Path(_HERE) / "h_mad_derive_test_path.sh"
@@ -71,6 +74,7 @@ class Resolution(NamedTuple):
     missing: Tuple[Path, ...]
     notes: Tuple[str, ...]
     verdict: Optional[Verdict]
+    budget: Optional[int] = None  # largest `**Judge budget**` of the matched Tasks
 
 
 class BoundedRun(NamedTuple):
@@ -293,6 +297,7 @@ def resolve(root: Path, target: Path, records: Sequence[Record], *, deadline: fl
     candidates = []
     seen_candidates = set()
     matched = False
+    declared_budget = None
     plan_paths = list(dict.fromkeys(record.state_file.parent / "01-plan" / "features" /
                                     f"{record.key}.impl-plan.md" for record in records))
     for plan in plan_paths:
@@ -313,6 +318,8 @@ def resolve(root: Path, target: Path, records: Sequence[Record], *, deadline: fl
             while _inside(str(base), str(real_root)):
                 if any(os.path.realpath(base / entry) == str(real_target) for entry in task["production"]):
                     matched = plan_matched = True
+                    if task.get("judge_budget") is not None:  # M:J-BUDGET-READ
+                        declared_budget = max(declared_budget or 0, task["judge_budget"])
                     for entry in task["tests"]:
                         candidate = Path(os.path.realpath(base / entry))
                         if not _inside(str(candidate), str(real_root)):
@@ -330,7 +337,7 @@ def resolve(root: Path, target: Path, records: Sequence[Record], *, deadline: fl
     if matched:  # M:R1
         if not present:
             return Resolution("impl-plan", (), missing, tuple(notes), _test_missing(missing, notes, root))
-        return Resolution("impl-plan", tuple(present), missing, tuple(notes), None)
+        return Resolution("impl-plan", tuple(present), missing, tuple(notes), None, declared_budget)
     if not _inside(str(real_target), str(real_root)):
         notes.append("name map: target outside root")
         return Resolution("", (), (), tuple(notes), _deny("no-test-resolved", "no test resolved" + _notes(notes)))
@@ -421,7 +428,65 @@ def _pytest_missing(output: str) -> bool:
                for line in output.splitlines())
 
 
-def score(proc_output: str, timed_out: bool) -> str:
+_E_ERROR_RE = re.compile(r"^E\s+[\w.]+(?:Error|Exception)\b")
+# Anchored at the end: `No module named 'pkg.m'; 'pkg' is not a package` is a shadowing
+# module, which writing the target cannot fix.
+_NO_MODULE_RE = re.compile(r"^E\s+ModuleNotFoundError: No module named '([\w.]+)'$")
+# Python 3.12+ appends `. Did you mean: 'x'?` after the path when a near name exists.
+_NO_NAME_RE = re.compile(r"^E\s+ImportError: cannot import name '\w+' from '([\w.]+)' \((.+?)\)"
+                         r"(?:\. Did you mean: '\w+'\?)?$")  # M:K-IMPORT-SUGGEST
+
+
+class ImportTarget(NamedTuple):
+    modules: frozenset  # every dotted suffix of the target's path
+    path: str           # the target's realpath
+    exists: bool        # whether the target file exists yet
+
+
+def target_module_names(root: Path, target: Path) -> frozenset:
+    """Every dotted suffix of the target's path that could be its import name."""
+    try:
+        parts = list(target.relative_to(root).with_suffix("").parts)
+    except ValueError:
+        return frozenset()
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    names = set()
+    for start in range(len(parts)):
+        chain = parts[start:]
+        if chain and all(part.isidentifier() for part in chain):
+            names.add(".".join(chain))
+    return frozenset(names)
+
+
+def _is_target_import_failure(line: str, target: ImportTarget) -> bool:
+    """One error line that writing the target would fix (rows 2765/2787).
+
+    A name match alone is not evidence: `json` or `utils` also names files that are
+    not the target (review). So `No module named` counts only while the target file
+    does not exist yet, and `cannot import name` only when pytest's printed source
+    path IS the target.
+    """
+    missing = _NO_MODULE_RE.match(line)
+    if missing:
+        return not target.exists and missing.group(1) in target.modules  # M:K-IMPORT-NEW
+    absent_name = _NO_NAME_RE.match(line)
+    if absent_name:
+        return (absent_name.group(1) in target.modules
+                and os.path.realpath(absent_name.group(2)) == target.path)  # M:K-IMPORT-PATH
+    return False
+
+
+def _missing_target_import(output: str, target: Optional[ImportTarget]) -> bool:
+    """Every error line is an import of the TARGET failing because its code is missing."""
+    if target is None:
+        return False
+    lines = [_SGR_RE.sub("", line).strip() for line in output.splitlines()]
+    errors = [line for line in lines if _E_ERROR_RE.match(line)]
+    return bool(errors) and all(_is_target_import_failure(line, target) for line in errors)
+
+
+def score(proc_output: str, timed_out: bool, import_target: Optional[ImportTarget] = None) -> str:
     if timed_out:
         return "timeout"
     if _pytest_missing(proc_output):  # M:K1
@@ -431,6 +496,8 @@ def score(proc_output: str, timed_out: bool) -> str:
         return "no-summary"
     if summary.no_tests_ran:
         return "no-tests-ran"
+    if summary.errors >= 1 and _missing_target_import(proc_output, import_target):  # M:K-IMPORT-RED
+        return "red-measured"
     if summary.errors >= 1:  # M:K2
         return "pytest-error"
     if summary.failed >= 1:
@@ -463,15 +530,28 @@ def _newest_first(candidate: Tuple[Path, Path]) -> Tuple[int, float]:
         return (1, 0.0)
 
 
+def effective_budget(default: float, declared: Optional[int]) -> float:
+    """A declared Task budget only ever extends the default, and never past the cap."""
+    if declared is None:
+        return default
+    return min(max(default, float(declared)), JUDGE_BUDGET_CAP_S)  # M:J-BUDGET-CAP
+
+
 def judge(root: Path, target: Path, records: Sequence[Record], *, budget_s: float = JUDGE_BUDGET_S,
           fallback_interpreter: str = sys.executable) -> Verdict:
-    deadline = time.monotonic() + budget_s
+    start = time.monotonic()
+    deadline = start + budget_s
     resolution = resolve(root, target, records, deadline=deadline)
     if resolution.verdict is not None:
         return resolution.verdict
+    budget = effective_budget(budget_s, resolution.budget)
+    deadline = start + budget  # M:J-BUDGET-APPLY
     outcomes = []
     notes = list(resolution.notes)
     substituted: Optional[str] = None  # the fallback, probed at most once per judge call
+    real_target = os.path.realpath(target)
+    modules = ImportTarget(target_module_names(Path(os.path.realpath(root)), Path(real_target)),
+                           real_target, os.path.isfile(real_target))  # M:K-IMPORT-WIRE
     # One budget covers every candidate, and ALLOW comes at the first red. The
     # active task's RED is the file just written, so try the newest first; an
     # earlier task's slow green guards otherwise spend the budget (kind=timeout).
@@ -487,7 +567,7 @@ def judge(root: Path, target: Path, records: Sequence[Record], *, budget_s: floa
             interpreter = substituted
         argv = [interpreter, "-m", "pytest", str(test), "-x", "-q", "--no-header"]
         returncode, out, err, timed_out, error, reap_failed = _run_bounded(argv, cwd, deadline)
-        kind = "no-summary" if error else score(out + "\n" + err, timed_out)  # M:K3
+        kind = "no-summary" if error else score(out + "\n" + err, timed_out, modules)  # M:K3
         if reap_failed:
             kind = "judge-timeout"
         entry = _output_entry(out + "\n" + err, error)
@@ -505,6 +585,10 @@ def judge(root: Path, target: Path, records: Sequence[Record], *, budget_s: floa
     reason = "; ".join(details)
     if kind == "pytest-error":
         reason += "; import error inside the test body"
+    if kind in ("timeout", "judge-timeout"):  # M:J-BUDGET-REPORT
+        reason += f"; judge budget {budget:g}s" + (
+            " (raise it with **Judge budget**: <N>s in the Task, cap "
+            f"{JUDGE_BUDGET_CAP_S:g}s)" if resolution.budget is None else " (from the Task)")
     return _deny(kind, reason + _notes(notes))
 
 

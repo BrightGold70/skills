@@ -34,7 +34,7 @@
       "name": "K3",
       "_mechanism": "Task 10 K3: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[failed-line-rc0] must reject the changed behavior.",
       "file": "scripts/h_mad_tdd_judge.py",
-      "find": "        kind = \"no-summary\" if error else score(out + \"\\n\" + err, timed_out)  # M:K3",
+      "find": "        kind = \"no-summary\" if error else score(out + \"\\n\" + err, timed_out, modules)  # M:K3",
       "replace": "        kind = \"red-measured\" if returncode == 1 else \"test-passing\"  # M:K3",
       "test": "tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[failed-line-rc0]"
     },
@@ -42,7 +42,7 @@
       "name": "K3B",
       "_mechanism": "Task 10 K3B: alter the scripts/h_mad_tdd_judge.py branch; tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[silent-rc1] must reject the changed behavior.",
       "file": "scripts/h_mad_tdd_judge.py",
-      "find": "        kind = \"no-summary\" if error else score(out + \"\\n\" + err, timed_out)  # M:K3",
+      "find": "        kind = \"no-summary\" if error else score(out + \"\\n\" + err, timed_out, modules)  # M:K3",
       "replace": "        kind = \"red-measured\" if returncode == 1 else \"test-passing\"  # M:K3",
       "test": "tests/test_h_mad_tdd_judge.py::test_rc_selects_nothing[silent-rc1]"
     },
@@ -102,6 +102,62 @@
       "find": "sorted(resolution.present, key=_newest_first)",
       "replace": "resolution.present",
       "test": "tests/test_h_mad_tdd_judge.py::test_judge_mtime_newest_red_avoids_guard_starvation"
+    },
+    {
+      "name": "target-import-never-red",
+      "_mechanism": "Rows 2765/2787 restored: a RED test importing its not-yet-written module at module top errors at collection, scores pytest-error, and the module can never be written.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if summary.errors >= 1 and _missing_target_import(proc_output, import_target):  # M:K-IMPORT-RED",
+      "replace": "    if False:  # M:K-IMPORT-RED",
+      "test": "tests/test_h_mad_tdd_judge.py::test_a_collection_import_error_naming_the_target_is_red[E   ModuleNotFoundError: No module named 'w_new'-target0]"
+    },
+    {
+      "name": "target-modules-not-wired",
+      "_mechanism": "The judge never passes the target's module names to score, so the import-RED rule exists but never fires.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "score(out + \"\\n\" + err, timed_out, modules)  # M:K3",
+      "replace": "score(out + \"\\n\" + err, timed_out)  # M:K3",
+      "test": "tests/test_h_mad_tdd_judge.py::test_a_new_module_imported_at_module_top_is_allowed"
+    },
+    {
+      "name": "any-same-named-module-is-red",
+      "_mechanism": "Review must-fix 1: a cannot-import-name error from a DIFFERENT file with the target's module name (stdlib json, a sibling utils.py) is RED, so a write is allowed that can never make the test pass.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "                and os.path.realpath(absent_name.group(2)) == target.path)  # M:K-IMPORT-PATH",
+      "replace": "                and True)  # M:K-IMPORT-PATH",
+      "test": "tests/test_h_mad_tdd_judge.py::test_any_other_collection_error_stays_pytest_error[E   ImportError: cannot import name 'f' from 'tools.w' (/usr/lib/python3/tools/w.py)-target4]"
+    },
+    {
+      "name": "existing-target-no-module-is-red",
+      "_mechanism": "A `No module named` error naming a target that already exists is a sys.path problem, not missing code; scoring it RED lets a write through that cannot fix it.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        return not target.exists and missing.group(1) in target.modules  # M:K-IMPORT-NEW",
+      "replace": "        return missing.group(1) in target.modules  # M:K-IMPORT-NEW",
+      "test": "tests/test_h_mad_tdd_judge.py::test_any_other_collection_error_stays_pytest_error[E   ModuleNotFoundError: No module named 'w'-target9]"
+    },
+    {
+      "name": "no-module-unanchored",
+      "_mechanism": "Review must-fix 2: `No module named 'pkg.m'; 'pkg' is not a package` (a shadowing module) matches as the target's import failing.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "_NO_MODULE_RE = re.compile(r\"^E\\s+ModuleNotFoundError: No module named '([\\w.]+)'$\")",
+      "replace": "_NO_MODULE_RE = re.compile(r\"^E\\s+ModuleNotFoundError: No module named '([\\w.]+)'\")",
+      "test": "tests/test_h_mad_tdd_judge.py::test_any_other_collection_error_stays_pytest_error[E   ModuleNotFoundError: No module named 'tools.w_new'; 'tools' is not a package-target8]"
+    },
+    {
+      "name": "dotted-error-lines-unseen",
+      "_mechanism": "Review should-fix: an error line with a dotted exception name (json.decoder.JSONDecodeError) is not seen, so a second, unrelated collection error hides behind the target's import failure.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "_E_ERROR_RE = re.compile(r\"^E\\s+[\\w.]+(?:Error|Exception)\\b\")",
+      "replace": "_E_ERROR_RE = re.compile(r\"^E\\s+\\w+(?:Error|Exception)\\b\")",
+      "test": "tests/test_h_mad_tdd_judge.py::test_any_other_collection_error_stays_pytest_error[E   ModuleNotFoundError: No module named 'w_new'\\nE   json.decoder.JSONDecodeError: x-target10]"
+    },
+    {
+      "name": "suggestion-tail-refused",
+      "_mechanism": "Review should-fix: Python 3.12+ appends `. Did you mean: 'x'?` after the path; without the optional tail a genuine near-miss RED scores pytest-error and the first-write deadlock returns.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "                         r\"(?:\\. Did you mean: '\\w+'\\?)?$\")  # M:K-IMPORT-SUGGEST",
+      "replace": "                         r\"$\")  # M:K-IMPORT-SUGGEST",
+      "test": "tests/test_h_mad_tdd_judge.py::test_a_collection_import_error_naming_the_target_is_red[E   ImportError: cannot import name 'fx' from 'tools.w' (/x/tools/w.py). Did you mean: 'f'?-target3]"
     }
   ]
 }

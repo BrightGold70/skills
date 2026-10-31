@@ -78,6 +78,62 @@
       "find": "    r\"^\\s*(?:[-*•]\\s+)?\\*{0,2}\\s*(?P<label>Task\\s+shape|WIRE-PIN|WIRE)\"",
       "replace": "    r\"^\\s*(?:[-*•]\\s+)?\\*{0,2}\\s*(?P<label>Task\\s+shape|WIRE-PIN|WIRE|Production)\"",
       "test": "tests/test_h_mad_parse_tasks_paths.py::test_field_re_is_unchanged"
+    },
+    {
+      "name": "h-mad-scripts-unmapped",
+      "_mechanism": "Row 2844 restored: a Phase-5 write to an h-mad script with no Task naming it is DENYed no-test-resolved.",
+      "file": "scripts/h_mad_derive_test_path.sh",
+      "find": "  h-mad/scripts/*)\n",
+      "replace": "  h-mad/no-such-dir/*)\n",
+      "test": "tests/test_h_mad_tdd_judge.py::test_an_h_mad_script_with_no_task_resolves_through_the_name_map"
+    },
+    {
+      "name": "declared-budget-ignored",
+      "_mechanism": "Row 2833 restored: a Task's **Judge budget** is parsed but never applied, so a slow file still times out before its RED.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    deadline = start + budget  # M:J-BUDGET-APPLY\n",
+      "replace": "",
+      "test": "tests/test_h_mad_tdd_judge.py::test_a_declared_budget_lets_a_slow_red_finish"
+    },
+    {
+      "name": "declared-budget-not-read",
+      "_mechanism": "The matched Task's budget is never collected, so the declaration has no effect.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "                    if task.get(\"judge_budget\") is not None:  # M:J-BUDGET-READ",
+      "replace": "                    if False:  # M:J-BUDGET-READ",
+      "test": "tests/test_h_mad_tdd_judge.py::test_a_declared_budget_lets_a_slow_red_finish"
+    },
+    {
+      "name": "budget-uncapped",
+      "_mechanism": "A Task can hold every Phase-5 write hostage to an arbitrarily long judge run inside a PreToolUse hook.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    return min(max(default, float(declared)), JUDGE_BUDGET_CAP_S)  # M:J-BUDGET-CAP",
+      "replace": "    return max(default, float(declared))  # M:J-BUDGET-CAP",
+      "test": "tests/test_h_mad_tdd_judge.py::test_the_effective_budget_only_extends_and_is_capped[40.0-999-300.0]"
+    },
+    {
+      "name": "budget-can-shrink",
+      "_mechanism": "A Task declaring a smaller budget shortens the operator's default, starving its own RED.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    return min(max(default, float(declared)), JUDGE_BUDGET_CAP_S)  # M:J-BUDGET-CAP",
+      "replace": "    return min(float(declared), JUDGE_BUDGET_CAP_S)  # M:J-BUDGET-CAP",
+      "test": "tests/test_h_mad_tdd_judge.py::test_the_effective_budget_only_extends_and_is_capped[40.0-10-40.0]"
+    },
+    {
+      "name": "timeout-deny-silent-on-budget",
+      "_mechanism": "A timeout DENY no longer names the budget, so the operator cannot tell a slow file from a hung one, nor that the budget can be raised.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "    if kind in (\"timeout\", \"judge-timeout\"):  # M:J-BUDGET-REPORT",
+      "replace": "    if False:  # M:J-BUDGET-REPORT",
+      "test": "tests/test_h_mad_tdd_judge.py::test_a_timeout_deny_names_the_budget"
+    },
+    {
+      "name": "budget-field-not-parsed",
+      "_mechanism": "The parser drops **Judge budget**, so no Task can raise its budget.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "            if budget is not None:\n                current[\"judge_budget\"] = int(budget.group(\"seconds\"))",
+      "replace": "            if False:\n                current[\"judge_budget\"] = int(budget.group(\"seconds\"))",
+      "test": "tests/test_h_mad_tdd_judge.py::test_the_task_parser_reads_a_judge_budget[**Judge budget**: 90s-90]"
     }
   ]
 }

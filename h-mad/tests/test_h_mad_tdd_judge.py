@@ -1134,3 +1134,147 @@ def test_a_substitute_outside_the_trusted_bin_dirs_is_not_used(tmp_path, monkeyp
     _path_with_pytest_python(tmp_path, monkeypatch, present=True, trusted=False)
     verdict = judge.judge(root, target, _records(root), fallback_interpreter=str(no_pytest))
     assert _kind(verdict) == "pytest-missing"
+
+
+# Row 2844 (skill-candidates): the name map knew only hematology-paper-writer/,
+# clinical-statistics-analyzer/ and shared/, so a Phase-5 write to one of h-mad's own
+# scripts was DENYed no-test-resolved unless an impl-plan Task named it.
+@pytest.mark.parametrize("prod,expected", [
+    ("h-mad/scripts/h_mad_tdd_judge.py", "h-mad/tests/test_h_mad_tdd_judge.py"),
+    ("h-mad/scripts/h_mad_state_write.py", "h-mad/tests/test_h_mad_state_write.py"),
+    ("h-mad/hooks/h-mad-codex-tdd-gate.py", ""),  # hyphenated hooks have no 1:1 test name
+    ("h-mad/scripts/__init__.py", ""),
+])
+def test_name_map_covers_h_mad_scripts(prod, expected):
+    out = subprocess.run(["bash", str(judge.NAME_MAP), prod], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == expected
+
+
+def test_an_h_mad_script_with_no_task_resolves_through_the_name_map(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root, "h-mad/scripts/h_mad_widget.py")
+    test = root / "h-mad/tests/test_h_mad_widget.py"
+    test.parent.mkdir(parents=True, exist_ok=True)
+    test.write_text("def test_red():\n    assert False\n", encoding="utf-8")
+    write_state(root, {"feat": _step()})
+    verdict = judge.judge(root, target, judge.read_chain(root, target).records,
+                          fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind, verdict.source) == ("ALLOW", "red-measured", "name-map"), verdict
+
+
+# Rows 2765/2787: a RED test that imports its not-yet-written production module at
+# module top errors at collection, which scored pytest-error (a DENY), so the module
+# that would fix the import could never be written. A collection ImportError that
+# names the TARGET module is the production code being missing: that is RED.
+_COLLECT = "\n!!!! Interrupted: 1 error during collection !!!!\n1 error in 0.04s\n"
+# A new module: the target file does not exist yet.
+_NEW = judge.ImportTarget(frozenset({"w_new", "tools.w_new"}), "/x/tools/w_new.py", False)
+# An existing module gaining a name: the file exists, the name does not.
+_OLD = judge.ImportTarget(frozenset({"w", "tools.w"}), "/x/tools/w.py", True)
+
+
+@pytest.mark.parametrize("line,target", [
+    ("E   ModuleNotFoundError: No module named 'w_new'", _NEW),
+    ("E   ModuleNotFoundError: No module named 'tools.w_new'", _NEW),
+    ("E   ImportError: cannot import name 'f' from 'tools.w' (/x/tools/w.py)", _OLD),
+    # Python 3.12+ appends a suggestion after the path when a near name exists (review).
+    ("E   ImportError: cannot import name 'fx' from 'tools.w' (/x/tools/w.py). Did you mean: 'f'?", _OLD),
+])
+def test_a_collection_import_error_naming_the_target_is_red(line, target):
+    assert judge.score(line + _COLLECT, False, target) == "red-measured"
+
+
+@pytest.mark.parametrize("output,target", [
+    ("E   ModuleNotFoundError: No module named 'other_mod'", _NEW),
+    ("E   ImportError: cannot import name 'f' from 'other.mod' (/x/other/mod.py)", _OLD),
+    ("E   ModuleNotFoundError: No module named 'w_new'\nE   SyntaxError: invalid syntax", _NEW),
+    ("E   ModuleNotFoundError: No module named 'w_newer'", _NEW),
+    # Review: a same-named module elsewhere (stdlib json, a sibling utils.py) is not the target.
+    ("E   ImportError: cannot import name 'f' from 'tools.w' (/usr/lib/python3/tools/w.py)", _OLD),
+    ("E   ImportError: cannot import name 'f' from 'tools.w'", _OLD),
+    ("E   ImportError: cannot import name 'fx' from 'tools.w' (/usr/lib/tools/w.py). Did you mean: 'f'?", _OLD),
+    ("E   ImportError: cannot import name 'fx' from 'tools.w' (/x/tools/w.py). Did you mean: 'f'? extra", _OLD),
+    # Review: a module shadowing the package is not fixed by writing the target.
+    ("E   ModuleNotFoundError: No module named 'tools.w_new'; 'tools' is not a package", _NEW),
+    # Review: the target already exists, so "no module named" is a path problem, not RED.
+    ("E   ModuleNotFoundError: No module named 'w'", _OLD),
+    # Review: a dotted exception name is still an error line that is not the target import.
+    ("E   ModuleNotFoundError: No module named 'w_new'\nE   json.decoder.JSONDecodeError: x", _NEW),
+])
+def test_any_other_collection_error_stays_pytest_error(output, target):
+    assert judge.score(output + _COLLECT, False, target) == "pytest-error"
+
+
+def test_without_an_import_target_a_collection_error_stays_pytest_error():
+    line = "E   ModuleNotFoundError: No module named 'w_new'"
+    assert judge.score(line + _COLLECT, False) == "pytest-error"
+
+
+@pytest.mark.parametrize("rel,expected", [
+    ("hematology-paper-writer/tools/w_new.py", {"w_new", "tools.w_new"}),
+    ("pkg/sub/__init__.py", {"sub", "pkg.sub"}),
+])
+def test_target_module_names_are_the_importable_dotted_suffixes(tmp_path, rel, expected):
+    assert judge.target_module_names(tmp_path, tmp_path / rel) == frozenset(expected)
+
+
+def test_a_new_module_imported_at_module_top_is_allowed(tmp_path):
+    root = _root(tmp_path)
+    target = root / "hematology-paper-writer/tools/w_new.py"  # not written yet
+    target.parent.mkdir(parents=True)
+    test = root / "hematology-paper-writer/tests/test_w_new.py"
+    test.parent.mkdir(parents=True)
+    test.write_text("from w_new import f\n\ndef test_f():\n    assert f() == 1\n", encoding="utf-8")
+    write_state(root, {"feat": _step()})
+    verdict = judge.judge(root, target, judge.read_chain(root, target).records,
+                          fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == ("ALLOW", "red-measured"), verdict
+
+
+# Row 2833: a fixed 40 s budget timed out one slow test file before its RED. A Task may
+# now declare `**Judge budget**: <N>s`, capped, and every timeout DENY names the budget.
+@pytest.mark.parametrize("line,expected", [
+    ("**Judge budget**: 90s", 90),
+    ("- **Judge budget**: 120", 120),
+    ("Judge budget: 45 s", 45),
+    ("**Judge budget**: ninety", None),
+    ("**Judge budget**: " + "9" * 5000, None),  # review: an unbounded int must not crash the parser
+])
+def test_the_task_parser_reads_a_judge_budget(line, expected):
+    from h_mad_wire_pin_gate import _parse_tasks
+    tasks = _parse_tasks(f"## Task 1: t\n{line}\n**Production file**: `a.py`\n")
+    assert tasks[0]["judge_budget"] == expected
+
+
+def test_a_task_without_a_budget_has_none():
+    from h_mad_wire_pin_gate import _parse_tasks
+    assert _parse_tasks("## Task 1: t\n**Production file**: `a.py`\n")[0]["judge_budget"] is None
+
+
+@pytest.mark.parametrize("default,declared,expected", [
+    (40.0, None, 40.0), (40.0, 90, 90.0), (40.0, 10, 40.0), (40.0, 999, judge.JUDGE_BUDGET_CAP_S),
+])
+def test_the_effective_budget_only_extends_and_is_capped(default, declared, expected):
+    assert judge.effective_budget(default, declared) == expected
+
+
+_SLOW_RED = "import time\n\ndef test_slow_red():\n    time.sleep(1.5)\n    assert False\n"
+
+
+def test_a_declared_budget_lets_a_slow_red_finish(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root, body=_SLOW_RED)
+    _task_plan(root, "**Judge budget**: 10s\n**Production file**: `tools/w.py`\n**Test file**: `tests/test_w.py`")
+    verdict = judge.judge(root, target, _records(root), budget_s=0.5, fallback_interpreter=sys.executable)
+    assert (verdict.decision, verdict.kind) == ("ALLOW", "red-measured"), verdict
+
+
+def test_a_timeout_deny_names_the_budget(tmp_path):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root, body=_SLOW_RED)
+    _task_plan(root, "**Production file**: `tools/w.py`\n**Test file**: `tests/test_w.py`")
+    verdict = judge.judge(root, target, _records(root), budget_s=0.5, fallback_interpreter=sys.executable)
+    assert _kind(verdict) == "timeout"
+    assert "judge budget 0.5s" in verdict.reason

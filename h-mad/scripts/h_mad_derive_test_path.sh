@@ -27,6 +27,10 @@ case "$PROD_PATH" in
   shared/*)
     PROJECT="shared"
     ;;
+  h-mad/scripts/*)
+    # h-mad's own scripts (row 2844). Hooks are hyphenated and have no 1:1 test name.
+    PROJECT="h-mad"
+    ;;
   *)
     # Unknown project layout → empty
     exit 0

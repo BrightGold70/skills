@@ -335,3 +335,13 @@ def test_the_no_op_revert_block_exits_zero(tmp_path) -> None:
     git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base")
     block = _revert_block().replace("<production-paths>", "mod.py").replace("<one-production-path>", "mod.py")
     assert sp.run(["bash", "-ec", block], cwd=repo, capture_output=True, text=True).returncode == 0
+
+
+def test_unpinned_spec_review_drift_has_a_test_first_route() -> None:
+    """Row 2769: when the 5e spec review finds design-stated behaviour that no test
+    pins, the skill named no route and the orchestrator improvised. The route is
+    test-first: amend RED with a failing pin, then GREEN implements against it."""
+    text = " ".join(SKILL.read_text(encoding="utf-8").split())
+    assert "no test pins" in text
+    assert "amend RED first" in text
+    assert "Never fix it in GREEN without a failing pin" in text
