@@ -476,9 +476,24 @@ def _operator_allowed(command: str, prefixes: list[list[str]]) -> bool:
         argv = shlex.split(command)
     except ValueError:
         return False
+    return _argv_operator_allowed(argv, prefixes)
+
+
+def _argv_operator_allowed(argv: list[str], prefixes: list[list[str]]) -> bool:
     if not argv or shutil.which(argv[0]) is None:  # M:SA-RESOLVE
         return False
-    return any(argv[:len(prefix)] == prefix for prefix in prefixes)  # M:SA-PREFIX
+    if any(argv[:len(prefix)] == prefix for prefix in prefixes):  # M:SA-PREFIX
+        return True
+    # `hmad-dispatch run --timeout N -- <cmd>` runs <cmd> under a timeout: admit it
+    # when <cmd> itself is declared, so one allow line covers both spellings (row
+    # 2756). Only h-mad's own wrapper, in exactly the shape `_safe_argv` admits.
+    hmad_dispatch = (Path(__file__).resolve().parents[1] / "bin" / "hmad-dispatch").resolve()
+    return (_trusted_executable(argv[0]) == hmad_dispatch  # M:SA-RUN-WRAPPER
+            and len(argv) >= 6 and argv[1:3] == ["run", "--timeout"]
+            # No leading zero: bash reads `08` as bad octal and the wrapper dies.
+            and argv[3].isdigit() and argv[3] == str(int(argv[3])) and int(argv[3]) >= 1
+            and argv[4:5] == ["--"]  # M:SA-RUN-SHAPE
+            and _argv_operator_allowed(argv[5:], prefixes))  # M:SA-RUN-INNER
 
 
 def _is_shell_allowance(root: Path, resolved: Identity) -> bool:

@@ -506,6 +506,38 @@
       "find": "    if phase == \"gate\":\n        lines.append(\"# A gate task: re-run its probes yourself; the PROBE: lines are claims.\")\n",
       "replace": "    if True:\n        lines.append(\"# A gate task: re-run its probes yourself; the PROBE: lines are claims.\")\n",
       "test": "tests/test_h_mad_assemble_tdd.py::TestGateProbeHandoffSpec::test_guard_red_green_command_blocks_do_not_offer_gate_probe_handoff[red]"
+    },
+    {
+      "name": "bare-python-not-resolved",
+      "_mechanism": "Row 2836 restored: a bare --python reaches the prompt verbatim, and a path-spelled phase5-shell-allow line never matches it.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        args.python = resolve_python(args.python)  # M:AT-PY-RESOLVE\n",
+      "replace": "",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestPythonResolution::test_cli_writes_the_absolute_interpreter_into_the_prompt"
+    },
+    {
+      "name": "python-symlink-followed",
+      "_mechanism": "Following the symlink turns /opt/homebrew/bin/python3.14 into a Cellar path outside every trusted directory, so the gate refuses the run the assembler prescribed.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    return os.path.normpath(os.path.abspath(found))",
+      "replace": "    return os.path.realpath(found)",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestPythonResolution::test_a_bare_name_resolves_to_its_path_entry_not_its_symlink_target"
+    },
+    {
+      "name": "unresolved-bare-name-passes",
+      "_mechanism": "A bare name not on PATH is written into the prompt instead of halting, so the dispatch runs a command that cannot start.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if found is None:\n        raise Halt(\"interpreter_not_found\"",
+      "replace": "    if found is None:\n        return python\n        raise Halt(\"interpreter_not_found\"",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestPythonResolution::test_a_bare_name_not_on_path_halts"
+    },
+    {
+      "name": "suggestions-stay-bare",
+      "_mechanism": "The halt's own suggestion re-introduces a bare name, so following it reproduces row 2836.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        absolute = candidate if \"/\" in candidate else shutil.which(candidate)",
+      "replace": "        absolute = candidate",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestPythonResolution::test_suggestions_are_absolute"
     }
   ],
   "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."

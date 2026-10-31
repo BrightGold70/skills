@@ -167,3 +167,48 @@ def test_outside_phase5_the_allowance_is_writable(tmp_path):
     payload = {"tool_name": "Write", "tool_input": {"file_path": str(root / ALLOW)}}
     verdict, reason, _ = _run(root, payload)
     assert verdict == "allow", reason
+
+
+# Row 2756 (skill-candidates): an allowance did not govern `hmad-dispatch run`. A
+# declared command was admitted bare and refused once wrapped in the dispatch timeout
+# wrapper the assembler prescribes, so the operator's one allow line covered only one
+# of the two spellings. The inner command is now matched against the same prefixes,
+# but only through h-mad's own wrapper in its exact `run --timeout N --` shape.
+HMAD_DISPATCH = str(Path(__file__).resolve().parents[1] / "bin" / "hmad-dispatch")
+
+
+def test_a_declared_prefix_is_admitted_inside_the_dispatch_wrapper(tmp_path):
+    root = _root(tmp_path)
+    _allow(root, "hpw manuscript run\n")
+    command = f"{HMAD_DISPATCH} run --timeout 60 -- hpw manuscript run paper"
+    verdict, reason, _ = _run(root, _shell(command), path=_fake_bin(tmp_path))
+    assert verdict == "allow", reason
+
+
+@pytest.mark.parametrize("command", [
+    "{d} run --timeout 60 -- hpw manuscript delete paper",
+    "{d} run --timeout 60 hpw manuscript run paper",
+    "{d} run --timeout 60 --x hpw manuscript run paper",
+    "{d} run --timeout 0 -- hpw manuscript run paper",
+    "{d} run --timeout 08 -- hpw manuscript run paper",
+    "{d} run -- hpw manuscript run paper",
+    "{d} exec --timeout 60 -- hpw manuscript run paper",
+    "{d} run --timeout 60 -- hpw manuscript run paper; touch prod.py",
+])
+def test_the_wrapper_admits_only_its_exact_shape_around_a_declared_command(tmp_path, command):
+    root = _root(tmp_path)
+    _allow(root, "hpw manuscript run\n")
+    verdict, reason, _ = _run(root, _shell(command.format(d=HMAD_DISPATCH)),
+                              path=_fake_bin(tmp_path))
+    assert verdict == "deny", reason
+
+
+def test_a_foreign_hmad_dispatch_on_path_does_not_unwrap(tmp_path):
+    # Only h-mad's own wrapper executes its inner command under a timeout; any other
+    # binary of that name could do anything with the trailing argv.
+    root = _root(tmp_path)
+    _fake_bin(tmp_path, "hmad-dispatch")
+    _allow(root, "hpw manuscript run\n")
+    verdict, reason, _ = _run(root, _shell("hmad-dispatch run --timeout 60 -- hpw manuscript run"),
+                              path=_fake_bin(tmp_path))
+    assert verdict == "deny", reason

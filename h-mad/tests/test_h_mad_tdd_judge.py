@@ -816,11 +816,30 @@ def test_candidate_outside_root_is_dropped_and_noted(tmp_path):
 
 
 # Scoring before the W4 summary connection: 5 items.
+def _path_with_pytest_python(tmp_path, monkeypatch, *, present, trusted=True):
+    """PATH holding a `python3.13` with pytest (a link to this interpreter), or none.
+
+    Host-independent: the judge considers only `python3.13`, so a system python with
+    pytest in /usr/bin (kept on PATH for the name-map's bash) cannot be picked.
+    """
+    bin_dir = tmp_path / "path-bin"
+    bin_dir.mkdir(exist_ok=True)
+    if present:
+        (bin_dir / "python3.13").symlink_to(sys.executable)
+    monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
+    monkeypatch.setattr(judge, "FALLBACK_CANDIDATES", ("python3.13",))
+    if trusted:
+        monkeypatch.setattr(judge, "TRUSTED_BIN_DIRS", {*judge.TRUSTED_BIN_DIRS, bin_dir})
+
+
 @pytest.mark.parametrize("case", ["project-venv", "gate-interpreter"])
-def test_pytest_missing_denies(tmp_path, case):
+def test_pytest_missing_denies(tmp_path, case, monkeypatch):
     root = _root(tmp_path)
     target = _target(root)
     _mapped_test(root, body="def test_pass():\n    assert True\n")
+    # A project venv is authoritative even when PATH offers a python with pytest;
+    # a fallback is substituted only when one exists (row 2776), so here none does.
+    _path_with_pytest_python(tmp_path, monkeypatch, present=case == "project-venv")
     if case == "project-venv":
         interpreter = build_venv(root / "hematology-paper-writer/.venv", with_pytest=False)
     else:
@@ -1078,3 +1097,40 @@ def test_judge_mtime_guard_older_red_still_allows_after_newer_green(tmp_path):
     assert (verdict.decision, verdict.kind, verdict.source, verdict.test) == (
         "ALLOW", "red-measured", "impl-plan", older_red,
     ), f"the older RED must still allow when the newer candidate passes: {verdict!r}"
+
+
+def test_a_fallback_without_pytest_uses_a_path_python_that_has_it(tmp_path, monkeypatch):
+    # Row 2776: the hook runs under a bare `python3` that may have no pytest, so a
+    # target with no project venv was DENYed pytest-missing on every write.
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    no_pytest = build_venv(tmp_path / "gate-venv", with_pytest=False)
+    _path_with_pytest_python(tmp_path, monkeypatch, present=True)
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=str(no_pytest))
+    assert (verdict.decision, verdict.kind) == ("ALLOW", "red-measured"), verdict
+
+
+def test_a_substituted_fallback_is_named_in_a_deny(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root, body="def test_pass():\n    assert True\n")
+    no_pytest = build_venv(tmp_path / "gate-venv", with_pytest=False)
+    _path_with_pytest_python(tmp_path, monkeypatch, present=True)
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=str(no_pytest))
+    assert _kind(verdict) == "test-passing"
+    assert f"fallback {no_pytest} has no pytest" in verdict.reason
+    assert "python3.13" in verdict.reason
+
+
+def test_a_substitute_outside_the_trusted_bin_dirs_is_not_used(tmp_path, monkeypatch):
+    # Review finding: the substitute decides ALLOW for production writes, so it must
+    # meet the shell gate's own trust rule; a PATH entry a worker can influence must
+    # not choose the measuring interpreter.
+    root = _root(tmp_path)
+    target = _target(root)
+    _mapped_test(root)
+    no_pytest = build_venv(tmp_path / "gate-venv", with_pytest=False)
+    _path_with_pytest_python(tmp_path, monkeypatch, present=True, trusted=False)
+    verdict = judge.judge(root, target, _records(root), fallback_interpreter=str(no_pytest))
+    assert _kind(verdict) == "pytest-missing"

@@ -745,3 +745,16 @@ def test_operator_allowance_admits_a_listed_command(tmp_path):
     allowance.write_text(f"# {HOSTILE.splitlines()[0]}\npython3 --version\n", encoding="utf-8")
     _expect(_decide(root, _command_payload(command)), "allow",
             because="a policy-refused command listed by the operator in SHELL_ALLOW_FILE must be admitted")
+
+
+def test_run_command_declared_prefix_admitted_inside_the_dispatch_wrapper(tmp_path):
+    # Row 2756 on the agy surface: the shared `_operator_allowed` unwraps h-mad's own
+    # `hmad-dispatch run --timeout N --`, so one allow line covers both spellings.
+    root = _root(tmp_path, "active")
+    (root / ".h-mad").mkdir(exist_ok=True)
+    (root / ".h-mad" / "phase5-shell-allow").write_text("/usr/bin/true manuscript\n", encoding="utf-8")
+    dispatch = Path(__file__).resolve().parents[1] / "bin" / "hmad-dispatch"
+    _expect(_decide(root, _command_payload(f"{dispatch} run --timeout 60 -- /usr/bin/true manuscript")),
+            "allow", because="a declared command wrapped in the dispatch timeout wrapper")
+    _expect(_decide(root, _command_payload(f"{dispatch} run --timeout 60 -- /usr/bin/true other")),
+            "deny", "shell-not-admitted", because="an undeclared inner command stays refused")

@@ -76,7 +76,8 @@ summary line (`N failed` or other summary counts), never its rc.
    allowlist of test, read-only, and H-MAD control commands. That refusal is project-wide, so work
    unrelated to the feature (a manuscript run) is admitted only by the operator listing its argv
    prefix, one per line, in `<root>/.h-mad/phase5-shell-allow`. The command must stay simple (no
-   chaining, redirection or substitution) and its executable must resolve. An allowance that cannot
+   chaining, redirection or substitution) and its executable must resolve. A declared prefix also
+   covers the same command wrapped in h-mad's own `hmad-dispatch run --timeout N -- <command>`. An allowance that cannot
    be read or parsed refuses, and codex may not write that file while `step5` is active. Keep claims
    alive during long dispatches.
 6. **Phase 6 — Verification.** Run the independent architectural review first, then gap analysis and

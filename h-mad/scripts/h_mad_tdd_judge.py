@@ -20,6 +20,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 from h_mad_audit_gate import _SGR_RE, _SUMMARY_LINE_RE, _suite_summary  # noqa: E402
 from h_mad_wire_pin_gate import _parse_tasks  # noqa: E402
+from h_mad_target_identity import TRUSTED_BIN_DIRS  # noqa: E402
 
 KINDS = frozenset({"red-measured", "no-test-resolved", "test-missing",
                    "venv-escapes-root", "pytest-missing", "pytest-error",
@@ -382,6 +383,39 @@ def select_interpreter(test: Path, root: Path, fallback: str) -> Union[str, Verd
     return fallback
 
 
+FALLBACK_CANDIDATES = tuple(f"python3.{minor}" for minor in range(20, 8, -1)) + ("python3",)
+
+
+def _has_pytest(python: str, deadline: float) -> bool:
+    # Through `_run_bounded` like every other child: the judge's budget, and a
+    # process-group kill on timeout.
+    probe = _run_bounded([python, "-c", "import pytest"], Path("/"),
+                         min(deadline, time.monotonic() + 10.0))
+    return probe.returncode == 0 and not probe.timed_out and not probe.reap_failed
+
+
+def fallback_with_pytest(fallback: str, deadline: float) -> Tuple[str, Optional[str]]:
+    """The fallback, or the first `python3.N` on PATH that can import pytest (row 2776).
+
+    The hook runs under a bare `python3`, which on some hosts has no pytest, so a
+    target with no project venv was DENYed pytest-missing on every write. Only the
+    fallback is substituted: a project venv that lacks pytest is the project's
+    configuration and stays a pytest-missing DENY. A substitute must sit in one of
+    the shell gate's TRUSTED_BIN_DIRS: its result decides ALLOW for a production
+    write, so a PATH entry a worker can influence must not pick it. Returns
+    (interpreter, note).
+    """
+    if _has_pytest(fallback, deadline):
+        return fallback, None
+    for name in FALLBACK_CANDIDATES:
+        candidate = shutil.which(name)
+        if (candidate and candidate != fallback
+                and Path(candidate).parent in TRUSTED_BIN_DIRS  # M:J-FALLBACK-TRUSTED
+                and _has_pytest(candidate, deadline)):
+            return candidate, f"fallback {fallback} has no pytest; used {candidate}"
+    return fallback, None
+
+
 def _pytest_missing(output: str) -> bool:
     return any(_SGR_RE.sub("", line).strip().endswith(": No module named pytest")
                for line in output.splitlines())
@@ -436,13 +470,21 @@ def judge(root: Path, target: Path, records: Sequence[Record], *, budget_s: floa
     if resolution.verdict is not None:
         return resolution.verdict
     outcomes = []
+    notes = list(resolution.notes)
+    substituted: Optional[str] = None  # the fallback, probed at most once per judge call
     # One budget covers every candidate, and ALLOW comes at the first red. The
     # active task's RED is the file just written, so try the newest first; an
     # earlier task's slow green guards otherwise spend the budget (kind=timeout).
     for test, cwd in sorted(resolution.present, key=_newest_first):  # M:J-NEWEST
         interpreter = select_interpreter(test, root, fallback_interpreter)
         if isinstance(interpreter, Verdict):
-            return interpreter._replace(reason=interpreter.reason + _notes(resolution.notes))
+            return interpreter._replace(reason=interpreter.reason + _notes(notes))
+        if interpreter == fallback_interpreter:  # M:J-FALLBACK-PYTEST
+            if substituted is None:
+                substituted, note = fallback_with_pytest(fallback_interpreter, deadline)
+                if note:
+                    notes.append(note)
+            interpreter = substituted
         argv = [interpreter, "-m", "pytest", str(test), "-x", "-q", "--no-header"]
         returncode, out, err, timed_out, error, reap_failed = _run_bounded(argv, cwd, deadline)
         kind = "no-summary" if error else score(out + "\n" + err, timed_out)  # M:K3
@@ -463,7 +505,7 @@ def judge(root: Path, target: Path, records: Sequence[Record], *, budget_s: floa
     reason = "; ".join(details)
     if kind == "pytest-error":
         reason += "; import error inside the test body"
-    return _deny(kind, reason + _notes(resolution.notes))
+    return _deny(kind, reason + _notes(notes))
 
 
 def format_state_line(chain: Chain, root: Path) -> str:

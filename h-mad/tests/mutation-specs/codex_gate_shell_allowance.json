@@ -43,8 +43,8 @@
       "name": "prefix-reduced-to-executable",
       "_mechanism": "Matching only the executable turns `hpw manuscript run` into `hpw *`, admitting every subcommand of a declared tool.",
       "file": "scripts/h_mad_target_identity.py",
-      "find": "    return any(argv[:len(prefix)] == prefix for prefix in prefixes)  # M:SA-PREFIX",
-      "replace": "    return any(argv[:1] == prefix[:1] for prefix in prefixes)  # M:SA-PREFIX",
+      "find": "    if any(argv[:len(prefix)] == prefix for prefix in prefixes):  # M:SA-PREFIX",
+      "replace": "    if any(argv[:1] == prefix[:1] for prefix in prefixes):  # M:SA-PREFIX",
       "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_an_undeclared_command_is_refused[hpw manuscript delete paper]"
     },
     {
@@ -86,6 +86,46 @@
       "find": "        if phase5_status in {\"active\", \"unknown\"} and _is_shell_allowance(root, resolved):  # M:SA-GUARD",
       "replace": "        if _is_shell_allowance(root, resolved):  # M:SA-GUARD",
       "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_outside_phase5_the_allowance_is_writable"
+    },
+    {
+      "name": "wrapper-never-unwrapped",
+      "_mechanism": "Row 2756 restored: a declared command is admitted bare but refused inside `hmad-dispatch run --timeout N --`, so one allow line covers only one spelling.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "    return (_trusted_executable(argv[0]) == hmad_dispatch  # M:SA-RUN-WRAPPER",
+      "replace": "    return (False  # M:SA-RUN-WRAPPER",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_a_declared_prefix_is_admitted_inside_the_dispatch_wrapper"
+    },
+    {
+      "name": "any-hmad-dispatch-unwraps",
+      "_mechanism": "The wrapper identity check removed: any binary named hmad-dispatch on PATH has its trailing argv matched as if h-mad's wrapper would run it under a timeout.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "    return (_trusted_executable(argv[0]) == hmad_dispatch  # M:SA-RUN-WRAPPER",
+      "replace": "    return (Path(argv[0]).name == \"hmad-dispatch\"  # M:SA-RUN-WRAPPER",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_a_foreign_hmad_dispatch_on_path_does_not_unwrap"
+    },
+    {
+      "name": "wrapper-admits-any-inner",
+      "_mechanism": "The inner command is not matched: the wrapper becomes a way to run any command the operator never declared.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "            and _argv_operator_allowed(argv[5:], prefixes))  # M:SA-RUN-INNER",
+      "replace": "            and True)  # M:SA-RUN-INNER",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_the_wrapper_admits_only_its_exact_shape_around_a_declared_command[{d} run --timeout 60 -- hpw manuscript delete paper]"
+    },
+    {
+      "name": "wrapper-shape-unchecked",
+      "_mechanism": "The `--` separator is not required, so the wrapper's own options could be read as the inner command.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "and argv[4:5] == [\"--\"]  # M:SA-RUN-SHAPE",
+      "replace": "and True  # M:SA-RUN-SHAPE",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_the_wrapper_admits_only_its_exact_shape_around_a_declared_command[{d} run --timeout 60 --x hpw manuscript run paper]"
+    },
+    {
+      "name": "wrapper-timeout-leading-zero",
+      "_mechanism": "A `--timeout 08` the wrapper's bash arithmetic rejects as bad octal is admitted, so the gate's shape and the wrapper's disagree.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "and argv[3] == str(int(argv[3])) and int(argv[3]) >= 1",
+      "replace": "and int(argv[3]) >= 1",
+      "test": "tests/test_h_mad_codex_gate_shell_allowance.py::test_the_wrapper_admits_only_its_exact_shape_around_a_declared_command[{d} run --timeout 08 -- hpw manuscript run paper]"
     }
   ]
 }

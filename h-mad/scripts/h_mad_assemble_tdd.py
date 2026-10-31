@@ -56,6 +56,7 @@ import argparse
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -346,16 +347,37 @@ def interpreter_has_pytest(python: str) -> bool:
         return False
 
 
+def resolve_python(python: str) -> str:
+    """A bare `--python` name as its absolute PATH entry; a spelled path verbatim.
+
+    The Phase-5 gate's allowlist matches argv words literally, so a bare
+    `python3.11` in the prompt never matches an allow line written as a path
+    (row 2836). The PATH entry is kept, not its symlink target: the gate trusts
+    `/opt/homebrew/bin/python3.14` by directory, and the Cellar directory it points
+    into is generally not a trusted one. `normpath` collapses a `..` in the PATH
+    spelling without following symlinks.
+    """
+    if "/" in python:
+        return python
+    found = shutil.which(python)
+    if found is None:
+        raise Halt("interpreter_not_found", f"--python {python!r} is not on PATH")
+    return os.path.normpath(os.path.abspath(found))
+
+
 def find_interpreters_with_pytest() -> list[str]:
-    """Candidates to suggest when the chosen interpreter has no pytest."""
-    return [
-        candidate
-        for candidate in (
-            sys.executable, "python3.13", "python3.12", "python3.11",
-            "/opt/homebrew/bin/python3", "/usr/bin/python3",
-        )
-        if candidate and interpreter_has_pytest(candidate)
-    ]
+    """Candidates to suggest when the chosen interpreter has no pytest, as absolute paths."""
+    found = []
+    for candidate in (
+        sys.executable, "python3.13", "python3.12", "python3.11",
+        "/opt/homebrew/bin/python3", "/usr/bin/python3",
+    ):
+        if not candidate:
+            continue
+        absolute = candidate if "/" in candidate else shutil.which(candidate)
+        if absolute and interpreter_has_pytest(absolute):
+            found.append(absolute)
+    return found
 
 
 # `<path>::<test>`, optionally parametrised; no whitespace anywhere.
@@ -823,6 +845,7 @@ def main(argv: list[str] | None = None) -> int:
     log = args.log or Path(f"/tmp/exec_{slug}.log")
 
     try:
+        args.python = resolve_python(args.python)  # M:AT-PY-RESOLVE
         if args.sandbox == "read-only":
             raise Halt(
                 "sandbox_read_only",

@@ -37,6 +37,38 @@
       "find": "        return stat.S_ISREG(os.lstat(venv / \"pyvenv.cfg\").st_mode)  # M:V3",
       "replace": "        return True  # M:V3",
       "test": "tests/test_h_mad_tdd_judge.py::test_venv_contained_rows[cfg-missing-False]"
+    },
+    {
+      "name": "fallback-never-substituted",
+      "_mechanism": "Row 2776 restored: a fallback interpreter without pytest is used as-is, so every write to a target with no project venv is DENYed pytest-missing.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        if interpreter == fallback_interpreter:  # M:J-FALLBACK-PYTEST",
+      "replace": "        if False:  # M:J-FALLBACK-PYTEST",
+      "test": "tests/test_h_mad_tdd_judge.py::test_a_fallback_without_pytest_uses_a_path_python_that_has_it"
+    },
+    {
+      "name": "project-venv-substituted",
+      "_mechanism": "A project venv without pytest is silently replaced by a PATH python, so the judge measures under an interpreter that is not the project's and the misconfiguration is never reported.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "        if interpreter == fallback_interpreter:  # M:J-FALLBACK-PYTEST",
+      "replace": "        if True:  # M:J-FALLBACK-PYTEST",
+      "test": "tests/test_h_mad_tdd_judge.py::test_pytest_missing_denies[project-venv]"
+    },
+    {
+      "name": "substitution-unreported",
+      "_mechanism": "The judge measures under a different interpreter than it was given and never says so; a DENY then cannot be traced to the interpreter that produced it.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "                if note:\n                    notes.append(note)",
+      "replace": "                pass",
+      "test": "tests/test_h_mad_tdd_judge.py::test_a_substituted_fallback_is_named_in_a_deny"
+    },
+    {
+      "name": "untrusted-substitute",
+      "_mechanism": "Any python3.N on PATH may measure RED for a production write, so a PATH entry a worker can influence chooses the interpreter whose result decides ALLOW.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "find": "                and Path(candidate).parent in TRUSTED_BIN_DIRS  # M:J-FALLBACK-TRUSTED",
+      "replace": "                and True  # M:J-FALLBACK-TRUSTED",
+      "test": "tests/test_h_mad_tdd_judge.py::test_a_substitute_outside_the_trusted_bin_dirs_is_not_used"
     }
   ]
 }

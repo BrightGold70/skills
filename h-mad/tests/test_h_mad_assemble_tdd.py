@@ -1963,3 +1963,61 @@ def test_the_pass_output_names_the_prompt_and_the_dispatch_output_distinctly(tmp
     assert out_line and "NOT the prompt" in out_line, result.stderr
     help_text = run_cli("--help").stdout
     assert "the agent's reply" in help_text and "assembled prompt is written" in help_text, help_text
+
+
+class TestPythonResolution:
+    """Row 2836: a bare `--python` was written verbatim into the prompt's run line,
+    the anchor check and the operator re-run. The Phase-5 gate's allowlist compares
+    argv words literally, so an allow line written with an absolute path never
+    matched the bare spelling. A bare name is now resolved on PATH (without following
+    symlinks, so `/opt/homebrew/bin/python3.14` stays in its trusted directory)."""
+
+    def test_a_bare_name_resolves_to_its_path_entry_not_its_symlink_target(self, tmp_path, monkeypatch):
+        import h_mad_assemble_tdd as at
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        link = bin_dir / "pyx"
+        link.symlink_to(PYTHON)
+        monkeypatch.setenv("PATH", str(bin_dir))
+        assert at.resolve_python("pyx") == str(link)
+
+    @pytest.mark.parametrize("given", ["/opt/my python/bin/python3", ".venv/bin/python"])
+    def test_a_spelled_path_is_kept_verbatim(self, given):
+        import h_mad_assemble_tdd as at
+        assert at.resolve_python(given) == given
+
+    def test_a_bare_name_not_on_path_halts(self, tmp_path, monkeypatch):
+        import h_mad_assemble_tdd as at
+        monkeypatch.setenv("PATH", str(tmp_path))
+        with pytest.raises(Halt) as exc:
+            at.resolve_python("python9.99")
+        assert exc.value.reason == "interpreter_not_found"
+
+    def test_suggestions_are_absolute(self, monkeypatch):
+        import h_mad_assemble_tdd as at
+        monkeypatch.setattr(at, "interpreter_has_pytest", lambda python: True)
+        suggestions = at.find_interpreters_with_pytest()
+        assert suggestions and all(s.startswith("/") for s in suggestions), suggestions
+
+    def test_cli_writes_the_absolute_interpreter_into_the_prompt(self, tmp_path):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        link = bin_dir / "pyx"
+        link.symlink_to(PYTHON)
+        root = tmp_path / "proj"
+        (root / "docs" / "01-plan" / "features").mkdir(parents=True)
+        (root / "docs" / "01-plan" / "features" / "feat.impl-plan.md").write_text(PLAN, encoding="utf-8")
+        prompt = tmp_path / "prompt.txt"
+        import os
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--feature", "feat", "--task", "Task 1",
+             "--phase", "red", "--project-root", str(root), "--module", "mod.py",
+             "--test-path", "tests/test_mod.py", "--expect-fail", "3", "--expect-pass", "1",
+             "--python", "pyx", "--prompt", str(prompt)],
+            capture_output=True, text=True,
+            env={**os.environ, "PATH": f"{bin_dir}:/usr/bin:/bin"},
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = prompt.read_text(encoding="utf-8")
+        assert f"`{link} -m pytest" in text
+        assert "`pyx -m pytest" not in text
