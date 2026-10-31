@@ -158,6 +158,54 @@
       "find": "| set(AGY_INSTALLED_NAMES)",
       "replace": "",
       "test": "tests/test_h_mad_install_check_roots.py::test_agents_root_lock_pinned_core_skill_still_fails"
+    },
+    {
+      "name": "AH1",
+      "_mechanism": "Drop the agy hook-target check from check(): an absent agy root a live hook runs from is silent again.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        issues += check_agy_hook_targets(hooks_files, Path(os.path.expanduser(agy_skills_dir)))",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_target_missing_under_absent_root_fails"
+    },
+    {
+      "name": "AH2",
+      "_mechanism": "Stop reading the project's .agents/hooks.json by default.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "(args.hooks_json or [Path.cwd() / \".agents\" / \"hooks.json\"])",
+      "replace": "(args.hooks_json or [])",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_project_hooks_json_read_by_default"
+    },
+    {
+      "name": "AH3",
+      "_mechanism": "Report every hook-command token outside the agy root too.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "                if not target.is_relative_to(agy_root):",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_target_outside_root_adds_no_line"
+    },
+    {
+      "name": "AH4",
+      "_mechanism": "Report a hook target under the agy root even when it exists.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "                if not target.exists():",
+      "replace": "                if True:",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_present_target_passes"
+    },
+    {
+      "name": "AH5",
+      "_mechanism": "Skip tilde expansion of hook-command tokens.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "                target = Path(os.path.expanduser(token))",
+      "replace": "                target = Path(token)",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_tilde_command_expands_home"
+    },
+    {
+      "name": "AH6",
+      "_mechanism": "Skip tilde expansion of the agy root the hook targets are compared against.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "check_agy_hook_targets(hooks_files, Path(os.path.expanduser(agy_skills_dir)))",
+      "replace": "check_agy_hook_targets(hooks_files, Path(agy_skills_dir))",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_tilde_command_expands_home"
     }
   ]
 }

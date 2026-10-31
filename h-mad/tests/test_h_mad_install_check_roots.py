@@ -1,5 +1,6 @@
 """Host skill roots are checked by the install-check CLI without changing its API default."""
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -324,4 +325,83 @@ def test_agents_root_lock_pinned_core_skill_still_fails(tmp_path, hermetic_env):
     assert lines[:1] == ["INSTALL: FAIL issues=1"]
     assert f"SIBLING_NOT_SYMLINK:{agents / 'h-mad'} " in proc.stdout
     assert lines[-1] == f"AGENTS_SIBLING_COLLISION:{agents / 'pdf'} kind=NOT_SYMLINK"
+
+
+# A live agy hook whose target sits under the agy skills root depends on that
+# root existing. Measured 2026-10-18: the root was absent, the check skipped it
+# ("a root that does not exist adds no line"), and agy refused every tool call.
+AGY_GATE = ("h-mad", "hooks", "h-mad-agy-tdd-gate.py")
+
+
+def _hooks_json(project: Path, command: str) -> Path:
+    path = project / ".agents" / "hooks.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"h-mad-agy-tdd-gate": {"enabled": True, "PreToolUse": [
+        {"matcher": "*", "hooks": [{"type": "command", "command": command, "timeout": 60}]}]}}),
+        encoding="utf-8")
+    return path
+
+
+def _run_in(project, repo, claude, hook, hermetic_env, agy, *args, extra_env=None):
+    argv = [sys.executable, str(SCRIPT), "--skills-link", str(claude / "h-mad"),
+            "--hook-link", str(hook), "--repo", str(repo),
+            "--agents-skills-dir", str(project / "absent-agents"),
+            "--agy-skills-dir", str(agy), *args]
+    return subprocess.run(argv, capture_output=True, text=True, cwd=project,
+                          env=hermetic_env(**(extra_env or {})), timeout=60.0)
+
+
+def test_agy_hook_target_missing_under_absent_root_fails(tmp_path, hermetic_env):
+    repo, claude, hook = _install(tmp_path)
+    agy = tmp_path / "agy-skills"
+    project = tmp_path / "project"
+    hooks = _hooks_json(tmp_path / "other-project", f"python3 {agy.joinpath(*AGY_GATE)}")
+    project.mkdir()
+    proc = _run_in(project, repo, claude, hook, hermetic_env, agy,
+                   "--hooks-json", str(hooks))
+    assert proc.returncode == 0, proc.stderr
+    assert _lines(proc) == ["INSTALL: FAIL issues=1",
+                            f"AGY_HOOK_TARGET_MISSING:{agy.joinpath(*AGY_GATE)}"]
+
+
+def test_agy_hook_project_hooks_json_read_by_default(tmp_path, hermetic_env):
+    repo, claude, hook = _install(tmp_path)
+    agy = tmp_path / "agy-skills"
+    project = tmp_path / "project"
+    _hooks_json(project, f"python3 {agy.joinpath(*AGY_GATE)}")
+    proc = _run_in(project, repo, claude, hook, hermetic_env, agy)
+    assert _lines(proc) == ["INSTALL: FAIL issues=1",
+                            f"AGY_HOOK_TARGET_MISSING:{agy.joinpath(*AGY_GATE)}"]
+
+
+def test_agy_hook_tilde_command_expands_home(tmp_path, hermetic_env):
+    repo, claude, hook = _install(tmp_path)
+    home = tmp_path / "home"
+    agy = home / "agy-skills"
+    project = tmp_path / "project"
+    _hooks_json(project, "python3 ~/agy-skills/h-mad/hooks/h-mad-agy-tdd-gate.py")
+    proc = _run_in(project, repo, claude, hook, hermetic_env, "~/agy-skills",
+                   extra_env={"HOME": str(home)})
+    assert _lines(proc) == ["INSTALL: FAIL issues=1",
+                            f"AGY_HOOK_TARGET_MISSING:{agy.joinpath(*AGY_GATE)}"]
+
+
+def test_agy_hook_present_target_passes(tmp_path, hermetic_env):
+    repo, claude, hook = _install(tmp_path)
+    repo.joinpath(*AGY_GATE).write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    agy = tmp_path / "agy-skills"
+    _state(agy, repo, "h-mad", "correct")
+    project = tmp_path / "project"
+    _hooks_json(project, f"python3 {agy.joinpath(*AGY_GATE)}")
+    proc = _run_in(project, repo, claude, hook, hermetic_env, agy)
+    assert _lines(proc) == ["INSTALL: PASS", "OK"]
+
+
+def test_agy_hook_target_outside_root_adds_no_line(tmp_path, hermetic_env):
+    repo, claude, hook = _install(tmp_path)
+    agy = tmp_path / "agy-skills"
+    project = tmp_path / "project"
+    _hooks_json(project, f"python3 {tmp_path / 'elsewhere' / 'gate.py'}")
+    proc = _run_in(project, repo, claude, hook, hermetic_env, agy)
+    assert _lines(proc) == ["INSTALL: PASS", "OK"]
 
