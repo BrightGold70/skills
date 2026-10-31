@@ -111,6 +111,51 @@ class TestTheGateNowExecutes:
         assert "SUITE:" not in out, "every existing caller must be unaffected"
 
 
+class TestTheSuiteAnnouncesItsTreeBeforeItRuns:
+    """Row `orchestrator writes during the cycle suite read as tree_moved`: cycles 1
+    and 3 read `tree_moved=` from the orchestrator's OWN writes (handoff commits,
+    origins appends, the delta-review report) made while the suite ran, and nothing
+    told it a suite was running. The notice must reach the reader BEFORE the suite
+    starts, name the tree the digest covers, and never read as the `SUITE:` verdict."""
+
+    HOLD = "SUITE-HOLD: hold writes to this tree until its SUITE verdict line prints tree="
+
+    def test_the_hold_notice_is_flushed_before_the_suite_starts(self, tmp_path: Path) -> None:
+        audit = tmp_path / "f.plan.audit.v1.codex.md"
+        audit.write_text(CLEAN, encoding="utf-8")
+        out_file, seen = tmp_path / "gate.out", tmp_path / "seen.txt"
+        # The suite itself reads what the gate had written by the time it started.
+        sh = fake_suite(tmp_path, "peek.sh",
+                        f'cat "{out_file}" > "{seen}"; echo "1 passed in 0.1s"')
+        with out_file.open("w", encoding="utf-8") as fh:
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPT), str(audit), "--project-tests", str(tmp_path),
+                 "--suite-cmd", str(sh)],
+                stdout=fh, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL)
+        assert proc.returncode == 0, proc.stderr
+        holds = [l for l in seen.read_text(encoding="utf-8").splitlines()
+                 if l.startswith("SUITE-HOLD:")]
+        assert holds == [self.HOLD + str(tmp_path.resolve())], (
+            "the notice was not on stdout when the suite started — a reader holding "
+            "writes until the verdict never saw it")
+        final = out_file.read_text(encoding="utf-8")
+        assert token(final, "SUITE:") == "SUITE: PASS passed=1 failed=0", (
+            "the notice must never be mistaken for the verdict line")
+
+    def test_the_hold_notice_names_the_git_toplevel_not_the_test_dir(
+            self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        """The offending writes were docs OUTSIDE the test dir; naming the test dir
+        would tell the operator those writes were safe."""
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        tests_dir = tmp_path / "pkg" / "tests"
+        tests_dir.mkdir(parents=True)
+        sh = fake_suite(tmp_path, "green.sh", 'echo "1 passed in 0.1s"')
+        assert gate.run_suite(tests_dir, command=[str(sh)])["verdict"] == "PASS"
+        holds = [l for l in capsys.readouterr().out.splitlines()
+                 if l.startswith("SUITE-HOLD:")]
+        assert holds == [self.HOLD + str(tmp_path.resolve())]
+
+
 class TestARedSuiteDoesNotHostageTheCycle:
     def test_a_failing_suite_leaves_the_cycle_verdict_alone(self, tmp_path: Path) -> None:
         audit = tmp_path / "f.plan.audit.v1.codex.md"
