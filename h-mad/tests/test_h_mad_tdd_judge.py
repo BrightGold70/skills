@@ -1179,7 +1179,8 @@ _OLD = judge.ImportTarget(frozenset({"w", "tools.w"}), "/x/tools/w.py", True)
     ("E   ImportError: cannot import name 'f' from 'tools.w' (/x/tools/w.py)", _OLD),
     # Python 3.12+ appends a suggestion after the path when a near name exists (review).
     ("E   ImportError: cannot import name 'fx' from 'tools.w' (/x/tools/w.py). Did you mean: 'f'?", _OLD),
-])
+], ids=["new-module", "new-module-dotted", "existing-module-new-name",
+        "existing-module-new-name-suggestion"])
 def test_a_collection_import_error_naming_the_target_is_red(line, target):
     assert judge.score(line + _COLLECT, False, target) == "red-measured"
 
@@ -1200,7 +1201,10 @@ def test_a_collection_import_error_naming_the_target_is_red(line, target):
     ("E   ModuleNotFoundError: No module named 'w'", _OLD),
     # Review: a dotted exception name is still an error line that is not the target import.
     ("E   ModuleNotFoundError: No module named 'w_new'\nE   json.decoder.JSONDecodeError: x", _NEW),
-])
+], ids=["other-module", "other-package-name", "target-then-syntax-error", "near-name-module",
+        "same-named-module-elsewhere", "no-path", "suggestion-other-path",
+        "suggestion-trailing-text", "package-shadowed", "existing-target-no-module",
+        "dotted-error-line"])
 def test_any_other_collection_error_stays_pytest_error(output, target):
     assert judge.score(output + _COLLECT, False, target) == "pytest-error"
 
