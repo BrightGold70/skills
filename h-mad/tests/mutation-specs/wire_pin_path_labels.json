@@ -1,0 +1,56 @@
+{
+  "_why": "Row 'path-label shape unenforced at 5b': the `**Production file**`/`**Test file**` labels the Phase-5 TDD judge resolves writes against were first read at the 5d dispatch. 5b now reports a Task whose label is absent, filler or an unedited placeholder as an `unlabeled:` detail line, judged on the RAW value (a `.sh`/`.md` production file is a declaration the `.py` list cannot hold) with `none` exempt. Each mutant removes one guard of that report.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_wire_pin_gate.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "M1: STOP CHECKING THE PRODUCTION LABEL. A Task with no `**Production file**` line reaches 5d silently again, where the judge matches no task and falls through to the name map.",
+      "_mechanism": "The loop no longer visits `production`, so the Task's missing label yields no entry.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "        for key, label in ((\"production\", \"Production file\"), (\"tests\", \"Test file\")):",
+      "replace": "        for key, label in ((\"tests\", \"Test file\"),):",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_a_task_with_no_production_label_is_reported"
+    },
+    {
+      "name": "M2: STOP CHECKING THE TEST LABEL. A `.py` production Task with no `**Test file**` line is the strongest case: the judge matches it, resolves zero candidates and DENYs every write as test-missing.",
+      "_mechanism": "The loop no longer visits `tests`, so the Task's missing label yields no entry.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "        for key, label in ((\"production\", \"Production file\"), (\"tests\", \"Test file\")):",
+      "replace": "        for key, label in ((\"production\", \"Production file\"),):",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_a_task_with_no_test_label_is_reported"
+    },
+    {
+      "name": "M3: ACCEPT ANY NON-EMPTY VALUE AS A DECLARATION. The unedited template placeholder `<relative/path/to/module.py>` and filler like `TBD` then read as paths -- and the placeholder is not even empty in the parsed `.py` list, which is why the check is on the raw value.",
+      "_mechanism": "`_is_real_value` no longer filters placeholders/filler, so both labels are recorded and nothing is reported.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "                                      or _is_real_value(paths.group(\"value\"))):",
+      "replace": "                                      or paths.group(\"value\").strip()):",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_an_unedited_path_placeholder_is_reported"
+    },
+    {
+      "name": "M4: DROP THE `none` EXEMPTION. `none` is in `_FILLER`, so without the explicit `_NONE_VALUE_RE` arm a `gate` Task that correctly declares `**Production file**: none` is reported as a gap -- refusing the declaration the template prescribes.",
+      "_mechanism": "Only `_is_real_value` remains, which rejects `none`, so the label is never recorded and two entries appear.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "            if paths is not None and (_NONE_VALUE_RE.match(paths.group(\"value\"))\n                                      or _is_real_value(",
+      "replace": "            if paths is not None and (False\n                                      or _is_real_value(",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_filler_path_values_other_than_none_are_reported"
+    },
+    {
+      "name": "M5: ROUTE EVERY LABEL TO `production`. A Test-file line then satisfies nothing, so a fully labeled Task reads as missing its Test file.",
+      "_mechanism": "`tests` is never added to `path_labels`, so a fully labeled plan reports an entry.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "                    \"production\" if paths.group(\"label\").lower().startswith(\"production\") else \"tests\")",
+      "replace": "                    \"production\")",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_a_fully_labeled_plan_reports_nothing"
+    },
+    {
+      "name": "M6: COMPUTE BUT NEVER PRINT. `check()` knows, the CLI -- the only thing 5b reads -- says nothing, which is the pre-fix state as the orchestrator sees it.",
+      "_mechanism": "The detail line is not printed, so the CLI test cannot find it.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "        print(f\"  unlabeled: {item}\")",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_cli_prints_unlabeled_lines_and_keeps_the_token"
+    }
+  ]
+}
