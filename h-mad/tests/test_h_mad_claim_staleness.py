@@ -31,7 +31,8 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from h_mad_state_ownership import OWNERSHIP_STALE_AFTER_SECONDS, owner_is_live  # noqa: E402
-from h_mad_state_write import StateWriteError, claim  # noqa: E402
+import h_mad_state_ownership as ownership  # noqa: E402
+from h_mad_state_write import StateWriteError, claim, release  # noqa: E402
 
 STATE_WRITE = SCRIPTS / "h_mad_state_write.py"
 RESUME = SCRIPTS / "h_mad_resume_decision.py"
@@ -94,19 +95,38 @@ def test_force_still_overrides_a_live_claim(tmp_path: Path) -> None:
     assert _owner_of(path) == "new-session"
 
 
-def test_a_claim_with_no_heartbeat_is_treated_as_live(tmp_path: Path) -> None:
-    # Fail closed, and identically to the router: held with no evidence of when
-    # is not evidence of abandonment. Otherwise a record predating heartbeats
-    # would be silently takeable.
+@pytest.mark.parametrize("heartbeat", [None, "not-a-timestamp"], ids=["null", "unparseable"])
+def test_a_claim_with_no_readable_heartbeat_is_unknown_age_not_live(
+    tmp_path: Path, heartbeat: str | None,
+) -> None:
+    # TLA+ F3 (skill-candidates, 2026-10-25): a null heartbeat used to read as
+    # live forever, so only `--force` or the owner's own id could free the claim.
+    # No heartbeat is unknown age, not evidence of life; the owner's own clocks
+    # decide, and here they are off (conftest), so the claim is takeable.
+    path = _state(tmp_path, heartbeat)
+    claim(path, "demo", "new-session", now=_iso(NOW))
+    assert _owner_of(path) == "new-session"
+
+
+def test_a_null_heartbeat_owner_with_a_fresh_transcript_is_still_refused(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    # Unknown age hands the decision to the owner's own transcript: a running
+    # owner that never beat is still protected, without `force`.
+    fresh = (NOW - timedelta(seconds=60)).timestamp()
+    monkeypatch.setattr(ownership, "read_transcript_mtime", lambda session: fresh)
     path = _state(tmp_path, None)
-    with pytest.raises(StateWriteError, match="owned by session"):
+    with pytest.raises(StateWriteError, match="transcript shows it running"):
         claim(path, "demo", "new-session", now=_iso(NOW))
+    assert _owner_of(path) == "dead-session"
 
 
-def test_an_unparseable_heartbeat_is_treated_as_live(tmp_path: Path) -> None:
-    path = _state(tmp_path, "not-a-timestamp")
-    with pytest.raises(StateWriteError, match="owned by session"):
-        claim(path, "demo", "new-session", now=_iso(NOW))
+def test_an_anonymous_release_frees_a_null_heartbeat_claim(tmp_path: Path) -> None:
+    # The F3 replay: after `owner_heartbeat_ts=null`, an anonymous `--release`
+    # was refused as "still live".
+    path = _state(tmp_path, None)
+    release(path, "demo")
+    assert _owner_of(path) is None
 
 
 def test_taking_a_stale_claim_refreshes_the_heartbeat(tmp_path: Path) -> None:
@@ -149,8 +169,9 @@ def test_both_halves_agree_on_every_claim_the_router_would_release(tmp_path: Pat
     `--claim` must succeed without `--force`. Any offset where the router
     releases but the writer refuses is the 2026-08-02 deadlock reproduced.
     """
-    for offset in (60, 3599, OWNERSHIP_STALE_AFTER_SECONDS, OWNERSHIP_STALE_AFTER_SECONDS + 1, 19 * 3600):
-        heartbeat = _iso(NOW - timedelta(seconds=offset))
+    for offset in (60, 3599, OWNERSHIP_STALE_AFTER_SECONDS, OWNERSHIP_STALE_AFTER_SECONDS + 1, 19 * 3600,
+                   None):
+        heartbeat = None if offset is None else _iso(NOW - timedelta(seconds=offset))
         path = _state(tmp_path, heartbeat)
         router = subprocess.run(
             [sys.executable, str(RESUME), "--state", str(path), "--feature", "demo",

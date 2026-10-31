@@ -404,7 +404,8 @@ def claim(
     guard stops protecting the case it exists for. Both halves now read one
     window (`h_mad_state_ownership`) so they cannot disagree again.
 
-    An absent or unreadable heartbeat counts as live, so this fails closed.
+    An absent or unreadable heartbeat is unknown age, not live: the owner's own
+    transcript (`_refuse_if_owner_proven_live`) is then the only refusal.
     """
 
     def apply(records: dict):

@@ -1,0 +1,29 @@
+{
+  "_why": "Row 2859 F3: an owned record with a null or unparseable heartbeat is UNKNOWN age, not live. `owner_is_live` returns False for it, and the owner's own transcript (`_refuse_if_owner_proven_live`) is the only refusal left. Restoring the old True pins the claim forever; dropping the transcript gate lets a running owner that never beat be taken without force.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_claim_staleness.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "N1: NULL HEARTBEAT PINS AGAIN. The pre-F3 fail-closed reading: no heartbeat reads as live, so only --force or the owner's id frees the claim.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    if heartbeat is None:\n        return False",
+      "replace": "    if heartbeat is None:\n        return True",
+      "test": "tests/test_h_mad_claim_staleness.py::test_a_claim_with_no_readable_heartbeat_is_unknown_age_not_live[null]"
+    },
+    {
+      "name": "N2: UNPARSEABLE HEARTBEAT PINS AGAIN. Only a literal null is unknown age; a garbage string still reads as live.",
+      "file": "scripts/h_mad_state_ownership.py",
+      "find": "    if heartbeat is None:\n        return False",
+      "replace": "    if heartbeat is None:\n        return heartbeat_ts is not None",
+      "test": "tests/test_h_mad_claim_staleness.py::test_a_claim_with_no_readable_heartbeat_is_unknown_age_not_live[unparseable]"
+    },
+    {
+      "name": "N3: CLAIM SKIPS THE TRANSCRIPT GATE. With the heartbeat no longer refusing, a running owner that never beat is taken without force.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "    if not force:\n        _refuse_if_owner_proven_live(state_path, feature, session_id, now, \"claim\")",
+      "replace": "    if False:\n        _refuse_if_owner_proven_live(state_path, feature, session_id, now, \"claim\")",
+      "test": "tests/test_h_mad_claim_staleness.py::test_a_null_heartbeat_owner_with_a_fresh_transcript_is_still_refused"
+    }
+  ]
+}

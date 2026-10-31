@@ -390,7 +390,7 @@ class TestClaimProtocolEnforcement:
     <old owner>` landed at exit 0, only the heartbeat refresh was skipped.
     F2: `--set owner_session_id=` / `--set owner_heartbeat_ts=` moved or froze a
     claim with no `--force`, and a null heartbeat then pinned the claim as live
-    (`owner_is_live(None)` is True) so neither `--claim` nor an anonymous
+    (`owner_is_live(None)` was True until F3) so neither `--claim` nor an anonymous
     `--release` could free it. Ownership moves only through claim/release/beat.
     """
 

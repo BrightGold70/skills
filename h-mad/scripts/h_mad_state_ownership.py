@@ -66,17 +66,20 @@ def parse_ts(value) -> "datetime | None":
 def owner_is_live(heartbeat_ts, now: str | None = None) -> bool:
     """True when a claim stamped `heartbeat_ts` still counts as held.
 
-    Fails CLOSED — an absent or unparseable heartbeat reads as live. "Held, with
-    no evidence of when" is not evidence of abandonment, and the safe error is
-    to leave a possibly-running session in possession rather than to hand its
-    feature to a second one.
+    An absent or unparseable heartbeat is UNKNOWN age, not live: this returns
+    False and leaves the decision to the owner's own clocks
+    (`owner_proven_live`), which `--claim`, `--release` and the resume oracle
+    each consult next. It used to read as live, which pinned such a claim
+    forever: only `--force` or the owner's id could free it (TLA+ F3,
+    skill-candidates 2026-10-25). `liveness_evidence` already reports the same
+    record as `UNKNOWN reason=heartbeat`, which never gates a claim.
 
     The boundary is inclusive: age exactly equal to the window is still live, so
     a claim becomes stale only once it is strictly older.
     """
     heartbeat = parse_ts(heartbeat_ts)
     if heartbeat is None:
-        return True
+        return False
     reference = parse_ts(now) or datetime.now(timezone.utc)
     age = (reference - heartbeat).total_seconds()
     return age <= OWNERSHIP_STALE_AFTER_SECONDS
@@ -104,8 +107,7 @@ def liveness_evidence(record, lane, now: str | None = None, *, transcript_mtime=
       * `LIVENESS: QUIET heartbeat_age=… transcript_age=… commit_age=… window=…`
         — every clock readable and cold;
       * `LIVENESS: UNKNOWN reason=<clocks>` — nothing fresh and some clock
-        could not be read. Never QUIET on a partial read: that is the same
-        fail-closed rule `owner_is_live` applies to a missing heartbeat.
+        could not be read. Never QUIET on a partial read.
 
     `ps` is positive-only. A session id is in argv only for resumed or
     explicit-id launches, so a match proves life and its absence proves
