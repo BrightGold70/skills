@@ -53,6 +53,15 @@ the call that test existed to exercise, and reported this as restoring a green s
 looks obvious, that is precisely when to write it down instead — and mark your stated cause as a
 belief unless you verified it.
 
+While any feature in this repository is at Phase 5 (step5), the Phase-5 TDD gate also limits Bash,
+for this audit too. The read-only commands the gate admits are exactly: `cat`, `grep`, `head`,
+`jq`, `ls`, `pwd`, `shasum`, `tail`, `wc`. The list is `READ_ONLY_COMMANDS` in
+`h-mad/scripts/h_mad_target_identity.py`. Anything else is refused, including `sed`, `nl`, `awk`,
+`find`, `git` and `python -c`. A command must also be one simple command: a `|`, `;`, `&&`,
+redirect, `$` or glob is refused. A refused command is not evidence that the code is absent or
+unreadable. Read source with your file-read tool if you have one, or with the admitted commands,
+and do not spend turns probing what else might pass.
+
 Your role this turn:
 - Plan audit: Reviewer.adversarial_consistency
 - Design audit: Reviewer.adversarial_consistency + Analyzer.cross_doc_consistency
