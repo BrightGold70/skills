@@ -1,0 +1,57 @@
+{
+  "_why": "Row 'refuse auto-generated parametrize ids in a spec's `test`': --check-anchors reports a mutation row whose `test` names a pytest AUTO param id (`<argname><N>`, given to a non-literal value), because inserting a case before it silently re-points the row at another case that still passes. Static only, advisory detail line, never a summary word. Each mutant removes one guard of that report.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_mutation_auto_param_ids.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "A1: IGNORE EXPLICIT IDS. A parametrize whose cases carry `pytest.param(..., id=...)` is flagged as auto, so every hand-named row reads as a hazard.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            if _has_explicit_ids(call):\n                continue",
+      "replace": "            if False:\n                continue",
+      "test": "tests/test_h_mad_mutation_auto_param_ids.py::test_pytest_param_with_id_is_not_flagged"
+    },
+    {
+      "name": "A2: TREAT EVERY VALUE AS NON-LITERAL. `allow-rc1` beside an int-valued `rc` is flagged again: the calibration false positive (H4) the literal check removed.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            if not all(_is_literal(v) for v in values[hit]):",
+      "replace": "            if True:",
+      "test": "tests/test_h_mad_mutation_auto_param_ids.py::test_argname_plus_digits_inside_a_literal_value_is_not_flagged"
+    },
+    {
+      "name": "A3: AN UNREADABLE TEST FILE READS AS OK. The could-not-check case takes the same branch as the checked-and-clean one.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        return [], f\"cannot read {path} ({type(exc).__name__})\"",
+      "replace": "        return [], None",
+      "test": "tests/test_h_mad_mutation_auto_param_ids.py::test_an_unreadable_test_file_is_cannot_judge_not_ok"
+    },
+    {
+      "name": "A4: AN ID FROM OUTSIDE ANY PARAMETRIZE READS AS OK. Fixture `params=` and `pytest_generate_tests` ids are silently passed instead of reported as cannot-judge.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if not matched and not calls:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_mutation_auto_param_ids.py::test_params_from_outside_a_literal_parametrize_are_cannot_judge"
+    },
+    {
+      "name": "A5: STOP SPLITTING STACKED IDS. `cfg0-fast` is inspected whole, never matches the identifier-plus-digits shape, and the auto `cfg0` goes unreported.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    shaped = [s for s in param_id.split(\"-\") if _AUTO_ID_SHAPE.fullmatch(s)]",
+      "replace": "    shaped = [s for s in [param_id] if _AUTO_ID_SHAPE.fullmatch(s)]",
+      "test": "tests/test_h_mad_mutation_auto_param_ids.py::test_stacked_parametrize_ids_are_split_on_hyphens"
+    },
+    {
+      "name": "A6: A NON-LITERAL CASE LIST READS AS OK. `parametrize(\"case\", CASES)` cannot be judged statically, and skipping it hides exactly the cases built in a loop.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                return [], f\"non-literal parametrize values on {names[-1]}\"",
+      "replace": "                continue",
+      "test": "tests/test_h_mad_mutation_auto_param_ids.py::test_a_non_literal_case_list_is_cannot_judge"
+    },
+    {
+      "name": "A7: COMPUTE THE FINDING, NEVER PRINT IT. The sweep keeps the result but no reader of --check-anchors ever sees it.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        for entry in result.get(\"auto_param_ids\", []):",
+      "replace": "        for entry in []:",
+      "test": "tests/test_h_mad_mutation_auto_param_ids.py::test_the_sweep_prints_a_detail_line_and_keeps_its_summary_verdict"
+    }
+  ]
+}

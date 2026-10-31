@@ -927,6 +927,146 @@ def self_matching(find: str, replace: str) -> bool:
     return bool(find) and find in replace
 
 
+#: A param-id segment that COULD be pytest's auto id: an identifier ending in
+#: digits. Only these are inspected; `fg-cpu-1` splits into pieces none of which
+#: match, so descriptive ids never cost a file read.
+_AUTO_ID_SHAPE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*?\d+")
+
+
+def _parametrize_calls(func: ast.AST) -> list[ast.Call]:
+    return [
+        d for d in getattr(func, "decorator_list", [])
+        if isinstance(d, ast.Call)
+        and isinstance(d.func, ast.Attribute) and d.func.attr == "parametrize"
+    ]
+
+
+def _parametrize_argnames(call: ast.Call) -> list[str] | None:
+    """The call's argnames, or None when they are not a literal."""
+    if not call.args:
+        return None
+    first = call.args[0]
+    if isinstance(first, ast.Constant) and isinstance(first.value, str):
+        return [n.strip() for n in first.value.split(",") if n.strip()]
+    if isinstance(first, (ast.List, ast.Tuple)) and all(
+        isinstance(e, ast.Constant) and isinstance(e.value, str) for e in first.elts
+    ):
+        return [e.value for e in first.elts]
+    return None
+
+
+def _is_literal(node: ast.AST) -> bool:
+    """A value pytest renders as itself (`1`, `'x'`, `None`), never `<argname><N>`."""
+    if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
+        return True
+    return isinstance(node, ast.Constant)
+
+
+def _argname_values(call: ast.Call, argnames: list[str]) -> dict[str, list] | None:
+    """Each argname's value nodes across the cases, or None when not a literal list."""
+    values = call.args[1] if len(call.args) > 1 else None
+    if not isinstance(values, (ast.List, ast.Tuple)):
+        return None
+    by_name: dict[str, list] = {a: [] for a in argnames}
+    for case in values.elts:
+        if (isinstance(case, ast.Call) and isinstance(case.func, ast.Attribute)
+                and case.func.attr == "param"):
+            items = list(case.args)
+        elif len(argnames) == 1:
+            items = [case]
+        elif isinstance(case, (ast.List, ast.Tuple)):
+            items = list(case.elts)
+        else:
+            return None
+        if len(items) != len(argnames):
+            return None
+        for name, item in zip(argnames, items):
+            by_name[name].append(item)
+    return by_name
+
+
+def _has_explicit_ids(call: ast.Call) -> bool:
+    if any(k.arg == "ids" for k in call.keywords):
+        return True
+    values = call.args[1] if len(call.args) > 1 else None
+    return (
+        isinstance(values, (ast.List, ast.Tuple)) and bool(values.elts)
+        and all(
+            isinstance(e, ast.Call) and isinstance(e.func, ast.Attribute)
+            and e.func.attr == "param" and any(k.arg == "id" for k in e.keywords)
+            for e in values.elts
+        )
+    )
+
+
+def auto_param_id_findings(root: Path, test: str) -> tuple[list[str], str | None]:
+    """Segments of `test`'s param id that are pytest AUTO ids, or why it cannot say.
+
+    Returns `(auto_segments, cannot_judge_reason)`. pytest names a non-literal
+    parametrize value `<argname><N>`, so inserting a case before it re-points
+    `[case3]` at a different case that still exists and still passes — the pin
+    precheck admits it and the mutant is scored against the wrong case. This
+    reads the test file and never runs it (`--check-anchors` runs no tests).
+
+    A segment counts only when it equals a REAL argname of that function's
+    parametrize plus digits AND that parametrize has no explicit ids: every
+    committed row that looks auto (`[p2]`, `[s2]`) uses `ids=`, so the id's shape
+    alone would flag all of them. When a shape-matching segment's origin is not a
+    literal parametrize on the function (fixture `params=`, `pytest_generate_tests`,
+    a class-level mark, a file that will not parse), the answer is cannot-judge,
+    never a silent OK. Only pytest `path::name[id]` node ids are inspected.
+    pytest's de-duplication suffix on colliding explicit ids is not detected.
+    """
+    if "::" not in test or not test.endswith("]") or "[" not in test:
+        return [], None
+    node, _, param_id = test[:-1].partition("[")
+    shaped = [s for s in param_id.split("-") if _AUTO_ID_SHAPE.fullmatch(s)]
+    if not shaped:
+        return [], None
+    path, *names = node.split("::")
+    try:
+        tree = ast.parse((root / path).read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, ValueError) as exc:
+        return [], f"cannot read {path} ({type(exc).__name__})"
+    scope: list[ast.AST] = [tree]
+    for name in names:
+        found = [
+            n for s in scope for n in getattr(s, "body", [])
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and n.name == name
+        ]
+        if len(found) != 1:
+            return [], f"{name} not found once in {path}"
+        if isinstance(found[0], ast.ClassDef) and _parametrize_calls(found[0]):
+            return [], f"class {name} carries a parametrize mark"
+        scope = found
+    calls = _parametrize_calls(scope[0])
+    auto: list[str] = []
+    for segment in shaped:
+        matched = False
+        for call in calls:
+            argnames = _parametrize_argnames(call)
+            if argnames is None:
+                return [], f"non-literal parametrize argnames on {names[-1]}"
+            hit = next((a for a in argnames
+                        if segment.startswith(a) and segment[len(a):].isdigit()), None)
+            if hit is None:
+                continue
+            matched = True
+            if _has_explicit_ids(call):
+                continue
+            # `allow-rc1` splits into `rc1` beside an int-valued `rc`: only a
+            # NON-literal value is ever named `<argname><N>` by pytest.
+            values = _argname_values(call, argnames)
+            if values is None:
+                return [], f"non-literal parametrize values on {names[-1]}"
+            if not all(_is_literal(v) for v in values[hit]):
+                auto.append(segment)
+        if not matched and not calls:
+            return [], f"{segment!r} does not come from a parametrize on {names[-1]}"
+    return auto, None
+
+
 def anchor_status(source: str, find: str) -> tuple[int, list[str]]:
     """How often `find` occurs in `source`, plus recovery hints when that is not 1.
 
@@ -1078,7 +1218,26 @@ def precheck_spec(spec_path: Path) -> dict:
         # `ok`: a consumer must be able to tell an anchor that was checked against
         # its symbol from one that only had its match count verified.
         "unpinned": [],
+        # Advisory, like `self_matching`: rows whose `test` names a pytest AUTO
+        # param id (`auto_param_id_findings`), and rows where that could not be
+        # judged. Neither reaches `verdict`; the summary line is parsed by exact
+        # string downstream, so these ride detail lines only.
+        "auto_param_ids": [],
+        "param_ids_unjudged": [],
     }
+
+    for mutation in spec["mutations"]:
+        if not mutation.get("test"):
+            continue
+        auto, why = auto_param_id_findings(root, mutation["test"])
+        for segment in auto:
+            result["auto_param_ids"].append(
+                {"name": mutation["name"], "test": mutation["test"], "segment": segment}
+            )
+        if why:
+            result["param_ids_unjudged"].append(
+                {"name": mutation["name"], "test": mutation["test"], "reason": why}
+            )
 
     # One read per file, not per mutation: specs routinely aim a dozen mutations
     # at the same target.
@@ -2059,6 +2218,18 @@ def _check_anchors(spec_paths: list[Path]) -> int:
             print(f"  self-matching: {len(flagged)} — {SELF_MATCHING_NOTE}")
             for entry in flagged:
                 print(f"    mutation: {entry['name']} :: {entry['file']}")
+        # Same detail-line rule as self-matching above: advisory, no summary word.
+        for entry in result.get("auto_param_ids", []):
+            print(
+                f"  auto-param-id: {entry['name']} :: {entry['test']} ({entry['segment']}) "
+                "— pytest's index id; inserting a case before it re-points the row "
+                "at another case. Give the parametrize explicit `ids=`."
+            )
+        for entry in result.get("param_ids_unjudged", []):
+            print(
+                f"  auto-param-id cannot-judge: {entry['name']} :: {entry['test']} "
+                f"({entry['reason']})"
+            )
 
     if specs == 0:
         verdict = "ANCHORS_NOTHING_SWEPT"
