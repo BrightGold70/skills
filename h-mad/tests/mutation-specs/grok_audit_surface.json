@@ -2107,18 +2107,18 @@
     },
     {
       "name": "grok-tmp-subdir-disarmed",
-      "_mechanism": "Disable the physical top-level comparison refusal.",
+      "_mechanism": "Disable the nested-cd branch so a nested --cd stages under the top level.",
       "file": "scripts/hmad-dispatch.sh",
       "find": "      if [ \"$(cd \"$cd_dir\" && pwd -P)\" != \"$(cd \"$T\" && pwd -P)\" ]; then  # M:GROK-TMP-SUBDIR",
       "replace": "      if false; then  # M:GROK-TMP-SUBDIR",
-      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_subdirectory_exits_2"
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_subdirectory_stages_inside_cd"
     },
     {
       "name": "grok-tmp-ignored-disarmed",
       "_mechanism": "Disable refusal when the repository does not ignore staging.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "      if ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$T\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED",
-      "replace": "      if false; then  # M:GROK-TMP-IGNORED",
+      "find": "      elif ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$T\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED",
+      "replace": "      elif false; then  # M:GROK-TMP-IGNORED",
       "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_staging_not_ignored_exits_2"
     },
     {
@@ -2133,7 +2133,7 @@
       "name": "grok-tmp-git-severed",
       "_mechanism": "Stage work-tree dispatches in the export-root directory.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "      S=\"$(mktemp -d \"$T/.h-mad/tmp/hmad_exec_grok.XXXXXX\")\" || return 1  # M:GROK-TMP-GIT",
+      "find": "      S=\"$(mktemp -d \"$B/.h-mad/tmp/hmad_exec_grok.XXXXXX\")\" || return 1  # M:GROK-TMP-GIT",
       "replace": "      S=\"$cd_dir/.tmp\"; mkdir -p \"$S\" || return 1  # M:GROK-TMP-GIT",
       "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_stages_under_h_mad_tmp"
     },
@@ -2141,8 +2141,8 @@
       "name": "grok-tmp-git-shared",
       "_mechanism": "Reuse a fixed work-tree staging directory across dispatches.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "      S=\"$(mktemp -d \"$T/.h-mad/tmp/hmad_exec_grok.XXXXXX\")\" || return 1  # M:GROK-TMP-GIT",
-      "replace": "      S=\"$T/.h-mad/tmp/hmad_exec_grok.shared\"; mkdir -p \"$S\" || return 1  # M:GROK-TMP-GIT",
+      "find": "      S=\"$(mktemp -d \"$B/.h-mad/tmp/hmad_exec_grok.XXXXXX\")\" || return 1  # M:GROK-TMP-GIT",
+      "replace": "      S=\"$B/.h-mad/tmp/hmad_exec_grok.shared\"; mkdir -p \"$S\" || return 1  # M:GROK-TMP-GIT",
       "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_two_dispatches_get_distinct_staging_dirs"
     },
     {
@@ -2165,8 +2165,8 @@
       "name": "grok-tmp-ignored-env-ambient",
       "_mechanism": "Let ambient GIT_DIR divert the ignore-rule lookup.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "      if ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$T\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED",
-      "replace": "      if ! LC_ALL=C env -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$T\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED",
+      "find": "      elif ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$T\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED",
+      "replace": "      elif ! LC_ALL=C env -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$T\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED",
       "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_ignores_an_ambient_git_dir"
     },
     {
@@ -2181,7 +2181,7 @@
       "name": "grok-tmp-rmguard-never",
       "_mechanism": "Prevent the staging-directory removal guard from passing.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "  trap 'if [ -n \"$T\" ] && [[ \"$S\" == \"$T/.h-mad/tmp/hmad_exec_grok.\"* ]]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
+      "find": "  trap 'if [ -n \"$B\" ] && [[ \"$S\" == \"$B/.h-mad/tmp/hmad_exec_grok.\"* ]]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
       "replace": "  trap 'if false; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
       "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_leaves_git_status_unchanged"
     },
@@ -2189,9 +2189,33 @@
       "name": "grok-tmp-rmguard-always",
       "_mechanism": "Drop the prefix check on S so the EXIT trap deletes any path stored in S.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "  trap 'if [ -n \"$T\" ] && [[ \"$S\" == \"$T/.h-mad/tmp/hmad_exec_grok.\"* ]]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
-      "replace": "  trap 'if [ -n \"$T\" ]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
+      "find": "  trap 'if [ -n \"$B\" ] && [[ \"$S\" == \"$B/.h-mad/tmp/hmad_exec_grok.\"* ]]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
+      "replace": "  trap 'if [ -n \"$B\" ]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
       "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_rmguard_refuses_to_remove_outside_staging_prefix"
+    },
+    {
+      "name": "grok-tmp-nested-ignored-disarmed",
+      "_mechanism": "Stage a nested --cd even when git does not ignore <cd>/.h-mad/tmp/.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "        if ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$cd_dir\" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-NESTED-IGNORED",
+      "replace": "        if false; then  # M:GROK-TMP-NESTED-IGNORED",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_subdirectory_not_ignored_exits_2"
+    },
+    {
+      "name": "grok-tmp-nested-base-top",
+      "_mechanism": "Keep the staging base at the top level for a nested --cd, outside the strict sandbox.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "        B=\"$cd_dir\"  # M:GROK-TMP-NESTED-BASE",
+      "replace": "        B=\"$T\"  # M:GROK-TMP-NESTED-BASE",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_subdirectory_stages_inside_cd"
+    },
+    {
+      "name": "grok-tmp-rmguard-nested-base",
+      "_mechanism": "Pin the EXIT-trap guard to the top level so nested staging is never removed.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  trap 'if [ -n \"$B\" ] && [[ \"$S\" == \"$B/.h-mad/tmp/hmad_exec_grok.\"* ]]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
+      "replace": "  trap 'if [ -n \"$T\" ] && [[ \"$S\" == \"$T/.h-mad/tmp/hmad_exec_grok.\"* ]]; then rm -rf -- \"$S\"; fi' EXIT  # M:GROK-TMP-RMGUARD",
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_in_a_work_tree_subdirectory_stages_inside_cd"
     },
     {
       "name": "grok-tmpdir-dropped",

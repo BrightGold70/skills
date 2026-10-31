@@ -646,10 +646,13 @@ resolved implementer and the independent review assignment:
   a weaker or unknown `--sandbox` value exits 2 unless
   `--allow-weaker-sandbox` is also given, which is recorded in `<log>.profile`,
   and `GROK_SANDBOX` is removed from grok's environment. In a git work tree it
-  stages its prompt and `TMPDIR` under `<top level>/.h-mad/tmp/` and exits 2,
-  launching nothing, when `--cd` is below the top level, when the repository
-  does not ignore `.h-mad/tmp/`, or when `git rev-parse` fails for a reason
-  other than "not a git repository"; outside a work tree it uses `<cd>/.tmp/`.
+  stages its prompt and `TMPDIR` under `<top level>/.h-mad/tmp/`, or under
+  `<cd>/.h-mad/tmp/` when `--cd` is a subdirectory of the work tree (a nested
+  sub-project), since the strict sandbox lets grok write only inside `--cd`.
+  It exits 2, launching nothing, when the repository does not ignore that
+  staging directory (`.h-mad/tmp/`, or `<cd>/.h-mad/tmp/` for a nested `--cd`),
+  or when `git rev-parse` fails for a reason other than "not a git
+  repository"; outside a work tree it uses `<cd>/.tmp/`.
 - **`exec agy`** — a resolved RED/GREEN implementer dispatch, or the independent 5e-review (and Phase 3/4/5b audit) dispatch. Runs `agy --print`
   under `--output-format stream-json`, so the transcript is a live NDJSON event stream
   and the wrapper lifts the final response out of the stream's `result` event. A

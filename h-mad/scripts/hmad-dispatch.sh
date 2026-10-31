@@ -3165,8 +3165,8 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
 
   # Isolate the EXIT trap so every return/error cleans this dispatch's staging.
   (
-  local T="" S="" git_top git_error git_rc
-  trap 'if [ -n "$T" ] && [[ "$S" == "$T/.h-mad/tmp/hmad_exec_grok."* ]]; then rm -rf -- "$S"; fi' EXIT  # M:GROK-TMP-RMGUARD
+  local T="" B="" S="" git_top git_error git_rc
+  trap 'if [ -n "$B" ] && [[ "$S" == "$B/.h-mad/tmp/hmad_exec_grok."* ]]; then rm -rf -- "$S"; fi' EXIT  # M:GROK-TMP-RMGUARD
   if [ "$agent" = grok ]; then
     # Keep stderr separate even on success (Apple's git shim can print warnings).
     # NUL-delimited pipe fields avoid creating a file before staging is validated.
@@ -3182,15 +3182,18 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
       } 3>&1
     )
     if [ "$git_rc" -eq 0 ]; then
-      T="$git_top"
+      T="$git_top"; B="$T"
+      # Strict-sandbox Grok writes only inside --cd, so a nested --cd stages there.
       if [ "$(cd "$cd_dir" && pwd -P)" != "$(cd "$T" && pwd -P)" ]; then  # M:GROK-TMP-SUBDIR
-        echo "hmad-dispatch: exec: grok staging: --cd is below the git top level" >&2; return 2
-      fi
-      if ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C "$T" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED
+        B="$cd_dir"  # M:GROK-TMP-NESTED-BASE
+        if ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C "$cd_dir" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-NESTED-IGNORED
+          echo "hmad-dispatch: exec: grok staging: $cd_dir/.h-mad/tmp/ is not ignored by git" >&2; return 2
+        fi
+      elif ! LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C "$T" check-ignore -q .h-mad/tmp/hmad_exec_grok.probe; then  # M:GROK-TMP-IGNORED
         echo "hmad-dispatch: exec: grok staging: .h-mad/tmp/ is not ignored by git" >&2; return 2
       fi
-      mkdir -p "$T/.h-mad/tmp" || return 1
-      S="$(mktemp -d "$T/.h-mad/tmp/hmad_exec_grok.XXXXXX")" || return 1  # M:GROK-TMP-GIT
+      mkdir -p "$B/.h-mad/tmp" || return 1
+      S="$(mktemp -d "$B/.h-mad/tmp/hmad_exec_grok.XXXXXX")" || return 1  # M:GROK-TMP-GIT
     elif [[ "$git_error" == *"not a git repository"* ]]; then  # M:GROK-TMP-GITFAIL
       S="$cd_dir/.tmp"; mkdir -p "$S" || return 1  # M:GROK-TMP-ROOT
     else
