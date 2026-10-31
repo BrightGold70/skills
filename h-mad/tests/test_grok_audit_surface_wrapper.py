@@ -590,12 +590,46 @@ def test_exec_grok_two_dispatches_get_distinct_staging_dirs(tmp_path, monkeypatc
         assert staging.name.startswith("hmad_exec_grok."), "each dispatch needs a Grok temp prefix"
 
 
-def test_exec_grok_in_a_work_tree_subdirectory_exits_2(tmp_path, monkeypatch):
+def _nested_staging_case(tmp_path, monkeypatch, *, nested_ignored):
     case = _staging_case(tmp_path, monkeypatch, work_tree=True)
+    if nested_ignored:
+        (case["root"] / ".gitignore").write_text(".h-mad/*\n**/.h-mad/tmp/\n", encoding="utf-8")
     case["cd"] = case["root"] / "nested [*] 'quoted'"
     case["cd"].mkdir()
-    _assert_staging_refused(case, _run_staging(case),
-                           "hmad-dispatch: exec: grok staging: --cd is below the git top level")
+    return case
+
+
+def test_exec_grok_in_a_work_tree_subdirectory_stages_inside_cd(tmp_path, monkeypatch):
+    case = _nested_staging_case(tmp_path, monkeypatch, nested_ignored=True)
+    before = _staging_git(case["root"], "status", "--porcelain", "--untracked-files=all")
+    assert before.returncode == 0, before.stderr
+    row = _staging_child(case, _run_staging(case))
+    staging = Path(row["tmpdir"])
+    assert staging.parent == case["cd"] / ".h-mad" / "tmp", (
+        "a nested --cd must stage under <cd>/.h-mad/tmp/ so strict-sandbox Grok can write there"
+    )
+    assert staging.name.startswith("hmad_exec_grok."), (
+        "nested exec grok must create a fresh hmad_exec_grok.* directory"
+    )
+    assert Path(row["prompt"]).parent == staging, "the staged prompt must sit in TMPDIR"
+    assert not (case["root"] / ".h-mad" / "tmp").exists(), (
+        "a nested --cd must not stage under the top level's .h-mad/tmp/"
+    )
+    assert not staging.exists(), "exec grok must remove the entire nested staging directory"
+    after = _staging_git(case["root"], "status", "--porcelain", "--untracked-files=all")
+    assert after.returncode == 0, after.stderr
+    assert after.stdout == before.stdout, "nested Grok scratch writes must leave git status unchanged"
+
+
+def test_exec_grok_in_a_work_tree_subdirectory_not_ignored_exits_2(tmp_path, monkeypatch):
+    case = _nested_staging_case(tmp_path, monkeypatch, nested_ignored=False)
+    _assert_staging_refused(
+        case, _run_staging(case),
+        f"hmad-dispatch: exec: grok staging: {case['cd']}/.h-mad/tmp/ is not ignored by git",
+    )
+    assert not (case["cd"] / ".h-mad").exists(), (
+        "a nested staging refusal must not create <cd>/.h-mad/"
+    )
 
 
 def test_exec_grok_staging_not_ignored_exits_2(tmp_path, monkeypatch):
