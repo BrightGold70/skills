@@ -48,6 +48,18 @@ def test_no_arguments_refuses_instead_of_reporting_zero() -> None:
     assert "usage:" in (r.stderr + r.stdout)
 
 
+def test_no_arguments_usage_names_every_flag_help_names() -> None:
+    # Row 2878: the bare-invocation usage line omitted `--apply` and `--rev`, so
+    # the stamp verb that already existed was rebuilt by hand four times and
+    # triaged as missing twice. The error path is what a caller actually sees.
+    bare = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True)
+    helped = subprocess.run([sys.executable, str(SCRIPT), "-h"], capture_output=True, text=True)
+    flags = set(re.findall(r"--[a-z-]+", helped.stdout))
+    assert {"--list-open", "--rev", "--apply"} <= flags, helped.stdout
+    missing = sorted(f for f in flags if f not in bare.stderr)
+    assert not missing, f"bare usage omits {missing}: {bare.stderr!r}"
+
+
 @pytest.mark.parametrize(
     "row, expect_open, why",
     [

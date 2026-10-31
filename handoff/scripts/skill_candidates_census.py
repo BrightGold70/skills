@@ -261,7 +261,8 @@ def main(argv=None):
               file=sys.stderr)
         return 1
     if not paths:
-        print("usage: skill_candidates_census.py [--list-open] <skill-candidates.md> [more...]",
+        print("usage: skill_candidates_census.py [--list-open] [--rev <rev>] "
+              "[--apply <table.md>] <skill-candidates.md> [more...]",
               file=sys.stderr)
         return 1
 
