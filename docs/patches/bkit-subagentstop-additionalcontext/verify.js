@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Verify the local SubagentStop patch on the newest installed bkit.
+// Verify SubagentStop on the newest installed bkit. The local patch is RETIRED (bkit
+// 2.1.41 fixed #162); this now checks that upstream still does not re-wake subagents.
 // Exit 0: the handler still composes its next-action hint, and does not return it as
 // additionalContext (which Claude Code delivers to the stopped subagent as a new turn).
-// Exit 1: re-apply (README.md). Exit 2: the check could not run — not a verdict.
+// Exit 1: upstream regressed — re-apply the retired patch (README.md) and re-report. Exit 2: the check could not run — not a verdict.
 //
 // It drives the real handler as a subprocess against a throwaway project whose bkit
 // state has a primary feature in phase `do`, so a hint IS generated. Without that

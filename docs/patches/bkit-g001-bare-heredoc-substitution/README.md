@@ -1,6 +1,13 @@
 # bkit G-001 — bare-tag heredoc bodies are not inert
 
-**Status:** APPLIED locally to bkit `2.1.40` on 2026-10-25 (Hawui-Macmini). This patch only makes
+**Status:** RETIRED 2026-10-31. Fixed upstream in bkit `2.1.41` (#161); do not re-apply. On
+Hawui-Macmini after the 2.1.41 update, `verify.js` reads `local patch MISSING — 10/11 cases correct,
+1 known gap` → `RESULT: OK — patch MISSING but upstream behaves correctly`, and the
+`sub-broad-delete-grades-critical` gap closed upstream too. The remaining gap
+(`commit-message-names-token`) is accepted: use `git commit -F <file>`. `verify.js` stays as the
+upstream regression check the SessionStart patch-verify hook runs. The rest of this document is
+the record of the retired patch.
+**Was:** APPLIED locally to bkit `2.1.40` on 2026-10-25 (Hawui-Macmini). This patch only makes
 the guard stricter.
 **Also APPLIED** to bkit `2.1.40` on 2026-10-26 (Hawk-MacStudio), after updating from `2.1.38`:
 `verify.js` exit 1 before (patch MISSING, upstream not fixed), sha256 `a27278dcc8938e36` →

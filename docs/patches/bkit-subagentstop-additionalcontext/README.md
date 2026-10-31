@@ -1,6 +1,12 @@
 # bkit SubagentStop — stop returning the next-action hint as `additionalContext`
 
-**Status:** APPLIED locally to bkit `2.1.40` on 2026-10-28 (`2.1.38` is a symlink to it on this Mac).
+**Status:** RETIRED 2026-10-31. Fixed upstream in bkit `2.1.41` (#162): its
+`subagent-stop-handler.js` no longer spreads `additionalContext: nextActionHint` into the output,
+the same line this patch removed. On Hawui-Macmini after the 2.1.41 update, `verify.js` reads
+`local patch MISSING — 2/2 checks correct` → `RESULT: OK`. Do not re-apply. `verify.js` stays as
+the upstream regression check the SessionStart patch-verify hook runs. The rest of this document is
+the record of the retired patch.
+**Was:** APPLIED locally to bkit `2.1.40` on 2026-10-28 (`2.1.38` is a symlink to it on this Mac).
 **Why:** bkit's `SubagentStop` handler returns `hookSpecificOutput.additionalContext` —
 `[SUGGEST] Sub-agent <type> completed. Next: /pdca analyze <feature>` — on every subagent stop, and
 never reads `stop_hook_active`. Claude Code documents `SubagentStop` `additionalContext` as

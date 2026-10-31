@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Self-contained verifier for bkit's destructive-detector heredoc handling.
 //
-// Run AFTER any bkit plugin update:
+// The local patch is RETIRED (bkit 2.1.41 fixed #161); this now checks upstream
+// against the same cases. Run AFTER any bkit plugin update:
 //   node docs/patches/bkit-g001-bare-heredoc-substitution/verify.js
 //
 // Exit 0 = every case correct, except the KNOWN_GAPS upstream has not closed.
@@ -76,7 +77,7 @@ const CASES = [
 //   shape and real. Workaround: `git commit -F <file>`.
 // sub-broad-delete-grades-critical: deleteTargetIsBroad() reads `~)` as one
 //   operand, so a broad delete inside $() grades high/ask instead of deny.
-const KNOWN_GAPS = new Set(['commit-message-names-token', 'sub-broad-delete-grades-critical']);
+const KNOWN_GAPS = new Set(['commit-message-names-token']);  // sub-broad-delete closed upstream in 2.1.41
 
 function classify(cmd) {
   const r = det.detect('Bash', { command: cmd });
