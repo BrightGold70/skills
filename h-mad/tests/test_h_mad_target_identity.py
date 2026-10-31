@@ -413,3 +413,32 @@ def test_codex_templates_name_exactly_the_gate_read_verbs(template: str) -> None
     assert named == identity.READ_ONLY_COMMANDS, (named ^ identity.READ_ONLY_COMMANDS)
     after = text[match.end():match.end() + 1000]
     assert "sed" in after and "|" in after, f"{template} must also say what is refused"
+
+
+# --- the audit prompt names them too, for every audit type ------------------
+#
+# The gate refuses Bash outside READ_ONLY_COMMANDS whenever ANY feature in the
+# root is at step5 (_any_phase5_status), so a plan, design or impl-plan audit
+# leg can hit it. Without the list, a codex audit leg tried sed/nl/find, was
+# refused, and returned a verdict with no code reads (skill-candidates row
+# "codex audit leg blind in step5"). Pinned on the assembled text per audit
+# type, so a paragraph scoped by {{ONLY:...}} or left in the orchestrator note
+# fails here.
+
+_AUDIT_TEMPLATE = Path(__file__).resolve().parents[1] / "audit-prompt.template.md"
+
+
+@pytest.mark.parametrize("audit_type", ["plan", "design", "impl-plan"])
+def test_audit_prompt_names_exactly_the_gate_read_verbs(identity, audit_type: str) -> None:
+    assemble = importlib.import_module("h_mad_assemble_audit")
+    assert audit_type in assemble.PHASES
+    text = assemble.resolve(
+        assemble.strip_orchestrator_note(_AUDIT_TEMPLATE.read_text(encoding="utf-8")), audit_type)
+    match = _READ_VERBS_LINE.search(text)
+    assert match, f"{audit_type} audit prompt does not list the read verbs the gate admits"
+    named = set(re.findall(r"`([a-z]+)`", match.group(1)))
+    assert named == identity.READ_ONLY_COMMANDS, (named ^ identity.READ_ONLY_COMMANDS)
+    after = text[match.end():match.end() + 1000]
+    assert "sed" in after and "|" in after, "the audit prompt must also say what is refused"
+    assert "READ_ONLY_COMMANDS" in after, "the audit prompt must name where the list lives"
+    assert "not evidence" in after, "a refused read must not read as absent code"
