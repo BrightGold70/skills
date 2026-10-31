@@ -1209,3 +1209,73 @@ def test_the_template_wire_runner_line_copied_verbatim_changes_nothing(
     _run_main_with_registration_args(monkeypatch, _plan(tmp_path, task), registry_path)
     (record,) = registry.load(registry_path)
     assert "runner" not in record
+
+
+# --- path labels (row "path-label shape unenforced at 5b") ---------------
+#
+# `**Production file**:` / `**Test file**:` are what the Phase-5 TDD judge
+# resolves a write against, and before this they were first read at the 5d
+# dispatch. Judged on the RAW value, not on the parsed `.py` list: a `.sh`, `.md`
+# or `.json` production file is a correct declaration the `.py` list cannot hold,
+# and the unedited template placeholder `<relative/path/to/module.py>` is NOT
+# empty in that list. `none` is a declaration (a `gate` task writes no
+# production file). Reported as a detail line; the verdict token is unchanged.
+
+
+def _pathed_task(production: str | None, tests: str | None, shape: str = "new-behaviour") -> str:
+    out = ["## Task 1: mod\n"]
+    if production is not None:
+        out.append(f"**Production file**: {production}\n")
+    if tests is not None:
+        out.append(f"**Test file**: {tests}\n")
+    out.append(f"**Task shape**: `{shape}`\n\n**Acceptance Criteria**:\n- [ ] AC-1.1: x\n\n")
+    return "".join(out)
+
+
+def test_a_task_with_no_production_label_is_reported(tmp_path: Path) -> None:
+    result = check(_plan(tmp_path, _pathed_task(None, "`tests/test_run.py`")))
+    assert [entry for entry in result["unlabeled"] if "Production file" in entry], result
+    assert not [entry for entry in result["unlabeled"] if "Test file" in entry], result
+    assert result["verdict"] == "PASS", "an unlabeled path is a detail line, not a new FAIL cause"
+
+
+def test_a_task_with_no_test_label_is_reported(tmp_path: Path) -> None:
+    result = check(_plan(tmp_path, _pathed_task("`engine/run.py`", None)))
+    assert [entry for entry in result["unlabeled"] if "Test file" in entry], result
+    assert not [entry for entry in result["unlabeled"] if "Production file" in entry], result
+
+
+def test_an_unedited_path_placeholder_is_reported(tmp_path: Path) -> None:
+    body = _pathed_task("`<relative/path/to/module.py>`", "`<relative/path/to/test_module.py>`")
+    result = check(_plan(tmp_path, body))
+    assert len(result["unlabeled"]) == 2, result
+
+
+@pytest.mark.parametrize("value", ["none", "None.", "**none** — writes nothing", "TBD"])
+def test_filler_path_values_other_than_none_are_reported(tmp_path: Path, value: str) -> None:
+    result = check(_plan(tmp_path, _pathed_task(value, value, shape="gate")))
+    expected = 2 if value == "TBD" else 0
+    assert len(result["unlabeled"]) == expected, (value, result)
+
+
+def test_a_non_python_path_is_a_declaration(tmp_path: Path) -> None:
+    body = _pathed_task("`h-mad/scripts/hmad-dispatch.sh`", "`h-mad/tests/mutation-specs/x.json`")
+    assert check(_plan(tmp_path, body))["unlabeled"] == []
+
+
+def test_a_fully_labeled_plan_reports_nothing(tmp_path: Path) -> None:
+    assert check(_plan(tmp_path, _task(1)))["unlabeled"] == []
+
+
+def test_an_unshaped_plan_still_carries_the_unlabeled_key(tmp_path: Path) -> None:
+    result = check(_plan(tmp_path, _task(1, shape=None)))
+    assert result["verdict"] == "UNSHAPED"
+    assert result["unlabeled"] == []
+
+
+def test_cli_prints_unlabeled_lines_and_keeps_the_token(tmp_path: Path) -> None:
+    proc = _run(str(_plan(tmp_path, _pathed_task(None, "`tests/test_run.py`"))))
+    assert proc.returncode == 0, proc.stderr
+    lines = proc.stdout.splitlines()
+    assert lines[0] == "WIREPIN: PASS tasks=1 wiring=0 unpinned=0 mislabeled=0", proc.stdout
+    assert "  unlabeled: Task 1 (mod): no **Production file**" in proc.stdout, proc.stdout
