@@ -3598,15 +3598,15 @@
       "name": "toolscan-explain-not-only-out",
       "_mechanism": "Explain inside and exempt paths too.",
       "file": "scripts/h_mad_tool_calls.py",
-      "find": "                if kind == \"out\" and entry not in explained:",
-      "replace": "                if entry not in explained:",
+      "find": "                if kind == \"out\" and entry not in seen:",
+      "replace": "                if entry not in seen:",
       "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_names_each_out_path_and_why"
     },
     {
       "name": "toolscan-explain-duplicates",
       "_mechanism": "Explain an agy call's path once per event (ACTIVE and DONE) instead of once.",
       "file": "scripts/h_mad_tool_calls.py",
-      "find": "                if kind == \"out\" and entry not in explained:",
+      "find": "                if kind == \"out\" and entry not in seen:",
       "replace": "                if kind == \"out\":",
       "test": "tests/test_grok_audit_surface_containment.py::test_scan_explain_agy_names_a_grouped_call_once"
     },
