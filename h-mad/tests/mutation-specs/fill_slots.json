@@ -55,6 +55,42 @@
       "replace": "    if residual := []:\n",
       "test": "tests/test_h_mad_assemble_audit.py::TestAGatedDocMayQuoteASlotToken::test_a_template_slot_left_unfilled_still_halts",
       "symbol": "preflight"
+    },
+    {
+      "name": "the-receipt-is-stamped-over-a-dirty-residue",
+      "_mechanism": "Skill-candidates row 'live-slot warning fires on prose that names a slot'. Dispatch's grammar is wider than preflight's `<INLINE_` and the TDD RESIDUAL (no `<AUDIT_SENTINEL>`); stamping regardless lets exec's skip hide a slot neither assembler refused.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "        if DISPATCH_SLOT.search(residue):  # M:ASSEMBLED-RESIDUE-CLEAN\n",
+      "replace": "        if False:  # M:ASSEMBLED-RESIDUE-CLEAN\n",
+      "test": "tests/test_h_mad_assemble_audit.py::TestAssembledReceipt::test_a_residue_slot_preflight_does_not_check_gets_no_receipt",
+      "symbol": "stamp_assembled"
+    },
+    {
+      "name": "the-audit-pass-stamps-no-receipt",
+      "_mechanism": "The audit PASS leaves no receipt, so every assembled audit prompt that quotes a slot warns again on every cycle -- the reported false positive, restored.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    stamp_assembled(out, residue=residue)  # M:ASSEMBLED-STAMP-AUDIT\n",
+      "replace": "    pass  # M:ASSEMBLED-STAMP-AUDIT\n",
+      "test": "tests/test_h_mad_assemble_audit.py::TestAssembledReceipt::test_a_PASS_stamps_a_receipt_that_matches_the_prompt_bytes",
+      "symbol": "main"
+    },
+    {
+      "name": "the-tdd-pass-stamps-no-receipt",
+      "_mechanism": "Same restoration on the 5d/5e path: the TDD assembler refused residual slots but exec cannot tell, so its quoted-slot prompts warn again.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    stamp_assembled(prompt, residue=meta[\"residue\"])  # M:ASSEMBLED-STAMP-TDD\n",
+      "replace": "    pass  # M:ASSEMBLED-STAMP-TDD\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestAssembledReceipt::test_a_PASS_stamps_a_receipt_that_matches_the_prompt_bytes",
+      "symbol": "main"
+    },
+    {
+      "name": "the-tdd-residue-never-reaches-the-stamp",
+      "_mechanism": "An empty residue passed to the stamper reads as clean, so a template `<AUDIT_SENTINEL>` the TDD RESIDUAL does not check gets a receipt and exec's skip hides it.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        \"residue\": residue,  # for stamp_assembled: RESIDUAL here has no <AUDIT_SENTINEL>\n",
+      "replace": "        \"residue\": \"\",\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestAssembledReceipt::test_a_residue_sentinel_the_assembler_does_not_check_gets_no_receipt",
+      "symbol": "assemble"
     }
   ]
 }

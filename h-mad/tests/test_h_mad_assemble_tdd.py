@@ -2041,3 +2041,42 @@ class TestPythonResolution:
         text = prompt.read_text(encoding="utf-8")
         assert f"`{link} -m pytest" in text
         assert "`pyx -m pytest" not in text
+
+
+class TestAssembledReceipt:
+    """Skill-candidates row "live-slot warning fires on prose that names a slot":
+    the TDD assembler stamps `<prompt>.assembled` on PASS, but only when the
+    template residue is clean under hmad-dispatch's grammar. `RESIDUAL` here has
+    no `<AUDIT_SENTINEL>`, so that token PASSes the assembler and must keep the
+    dispatch advisory armed."""
+
+    def _cli(self, tmp_path: Path, *extra: str):
+        root = tmp_path / "proj"
+        (root / "docs" / "01-plan" / "features").mkdir(parents=True, exist_ok=True)
+        (root / "docs" / "01-plan" / "features" / "feat.impl-plan.md").write_text(
+            PLAN, encoding="utf-8")
+        prompt = tmp_path / "p.txt"
+        result = run_cli(
+            "--feature", "feat", "--task", "Task 1", "--phase", "red",
+            "--project-root", str(root), "--module", "mod",
+            "--test-path", "tests/test_mod.py",
+            "--expect-fail", "3", "--expect-pass", "1",
+            "--python", PYTHON, "--prompt", str(prompt), *extra,
+        )
+        return result, prompt
+
+    def test_a_PASS_stamps_a_receipt_that_matches_the_prompt_bytes(self, tmp_path):
+        import hashlib
+        result, prompt = self._cli(tmp_path)
+        assert "ASSEMBLE-TDD: PASS" in result.stdout, result.stdout + result.stderr
+        receipt = Path(str(prompt) + ".assembled")
+        assert receipt.is_file()
+        assert receipt.read_text().strip() == hashlib.sha256(prompt.read_bytes()).hexdigest()
+
+    def test_a_residue_sentinel_the_assembler_does_not_check_gets_no_receipt(self, tmp_path):
+        template = tmp_path / "t.md"
+        template.write_text("<INLINE_TASK_FROM_IMPL_PLAN>\nSentinel: <AUDIT_SENTINEL>\n",
+                            encoding="utf-8")
+        result, prompt = self._cli(tmp_path, "--template", str(template))
+        assert "ASSEMBLE-TDD: PASS" in result.stdout, result.stdout + result.stderr
+        assert not Path(str(prompt) + ".assembled").exists()

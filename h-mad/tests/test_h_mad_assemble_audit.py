@@ -852,3 +852,56 @@ class TestAGatedDocMayQuoteASlotToken:
                                template=template)
 
         assert any(p.startswith("unfilled_slot") and "INLINE_NOT_A_SLOT" in p for p in problems), problems
+
+
+class TestAssembledReceipt:
+    """Skill-candidates row "live-slot warning fires on prose that names a slot".
+    On PASS the assembler writes `<out>.assembled`, the sha256 of the bytes it
+    wrote; `hmad-dispatch exec` skips its live-slot advisory only when that hash
+    matches. The receipt is stamped only when the template residue is clean under
+    DISPATCH's grammar, which is wider than preflight's `<INLINE_` -- so a slot
+    the assembler did not check can never be hidden by the skip."""
+
+    def test_a_PASS_stamps_a_receipt_that_matches_the_prompt_bytes(self, tmp_path):
+        import hashlib
+        root = _project(tmp_path)
+        out = tmp_path / "prompt.txt"
+        r = _run("--feature", "demo", "--phase", "plan",
+                 "--project-root", str(root), "--out", str(out))
+        assert r.stdout.startswith("ASSEMBLE: PASS"), r.stdout + r.stderr
+        receipt = tmp_path / "prompt.txt.assembled"
+        assert receipt.is_file(), "a PASS must leave the receipt exec honours"
+        assert receipt.read_text().strip() == hashlib.sha256(out.read_bytes()).hexdigest()
+
+    def test_a_HALT_stamps_no_receipt(self, tmp_path):
+        root = _project(tmp_path)
+        bad = tmp_path / "bad.template.md"
+        bad.write_text((SKILL_DIR / "audit-prompt.template.md").read_text()
+                       + "\n<INLINE_NEVER_FILLED>\n")
+        out = tmp_path / "prompt.txt"
+        r = _run("--feature", "demo", "--phase", "plan", "--project-root", str(root),
+                 "--out", str(out), "--template", str(bad))
+        assert r.stdout.startswith("ASSEMBLE: HALT"), r.stdout
+        assert not (tmp_path / "prompt.txt.assembled").exists()
+
+    def test_a_residue_slot_preflight_does_not_check_gets_no_receipt(self, tmp_path):
+        """`<INLINE-TYPO>` evades preflight's `"<INLINE_" in` test, so the prompt
+        PASSes -- but dispatch's `<INLINE[^>]*>` sees it. Stamping here would let
+        the skip hide a slot the assembler never refused."""
+        root = _project(tmp_path)
+        typo = tmp_path / "typo.template.md"
+        typo.write_text((SKILL_DIR / "audit-prompt.template.md").read_text()
+                        + "\nModule: <INLINE-TYPO>\n")
+        out = tmp_path / "prompt.txt"
+        r = _run("--feature", "demo", "--phase", "plan", "--project-root", str(root),
+                 "--out", str(out), "--template", str(typo))
+        assert r.stdout.startswith("ASSEMBLE: PASS"), r.stdout
+        assert not (tmp_path / "prompt.txt.assembled").exists(), (
+            "a residue slot under dispatch's grammar must leave the advisory armed")
+
+    def test_a_stale_receipt_is_removed_when_the_residue_is_dirty(self, tmp_path):
+        out = tmp_path / "prompt.txt"
+        out.write_text("x")
+        (tmp_path / "prompt.txt.assembled").write_text("stale\n")
+        assert aa.stamp_assembled(out, residue="<AUDIT_SENTINEL>") is False
+        assert not (tmp_path / "prompt.txt.assembled").exists()
