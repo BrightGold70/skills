@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-01 · gotcha · [0.9] · `handoff,census,skill-candidates` — skill_candidates_census.py --apply requires a strict 2-column Markdown table (| Row | Status |) and a filesystem path (or /dev/stdin, not '-'); 3-column tables fail with APPLY: REFUSED reason=malformed-row.
+- 2026-11-01 · gotcha · [0.9] · `homebrew,codex,gatekeeper,syspolicyd` — Homebrew 7 Cask generated_completion.rb runs CLI-only casks (codex) inside sandbox-exec while cold, wedging syspolicyd. Warm bin/* --help in #{staged_path}-warm outside sandbox-exec and skip run_cask_sandbox for non-:app casks.
 - 2026-10-31 · gotcha · [0.5] · `h-mad,mutation-harness,review,handoff:2026-10-31-skill-backlog-clusters-a-d` — After a review-fix commit, re-run the committed-spec anchor sweep: a behaviour-preserving edit (set-based dedupe) silently drifted two mutant anchors the review did not see.
 - 2026-10-31 · gotcha · [0.7] · `h-mad,tdd-judge,security,handoff:2026-10-31-skill-backlog-clusters-a-d` — TDD-judge import-RED: a module-name match alone is a false ALLOW (stdlib json, sibling utils.py, 'pkg is not a package'); require file evidence — printed source path is the target, or target file absent.
 - 2026-10-31 · gotcha · [0.7] · `h-mad,mutation-harness,handoff:2026-10-31-skill-backlog-clusters-a-d` — Mutation specs: json.dumps re-dump reformats compact arrays and flips \u vs raw UTF-8; append rows as text. A new parametrize case shifts targetN ids that rows name; re-map via --collect-only.
