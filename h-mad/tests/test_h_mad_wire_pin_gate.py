@@ -1279,3 +1279,52 @@ def test_cli_prints_unlabeled_lines_and_keeps_the_token(tmp_path: Path) -> None:
     lines = proc.stdout.splitlines()
     assert lines[0] == "WIREPIN: PASS tasks=1 wiring=0 unpinned=0 mislabeled=0", proc.stdout
     assert "  unlabeled: Task 1 (mod): no **Production file**" in proc.stdout, proc.stdout
+
+
+# --- a non-.py production file is reported as ungated (row 2853) -----------
+#
+# `_parse_tasks` keeps only `.py` tokens, and that list is the TDD judge's task
+# map too, so a `.sh` production file is never judged and no wire-pin covers it.
+# Gating it is an /h-mad feature (user ruling 2026-11-01); until then the gap is
+# printed on every 5b run as an advisory detail line, never a FAIL cause.
+
+def test_a_non_python_production_file_is_reported_ungated(tmp_path: Path) -> None:
+    body = _pathed_task("`h-mad/scripts/hmad-dispatch.sh`, `h-mad/scripts/a.py`",
+                        "`h-mad/tests/test_a.py`")
+    result = check(_plan(tmp_path, body))
+    assert result["ungated"] == ["Task 1 (mod): `h-mad/scripts/hmad-dispatch.sh`"], result
+    assert result["verdict"] == "PASS", "an ungated file is a detail line, not a new FAIL cause"
+
+
+def test_an_extensionless_script_path_is_ungated_too(tmp_path: Path) -> None:
+    result = check(_plan(tmp_path, _pathed_task("`h-mad/bin/hmad-dispatch`", "`tests/test_x.py`")))
+    assert result["ungated"] == ["Task 1 (mod): `h-mad/bin/hmad-dispatch`"], result
+
+
+@pytest.mark.parametrize("production", ["`engine/run.py`", "none", "`none`"],
+                         ids=["python", "none", "backticked-none"])
+def test_python_or_none_production_is_never_ungated(tmp_path: Path, production: str) -> None:
+    result = check(_plan(tmp_path, _pathed_task(production, "`tests/test_run.py`")))
+    assert result["ungated"] == [], result
+
+
+def test_a_non_python_test_file_is_not_ungated(tmp_path: Path) -> None:
+    body = _pathed_task("`engine/run.py`", "`h-mad/tests/mutation-specs/x.json`")
+    assert check(_plan(tmp_path, body))["ungated"] == []
+
+
+def test_an_unshaped_plan_still_carries_the_ungated_key(tmp_path: Path) -> None:
+    body = _pathed_task("`h-mad/scripts/x.sh`", "`tests/test_x.py`").replace(
+        "**Task shape**: `new-behaviour`\n", "")
+    result = check(_plan(tmp_path, body))
+    assert result["verdict"] == "UNSHAPED"
+    assert result["ungated"] == ["Task 1 (mod): `h-mad/scripts/x.sh`"], result
+
+
+def test_cli_prints_ungated_lines_and_keeps_the_token(tmp_path: Path) -> None:
+    proc = _run(str(_plan(tmp_path, _pathed_task("`h-mad/scripts/x.sh`", "`tests/test_x.py`"))))
+    assert proc.returncode == 0, proc.stderr
+    lines = proc.stdout.splitlines()
+    assert lines[0] == "WIREPIN: PASS tasks=1 wiring=0 unpinned=0 mislabeled=0", proc.stdout
+    assert ("  ungated: Task 1 (mod): `h-mad/scripts/x.sh` — not .py, so no TDD judge "
+            "or wire-pin covers it") in proc.stdout, proc.stdout
