@@ -56,8 +56,8 @@ belief unless you verified it.
 While any feature in this repository is at Phase 5 (step5), the Phase-5 TDD gate also limits Bash,
 for this audit too. The read-only commands the gate admits are exactly: `cat`, `grep`, `head`,
 `jq`, `ls`, `pwd`, `shasum`, `tail`, `wc`. The list is `READ_ONLY_COMMANDS` in
-`h-mad/scripts/h_mad_target_identity.py`. Anything else is refused, including `sed`, `nl`, `awk`,
-`find`, `git` and `python -c`. A command must also be one simple command made only of letters,
+`h-mad/scripts/h_mad_target_identity.py`. It also admits read-only `git` with exactly these verbs: `blame`, `cat-file`, `diff`, `log`, `ls-files`, `merge-base`, `rev-parse`, `show`, `status`. Nothing may come before the verb (`git -C`, `git -c` are refused), and `--output`, `--ext-diff`, `--textconv` and `--filters`, or any abbreviation of them such as `--out=`, are refused (the list is `READ_ONLY_GIT_VERBS`). Anything else is refused, including `sed`, `nl`, `awk`,
+`find`, other `git` verbs and `python -c`. A command must also be one simple command made only of letters,
 digits, spaces, quotes and `_ . / : @ % + = , -`; any other character is refused even inside
 quotes, so `|`, `;`, `&&`, redirects, `$`, globs, `(`, `[`, `^`, `\` and `~` all fail
 (`grep -n 'def foo(' a.py` is refused: search for `def foo` instead). A refused command is not evidence that the code is absent or

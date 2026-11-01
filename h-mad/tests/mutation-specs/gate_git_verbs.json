@@ -1,0 +1,50 @@
+{
+  "_why": "Row 2729: the Phase-5 shell gate admits read-only `git <verb>` so the 5e verifier can measure spec-unchanged / exact-diff ACs. Each mutant loosens one refusal of the agreed denylist, or drops the admit.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_gate_git_verbs.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "G1: GIT NEVER ADMITTED. The pre-fix gate: the verifier is refused `git diff` and reports the AC unmeasured.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "    if executable == \"git\":  # M:CX-GIT\n        return (",
+      "replace": "    if executable == \"git\":  # M:CX-GIT\n        return False and (",
+      "test": "tests/test_h_mad_gate_git_verbs.py::test_read_only_git_is_admitted[diff]"
+    },
+    {
+      "name": "G2: ANY VERB. `git checkout -- <file>` reverts a production file under the gate.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        return (len(argv) >= 2 and argv[1] in READ_ONLY_GIT_VERBS",
+      "replace": "        return (len(argv) >= 2",
+      "test": "tests/test_h_mad_gate_git_verbs.py::test_git_that_writes_or_executes_is_refused[checkout]"
+    },
+    {
+      "name": "G3: OPTIONS BEFORE THE VERB. The verb is looked for past global options, so `git -C /tmp diff` reads outside the root.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        return (len(argv) >= 2 and argv[1] in READ_ONLY_GIT_VERBS",
+      "replace": "        return (len(argv) >= 2 and any(a in READ_ONLY_GIT_VERBS for a in argv[1:])",
+      "test": "tests/test_h_mad_gate_git_verbs.py::test_git_that_writes_or_executes_is_refused[global-C]"
+    },
+    {
+      "name": "G4: DENIED OPTIONS IGNORED. `git diff --output=<file>` writes a file through a read verb.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "                and not any(_git_denied_option(arg) for arg in argv[2:]))",
+      "replace": "                and True)",
+      "test": "tests/test_h_mad_gate_git_verbs.py::test_git_that_writes_or_executes_is_refused[output-eq]"
+    },
+    {
+      "name": "G5: EXACT NAMES ONLY. Git expands a unique prefix, so `--out=<file>` still writes.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "    return len(name) > 2 and any(denied.startswith(name) for denied in GIT_DENIED_OPTIONS)",
+      "replace": "    return name in GIT_DENIED_OPTIONS",
+      "test": "tests/test_h_mad_gate_git_verbs.py::test_git_that_writes_or_executes_is_refused[output-abbrev]"
+    },
+    {
+      "name": "G6: TEXTCONV DROPPED FROM THE DENYLIST. `git show --textconv` runs a configured driver.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "GIT_DENIED_OPTIONS = (\"--output\", \"--ext-diff\", \"--textconv\", \"--filters\")",
+      "replace": "GIT_DENIED_OPTIONS = (\"--output\", \"--ext-diff\", \"--filters\")",
+      "test": "tests/test_h_mad_gate_git_verbs.py::test_git_that_writes_or_executes_is_refused[textconv]"
+    }
+  ]
+}

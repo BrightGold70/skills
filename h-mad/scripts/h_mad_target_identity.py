@@ -223,6 +223,15 @@ def emit_canon(identity: Identity) -> None:
 
 SIMPLE_SHELL_COMMAND = re.compile(r"[A-Za-z0-9_./:@%+=,'\" \t-]+")
 READ_ONLY_COMMANDS = {"cat", "grep", "head", "jq", "ls", "pwd", "shasum", "tail", "wc"}
+# `git <verb>` the 5e verifier needs for spec-unchanged / exact-diff ACs (row
+# "Phase-5 Codex gate refuses the read-only checks", denylist agreed 2026-11-01).
+# Nothing may precede the verb: `-c core.pager=…` / `-c alias.…` execute.
+READ_ONLY_GIT_VERBS = {
+    "blame", "cat-file", "diff", "log", "ls-files", "merge-base", "rev-parse", "show", "status",
+}
+# Write a file or run a configured driver. Git expands a unique prefix of a long
+# option, so any prefix of these (`--out=f`) is refused too, `--text` included.
+GIT_DENIED_OPTIONS = ("--output", "--ext-diff", "--textconv", "--filters")
 SAFE_DISPATCH_VERBS = {
     "alive", "await", "clear", "collect-report", "env", "file-diff", "gate-create",
     "gate-resolve", "gate-wait", "interrupt", "notify", "pin", "pin-agents",
@@ -504,6 +513,13 @@ def _is_shell_allowance(root: Path, resolved: Identity) -> bool:
     return False
 
 
+def _git_denied_option(arg: str) -> bool:
+    if not arg.startswith("--") or arg == "--":
+        return False
+    name = arg.split("=", 1)[0]
+    return len(name) > 2 and any(denied.startswith(name) for denied in GIT_DENIED_OPTIONS)
+
+
 def _safe_argv(argv: list[str], root: Path | None, cwd: object) -> bool:
     if not argv:
         return False
@@ -519,6 +535,9 @@ def _safe_argv(argv: list[str], root: Path | None, cwd: object) -> bool:
         return True
     if executable in READ_ONLY_COMMANDS:
         return True
+    if executable == "git":  # M:CX-GIT
+        return (len(argv) >= 2 and argv[1] in READ_ONLY_GIT_VERBS
+                and not any(_git_denied_option(arg) for arg in argv[2:]))
     if executable in {"hmad-dispatch", "hmad-dispatch.sh"}:
         expected = (Path(__file__).resolve().parents[1] / "bin" / "hmad-dispatch").resolve()
         if resolved_executable != expected or len(argv) < 2:

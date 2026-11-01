@@ -348,7 +348,7 @@ def test_codex_hook_denies_run_verb_around_an_untrusted_or_malformed_command(tmp
     for command in (
         f"{dispatch} run --timeout 60 -- rm -rf x",
         f"{dispatch} run --timeout 60 -- python3 -c pass",
-        f"{dispatch} run --timeout 60 -- git status",
+        f"{dispatch} run --timeout 60 -- git stash",  # read-only git is admitted (row 2729)
         f"{dispatch} run --timeout 60 -- {dispatch} exec agy p.md",
         f"{dispatch} run --timeout 60 -- {dispatch} run --timeout 1 -- rm x",
         f"{dispatch} run --timeout 60 --",
@@ -379,7 +379,7 @@ def test_codex_hook_rejects_untrusted_executable_paths(tmp_path):
         "rg --hostname-bin=/tmp/evil needle .",
         "git diff --ext-diff",
         "git show --textconv HEAD:file",
-        "git status",
+        "git stash",  # `git status` is admitted since row 2729
     ):
         result = _run_hook(project, {
             "tool_name": "Bash",

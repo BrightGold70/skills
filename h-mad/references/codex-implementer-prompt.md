@@ -54,7 +54,7 @@ and wrapping any other command in `run` is refused the same as running it bare.
 
 The read-only commands the gate admits are exactly: `cat`, `grep`, `head`, `jq`, `ls`, `pwd`,
 `shasum`, `tail`, `wc`. Besides those, the gate admits only pytest, the allowed `hmad-dispatch`
-verbs, the h-mad scripts it allow-lists, and any prefix in `.h-mad/phase5-shell-allow`. Anything
+verbs, the h-mad scripts it allow-lists, and any prefix in `.h-mad/phase5-shell-allow`. It also admits read-only `git` with exactly these verbs: `blame`, `cat-file`, `diff`, `log`, `ls-files`, `merge-base`, `rev-parse`, `show`, `status`. Nothing may come before the verb (`git -C`, `git -c` are refused), and `--output`, `--ext-diff`, `--textconv` and `--filters`, or any abbreviation of them such as `--out=`, are refused (the list is `READ_ONLY_GIT_VERBS`). Anything
 else is refused, including `sed`, `nl`, `awk`, `find` and `python -c`. A command must be one simple command made only of letters, digits, spaces, quotes and
 `_ . / : @ % + = , -`. A `|`, `;`, `&`, redirect, `$`, `^`, `\`, `(`/`)`, `[`/`]`, `{`/`}`, `~`, `!`,
 `#` or glob is refused, so a grep pattern like `"^def x("` is refused too. Read with these, or run the tests. Do not spend

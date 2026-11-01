@@ -35,12 +35,12 @@ Under the Phase-5 TDD gate, the read-only commands the gate admits are exactly: 
 `head`, `jq`, `ls`, `pwd`, `shasum`, `tail`, `wc`. It also admits pytest through the interpreter, the
 allowed `hmad-dispatch` verbs, the h-mad scripts it allow-lists (e.g. `h_mad_mutation_harness.py
 --check-anchors`), and any prefix the operator declared in `.h-mad/phase5-shell-allow`. Everything
-else is refused, including `sed`, `nl`, `awk`, `find`, `git` and `python -c`. So the git revert in
+else is refused, including `sed`, `nl`, `awk`, `find`, other `git` verbs and `python -c`. So the git revert in
 step 1b, and an env-assignment prefix such as `MPLBACKEND=Agg …`, cannot run under the gate (the
 allowlist matches commands, and an `=` head is refused before it). Report those ACs as unmeasured. A command must be one simple command made only of letters, digits, spaces, quotes and
 `_ . / : @ % + = , -`. A `|`, `;`, `&`, redirect, `$`, `^`, `\`, `(`/`)`, `[`/`]`, `{`/`}`, `~`, `!`,
-`#` or glob is refused, so a grep pattern like `"^def x("` is refused too.
-If an AC needs a measurement none of these can take, such as a `git diff`, report it as unmeasured
+`#` or glob is refused, so a grep pattern like `"^def x("` is refused too. It also admits read-only `git` with exactly these verbs: `blame`, `cat-file`, `diff`, `log`, `ls-files`, `merge-base`, `rev-parse`, `show`, `status`. Nothing may come before the verb (`git -C`, `git -c` are refused), and `--output`, `--ext-diff`, `--textconv` and `--filters`, or any abbreviation of them such as `--out=`, are refused (the list is `READ_ONLY_GIT_VERBS`). Use these to measure spec-unchanged and exact-diff ACs yourself.
+If an AC needs a measurement none of these can take, such as the git revert, report it as unmeasured
 with `STATUS: NEEDS_CONTEXT`. Do not guess.
 Full-suite reference number (pre-change baseline): `<INLINE_SUITE_REFERENCE>`.
 

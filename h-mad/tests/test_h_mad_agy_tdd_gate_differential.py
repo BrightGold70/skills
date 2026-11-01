@@ -23,7 +23,7 @@ TARGET_SHAPES = (
     "tmp-py", "outside-non-tmp", "unresolvable", "chmod000-chain",
 )
 COMMANDS = (
-    "ls", "git status", 'python3 -c "open(\'x\',\'w\').write(\'x\')"',
+    "ls", "git stash", 'python3 -c "open(\'x\',\'w\').write(\'x\')"',
     "rm -rf build", ".venv/bin/python -m pytest -q", "cat a > b",
 )
 
@@ -166,7 +166,7 @@ def test_target_differential(tmp_path, gate_environment, request, shape, status)
 
 
 @pytest.mark.parametrize("allowance", ("absent", "lists-the-command", "unreadable"))
-@pytest.mark.parametrize("command", COMMANDS, ids=("ls", "git-status", "python-write", "rm-build", "venv-pytest", "redirect"))
+@pytest.mark.parametrize("command", COMMANDS, ids=("ls", "git-stash", "python-write", "rm-build", "venv-pytest", "redirect"))
 def test_shell_differential(tmp_path, gate_environment, request, command, allowance):
     root = _root(tmp_path, "active", gate_environment)
     # The gates classify this interpreter; they must never execute the command.
@@ -179,9 +179,9 @@ def test_shell_differential(tmp_path, gate_environment, request, command, allowa
             allow_file.chmod(0)
             policy = importlib.import_module("h_mad_target_identity")
             assert isinstance(policy._shell_allowance(root), str), "sealed allowance must be unreadable"
-    # `git` is not in READ_ONLY_COMMANDS: the shared policy refuses `git status` unless listed.
+    # `stash` is not in READ_ONLY_GIT_VERBS: the shared policy refuses `git stash` unless listed.
     expected = "allow" if command in {"ls", ".venv/bin/python -m pytest -q"} else "deny"
-    if command in {"rm -rf build", "git status"} and allowance == "lists-the-command":
+    if command in {"rm -rf build", "git stash"} and allowance == "lists-the-command":
         expected = "allow"
     codex = _run(root, gate_environment, "codex", {
         "tool_name": "exec_command", "tool_input": {"cmd": command},
