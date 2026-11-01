@@ -1,0 +1,50 @@
+{
+  "_why": "Row 2816: h_mad_reanchor_diff.py reports a re-anchored mutation row whose edit delta changed: the tokens added differ, or neither removed set contains the other. Each mutant removes one part of that judgement.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_reanchor_diff.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "R1: ADDED TOKENS IGNORED. The 2026-10-25 shape: same anchors, replace now breaks a different guard, read SAME.",
+      "file": "scripts/h_mad_reanchor_diff.py",
+      "find": "    return was_added == now_added and nested",
+      "replace": "    return nested",
+      "test": "tests/test_h_mad_reanchor_diff.py::test_same_removed_tokens_but_a_different_replacement_is_changed"
+    },
+    {
+      "name": "R2: REMOVED TOKENS IGNORED. A mutant that now deletes unrelated code reads SAME.",
+      "file": "scripts/h_mad_reanchor_diff.py",
+      "find": "    return was_added == now_added and nested",
+      "replace": "    return was_added == now_added",
+      "test": "tests/test_h_mad_reanchor_diff.py::test_removing_unrelated_tokens_is_changed"
+    },
+    {
+      "name": "R3: EXACT EQUALITY. The strict rule: a deleted statement that legitimately grew reads CHANGED (7/10 noise in calibration).",
+      "file": "scripts/h_mad_reanchor_diff.py",
+      "find": "    nested = not (was_removed - now_removed) or not (now_removed - was_removed)",
+      "replace": "    nested = was_removed == now_removed",
+      "test": "tests/test_h_mad_reanchor_diff.py::test_a_deleted_statement_that_grew_keeps_the_delta"
+    },
+    {
+      "name": "R4: WHITESPACE COUNTS. Tokenizing on raw characters makes `f(a,b)` vs `f(a, b)` read CHANGED.",
+      "file": "scripts/h_mad_reanchor_diff.py",
+      "find": "_TOKEN_RE = re.compile(r\"\\w+|[^\\w\\s]\")",
+      "replace": "_TOKEN_RE = re.compile(r\"\\w+|[^\\w]\")",
+      "test": "tests/test_h_mad_reanchor_diff.py::test_spacing_inside_the_edited_region_is_ignored"
+    },
+    {
+      "name": "R5: A NEW OR RENAMED ROW READS SAME. Rows with no same-named base row are skipped instead of reported cannot-judge.",
+      "file": "scripts/h_mad_reanchor_diff.py",
+      "find": "            unjudged.append(f\"{spec_arg} :: {name} (no row of that name at {base})\")",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_reanchor_diff.py::test_a_row_with_no_same_named_row_at_base_is_unjudged"
+    },
+    {
+      "name": "R6: AN UNREADABLE SPEC READS SAME. Bad JSON is swallowed as a spec with no rows.",
+      "file": "scripts/h_mad_reanchor_diff.py",
+      "find": "        return 0, 0, [], [f\"{spec_arg} (unreadable: {type(exc).__name__})\"]",
+      "replace": "        return 0, 0, [], []",
+      "test": "tests/test_h_mad_reanchor_diff.py::test_an_unreadable_spec_is_unjudged_not_ok"
+    }
+  ]
+}
