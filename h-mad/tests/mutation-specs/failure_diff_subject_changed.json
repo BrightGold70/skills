@@ -1,7 +1,7 @@
 {
   "_why": "Row 2903: `h_mad_failure_diff.py run` must end UNREADABLE reason=subject-changed when the subject tree changes during a subject run, including an edit reverted mid-run, and must not fire on ignored paths or its own --log-dir. Each mutant blinds one half of the snapshot comparison or widens what counts as the subject.",
   "root": "../..",
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_failure_diff.py", "-q", "-k", "subject_tree_changed or ignored_path or log_dir_inside or log_dir_covering"],
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_failure_diff.py", "-q", "-k", "subject_tree_changed or ignored_path or log_dir_inside or log_dir_covering or listing or unstattable or control_parent_inside or earlier_run or fifteen"],
   "target_command": ["python3.11", "-m", "pytest", "tests/test_h_mad_failure_diff.py", "-q"],
   "mutations": [
     {
@@ -42,7 +42,7 @@
     {
       "name": "S6: LOG DIR COUNTS. The run's own logs inside the subject read as a subject change.",
       "file": "scripts/h_mad_failure_diff.py",
-      "find": "        if _under(str(path), str(exclude)):  # M:FD-SNAP-EXCLUDE",
+      "find": "        if any(_under(str(path), str(exclude)) for exclude in excludes):  # M:FD-SNAP-EXCLUDE",
       "replace": "        if False:  # M:FD-SNAP-EXCLUDE",
       "test": "tests/test_h_mad_failure_diff.py::test_a_log_dir_inside_the_subject_is_not_a_subject_change"
     },
@@ -52,6 +52,48 @@
       "find": "    if _under(os.path.realpath(subject), os.path.realpath(logs)):  # M:FD-LOGDIR-COVERS",
       "replace": "    if False:  # M:FD-LOGDIR-COVERS",
       "test": "tests/test_h_mad_failure_diff.py::test_a_log_dir_covering_the_subject_is_refused[the-subject]"
+    },
+    {
+      "name": "S8: LIST EXIT IGNORED. A failing `git ls-files` reads as an empty, unchanged tree.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if listed.returncode != 0:  # M:FD-SNAP-LIST-RC",
+      "replace": "    if False:  # M:FD-SNAP-LIST-RC",
+      "test": "tests/test_h_mad_failure_diff.py::test_a_failing_file_listing_is_subject_snapshot_failed"
+    },
+    {
+      "name": "S9: LISTING WARNING IGNORED. Files under an unreadable untracked dir silently fall outside the snapshot.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if listed.stderr.strip():  # M:FD-SNAP-LIST-STDERR",
+      "replace": "    if False:  # M:FD-SNAP-LIST-STDERR",
+      "test": "tests/test_h_mad_failure_diff.py::test_a_listing_that_warns_fails_the_snapshot"
+    },
+    {
+      "name": "S10: UNSTATTABLE SKIPPED. A file that cannot be stat'd is dropped instead of failing the snapshot.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        except OSError:  # M:FD-SNAP-STAT",
+      "replace": "        except OSError:  # M:FD-SNAP-STAT\n            continue\n        except Exception:",
+      "test": "tests/test_h_mad_failure_diff.py::test_an_unstattable_file_fails_the_snapshot"
+    },
+    {
+      "name": "S11: CONTROL COUNTS. A control worktree inside the subject reads its own writes as a subject change.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    excludes = (Path(os.path.realpath(logs)), control)  # M:FD-SNAP-EXCLUDES",
+      "replace": "    excludes = (Path(os.path.realpath(logs)),)  # M:FD-SNAP-EXCLUDES",
+      "test": "tests/test_h_mad_failure_diff.py::test_a_control_parent_inside_the_subject_is_not_a_subject_change"
+    },
+    {
+      "name": "S12: LAST RUN ONLY. Comparing only after the last subject run misnames when the change was seen.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "            if side == \"subject\":  # M:FD-SNAP-SIDE",
+      "replace": "            if side == \"subject\" and index == args.repeat:  # M:FD-SNAP-SIDE",
+      "test": "tests/test_h_mad_failure_diff.py::test_a_change_in_an_earlier_run_is_named_at_that_run"
+    },
+    {
+      "name": "S13: OVERFLOW UNCOUNTED. Past 14 changed paths the rest vanish with no count.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "                    if len(changed) > 14:  # M:FD-SNAP-MORE; `_unreadable` keeps 15 tail lines",
+      "replace": "                    if False:  # M:FD-SNAP-MORE; `_unreadable` keeps 15 tail lines",
+      "test": "tests/test_h_mad_failure_diff.py::test_more_than_fifteen_changed_paths_are_counted"
     }
   ]
 }

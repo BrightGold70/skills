@@ -1072,3 +1072,135 @@ def test_a_log_dir_covering_the_subject_is_refused(tmp_path, where):
         r.stdout + r.stderr
     assert r.returncode == 2
     _no_control_left(repo, tmp_path)
+
+
+# --- row 2914: the snapshot fails closed, and only the subject counts --------
+
+def _snapshot_module():
+    sys.path.insert(0, str(SCRIPTS))
+    try:
+        import h_mad_failure_diff
+    finally:
+        sys.path.remove(str(SCRIPTS))
+    return h_mad_failure_diff
+
+
+def test_a_failing_file_listing_is_subject_snapshot_failed(tmp_path):
+    """`git ls-files` failing (dubious ownership, a corrupt index) must not read
+    as an empty, unchanged tree: `{}` vs `{}` would hide every change."""
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING}, {"tests/test_new.py": PASSING})
+    real = shutil.which("git")
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    (stub / "git").write_text(
+        # Silent on stderr, so the exit code alone must fail the snapshot.
+        "#!/bin/sh\nfor a in \"$@\"; do [ \"$a\" = ls-files ] && exit 128; done\n"
+        f"exec {real} \"$@\"\n")
+    (stub / "git").chmod(0o755)
+    env = _env(tmp_path, PATH=f"{stub}{os.pathsep}{os.environ['PATH']}")
+    r = _diff_run(repo, tmp_path, "tests", env=env)
+    assert _token(r.stdout) == "FAILDIFF: UNREADABLE reason=subject-snapshot-failed side=subject", \
+        r.stdout + r.stderr
+    _no_control_left(repo, tmp_path)
+
+
+def test_an_unstattable_file_fails_the_snapshot(tmp_path, monkeypatch):
+    """A `stat` error other than absence is an unread file, not a skipped one."""
+    module = _snapshot_module()
+    repo = _repo(tmp_path, {"notes.txt": "a\n"}, {"more.txt": "b\n"})
+    real = os.lstat
+
+    def lstat(path, *args, **kwargs):
+        if str(path).endswith("notes.txt"):
+            raise PermissionError(13, "Permission denied", str(path))
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "lstat", lstat)
+    assert module._tree_snapshot(repo, (tmp_path / "elsewhere",)) is None
+
+
+def test_a_listing_that_warns_fails_the_snapshot(tmp_path):
+    """`git ls-files --others` only WARNS on an unreadable untracked dir and
+    exits 0, so the files under it would silently fall outside the snapshot."""
+    if os.geteuid() == 0:
+        pytest.skip("root reads every directory")
+    module = _snapshot_module()
+    repo = _repo(tmp_path, {"notes.txt": "a\n"}, {"more.txt": "b\n"})
+    locked = repo / "locked"
+    locked.mkdir()
+    (locked / "inside.txt").write_text("x\n")
+    locked.chmod(0)
+    try:
+        assert module._tree_snapshot(repo, (tmp_path / "elsewhere",)) is None
+    finally:
+        locked.chmod(0o755)
+
+
+CONTROL_WRITES = """\
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def test_writes_only_in_the_control():
+    if ".h-mad-control-" in str(ROOT):
+        (ROOT / "control-output.txt").write_text("x\\n")
+"""
+
+
+def test_a_control_parent_inside_the_subject_is_not_a_subject_change(tmp_path):
+    """The control worktree under the subject is listed as one untracked entry;
+    its own writes are not the subject changing."""
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING, "tests/test_control.py": CONTROL_WRITES},
+                 {"tests/test_new.py": PASSING})
+    inside = repo / "ctl"
+    inside.mkdir()
+    r = _diff_run(repo, tmp_path, "tests", repeat=2,
+                  extra=("--control-parent", str(inside)))
+    assert _token(r.stdout).startswith("FAILDIFF: SAME "), r.stdout + r.stderr
+    assert list(inside.iterdir()) == [], "the control was not removed"
+
+
+FIRST_RUN_ONLY = """\
+import hashlib, os, pathlib
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+def test_changes_the_tree_in_the_first_subject_run_only():
+    if ".h-mad-control-" in str(ROOT):
+        return
+    mark = pathlib.Path(os.environ["FD_COUNTER_DIR"]) / "first-run-done"
+    if not mark.exists():
+        mark.write_text("1")
+        (ROOT / "scratch.txt").write_text("new\\n")
+"""
+
+
+def test_a_change_in_an_earlier_run_is_named_at_that_run(tmp_path):
+    """The snapshot is compared after EVERY subject run, not only the last."""
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING},
+                 {"tests/test_first.py": FIRST_RUN_ONLY})
+    r = _diff_run(repo, tmp_path, "tests", repeat=2)
+    assert _token(r.stdout) == "FAILDIFF: UNREADABLE reason=subject-changed side=subject run=1/2", \
+        r.stdout + r.stderr
+    _no_control_left(repo, tmp_path)
+
+
+MANY_CHANGES = """\
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def test_creates_many_files():
+    if ".h-mad-control-" not in str(ROOT):
+        for i in range(20):
+            (ROOT / f"made-{i:02d}.txt").write_text("x\\n")
+"""
+
+
+def test_more_than_fifteen_changed_paths_are_counted(tmp_path):
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING},
+                 {"tests/test_many.py": MANY_CHANGES})
+    r = _diff_run(repo, tmp_path, "tests")
+    assert "reason=subject-changed" in _token(r.stdout), r.stdout + r.stderr
+    assert "… and 6 more" in r.stdout, r.stdout
+    assert r.stdout.count("  | changed: ") == 14, r.stdout

@@ -72,15 +72,27 @@ Fail closed — each of these is UNREADABLE, never "no new failures":
     the same installed snapshot;
   * `probe-failed`: that check could not read the control interpreter;
   * `subject-changed` (run mode): a file of the subject — tracked, or untracked
-    and not ignored — changed `(mtime, size)`, appeared or vanished between the
-    start and the end of a subject run, so the run may have measured a tree
-    nobody can name. An edit REVERTED mid-run is caught too, because the revert
-    is itself a write; a content hash taken before and after would miss it.
-    `--log-dir` inside the subject is excluded; one equal to or above the
-    subject is refused as `log-dir`, since it would exclude everything. Not seen: a change made and
-    undone with its mtime restored, and a change during the last control run,
-    which no subject run follows. `subject-snapshot-failed`: the file list or a
-    `stat` could not be read;
+    and not ignored — has a different `(mtime, size)`, or appeared or vanished,
+    compared with ONE snapshot taken before the first run. The comparison runs
+    after every subject run, so `run=i/N` names the first subject run after
+    which the change was seen, not necessarily the run that made it (a change
+    during control run k shows as subject run k+1). The run may have measured a
+    tree nobody can name. An edit REVERTED mid-run is caught too, because the
+    revert is itself a write; a content hash taken before and after would miss
+    it. `--log-dir` and the control worktree inside the subject are excluded; a
+    `--log-dir` equal to or above the subject is refused as `log-dir`, since it
+    would exclude everything. Not seen: a change undone with its mtime
+    restored; a change during the last control run, which no subject run
+    follows; an untracked file created and deleted between two snapshots; a
+    rename away and back (rename keeps mtime and size); an edit inside a
+    submodule (only the gitlink dir is stat'd) or to the target of a symlink
+    (`lstat` reads the link); ignored files the suite still reads (`.venv`, a
+    local config); and a HEAD move with no file change, which leaves the
+    `SUBJECT: head=` line stale. Recording ctime and inode would close the
+    rename and mtime-restore holes; declined, because macOS changes ctime when
+    an app merely writes xattrs to an open file. `subject-snapshot-failed`: the
+    file list could not be read (a non-zero exit, or a warning on stderr such
+    as an unreadable untracked directory) or a `stat` failed;
   * `disjoint-ids` (logs mode only): two non-empty sets with no id in common, the
     collection-root mismatch of row 1880. In run mode both sides run one
     selection from the same relative root by construction, so it does not apply.
@@ -297,14 +309,18 @@ def _under(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
-def _tree_snapshot(subject: Path, exclude: Path) -> dict[str, tuple[int, int] | None] | None:
+def _tree_snapshot(subject: Path, excludes: tuple[Path, ...]) -> dict[str, tuple[int, int] | None] | None:
     """`(mtime_ns, size)` per file git would show (tracked, or untracked and not
     ignored), None for a listed path that is absent. None overall when the list
-    or a stat cannot be read: an unread tree is never an unchanged one."""
+    or a stat cannot be read: an unread tree is never an unchanged one. That
+    includes a listing that exits 0 but warns: `--others` only warns on an
+    unreadable directory, and the files under it would never be compared."""
     listed = subprocess.run(
         ["git", "-C", str(subject), "ls-files", "-z", "--cached", "--others",
          "--exclude-standard"], capture_output=True)
-    if listed.returncode != 0:
+    if listed.returncode != 0:  # M:FD-SNAP-LIST-RC
+        return None
+    if listed.stderr.strip():  # M:FD-SNAP-LIST-STDERR
         return None
     snapshot: dict[str, tuple[int, int] | None] = {}
     for raw in listed.stdout.split(b"\0"):
@@ -312,14 +328,14 @@ def _tree_snapshot(subject: Path, exclude: Path) -> dict[str, tuple[int, int] | 
             continue
         rel = os.fsdecode(raw)
         path = subject / rel
-        if _under(str(path), str(exclude)):  # M:FD-SNAP-EXCLUDE
+        if any(_under(str(path), str(exclude)) for exclude in excludes):  # M:FD-SNAP-EXCLUDE
             continue
         try:
             stat = os.lstat(path)
         except FileNotFoundError:
             snapshot[rel] = None
             continue
-        except OSError:
+        except OSError:  # M:FD-SNAP-STAT
             return None
         snapshot[rel] = (stat.st_mtime_ns, stat.st_size)
     return snapshot
@@ -492,8 +508,10 @@ def _compare(args, subject: Path, control: Path, base_sha: str, admin_out: list,
     if leaked:
         return _unreadable("control-imports-subject", "control", tail="\n".join(leaked))
     argv = [args.python, "-m", "pytest", *PYTEST_FLAGS, *args.selection]
-    exclude = Path(os.path.realpath(logs))
-    before = _tree_snapshot(subject, exclude)
+    # The run's own logs and the control worktree are written by this tool, not
+    # by whatever might change the subject; either may sit inside the subject.
+    excludes = (Path(os.path.realpath(logs)), control)  # M:FD-SNAP-EXCLUDES
+    before = _tree_snapshot(subject, excludes)
     if before is None:
         return _unreadable("subject-snapshot-failed", "subject")
     results: dict[str, list[dict[str, str]]] = {"subject": [], "control": []}
@@ -519,13 +537,15 @@ def _compare(args, subject: Path, control: Path, base_sha: str, admin_out: list,
             print(f"RUN: side={side} run={where} rc={rc} passed={summary.passed} "
                   f"failed={summary.failed} errors={summary.errors} log={log}")
             if side == "subject":  # M:FD-SNAP-SIDE
-                after = _tree_snapshot(subject, exclude)
+                after = _tree_snapshot(subject, excludes)
                 if after is None:
                     return _unreadable("subject-snapshot-failed", side, where)
                 changed = _changed_paths(before, after)
                 if changed:  # M:FD-SNAP-CHANGED
-                    return _unreadable("subject-changed", side, where,
-                                       tail="\n".join(f"changed: {rel}" for rel in changed[:15]))
+                    shown = [f"changed: {rel}" for rel in changed[:14]]
+                    if len(changed) > 14:  # M:FD-SNAP-MORE; `_unreadable` keeps 15 tail lines
+                        shown.append(f"… and {len(changed) - 14} more")
+                    return _unreadable("subject-changed", side, where, tail="\n".join(shown))
     return classify(results["subject"], results["control"], args.repeat)
 
 
