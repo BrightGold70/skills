@@ -76,7 +76,8 @@ Fail closed — each of these is UNREADABLE, never "no new failures":
     start and the end of a subject run, so the run may have measured a tree
     nobody can name. An edit REVERTED mid-run is caught too, because the revert
     is itself a write; a content hash taken before and after would miss it.
-    `--log-dir` inside the subject is excluded. Not seen: a change made and
+    `--log-dir` inside the subject is excluded; one equal to or above the
+    subject is refused as `log-dir`, since it would exclude everything. Not seen: a change made and
     undone with its mtime restored, and a change during the last control run,
     which no subject run follows. `subject-snapshot-failed`: the file list or a
     `stat` could not be read;
@@ -448,6 +449,10 @@ def run_mode(args) -> int:
         logs.mkdir(parents=True, exist_ok=True)
     except OSError:
         return _unreadable("log-dir", "both")
+    # A log dir equal to or above the subject would exclude the whole subject
+    # from the snapshot, turning the subject-changed check silently off.
+    if _under(os.path.realpath(subject), os.path.realpath(logs)):  # M:FD-LOGDIR-COVERS
+        return _unreadable("log-dir", "both", tail=f"log-dir {logs} covers the subject {subject}")
     try:
         parent = Path(args.control_parent) if args.control_parent else subject.parent
         control = Path(os.path.realpath(tempfile.mkdtemp(prefix=".h-mad-control-", dir=parent)))

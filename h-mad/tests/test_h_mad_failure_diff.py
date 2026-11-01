@@ -1057,3 +1057,18 @@ def test_a_log_dir_inside_the_subject_is_not_a_subject_change(tmp_path):
     r = _diff_run(repo, tmp_path, "tests", repeat=2,
                   extra=("--log-dir", str(repo / "fd-logs")))
     assert _token(r.stdout).startswith("FAILDIFF: SAME "), r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("where", ["the-subject", "above-the-subject"])
+def test_a_log_dir_covering_the_subject_is_refused(tmp_path, where):
+    """A --log-dir equal to or above the subject would exclude the whole subject
+    from the snapshot: `{}` vs `{}`, the check silently off, and a file created
+    mid-run ending SAME. An unread tree is never an unchanged one: refuse it."""
+    repo = _repo(tmp_path, {"notes.txt": "a\n", "tests/test_ok.py": PASSING},
+                 {"tests/test_change.py": TREE_CHANGE.format(action="create")})
+    logs = repo if where == "the-subject" else tmp_path
+    r = _diff_run(repo, tmp_path, "tests", extra=("--log-dir", str(logs)))
+    assert _token(r.stdout) == "FAILDIFF: UNREADABLE reason=log-dir side=both", \
+        r.stdout + r.stderr
+    assert r.returncode == 2
+    _no_control_left(repo, tmp_path)

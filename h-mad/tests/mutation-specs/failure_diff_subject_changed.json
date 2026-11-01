@@ -1,7 +1,7 @@
 {
   "_why": "Row 2903: `h_mad_failure_diff.py run` must end UNREADABLE reason=subject-changed when the subject tree changes during a subject run, including an edit reverted mid-run, and must not fire on ignored paths or its own --log-dir. Each mutant blinds one half of the snapshot comparison or widens what counts as the subject.",
   "root": "../..",
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_failure_diff.py", "-q", "-k", "subject_tree_changed or ignored_path or log_dir_inside"],
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_failure_diff.py", "-q", "-k", "subject_tree_changed or ignored_path or log_dir_inside or log_dir_covering"],
   "target_command": ["python3.11", "-m", "pytest", "tests/test_h_mad_failure_diff.py", "-q"],
   "mutations": [
     {
@@ -45,6 +45,13 @@
       "find": "        if _under(str(path), str(exclude)):  # M:FD-SNAP-EXCLUDE",
       "replace": "        if False:  # M:FD-SNAP-EXCLUDE",
       "test": "tests/test_h_mad_failure_diff.py::test_a_log_dir_inside_the_subject_is_not_a_subject_change"
+    },
+    {
+      "name": "S7: LOG DIR COVERS SUBJECT. A --log-dir equal to or above the subject excludes every file, so both snapshots are empty and a mid-run change ends SAME.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    if _under(os.path.realpath(subject), os.path.realpath(logs)):  # M:FD-LOGDIR-COVERS",
+      "replace": "    if False:  # M:FD-LOGDIR-COVERS",
+      "test": "tests/test_h_mad_failure_diff.py::test_a_log_dir_covering_the_subject_is_refused[the-subject]"
     }
   ]
 }
