@@ -322,24 +322,28 @@ def test_committed_mutation_specs_are_not_drifted() -> None:
     assert not failures, _committed_spec_drift_assertion_message(failures, skipped)
 
 
-def test_committed_mutation_spec_drift_check_is_discriminating() -> None:
-    """A deliberately drifted committed anchor must fail, then restore byte-identical."""
-    spec_path = Path(__file__).resolve().parent / "mutation-specs" / "mutation_harness.json"
-    original = spec_path.read_bytes()
-    try:
-        spec = json.loads(original.decode("utf-8"))
-        spec["mutations"][0]["find"] += "\nINTENTIONAL-ANCHOR-DRIFT"
-        spec_path.write_text(
-            json.dumps(spec, indent=1, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+def test_committed_mutation_spec_drift_check_is_discriminating(tmp_path: Path) -> None:
+    """A deliberately drifted copy of a committed spec must fail; the clean copy must not.
 
-        failures = _committed_spec_drift_messages([spec_path], [])
+    The copy lives in tmp_path with `root` pinned to the committed spec's own root, so
+    its anchors still read the real files. The committed spec is never written: a test
+    that rewrites a tracked file in place, even byte-identically, changes the tree a
+    sibling session or `h_mad_failure_diff.py run` is reading (row 2903)."""
+    committed = Path(__file__).resolve().parent / "mutation-specs" / "mutation_harness.json"
+    before = (committed.read_bytes(), committed.stat().st_mtime_ns)
+    spec = json.loads(before[0].decode("utf-8"))
+    spec["root"] = str((committed.parent / spec.get("root", ".")).resolve())
+    spec_path = tmp_path / committed.name
 
-        assert any(spec_path.name in failure for failure in failures), failures
-    finally:
-        spec_path.write_bytes(original)
-        assert spec_path.read_bytes() == original
+    spec_path.write_text(json.dumps(spec, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    assert _committed_spec_drift_messages([spec_path], []) == [], "the clean copy must pass"
+
+    spec["mutations"][0]["find"] += "\nINTENTIONAL-ANCHOR-DRIFT"
+    spec_path.write_text(json.dumps(spec, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    failures = _committed_spec_drift_messages([spec_path], [])
+
+    assert any(spec_path.name in failure for failure in failures), failures
+    assert (committed.read_bytes(), committed.stat().st_mtime_ns) == before, "committed spec touched"
 
 
 def test_non_spec_json_does_not_fail_committed_spec_drift_check(tmp_path: Path) -> None:

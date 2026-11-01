@@ -998,3 +998,62 @@ def test_main_in_process_with_a_plain_stdout(tmp_path):
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stdout + r.stderr
     assert r.stdout.strip().startswith("FAILDIFF: SAME "), r.stdout + r.stderr
+
+
+# --- row 2903: the subject tree must not change while it is being measured --
+#
+# The run read the subject once (`SUBJECT: … dirty=N`) and never again, so an
+# edit made while the subject's pytest ran was measured as part of the subject.
+# The reported case was an edit REVERTED a minute later, which a before/after
+# content hash cannot see; a (mtime, size) snapshot can, because the revert is
+# itself a write. The test below changes its own tree mid-run, exactly once.
+
+TREE_CHANGE = """\
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def test_changes_its_own_tree():
+    action = {action!r}
+    notes = ROOT / "notes.txt"
+    if action == "edit-and-revert":
+        original = notes.read_text()
+        notes.write_text(original + "mid-run edit\\n")
+        notes.write_text(original)
+    elif action == "create":
+        (ROOT / "scratch.txt").write_text("new\\n")
+    elif action == "delete":
+        notes.unlink()
+    elif action == "ignored":
+        (ROOT / "__pycache__").mkdir(exist_ok=True)
+        (ROOT / "__pycache__" / "x.txt").write_text("ignored\\n")
+"""
+
+
+@pytest.mark.parametrize("action", ["edit-and-revert", "create", "delete"])
+def test_subject_tree_changed_mid_run_is_UNREADABLE(tmp_path, action):
+    repo = _repo(tmp_path, {"notes.txt": "a\n", "tests/test_ok.py": PASSING},
+                 {"tests/test_change.py": TREE_CHANGE.format(action=action)})
+    r = _diff_run(repo, tmp_path, "tests")
+    token = _token(r.stdout)
+    assert token == "FAILDIFF: UNREADABLE reason=subject-changed side=subject run=1/1", \
+        r.stdout + r.stderr
+    assert r.returncode == 2
+    changed = "scratch.txt" if action == "create" else "notes.txt"
+    assert changed in r.stdout, "the changed path is named"
+    _no_control_left(repo, tmp_path)
+
+
+def test_an_ignored_path_changing_mid_run_is_not_a_subject_change(tmp_path):
+    repo = _repo(tmp_path, {"notes.txt": "a\n", "tests/test_ok.py": PASSING},
+                 {"tests/test_change.py": TREE_CHANGE.format(action="ignored")})
+    r = _diff_run(repo, tmp_path, "tests")
+    assert _token(r.stdout).startswith("FAILDIFF: SAME "), r.stdout + r.stderr
+
+
+def test_a_log_dir_inside_the_subject_is_not_a_subject_change(tmp_path):
+    """The run's own logs are written between runs; they are not the subject."""
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING}, {"tests/test_new.py": PASSING})
+    r = _diff_run(repo, tmp_path, "tests", repeat=2,
+                  extra=("--log-dir", str(repo / "fd-logs")))
+    assert _token(r.stdout).startswith("FAILDIFF: SAME "), r.stdout + r.stderr

@@ -1,0 +1,50 @@
+{
+  "_why": "Row 2903: `h_mad_failure_diff.py run` must end UNREADABLE reason=subject-changed when the subject tree changes during a subject run, including an edit reverted mid-run, and must not fire on ignored paths or its own --log-dir. Each mutant blinds one half of the snapshot comparison or widens what counts as the subject.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_failure_diff.py", "-q", "-k", "subject_tree_changed or ignored_path or log_dir_inside"],
+  "target_command": ["python3.11", "-m", "pytest", "tests/test_h_mad_failure_diff.py", "-q"],
+  "mutations": [
+    {
+      "name": "S1: CHANGE IGNORED. A changed subject is measured as though it were the tree named in SUBJECT:, the pre-fix behaviour.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "                if changed:  # M:FD-SNAP-CHANGED",
+      "replace": "                if False:  # M:FD-SNAP-CHANGED",
+      "test": "tests/test_h_mad_failure_diff.py::test_subject_tree_changed_mid_run_is_UNREADABLE[edit-and-revert]"
+    },
+    {
+      "name": "S2: SIZE ONLY. Comparing sizes alone misses an edit reverted mid-run, the reported case.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        snapshot[rel] = (stat.st_mtime_ns, stat.st_size)",
+      "replace": "        snapshot[rel] = (0, stat.st_size)",
+      "test": "tests/test_h_mad_failure_diff.py::test_subject_tree_changed_mid_run_is_UNREADABLE[edit-and-revert]"
+    },
+    {
+      "name": "S3: TRACKED ONLY. A file created mid-run is not listed, so it is never seen.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        [\"git\", \"-C\", str(subject), \"ls-files\", \"-z\", \"--cached\", \"--others\",",
+      "replace": "        [\"git\", \"-C\", str(subject), \"ls-files\", \"-z\", \"--cached\",",
+      "test": "tests/test_h_mad_failure_diff.py::test_subject_tree_changed_mid_run_is_UNREADABLE[create]"
+    },
+    {
+      "name": "S4: KEYS ONLY BEFORE. A path present after but not before is ignored, so a created file is missed.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "    return [rel for rel in sorted(set(before) | set(after))",
+      "replace": "    return [rel for rel in sorted(set(before))",
+      "test": "tests/test_h_mad_failure_diff.py::test_subject_tree_changed_mid_run_is_UNREADABLE[create]"
+    },
+    {
+      "name": "S5: IGNORED PATHS COUNT. Listing ignored files makes __pycache__ writes read as a subject change.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "         \"--exclude-standard\"], capture_output=True)",
+      "replace": "         ], capture_output=True)",
+      "test": "tests/test_h_mad_failure_diff.py::test_an_ignored_path_changing_mid_run_is_not_a_subject_change"
+    },
+    {
+      "name": "S6: LOG DIR COUNTS. The run's own logs inside the subject read as a subject change.",
+      "file": "scripts/h_mad_failure_diff.py",
+      "find": "        if _under(str(path), str(exclude)):  # M:FD-SNAP-EXCLUDE",
+      "replace": "        if False:  # M:FD-SNAP-EXCLUDE",
+      "test": "tests/test_h_mad_failure_diff.py::test_a_log_dir_inside_the_subject_is_not_a_subject_change"
+    }
+  ]
+}

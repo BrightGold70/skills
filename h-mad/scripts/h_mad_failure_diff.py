@@ -71,6 +71,15 @@ Fail closed — each of these is UNREADABLE, never "no new failures":
     NON-editable `pip install .` of the subject, which both sides import as
     the same installed snapshot;
   * `probe-failed`: that check could not read the control interpreter;
+  * `subject-changed` (run mode): a file of the subject — tracked, or untracked
+    and not ignored — changed `(mtime, size)`, appeared or vanished between the
+    start and the end of a subject run, so the run may have measured a tree
+    nobody can name. An edit REVERTED mid-run is caught too, because the revert
+    is itself a write; a content hash taken before and after would miss it.
+    `--log-dir` inside the subject is excluded. Not seen: a change made and
+    undone with its mtime restored, and a change during the last control run,
+    which no subject run follows. `subject-snapshot-failed`: the file list or a
+    `stat` could not be read;
   * `disjoint-ids` (logs mode only): two non-empty sets with no id in common, the
     collection-root mismatch of row 1880. In run mode both sides run one
     selection from the same relative root by construction, so it does not apply.
@@ -287,6 +296,39 @@ def _under(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
+def _tree_snapshot(subject: Path, exclude: Path) -> dict[str, tuple[int, int] | None] | None:
+    """`(mtime_ns, size)` per file git would show (tracked, or untracked and not
+    ignored), None for a listed path that is absent. None overall when the list
+    or a stat cannot be read: an unread tree is never an unchanged one."""
+    listed = subprocess.run(
+        ["git", "-C", str(subject), "ls-files", "-z", "--cached", "--others",
+         "--exclude-standard"], capture_output=True)
+    if listed.returncode != 0:
+        return None
+    snapshot: dict[str, tuple[int, int] | None] = {}
+    for raw in listed.stdout.split(b"\0"):
+        if not raw:
+            continue
+        rel = os.fsdecode(raw)
+        path = subject / rel
+        if _under(str(path), str(exclude)):  # M:FD-SNAP-EXCLUDE
+            continue
+        try:
+            stat = os.lstat(path)
+        except FileNotFoundError:
+            snapshot[rel] = None
+            continue
+        except OSError:
+            return None
+        snapshot[rel] = (stat.st_mtime_ns, stat.st_size)
+    return snapshot
+
+
+def _changed_paths(before: dict, after: dict) -> list[str]:
+    return [rel for rel in sorted(set(before) | set(after))
+            if before.get(rel) != after.get(rel)]  # M:FD-SNAP-DIFF
+
+
 def _control_env(subject: Path, control: Path) -> dict:
     """The environment for the control side: absolute PYTHONPATH entries inside
     the subject point at the control's copy instead (review of 8d2901be, M3)."""
@@ -445,6 +487,10 @@ def _compare(args, subject: Path, control: Path, base_sha: str, admin_out: list,
     if leaked:
         return _unreadable("control-imports-subject", "control", tail="\n".join(leaked))
     argv = [args.python, "-m", "pytest", *PYTEST_FLAGS, *args.selection]
+    exclude = Path(os.path.realpath(logs))
+    before = _tree_snapshot(subject, exclude)
+    if before is None:
+        return _unreadable("subject-snapshot-failed", "subject")
     results: dict[str, list[dict[str, str]]] = {"subject": [], "control": []}
     for index in range(1, args.repeat + 1):
         where = f"{index}/{args.repeat}"
@@ -467,6 +513,14 @@ def _compare(args, subject: Path, control: Path, base_sha: str, admin_out: list,
             results[side].append(ids)
             print(f"RUN: side={side} run={where} rc={rc} passed={summary.passed} "
                   f"failed={summary.failed} errors={summary.errors} log={log}")
+            if side == "subject":  # M:FD-SNAP-SIDE
+                after = _tree_snapshot(subject, exclude)
+                if after is None:
+                    return _unreadable("subject-snapshot-failed", side, where)
+                changed = _changed_paths(before, after)
+                if changed:  # M:FD-SNAP-CHANGED
+                    return _unreadable("subject-changed", side, where,
+                                       tail="\n".join(f"changed: {rel}" for rel in changed[:15]))
     return classify(results["subject"], results["control"], args.repeat)
 
 
