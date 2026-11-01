@@ -1,0 +1,57 @@
+{
+  "_why": "Row 2729 interpreter half: GREEN's `--check-anchors` line is emitted with an interpreter the Phase-5 gate admits, not the pytest-capable `--python` the gate may refuse. Each mutant restores the refused command, keeps an interpreter the gate refuses, or substitutes one that cannot run.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_assemble_tdd.py", "-q", "-k", "anchor"],
+  "target_command": ["python3.11", "-m", "pytest", "tests/test_h_mad_assemble_tdd.py", "-q"],
+  "mutations": [
+    {
+      "name": "A1: CALL SITE USES --python. The pre-fix prompt: the gate refuses the anchor check under /opt/anaconda3.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "f\"`{anchor_check_python(python, project_root)} {harness} --check-anchors",
+      "replace": "f\"`{python} {harness} --check-anchors",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_anchor_check_skips_a_candidate_that_does_not_run"
+    },
+    {
+      "name": "A2: ALWAYS KEEP. Every --python is treated as trusted, so an untrusted one is never substituted.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if Path(python).parent in STATIC_TRUSTED_BIN_DIRS:  # M:AT-ANCHOR-KEEP",
+      "replace": "    if True:  # M:AT-ANCHOR-KEEP",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_anchor_check_skips_a_candidate_that_does_not_run"
+    },
+    {
+      "name": "A3: NEVER KEEP. A trusted --python is swapped for another, so prompts stop being byte-identical.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if Path(python).parent in STATIC_TRUSTED_BIN_DIRS:  # M:AT-ANCHOR-KEEP",
+      "replace": "    if False:  # M:AT-ANCHOR-KEEP",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_anchor_check_keeps_a_trusted_python_verbatim"
+    },
+    {
+      "name": "A4: VENV DROPPED. A project .venv interpreter the gate admits is replaced by a system one.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if _contained_venv_executable(python, project_root, None) is not None:  # M:AT-ANCHOR-VENV",
+      "replace": "    if False:  # M:AT-ANCHOR-VENV",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_anchor_check_keeps_a_venv_contained_in_the_project"
+    },
+    {
+      "name": "A5: NAME-ONLY VENV. Any `.venv/bin/python` is kept, including one outside the root that the gate refuses.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if _contained_venv_executable(python, project_root, None) is not None:  # M:AT-ANCHOR-VENV",
+      "replace": "    if Path(python).parent.parent.name == \".venv\":  # M:AT-ANCHOR-VENV",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_anchor_check_substitutes_a_venv_outside_the_project"
+    },
+    {
+      "name": "A6: UNPROBED CANDIDATE. The first candidate is taken unrun, so GREEN is told to run an absent interpreter or an install-prompt stub.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if _interpreter_runs(candidate):  # M:AT-ANCHOR-TRUSTED",
+      "replace": "        if True:  # M:AT-ANCHOR-TRUSTED",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_anchor_check_skips_a_candidate_that_does_not_run"
+    },
+    {
+      "name": "A7: NO FALLBACK. With nothing runnable, a missing candidate is emitted instead of --python.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            return candidate\n    return python\n",
+      "replace": "            return candidate\n    return ANCHOR_CHECK_PYTHONS[0]\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_anchor_check_keeps_python_when_no_candidate_runs"
+    }
+  ]
+}

@@ -1070,6 +1070,133 @@ def test_cli_mutation_spec_reaches_the_green_prompt(plan: Path, tmp_path: Path) 
     assert str(spec) in text and "--check-anchors" in text, "the CLI flag never reached the prompt"
 
 
+def _anchor_argv(text: str) -> list[str]:
+    import re
+    import shlex
+    match = re.search(r"`([^`]*--check-anchors[^`]*)`", text)
+    assert match, "no anchor-check command in the prompt"
+    return shlex.split(match.group(1))
+
+
+def _fake_python(path: Path, exit_code: int = 0) -> str:
+    """An executable that answers `-c pass` with `exit_code` (1 = an install-prompt stub)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"#!/bin/sh\nexit {exit_code}\n", encoding="utf-8")
+    path.chmod(0o755)
+    return str(path)
+
+
+def _green_anchor(plan: Path, root: Path, python: str) -> tuple[str, list[str]]:
+    text, _ = call(plan, root, phase="green", python=python,
+                   mutation_spec=str(root / "specs" / "feat.json"))
+    return text, _anchor_argv(text)
+
+
+@pytest.fixture
+def no_pytest_probe(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    """The fakes cannot import pytest; the assembler's pytest check is not under test here."""
+    monkeypatch.setattr("h_mad_assemble_tdd.interpreter_has_pytest", lambda python: True)
+    return monkeypatch
+
+
+def test_anchor_check_runs_under_an_interpreter_the_phase5_gate_admits(
+    plan: Path, tmp_path: Path, no_pytest_probe: pytest.MonkeyPatch
+) -> None:
+    """Row 2729 interpreter half: `--python` is the pytest-capable interpreter, and
+    the gate refuses one outside its trusted dirs, so every GREEN's anchor check was
+    rejected. The check needs no pytest; it must be emitted with a trusted one.
+    Uses this host's real candidates and the real gate predicate."""
+    import h_mad_assemble_tdd as at
+    from h_mad_target_identity import _safe_argv
+    if not any(at._interpreter_runs(c) for c in at.ANCHOR_CHECK_PYTHONS):
+        pytest.skip("no runnable python3 in any trusted dir on this host")
+    untrusted = _fake_python(tmp_path / "anaconda3" / "bin" / "python3")
+    text, argv = _green_anchor(plan, tmp_path, untrusted)
+    assert argv[0] in at.ANCHOR_CHECK_PYTHONS
+    assert _safe_argv(argv, tmp_path, None), f"gate refuses {argv}"
+    assert f"`{untrusted} -m pytest" in text, "the pytest run line keeps --python"
+
+
+def test_anchor_check_keeps_a_trusted_python_verbatim(
+    plan: Path, tmp_path: Path, no_pytest_probe: pytest.MonkeyPatch
+) -> None:
+    """A `--python` the gate already trusts is not substituted: prompts stay byte-identical.
+    The only candidate is a different, runnable one, so a dropped keep is visible."""
+    other = _fake_python(tmp_path / "other" / "python3")
+    no_pytest_probe.setattr("h_mad_assemble_tdd.ANCHOR_CHECK_PYTHONS", (other,))
+    _, argv = _green_anchor(plan, tmp_path, "/usr/bin/python3")
+    assert argv[0] == "/usr/bin/python3"
+
+
+def test_anchor_check_skips_a_candidate_that_does_not_run(
+    plan: Path, tmp_path: Path, no_pytest_probe: pytest.MonkeyPatch
+) -> None:
+    """An absent candidate, or a stub that exits non-zero (`/usr/bin/python3` without
+    Command Line Tools), would hand GREEN a command that fails instead of checking."""
+    missing = str(tmp_path / "missing" / "python3")
+    stub = _fake_python(tmp_path / "stub" / "python3", exit_code=1)
+    good = _fake_python(tmp_path / "good" / "python3")
+    no_pytest_probe.setattr("h_mad_assemble_tdd.ANCHOR_CHECK_PYTHONS", (missing, stub, good))
+    _, argv = _green_anchor(plan, tmp_path, _fake_python(tmp_path / "anaconda3" / "bin" / "python3"))
+    assert argv[0] == good
+
+
+def test_anchor_check_keeps_python_when_no_candidate_runs(
+    plan: Path, tmp_path: Path, no_pytest_probe: pytest.MonkeyPatch
+) -> None:
+    """Nothing trusted runs here: keep `--python` rather than point at something absent."""
+    no_pytest_probe.setattr("h_mad_assemble_tdd.ANCHOR_CHECK_PYTHONS",
+                            (str(tmp_path / "missing" / "python3"),))
+    untrusted = _fake_python(tmp_path / "anaconda3" / "bin" / "python3")
+    _, argv = _green_anchor(plan, tmp_path, untrusted)
+    assert argv[0] == untrusted
+
+
+def _venv_python(base: Path) -> str:
+    python = _fake_python(base / ".venv" / "bin" / "python")
+    (base / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+    return python
+
+
+def test_anchor_check_keeps_a_venv_contained_in_the_project(
+    plan: Path, tmp_path: Path, no_pytest_probe: pytest.MonkeyPatch
+) -> None:
+    """The gate admits a venv contained in the project, so it is not substituted."""
+    other = _fake_python(tmp_path / "other" / "python3")
+    no_pytest_probe.setattr("h_mad_assemble_tdd.ANCHOR_CHECK_PYTHONS", (other,))
+    venv = _venv_python(tmp_path)
+    _, argv = _green_anchor(plan, tmp_path, venv)
+    assert argv[0] == venv
+
+
+def test_anchor_check_substitutes_a_venv_outside_the_project(
+    plan: Path, tmp_path: Path, tmp_path_factory: pytest.TempPathFactory,
+    no_pytest_probe: pytest.MonkeyPatch,
+) -> None:
+    """The gate refuses a venv outside the root, so it must be substituted like any
+    untrusted interpreter; a name-only `.venv/bin` check would keep it."""
+    other = _fake_python(tmp_path / "other" / "python3")
+    no_pytest_probe.setattr("h_mad_assemble_tdd.ANCHOR_CHECK_PYTHONS", (other,))
+    outside = _venv_python(tmp_path_factory.mktemp("elsewhere"))
+    _, argv = _green_anchor(plan, tmp_path, outside)
+    assert argv[0] == other
+
+
+def test_the_anchor_check_runs_under_every_runnable_substitute() -> None:
+    """The oldest substitute is `/usr/bin/python3` 3.9: a harness edit that needs a
+    newer Python would break GREEN's anchor check while this suite, on 3.14, stays green."""
+    import h_mad_assemble_tdd as at
+    harness = SCRIPTS / "h_mad_mutation_harness.py"
+    spec = SKILL_DIR / "tests" / "mutation-specs" / "anchor_check_python.json"
+    runnable = [c for c in at.ANCHOR_CHECK_PYTHONS if at._interpreter_runs(c)]
+    if not runnable:
+        pytest.skip("no runnable python3 in any trusted dir on this host")
+    for candidate in runnable:
+        proc = subprocess.run([candidate, str(harness), "--check-anchors", str(spec)],
+                              capture_output=True, text=True, timeout=120)
+        assert "ANCHORS_OK" in proc.stdout, (candidate, proc.stdout[-500:], proc.stderr[-500:])
+
+
 def test_a_task_that_quotes_a_slot_token_reaches_the_prompt_verbatim(tmp_path: Path) -> None:
     """Slot filling ran one `.replace` at a time AFTER the task text was inserted, so a
     task quoting `<REPORT_FILE_PATH>` was rewritten, and one naming `<INLINE_X>` halted

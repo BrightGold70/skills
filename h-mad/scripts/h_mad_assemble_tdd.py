@@ -69,6 +69,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # disagreeing verdicts on the same file (#39).
 from h_mad_wire_pin_gate import _TASK_RE, _parse_tasks  # noqa: E402
 from h_mad_assemble_audit import fill_slots, stamp_assembled  # noqa: E402
+from h_mad_target_identity import (  # noqa: E402
+    STATIC_TRUSTED_BIN_DIRS,
+    _contained_venv_executable,
+)
 
 TOKEN = "ASSEMBLE-TDD"
 TEMPLATE = SKILL_DIR / "references" / "codex-implementer-prompt.md"
@@ -380,6 +384,47 @@ def find_interpreters_with_pytest() -> list[str]:
     return found
 
 
+# Derived from the gate's own set, so a candidate can never sit in a dir the gate
+# stopped trusting. The order decides what GREEN runs: Homebrew first, because on
+# a Mac without Command Line Tools `/usr/bin/python3` is the xcode-select stub.
+ANCHOR_CHECK_PYTHONS = tuple(
+    str(directory / "python3")
+    for directory in sorted(
+        STATIC_TRUSTED_BIN_DIRS, key=lambda d: (d != Path("/opt/homebrew/bin"), str(d))
+    )
+)
+
+
+def _interpreter_runs(python: str) -> bool:
+    """It exists AND runs: an executable stub that only prompts an install does not."""
+    try:
+        return subprocess.run(
+            [python, "-c", "pass"], capture_output=True, timeout=30
+        ).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def anchor_check_python(python: str, project_root: Path) -> str:
+    """The interpreter GREEN runs `--check-anchors` under: one the Phase-5 gate admits.
+
+    `--python` must import pytest, so it is often outside the gate's trusted dirs
+    (`/opt/anaconda3/bin/python3`), and the gate then refused every GREEN's anchor
+    check (row 2729). The check needs no pytest, so a trusted `python3` serves.
+    A `--python` already in a trusted dir, or a venv the gate itself judges
+    contained in the project, is kept verbatim. With no runnable trusted candidate
+    `--python` is kept: the check may be refused, as before, never mis-pointed.
+    """
+    if Path(python).parent in STATIC_TRUSTED_BIN_DIRS:  # M:AT-ANCHOR-KEEP
+        return python
+    if _contained_venv_executable(python, project_root, None) is not None:  # M:AT-ANCHOR-VENV
+        return python
+    for candidate in ANCHOR_CHECK_PYTHONS:
+        if _interpreter_runs(candidate):  # M:AT-ANCHOR-TRUSTED
+            return candidate
+    return python
+
+
 # `<path>::<test>`, optionally parametrised; no whitespace anywhere.
 ENV_NODE = re.compile(r"^[^\s:]+(?:::[^\s:]+)+(?:\[[^\s\]]*\])?$")
 
@@ -654,7 +699,7 @@ def assemble(
             harness = SKILL_DIR / "scripts" / "h_mad_mutation_harness.py"
             lines.append(
                 f"**Mutation rows (5e):** append {rows} to `{mutation_spec}`. Then run "
-                f"`{python} {harness} --check-anchors {mutation_spec}` and quote its "
+                f"`{anchor_check_python(python, project_root)} {harness} --check-anchors {mutation_spec}` and quote its "
                 "last line. Do not run the harness without `--check-anchors`; the "
                 "orchestrator scores the rows.")
         else:

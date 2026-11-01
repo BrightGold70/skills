@@ -269,11 +269,17 @@ TEMP_OUTPUT_OPTIONS = {"--log", "--out", "--prompt", "--report-file"}
 # unrelated to the feature (a manuscript run). Codex may not write this file
 # while step5 is active, or a worker could grant itself any command.
 SHELL_ALLOW_FILE = ".h-mad/phase5-shell-allow"
-TRUSTED_BIN_DIRS = {
+# The dirs trusted in EVERY process. The gate also trusts its own interpreter's
+# dir, which only the hook process knows, so a caller predicting what the gate
+# admits (the TDD assembler, row 2729) must use this set, not TRUSTED_BIN_DIRS.
+STATIC_TRUSTED_BIN_DIRS = frozenset({
     Path("/bin"),
     Path("/usr/bin"),
     Path("/usr/local/bin"),
     Path("/opt/homebrew/bin"),
+})
+TRUSTED_BIN_DIRS = {
+    *STATIC_TRUSTED_BIN_DIRS,
     Path(sys.executable).resolve().parent,
 }
 MALFORMED_WORKDIR = object()  # a workdir codex sent that is not a string
