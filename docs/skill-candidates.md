@@ -2896,3 +2896,7 @@ One threshold changed: `vendored-plugin patch kit` waited on a third vendored pa
 
 ## 2026-11-01 — triage-closed-codex-unwedged — no candidates
 
+
+## 2026-11-01 — backlog-open-rows-to-three (scout)
+
+- **failure-diff cannot see the subject tree change mid-run**: `h_mad_failure_diff.py run` reads the subject tree once (`SUBJECT: … dirty=N`, `:435`) and never again, so an edit made while the subject's pytest is running is measured as part of the subject. On 2026-11-01 I appended 8 red tests to `test_h_mad_wire_pin_gate.py` during a run and reverted them a minute later; nothing in the verdict could show whether the run had collected them. Fix direction: hash `git diff HEAD` plus untracked files before and after each subject run, and end `FAILDIFF: UNREADABLE reason=subject-changed` when they differ — remedy: existing-tool-repair — recurrence: 1 — candidate: yes
