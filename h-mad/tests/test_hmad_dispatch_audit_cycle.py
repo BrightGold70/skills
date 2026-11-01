@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -17,6 +18,9 @@ AUDIT_CYCLE_HELPER = SKILL / "scripts" / "h_mad_audit_cycle.py"
 SPEC_DIR = SKILL / "tests" / "specs"
 GATING_MUTATION_SPEC = SPEC_DIR / "audit_cycle_gating.mutation.json"
 CONNECTIONS_MUTATION_SPEC = SPEC_DIR / "audit_cycle_connections.mutation.json"
+# The shims exec the interpreter running this suite: a hardcoded host path
+# (once /opt/anaconda3/bin/python3.11) fails as `bad interpreter` elsewhere.
+REAL_PYTHON = sys.executable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_hmad_dispatch import _bindir, run  # noqa: E402
 
@@ -313,7 +317,7 @@ def traced_bindir(tmp_path, trace):
         (b / "jq").unlink(missing_ok=True)
         (b / "jq").symlink_to(jq)
 
-    real_python = "/opt/anaconda3/bin/python3.11"
+    real_python = REAL_PYTHON
     (b / "python3").write_text(
         textwrap.dedent(
             f"""\
@@ -576,7 +580,7 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
             source "$lib"
 
             _cmd_exec() {
-              /opt/anaconda3/bin/python3.11 - "$trace" cmd_exec_start "$@" <<'PY'
+              @REAL_PYTHON@ - "$trace" cmd_exec_start "$@" <<'PY'
             import json, fcntl, sys, time
             from pathlib import Path
             trace = Path(sys.argv[1])
@@ -600,7 +604,7 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
             PY
               local expected="${HMAD_CMD_EXEC_SYNC_STARTS:-0}"
               if [ "$expected" -gt 0 ]; then
-                /opt/anaconda3/bin/python3.11 - "$trace" "$expected" <<'PY'
+                @REAL_PYTHON@ - "$trace" "$expected" <<'PY'
             import json, sys, time
             from pathlib import Path
             trace = Path(sys.argv[1])
@@ -618,7 +622,7 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
                 time.sleep(0.01)
             PY
               fi
-              /opt/anaconda3/bin/python3.11 - "$trace" cmd_exec_exit "${HMAD_STUB_AGY_RC:-0}" "$@" <<'PY'
+              @REAL_PYTHON@ - "$trace" cmd_exec_exit "${HMAD_STUB_AGY_RC:-0}" "$@" <<'PY'
             import json, fcntl, os, sys
             from pathlib import Path
             trace = Path(sys.argv[1])
@@ -658,7 +662,7 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
 
             _cmd_audit_cycle "$@"
             """
-        ),
+        ).replace("@REAL_PYTHON@", shlex.quote(REAL_PYTHON)),
         encoding="utf-8",
     )
     harness.chmod(harness.stat().st_mode | stat.S_IXUSR)
@@ -722,7 +726,7 @@ def run_main_with_fallthrough_marker(tmp_path, args, *, env=None):
             source "$lib"
 
             _cmd_exec() {
-              /opt/anaconda3/bin/python3.11 - "$trace" cmd_exec_start "$@" <<'PY'
+              @REAL_PYTHON@ - "$trace" cmd_exec_start "$@" <<'PY'
             import json, fcntl, sys
             from pathlib import Path
             trace = Path(sys.argv[1])
@@ -755,7 +759,7 @@ def run_main_with_fallthrough_marker(tmp_path, args, *, env=None):
             main "$@"
             printf 'fell through\\n' > "$marker"
             """
-        ),
+        ).replace("@REAL_PYTHON@", shlex.quote(REAL_PYTHON)),
         encoding="utf-8",
     )
     harness.chmod(harness.stat().st_mode | stat.S_IXUSR)
@@ -1413,6 +1417,8 @@ def _script_dir_with_stub_assemble_and_real_cycle(tmp_path):
         "h_mad_report_wait.py",
         "h_mad_extract_report.py",
         "h_mad_audit_gate.py",
+        # Loaded by the gate as its file-path sibling (`_load_test_boundaries_checker`).
+        "h_mad_test_boundaries_check.py",
     ):
         (script_dir / name).symlink_to(WRAPPER.parent / name)
     return script_dir

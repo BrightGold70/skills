@@ -12,6 +12,8 @@ import pytest
 from grokfixtures import STUBS, f0_text
 from test_hmad_dispatch import _bindir, run
 from test_hmad_dispatch_exec_grok import HOSTILE_PROMPT
+from test_h_mad_test_boundaries_check import _spec as boundaries_spec
+from test_h_mad_test_boundaries_check import _table as boundaries_table
 from test_hmad_dispatch_audit_cycle import (
     _audit_response,
     _dispatch_artifacts_by_pass,
@@ -91,6 +93,14 @@ def test_three_surfaces_print_no_repeated_warning(tmp_path):
 def _real_cycle_stamps(tmp_path, surfaces, passes):
     feature = "gas-fx"
     root = project_with_docs(tmp_path, feature=feature)
+    # The real gate also checks the design's Test Boundaries (9c6d5474), and a
+    # design without them FAILs every pass, so nothing would be stamped. Give the
+    # design a passing section and the spec the AC it covers.
+    design = root / "docs" / "02-design" / "features" / f"{feature}.design.md"
+    spec = root / "docs" / "01-plan" / "features" / f"{feature}.spec.md"
+    design.write_text(design.read_text(encoding="utf-8")
+                      + "\n## Test Boundaries\n\n" + boundaries_table(), encoding="utf-8")
+    spec.write_text(spec.read_text(encoding="utf-8") + "\n" + boundaries_spec(), encoding="utf-8")
     script_dir = _script_dir_with_stub_assemble_and_real_cycle(tmp_path)
     # run_audit_cycle installs its own agy-only bin, so supply a separate bin
     # with every requested surface and jq through its supported _BINDIR override.
