@@ -101,8 +101,12 @@ def test_no_surface_still_claims_the_exec_path_is_uncapped() -> None:
 
 def test_skill_has_no_bare_heading_stub() -> None:
     """A lone `#` line arrived with commit bea1b60 and sat between two sections for weeks."""
-    lines = doc_text(SKILL).splitlines()
-    assert "#" not in lines, [i + 1 for i, l in enumerate(lines) if l == "#"]
+    # The LOADED files, read raw: SKILL.md plus each split reference. Not
+    # skill_text(), whose reconstruction drops the stubs and renumbers lines.
+    from skill_corpus import SPLIT_REFERENCES
+    for path in [SKILL, *(SKILL_DIR / rel for rel in SPLIT_REFERENCES if (SKILL_DIR / rel).is_file())]:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        assert "#" not in lines, (path.name, [i + 1 for i, l in enumerate(lines) if l == "#"])
 
 
 # --- the authors' report body has no file deliverable (taken-over brief, 2026-09-07) ---

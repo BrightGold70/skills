@@ -26,6 +26,16 @@ BUDGET_BYTES = 260 * 1024
 # The largest stub is ~1.5 KB. A pasted-back section is tens of KB.
 STUB_MAX_BYTES = 4 * 1024
 
+# Each stub must say WHEN its reference is read, in words that cover every step needing
+# it. A bare "before" passed a trigger that fired only on a run's first audit, so a
+# session resuming mid-audit was never sent to the rules for judging a cycle.
+TRIGGERS = {
+    "references/phase5-substeps.md": ("at Phase 5 start", "before a session's first audit dispatch"),
+    "references/teammate-authors.md": ("before the first author dispatch", "before any re-dispatch after an audit"),
+    "references/audit-prompt-assembly.md": ("before every audit cycle in a session that has not yet read it",
+                                            "before any implementer dispatch"),
+}
+
 MARKER = re.compile(r'^<!-- h-mad split body: SKILL\.md §"(?P<heading>[^"\n]+)" -->$', re.M)
 
 
@@ -66,7 +76,9 @@ def test_each_stub_names_its_reference_and_stays_a_pointer(ref: str) -> None:
     heading = _heading_of(ref)
     stub = _stub(skill, heading)
     assert f"]({ref})" in stub, f"the {heading!r} stub must link {ref}"
-    assert re.search(r"\bbefore\b", stub, re.I), f"the {heading!r} stub must say when to read it"
+    flat = " ".join(stub.split())
+    for phrase in TRIGGERS[ref]:
+        assert phrase in flat, f"the {heading!r} stub must say when to read it: {phrase!r}"
     size = len(stub.encode("utf-8"))
     assert size <= STUB_MAX_BYTES, (
         f"the {heading!r} stub is {size:,} bytes; its text belongs in {ref}, not SKILL.md"
@@ -80,6 +92,9 @@ def test_every_moved_subheading_resolves_from_skill_md(ref: str) -> None:
     body = (SKILL_DIR / ref).read_text(encoding="utf-8")
     missing = [h for h in _subheadings(body) if f'§"{h}"' not in stub]
     assert not missing, f"moved subheadings not listed in the stub: {missing}"
+    anchors = re.findall(r'^- §"(.+)" \(paragraph\)$', stub, re.M)
+    stale = [a for a in anchors if f"**{a}" not in body]
+    assert not stale, f"paragraph anchors listed in the stub but not bold leads in {ref}: {stale}"
 
 
 def test_skill_text_restores_each_section_in_place_of_its_stub() -> None:
@@ -104,3 +119,23 @@ def test_skill_text_is_identity_when_nothing_is_split(tmp_path: Path) -> None:
     text = "## A\n\nbody\n\n## B\n"
     (tmp_path / "SKILL.md").write_text(text, encoding="utf-8")
     assert skill_text(tmp_path) == text
+
+
+def test_skill_text_refuses_a_split_reference_that_lost_its_link(tmp_path: Path) -> None:
+    refs = tmp_path / "references"
+    refs.mkdir()
+    (refs / "phase5-substeps.md").write_text(
+        '# t\n\n## A\n\n<!-- h-mad split body: SKILL.md §"A" -->\nbody\n', encoding="utf-8")
+    (tmp_path / "SKILL.md").write_text("## A\n\nRead the Phase 5 reference.\n\n## B\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="no longer links it"):
+        skill_text(tmp_path)
+
+
+def test_skill_text_refuses_a_marker_reference_it_does_not_list(tmp_path: Path) -> None:
+    refs = tmp_path / "references"
+    refs.mkdir()
+    (refs / "later-slice.md").write_text(
+        '# t\n\n## Z\n\n<!-- h-mad split body: SKILL.md §"Z" -->\nbody\n', encoding="utf-8")
+    (tmp_path / "SKILL.md").write_text("## A\n\nbody\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="does not list"):
+        skill_text(tmp_path)

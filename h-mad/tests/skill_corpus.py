@@ -15,8 +15,10 @@ changed every one of those.
 What this reconstruction does NOT read is the stub's own wording. Pins on the
 stubs belong in `test_h_mad_skill_budget.py`, which reads SKILL.md directly.
 
-Failure is loud. A stub that links a split reference which is missing, has no
-marker, or names a different heading raises. A pin must never pass because the
+Failure is loud, in both directions. A stub that links a split reference which
+is missing, has no marker, or names a different heading raises; so does a split
+reference that exists but is no longer linked, and a file under `references/`
+carrying the marker that `SPLIT_REFERENCES` does not list. A pin must never pass because the
 text it guards silently stopped being read.
 
 Before the split lands, SKILL.md links no split reference and `skill_text()`
@@ -69,9 +71,21 @@ def skill_text(skill_dir: Path = SKILL_DIR) -> str:
     """SKILL.md with every split section's body restored in place of its stub."""
     skill_dir = Path(skill_dir)
     text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    unlisted = sorted(
+        f"references/{p.name}" for p in (skill_dir / "references").glob("*.md")
+        if f"references/{p.name}" not in SPLIT_REFERENCES
+        and _MARKER.search(p.read_text(encoding="utf-8", errors="replace"))
+    ) if (skill_dir / "references").is_dir() else []
+    if unlisted:
+        raise ValueError(f"split-body marker in {unlisted}, which SPLIT_REFERENCES does not "
+                         "list: add it there, or nothing restores or checks it")
     for rel in SPLIT_REFERENCES:
-        if rel not in text:
-            continue
+        linked, exists = rel in text, (skill_dir / rel).is_file()
+        if not linked and not exists:
+            continue  # this section was never split
+        if exists and not linked:
+            raise ValueError(f"{rel} exists but SKILL.md no longer links it: its stub lost "
+                             "the pointer, and its text would silently stop being read")
         heading, body = _split_body(skill_dir / rel)
         head_line = f"## {heading}\n"
         starts = [m.start() for m in re.finditer(re.escape(head_line), text)

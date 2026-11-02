@@ -367,7 +367,7 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
 
 ## Phase 5 (Implementation) sub-steps
 
-**Read [references/phase5-substeps.md](references/phase5-substeps.md) in full at Phase 5 start, before the substrate preflight and before step 5a.** It holds every Phase 5 sub-step (5a–5f), the codex-authorship enforcement, and how 5d/5e are dispatched, watched and made visible. Nothing in Phase 5 may run from memory of it.
+**Read [references/phase5-substeps.md](references/phase5-substeps.md) in full at Phase 5 start, before the substrate preflight and before step 5a.** It holds every Phase 5 sub-step (5a–5f), the codex-authorship enforcement, and how 5d/5e are dispatched, watched and made visible. Nothing in Phase 5 may run from memory of it. **Its opening part — everything above `### Codex authors Phase 5` (substrate preflight, dispatch enforcement, pinning the agents, handle liveness) — and its §"Dispatch channels and their guarantees" also govern audit dispatches: read those two parts before a session's first audit dispatch, even before Phase 5.**
 
 A cross-reference `SKILL.md §"…"` to any of these now resolves in `references/phase5-substeps.md`:
 
@@ -378,6 +378,8 @@ A cross-reference `SKILL.md §"…"` to any of these now resolves in `references
 - §"Dispatch channels and their guarantees"
 - §"Exception — `exec agy` on an audit phase: fill the report-file slot" (paragraph)
 - §"A missing report on the `exec` path" (paragraph)
+- §"Pin the agents once (Orca) — do it while identity is known" (paragraph)
+- §"Give every dispatch its own `--out`" (paragraph)
 
 ## Phase 5 parallel fanout (Orca only)
 
@@ -680,6 +682,7 @@ A cross-reference `SKILL.md §"…"` to any of these now resolves in `references
 - §"The measurement layer lives in probes, not in the phase document"
 - §"Precheck before you dispatch — never spend a cycle on a greppable premise"
 - §"Why the ack match is not fuzzy"
+- §"Author dispatch rules the ORCHESTRATOR owns" (paragraph)
 
 ## Finding class — build vs measurement
 
@@ -1500,7 +1503,7 @@ the store accumulated five spellings of "merge sha".
 
 ## Audit prompt assembly
 
-**Read [references/audit-prompt-assembly.md](references/audit-prompt-assembly.md) in full before assembling or dispatching the run's FIRST audit prompt (Phase 2 onward) and before any implementer dispatch.** It holds the substrate preflight for an audit that precedes Phase 5, the dispatch-time pin re-verification, and every step of building, sending and gating an audit prompt.
+**Read [references/audit-prompt-assembly.md](references/audit-prompt-assembly.md) in full before every audit cycle in a session that has not yet read it — the run's first audit (Phase 3 onward), and any audit after a resume or a new session — and before any implementer dispatch.** It holds the substrate preflight for an audit that precedes Phase 5, the dispatch-time pin re-verification, every step of building, sending and gating an audit prompt, and the rules for judging a cycle (the `Effort:` block before trusting a clean pass, and the working-tree check after every audit dispatch).
 
 ## Putting `hmad-dispatch` on PATH
 
