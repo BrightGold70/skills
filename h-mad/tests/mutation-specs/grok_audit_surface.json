@@ -2159,7 +2159,7 @@
       "file": "scripts/hmad-dispatch.sh",
       "find": "        git_stdout=\"$(LC_ALL=C env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$cd_dir\" rev-parse --show-toplevel 2>&3)\" || git_status=$?  # M:GROK-TMP-ENV",
       "replace": "        git_stdout=\"$(LC_ALL=C env -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git -C \"$cd_dir\" rev-parse --show-toplevel 2>&3)\" || git_status=$?  # M:GROK-TMP-ENV",
-      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_ignores_an_ambient_git_dir"
+      "test": "tests/test_grok_audit_surface_wrapper.py::test_exec_grok_export_root_ignores_an_ambient_git_dir"
     },
     {
       "name": "grok-tmp-ignored-env-ambient",

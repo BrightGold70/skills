@@ -698,6 +698,40 @@ def test_exec_grok_ignores_an_ambient_git_dir(tmp_path, monkeypatch):
     assert not (ambient / ".h-mad").exists(), "ambient GIT_DIR must receive no staging artifacts"
 
 
+def test_exec_grok_export_root_ignores_an_ambient_git_dir(tmp_path, monkeypatch):
+    # Inside a work tree, an unscrubbed top-level lookup is masked: the diverted
+    # top level differs from --cd, so the nested-cd branch re-bases staging on
+    # --cd and its own scrubbed check-ignore passes (row 2936). Only an export
+    # root exposes it — the scrubbed lookup fails "not a git repository", while
+    # an ambient GIT_DIR with core.worktree makes it succeed.
+    case = _staging_case(tmp_path, monkeypatch)
+    ambient = tmp_path / "ambient repository [*] 'quoted'"
+    ambient.mkdir()
+    init = _staging_git(ambient, "init")
+    assert init.returncode == 0, init.stderr
+    config = _staging_git(ambient, "config", "core.worktree", str(ambient))
+    assert config.returncode == 0, config.stderr
+    polluted = subprocess.run(
+        ["git", "-C", str(case["cd"]), "rev-parse", "--show-toplevel"],
+        env={**os.environ, "GIT_DIR": str(ambient / ".git")},
+        text=True, capture_output=True, timeout=10,
+    )
+    assert polluted.returncode == 0 and Path(polluted.stdout.strip()) == ambient, (
+        "positive control: ambient GIT_DIR must turn an export root into a work-tree lookup"
+    )
+    row = _staging_child(case, _run_staging(case, env={"GIT_DIR": str(ambient / ".git")}))
+    assert Path(row["prompt"]).parent == case["cd"] / ".tmp", (
+        "an export-root exec grok must stage under <cd>/.tmp/ despite an ambient GIT_DIR"
+    )
+    assert row["tmpdir"] == str(case["cd"] / ".tmp"), (
+        "ambient GIT_DIR must not divert Grok's TMPDIR from export-root staging"
+    )
+    assert not (ambient / ".h-mad").exists(), "ambient GIT_DIR must receive no staging artifacts"
+    assert not (case["cd"] / ".h-mad").exists(), (
+        "an export root must not be staged as a nested work-tree --cd"
+    )
+
+
 def test_exec_codex_stages_prompt_and_last_beside_the_log(tmp_path, monkeypatch):
     case = _staging_case(tmp_path, monkeypatch)
     row = _staging_child(case, _run_staging(case, agent="codex"))
