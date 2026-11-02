@@ -1,7 +1,7 @@
 # Plan: split h-mad/SKILL.md into core + references (row 2910, first slice)
 
-**Status:** approved by the user 2026-11-01 ("Approve as written"), after they chose the
-corpus-helper approach over "unpinned sections only" and a full /h-mad feature. Not started.
+**Status:** LANDED 2026-11-02 on main (`004b33fd` + `b06eba3e` + `de75366b`), after the user approved it
+2026-11-01 ("Approve as written"). Deviations from the steps below are listed under §"As built".
 Measured on Hawui-Macmini; implement on the Mac Studio. Re-measure first if SKILL.md has
 moved: line ranges below are as of `b5f8b7ac`.
 
@@ -83,3 +83,22 @@ handoff/SKILL.md (~34k); the other 37 sections; any rewording.
 Both prerequisite branches merged 2026-11-01 (`67b653eb`, `841a7671`), so step 5's baseline is
 main at or after `841a7671`. On Hawui-Macmini that baseline is 9 environment-only failures;
 the Studio's will differ, so compare failure IDs with `h_mad_failure_diff.py`, never counts.
+
+## As built (2026-11-02, Hawk-MacStudio)
+- **Step 1, the corpus helper, RECONSTRUCTS rather than concatenates.** Each reference keeps the original
+  `## ` heading and, below a split-body marker line, the section body verbatim. `skill_text()` puts each
+  body back in place of its stub and returns the pre-split SKILL.md byte for byte, so slice, order,
+  count and `not in` pins all measure what they did before. `doc_text(path)` routes a SKILL.md path
+  through it. The breaking set came from a trial split's failure-diff (128 tests in 36 files), not the
+  ast scan: 3 files were outside the scan's 43, and 10 of the 43 did not break.
+- **Step 2, the stubs, list every moved `###`/`####` heading and five cited bold-lead paragraphs as
+  `§"…"`.** The plan assumed cross-references cited `##` headings only; many cite `###` subsections.
+- **Step 3: 25 rows / 11 specs, as measured.** The reference keeps the `## ` heading so `symbol` pins
+  (the nearest heading) hold. ANCHORS_OK 2740/2740. 10 specs ALL_CAUGHT. `grok_audit_surface` is
+  464/465, with survivor `grok-tmp-env-ambient` identical on main (row 2936).
+- **Added:** `h_mad_doc_consumers.py` gives a marker-bearing reference its SKILL.md's consumers. It had 0,
+  and now has 89.
+- **Review fixes:** the audit stub triggers per session, not per run. The Phase 5 opening block and its
+  dispatch-channels section are read before a session's first audit dispatch. `skill_text()` fails
+  closed on an unlinked or unlisted split reference. Trigger wording is pinned by phrase.
+- **Verify:** `FAILDIFF: SAME`, 8,092 vs 8,073 passed, 0 failed on both sides. Next slices: row 2930.
