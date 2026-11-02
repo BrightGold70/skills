@@ -11,6 +11,7 @@ coverage.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -28,6 +29,10 @@ from h_mad_new_gate import Refusal, existing_tokens, scaffold  # noqa: E402
 
 def fake_skill_dir(tmp_path: Path) -> Path:
     (tmp_path / "scripts").mkdir()
+    # The generated pins read the registry through the skill's own corpus
+    # reader, which every real h-mad skill dir ships beside its gates.
+    if (SCRIPTS / "h_mad_skill_corpus.py").is_file():
+        shutil.copy2(SCRIPTS / "h_mad_skill_corpus.py", tmp_path / "scripts")
     (tmp_path / "tests" / "mutation-specs").mkdir(parents=True)
     (tmp_path / "SKILL.md").write_text("# fake skill\n", encoding="utf-8")
     return tmp_path
@@ -169,10 +174,11 @@ class TestRefusals:
 
     def test_a_refusal_exits_two_and_writes_nothing(self, tmp_path: Path) -> None:
         root = fake_skill_dir(tmp_path)
+        before = sorted(root.rglob("*"))
         proc = run_cli("--name", "Bad-Name", "--token", "X", "--skill-dir", str(root))
         assert proc.returncode == 2
         assert "SCAFFOLD: REFUSED" in proc.stdout
-        assert not list((root / "scripts").iterdir())
+        assert sorted(root.rglob("*")) == before
 
 
 class TestTokenDetection:
@@ -183,7 +189,92 @@ class TestTokenDetection:
         for token in ("GATE", "WIREPIN", "MUTATION", "PRECONDITION"):
             assert token in found, f"{token} missing from {sorted(found)[:20]}"
 
-    def test_an_unreadable_registry_yields_no_tokens_rather_than_raising(
+    def test_an_unreadable_registry_is_refused_not_read_as_empty(
         self, tmp_path: Path
     ) -> None:
-        assert existing_tokens(tmp_path / "absent.md") == set()
+        """An empty set is byte-identical to "no token is taken", so reading a
+        registry that could not be read as empty lets any token through."""
+        with pytest.raises(Refusal) as exc:
+            existing_tokens(tmp_path / "SKILL.md")
+        assert exc.value.reason == "registry_unreadable"
+
+    def test_a_broken_split_is_refused_not_read_as_empty(self, tmp_path: Path) -> None:
+        root = split_skill_dir(tmp_path, "")
+        # A reference that lost its split-body marker: skill_text raises
+        # ValueError, not OSError (a deleted reference is FileNotFoundError).
+        (root / "references" / SPLIT_REF).write_text("# no marker\n", encoding="utf-8")
+        with pytest.raises(Refusal) as exc:
+            existing_tokens(root / "SKILL.md")
+        assert exc.value.reason == "registry_unreadable"
+
+    def test_an_unreadable_registry_refuses_the_scaffold_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        root = fake_skill_dir(tmp_path)
+        (root / "SKILL.md").unlink()
+        proc = run_cli("--name", "demo_gate", "--token", "DEMOGATE", "--skill-dir", str(root))
+        assert proc.returncode == 2
+        assert "SCAFFOLD: REFUSED reason=registry_unreadable" in proc.stdout
+        assert not (root / "scripts" / "h_mad_demo_gate.py").exists()
+
+
+SPLIT_REF = "phase5-substeps.md"
+SPLIT_HEADING = "Phase 5 sub-steps"
+
+
+def split_skill_dir(tmp_path: Path, moved_body: str) -> Path:
+    """A skill dir whose registry text lives in a split reference, the shape
+    rows 2910/2930 give the real SKILL.md: a stub in SKILL.md, the verbatim
+    body behind a split-body marker in `references/`."""
+    root = fake_skill_dir(tmp_path)
+    (root / "SKILL.md").write_text(
+        f"# fake skill\n\n## {SPLIT_HEADING}\n\nMoved to `references/{SPLIT_REF}`.\n\n"
+        "## Last\n\nend\n", encoding="utf-8")
+    (root / "references").mkdir()
+    (root / "references" / SPLIT_REF).write_text(
+        f"# {SPLIT_HEADING}\n\n<!-- h-mad split body: SKILL.md §\"{SPLIT_HEADING}\" -->\n"
+        + moved_body, encoding="utf-8")
+    return root
+
+
+class TestTheRegistryIsReadWithItsSplitSectionsRestored:
+    """Rows 2910/2930 move SKILL.md sections into `references/`. The registry
+    the collision check and the generated pins read is the restored text, or a
+    token documented only in a moved section is silently free again."""
+
+    def test_a_token_documented_only_in_a_split_reference_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        root = split_skill_dir(
+            tmp_path, "- `h_mad_other.py` — CLI printing `DEMOGATE: PASS|FAIL issues=N`\n\n")
+        assert "DEMOGATE" not in (root / "SKILL.md").read_text(), (
+            "control: the token must be absent from the raw SKILL.md")
+        with pytest.raises(Refusal) as exc:
+            make(tmp_path, root=root)
+        assert exc.value.reason == "token_taken"
+
+    def test_the_real_registry_reads_as_the_restored_skill_text(self) -> None:
+        from h_mad_skill_corpus import skill_text
+        restored = skill_text(SKILL_DIR)
+        assert existing_tokens(SKILL_DIR / "SKILL.md") == existing_tokens_in(restored)
+
+    def test_the_generated_pins_read_a_registry_line_in_a_split_reference(
+        self, tmp_path: Path
+    ) -> None:
+        root = split_skill_dir(tmp_path, "")
+        proc = run_cli("--name", "demo_gate", "--token", "DEMOGATE", "--skill-dir", str(root))
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        line = next(ln for ln in proc.stdout.split("\n") if ln.startswith("- `h_mad_"))
+        with (root / "references" / SPLIT_REF).open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n\n")
+        assert "h_mad_demo_gate.py" not in (root / "SKILL.md").read_text()
+        suite = subprocess.run(
+            [sys.executable, "-m", "pytest", "tests/test_h_mad_demo_gate.py", "-q",
+             "-k", "Docs"], cwd=str(root), capture_output=True, text=True)
+        assert suite.returncode == 0, suite.stdout + suite.stderr
+        assert "3 passed" in suite.stdout, suite.stdout
+
+
+def existing_tokens_in(text: str) -> set[str]:
+    import re
+    return set(re.findall(r"`?\b([A-Z][A-Z0-9-]{2,})`?:\s*(?:[A-Z]+\|)*[A-Z]+", text))

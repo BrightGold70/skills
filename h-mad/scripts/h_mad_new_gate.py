@@ -41,6 +41,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from h_mad_skill_corpus import doc_text  # noqa: E402
+
 SKILL_DIR = Path(__file__).resolve().parent.parent
 TOKEN = "SCAFFOLD"
 SLUG = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -55,11 +58,20 @@ class Refusal(Exception):
 
 
 def existing_tokens(skill_md: Path) -> set[str]:
-    """Verdict tokens already documented in SKILL.md's helper registry."""
+    """Verdict tokens already documented in SKILL.md's helper registry.
+
+    Read with SKILL.md's split sections restored (row 2930 moves the registry
+    into `references/`): the raw file would leave a moved token free to reuse.
+    A registry that cannot be read is refused, never read as empty, because an
+    empty set is byte-identical to "no token is taken".
+    """
     try:
-        text = skill_md.read_text()
-    except OSError:
-        return set()
+        text = doc_text(skill_md)
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise Refusal(
+            "registry_unreadable",
+            f"cannot read the verdict-token registry {skill_md}: {exc}",
+        ) from exc
     return set(re.findall(r"`?\b([A-Z][A-Z0-9-]{2,})`?:\s*(?:[A-Z]+\|)*[A-Z]+", text))
 
 
@@ -163,6 +175,7 @@ SCRIPT = SCRIPTS / "h_mad_{slug}.py"
 sys.path.insert(0, str(SCRIPTS))
 
 from h_mad_{slug} import TOKEN, check, render  # noqa: E402
+from h_mad_skill_corpus import skill_text  # noqa: E402  (SKILL.md with split sections restored)
 
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -214,11 +227,11 @@ class TestDocsArePinnedBothWays:
     """Detail line in the script <=> row in SKILL.md's remedy table."""
 
     def test_the_token_is_registered(self) -> None:
-        assert "h_mad_{slug}.py" in (SKILL_DIR / "SKILL.md").read_text()
+        assert "h_mad_{slug}.py" in skill_text(SKILL_DIR)
 
     def test_every_detail_prefix_is_documented(self) -> None:
         script = SCRIPT.read_text()
-        skill = (SKILL_DIR / "SKILL.md").read_text()
+        skill = skill_text(SKILL_DIR)
         prefixes = set(re.findall(r'"([A-Z][A-Z_]+):', script))
         undocumented = sorted(p for p in prefixes if p not in skill)
         assert not undocumented, f"detail lines with no remedy row: {{undocumented}}"
@@ -226,7 +239,7 @@ class TestDocsArePinnedBothWays:
     def test_every_documented_prefix_still_exists(self) -> None:
         """The other direction: a remedy row for a line the gate cannot print."""
         script = SCRIPT.read_text()
-        skill = (SKILL_DIR / "SKILL.md").read_text()
+        skill = skill_text(SKILL_DIR)
         entry = next((ln for ln in skill.split("\\n") if "h_mad_{slug}.py" in ln), "")
         documented = set(re.findall(r"`([A-Z][A-Z_]+):`", entry))
         stale = sorted(d for d in documented if f'"{{d}}:' not in script)

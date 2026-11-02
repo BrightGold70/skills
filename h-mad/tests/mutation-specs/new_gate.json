@@ -78,6 +78,38 @@
    "find": "    return set(re.findall(r\"`?\\b([A-Z][A-Z0-9-]{2,})`?:\\s*(?:[A-Z]+\\|)*[A-Z]+\", text))",
    "replace": "    return set()",
    "test": "tests/test_h_mad_new_gate.py::TestTokenDetection::test_it_finds_the_tokens_already_in_the_real_registry"
-  }
+  },
+ {
+  "name": "registry-read-raw",
+  "_mechanism": "Row 2930: read the token registry without restoring SKILL.md's split sections, so a token documented only in a moved section (the helper registry) is free to reuse.",
+  "file": "scripts/h_mad_new_gate.py",
+  "find": "        text = doc_text(skill_md)",
+  "replace": "        text = skill_md.read_text()",
+  "test": "tests/test_h_mad_new_gate.py::TestTheRegistryIsReadWithItsSplitSectionsRestored::test_a_token_documented_only_in_a_split_reference_is_refused"
+ },
+ {
+  "name": "registry-unreadable-reads-empty",
+  "_mechanism": "Fail open: a registry that cannot be read becomes an empty set, byte-identical to 'no token is taken'.",
+  "file": "scripts/h_mad_new_gate.py",
+  "find": "    except (OSError, UnicodeDecodeError, ValueError) as exc:\n        raise Refusal(",
+  "replace": "    except (OSError, UnicodeDecodeError, ValueError) as exc:\n        return set()\n        raise Refusal(",
+  "test": "tests/test_h_mad_new_gate.py::TestTokenDetection::test_an_unreadable_registry_is_refused_not_read_as_empty"
+ },
+ {
+  "name": "registry-broken-split-reads-empty",
+  "_mechanism": "A split whose reference vanished raises ValueError in skill_text; catching only OSError lets it escape as a traceback instead of a refusal.",
+  "file": "scripts/h_mad_new_gate.py",
+  "find": "    except (OSError, UnicodeDecodeError, ValueError) as exc:\n        raise Refusal(",
+  "replace": "    except (OSError, UnicodeDecodeError) as exc:\n        raise Refusal(",
+  "test": "tests/test_h_mad_new_gate.py::TestTokenDetection::test_a_broken_split_is_refused_not_read_as_empty"
+ },
+ {
+  "name": "generated-pin-reads-raw-skill",
+  "_mechanism": "The generated registration pin reads raw SKILL.md, so a gate registered in a split reference fails its own suite (or, inverted, a stale raw copy passes it).",
+  "file": "scripts/h_mad_new_gate.py",
+  "find": "        assert \"h_mad_{slug}.py\" in skill_text(SKILL_DIR)",
+  "replace": "        assert \"h_mad_{slug}.py\" in (SKILL_DIR / \"SKILL.md\").read_text()",
+  "test": "tests/test_h_mad_new_gate.py::TestTheRegistryIsReadWithItsSplitSectionsRestored::test_the_generated_pins_read_a_registry_line_in_a_split_reference"
+ }
  ]
 }
