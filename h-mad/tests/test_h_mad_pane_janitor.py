@@ -25,6 +25,7 @@ import pytest
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 SKILL_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
+from skill_corpus import doc_text  # noqa: E402  (SKILL.md with split sections restored)
 
 SCRIPT = SCRIPTS / "h_mad_pane_janitor.py"
 
@@ -394,14 +395,14 @@ class TestRefusals:
 
 class TestDocsPin:
     def test_the_token_is_registered_in_skill_md(self) -> None:
-        skill = (SKILL_DIR / "SKILL.md").read_text()
+        skill = doc_text(SKILL_DIR / "SKILL.md")
         assert "h_mad_pane_janitor.py" in skill
         assert "JANITOR: PLANNED" in skill
 
     def test_every_refusal_reason_is_documented(self) -> None:
         import re
         script = SCRIPT.read_text()
-        skill = (SKILL_DIR / "SKILL.md").read_text()
+        skill = doc_text(SKILL_DIR / "SKILL.md")
         reasons = set(re.findall(r'Refusal\(\s*"([a-z_]+)"', script))
         assert reasons, "no refusal reasons found in the script"
         undocumented = sorted(r for r in reasons if r not in skill)

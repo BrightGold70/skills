@@ -691,7 +691,7 @@
     {
       "name": "registry-row-removed",
       "test": "tests/test_h_mad_doc_block_exec.py::test_every_emittable_line_has_a_registry_row",
-      "file": "SKILL.md",
+      "file": "references/helper-scripts.md",
       "find": "| `RAN` | `rc=3 blocks=1 shell=plain` | Inspect the child rc and stream artifacts. |\n",
       "replace": ""
     },

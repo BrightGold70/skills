@@ -21,6 +21,7 @@ ADAPTERS = {
 }
 sys.path.insert(0, str(REPO_ROOT / "h-mad" / "scripts"))
 from h_mad_doc_block_exec import AmbiguousHeading, _fence_events, fence_aware_end, find_heading  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402  (SKILL.md with split sections restored)
 
 
 SID_READ = '"$(cat "$(git rev-parse --absolute-git-dir)/h-mad-session-id.<feature>")"'
@@ -486,14 +487,14 @@ def test_hooks_section_advisor_warn_note(case: str, token: str) -> None:
     ids=[f"{skill}-{host}" for skill in ("h-mad", "handoff") for host in ("codex", "agy", "grok")],
 )
 def test_host_runtime_names_every_adapter(skill: str, host: str) -> None:
-    section = _section((REPO_ROOT / skill / "SKILL.md").read_text(encoding="utf-8"), "## Host runtime")
+    section = _section(doc_text(REPO_ROOT / skill / "SKILL.md"), "## Host runtime")
     adapter = f"references/{host}-runtime.md"
     assert adapter in section, f"{skill} Host runtime must name {adapter}"
 
 
 @pytest.mark.parametrize("case", ("renamed", "doubled"), ids=("renamed", "doubled"))
 def test_host_runtime_locator_fails_loudly(case: str) -> None:
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     heading = "## Host runtime"
     assert text.count(heading + "\n") == 1, "fixture requires one Host runtime heading"
     changed = text.replace(heading + "\n", "## Runtime hosts\n", 1) if case == "renamed" else text + "\n" + heading + "\n"
@@ -503,7 +504,7 @@ def test_host_runtime_locator_fails_loudly(case: str) -> None:
 
 @pytest.mark.parametrize("case,token", (("hmad-host", "HMAD_HOST"), ("session-id", "--session-id")), ids=("hmad-host", "session-id"))
 def test_cannot_judge_row_names_host_cause(case: str, token: str) -> None:
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     section = _section(text, '## Decision routing (for `/h-mad "<feature>"`)')
     rows = [line for line in section.splitlines() if line.startswith("| `cannot_judge` |")]
     assert len(rows) == 1, "Decision routing must have exactly one cannot_judge row"
@@ -521,7 +522,7 @@ def test_cannot_judge_row_names_host_cause(case: str, token: str) -> None:
     ids=("agents-root", "agy-root", "agents-env", "agy-env"),
 )
 def test_bootstrap_install_check_names_host_roots(case: str, token: str) -> None:
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     section = _section(text, "## First-run auto-bootstrap")
     assert token in section, f"First-run auto-bootstrap must name {case}: {token}"
 
@@ -532,7 +533,7 @@ def test_bootstrap_install_check_names_host_roots(case: str, token: str) -> None
     ids=("agents", "agy"),
 )
 def test_sibling_remedy_names_every_root(case: str, root: str) -> None:
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     section = _section(text, "## First-run auto-bootstrap")
     rows = [line for line in section.splitlines() if line.startswith("| `SIBLING_NOT_SYMLINK` |")]
     assert len(rows) == 1, "First-run auto-bootstrap needs exactly one SIBLING_NOT_SYMLINK remedy"
@@ -540,7 +541,7 @@ def test_sibling_remedy_names_every_root(case: str, root: str) -> None:
 
 
 def test_agy_collision_row_present() -> None:
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     section = _section(text, "## First-run auto-bootstrap")
     rows = [line for line in section.splitlines() if line.startswith("| `AGY_SIBLING_COLLISION` |")]
     assert len(rows) == 1, "First-run auto-bootstrap needs exactly one AGY_SIBLING_COLLISION row"
@@ -552,7 +553,7 @@ def test_agy_collision_row_present() -> None:
     ids=("agents-option", "agy-option", "agy-collision"),
 )
 def test_helper_registry_install_check_line(case: str, token: str) -> None:
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     section = _section(text, "## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)")
     lines = [line for line in section.splitlines() if line.startswith("- `h_mad_install_check.py` —")]
     assert len(lines) == 1, "Helper scripts needs exactly one install-check entry"
@@ -565,7 +566,7 @@ def test_helper_registry_install_check_line(case: str, token: str) -> None:
     ids=("host-unsupported", "unknown-host"),
 )
 def test_helper_registry_budget_line(case: str, token: str) -> None:
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     section = _section(text, "## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)")
     lines = [line for line in section.splitlines() if line.startswith("- `h_mad_context_budget.py` —")]
     assert len(lines) == 1, "Helper scripts needs exactly one context-budget entry"
@@ -573,7 +574,7 @@ def test_helper_registry_budget_line(case: str, token: str) -> None:
 
 
 def test_helper_registry_lists_h_mad_host() -> None:
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     section = _section(text, "## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)")
     lines = [line for line in section.splitlines() if line.startswith("- `h_mad_host.py` —")]
     assert len(lines) == 1, "Helper scripts needs exactly one h_mad_host.py entry"
@@ -581,7 +582,7 @@ def test_helper_registry_lists_h_mad_host() -> None:
 
 
 def test_remedy_count_sentence_names_the_eleventh_row() -> None:
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     section = _section(text, "## First-run auto-bootstrap")
     lines = [line for line in section.splitlines() if "all ten have one" in line]
     assert len(lines) == 1, "First-run auto-bootstrap needs exactly one remedy-count sentence"
@@ -591,13 +592,13 @@ def test_remedy_count_sentence_names_the_eleventh_row() -> None:
 @pytest.mark.parametrize("host", ("codex", "agy", "grok"))
 def test_host_runtime_adapter_read_precedes_bootstrap(host: str) -> None:
     # The agy clause once carried no timing while codex and grok said "before bootstrap".
-    section = " ".join(_section((REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8"), "## Host runtime").split())
+    section = " ".join(_section(doc_text(REPO_ROOT / "h-mad" / "SKILL.md"), "## Host runtime").split())
     link = f"[references/{host}-runtime.md](references/{host}-runtime.md)"
     assert f"{link} before bootstrap" in section, f"{host} adapter read must be timed before bootstrap"
 
 
 def test_host_runtime_states_the_lazy_read_only_exception() -> None:
-    section = " ".join(_section((REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8"), "## Host runtime").split())
+    section = " ".join(_section(doc_text(REPO_ROOT / "h-mad" / "SKILL.md"), "## Host runtime").split())
     assert "required before any bootstrap, script, `hmad-dispatch` call or write" in section
     assert "read-only `/h-mad status`" in section
 

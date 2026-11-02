@@ -21,8 +21,9 @@ from skill_corpus import SPLIT_REFERENCES, skill_text
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SKILL_MD = SKILL_DIR / "SKILL.md"
 
-# Was 393,620 bytes before row 2910; 248,399 right after it.
-BUDGET_BYTES = 260 * 1024
+# Was 393,620 bytes before row 2910; 248,399 right after it; 166,634 after row 2930
+# moved §"Helper scripts".
+BUDGET_BYTES = 175 * 1024
 # The largest stub is ~1.5 KB. A pasted-back section is tens of KB.
 STUB_MAX_BYTES = 4 * 1024
 
@@ -34,6 +35,8 @@ TRIGGERS = {
     "references/teammate-authors.md": ("before the first author dispatch", "before any re-dispatch after an audit"),
     "references/audit-prompt-assembly.md": ("before every audit cycle in a session that has not yet read it",
                                             "before any implementer dispatch"),
+    "references/helper-scripts.md": ("before running a helper whose verdict line or exit codes you have not read in this session",
+                                     "before acting on a verdict token you have not seen documented this session"),
 }
 
 MARKER = re.compile(r'^<!-- h-mad split body: SKILL\.md §"(?P<heading>[^"\n]+)" -->$', re.M)

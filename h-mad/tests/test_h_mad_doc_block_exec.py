@@ -32,6 +32,7 @@ SCRIPTS = REPO_ROOT / "h-mad" / "scripts"
 DOCSECTIONS = Path(__file__).with_name("docsections.py")
 sys.path.insert(0, str(SCRIPTS))
 import h_mad_doc_block_exec as dbe  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402  (SKILL.md with split sections restored)
 
 
 @pytest.fixture
@@ -2081,7 +2082,7 @@ def test_only_ambiguous_carries_blocks(cli_case):
 
 
 def registry_tokens():
-    text = (SCRIPTS.parent / 'SKILL.md').read_text(encoding='utf-8')
+    text = doc_text(SCRIPTS.parent / 'SKILL.md')
     match = re.search(r'^- `h_mad_doc_block_exec\.py` —.*?(?=^- |\Z)', text, re.M | re.S)
     assert match, 'SKILL.md must contain the doc-block CLI helper entry'
     entry = match[0]

@@ -46,7 +46,7 @@
     },
     {
       "name": "drop-helper-from-list",
-      "file": "SKILL.md",
+      "file": "references/helper-scripts.md",
       "find": "- `h_mad_context_budget.py` \u2014 orchestrator context budget",
       "replace": "- `h_mad_ctx_unused.py` \u2014 orchestrator context budget"
     },

@@ -40,6 +40,7 @@ SPLIT_REFERENCES = (
     "references/phase5-substeps.md",
     "references/teammate-authors.md",
     "references/audit-prompt-assembly.md",
+    "references/helper-scripts.md",
 )
 
 _MARKER = re.compile(r'^<!-- h-mad split body: SKILL\.md §"(?P<heading>[^"\n]+)" -->\n', re.M)

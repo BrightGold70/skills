@@ -842,7 +842,7 @@
     {
       "name": "reachability-doc-pin-removed",
       "_mechanism": "The harness bullet must document the flag and appended count in one sentence.",
-      "file": "SKILL.md",
+      "file": "references/helper-scripts.md",
       "symbol": "Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)",
       "find": " Opt-in `--reachability` traces each named Python test on the original tree and appends `unreachable_kills=` for caught mutations whose original span never executed; unmeasured rows are reported separately and verdicts stay unchanged.",
       "replace": "",

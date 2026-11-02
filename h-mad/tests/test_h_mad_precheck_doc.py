@@ -179,7 +179,9 @@ def test_LINEPIN_is_hard_where_the_author_contract_forbids_it_and_advisory_elsew
     phase NOT in `NO_LINE_PINS`, an ordinary pin is still surfaced for triage and
     still does not move the verdict — "I could not check" is not "it is broken".
     """
-    body = "The heading is at `h-mad/SKILL.md:1897`.\n"
+    # Line 1 always exists: a pin past the live file's end reads `past_eof`, a
+    # different finding, and row 2930's split left SKILL.md shorter than :1897.
+    body = "The heading is at `h-mad/SKILL.md:1`.\n"
     for phase in ("design", "plan", "spec"):
         doc = write(tmp_path, f"x.{phase}.md", body)
         r = run(doc, "--phase", phase, "--root", REPO)
@@ -210,7 +212,9 @@ def test_an_ARCHIVED_document_keeps_the_line_pin_advisory(tmp_path):
     archived = tmp_path / "docs" / "archive" / "2026-09" / "f"
     archived.mkdir(parents=True)
     doc = archived / "x.design.md"
-    doc.write_text("The heading is at `h-mad/SKILL.md:1897`.\n")
+    # Line 1 always exists: a pin past the live file's end reads `past_eof`, a
+    # different finding, and row 2930's split left SKILL.md shorter than :1897.
+    doc.write_text("The heading is at `h-mad/SKILL.md:1`.\n")
     r = run(doc, "--phase", "design", "--root", REPO)
     assert details(r.stdout, "LINEPIN"), r.stdout
     assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout

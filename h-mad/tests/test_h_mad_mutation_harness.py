@@ -1796,7 +1796,7 @@ def test_skill_documents_the_precheck_is_automatic() -> None:
 def test_recovery_table_carries_the_new_verdict() -> None:
     """AC-7.2/7.5: registry and recovery docs name PRECHECK_FAILED's route."""
     skill_dir = _live_skill_dir()
-    skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(skill_dir / "SKILL.md")
     harness = (skill_dir / "scripts" / "h_mad_mutation_harness.py").read_text(
         encoding="utf-8"
     )
@@ -4449,7 +4449,7 @@ class TestHostBoundMutationRows:
         assert row.get("requires") == ["bash", "-c", '[ "${BASH_VERSINFO[0]}" -ge 4 ]'], row
 
     def test_skill_harness_bullet_documents_requires_and_host_skipped_in_a_sentence(self) -> None:
-        skill = (_live_skill_dir() / "SKILL.md").read_text(encoding="utf-8")
+        skill = doc_text(_live_skill_dir() / "SKILL.md")
         lines = skill.splitlines()
         start = next(i for i, line in enumerate(lines) if line.startswith("- `h_mad_mutation_harness.py`"))
         end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith(("- ", "#"))), len(lines))
@@ -4811,7 +4811,7 @@ def test_reachability_sweep_forwards_flag_and_per_spec_appended_counts(tmp_path)
 def test_reachability_skill_harness_bullet_documents_flag_and_count_together():
     import re
 
-    lines = (_live_skill_dir() / "SKILL.md").read_text(encoding="utf-8").splitlines()
+    lines = doc_text(_live_skill_dir() / "SKILL.md").splitlines()
     start = next(i for i, line in enumerate(lines) if line.startswith("- `h_mad_mutation_harness.py`"))
     end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith(("- ", "#"))), len(lines))
     sentences = re.split(r"(?<=[.!?])\s+", "\n".join(lines[start:end]))

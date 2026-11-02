@@ -385,7 +385,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{TOKEN}: WROTE name={args.name} token={args.token} files={len(written)}")
     for path in written:
         print(f"  {path}")
-    print("\nPaste into SKILL.md's helper registry, then fill in the TODOs:")
+    print("\nPaste into the helper registry (references/helper-scripts.md, SKILL.md §\"Helper scripts\"), "
+          "then fill in the TODOs:")
     print(REGISTRY_LINE.format(
         slug=args.name, token=args.token, count_name=args.count,
         cannot=args.cannot_judge, verdicts_bar=f"{args.pass_word}|{args.fail_word}"))

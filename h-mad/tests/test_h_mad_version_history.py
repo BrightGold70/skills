@@ -24,6 +24,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 REFERENCES = Path(__file__).resolve().parents[1] / "references"
 sys.path.insert(0, str(SCRIPTS))
+from skill_corpus import doc_text  # noqa: E402  (SKILL.md with split sections restored)
 
 from h_mad_version_history import (  # noqa: E402
     Refusal,
@@ -350,13 +351,13 @@ class TestDocsPin:
     """Bidirectional: the token in the script must be the token in SKILL.md."""
 
     def test_the_token_is_registered_in_skill_md(self) -> None:
-        skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text()
+        skill = doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
         assert "h_mad_version_history.py" in skill
         assert "VERSION-HISTORY: OK" in skill
 
     def test_every_refusal_reason_is_documented(self) -> None:
         script = SCRIPT.read_text()
-        skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text()
+        skill = doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
         reasons = set(re.findall(r'Refusal\("([a-z_]+)"', script))
         assert reasons, "no refusal reasons found in the script"
         undocumented = sorted(r for r in reasons if r not in skill)

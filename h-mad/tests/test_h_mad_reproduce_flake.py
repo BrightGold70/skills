@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from skill_corpus import doc_text  # noqa: E402  (SKILL.md with split sections restored)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "h_mad_reproduce_flake.py"
@@ -428,7 +430,7 @@ def test_script_imports_only_stdlib_and_local_helpers():
 
 
 def test_skill_scripts_list_names_tokens_and_when_to_prefer_the_reproducer():
-    text = (ROOT / "SKILL.md").read_text()
+    text = doc_text(ROOT / "SKILL.md")
     inventory = text.split("## Helper scripts", 1)[1].split("\n## ", 1)[0]
     bullets = re.findall(r"^- .*?(?=\n- |\n### |\Z)", inventory, re.M | re.S)
     entries = [bullet for bullet in bullets if "`h_mad_reproduce_flake.py`" in bullet]

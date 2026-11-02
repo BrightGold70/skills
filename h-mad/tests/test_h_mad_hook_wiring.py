@@ -30,6 +30,7 @@ SCRIPT = REPO_ROOT / "h-mad" / "scripts" / "h_mad_hook_wiring.py"
 
 sys.path.insert(0, str(SCRIPT.parent))
 import h_mad_hook_wiring as hw  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402  (SKILL.md with split sections restored)
 
 TDD = "h-mad-tdd-gate.sh"
 ADV = "h-mad-advisor-warn.sh"
@@ -286,7 +287,7 @@ SKILL_MD = REPO_ROOT / "h-mad" / "SKILL.md"
 
 
 def _wiring_section() -> str:
-    text = SKILL_MD.read_text()
+    text = doc_text(SKILL_MD)
     marker = "### Wired, not just installed"
     assert marker in text, "the wiring section is gone"
     body = text.split(marker, 1)[1]
@@ -349,7 +350,7 @@ def test_docs_say_wiring_is_only_confirmable_live():
 
 
 def test_helper_registry_lists_it():
-    text = SKILL_MD.read_text()
+    text = doc_text(SKILL_MD)
     # Its own list entry inside the section: a substring over the whole tail passes
     # on any later mention (the context-budget registry test had exactly that hole).
     registry = text.split("## Helper scripts", 1)[1].split("\n## ", 1)[0]
@@ -359,7 +360,7 @@ def test_helper_registry_lists_it():
 def test_bootstrap_obliges_the_wiring_check_to_be_run():
     """A check nothing is obliged to run is advisory, and this one exists precisely
     because the failure it detects is invisible everywhere else."""
-    text = SKILL_MD.read_text()
+    text = doc_text(SKILL_MD)
     boot = text.split("## First-run auto-bootstrap", 1)[1].split("\n## ", 1)[0]
     boot = " ".join(boot.split())
     assert "h_mad_hook_wiring.py" in boot

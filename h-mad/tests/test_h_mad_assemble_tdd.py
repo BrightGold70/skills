@@ -20,6 +20,7 @@ import pytest
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 SKILL_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
+from skill_corpus import doc_text  # noqa: E402  (SKILL.md with split sections restored)
 
 from h_mad_assemble_tdd import (  # noqa: E402
     Halt,
@@ -769,14 +770,14 @@ class TestRealCorpus:
 
 class TestDocsPin:
     def test_the_token_is_registered_in_skill_md(self) -> None:
-        skill = (SKILL_DIR / "SKILL.md").read_text()
+        skill = doc_text(SKILL_DIR / "SKILL.md")
         assert "h_mad_assemble_tdd.py" in skill
         assert "ASSEMBLE-TDD: PASS" in skill
 
     def test_every_halt_reason_is_documented(self) -> None:
         import re as _re
         script = SCRIPT.read_text()
-        skill = (SKILL_DIR / "SKILL.md").read_text()
+        skill = doc_text(SKILL_DIR / "SKILL.md")
         reasons = set(_re.findall(r'Halt\(\s*"([a-z_]+)"', script))
         assert reasons, "no halt reasons found in the script"
         undocumented = sorted(r for r in reasons if r not in skill)

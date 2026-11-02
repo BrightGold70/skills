@@ -25,6 +25,7 @@ below is one whose removal turns the section into a suggestion:
 """
 
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402  (SKILL.md with split sections restored)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL_MD = REPO_ROOT / "h-mad" / "SKILL.md"
@@ -41,7 +42,7 @@ def _section() -> str:
     tracked because the bash block contains `#` comments, and a naive
     startswith("#") ends the section inside its own example.
     """
-    text = SKILL_MD.read_text()
+    text = doc_text(SKILL_MD)
     assert MARKER in text, "the orchestrator context-hygiene section is gone"
     body = text.split(MARKER, 1)[1]
 
@@ -259,7 +260,7 @@ class TestMechanicalEnforcement:
 def test_never_list_carries_the_rule():
     """A rule that lives only in a prose section is advisory. The NEVER list is
     where this skill's non-negotiables are read from."""
-    text = SKILL_MD.read_text()
+    text = doc_text(SKILL_MD)
     never = text.split("## What you NEVER do", 1)[1].split("\n## ", 1)[0]
     assert "advisor()" in never
     assert "45%" in never
@@ -274,7 +275,7 @@ def test_helper_script_is_listed():
     renamed: the `h_mad_host.py` entry mentions this script in its prose, and the
     first full-corpus `--sweep` reported `drop-helper-from-list` SURVIVED.
     """
-    text = SKILL_MD.read_text()
+    text = doc_text(SKILL_MD)
     helpers = text.split("## Helper scripts", 1)[1].split("\n## ", 1)[0]
     assert "\n- `h_mad_context_budget.py` — " in helpers
 
@@ -288,34 +289,34 @@ class TestRunCeilingDocumented:
     """
 
     def test_names_the_run_mode_and_its_ceiling(self):
-        s = SKILL_MD.read_text()
+        s = doc_text(SKILL_MD)
         assert "--mode run" in s
         assert "ceiling=80" in s
 
     def test_distinguishes_the_two_ceilings(self):
         """45 and 80 answer different questions and prescribe opposite remedies."""
-        s = SKILL_MD.read_text()
+        s = doc_text(SKILL_MD)
         assert "Run-context ceiling" in s
         assert "--mode advisor" in s
 
     def test_states_the_halt_route(self):
-        assert "<phase>:context_ceiling" in SKILL_MD.read_text()
+        assert "<phase>:context_ceiling" in doc_text(SKILL_MD)
 
     def test_requires_the_handoff_before_stopping(self):
         """The halt is worthless without it — that is the whole point of the route."""
-        s = SKILL_MD.read_text()
+        s = doc_text(SKILL_MD)
         section = _titled_section(s, "Run-context ceiling")
         assert "handoff" in section.lower()
         assert "--release" in section
 
     def test_says_why_halt_and_not_warn(self):
-        s = SKILL_MD.read_text()
+        s = doc_text(SKILL_MD)
         section = _titled_section(s, "Run-context ceiling")
         assert "unrecoverable" in section
 
     def test_pins_halt_is_not_deny(self):
         """Anti-conflation with the live advisor hook, stated where a reader will hit it."""
-        s = SKILL_MD.read_text()
+        s = doc_text(SKILL_MD)
         section = _titled_section(s, "Run-context ceiling")
         assert "DENY" in section and "HALT" in section
 
@@ -337,7 +338,7 @@ class TestCeilingRoutesToTheHandoffSkill:
     """
 
     def test_names_the_skill_and_its_write_mode(self):
-        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        section = _titled_section(doc_text(SKILL_MD), "Run-context ceiling")
         assert "handoff" in section and "WRITE" in section
         assert 'Skill(skill: "handoff")' in section, (
             "the route must be invocable as written -- 'write the handoff' is "
@@ -345,20 +346,20 @@ class TestCeilingRoutesToTheHandoffSkill:
         )
 
     def test_forbids_a_hand_written_substitute_and_says_why(self):
-        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        section = _titled_section(doc_text(SKILL_MD), "Run-context ceiling")
         assert "branch-slug" in section or "branch slug" in section
         assert "canonical" in section.lower()
         assert "invisible to the resume" in section
 
     def test_names_what_write_adds_that_a_doc_omits(self):
         """Each of these is a thing the NEXT session depends on, not a nicety."""
-        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        section = _titled_section(doc_text(SKILL_MD), "Run-context ceiling")
         for token in ("INDEX.md", "auto-memory", "handoff_commit.py"):
             assert token in section, token
 
     def test_budgets_the_write_itself_and_ranks_the_escape_hatches(self):
         """At 80% the write costs context too, so the order of sacrifice matters."""
-        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        section = _titled_section(doc_text(SKILL_MD), "Run-context ceiling")
         assert "--skip-scout" in section and "--skip-memories" in section
         assert "not\ndiscretionary" in section or "not discretionary" in section
         assert section.index("--skip-scout") < section.index("--skip-memories"), (
@@ -368,12 +369,12 @@ class TestCeilingRoutesToTheHandoffSkill:
 
     def test_the_never_list_routes_to_the_skill_too(self):
         """A reader who reaches the ban list must not be told merely to 'write' one."""
-        s = SKILL_MD.read_text()
+        s = doc_text(SKILL_MD)
         never = s[s.index("## What you NEVER do"):]
         line = next(ln for ln in never.splitlines() if "CTXBUDGET: HALT mode=run" in ln)
         assert "handoff" in line and "skill" in line, line
 
     def test_points_handover_at_the_other_mode(self):
         """Work that belongs elsewhere must not be closed out as if it were ours."""
-        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        section = _titled_section(doc_text(SKILL_MD), "Run-context ceiling")
         assert "HANDOVER" in section
