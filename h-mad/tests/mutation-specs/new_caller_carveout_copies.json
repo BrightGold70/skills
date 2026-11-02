@@ -36,7 +36,7 @@
     {
       "name": "fr9-copy-L3",
       "_mechanism": "Removing the exclusive new-caller condition from L3 must break its canonical-block guard.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "symbol": "Phase 5 (Implementation) sub-steps",
       "find": "halt `step5d:red_wrong_reason:<module>`. A missing-symbol RED on the pin is valid **only** when",
       "replace": "halt `step5d:red_wrong_reason:<module>`. A missing-symbol RED on the pin is valid when",

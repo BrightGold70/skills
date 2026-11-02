@@ -50,7 +50,7 @@
     {
       "name": "the-orchestrator-stops-passing-REPORT",
       "_mechanism": "A contract only the agent side knows about is never exercised: every author is told to write to a path the dispatcher never supplies, so all four take the REPORT=<none> branch forever.",
-      "file": "SKILL.md",
+      "file": "references/teammate-authors.md",
       "find": "      REPORT=$RP\")",
       "replace": "      \")",
       "test": "tests/test_h_mad_agent_definitions.py::test_the_orchestrator_passes_REPORT_when_dispatching_an_author"
@@ -66,7 +66,7 @@
     {
       "name": "the-orchestrator-never-reads-the-report-file",
       "_mechanism": "The end-to-end hole: the path is staged, passed and written, and nobody opens it. The orchestrator acts on the DONE pointer, so the owed list is skipped \u2014 the same loss the file deliverable prevents, moved one step later. Wiring both ends and consuming neither is worse than not wiring at all, because it reads as done.",
-      "file": "SKILL.md",
+      "file": "references/teammate-authors.md",
       "find": "5. **Read `$RP` after every author DONE \u2014 staging a path is not consuming it.**",
       "replace": "5. **Optional: glance at `$RP` if convenient.**",
       "test": "tests/test_h_mad_agent_definitions.py::test_skill_orchestrator_owns_the_successor_ownership_rules"

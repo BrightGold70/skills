@@ -438,3 +438,31 @@ def test_run_survives_non_utf8_child_output(tmp_path: Path) -> None:
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert proc.stdout.rstrip().splitlines()[-1] == "CONSUMERS-RUN: PASS files=1 passed=1", proc.stdout
+
+
+def test_a_split_reference_reports_its_skill_md_readers(tmp_path: Path) -> None:
+    """Row 2910: a section moved out of SKILL.md is still read by SKILL.md's tests.
+
+    Those tests read it through `skill_corpus.skill_text()`, so their source names
+    `SKILL.md`, never the reference's basename. Matching on the basename alone
+    reported 0 consumers for the moved text, so an edit to it named no test.
+    """
+    repo = _repo(tmp_path)
+    marker = '<!-- h-mad split body: SKILL.md §"Part" -->\n'
+    for rel, body in {
+        "skill-a/references/part.md": f"# part\n\n## Part\n\n{marker}moved text\n",
+        "skill-a/references/plain.md": "# plain, never part of SKILL.md\n",
+    }.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(body, encoding="utf-8")
+
+    split = _run(repo, "skill-a/references/part.md")
+    assert split.returncode == 0, split.stderr
+    assert "CONSUMERS: skill-a/references/part.md n=2" in split.stdout, split.stdout
+    assert "skill-a/tests/test_a_docs.py" in split.stdout
+    assert "skill-b/tests/test_b_reads_a.py" in split.stdout
+    assert "test_c_other.py" not in split.stdout, "reads a different SKILL.md"
+
+    plain = _run(repo, "skill-a/references/plain.md")
+    assert "CONSUMERS: skill-a/references/plain.md n=0" in plain.stdout, (
+        "only a reference carrying the split-body marker inherits SKILL.md's readers")

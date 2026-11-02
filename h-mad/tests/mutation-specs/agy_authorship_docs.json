@@ -17,7 +17,7 @@
     {
       "name": "fr10-authorship-section",
       "_mechanism": "Delete the authorship resolver instruction so the Phase 5 section no longer names the shared implementer verb.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "symbol": "Codex authors Phase 5 — enforced, not just instructed",
       "find": "Read the resolution with `h_mad_tdd_judge.py implementer`; stage it before dispatch\nas described below.",
       "replace": "",
@@ -26,7 +26,7 @@
     {
       "name": "fr10-upgrade-trigger",
       "_mechanism": "Delete the agy upgrade re-verification sentence so neither FR-8 re-run nor the renewed class-(a) inventory is required here.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "symbol": "Codex authors Phase 5 — enforced, not just instructed",
       "find": "After any agy upgrade, re-run FR-8 step 2 and step 2a and re-take the class-(a) inventory.",
       "replace": "",
@@ -35,7 +35,7 @@
     {
       "name": "fr10-exit-code-exec-agy",
       "_mechanism": "Delete the sentence assigning exec agy an implementer role while leaving its review example and staging procedure intact.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "symbol": "Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot",
       "find": "**`exec agy`** — a resolved RED/GREEN implementer dispatch, or the independent 5e-review (and Phase 3/4/5b audit) dispatch.",
       "replace": "",
@@ -71,7 +71,7 @@
     {
       "name": "fr10-staging-drops-record-flag",
       "_mechanism": "Delete --record from the staging command so a peer switch can be dispatched without durable switch evidence.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "symbol": "Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot",
       "find": "python3 ~/.claude/skills/h-mad/scripts/h_mad_tdd_judge.py implementer --root . --feature \"$FEATURE\" --record",
       "replace": "python3 ~/.claude/skills/h-mad/scripts/h_mad_tdd_judge.py implementer --root . --feature \"$FEATURE\"",
@@ -80,7 +80,7 @@
     {
       "name": "fr10-staging-dispatches-after-record-failed",
       "_mechanism": "Replace the failed-record refusal and halt with staging the peer; the ordered branch guard must reject dispatch after an unrecorded switch.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "symbol": "Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot",
       "find": "**do not dispatch.** Halt `step5:implementer_switch_unrecorded` and print `[H-MAD] <feature> halt step5:implementer_switch_unrecorded`, because a switch that is not in state is the silent switch the operator decision forbids (FR-2).",
       "replace": "stage the resolved peer",

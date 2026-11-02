@@ -82,7 +82,7 @@
   {
    "name": "delete-the-value-sweep-step",
    "_mechanism": "L463: two-thirds of one session's 79 findings were this class, and 4 stale copies survived two reviewers.",
-   "file": "SKILL.md",
+   "file": "references/audit-prompt-assembly.md",
    "find": "sweep the corrected VALUE",
    "replace": "re-read the section",
    "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[SKILL:Audit prompt assembly:sweep the corrected VALUE]"
@@ -90,7 +90,7 @@
   {
    "name": "soften-relocates-to-duplicates",
    "_mechanism": "L463: closing a class in one document of a PAIR relocates it; 'duplicates' loses that the original is now the stale one.",
-   "file": "SKILL.md",
+   "file": "references/audit-prompt-assembly.md",
    "find": "RELOCATES it",
    "replace": "duplicates it",
    "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[SKILL:Audit prompt assembly:RELOCATES it]"
@@ -98,7 +98,7 @@
   {
    "name": "delete-the-design-shape-question",
    "_mechanism": "L481: found 4 of 5 defects that neither a 49-test suite nor an independent reviewer saw.",
-   "file": "SKILL.md",
+   "file": "references/phase5-substeps.md",
    "find": "does the running binary emit what the design says",
    "replace": "is the implementation correct",
    "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[SKILL:Phase 5 (Implementation) sub-steps:does the running binary emit]"

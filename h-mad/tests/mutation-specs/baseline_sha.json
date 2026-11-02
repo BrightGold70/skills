@@ -66,7 +66,7 @@
     {
       "name": "skill-stops-naming-the-wrong-command",
       "_mechanism": "The row's real fix is the contract, not the script: `git merge-base` is what an operator reaches for, and a doc that merely prescribes the right command without marking the wrong one leaves the reflex intact. Anchored at the 5f site alone on purpose -- 5f and 6a-prime are read in isolation, so stripping the warning from EITHER one must fail, which is why the test counts both rather than checking the string exists somewhere in the file.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "find": "- **5f** \u2014 **Derive the 5c sha, never `git merge-base`.** ",
       "replace": "- **5f** \u2014 **Derive the 5c sha.** ",
       "test": "tests/test_h_mad_baseline_sha.py::test_skill_documents_the_derivation_and_forbids_merge_base"

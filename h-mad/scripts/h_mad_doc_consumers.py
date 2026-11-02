@@ -80,7 +80,27 @@ def _test_files(repo: Path) -> list[str]:
                   if "tests" in Path(rel).parts[:-1])
 
 
-def consumers(repo: Path, doc: str, tests: list[str]) -> list[str]:
+# A section moved out of SKILL.md into `<skill>/references/` (row 2910). Its tests
+# read it through `skill_corpus.skill_text()`, so they name `SKILL.md`, never the
+# reference's basename: such a reference's consumers are its SKILL.md's.
+_SPLIT_BODY = re.compile(r'^<!-- h-mad split body: SKILL\.md §"[^"\n]+" -->$', re.M)
+
+
+def _split_owner(repo: Path, doc: str) -> str | None:
+    """The SKILL.md a split reference was moved out of, or None."""
+    path = Path(doc)
+    if path.parent.name != "references":
+        return None
+    try:
+        text = (repo / doc).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    if not _SPLIT_BODY.search(text):
+        return None
+    return (path.parent.parent / "SKILL.md").as_posix()
+
+
+def consumers(repo: Path, doc: str, tests: list[str], *, owner: bool = True) -> list[str]:
     base = Path(doc).name
     top = Path(doc).parts[0] if len(Path(doc).parts) > 1 else ""
     found = []
@@ -93,6 +113,9 @@ def consumers(repo: Path, doc: str, tests: list[str]) -> list[str]:
             continue
         if not top or Path(rel).parts[0] == top or top in text:
             found.append(rel)
+    skill_md = _split_owner(repo, doc) if owner else None
+    if skill_md:
+        found += [rel for rel in consumers(repo, skill_md, tests, owner=False) if rel not in found]
     return found
 
 

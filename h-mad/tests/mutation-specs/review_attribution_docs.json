@@ -44,7 +44,7 @@
     {
       "name": "fr7-docs-5e-author-append",
       "_mechanism": "Remove the accepted GREEN author append before spec review.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "symbol": "Phase 5 (Implementation) sub-steps",
       "find": "**Record authors before review:** when the orchestrator accepts a module's GREEN dispatch (reads `STATUS: DONE` or `STATUS: DONE_WITH_CONCERNS` and stops re-dispatching GREEN), run `h_mad_state_write.py docs/.bkit-memory.json --feature <feature> --session-id <owner-session-id> --append implementation_authors='{\"module\":\"<module>\",\"agent\":\"<agent>\"}'` before the module's 5e spec-review leg runs.",
       "replace": "",

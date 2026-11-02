@@ -274,7 +274,7 @@
     {
       "name": "sha-is-one-commit-undocumented",
       "_mechanism": "SKILL.md no longer says --sha is one commit, so a two-commit revision is staged and half-reviewed.",
-      "file": "SKILL.md",
+      "file": "references/teammate-authors.md",
       "find": "**`--sha` is ONE commit, and the review sees only that commit.**",
       "replace": "**The review sees only that commit.**",
       "test": "tests/test_h_mad_delta_stage.py::test_skill_md_says_sha_is_the_one_commit_carrying_the_revision"

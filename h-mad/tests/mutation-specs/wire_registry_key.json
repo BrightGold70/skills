@@ -66,7 +66,7 @@
     {
       "name": "documented-contract-drifts-from-the-emitted-one",
       "_mechanism": "SKILL.md is the contract 5f is run from. The fidelity test scrapes the emitted f-strings and diffs them against the documented tokens, so a halt reason that changes shape without the doc following it is caught here rather than by an operator grepping for a string the code no longer prints.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "find": "`step5f:undeclared_removal:<feature>::<id>`",
       "replace": "`step5f:undeclared_removal:<id>`",
       "test": "tests/test_h_mad_wire_registry.py::test_skill_documents_exactly_all_registry_halt_reasons"

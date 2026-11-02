@@ -146,7 +146,7 @@
     {
       "name": "the-orchestrator-loses-rule-6",
       "_mechanism": "Back to the measured state: five agent files require the digest and nothing consumes it. The author computes a sha, echoes it into the log, and the orchestrator commits without comparing — echoing is not a gate.",
-      "file": "SKILL.md",
+      "file": "references/teammate-authors.md",
       "find": "6. **Re-derive the artifact's sha256 and refuse a mismatch, BEFORE you read `$RP` or commit.**",
       "replace": "6. **Note the artifact's sha256 when the author reports one.**",
       "test": "tests/test_h_mad_done_gate.py::test_the_orchestrator_owns_rule_6_and_names_the_gate"
@@ -154,7 +154,7 @@
     {
       "name": "the-rule-count-goes-stale-again",
       "_mechanism": "The sentence introducing the list said `Four` beside five rules from the day rule 5 landed, and nothing pinned it. A reader who counts stops at rule 4 and never reaches the gate.",
-      "file": "SKILL.md",
+      "file": "references/teammate-authors.md",
       "find": "stood down. Eight rules",
       "replace": "stood down. Four rules",
       "test": "tests/test_h_mad_done_gate.py::test_the_rule_count_matches_the_rules_that_follow"
@@ -162,7 +162,7 @@
     {
       "name": "rule-6-prescribes-an-unrunnable-command",
       "_mechanism": "Restores the first draft: `--message-file \"$MSG\"` with `$MSG` bound nowhere in the skill. The author's final message arrives in the Agent tool result, not on disk, so the prescribed command reads correctly and cannot be run — the section's own failure class reached through the rule written to close it.",
-      "file": "SKILL.md",
+      "file": "references/teammate-authors.md",
       "find": "     --done-line '<the first line of the author'\"'\"'s final message, verbatim>' || exit 1",
       "replace": "     --message-file \"$MSG\" || exit 1",
       "test": "tests/test_h_mad_done_gate.py::test_rule_6_prescribes_a_COMMAND_THAT_CAN_BE_RUN"

@@ -3301,7 +3301,7 @@
     {
       "name": "exec-grok-strict-sentence-pin",
       "_mechanism": "K8: weaken the FR-11 exec grok bullet so the override reads as optional; the strict-contract doc pin must fail.",
-      "file": "SKILL.md",
+      "file": "references/phase5-substeps.md",
       "find": "`--allow-weaker-sandbox` is also given",
       "replace": "`--allow-weaker-sandbox` is optional",
       "test": "tests/test_grok_audit_surface_docs.py::test_exec_grok_bullet_states_the_strict_contract"

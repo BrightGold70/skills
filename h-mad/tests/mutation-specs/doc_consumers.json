@@ -74,6 +74,22 @@
       "find": "        \"\"|*\"LIVE-RUNS: NONE\"*) ;;\n",
       "replace": "        *) ;;\n",
       "test": "tests/test_h_mad_doc_consumers.py::test_pre_commit_hook_warns_of_live_runs_and_never_blocks"
+    },
+    {
+      "name": "split-reference-never-inherits-skill-md-readers",
+      "_mechanism": "Row 2910: a reference moved out of SKILL.md reports 0 consumers again, so an edit to the moved text names no test.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    return (path.parent.parent / \"SKILL.md\").as_posix()\n",
+      "replace": "    return None\n",
+      "test": "tests/test_h_mad_doc_consumers.py::test_a_split_reference_reports_its_skill_md_readers"
+    },
+    {
+      "name": "any-reference-inherits-skill-md-readers",
+      "_mechanism": "The split-body marker stops gating: every file under references/ claims SKILL.md's readers, so the RUN line stops discriminating.",
+      "file": "scripts/h_mad_doc_consumers.py",
+      "find": "    if not _SPLIT_BODY.search(text):\n        return None\n",
+      "replace": "",
+      "test": "tests/test_h_mad_doc_consumers.py::test_a_split_reference_reports_its_skill_md_readers"
     }
   ]
 }
