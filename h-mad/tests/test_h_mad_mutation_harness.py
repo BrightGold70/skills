@@ -34,6 +34,7 @@ from h_mad_mutation_harness import (  # noqa: E402
     precheck_spec,
     run_spec,
 )
+from skill_corpus import doc_text  # noqa: E402
 
 
 GUARD = "THRESHOLD = 5\n# a comment that no test observes\n"
@@ -1739,7 +1740,7 @@ def test_skill_documents_the_anchor_sweep() -> None:
     The precheck's whole value is that it is cheap enough to run after every
     edit; that only happens if Phase 5e says so, and says what the token means.
     """
-    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
     assert "--check-anchors" in skill, "Phase 5e never tells anyone to sweep anchors"
     assert "ANCHORS_DRIFTED" in skill, "the drifted token is undocumented"
     assert "ANCHORS_NOTHING_SWEPT" in skill, "the nothing-swept token is undocumented"
@@ -1761,7 +1762,7 @@ def _phase_5e_text(skill: str) -> str:
 def test_skill_documents_the_precheck_is_automatic() -> None:
     """AC-7.1/7.3/7.4: Phase-5e documents the run-time sibling precheck."""
     skill_path = _live_skill_dir() / "SKILL.md"
-    skill = skill_path.read_text(encoding="utf-8")
+    skill = doc_text(skill_path)
     phase_5e = _phase_5e_text(skill)
     stale_operator_instruction = "Sweep every spec's anchors after any edit"
 

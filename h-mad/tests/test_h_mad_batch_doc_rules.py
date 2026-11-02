@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 
 import pytest
+from skill_corpus import doc_text  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 INVARIANTS = SKILL_DIR / "invariants.base.md"
@@ -29,7 +30,7 @@ def section_text(path: Path, name: str) -> str:
     Scoped rather than whole-file on purpose: a whole-file `in` check is
     satisfied by any other section that happens to use the same words.
     """
-    lines = path.read_text().split("\n")
+    lines = doc_text(path).split("\n")
     heads = [i for i, l in enumerate(lines) if l.strip() == f"## {name}"]
     assert len(heads) == 1, f"{path.name} §{name}: expected 1 heading, found {len(heads)}"
     start = heads[0] + 1
@@ -105,7 +106,7 @@ class TestTheseTestsCanFail:
         prose — the exact way a documentation test in this repo passed with its
         documented guidance removed.
         """
-        whole = flat(path.read_text())
+        whole = flat(doc_text(path))
         inside = flat(section_text(path, section))
         assert whole.count(phrase) == inside.count(phrase) == 1, (
             f"{phrase!r} occurs {whole.count(phrase)}x in {path.name}; "

@@ -22,6 +22,7 @@ in unrelated prose nearby.
 from pathlib import Path
 
 import pytest
+from skill_corpus import doc_text  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SKILL = SKILL_DIR / "SKILL.md"
@@ -34,7 +35,7 @@ BASE = SKILL_DIR / "invariants.base.md"
 
 def _norm(path: Path) -> str:
     """Collapse whitespace so a markdown reflow cannot break an assertion."""
-    return " ".join(path.read_text(encoding="utf-8").split())
+    return " ".join(doc_text(path).split())
 
 
 # (file, literal, why it is load-bearing)

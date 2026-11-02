@@ -25,6 +25,7 @@ other outcome carries no `sha=` at all.
 import subprocess
 import sys
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "h_mad_baseline_sha.py"
 
@@ -318,7 +319,7 @@ def test_emits_the_h_mad_marker(tmp_path):
 def test_skill_documents_the_derivation_and_forbids_merge_base():
     """The row's real fix is the contract, not the script: the wrong command is the
     one an operator reaches for, so SKILL.md must name it as wrong."""
-    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
     assert "h_mad_baseline_sha.py" in skill
     assert "BASELINE:" in skill
     # BOTH consumption sites, not just one. 5f and 6a-prime each take a 5c sha and

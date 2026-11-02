@@ -7,6 +7,7 @@ import re
 import subprocess
 
 from docsections import titled_section
+from skill_corpus import doc_text  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,11 +19,11 @@ STAGING_ANCHOR = "- **Stage the implementer.**"
 
 
 def _section(path: Path, heading: str) -> str:
-    return titled_section(path.read_text(encoding="utf-8"), heading)
+    return titled_section(doc_text(path), heading)
 
 
 def _staging_bullet() -> str:
-    text = SKILL.read_text(encoding="utf-8")
+    text = doc_text(SKILL)
     assert text.count(STAGING_ANCHOR) == 1, (
         "SKILL.md must contain exactly one '- **Stage the implementer.**' bullet "
         "with the resolver command and fail-closed dispatch branches"
@@ -84,7 +85,7 @@ def test_exit_code_dispatch_section_lists_exec_agy_as_an_implementer():
 
 
 def test_teammate_bullet_separates_audit_selection_from_authorship():
-    text = SKILL.read_text(encoding="utf-8")
+    text = doc_text(SKILL)
     anchor = "- **It does not license Claude to write Phase 5 production code"
     assert text.count(anchor) == 1, "expected one teammate Phase 5 authorship bullet"
     bullet = text.split(anchor, 1)[1].split("\n\n", 1)[0]

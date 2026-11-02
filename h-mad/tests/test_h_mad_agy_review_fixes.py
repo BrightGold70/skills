@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from skill_corpus import doc_text  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SKILL = SKILL_DIR / "SKILL.md"
@@ -29,7 +30,7 @@ PRECONDITIONS = SKILL_DIR / "scripts" / "h_mad_do_preconditions.py"
 
 
 def _norm(path: Path) -> str:
-    return " ".join(path.read_text(encoding="utf-8").split())
+    return " ".join(doc_text(path).split())
 
 
 def _run(repo_root: Path, feature: str = "feat") -> subprocess.CompletedProcess:
@@ -248,7 +249,7 @@ def test_signal_discipline_is_still_stated_where_it_is_owned(path: Path, label: 
 
 
 def _revert_block() -> str:
-    text = SKILL.read_text(encoding="utf-8")
+    text = doc_text(SKILL)
     anchor = text.index("**Use this exact sequence to revert and restore.**")
     start = text.index("```bash\n", anchor) + len("```bash\n")
     return text[start:text.index("```", start)]
@@ -341,7 +342,7 @@ def test_unpinned_spec_review_drift_has_a_test_first_route() -> None:
     """Row 2769: when the 5e spec review finds design-stated behaviour that no test
     pins, the skill named no route and the orchestrator improvised. The route is
     test-first: amend RED with a failing pin, then GREEN implements against it."""
-    text = " ".join(SKILL.read_text(encoding="utf-8").split())
+    text = " ".join(doc_text(SKILL).split())
     assert "no test pins" in text
     assert "amend RED first" in text
     assert "Never fix it in GREEN without a failing pin" in text

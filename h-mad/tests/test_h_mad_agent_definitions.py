@@ -9,6 +9,7 @@ literals are the gate on the rules that close that.
 from pathlib import Path
 
 import pytest
+from skill_corpus import doc_text  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 AGENTS = SKILL_DIR / "agents"
@@ -20,7 +21,7 @@ WRAPPER = SKILL_DIR / "scripts" / "hmad-dispatch.sh"
 
 def _norm(path: Path) -> str:
     """Collapse whitespace so a literal survives reflow/indentation."""
-    return " ".join(path.read_text(encoding="utf-8").split())
+    return " ".join(doc_text(path).split())
 
 
 AUTHOR_DONE = {
@@ -100,7 +101,7 @@ def test_no_surface_still_claims_the_exec_path_is_uncapped() -> None:
 
 def test_skill_has_no_bare_heading_stub() -> None:
     """A lone `#` line arrived with commit bea1b60 and sat between two sections for weeks."""
-    lines = SKILL.read_text(encoding="utf-8").splitlines()
+    lines = doc_text(SKILL).splitlines()
     assert "#" not in lines, [i + 1 for i, l in enumerate(lines) if l == "#"]
 
 

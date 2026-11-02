@@ -12,6 +12,7 @@ carry item; Wave 3's dogfood run is what exercises it.
 """
 
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL_MD = REPO_ROOT / "h-mad" / "SKILL.md"
@@ -29,13 +30,13 @@ def _section(text: str, start: str, end: str) -> str:
 
 def _phase5_preflight() -> str:
     """The Phase-5 substrate-preflight block of SKILL.md."""
-    return _section(SKILL_MD.read_text(encoding="utf-8"),
+    return _section(doc_text(SKILL_MD),
                     "## Phase 5 (Implementation) sub-steps",
                     "## Phase 5 parallel fanout")
 
 
 def _audit_assembly() -> str:
-    return _section(SKILL_MD.read_text(encoding="utf-8"),
+    return _section(doc_text(SKILL_MD),
                     "## Audit prompt assembly",
                     "## Putting `hmad-dispatch` on PATH")
 
@@ -150,7 +151,7 @@ def test_agent_substrate_documents_receipt_and_env_vars() -> None:
 
 def test_skill_frontmatter_still_valid() -> None:
     """AC-9.4: preserve a parseable manifest with non-empty required fields."""
-    text = SKILL_MD.read_text(encoding="utf-8")
+    text = doc_text(SKILL_MD)
     assert text.startswith("---\n")
     end = text.find("\n---\n", 4)
     assert end != -1
@@ -163,7 +164,7 @@ def test_skill_frontmatter_still_valid() -> None:
 
 def test_skill_documents_worktree_rm_guards() -> None:
     """AC-9.1, AC-9.3: the guard and both reason tokens are documented."""
-    text = SKILL_MD.read_text(encoding="utf-8")
+    text = doc_text(SKILL_MD)
     assert "worktree_has_uncommitted_work" in text
     assert "worktree_has_unmerged_commits" in text
     # The verb-behaviour table must say worktree-rm can refuse, not merely that
@@ -234,7 +235,7 @@ def test_fanout_teardown_documents_the_base_override() -> None:
 
 
 def _skill_norm() -> str:
-    return " ".join(SKILL_MD.read_text(encoding="utf-8").split())
+    return " ".join(doc_text(SKILL_MD).split())
 
 
 def test_skill_documents_worktree_for_live_skill_edits():

@@ -18,6 +18,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from skill_corpus import doc_text  # noqa: E402
 
 SKILL = Path(__file__).resolve().parent.parent
 REPO_ROOT = SKILL.parent
@@ -342,7 +343,7 @@ def test_an_unreadable_plan_is_unreadable_and_exits_2(tmp_path):
 
 
 def test_skill_md_runs_the_check_before_the_first_red_and_lists_the_script():
-    text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(SKILL / "SKILL.md")
     red = next(ln for ln in text.splitlines() if ln.startswith("- **5d** — RED dispatch"))
     assert "h_mad_prescribed_block_guards.py" in red
     assert "Before the feature's first RED dispatch" in red

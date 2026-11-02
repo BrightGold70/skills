@@ -6,6 +6,7 @@ import pytest
 
 from docsections import titled_section
 from tdd_gate_support import hook_form
+from skill_corpus import doc_text  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +44,7 @@ def test_trust_boundary_states_the_venv_rule():
 
 def test_helper_scripts_registers_the_judge():
     section = titled_section(
-        SKILL.read_text(encoding="utf-8"),
+        doc_text(SKILL),
         "Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)",
     )
     for token in ("h_mad_tdd_judge.py", "state", "judge", "TDD-STATE:",
@@ -81,7 +82,7 @@ def test_hook_bullets_state_the_shipped_rule():
 
 
 def test_skill_gate_bullet_states_the_every_record_rule():
-    bullet = _skill_gate_bullet(SKILL.read_text(encoding="utf-8"))
+    bullet = _skill_gate_bullet(doc_text(SKILL))
     for token in ("ACTIVE", "every", "unavailable", "exhausted"):
         assert token in bullet, f"Phase 5 gate bullet must state {token!r} for every record"
 
@@ -100,7 +101,7 @@ def test_locators_fail_loudly(locator):
         with pytest.raises(AssertionError):
             titled_section(doctored, "Trust boundary")
     elif locator == "helper-scripts":
-        text = SKILL.read_text(encoding="utf-8")
+        text = doc_text(SKILL)
         doctored = text.replace("## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)",
                                 "## Renamed helper scripts", 1)
         assert doctored != text
@@ -121,7 +122,7 @@ def test_locators_fail_loudly(locator):
 
 
 def test_skill_states_the_docs_first_component_rule():
-    text = SKILL.read_text(encoding="utf-8")
+    text = doc_text(SKILL)
     anchor = "Test files, docs, config, and shell are never gated; only production `.py`."
     assert text.count(anchor) == 1, "expected one gate-scope line in SKILL.md"
     paragraph = text.split(anchor, 1)[1].split("\n\n", 1)[0]

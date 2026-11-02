@@ -18,6 +18,7 @@ import h_mad_audit_gate as audit_gate  # noqa: E402
 import h_mad_cycle_counts as cycle_counts  # noqa: E402
 from h_mad_audit_gate import classify, classify_detail, stamp_path  # noqa: E402
 from h_mad_audit_cycle import _collected_path  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402
 
 
 def run_gate(audit_file: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -819,7 +820,7 @@ def test_an_unreadable_gated_file_refuses_rather_than_stamping_a_hole(
 
 
 def test_the_skill_documents_the_stamp() -> None:
-    skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     assert "--verify-stamp" in skill, "a readback nobody is told to run is never run"
     assert "GATESTAMP:" in skill, "the token is undocumented"
 
@@ -1048,7 +1049,7 @@ def test_the_class_test_sentence_is_stated_identically_on_every_surface() -> Non
 
 
 def test_both_exit_sites_gate_on_the_build_class_and_name_the_measurement_class() -> None:
-    skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     body = "\n".join(skill.splitlines())
     # The two audit-loop exit clauses (Phase 3 auto-cycle and the 5b bullet).
     sites = [ln for ln in body.splitlines() if "Exit ONLY when" in ln or ln.startswith("- **5b**")]
@@ -1060,7 +1061,7 @@ def test_both_exit_sites_gate_on_the_build_class_and_name_the_measurement_class(
 
 
 def test_gate_class_line_is_documented_in_the_script_catalog() -> None:
-    skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     assert "GATE-CLASS:" in skill
 
 
@@ -1072,7 +1073,7 @@ def test_author_agents_carry_the_measurement_layer_rule() -> None:
 
 
 def test_the_skill_caps_document_audit_rounds_and_routes_revisions_to_codex_plus_delta() -> None:
-    skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     assert "## Document-audit round cap — Phase 5 is the gate" in skill
     assert "capped at TWO gating rounds" in skill
     assert "Re-audit only what changed" in skill

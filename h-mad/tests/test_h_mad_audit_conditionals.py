@@ -37,6 +37,7 @@ from h_mad_assemble_audit import (  # noqa: E402
     resolve,
     strip_orchestrator_note,
 )
+from skill_corpus import doc_text  # noqa: E402
 
 LEGACY = ("{For plan and design audits:}", "{For design audit only:}",
           "{For impl-plan audit only:}", "{Design only")
@@ -136,7 +137,7 @@ class TestCrossDocBulletScoping:
 
 class TestConventionIsDocumented:
     def test_skill_md_states_the_resolution_rule(self):
-        s = SKILL_MD.read_text(encoding="utf-8")
+        s = doc_text(SKILL_MD)
         assert "{{ONLY:" in s
         assert "unresolved_conditional" in s, "preflight must halt on a surviving marker"
 
@@ -144,7 +145,7 @@ class TestConventionIsDocumented:
         """The project invariants heading is project-authored -- HemaSuite's reads
         '# HPW Project Axis B Invariants'. A hardcoded needle reports a false 0
         everywhere except this repo, which reads as 'no project layer inlined'."""
-        s = SKILL_MD.read_text(encoding="utf-8")
+        s = doc_text(SKILL_MD)
         preflight = s[s.index("Residual-placeholder preflight") :][:2500]
         assert "head -1" in preflight, (
             "derive the duplication needle from the invariants file's own first line"

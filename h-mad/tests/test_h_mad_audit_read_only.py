@@ -24,6 +24,7 @@ here rather than left to the reviewer's judgement.
 """
 
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = REPO_ROOT / "h-mad" / "audit-prompt.template.md"
@@ -81,7 +82,7 @@ def test_skill_md_tells_the_orchestrator_to_check_the_tree_after_an_audit() -> N
     leaves no trace except the delta, and an orchestrator that never looks will
     not see it.
     """
-    text = SKILL_MD.read_text().casefold()
+    text = doc_text(SKILL_MD).casefold()
     assert "check the working tree after every audit dispatch" in text
     assert "git status --short" in text
 

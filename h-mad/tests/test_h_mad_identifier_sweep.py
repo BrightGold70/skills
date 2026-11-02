@@ -23,6 +23,7 @@ SWEEP = SCRIPTS / "h_mad_identifier_sweep.py"
 
 sys.path.insert(0, str(SCRIPTS))
 from h_mad_identifier_sweep import classify_surface, sweep  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402
 
 
 def _tree(root: Path, files: dict[str, str]) -> Path:
@@ -256,7 +257,7 @@ def test_cli_refuses_an_empty_identifier(tmp_path: Path) -> None:
 
 
 def test_the_skill_documents_the_sweep() -> None:
-    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
     assert "h_mad_identifier_sweep.py" in skill, "a tool nobody is told to run is a tool nobody runs"
     assert "SWEEP:" in skill, "the token is undocumented"
     assert "the LAST edit" in skill, (

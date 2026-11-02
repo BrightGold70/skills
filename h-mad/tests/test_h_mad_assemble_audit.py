@@ -24,6 +24,7 @@ from h_mad_assemble_audit import (  # noqa: E402
     preflight,
     prepend_output_contract,
 )
+from skill_corpus import doc_text  # noqa: E402
 
 SPEC = "# Spec: demo\n\n## Functional Requirements\n- FR-1 do the thing (AC-1.1)\n"
 PLAN = "# Plan: demo\n\nStrategy for FR-1.\n"
@@ -505,7 +506,7 @@ class TestReportFileDeliveryAdvice:
     def test_docs_forbid_gating_an_audit_on_result_status(self, doc: str):
         # Measured three times with three unrelated causes: any failed or refused
         # tool call yields `status: ERROR` beside a complete, correct report.
-        text = (SKILL_DIR / doc).read_text(encoding="utf-8")
+        text = doc_text(SKILL_DIR / doc)
 
         assert "never gate on it" in text.lower() or "never gate an audit on" in text.lower()
         assert "`result.status`" in text

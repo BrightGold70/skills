@@ -36,6 +36,7 @@ _BASE_RULE_HEADINGS = (
 
 sys.path.insert(0, str(SCRIPT_DIR))
 from h_mad_audit_gate import classify  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402
 
 
 def _strip_orchestrator_note(template: str) -> str:
@@ -354,6 +355,6 @@ def test_orchestrator_note_is_fenced_and_stripped_before_dispatch():
 
 
 def test_skill_documents_note_strip_and_residual_placeholder_preflight():
-    skill = SKILL_MD.read_text(encoding="utf-8")
+    skill = doc_text(SKILL_MD)
     assert "ORCHESTRATOR-NOTE:END" in skill, "step 1 must tell the orchestrator to strip the note"
     assert "unfilled_slot" in skill, "assembly must halt on a residual <INLINE_…> token"

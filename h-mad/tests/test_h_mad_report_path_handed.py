@@ -50,6 +50,7 @@ from test_h_mad_collect_report import (  # noqa: E402
     write_report,
 )
 import h_mad_assemble_audit as aa  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402
 
 RUN_STEM = r"_run\d{8}T\d{6}Z-\d+"
 
@@ -669,7 +670,7 @@ def test_two_verb_runs_against_the_real_assembler_use_different_stems(tmp_path):
 
 def _flat(path: Path) -> str:
     # Whitespace-normalised: the docs wrap at ~100 columns.
-    return " ".join(path.read_text(encoding="utf-8").split())
+    return " ".join(doc_text(path).split())
 
 
 def test_the_rule_says_claim_once_and_where():
@@ -739,7 +740,7 @@ def _opt(block: str, flag: str) -> str:
 
 
 def test_every_hand_recipe_mints_and_carries_one_report_and_prompt_path():
-    skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(SKILL_DIR / "SKILL.md")
     orch = (SKILL_DIR / "references" / "orchestration-mode.md").read_text(encoding="utf-8")
     for doc in (skill, orch):
         assert 'rm -f "$RP" "$RP.done"' not in doc and "(and `rm -f" not in doc
@@ -792,7 +793,7 @@ def test_every_hand_recipe_mints_and_carries_one_report_and_prompt_path():
 
 
 def test_step_6_6_does_not_promise_a_hand_assembler_a_halt():
-    skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(SKILL_DIR / "SKILL.md")
     step = skill[skill.index("6.6. **Report-file transport"):skill.index("\n7. Stage:")]
     flat = " ".join(step.split())
     assert "A hand assembly claims nothing" in flat, flat[:600]

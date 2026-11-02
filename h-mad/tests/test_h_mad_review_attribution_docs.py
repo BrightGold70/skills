@@ -20,10 +20,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import h_mad_phase7_preconditions as p7  # noqa: E402
 from h_mad_state_validate import property_valid  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402
 
 
 def _span(start, end):
-    text = SKILL.read_text(encoding="utf-8")
+    text = doc_text(SKILL)
     assert text.count(start) == 1, f"expected exactly one SKILL.md {start!r}"
     begin = text.index(start)
     return " ".join(text[begin:text.index(end, begin)].split())

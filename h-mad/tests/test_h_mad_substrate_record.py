@@ -21,6 +21,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO_ROOT / "h-mad" / "scripts"
@@ -103,7 +104,7 @@ def test_skill_no_longer_orders_an_impossible_telemetry_call():
     # The defect was prose ordering a call the script cannot serve. Assert the
     # instruction is gone AND that the executable one replaced it -- deleting the
     # sentence alone would lose the capability rather than fix it.
-    text = " ".join(SKILL_MD.read_text(encoding="utf-8").split())
+    text = " ".join(doc_text(SKILL_MD).split())
     assert "Record the printed substrate + agent mapping via `scripts/h_mad_telemetry.py`" not in text, (
         "the unexecutable instruction is still present"
     )

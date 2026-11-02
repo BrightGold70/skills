@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from docsections import section_from, titled_section
+from skill_corpus import doc_text  # noqa: E402
 
 SKILL_MD = Path(__file__).resolve().parents[1] / "SKILL.md"
 
@@ -83,7 +84,7 @@ def test_the_live_phase5_section_extends_past_its_fenced_blocks() -> None:
     fixture written from the tight case is green on the bug — the same reason
     `docs/skill-candidates.md` carries `pin-a-doc-lint-against-the-real-file`.
     """
-    text = SKILL_MD.read_text(encoding="utf-8")
+    text = doc_text(SKILL_MD)
     phase5 = titled_section(text, "Phase 5 (Implementation) sub-steps")
     assert "```" in phase5, "the section must still contain the fenced blocks"
     # A landmark from the far end of the section: present only if the bound did

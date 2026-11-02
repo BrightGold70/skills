@@ -27,6 +27,7 @@ AB = SCRIPTS / "h_mad_ab_dispatch.py"
 
 sys.path.insert(0, str(SCRIPTS))
 from h_mad_ab_dispatch import build_arms, run_ab  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402
 
 
 TEMPLATE = "Do the task.\n\nRULE: {{RULE}}\n\nReport when done.\n"
@@ -270,7 +271,7 @@ def test_cli_requires_a_capture_group(tmp_path: Path) -> None:
 
 
 def test_the_skill_documents_the_harness() -> None:
-    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
     assert "h_mad_ab_dispatch.py" in skill, "a tool nobody is told to run is never run"
     assert "AB:" in skill, "the token is undocumented"
     assert "INCONCLUSIVE" in skill, (
@@ -451,7 +452,7 @@ class TestRunTokenParsing:
 
 
 def test_skill_documents_a_run_form_that_actually_parses():
-    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
     line = next(l for l in skill.splitlines() if "h_mad_ab_dispatch.py" in l and "--run" in l)
     assert "--run" in line
     # The documented form must not be the bare space-separated one that argparse
@@ -515,5 +516,5 @@ def test_skill_states_the_environment_is_not_controlled():
     only ever compares the two prompts. That is a real limit on what a `SAME` or a
     difference means, and an unstated limit reads as a guarantee.
     """
-    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    skill = doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
     assert "does not control the environment" in skill

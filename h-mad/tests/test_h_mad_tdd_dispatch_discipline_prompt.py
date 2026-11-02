@@ -1,6 +1,7 @@
 """Doc-tests for the TDD dispatch verification-discipline prompts."""
 
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]  # h-mad/ — never outside the skill dir
@@ -35,7 +36,7 @@ def test_green_named_evasions_present() -> None:
 
 
 def test_skill_revert_test_definition_present() -> None:
-    body = _norm(SKILL.read_text(encoding="utf-8"))
+    body = _norm(doc_text(SKILL))
     for literal in (
         "revert production only",
         "RED split returns EXACTLY",
@@ -68,13 +69,13 @@ def test_verifier_points_to_skill_not_restates() -> None:
 
 
 def test_skill_author_callform_rule_present() -> None:
-    body = _norm(SKILL.read_text(encoding="utf-8"))
+    body = _norm(doc_text(SKILL))
     literal = "assert the call form, not an occurrence count over a whole method"
     assert _norm(literal) in body
 
 
 def test_skill_pin_reverify_rule_present() -> None:
-    body = _norm(SKILL.read_text(encoding="utf-8"))
+    body = _norm(doc_text(SKILL))
     assert _norm("Re-verify every impl-plan pin") in body
 
 

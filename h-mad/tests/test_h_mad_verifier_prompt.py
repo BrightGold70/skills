@@ -13,6 +13,7 @@ into SKILL.md's 5e phase, so the recipe cannot silently drift out of the skill.
 from pathlib import Path
 
 import pytest
+from skill_corpus import doc_text  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = REPO_ROOT / "h-mad" / "references" / "codex-verifier-prompt.md"
@@ -55,7 +56,7 @@ def test_verifier_prompt_pins_single_status_contract() -> None:
 
 
 def test_skill_5e_wires_the_verifier_reference() -> None:
-    body = _norm(SKILL.read_text(encoding="utf-8"))
+    body = _norm(doc_text(SKILL))
     assert "references/codex-verifier-prompt.md" in body, (
         "SKILL.md does not reference the bundled verifier template — the 5e "
         "anti-gaming verify would drift back to an ad-hoc scratchpad prompt"

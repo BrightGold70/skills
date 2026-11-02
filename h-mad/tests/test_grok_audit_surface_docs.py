@@ -5,6 +5,7 @@ import re
 import subprocess
 
 from docsections import titled_section
+from skill_corpus import doc_text  # noqa: E402
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -35,7 +36,7 @@ def test_exclusion_list_holds_the_required_entries() -> None:
 def test_teammate_section_names_hmad_dispatch_audit_cycle() -> None:
     section = " ".join(
         titled_section(
-            SKILL_MD.read_text(encoding="utf-8"),
+            doc_text(SKILL_MD),
             "Teammate audit leg — when codex is unavailable",
         ).split()
     )
@@ -76,7 +77,7 @@ def test_no_h_mad_md_pairs_audit_cycle_py_with_surfaces() -> None:
 
 def test_never_do_legs_bullet_states_the_first_gate_leg_set() -> None:
     section = titled_section(
-        SKILL_MD.read_text(encoding="utf-8"), "What you NEVER do"
+        doc_text(SKILL_MD), "What you NEVER do"
     )
     bullets = [" ".join(bullet.split()) for bullet in re.split(r"(?m)^- ", section)]
     legs_bullets = [
@@ -102,7 +103,7 @@ def test_exec_grok_bullet_states_the_strict_contract():
 
     skill = Path(__file__).parents[1] / "SKILL.md"
     lines = titled_section(
-        skill.read_text(),
+        doc_text(skill),
         "Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot",
     ).splitlines()
     start = next(
@@ -247,7 +248,7 @@ def _surface(doc: str, name: str) -> tuple[str, str]:
 
 
 def _exec_grok_bullet() -> str:
-    lines = titled_section(SKILL_MD.read_text(encoding="utf-8"), EXEC_SECTION).splitlines()
+    lines = titled_section(doc_text(SKILL_MD), EXEC_SECTION).splitlines()
     start = next(
         index
         for index, line in enumerate(lines)
@@ -265,7 +266,7 @@ def _exec_grok_bullet() -> str:
 
 
 def _ac62_sites() -> dict[str, str]:
-    teammate = titled_section(SKILL_MD.read_text(encoding="utf-8"), TEAMMATE_SECTION)
+    teammate = titled_section(doc_text(SKILL_MD), TEAMMATE_SECTION)
     return {"exec grok bullet": _exec_grok_bullet(), "teammate section": _collapse(teammate)}
 
 
@@ -435,7 +436,7 @@ GROK_FALSIFICATION = (
 
 
 def _never_gate_section() -> str:
-    return _collapse(titled_section(SKILL_MD.read_text(encoding="utf-8"), NEVER_GATE_SECTION))
+    return _collapse(titled_section(doc_text(SKILL_MD), NEVER_GATE_SECTION))
 
 
 def test_never_gate_section_names_three_surface_first_gate() -> None:
@@ -462,7 +463,7 @@ def test_never_gate_section_names_three_surface_first_gate() -> None:
 
 
 def test_never_gate_section_names_grok_falsification() -> None:
-    raw = SKILL_MD.read_text(encoding="utf-8")
+    raw = doc_text(SKILL_MD)
     section = _collapse(titled_section(raw, NEVER_GATE_SECTION))
     assert GROK_FALSIFICATION in section, (
         "§Never gate on one audit pass must state the D14 grok must-fix "

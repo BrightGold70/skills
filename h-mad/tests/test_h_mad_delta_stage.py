@@ -36,6 +36,7 @@ import h_mad_assemble_audit as aa  # noqa: E402
 import h_mad_audit_gate as ag  # noqa: E402
 import h_mad_cycle_counts as cc  # noqa: E402
 import h_mad_delta_stage as ds  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402
 
 FEATURE = "demo"
 DOCS = {
@@ -548,7 +549,7 @@ def test_a_claim_that_cannot_be_written_releases_this_runs_claims(
 def test_skill_md_says_sha_is_the_one_commit_carrying_the_revision():
     # Step 2 diffs <last audited>..HEAD; the script reviews `git show <sha>`, ONE
     # commit. The prescription must say so, or a two-commit revision is half-reviewed.
-    text = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    text = doc_text(REPO_ROOT / "h-mad" / "SKILL.md")
     start = text.index("### Delta self-review")
     section = text[start:text.index("\n### ", start + 10)]
     assert "`--sha` is ONE commit" in section

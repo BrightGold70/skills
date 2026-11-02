@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from docsections import titled_section
+from skill_corpus import doc_text  # noqa: E402
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
@@ -105,7 +106,7 @@ COPIES = [
 
 @pytest.mark.parametrize("name,path,locate,anchor", COPIES, ids=[c[0] for c in COPIES])
 def test_copy_carries_the_canonical_block(name, path, locate, anchor):
-    span = locate(path.read_text(encoding="utf-8"))
+    span = locate(doc_text(path))
     count = collapse(span).count(collapse(CANONICAL))
     assert count == 1, (
         f"{name} ({path.relative_to(SKILL_DIR)}): expected exactly one complete "
@@ -116,7 +117,7 @@ def test_copy_carries_the_canonical_block(name, path, locate, anchor):
 @pytest.mark.parametrize("name,path,locate,anchor", COPIES, ids=[c[0] for c in COPIES])
 @pytest.mark.parametrize("cardinality", ["zero", "two"])
 def test_locator_refuses_zero_or_many_spans(name, path, locate, anchor, cardinality):
-    source = path.read_text(encoding="utf-8")
+    source = doc_text(path)
     span = locate(source)  # The unchanged source must first select exactly one span.
     if name == "L4":
         # Locate the row through the remedy cell that L4 actually returns.

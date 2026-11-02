@@ -7,6 +7,7 @@ report transport caveat.
 """
 
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -25,7 +26,7 @@ EXPECTED_FRONTMATTER = (
 
 
 def _skill_doc() -> str:
-    return SKILL_MD.read_text(encoding="utf-8")
+    return doc_text(SKILL_MD)
 
 
 def _section(text: str, start: str, end: str) -> str:

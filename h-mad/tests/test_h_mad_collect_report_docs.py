@@ -23,6 +23,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from h_mad_audit_gate import is_transport_path  # noqa: E402
 import h_mad_doc_block_exec as dbe  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402
 
 
 SECOND_SURFACE_HEADING = "## Second surface — the codex leg"
@@ -31,7 +32,7 @@ PATH_HEADING = "## Putting `hmad-dispatch` on PATH"
 
 
 def _skill_doc() -> str:
-    return SKILL_MD.read_text(encoding="utf-8")
+    return doc_text(SKILL_MD)
 
 
 def _orchestration_doc() -> str:

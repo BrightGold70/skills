@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from test_hmad_dispatch import _bindir, run
+from skill_corpus import doc_text  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "hmad-dispatch.sh"
 
@@ -49,7 +50,7 @@ def _entry(path, selector, comment=None, active=False, omit_comment=False):
 
 
 def _skill_doc() -> str:
-    return (Path(__file__).resolve().parent.parent / "SKILL.md").read_text(encoding="utf-8")
+    return doc_text(Path(__file__).resolve().parent.parent / "SKILL.md")
 
 
 def test_skill_docs_describe_exec_heartbeat_knob():

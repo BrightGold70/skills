@@ -18,6 +18,7 @@ prose around it.
 """
 
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL_MD = REPO_ROOT / "h-mad" / "SKILL.md"
@@ -42,7 +43,7 @@ def _section() -> str:
     fails on a moved line boundary gets deleted rather than fixed -- assert the
     CLAIM, not where the newlines fell.
     """
-    text = SKILL_MD.read_text()
+    text = doc_text(SKILL_MD)
     marker = "### Making a dispatch visible in Orca (zsh shell pane)"
     assert marker in text, "the pane viewport section is gone"
     body = text.split(marker, 1)[1]

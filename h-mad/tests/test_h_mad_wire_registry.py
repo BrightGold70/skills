@@ -14,6 +14,7 @@ import pytest
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import h_mad_wire_registry as registry  # noqa: E402
+from skill_corpus import doc_text  # noqa: E402
 
 
 def _entry(**overrides: object) -> dict:
@@ -66,7 +67,7 @@ def _section(text: str, heading: str) -> str:
 
 
 def _skill_text() -> str:
-    return (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    return doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
 
 
 def _emitted_halt_reasons() -> set[str]:

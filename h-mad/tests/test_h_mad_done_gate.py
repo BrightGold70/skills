@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from skill_corpus import doc_text  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = SKILL_DIR / "scripts" / "h_mad_done_gate.py"
@@ -45,7 +46,7 @@ ALL_AGENTS = AUTHORS + ["doc-auditor", "change-reviewer"]
 
 def _norm(path: Path) -> str:
     """Collapse whitespace so a literal survives reflow/indentation."""
-    return " ".join(path.read_text(encoding="utf-8").split())
+    return " ".join(doc_text(path).split())
 
 
 def _run(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -408,7 +409,7 @@ def test_the_rule_count_matches_the_rules_that_follow() -> None:
     A stale count in the sentence that introduces a list is the cheapest possible
     way to make a reader stop early, and nothing pinned it.
     """
-    text = SKILL.read_text(encoding="utf-8")
+    text = doc_text(SKILL)
     heading = "**Author dispatch rules the ORCHESTRATOR owns.**"
     assert heading in text
     section = text.split(heading, 1)[1]
@@ -441,7 +442,7 @@ def test_rule_6_prescribes_a_COMMAND_THAT_CAN_BE_RUN() -> None:
     # Scoped to the COMMAND BLOCK, never the whole file: the prose deliberately
     # quotes `$MSG` to name the defect, and a file-wide ban would forbid recording
     # what went wrong — the same trap as banning a value the document must discuss.
-    text = SKILL.read_text(encoding="utf-8")
+    text = doc_text(SKILL)
     heading = "6. **Re-derive the artifact's sha256 and refuse a mismatch"
     assert heading in text
     block = text.split(heading, 1)[1].split("```", 2)[1]
@@ -457,7 +458,7 @@ def test_rule_6_prescribes_a_COMMAND_THAT_CAN_BE_RUN() -> None:
 
 def test_the_script_is_registered_in_the_skill_inventory() -> None:
     """An unlisted script is one nobody finds — the inventory is the index."""
-    assert "- `h_mad_done_gate.py` —" in SKILL.read_text(encoding="utf-8")
+    assert "- `h_mad_done_gate.py` —" in doc_text(SKILL)
 
 
 def test_rule_7_gates_the_freeze_with_a_SECOND_gate_run() -> None:
@@ -472,7 +473,7 @@ def test_rule_7_gates_the_freeze_with_a_SECOND_gate_run() -> None:
     subagent's "stopped writing" is an instant and nothing can answer "no author is
     running". "Did these bytes change" is decidable and is the same question.
     """
-    text = SKILL.read_text(encoding="utf-8")
+    text = doc_text(SKILL)
     heading = "7. **An author is not finished because it reported DONE"
     assert heading in text
     section = text.split(heading, 1)[1].split("\n8. ", 1)[0]
@@ -500,7 +501,7 @@ def test_rule_8_is_about_the_DOCUMENT_and_is_not_rule_5_restated() -> None:
     because the author had no duty to revisit a premise the ORCHESTRATOR refuted and
     only the orchestrator knew the refutation had happened.
     """
-    text = SKILL.read_text(encoding="utf-8")
+    text = doc_text(SKILL)
     # The anchor must be the COMPLETE bold heading, closing `**` included. A prefix
     # anchor leaves a dangling `**` at the head of the section, which pairs with the
     # NEXT `**` and shifts every span by one: measured, the first "bold span" then ran

@@ -8,6 +8,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402
 
 SKILL = Path(__file__).resolve().parent.parent
 WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
@@ -15,7 +16,7 @@ STUBS = SKILL / "tests" / "stubs"
 SKILL_MD = SKILL / "SKILL.md"
 RECOVERY_MD = SKILL / "references" / "failure-recovery.md"
 TAIL_SIGNATURE_PASS_SPEC = SKILL / "tests" / "mutation-specs" / "tail_signature_pass.json"
-SKILL_MD_TEXT = SKILL_MD.read_text(encoding="utf-8")
+SKILL_MD_TEXT = doc_text(SKILL_MD)
 
 # J7: the pin file is the second leak channel into this harness. F13 stripped the
 # HMAD_ORCA_* env vars, but _pin_file() falls back to a CWD-RELATIVE
@@ -3482,7 +3483,7 @@ def test_orchestration_worker_done_prompt_blocks_and_docs():
     for required in ["task-create", "dispatch", "await", "gate-create", "gate-resolve",
                      "HMAD_ORCA_COORDINATOR_TERMINAL", "worker_done"]:
         assert required in mode_text
-    assert "references/orchestration-mode.md" in (SKILL / "SKILL.md").read_text()
+    assert "references/orchestration-mode.md" in doc_text(SKILL / "SKILL.md")
 
 
 def test_worktree_create_argv_orca(tmp_path):
@@ -3926,7 +3927,7 @@ def test_worktree_current_propagates_ok_false(tmp_path):
 
 
 def test_skill_documents_fanout_conjunction():
-    text = (SKILL / "SKILL.md").read_text()
+    text = doc_text(SKILL / "SKILL.md")
     fanout = text[text.index("## Phase 5 parallel fanout"):]
     for required in ["substrate=orca", "orchestration: on", "≥2 independent",
                      "HMAD_ORCA_MAX_WORKTREES", "default 4", "worktree-create",
@@ -4008,7 +4009,7 @@ def test_file_open_changed_refuses_cmux(tmp_path):
 
 
 def test_skill_documents_diff_surface_gate():
-    text = (SKILL / "SKILL.md").read_text()
+    text = doc_text(SKILL / "SKILL.md")
     for required in ["file-open-changed", "file-diff", "best-effort", "non-blocking"]:
         assert required in text
 
@@ -4177,7 +4178,7 @@ def test_automation_verbs_refuse_cmux(tmp_path):
 
 
 def test_skill_documents_automation_usage():
-    text = (SKILL / "SKILL.md").read_text()
+    text = doc_text(SKILL / "SKILL.md")
     for required in ["automation-create", "automation-run", "automation-list", "automation-remove", "hpw doctor"]:
         assert required in text
 

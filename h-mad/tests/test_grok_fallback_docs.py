@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from docsections import titled_section
+from skill_corpus import doc_text  # noqa: E402
 
 
 H_MAD = Path(__file__).resolve().parents[1]
@@ -19,7 +20,7 @@ NEVER_GATE_HEADING = "Never gate on one audit pass"
 
 
 def _section(path: Path, heading: str) -> str:
-    return titled_section(path.read_text(encoding="utf-8"), heading)
+    return titled_section(doc_text(path), heading)
 
 
 def _assert_terms(section: str, *terms: str) -> None:
@@ -64,7 +65,7 @@ def test_agent_substrate_documents_exec_grok_and_grok_sandbox() -> None:
 
 
 def test_missing_heading_fails_not_skips(tmp_path: Path) -> None:
-    original = SKILL_MD.read_text(encoding="utf-8")
+    original = doc_text(SKILL_MD)
     heading_line = f"## {TEAMMATE_HEADING}\n"
     assert original.count(heading_line) == 1, "the teammate heading must occur exactly once"
     scratch = tmp_path / "SKILL.md"

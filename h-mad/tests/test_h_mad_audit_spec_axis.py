@@ -18,6 +18,7 @@ mechanical.
 
 import sys
 from pathlib import Path
+from skill_corpus import doc_text  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL_DIR = REPO_ROOT / "h-mad"
@@ -32,7 +33,7 @@ def tmpl() -> str:
 
 
 def skill() -> str:
-    return SKILL_MD.read_text(encoding="utf-8")
+    return doc_text(SKILL_MD)
 
 
 class TestSpecSlot:
