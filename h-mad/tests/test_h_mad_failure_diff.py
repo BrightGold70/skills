@@ -1204,3 +1204,137 @@ def test_more_than_fifteen_changed_paths_are_counted(tmp_path):
     assert "reason=subject-changed" in _token(r.stdout), r.stdout + r.stderr
     assert "… and 6 more" in r.stdout, r.stdout
     assert r.stdout.count("  | changed: ") == 14, r.stdout
+
+
+# --- --subject-snapshot (row 2924) --------------------------------------------
+#
+# A full-suite `run` takes 30-60 min, and `subject-changed` (row 2903) makes the
+# live checkout untouchable for all of it: three times in one session work had to
+# wait or live in a scratchpad. `--subject-snapshot` measures a detached worktree
+# at the subject's HEAD instead, so the live tree can keep moving. Every test
+# below that expects a verdict also proves the snapshot measured what it claims.
+
+# Writes into the LIVE tree while the subject runs: the change `subject-changed`
+# exists to catch, and the one a snapshot must make harmless.
+LIVE_WRITER = """\
+import os, pathlib
+
+def test_touches_the_live_tree():
+    live = pathlib.Path(os.environ["FD_LIVE"])
+    (live / "notes.txt").write_text("edited by a concurrent session\\n")
+"""
+
+# Imports a module through an absolute PYTHONPATH entry inside the LIVE tree and
+# fails unless it was loaded from the tree this test itself runs in.
+OWN_TREE_IMPORT = """\
+import pathlib
+import fdmod
+
+def test_imports_from_its_own_tree():
+    here = pathlib.Path(__file__).resolve().parents[1]
+    assert pathlib.Path(fdmod.__file__).resolve().is_relative_to(here), fdmod.__file__
+"""
+
+SNAPSHOT_STICKY = """\
+import pathlib
+
+def test_sticky_snapshot():
+    tree = pathlib.Path(__file__).resolve().parents[1]
+    if tree.name.startswith(".h-mad-snapshot-"):
+        stuck = tree / "stuck"
+        stuck.mkdir()
+        (stuck / "f").write_text("x")
+        stuck.chmod(0o500)
+"""
+
+
+def _subject_line(out: str) -> dict:
+    lines = [line for line in out.splitlines() if line.startswith("SUBJECT: ")]
+    assert len(lines) == 1, out
+    return _fields("SUBJECT: x " + lines[0][len("SUBJECT: "):])
+
+
+def test_live_writer_is_subject_changed_without_a_snapshot(tmp_path):
+    """Positive control for the next test: the writer really does move the live
+    tree, so a verdict under `--subject-snapshot` is not a writer that did nothing."""
+    repo = _repo(tmp_path, {"notes.txt": "a\n", "tests/test_ok.py": PASSING},
+                 {"tests/test_writer.py": LIVE_WRITER, "tests/test_new.py": FAILING})
+    r = _diff_run(repo, tmp_path, "tests", env=_env(tmp_path, FD_LIVE=str(repo)))
+    assert "reason=subject-changed" in _token(r.stdout), r.stdout + r.stderr
+
+
+def test_snapshot_measures_head_while_the_live_tree_moves(tmp_path):
+    repo = _repo(tmp_path, {"notes.txt": "a\n", "tests/test_ok.py": PASSING},
+                 {"tests/test_writer.py": LIVE_WRITER, "tests/test_new.py": FAILING})
+    head = _git(repo, "rev-parse", "HEAD")
+    r = _diff_run(repo, tmp_path, "tests", env=_env(tmp_path, FD_LIVE=str(repo)),
+                  extra=("--subject-snapshot",))
+    assert _token(r.stdout).startswith("FAILDIFF: NEW subject_only=1"), r.stdout + r.stderr
+    assert _tagged(r.stdout, "SUBJECT_ONLY") == ["tests/test_new.py::test_broken"], r.stdout
+    fields = _subject_line(r.stdout)
+    assert fields["head"] == head and fields["dirty_copied"] == "0", r.stdout
+    assert fields["snapshot_of"] == str(repo.resolve()), r.stdout
+    assert ".h-mad-snapshot-" in fields["path"], r.stdout
+    assert (repo / "notes.txt").read_text() == "edited by a concurrent session\n"
+    _no_control_left(repo, tmp_path)
+
+
+def test_snapshot_refuses_a_dirty_tree_without_include_dirty(tmp_path):
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING}, {"tests/test_new.py": PASSING})
+    _write(repo, "tests/test_new.py", FAILING)
+    r = _diff_run(repo, tmp_path, "tests", extra=("--subject-snapshot",))
+    assert _token(r.stdout) == "FAILDIFF: UNREADABLE reason=subject-dirty side=subject", \
+        r.stdout + r.stderr
+    assert r.returncode == 2
+    _no_control_left(repo, tmp_path)
+
+
+def test_include_dirty_copies_every_uncommitted_change_into_the_snapshot(tmp_path):
+    """The positive control: failures that exist ONLY in uncommitted files must be
+    measured. A snapshot that silently measured HEAD would report SAME here."""
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING},
+                 {"tests/test_gone.py": FAILING})
+    _write(repo, "tests/test_ok.py", FAILING)                    # tracked, modified
+    _write(repo, "tests/test_untracked.py", FAILING)             # untracked
+    _write(repo, "tests/test_staged.py", FAILING)                # staged only
+    _git(repo, "add", "tests/test_staged.py")
+    (repo / "tests" / "test_gone.py").unlink()                   # tracked, deleted
+    status_before = _git(repo, "status", "--porcelain")
+    r = _diff_run(repo, tmp_path, "tests",
+                  extra=("--subject-snapshot", "--include-dirty"))
+    assert _token(r.stdout).startswith("FAILDIFF: NEW subject_only=3"), r.stdout + r.stderr
+    assert sorted(_tagged(r.stdout, "SUBJECT_ONLY")) == [
+        "tests/test_ok.py::test_broken",
+        "tests/test_staged.py::test_broken",
+        "tests/test_untracked.py::test_broken",
+    ], r.stdout
+    assert _subject_line(r.stdout)["dirty_copied"] == "4", r.stdout
+    assert _git(repo, "status", "--porcelain") == status_before, "the live tree is untouched"
+    _no_control_left(repo, tmp_path)
+
+
+def test_snapshot_rebases_a_pythonpath_entry_inside_the_live_tree(tmp_path):
+    """An absolute PYTHONPATH entry inside the live tree would make the snapshot
+    import the LIVE code — two readings through one instrument."""
+    repo = _repo(tmp_path, {"lib/fdmod.py": "VALUE = 1\n", "tests/test_own.py": OWN_TREE_IMPORT},
+                 {"tests/test_ok.py": PASSING})
+    env = _env(tmp_path, PYTHONPATH=str((repo / "lib").resolve()))
+    r = _diff_run(repo, tmp_path, "tests", env=env, extra=("--subject-snapshot",))
+    assert _token(r.stdout).startswith("FAILDIFF: SAME"), r.stdout + r.stderr
+    _no_control_left(repo, tmp_path)
+
+
+def test_snapshot_that_cannot_be_removed_is_UNREADABLE(tmp_path):
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING},
+                 {"tests/test_sticky.py": SNAPSHOT_STICKY})
+    try:
+        r = _diff_run(repo, tmp_path, "tests", extra=("--subject-snapshot",))
+        assert _token(r.stdout).startswith(
+            "FAILDIFF: UNREADABLE reason=snapshot-not-removed side=subject"), r.stdout + r.stderr
+        assert r.returncode == 2
+    finally:
+        for stuck in (tmp_path / "controls").glob(".h-mad-snapshot-*/stuck"):
+            stuck.chmod(0o700)
+        for left in (tmp_path / "controls").glob(".h-mad-snapshot-*"):
+            shutil.rmtree(left, ignore_errors=True)
+        subprocess.run(["git", "-C", str(repo), "worktree", "prune"], capture_output=True)

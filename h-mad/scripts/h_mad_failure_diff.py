@@ -18,6 +18,16 @@ rebuilt per feature each time (row 2364). This is that comparison, once.
           removed turns the token into UNREADABLE. Each run's full output is
           kept and named on its `RUN:` line (`log=`), so an attributed id is
           investigated from the run that produced it.
+          `--subject-snapshot` measures a second throwaway detached worktree at
+          the subject's HEAD instead of the live checkout, so the checkout may
+          keep changing for the whole run (row 2924); `subject-changed` then
+          guards the snapshot, and the `SUBJECT:` line names it
+          (`snapshot_of=<live> dirty_copied=N`). A dirty tree is refused as
+          `subject-dirty` unless `--include-dirty` copies every path that
+          differs from HEAD — staged, unstaged, deleted, and untracked-not-
+          ignored — into it, file by file (never a stash, never a patch). It
+          lives beside the control and is removed the same way;
+          `snapshot-not-removed` is UNREADABLE, printed last.
     logs  --run <pytest log> --control <pytest log | id list>
           Compares two existing readings. An id list is one node id per line
           (`#` comments and blank lines ignored), as in `baseline_failures.txt`.
@@ -93,6 +103,10 @@ Fail closed — each of these is UNREADABLE, never "no new failures":
     an app merely writes xattrs to an open file. `subject-snapshot-failed`: the
     file list could not be read (a non-zero exit, or a warning on stderr such
     as an unreadable untracked directory) or a `stat` failed;
+  * with `--subject-snapshot`: `subject-dirty` (uncommitted changes and no
+    `--include-dirty`), `snapshot-dir`, `snapshot-add-failed`,
+    `snapshot-copy-failed`, `snapshot-not-removed`; a dirty-path listing that
+    fails or warns is `subject-snapshot-failed`;
   * `disjoint-ids` (logs mode only): two non-empty sets with no id in common, the
     collection-root mismatch of row 1880. In run mode both sides run one
     selection from the same relative root by construction, so it does not apply.
@@ -341,6 +355,37 @@ def _tree_snapshot(subject: Path, excludes: tuple[Path, ...]) -> dict[str, tuple
     return snapshot
 
 
+def _dirty_paths(subject: Path) -> list[str] | None:
+    """Every path where the subject's working tree differs from its HEAD: staged
+    and unstaged changes and deletions (`diff HEAD`, renames off so a rename
+    lists both names), plus untracked files that are not ignored. None when
+    either listing fails or warns — an unread tree is never a clean one."""
+    paths: set[str] = set()
+    for argv in (["diff", "--name-only", "-z", "--no-renames", "HEAD"],
+                 ["ls-files", "-z", "--others", "--exclude-standard"]):
+        listed = subprocess.run(["git", "-C", str(subject), *argv], capture_output=True)
+        if listed.returncode != 0 or listed.stderr.strip():  # M:FD-DIRTY-LIST
+            return None
+        paths.update(os.fsdecode(raw) for raw in listed.stdout.split(b"\0") if raw)
+    return sorted(paths)
+
+
+def _copy_dirty(subject: Path, snapshot: Path, paths: list[str]) -> None:
+    """Make the snapshot's working tree match the subject's for `paths`: copy
+    what exists (a symlink as a link), delete what the subject deleted. Never
+    `git stash` (it can pop a stash the run did not make) and never a patch
+    (`git diff | apply` drops untracked files). Raises OSError."""
+    for rel in paths:
+        source, target = subject / rel, snapshot / rel
+        if os.path.lexists(source):  # M:FD-DIRTY-COPY
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if os.path.lexists(target) and not os.path.isdir(target):
+                target.unlink()
+            shutil.copy2(source, target, follow_symlinks=False)
+        elif os.path.lexists(target):  # M:FD-DIRTY-DELETE
+            target.unlink()
+
+
 def _changed_paths(before: dict, after: dict) -> list[str]:
     return [rel for rel in sorted(set(before) | set(after))
             if before.get(rel) != after.get(rel)]  # M:FD-SNAP-DIFF
@@ -469,36 +514,90 @@ def run_mode(args) -> int:
     # from the snapshot, turning the subject-changed check silently off.
     if _under(os.path.realpath(subject), os.path.realpath(logs)):  # M:FD-LOGDIR-COVERS
         return _unreadable("log-dir", "both", tail=f"log-dir {logs} covers the subject {subject}")
+    parent = Path(args.control_parent) if args.control_parent else subject.parent
+    snap: dict | None = None
+    if args.subject_snapshot:
+        dirty = _dirty_paths(subject)
+        if dirty is None:
+            return _unreadable("subject-snapshot-failed", "subject")
+        if dirty and not args.include_dirty:  # M:FD-SNAP-DIRTY-REFUSE
+            return _unreadable("subject-dirty", "subject", tail="\n".join(
+                f"dirty: {rel}" for rel in dirty[:14]))
+        try:
+            snap = {"path": Path(os.path.realpath(
+                tempfile.mkdtemp(prefix=".h-mad-snapshot-", dir=parent))),
+                "dirty": dirty, "admin": []}
+        except OSError:
+            return _unreadable("snapshot-dir", "subject")
     try:
-        parent = Path(args.control_parent) if args.control_parent else subject.parent
         control = Path(os.path.realpath(tempfile.mkdtemp(prefix=".h-mad-control-", dir=parent)))
     except OSError:
+        if snap is not None:
+            _remove_control(subject, snap["path"], None)
         return _unreadable("control-dir", "control")
     admin: list[str] = []
     try:
-        code = _compare(args, subject, control, base_sha, admin, logs)
+        code = _compare(args, subject, control, base_sha, admin, logs, snap)
     finally:
         removed = _remove_control(subject, control, admin[0] if admin else None)
+        snap_removed = snap is None or _remove_control(  # M:FD-SNAP-REMOVE
+            subject, snap["path"], snap["admin"][0] if snap["admin"] else None)
+    # Printed last, so each is the token a reader takes: a leaked worktree is a
+    # broken run even when the comparison itself finished.
     if not removed:
-        # Printed last, so it is the token a reader takes: a leaked control is a
-        # broken run even when the comparison itself finished.
-        return _unreadable("control-not-removed", "control", tail=f"path={control}")
+        code = _unreadable("control-not-removed", "control", tail=f"path={control}")
+    if not snap_removed and snap is not None:
+        code = _unreadable("snapshot-not-removed", "subject", tail=f"path={snap['path']}")
     return code
 
 
+def _make_snapshot(subject: Path, snap: dict) -> str | None:
+    """Detach the snapshot at the subject's HEAD and copy the dirty paths in.
+    Returns an UNREADABLE reason, or None."""
+    added = _git(subject, "worktree", "add", "--detach", "--quiet", str(snap["path"]), "HEAD")
+    if added.returncode != 0:
+        return "snapshot-add-failed"
+    found = _git(snap["path"], "rev-parse", "--absolute-git-dir")
+    if found.returncode == 0:
+        snap["admin"].append(found.stdout.strip())
+    try:
+        _copy_dirty(subject, snap["path"], snap["dirty"])
+    except OSError:
+        return "snapshot-copy-failed"
+    return None
+
+
 def _compare(args, subject: Path, control: Path, base_sha: str, admin_out: list,
-             logs: Path) -> int:
+             logs: Path, snap: dict | None = None) -> int:
+    # `subject` is always the LIVE tree: the control is added from it and every
+    # leak probe is taken against it. `measured` is where the subject side runs.
+    measured = subject
+    if snap is not None:
+        failed = _make_snapshot(subject, snap)
+        if failed:
+            return _unreadable(failed, "subject")
+        measured = snap["path"]
     added = _git(subject, "worktree", "add", "--detach", "--quiet", str(control), base_sha)
     if added.returncode != 0:
         return _unreadable("worktree-add-failed", "control", tail=added.stderr)
     found = _git(control, "rev-parse", "--absolute-git-dir")
     if found.returncode == 0:
         admin_out.append(found.stdout.strip())
-    head = _git(subject, "rev-parse", "HEAD").stdout.strip()
+    head = _git(measured, "rev-parse", "HEAD").stdout.strip()
     dirty = len(_git(subject, "status", "--porcelain").stdout.splitlines())
-    print(f"SUBJECT: path={subject} head={head} dirty={dirty}")
+    extra = (f" snapshot_of={subject} dirty_copied={len(snap['dirty'])}"
+             if snap is not None else "")
+    print(f"SUBJECT: path={measured} head={head} dirty={dirty}{extra}")
     print(f"CONTROL: path={control} base={args.base} sha={base_sha}")
-    envs = {"subject": dict(os.environ), "control": _control_env(subject, control)}
+    envs = {"subject": (_control_env(subject, measured)  # M:FD-SNAP-ENV
+                        if snap is not None else dict(os.environ)),
+            "control": _control_env(subject, control)}
+    # The probe is taken against the LIVE tree even with a snapshot. Both sides
+    # run one interpreter (`--python`), so an editable install of the live
+    # checkout would make the snapshot AND the control import the live code; the
+    # control's probe sees that install, which is why a second probe on the
+    # snapshot side would add nothing. The one per-side difference, PYTHONPATH,
+    # is rebased per side above.
     try:
         leaked = _subject_on_control_path(args.python, subject, control, envs["control"])
     except (OSError, subprocess.SubprocessError) as exc:
@@ -510,14 +609,15 @@ def _compare(args, subject: Path, control: Path, base_sha: str, admin_out: list,
     argv = [args.python, "-m", "pytest", *PYTEST_FLAGS, *args.selection]
     # The run's own logs and the control worktree are written by this tool, not
     # by whatever might change the subject; either may sit inside the subject.
+    # With a snapshot the check guards the snapshot, so the live tree is free.
     excludes = (Path(os.path.realpath(logs)), control)  # M:FD-SNAP-EXCLUDES
-    before = _tree_snapshot(subject, excludes)
+    before = _tree_snapshot(measured, excludes)
     if before is None:
         return _unreadable("subject-snapshot-failed", "subject")
     results: dict[str, list[dict[str, str]]] = {"subject": [], "control": []}
     for index in range(1, args.repeat + 1):
         where = f"{index}/{args.repeat}"
-        for side, root in (("subject", subject), ("control", control)):
+        for side, root in (("subject", measured), ("control", control)):  # M:FD-SNAP-MEASURED
             if _STATE["stop"] is not None:
                 return _unreadable("interrupted", "both")
             log = logs / f"{side}-{index}.log"
@@ -537,7 +637,7 @@ def _compare(args, subject: Path, control: Path, base_sha: str, admin_out: list,
             print(f"RUN: side={side} run={where} rc={rc} passed={summary.passed} "
                   f"failed={summary.failed} errors={summary.errors} log={log}")
             if side == "subject":  # M:FD-SNAP-SIDE
-                after = _tree_snapshot(subject, excludes)
+                after = _tree_snapshot(measured, excludes)
                 if after is None:
                     return _unreadable("subject-snapshot-failed", side, where)
                 changed = _changed_paths(before, after)
@@ -587,6 +687,12 @@ def main(argv: list[str] | None = None) -> int:
                      "(default: beside the subject's toplevel)")
     run.add_argument("--log-dir", help="where each run's output is kept "
                      "(default: a new directory under the system temp dir)")
+    run.add_argument("--subject-snapshot", action="store_true",
+                     help="measure a detached worktree at the subject's HEAD instead of "
+                     "the live checkout, so the checkout may change during the run")
+    run.add_argument("--include-dirty", action="store_true",
+                     help="with --subject-snapshot: copy uncommitted changes and untracked "
+                     "files into the snapshot instead of refusing a dirty tree")
     run.add_argument("selection", nargs="+", help="pytest selection, after `--`, "
                      "relative to the subject's toplevel (pytest runs there)")
     logs = sub.add_parser("logs", help="compare two existing readings")
@@ -597,6 +703,8 @@ def main(argv: list[str] | None = None) -> int:
         return logs_mode(args)
     if args.repeat < 1:
         parser.error("--repeat must be at least 1")
+    if args.include_dirty and not args.subject_snapshot:
+        parser.error("--include-dirty needs --subject-snapshot")
     for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
         signal.signal(sig, _on_signal)
     return run_mode(args)

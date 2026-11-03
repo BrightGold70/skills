@@ -1,0 +1,78 @@
+{
+ "_why": "Row 2924: `h_mad_failure_diff.py run --subject-snapshot` measures a detached worktree at the subject's HEAD so the live checkout may change during the run; `--include-dirty` copies every path that differs from HEAD. Each mutant measures the live tree again, drops one class of dirty path, stops refusing a dirty tree, imports live code through PYTHONPATH, or leaks the snapshot.",
+ "root": "../..",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_failure_diff.py",
+  "-q",
+  "-k",
+  "snapshot or live_writer or include_dirty"
+ ],
+ "mutations": [
+  {
+   "name": "snapshot-runs-the-live-tree",
+   "_mechanism": "The subject side runs in the live checkout again, so an edit there during the run is measured (or trips subject-changed).",
+   "file": "scripts/h_mad_failure_diff.py",
+   "find": "        for side, root in ((\"subject\", measured), (\"control\", control)):  # M:FD-SNAP-MEASURED",
+   "replace": "        for side, root in ((\"subject\", subject), (\"control\", control)):  # M:FD-SNAP-MEASURED",
+   "test": "tests/test_h_mad_failure_diff.py::test_snapshot_measures_head_while_the_live_tree_moves"
+  },
+  {
+   "name": "dirty-files-are-not-copied",
+   "_mechanism": "Modified, staged and untracked files are not copied in, so the snapshot measures HEAD while claiming the dirty tree.",
+   "file": "scripts/h_mad_failure_diff.py",
+   "find": "        if os.path.lexists(source):  # M:FD-DIRTY-COPY",
+   "replace": "        if False:  # M:FD-DIRTY-COPY",
+   "test": "tests/test_h_mad_failure_diff.py::test_include_dirty_copies_every_uncommitted_change_into_the_snapshot"
+  },
+  {
+   "name": "deletions-are-not-applied",
+   "_mechanism": "A file deleted in the live tree survives in the snapshot and is measured.",
+   "file": "scripts/h_mad_failure_diff.py",
+   "find": "        elif os.path.lexists(target):  # M:FD-DIRTY-DELETE",
+   "replace": "        elif False:  # M:FD-DIRTY-DELETE",
+   "test": "tests/test_h_mad_failure_diff.py::test_include_dirty_copies_every_uncommitted_change_into_the_snapshot"
+  },
+  {
+   "name": "staged-only-changes-are-missed",
+   "_mechanism": "Diffing against the index instead of HEAD drops a change that is staged and not modified since.",
+   "file": "scripts/h_mad_failure_diff.py",
+   "find": "[\"diff\", \"--name-only\", \"-z\", \"--no-renames\", \"HEAD\"],",
+   "replace": "[\"diff\", \"--name-only\", \"-z\", \"--no-renames\"],",
+   "test": "tests/test_h_mad_failure_diff.py::test_include_dirty_copies_every_uncommitted_change_into_the_snapshot"
+  },
+  {
+   "name": "dirty-tree-is-not-refused",
+   "_mechanism": "Without --include-dirty a dirty tree is measured at HEAD silently instead of refused.",
+   "file": "scripts/h_mad_failure_diff.py",
+   "find": "        if dirty and not args.include_dirty:  # M:FD-SNAP-DIRTY-REFUSE",
+   "replace": "        if False:  # M:FD-SNAP-DIRTY-REFUSE",
+   "test": "tests/test_h_mad_failure_diff.py::test_snapshot_refuses_a_dirty_tree_without_include_dirty"
+  },
+  {
+   "name": "snapshot-keeps-the-live-pythonpath",
+   "_mechanism": "An absolute PYTHONPATH entry inside the live tree is not rebased, so the snapshot imports the live code.",
+   "file": "scripts/h_mad_failure_diff.py",
+   "find": "    envs = {\"subject\": (_control_env(subject, measured)  # M:FD-SNAP-ENV",
+   "replace": "    envs = {\"subject\": (dict(os.environ)  # M:FD-SNAP-ENV",
+   "test": "tests/test_h_mad_failure_diff.py::test_snapshot_rebases_a_pythonpath_entry_inside_the_live_tree"
+  },
+  {
+   "name": "snapshot-is-never-removed",
+   "_mechanism": "The snapshot worktree is left behind and its leak is never reported.",
+   "file": "scripts/h_mad_failure_diff.py",
+   "find": "        snap_removed = snap is None or _remove_control(  # M:FD-SNAP-REMOVE",
+   "replace": "        snap_removed = True or _remove_control(  # M:FD-SNAP-REMOVE",
+   "test": "tests/test_h_mad_failure_diff.py::test_snapshot_measures_head_while_the_live_tree_moves"
+  }
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_failure_diff.py",
+  "-q"
+ ]
+}
