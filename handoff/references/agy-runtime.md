@@ -57,7 +57,6 @@ Modes, ordering and stop conditions are unchanged from `../SKILL.md`. Two host f
 
 | construct | status | mapping | source |
 |---|---|---|---|
-| `skill-call` | mapped | Invoke the installed agy handoff skill by name. | agy `skills.md` |
 | `task-tools` | not-applicable | agy's `manage_task` manages background tasks, not a checklist, so there is no rung 1 task sink. Restore to `.omc/notepad.md` when writable, then an inline checklist. | observed agy tools |
 | `tool-search` | not-applicable | agy supplies its tool list at start and has no todo tool to load; `manage_task` manages background tasks. | observed agy tools: `init.tools` of `plan-audit-v1-p2-agy.log` |
 | `skill-root-env` | mapped | Resolve `HANDOFF_SKILL_ROOT` from the loaded handoff skill path. | agy `skills.md` |

@@ -12,8 +12,7 @@
       "id": "skill-call",
       "pattern": "\\bSkill\\(",
       "skills": [
-        "h-mad",
-        "handoff"
+        "h-mad"
       ],
       "description": "Claude Code Skill calls."
     },

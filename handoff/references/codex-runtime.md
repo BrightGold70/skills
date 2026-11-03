@@ -50,7 +50,6 @@ Do not use a Claude-specific skill-root variable or home-directory path in Codex
 
 | construct | status | mapping | source |
 |---|---|---|---|
-| `skill-call` | mapped | Use the installed handoff skill named in Codex's Skills instructions; load its `SKILL.md` when invoked. | observed Codex Skills instructions (DP16) |
 | `task-tools` | not-applicable | No current rung 1 task checklist tool is evidenced; `update_plan` remains a lead from older rollouts. Restore to `.omc/notepad.md` when writable, then an inline checklist. | A3; observed Codex 0.142.0 rollouts (DP16) |
 | `tool-search` | not-applicable | No rung 1 todo tool is evidenced, so there is no deferred task tool to load. | A3; Codex 0.157.1 feature list |
 | `skill-root-env` | mapped | Resolve `HANDOFF_SKILL_ROOT` from the loaded handoff `SKILL.md` path. | existing adapter rule; observed Codex Skills instructions (DP16) |

@@ -80,7 +80,7 @@ After the handoff markdown is written (and not on `--dry-run`), leave a durable,
 A cross-reference `SKILL.md §"…"` to any of these now resolves in `references/read-mode.md`:
 
 - §"Step 0a: Fresh-context precondition — HALT if the session is not clean"
-- §"Step 0b: Terse output mode (best-effort)"
+- §"Step 0b: Output style — follow the user's level, never set one"
 - §"Step 0: Sync local with the remote BEFORE locating/reading"
 - §"Step 1: Locate the doc"
 - §"Step 2: Read it"

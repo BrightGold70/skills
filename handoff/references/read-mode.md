@@ -47,21 +47,23 @@ which passes silently.
 resume ran against an existing context so they know which state won any conflict. Never infer the
 override from impatience or from a repeated invocation; it has to be asked for.
 
-### Step 0b: Terse output mode (best-effort)
+### Step 0b: Output style — follow the user's level, never set one
 
-Once Step 0a passes, invoke the caveman skill at ultra intensity before locating anything:
+READ does not choose an output style. Write the resume report in whatever style the session
+already carries — a caveman level if the user has one active, plain prose otherwise — and do not
+invoke the caveman skill to change it.
 
-```
-Skill(skill: "caveman:caveman", args: "ultra")
-```
+An earlier revision invoked the caveman skill at ultra here. It lasted one turn. Measured
+2026-11-03: caveman keeps its level in one machine-wide flag, `.caveman-active` in the host's
+config directory, which only two things write — a prompt the **user** types (`/caveman <level>`,
+matched by the plugin's per-prompt hook) and the plugin's session-start hook. A model-invoked skill
+call writes nothing, so the same per-prompt hook re-injected `CAVEMAN MODE ACTIVE (lite)` from the very next prompt. Writing the flag from
+here instead would switch every concurrent session on the machine, and patching the vendor hook
+does not survive a plugin update.
 
-A resume report is dense reference material the user scans rather than reads, which is what that
-mode is for. It applies to the report and to the rest of the session; the user reverts with
-`stop caveman` or `/caveman full`.
-
-This is **best-effort and never a dependency**. If the skill is not installed the invocation
-fails — proceed to Step 0 silently and say nothing about it. READ must work identically on a
-machine that has never heard of caveman.
+So the supported route is the user's own: if they want the report terser, they type
+`/caveman ultra`, and the hook records it properly. READ must work identically on a machine that
+has never heard of caveman.
 
 ### Step 0: Sync local with the remote BEFORE locating/reading
 
@@ -341,7 +343,8 @@ Then stop. Don't start executing tasks — the user reads the report and decides
   `/clear` wastes the round trip and, worse, half-loads the context the halt exists to keep clean.
 - Don't offer to run `/clear` yourself. It is a built-in CLI command with no tool behind it — only
   the user can trigger it, and it would wipe this skill mid-run. Print the two lines and wait.
-- Don't let a missing caveman skill (Step 0b) fail the resume, and don't announce its absence.
+- Don't set a caveman level from READ (Step 0b) — a model-invoked level lasts one turn, and
+  writing the machine-wide flag changes every other session.
 - Don't rewrite or update the handoff doc in read mode — it's a historical record. (Step 3.6 may
   *commit* an untracked handoff doc, which changes no content.)
 - Don't resolve a divergence that is not on Step 3.6's allowlist, and don't extend the allowlist in

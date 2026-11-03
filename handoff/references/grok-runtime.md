@@ -54,7 +54,6 @@ the missing path. Do not infer the root from a user-specific checkout.
 
 | construct | status | mapping | source |
 |---|---|---|---|
-| `skill-call` | mapped | Invoke the installed `/handoff` skill. | `08-skills.md` |
 | `task-tools` | mapped | Restore tasks with built-in `todo_write`; the checklist has a user-visible pane toggled by `Ctrl+T`. | `01-getting-started.md`; `16-subagents.md` |
 | `tool-search` | not-applicable | `todo_write` is built in, so there is no deferred task tool to load. | `01-getting-started.md` |
 | `skill-root-env` | mapped | Resolve `HANDOFF_SKILL_ROOT` from the loaded handoff skill path. | `08-skills.md` |

@@ -1,0 +1,35 @@
+{
+ "_why": "READ Step 0b follows the user's caveman level and never sets one: a model-invoked level lasts one turn, and writing the machine-wide flag changes every other session (measured 2026-11-03).",
+ "root": "../..",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_handoff_read_output_style.py",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "step-0b-invokes-caveman-ultra-again",
+   "_mechanism": "Step 0b goes back to invoking the caveman skill at ultra, which the plugin's per-turn hook overrides from the next prompt.",
+   "file": "references/read-mode.md",
+   "find": "READ does not choose an output style.",
+   "replace": "Invoke `Skill(skill: \"caveman:caveman\", args: \"ultra\")` before locating anything.",
+   "test": "tests/test_handoff_read_output_style.py::test_read_never_invokes_the_caveman_skill"
+  },
+  {
+   "name": "step-0b-stops-naming-the-flag",
+   "_mechanism": "Step 0b no longer names the machine-wide flag, so the reason not to write it is lost.",
+   "file": "references/read-mode.md",
+   "find": "one machine-wide flag, `.caveman-active` in the host's",
+   "replace": "one machine-wide flag in the host's",
+   "test": "tests/test_handoff_read_output_style.py::test_step_0b_names_the_flag_and_the_supported_route"
+  }
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ]
+}
