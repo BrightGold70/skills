@@ -32,7 +32,8 @@ AUTHOR_DONE = {
 }
 
 
-@pytest.mark.parametrize("name", sorted(AUTHOR_DONE) + ["doc-auditor", "change-reviewer"])
+@pytest.mark.parametrize("name", sorted(AUTHOR_DONE) + ["doc-auditor", "change-reviewer",
+                                                   "task-executor", "task-labeller"])
 def test_agent_never_calls_advisor_and_reads_in_slices(name: str) -> None:
     body = _norm(AGENTS / f"{name}.md")
     assert "Never call `advisor()`, and read in slices." in body, name

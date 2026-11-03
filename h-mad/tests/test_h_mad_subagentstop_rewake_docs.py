@@ -25,6 +25,8 @@ AGENT_NAMES = [
     "implplan-author",
     "doc-auditor",
     "change-reviewer",
+    "task-executor",
+    "task-labeller",
 ]
 
 

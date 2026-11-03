@@ -148,6 +148,7 @@ These mappings cover the current grok host. Each source cites a grok chapter,
 | `send-message` | not-applicable | `send_subagent_message` is off by default; continue with `spawn_subagent` and `resume_from`. | `16-subagents.md` |
 | `hook-event` | mapped | Run Claude hooks from `~/.claude/settings.json` through `compat.claude.hooks`; adapt to camelCase payloads and `exit 2` deny. | `10-hooks.md` |
 | `session-id-env` | mapped | `GROK_SESSION_ID` is documented for hook processes; until observed in the orchestrator shell, mint the file id with `uuid.uuid4()` and let the oracle report `owned_elsewhere` when another session owns the claim. | `10-hooks.md` |
+| `subagent-model-env` | not-applicable | grok dispatches no Claude Code subagents, so no variable replaces a judge's model; a grok leg's model is the dispatch's `--model`. | observed: `hmad-dispatch exec grok` runs grok as its own process, never as a Claude Code subagent (row 2934) |
 | `claude-config-dir` | not-applicable | grok reads `~/.claude/settings.json` at a fixed path; honoring `CLAUDE_CONFIG_DIR` is undocumented. | `10-hooks.md` |
 | `claude-md` | mapped | Read `Claude.md`, `CLAUDE.md`, or `AGENTS.md` as project rules. | `12-project-rules.md` |
 | `claude-skills-dir` | mapped | Load the skill from `~/.claude/skills` through `compat.claude.skills` and resolve `HMAD_SKILL_ROOT` from its loaded path. | grok inspect |

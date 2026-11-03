@@ -1,0 +1,59 @@
+{
+ "_why": "Row 2932: the narrow helper agents keep their exact tool grants and models, and SKILL.md prescribes only defined agents, fork, or the one general-purpose fallback.",
+ "root": "../..",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_helper_agents.py",
+  "-q"
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "executor-gains-the-agent-tool",
+   "_mechanism": "A helper that can spawn helpers is no longer narrow.",
+   "file": "agents/task-executor.md",
+   "find": "tools: Read, Grep, Glob, Bash, Edit, Write",
+   "replace": "tools: Read, Grep, Glob, Bash, Edit, Write, Agent",
+   "test": "tests/test_h_mad_helper_agents.py::test_helper_frontmatter_pins_name_model_and_an_exact_tool_grant[task-executor]"
+  },
+  {
+   "name": "labeller-gains-edit",
+   "_mechanism": "The read-only labeller can now change the tree it is labelling.",
+   "file": "agents/task-labeller.md",
+   "find": "tools: Read, Grep, Glob, Bash, Write",
+   "replace": "tools: Read, Grep, Glob, Bash, Edit, Write",
+   "test": "tests/test_h_mad_helper_agents.py::test_the_labeller_cannot_edit"
+  },
+  {
+   "name": "executor-runs-on-opus",
+   "_mechanism": "The cheap tier silently becomes the expensive one.",
+   "file": "agents/task-executor.md",
+   "find": "model: sonnet",
+   "replace": "model: opus",
+   "test": "tests/test_h_mad_helper_agents.py::test_helper_frontmatter_pins_name_model_and_an_exact_tool_grant[task-executor]"
+  },
+  {
+   "name": "labelling-routed-back-to-general-purpose",
+   "_mechanism": "SKILL.md prescribes general-purpose for helper work again.",
+   "file": "SKILL.md",
+   "find": "Agent(subagent_type: \"task-labeller\", prompt:",
+   "replace": "Agent(subagent_type: \"general-purpose\", prompt:",
+   "test": "tests/test_h_mad_helper_agents.py::test_general_purpose_is_prescribed_only_as_the_bootstrap_fallback"
+  },
+  {
+   "name": "prescribe-an-undefined-agent",
+   "_mechanism": "SKILL.md names a subagent type with no agents/ file.",
+   "file": "SKILL.md",
+   "find": "Agent(subagent_type: \"task-executor\", prompt:",
+   "replace": "Agent(subagent_type: \"executor\", prompt:",
+   "test": "tests/test_h_mad_helper_agents.py::test_every_prescribed_subagent_type_names_an_agent_file_fork_or_the_fallback"
+  }
+ ]
+}

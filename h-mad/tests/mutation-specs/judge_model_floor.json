@@ -1,0 +1,59 @@
+{
+ "_why": "Row 2934 fix direction (3): doc-auditor, change-reviewer and the spec/plan/design authors never resolve below Opus, by frontmatter or by a prescribed dispatch's model override.",
+ "root": "../..",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_judge_model_floor.py",
+  "-q"
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "auditor-drops-to-sonnet",
+   "_mechanism": "The auditor runs on a cheaper tier, turning real findings into clean verdicts.",
+   "file": "agents/doc-auditor.md",
+   "find": "model: opus",
+   "replace": "model: sonnet",
+   "test": "tests/test_h_mad_judge_model_floor.py::test_a_judge_pins_at_least_opus_in_its_frontmatter[doc-auditor]"
+  },
+  {
+   "name": "reviewer-inherits",
+   "_mechanism": "inherit follows the parent session, which may be anything.",
+   "file": "agents/change-reviewer.md",
+   "find": "model: opus",
+   "replace": "model: inherit",
+   "test": "tests/test_h_mad_judge_model_floor.py::test_a_judge_pins_at_least_opus_in_its_frontmatter[change-reviewer]"
+  },
+  {
+   "name": "spec-author-pins-a-sonnet-id",
+   "_mechanism": "A full model id below Opus passes an alias-only check.",
+   "file": "agents/spec-author.md",
+   "find": "model: opus",
+   "replace": "model: claude-sonnet-5-5",
+   "test": "tests/test_h_mad_judge_model_floor.py::test_a_judge_pins_at_least_opus_in_its_frontmatter[spec-author]"
+  },
+  {
+   "name": "skill-dispatch-lowers-the-auditor",
+   "_mechanism": "A prescribed dispatch overrides the auditor's frontmatter for that call.",
+   "file": "SKILL.md",
+   "find": "Agent(subagent_type: \"doc-auditor\", prompt:",
+   "replace": "Agent(subagent_type: \"doc-auditor\", model: \"sonnet\", prompt:",
+   "test": "tests/test_h_mad_judge_model_floor.py::test_no_prescribed_judge_dispatch_lowers_the_model"
+  },
+  {
+   "name": "reference-dispatch-lowers-the-plan-author",
+   "_mechanism": "A lowered dispatch in a split reference, not SKILL.md.",
+   "file": "references/teammate-authors.md",
+   "find": "Agent(subagent_type: \"plan-author\", prompt:",
+   "replace": "Agent(subagent_type: \"plan-author\", model: \"haiku\", prompt:",
+   "test": "tests/test_h_mad_judge_model_floor.py::test_no_prescribed_judge_dispatch_lowers_the_model"
+  }
+ ]
+}

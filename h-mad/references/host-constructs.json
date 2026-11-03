@@ -66,6 +66,14 @@
       "description": "Claude Code session ID environment variable."
     },
     {
+      "id": "subagent-model-env",
+      "pattern": "\\bCLAUDE_CODE_SUBAGENT_MODEL\\b",
+      "skills": [
+        "h-mad"
+      ],
+      "description": "Claude Code environment variable that overrides every subagent's model."
+    },
+    {
       "id": "claude-config-dir",
       "pattern": "\\bCLAUDE_CONFIG_DIR\\b",
       "skills": [

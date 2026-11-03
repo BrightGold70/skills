@@ -163,6 +163,7 @@ and design references behind each mapping.
 | `send-message` | not-applicable | `send_message` target semantics are undocumented; dispatch a fresh author with the previous report path. | Observed agy tools; design D9.3. |
 | `hook-event` | mapped | Use `SessionStart` (once per new conversation), `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop`. | Re-checked against installed agy `1.4.0` (`agy --version`) and its bundled `hooks.md`. |
 | `session-id-env` | not-applicable | agy has no documented session id variable; mint the file id with `uuid.uuid4()` and pass it to the oracle, which may return `owned_elsewhere`. | F13; FR-9 minted-id procedure. |
+| `subagent-model-env` | not-applicable | agy dispatches no Claude Code subagents, so no variable replaces a judge's model; an agy audit leg's model is the `--model` its dispatch passes. | row 2934; `test_h_mad_judge_model_floor.py` |
 | `claude-config-dir` | not-applicable | Claude's settings scope does not apply because agy's config root is `~/.gemini/config`. | agy `hooks.md`. |
 | `claude-md` | mapped | Read workspace rules from `.agents/`. | agy `rules.md`. |
 | `claude-skills-dir` | mapped | Resolve `$HMAD_SKILL_ROOT` from the loaded skill path under `~/.gemini/config/skills/h-mad`. | agy `skills.md`. |

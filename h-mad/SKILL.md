@@ -47,12 +47,12 @@ Before any feature-level operation, check:
    `python3 ~/.claude/skills/h-mad/scripts/h_mad_hook_wiring.py` and read the `WIRING:`
    token. This one never halts — see §"Wired, not just installed" — but it is not
    optional to *run*: an unwired gate is silent in exactly the way a passing one is.
-3. Are the **agents registered**? The six teammate definitions this skill dispatches
-   (§"Teammate authors", §"Teammate audit leg", §"Teammate change review") live in `agents/` inside
+3. Are the **agents registered**? The eight agent definitions this skill dispatches
+   (§"Teammate authors", §"Teammate audit leg", §"Helper work", §"Teammate change review") live in `agents/` inside
    this checkout and are reached through user-scope symlinks:
 
    ```bash
-   for n in spec-author plan-author design-author implplan-author doc-auditor change-reviewer; do
+   for n in spec-author plan-author design-author implplan-author doc-auditor change-reviewer task-executor task-labeller; do
      ln -sfn "<checkout>/h-mad/agents/$n.md" "$HOME/.claude/agents/$n.md"
    done
    ```
@@ -205,10 +205,10 @@ Run from current project root (`pwd` at invocation):
      echo "[h-mad] cannot resolve the skill checkout — agents NOT registered"
    else
      mkdir -p ~/.claude/agents
-     for n in spec-author plan-author design-author implplan-author doc-auditor change-reviewer; do
+     for n in spec-author plan-author design-author implplan-author doc-auditor change-reviewer task-executor task-labeller; do
        ln -sfn "$SK/agents/$n.md" ~/.claude/agents/"$n".md
      done
-     for n in spec-author plan-author design-author implplan-author doc-auditor change-reviewer; do
+     for n in spec-author plan-author design-author implplan-author doc-auditor change-reviewer task-executor task-labeller; do
        [ -r ~/.claude/agents/"$n".md ] || echo "DANGLING: $n — registration FAILED"
      done
    fi
@@ -1118,6 +1118,43 @@ assumed for that reason.
 **Never batch `advisor()` into a heavy turn.** Its input is snapshotted at call time, so the 40
 files you read in the same turn are inside the copy. Call it, then do the reading.
 
+## Helper work — narrow agents, never `general-purpose`
+
+Work the orchestrator hands off that is neither a phase document, an audit nor a review goes to
+one of two narrow agents, never `general-purpose`. A default session starts each turn at ~53k
+context and these at ~20k (measured 2026-11-02, row 2932), and the narrow tool grant is also
+what keeps a helper inside its task.
+
+- **One bounded change** — implement a named task, fix one verified finding, apply a mechanical
+  edit — goes to `task-executor` (Sonnet; Read/Grep/Glob/Bash/Edit/Write). Hand it `TASK`,
+  `FILES` (the only paths it may edit), `VERIFY`, `REPORT` and `PROJECT_ROOT`:
+
+  ```
+  Agent(subagent_type: "task-executor", prompt:
+    "TASK: <what, and what done means>\nFILES: <paths>\nVERIFY: <command>\nREPORT: <path>\nPROJECT_ROOT: <root>")
+  ```
+
+- **Labelling a batch** — classify findings, triage rows, sort failures by cause — goes to
+  `task-labeller` (Haiku; read-only plus its report). Hand it `ITEMS`, the closed `LABELS` set
+  with a definition each, `REPORT` and `PROJECT_ROOT`:
+
+  ```
+  Agent(subagent_type: "task-labeller", prompt:
+    "ITEMS: <file or list>\nLABELS: <label — definition, one per line>\nREPORT: <path>\nPROJECT_ROOT: <root>")
+  ```
+
+Both answer with a `DONE` line carrying the report's `sha256=`; gate it through
+`h_mad_done_gate.py` before reading the report, exactly as for an author. Phase 5 implementation
+still goes to codex through `hmad-dispatch exec` (§"Phase 5 sub-steps"); `task-executor` is for
+the orchestrator's own side work, not a substitute for the TDD loop. The only `general-purpose`
+dispatch this skill prescribes is the same-session bootstrap fallback above.
+
+The judges never get the cheap tier: `doc-auditor`, `change-reviewer` and the spec/plan/design
+authors pin Opus, and no prescribed dispatch of them may pass a lower `model:`
+(`test_h_mad_judge_model_floor.py`). One override is outside the repository's reach:
+`CLAUDE_CODE_SUBAGENT_MODEL` in the environment replaces every subagent's model, judges
+included. Leave it unset for an h-mad run.
+
 ## `hooks/memory-index-guard.sh` — the auto-memory cap, surfaced without being asked
 
 `h_mad_check_memory_index.py` was correct from the day it shipped and ran only when somebody READ
@@ -1880,6 +1917,7 @@ is the one returned.
 - `agents/{spec,plan,design,implplan}-author.md` — the four phase-document authors (§"Teammate authors")
 - `agents/doc-auditor.md` — the teammate audit leg (§"Teammate audit leg")
 - `agents/change-reviewer.md` — fresh-context review of a CHANGE that writes its own report (§"Teammate change review")
+- `agents/task-executor.md`, `agents/task-labeller.md` — the narrow helper agents (§"Helper work")
 - `references/codex-implementer-prompt.md` — Phase 5d/5e Codex dispatch template
 - `references/agy-spec-reviewer-prompt.md` — Phase 5e-review agy dispatch template
 - `references/agy-architectural-reviewer-prompt.md` — Phase 6a-prime agy dispatch template

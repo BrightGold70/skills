@@ -171,6 +171,7 @@ observations and design references behind each mapping.
 | `send-message` | not-applicable | The observed Codex rollouts have no message call; dispatch a fresh author with the prior report path. | Codex rollout observations (DP16). |
 | `hook-event` | mapped | Codex hook events run `hooks/h-mad-codex-tdd-gate.py` through the active hooks file. | Observed Codex hook event fixture. |
 | `session-id-env` | not-applicable | Codex has no documented session id variable; mint the file id with `uuid.uuid4()` and pass it to the oracle, which can return `owned_elsewhere`. | F14; FR-9 minted-id procedure. |
+| `subagent-model-env` | not-applicable | Codex dispatches no Claude Code subagents, so no variable replaces a judge's model; a codex leg's model is `$CODEX_HOME/config.toml` or the dispatch's `--model`. | row 2934; `test_h_mad_judge_model_floor.py` |
 | `claude-config-dir` | not-applicable | Codex uses its own configuration scope, so Claude settings paths do not apply here. | `codex --help` configuration option (DP16). |
 | `claude-md` | mapped | Read `AGENTS.md` for project instructions. | Observed Codex rollout instruction blocks (DP16). |
 | `claude-skills-dir` | mapped | Resolve `$HMAD_SKILL_ROOT` from the loaded skill path under `~/.agents/skills/<skill>`. | Observed Codex skill paths (DP16); V-11.1 load check. |
