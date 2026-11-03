@@ -1,0 +1,4 @@
+{"phase": "plan", "cycle": 1, "leg": "codex", "item": "No incident replay of a real impl-plan Task listing hmad-dispatch.sh (base Incid", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "agy", "item": "phase5-substeps.md:230 'shell is never gated' + pinning doc-test omitted from D9", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "grok", "item": "FR-3 transport false: codex _load_judge only on .py path; agy binds judge module", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "grok", "item": "Plan FR-6 omits spec tie-break (min .py, else smallest listed name)", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
