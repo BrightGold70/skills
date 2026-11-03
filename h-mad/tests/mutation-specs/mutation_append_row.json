@@ -1,0 +1,80 @@
+{
+ "_why": "Row 2890: `h_mad_mutation_harness.py <spec> --append-row <row.json>` inserts one row without reformatting the spec, and refuses a malformed row, a taken name, an anchor that does not match exactly once, or a test id that does not collect. Each mutant drops one refusal, the structural verify, string-aware bracket scanning, or the spec's own layout.",
+ "root": "../..",
+ "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_mutation_append_row.py", "-q"],
+ "mutations": [
+  {
+   "name": "append-accepts-a-taken-name",
+   "_mechanism": "A second row with an existing name is appended, so two rows share one name.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    if any(m.get(\"name\") == row[\"name\"] for m in spec[\"mutations\"]):  # M:APPEND-DUP",
+   "replace": "    if False:  # M:APPEND-DUP",
+   "test": "tests/test_h_mad_mutation_append_row.py::test_a_taken_name_is_refused"
+  },
+  {
+   "name": "append-accepts-an-absent-anchor",
+   "_mechanism": "An anchor that matches nowhere is appended; the row could never mutate anything.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    if hits != 1:  # M:APPEND-ANCHOR",
+   "replace": "    if hits > 1:  # M:APPEND-ANCHOR",
+   "test": "tests/test_h_mad_mutation_append_row.py::test_an_anchor_that_does_not_match_once_is_refused"
+  },
+  {
+   "name": "append-accepts-a-malformed-row",
+   "_mechanism": "A row without `replace` is appended and breaks the spec at load time.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    if not (isinstance(row, dict)  # M:APPEND-ROW-SHAPE",
+   "replace": "    if not (True or isinstance(row, dict)  # M:APPEND-ROW-SHAPE",
+   "test": "tests/test_h_mad_mutation_append_row.py::test_a_malformed_row_is_refused"
+  },
+  {
+   "name": "append-skips-the-structural-verify",
+   "_mechanism": "An insert at the wrong bracket is written, changing a key nobody asked to change.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    if (new_data.get(\"mutations\") != old_data[\"mutations\"] + [row]  # M:APPEND-VERIFY",
+   "replace": "    if False and (new_data.get(\"mutations\") != old_data[\"mutations\"] + [row]  # M:APPEND-VERIFY",
+   "test": "tests/test_h_mad_mutation_append_row.py::test_an_insert_at_the_wrong_bracket_is_refused_by_the_verify_step"
+  },
+  {
+   "name": "append-scanner-ignores-escaped-quotes",
+   "_mechanism": "A `\\\"` inside a string ends it early, so the scan finds the wrong bracket on specs whose anchors quote code.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "                j += 2 if text[j] == \"\\\\\" else 1",
+   "replace": "                j += 1",
+   "test": "tests/test_h_mad_mutation_append_row.py::test_the_insert_is_exact_on_every_committed_spec"
+  },
+  {
+   "name": "append-always-renders-multi-line",
+   "_mechanism": "A spec whose rows are one line each gets a multi-line row, a layout change in review.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    one_line = text[last_open:end + 1].lstrip().startswith(\"{\")",
+   "replace": "    one_line = False",
+   "test": "tests/test_h_mad_mutation_append_row.py::test_a_one_line_row_layout_gets_a_one_line_row"
+  },
+  {
+   "name": "append-escapes-non-ascii-in-a-literal-spec",
+   "_mechanism": "A spec that writes non-ASCII literally gets `\\u` escapes in the new row.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    ascii_only = all(ord(c) < 128 for c in text)",
+   "replace": "    ascii_only = True",
+   "test": "tests/test_h_mad_mutation_append_row.py::test_append_inserts_the_row_and_touches_no_other_byte"
+  },
+  {
+   "name": "append-skips-the-collect-check",
+   "_mechanism": "A row naming a test id that does not exist is appended, so its kill is unattributable.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    if collected.returncode != 0 or not _collected(row[\"test\"], collected.stdout, root):  # M:APPEND-COLLECT",
+   "replace": "    if False:  # M:APPEND-COLLECT",
+   "test": "tests/test_h_mad_mutation_append_row.py::test_a_test_id_that_does_not_collect_is_refused"
+  },
+  {
+   "name": "append-ignores-a-rootdir-relative-id",
+   "_mechanism": "pytest prints ids relative to the rootdir above the spec root; without the prefix match every real id in this repository is refused.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "        if line.endswith(\"/\" + test_id):  # M:APPEND-ROOTDIR",
+   "replace": "        if False:  # M:APPEND-ROOTDIR",
+   "test": "tests/test_h_mad_mutation_append_row.py::test_a_test_id_collects_when_pytest_rootdir_is_above_the_spec_root"
+  }
+ ],
+ "target_command": ["python3.11", "-m", "pytest", "-q"]
+}

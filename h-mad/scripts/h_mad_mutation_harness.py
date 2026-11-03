@@ -2523,6 +2523,144 @@ def _isolate(argv: list[str], spec_paths: list[Path]) -> int:
     return status
 
 
+# --- --append-row (row 2890) --------------------------------------------------
+#
+# Re-dumping a spec with json.dumps rewrites bytes nobody changed: compact
+# arrays expand, `\u` escapes flip, and a one-row edit reads as a rewrite of the
+# whole file in review. This inserts the row's text before the `mutations`
+# array closes and leaves every other byte alone, then proves it did.
+
+def _mutations_bounds(text: str) -> tuple[int, int] | None:
+    """Offsets of the top-level `"mutations": [` bracket and its matching `]`,
+    found by a string-aware scan (brackets inside strings are not structure)."""
+    depth, i, n = 0, 0, len(text)
+    open_at = None
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            token = text[i + 1:j]
+            i = j + 1
+            if depth == 1 and open_at is None and token == "mutations":
+                k = i
+                while k < n and text[k] in " \t\r\n":
+                    k += 1
+                if k < n and text[k] == ":":
+                    k += 1
+                    while k < n and text[k] in " \t\r\n":
+                        k += 1
+                    if k < n and text[k] == "[":
+                        open_at, depth, i = k, depth + 1, k + 1
+            continue
+        if ch in "{[":
+            depth += 1
+        elif ch in "}]":
+            depth -= 1
+            if open_at is not None and depth == 1 and ch == "]":
+                return open_at, i
+        i += 1
+    return None
+
+
+def _render_row(text: str, open_at: int, close_at: int, row: dict) -> tuple[int, str]:
+    """(insert offset, inserted text) in the spec's own layout: the last row's
+    indent, the indent step between the array and its rows, one line or many as
+    the last row is, and `\\u` escaping only when the file is pure ASCII."""
+    end = close_at - 1
+    while text[end] in " \t\r\n":
+        end -= 1
+    last_open = text.rfind("\n", 0, end) + 1
+    row_indent = len(text[last_open:end]) - len(text[last_open:end].lstrip(" "))
+    key_line = text.rfind("\n", 0, open_at) + 1
+    key_indent = len(text[key_line:open_at]) - len(text[key_line:open_at].lstrip(" "))
+    step = max(row_indent - key_indent, 1)
+    ascii_only = all(ord(c) < 128 for c in text)
+    # The last row's own `{`: a one-line row has it on the closing `}`'s line.
+    one_line = text[last_open:end + 1].lstrip().startswith("{")
+    if one_line:
+        body = json.dumps(row, ensure_ascii=ascii_only)
+    else:
+        body = json.dumps(row, indent=step, ensure_ascii=ascii_only).replace(
+            "\n", "\n" + " " * row_indent)
+    return end + 1, ",\n" + " " * row_indent + body
+
+
+def _collected(test_id: str, output: str, root: Path) -> bool:
+    """Did `pytest --collect-only -q` list `test_id`? pytest prints ids relative
+    to its rootdir (the directory holding `pytest.ini`), which can sit above the
+    spec root, so `h-mad/tests/x.py::t` must match a spec's `tests/x.py::t`. The
+    prefix has to name the spec root itself, or a same-named test elsewhere would
+    count."""
+    real_root = os.path.realpath(root)
+    for line in output.splitlines():
+        if line == test_id:
+            return True
+        if line.endswith("/" + test_id):  # M:APPEND-ROOTDIR
+            prefix = line[: -len(test_id) - 1]
+            if real_root == prefix or real_root.endswith(os.sep + prefix.replace("/", os.sep)):
+                return True
+    return False
+
+
+def append_row(spec_path: Path, row_path: Path) -> int:
+    def refused(reason: str) -> int:
+        print(f"APPEND: REFUSED reason={reason}")
+        return 2
+
+    try:
+        text = spec_path.read_text(encoding="utf-8")
+        spec = _load_spec(spec_path)
+        row = json.loads(row_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, SpecError) as exc:
+        print(f"  {exc}")
+        return refused("unreadable")
+    if not (isinstance(row, dict)  # M:APPEND-ROW-SHAPE
+            and all(isinstance(row.get(k), str) and row.get(k) for k in ("name", "file", "find", "test"))
+            and isinstance(row.get("replace"), str)):
+        return refused("bad-row name/file/find/test must be non-empty strings and replace a string")
+    if any(m.get("name") == row["name"] for m in spec["mutations"]):  # M:APPEND-DUP
+        return refused(f"duplicate-name name={row['name']}")
+    root = _resolve_root(spec, spec_path)
+    try:
+        source = (root / row["file"]).read_text(encoding="utf-8")
+    except OSError:
+        return refused(f"anchor-count count=0 file={row['file']} (unreadable)")
+    hits, _ = anchor_status(source, row["find"])
+    if hits != 1:  # M:APPEND-ANCHOR
+        return refused(f"anchor-count count={hits} file={row['file']}")
+    head = _override_interpreter(spec)["command"][0]
+    python = head if "python" in os.path.basename(head) else sys.executable
+    collected = subprocess.run(
+        [python, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", row["test"]],
+        cwd=root, capture_output=True, text=True, timeout=600)
+    if collected.returncode != 0 or not _collected(row["test"], collected.stdout, root):  # M:APPEND-COLLECT
+        return refused(f"test-not-collected test={row['test']} rc={collected.returncode}")
+    bounds = _mutations_bounds(text)
+    if bounds is None:
+        return refused("no-mutations-array")
+    at, inserted = _render_row(text, *bounds, row)
+    new = text[:at] + inserted + text[at:]
+    # Prove the edit before writing it: every old key unchanged, the rows equal
+    # the old rows plus this one, and the text equal to the old text plus the
+    # insert. A scan that found the wrong bracket fails here, not in a review.
+    old_data = json.loads(text)
+    try:
+        new_data = json.loads(new)
+    except ValueError:
+        return refused("verify-failed (the edited spec is not valid JSON)")
+    if (new_data.get("mutations") != old_data["mutations"] + [row]  # M:APPEND-VERIFY
+            or {k: v for k, v in new_data.items() if k != "mutations"}
+            != {k: v for k, v in old_data.items() if k != "mutations"}):
+        return refused("verify-failed")
+    tmp = spec_path.with_name(spec_path.name + ".append.tmp")
+    tmp.write_text(new, encoding="utf-8")
+    os.replace(tmp, spec_path)
+    print(f"APPEND: OK row={row['name']} mutations={len(new_data['mutations'])}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="H-MAD Phase-5e mutation harness")
     parser.add_argument(
@@ -2560,7 +2698,17 @@ def main(argv: list[str] | None = None) -> int:
         help="score only the named mutation row(s) of ONE spec (the baseline and "
              "survivor checks still run the spec's full command)",
     )
+    parser.add_argument(
+        "--append-row", type=Path, metavar="ROW_JSON",
+        help="append the mutation row in ROW_JSON to ONE spec without reformatting it; "
+             "refuses a taken name, an anchor that does not match exactly once, or a "
+             "`test` id that does not collect (row 2890)",
+    )
     args = parser.parse_args(argv)
+    if args.append_row is not None:
+        if len(args.spec) != 1 or args.sweep or args.check_anchors or args.only or args.isolate:
+            parser.error("--append-row takes exactly one spec and no other mode")
+        return append_row(args.spec[0], args.append_row)
     if args.only and (args.sweep or args.check_anchors):
         parser.error("--only scores rows of ONE spec; it cannot be combined with "
                      "--sweep or --check-anchors")
