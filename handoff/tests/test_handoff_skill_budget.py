@@ -92,6 +92,20 @@ def test_each_stub_names_its_reference_and_says_when_to_read_it(ref: str) -> Non
 
 
 @pytest.mark.parametrize("ref", SPLIT_REFERENCES)
+def test_each_stub_says_to_load_its_reference_with_the_read_tool(ref: str) -> None:
+    # Measured 2026-11-03 on the first live `/handoff read` after the split: the
+    # agent ran `cat references/read-mode.md` (38.8 KB), Bash returned a ~2 KB
+    # preview over its inline-output limit, and only a second `Read` call
+    # recovered the procedure. An agent that accepts the preview runs READ
+    # without Steps 0a-5 and nothing reports it.
+    stub = " ".join(_stub(SKILL_MD.read_text(encoding="utf-8"), _heading_of(ref)).split())
+    assert "with the `Read` tool, not `cat`" in stub, (
+        f"the stub for {ref} must say to load it with the Read tool; a shell read of a "
+        "reference this size returns a truncated preview"
+    )
+
+
+@pytest.mark.parametrize("ref", SPLIT_REFERENCES)
 def test_every_moved_subheading_resolves_from_skill_md(ref: str) -> None:
     stub = _stub(SKILL_MD.read_text(encoding="utf-8"), _heading_of(ref))
     body = (SKILL_DIR / ref).read_text(encoding="utf-8")

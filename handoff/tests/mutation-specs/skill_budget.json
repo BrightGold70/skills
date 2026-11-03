@@ -40,6 +40,14 @@
    "find": "- §\"Step 3.5: Take over handed-over work\"\n",
    "replace": "",
    "test": "tests/test_handoff_skill_budget.py::test_every_moved_subheading_resolves_from_skill_md[references/read-mode.md]"
+  },
+  {
+   "name": "read-stub-loads-its-reference-with-cat",
+   "_mechanism": "The READ stub stops saying to load read-mode.md with the Read tool; a shell read of ~39 KB returns a truncated preview (measured 2026-11-03).",
+   "file": "SKILL.md",
+   "find": "Load it with the `Read` tool, not `cat`: at ~39 KB",
+   "replace": "Load it with `cat`: at ~39 KB",
+   "test": "tests/test_handoff_skill_budget.py::test_each_stub_says_to_load_its_reference_with_the_read_tool[references/read-mode.md]"
   }
  ],
  "target_command": [

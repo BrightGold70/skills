@@ -75,7 +75,7 @@ After the handoff markdown is written (and not on `--dry-run`), leave a durable,
 
 ## Reading a handoff (resume mode)
 
-**Read [references/read-mode.md](references/read-mode.md) in full before Step 0a, on every READ entry point** (`/handoff read`, `/handoff resume`, "where did we leave off", a bare "resume"). It holds the fresh-context halt, the remote sync, locating and reading the doc, reconciliation, the mechanical-resolve allowlist, the todo restore ladder and the resume report.
+**Read [references/read-mode.md](references/read-mode.md) in full before Step 0a, on every READ entry point** (`/handoff read`, `/handoff resume`, "where did we leave off", a bare "resume"). Load it with the `Read` tool, not `cat`: at ~39 KB a shell read returns only a truncated preview, and READ then runs without its steps. It holds the fresh-context halt, the remote sync, locating and reading the doc, reconciliation, the mechanical-resolve allowlist, the todo restore ladder and the resume report.
 
 A cross-reference `SKILL.md §"…"` to any of these now resolves in `references/read-mode.md`:
 
@@ -162,7 +162,7 @@ Then stop — this is a single-shot operation, not a gateway to more work.
 
 ## HANDOVER mode — move ownership to another worktree
 
-**Read [references/handover-mode.md](references/handover-mode.md) in full before running HANDOVER, including when WRITE's §"Route foreign-worktree work before closing out" invokes it as a subroutine.** It holds the claim release, the brief, the worktree stamp, delivery through `orca-cli`, and the landed check.
+**Read [references/handover-mode.md](references/handover-mode.md) in full before running HANDOVER, including when WRITE's §"Route foreign-worktree work before closing out" invokes it as a subroutine.** Load it with the `Read` tool, not `cat` — a shell read of a reference this size can return a truncated preview. It holds the claim release, the brief, the worktree stamp, delivery through `orca-cli`, and the landed check.
 
 A cross-reference `SKILL.md §"…"` to any of these now resolves in `references/handover-mode.md`:
 
@@ -177,7 +177,7 @@ A cross-reference `SKILL.md §"…"` to any of these now resolves in `references
 
 ## TAKEOVER mode — adopt a handed-over brief WITHOUT ending the session
 
-**Read [references/takeover-mode.md](references/takeover-mode.md) in full before adopting a brief, whether from `/handoff takeover` or from READ Step 3.5.** It holds the pending-handover scan, the claim, the premise re-check, the `**Taken-Over-By:**` stamp and the report.
+**Read [references/takeover-mode.md](references/takeover-mode.md) in full before adopting a brief, whether from `/handoff takeover` or from READ Step 3.5.** Load it with the `Read` tool, not `cat` — a shell read can return a truncated preview. It holds the pending-handover scan, the claim, the premise re-check, the `**Taken-Over-By:**` stamp and the report.
 
 A cross-reference `SKILL.md §"…"` to any of these now resolves in `references/takeover-mode.md`:
 
