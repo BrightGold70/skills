@@ -521,3 +521,33 @@ def test_host_parity_has_no_fence_scanner():
 
 def test_expand_branches_optional_group_adds_empty_alternative():
     assert sorted(host_parity.expand_branches("x(?:y)?z")) == ["xyz", "xz"], "optional group must contribute its empty branch"
+
+
+@pytest.mark.parametrize("skill,marker", [
+    ("h-mad", '<!-- h-mad split body: SKILL.md §"Moved" -->'),
+    ("handoff", '<!-- handoff split body: SKILL.md §"Moved" -->'),
+])
+def test_a_token_only_in_a_split_reference_is_still_scanned(tmp_path, skill, marker):
+    """Rows 2910/2930 (and the handoff split) move SKILL.md sections into
+    `references/`. A host construct that lives only in a moved section must
+    still be checked, or the split silently removes it from the scan."""
+    token = AXIS_TOKENS["A4-tilde"]
+    paths = _empty_registry_with_token(tmp_path, "")
+    paths.skills["h-mad"].write_text("# h\n", encoding="utf-8")
+    ref = paths.skills[skill].parent / "references" / "moved.md"
+    ref.write_text(f"# Moved\n\n## Moved\n\n{marker}\n{token}\n", encoding="utf-8")
+    assert token not in paths.skills[skill].read_text(), "control: absent from the raw SKILL.md"
+    target = str(paths.skills[skill].relative_to(paths.root))
+    got = [f for f in host_parity.check(paths).failures
+           if f.kind == "UNREGISTERED" and f.file == target and f.token == token]
+    assert got, _lines(host_parity.check(paths))
+
+
+def test_a_reference_without_a_split_marker_is_not_scanned_as_skill_text(tmp_path):
+    """Adapters and other references are not SKILL.md text: only marked split bodies are."""
+    token = AXIS_TOKENS["A4-tilde"]
+    paths = _empty_registry_with_token(tmp_path, "")
+    paths.skills["h-mad"].write_text("# h\n", encoding="utf-8")
+    (paths.skills["h-mad"].parent / "references" / "notes.md").write_text(f"# N\n\n{token}\n", encoding="utf-8")
+    target = str(paths.skills["h-mad"].relative_to(paths.root))
+    assert not [f for f in host_parity.check(paths).failures if f.kind == "UNREGISTERED" and f.file == target]

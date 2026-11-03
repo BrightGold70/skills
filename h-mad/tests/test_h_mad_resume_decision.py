@@ -5,6 +5,9 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "handoff" / "tests"))
+from handoff_corpus import doc_text as _handoff_doc  # noqa: E402  (handoff SKILL.md, split modes restored)
 
 import pytest
 
@@ -153,7 +156,7 @@ class TestAnUnreadableStateFileIsNotAnEmptyOne:
         handoff = Path.home() / ".claude" / "skills" / "handoff" / "SKILL.md"
         if not handoff.is_file():
             pytest.skip("handoff skill not installed alongside h-mad")
-        text = handoff.read_text(encoding="utf-8")
+        text = _handoff_doc(handoff)
         assert "`cannot_judge`" in text, (
             "the handoff skill's oracle enumeration does not mention cannot_judge, so "
             "it falls into whatever that list's default is")
@@ -646,7 +649,7 @@ class TestALostRecordIsNotANewFeature:
         skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
         row = next((ln for ln in skill.splitlines() if ln.startswith("| `state_lost` |")), "")
         assert "**Stop." in row, "h-mad decision table must give state_lost a STOP row"
-        handoff = " ".join((REPO_ROOT / "handoff" / "SKILL.md").read_text(encoding="utf-8").split())
+        handoff = " ".join(_handoff_doc(REPO_ROOT / "handoff" / "SKILL.md").split())
         safe = handoff.split("→ no live owner. Safe to proceed.")[0].rsplit("- **one of", 1)[1]
         assert "`state_lost`" not in safe, "state_lost must not be on HANDOVER's safe list"
         assert "- **`state_lost`** →" in handoff, "HANDOVER Step 2 must classify state_lost as a STOP"

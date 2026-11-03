@@ -24,11 +24,14 @@ Literals are whitespace-normalised so a markdown reflow cannot break them.
 from __future__ import annotations
 
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from handoff_corpus import doc_text as _skill_doc  # noqa: E402  (SKILL.md with split modes restored)
 
 import pytest
 
 SKILL = Path(__file__).resolve().parents[1] / "SKILL.md"
-RAW = SKILL.read_text(encoding="utf-8")
+RAW = _skill_doc(SKILL)
 DOC = " ".join(RAW.split())
 
 

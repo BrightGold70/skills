@@ -46,6 +46,29 @@ REQUIRED_KEYS = ("id", "pattern", "skills", "description")
 _ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 
 
+# A SKILL.md section moved to `references/` (h-mad rows 2910/2930, the handoff
+# split) is still SKILL.md text: its body sits behind this marker line. Reading
+# only the raw SKILL.md would drop every moved section from the scan silently.
+SPLIT_MARKER = re.compile(r'^<!-- (?:h-mad|handoff) split body: SKILL\.md §"[^"\n]+" -->$', re.M)
+
+
+def skill_scan_text(skill_md: Path) -> str:
+    """SKILL.md plus every split-body reference beside it, for token scanning.
+
+    Concatenated, not restored in place: the scan counts and locates tokens, it
+    does not slice sections, so order does not matter. A reference with no
+    split marker (an adapter, a guide) is not SKILL.md text and is not read.
+    """
+    parts = [skill_md.read_text(encoding="utf-8")]
+    refs = skill_md.parent / "references"
+    if refs.is_dir():
+        for ref in sorted(refs.glob("*.md")):
+            body = ref.read_text(encoding="utf-8")
+            if SPLIT_MARKER.search(body):
+                parts.append(body)
+    return "\n".join(parts)
+
+
 def live_paths(root: Path) -> ParityPaths:
     skills = {name: root / name / "SKILL.md" for name in ("h-mad", "handoff")}
     adapters = {
@@ -335,7 +358,7 @@ def check(paths: ParityPaths, *, axes: Mapping[str, str] = CATCH_ALL_AXES,
     stages.append("skill")
     for skill, path in paths.skills.items():
         skill_file = _file(paths, path)
-        text = path.read_text(encoding="utf-8")
+        text = skill_scan_text(path)  # M:SPLIT-SCAN
         spans: list[tuple[int, int]] = []
         for element in elements:
             identifier = element["id"]

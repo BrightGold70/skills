@@ -29,6 +29,9 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from handoff_corpus import doc_text as _skill_doc  # noqa: E402  (SKILL.md with split modes restored)
 
 import pytest
 
@@ -279,7 +282,7 @@ class TestTheSkillDocumentsTheMechanism:
     SKILL = Path(__file__).resolve().parents[1] / "SKILL.md"
 
     def test_step_1_runs_the_scan_in_addition_to_check_2(self) -> None:
-        text = self.SKILL.read_text(encoding="utf-8")
+        text = _skill_doc(self.SKILL)
         assert "pending-handovers" in text
         # The gate that made the old exception unreachable must be gone from the
         # Handover-From path -- a reachable remedy is the entire fix.
@@ -297,7 +300,7 @@ class TestTheSkillDocumentsTheMechanism:
         a brief mid-session no longer requires a mode that halts on a loaded context,
         and READ Step 3.5 now delegates rather than carrying a second copy.
         """
-        text = self.SKILL.read_text(encoding="utf-8")
+        text = _skill_doc(self.SKILL)
         section = text[text.index("## TAKEOVER mode") :]
         assert "**Taken-Over-By:**" in section
         # and READ still routes into it, so the marker is reached from a resume too
@@ -310,7 +313,7 @@ class TestTheSkillDocumentsTheMechanism:
         in a repo flags every historical brief -- 16 of them on this repo. An
         alert that is always wrong gets trained away, and the scan then fails the
         way the thing it replaced did."""
-        locate = self.SKILL.read_text(encoding="utf-8")
+        locate = _skill_doc(self.SKILL)
         locate = locate[locate.index("### Step 1: Locate the doc") :]
         locate = " ".join(locate[: locate.index("### Step 2: Read it")].split())
         assert "Cold start" in locate
@@ -320,5 +323,5 @@ class TestTheSkillDocumentsTheMechanism:
     def test_the_marker_is_defined_in_the_template(self) -> None:
         """The defect this repo also carries as D3: an undefined field doing
         load-bearing work. A marker the locator filters on must be specified."""
-        text = self.SKILL.read_text(encoding="utf-8")
+        text = _skill_doc(self.SKILL)
         assert "Taken-Over-By" in text[text.index("## Required template") :]

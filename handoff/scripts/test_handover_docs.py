@@ -12,6 +12,9 @@ if a future edit trips one of these, the message should explain what it cost.
 from __future__ import annotations
 
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+from handoff_corpus import doc_text as _skill_doc  # noqa: E402  (SKILL.md with split modes restored)
 
 import pytest
 
@@ -19,7 +22,7 @@ SKILL = Path(__file__).resolve().parents[1] / "SKILL.md"
 
 
 def _norm(path: Path) -> str:
-    return " ".join(path.read_text(encoding="utf-8").split())
+    return " ".join(_skill_doc(path).split())
 
 
 GUIDANCE = [
@@ -294,7 +297,7 @@ def test_learn_step4_example_matches_the_real_renderer() -> None:
         "learn.py's render() changed shape; update this test AND the Step 4 example together"
     )
     example = [
-        ln for ln in SKILL.read_text(encoding="utf-8").splitlines()
+        ln for ln in _skill_doc(SKILL).splitlines()
         if "lightrag,nan-embed" in ln and "Learning saved" not in ln
     ]
     assert example, "the Step 4 success example is gone"
@@ -391,7 +394,7 @@ def test_write_phase_list_is_contiguously_numbered() -> None:
     # Renumbering after adding/removing a phase is exactly the kind of edit that
     # silently drops a step — a list going 1,2,3,4,5,7 means item 6 vanished.
     import re
-    body = SKILL.read_text(encoding="utf-8").split("## After writing", 1)[1].split("\n---", 1)[0]
+    body = _skill_doc(SKILL).split("## After writing", 1)[1].split("\n---", 1)[0]
     nums = [int(m.group(1)) for m in re.finditer(r"^(\d+)\. ", body, re.M)]
     assert nums == list(range(1, len(nums) + 1)), f"phase list numbering is broken: {nums}"
 
@@ -539,7 +542,7 @@ def _fenced_blocks() -> list[tuple[int, str, str]]:
     """(first-line-number, enclosing heading, body) for every fenced block."""
     import re
 
-    lines = SKILL.read_text(encoding="utf-8").splitlines()
+    lines = _skill_doc(SKILL).splitlines()
     out: list[tuple[int, str, str]] = []
     cur: list[str] | None = None
     start = 0
@@ -620,7 +623,7 @@ def test_orca_is_only_ever_reached_through_the_wrapper() -> None:
     import re
 
     offenders = []
-    for lineno, line in enumerate(SKILL.read_text(encoding="utf-8").splitlines(), 1):
+    for lineno, line in enumerate(_skill_doc(SKILL).splitlines(), 1):
         for match in re.finditer(r"`orca ([a-z][a-z-]*)", line):
             if (
                 line.lstrip().startswith("- Don't")
@@ -644,7 +647,7 @@ def test_example_handoff_filenames_carry_the_branch_separator() -> None:
     """
     import re
 
-    text = SKILL.read_text(encoding="utf-8")
+    text = _skill_doc(SKILL)
     bad = [
         name
         for name in re.findall(r"handoffs/(\d{4}-\d{2}-\d{2}-[A-Za-z0-9_.-]+\.md)", text)
@@ -738,7 +741,7 @@ def test_the_commit_script_is_reachable_from_the_write_phase_list() -> None:
 def test_step_7_exists_and_is_distinguished_from_supervision() -> None:
     """Step 6 says stop monitoring and Step 5 says the receipt proves nothing.
     Between them sat a real gap: asking ONCE, later, whether it was picked up."""
-    text = SKILL.read_text(encoding="utf-8")
+    text = _skill_doc(SKILL)
     doc = " ".join(text.split())
     assert "### Step 7 (optional, later): check ONCE that it landed" in text
     assert "Not a walk-back of Step 6" in doc, (
@@ -748,7 +751,7 @@ def test_step_7_exists_and_is_distinguished_from_supervision() -> None:
 
 def test_unknown_is_not_reported_as_not_yet() -> None:
     """The asymmetry that makes this safe for a sender who has already let go."""
-    doc = " ".join(SKILL.read_text(encoding="utf-8").split())
+    doc = " ".join(_skill_doc(SKILL).split())
     assert "`UNKNOWN` (rc 2) is not `NOT_YET` (rc 1)" in doc
     assert "re-deliver work that is already in progress" in doc
 
@@ -756,6 +759,6 @@ def test_unknown_is_not_reported_as_not_yet() -> None:
 def test_the_unimplemented_third_signal_is_named_with_its_reason() -> None:
     """A dropped requirement that is not written down reads as an oversight, and
     the next reader re-derives it. The blocker is a missing wrapper verb."""
-    doc = " ".join(SKILL.read_text(encoding="utf-8").split())
+    doc = " ".join(_skill_doc(SKILL).split())
     assert "deliberately **not** implemented" in doc
     assert "no wrapper verb reads an arbitrary terminal handle" in doc

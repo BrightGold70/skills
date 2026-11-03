@@ -597,6 +597,14 @@
       "find": "    return [i for i in seed_ids if i not in registry_ids and not retired.get(i)]",
       "replace": "    return [i for i in seed_ids if i not in registry_ids and i not in retired]",
       "test": "tests/test_host_construct_parity.py::test_seed_check_honours_retirement[retired-empty-reason]"
+    },
+    {
+      "name": "split-references-not-scanned",
+      "_mechanism": "The parity scan reads only the raw SKILL.md, so a host construct inside a section moved to references/ is never checked.",
+      "file": "tests/host_parity.py",
+      "find": "        text = skill_scan_text(path)  # M:SPLIT-SCAN",
+      "replace": "        text = path.read_text(encoding=\"utf-8\")  # M:SPLIT-SCAN",
+      "test": "tests/test_host_construct_parity.py::test_a_token_only_in_a_split_reference_is_still_scanned"
     }
   ]
 }

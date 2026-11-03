@@ -25,6 +25,9 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "handoff" / "tests"))
+from handoff_corpus import doc_text as _handoff_doc  # noqa: E402  (handoff SKILL.md, split modes restored)
 
 import pytest
 
@@ -234,13 +237,13 @@ class TestTheTokenIsAStopEverywhereItIsListed:
         assert "`migrated_by_bkit` STOPs too" in text, adapter
 
     def test_handover_step2_classifies_it_as_a_stop(self) -> None:
-        handoff = _flat(REPO_ROOT / "handoff" / "SKILL.md")
+        handoff = " ".join(_handoff_doc(REPO_ROOT / "handoff" / "SKILL.md").split())
         safe = handoff.split("→ no live owner. Safe to proceed.")[0].rsplit("- **one of", 1)[1]
         assert "`migrated_by_bkit`" not in safe, "migrated_by_bkit must not be on the safe list"
         assert "- **`migrated_by_bkit`** →" in handoff
 
     def test_takeover_stops_on_it_before_the_claim_catch_all(self) -> None:
-        body = (REPO_ROOT / "handoff" / "SKILL.md").read_text(encoding="utf-8")
+        body = _handoff_doc(REPO_ROOT / "handoff" / "SKILL.md")
         takeover = body[body.index("### Step T2: Adopt it"):]
         stop = takeover.find("- `migrated_by_bkit` → STOP")
         claim = takeover.find("- anything else → claim it:")
@@ -248,7 +251,7 @@ class TestTheTokenIsAStopEverywhereItIsListed:
         assert claim != -1 and stop < claim
 
     def test_takeover_absent_file_path_stops_on_it(self) -> None:
-        body = (REPO_ROOT / "handoff" / "SKILL.md").read_text(encoding="utf-8")
+        body = _handoff_doc(REPO_ROOT / "handoff" / "SKILL.md")
         takeover = " ".join(body[body.index("### Step T2: Adopt it"):].split())
         assert "`state_lost`, `migrated_by_bkit` (or `cannot_judge`) → STOP" in takeover
 

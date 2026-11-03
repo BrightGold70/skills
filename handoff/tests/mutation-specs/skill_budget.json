@@ -1,0 +1,51 @@
+{
+ "_why": "The handoff split: SKILL.md stays under budget, and each moved mode body keeps a stub that links it, says when to read it, and lists its subheadings.",
+ "root": "../..",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_handoff_skill_budget.py",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "read-stub-loses-its-trigger",
+   "_mechanism": "The READ stub no longer says it must be read in full on every entry point.",
+   "file": "SKILL.md",
+   "find": "in full before Step 0a, on every READ",
+   "replace": "before Step 0a, on a READ",
+   "test": "tests/test_handoff_skill_budget.py::test_each_stub_names_its_reference_and_says_when_to_read_it[references/read-mode.md]"
+  },
+  {
+   "name": "takeover-stub-drops-its-link",
+   "_mechanism": "The TAKEOVER stub stops linking its reference.",
+   "file": "SKILL.md",
+   "find": "**Read [references/takeover-mode.md](references/takeover-mode.md) in full",
+   "replace": "**Read references/takeover-mode.md in full",
+   "test": "tests/test_handoff_skill_budget.py::test_each_stub_names_its_reference_and_says_when_to_read_it[references/takeover-mode.md]"
+  },
+  {
+   "name": "handover-stub-forgets-the-subroutine-entry",
+   "_mechanism": "HANDOVER is also entered from WRITE; the stub stops saying so.",
+   "file": "SKILL.md",
+   "find": "invokes it as a subroutine",
+   "replace": "invokes it",
+   "test": "tests/test_handoff_skill_budget.py::test_each_stub_names_its_reference_and_says_when_to_read_it[references/handover-mode.md]"
+  },
+  {
+   "name": "a-moved-subheading-is-unlisted",
+   "_mechanism": "A SKILL.md §\"…\" cross-reference to a moved subheading can no longer be resolved.",
+   "file": "SKILL.md",
+   "find": "- §\"Step 3.5: Take over handed-over work\"\n",
+   "replace": "",
+   "test": "tests/test_handoff_skill_budget.py::test_every_moved_subheading_resolves_from_skill_md[references/read-mode.md]"
+  }
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ]
+}

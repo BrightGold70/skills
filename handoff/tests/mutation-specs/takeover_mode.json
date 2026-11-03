@@ -34,7 +34,7 @@
     {
       "name": "the-halt-exception-loses-its-reason",
       "_mechanism": "An unexplained exception to a safety gate is the thing a later reader either DELETES (restoring the hand-execution this mode replaces) or COPIES to a mode with no such justification. Aimed at the REASON SENTENCE, not the bold header above it: a row against the header SURVIVED, because the paragraph beneath still carried the contrast and the test still passed. The mutation was mis-specified, not the assertion.",
-      "file": "SKILL.md",
+      "file": "references/takeover-mode.md",
       "find": "READ's halt exists\nbecause a resume *replaces* context \u2014 the prior session's working assumptions would silently outrank\nthe document just read. A takeover *adds* one owned item and replaces nothing, so that conflict cannot\narise.",
       "replace": "The halt does not apply here.",
       "test": "tests/test_handoff_takeover_mode.py::TestTheHaltExceptionIsStatedNotJustTaken::test_the_REASON_is_given"
@@ -42,7 +42,7 @@
     {
       "name": "READ-regrows-its-own-copy-of-the-claim",
       "_mechanism": "Two adoption procedures, internally consistent, drifting apart \u2014 precisely the shared-sentence divergence h_mad_adoption_check.py exists to catch, and neither reader can see it from their own copy.",
-      "file": "SKILL.md",
+      "file": "references/read-mode.md",
       "find": "\u00a7\"TAKEOVER mode\" in full \u2014 the procedure lives there, single-sourced",
       "replace": "the steps below \u2014 copied here for convenience: run `h_mad_state_write.py --claim`, single-sourced",
       "test": "tests/test_handoff_takeover_mode.py::TestTheProcedureIsSingleSourced::test_READ_step_3_5_carries_no_claim_procedure_of_its_own"
@@ -50,7 +50,7 @@
     {
       "name": "takeover-stops-disclaiming-the-resume-work",
       "_mechanism": "Without the never-list the mode grows into a resume \u2014 syncing, reconciling and rebuilding the todo list on a loaded session, which is exactly what READ's halt exists to prevent. The exception would then have eaten the rule.",
-      "file": "SKILL.md",
+      "file": "references/takeover-mode.md",
       "find": "- It does **not** sync with the remote, locate this branch's newest handoff, or read it.",
       "replace": "- It may sync and reconcile if that seems useful.",
       "test": "tests/test_handoff_takeover_mode.py::TestItDiscoversAndDoesNotOverreach::test_takeover_names_what_it_does_NOT_do"
@@ -58,7 +58,7 @@
     {
       "name": "the-discovery-scan-is-dropped-from-the-mode",
       "_mechanism": "Half the original gap was DISCOVERY: `pending-handovers` was READ Step 1, so mid-session you could not learn a brief had arrived. A takeover mode that cannot find one only helps when you already knew.",
-      "file": "SKILL.md",
+      "file": "references/takeover-mode.md",
       "find": "### Step T1: Find what is addressed to this repo",
       "replace": "### Step T1: Assume the user handed you the path",
       "test": "tests/test_handoff_takeover_mode.py::TestItDiscoversAndDoesNotOverreach::test_takeover_runs_the_pending_handovers_scan"
@@ -66,7 +66,7 @@
     {
       "name": "an-unnamed-feature-leaves-the-work-unowned",
       "_mechanism": "THE live defect, 2026-09-07: the brief named no feature, the state file held 34 records, and the mode said nothing about that case \u2014 so five adopted items sat owned by nobody, which is the failure this mode exists to prevent, reached through this mode. A third session could then start the same work with no collision visible to either.",
-      "file": "SKILL.md",
+      "file": "references/takeover-mode.md",
       "find": "**If the brief names NO feature but a state file exists, CREATE the record and claim it.**",
       "replace": "If the brief names no feature, there is nothing to claim.",
       "test": "tests/test_handoff_takeover_mode.py::TestAnUnnamedFeatureIsStillClaimed::test_the_unnamed_feature_case_PRESCRIBES_a_claim"
@@ -74,7 +74,7 @@
     {
       "name": "the-create-path-becomes-a-way-around-the-live-owner-check",
       "_mechanism": "`owned_elsewhere` is the one branch that must never be softened by a more convenient entry point. A create path that skips the oracle takes a feature out from under a running session \u2014 exactly what `--force` exists to gate, reached without it.",
-      "file": "SKILL.md",
+      "file": "references/takeover-mode.md",
       "find": "`start_fresh`, and `owned_elsewhere` **still stops** you; the create path is a way to own unclaimed\nwork, never a way around the live-owner check.",
       "replace": "`start_fresh`, so you may create and claim it.",
       "test": "tests/test_handoff_takeover_mode.py::TestAnUnnamedFeatureIsStillClaimed::test_owned_elsewhere_still_stops_the_create_path"
@@ -82,7 +82,7 @@
     {
       "name": "the-feature-name-is-invented-rather-than-derived",
       "_mechanism": "An invented name is unfindable by the sender and by the next reader: the brief asked for the work, and the claim must be traceable back to it. Two sessions inventing different names for one brief both believe they own it.",
-      "file": "SKILL.md",
+      "file": "references/takeover-mode.md",
       "find": "brief's **slug** as the feature name \u2014 derived and traceable back to the document that asked for the\nwork, never invented:",
       "replace": "any short name you like:",
       "test": "tests/test_handoff_takeover_mode.py::TestAnUnnamedFeatureIsStillClaimed::test_the_feature_name_comes_from_the_briefs_slug"
@@ -98,7 +98,7 @@
     {
       "name": "takeover-claims-a-lost-record",
       "_mechanism": "Without the STOP bullet, TAKEOVER's 'anything else -> claim it' claims on state_lost and cannot_judge.",
-      "file": "SKILL.md",
+      "file": "references/takeover-mode.md",
       "find": "- `cannot_judge` or `state_lost` \u2192 STOP, exactly as HANDOVER Step 2 says.",
       "replace": "- (removed)",
       "test": "tests/test_handoff_oracle_token_coverage.py::TestEveryTokenIsClassified::test_takeover_stops_on_the_two_no_claim_tokens"
@@ -106,7 +106,7 @@
     {
       "name": "takeover-trusts-an-absent-file-again",
       "_mechanism": "2026-10-07: the state file vanished over a Phase-6 feature; skipping the oracle on the absent-file path reads that as nothing claimed.",
-      "file": "SKILL.md",
+      "file": "references/takeover-mode.md",
       "find": "  --state ./docs/.bkit-memory.json --feature \"<feature>\" --session-id \"<your-session-id>\"",
       "replace": "  --feature \"<feature>\" --session-id \"<your-session-id>\"",
       "test": "tests/test_handoff_oracle_token_coverage.py::TestEveryTokenIsClassified::test_takeover_asks_the_oracle_even_with_no_state_file"

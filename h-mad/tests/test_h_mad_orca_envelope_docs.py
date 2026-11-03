@@ -21,6 +21,9 @@ whitespace-normalised so a markdown reflow cannot break them.
 from __future__ import annotations
 
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "handoff" / "tests"))
+from handoff_corpus import doc_text as _handoff_doc  # noqa: E402  (handoff SKILL.md, split modes restored)
 
 import pytest
 
@@ -131,7 +134,7 @@ def _handoff_skill() -> str:
     path = SKILL_ROOT.parent / "handoff" / "SKILL.md"
     if not path.is_file():
         pytest.skip("handoff skill not installed alongside h-mad")
-    return _norm(path)
+    return " ".join(_handoff_doc(path).split())
 
 
 def test_handoff_refuses_to_overwrite_a_comment_it_could_not_read() -> None:
