@@ -21,6 +21,13 @@ a FALSE OK (the direction that ends a run):
      `isSidechain: true`, and a subagent's context is a fraction of the parent's, so
      the newest usage line can report 8k while the orchestrator sits at 500k. Skip
      sidechain lines.
+  4. reading the top-level `usage` billing sum on a multi-iteration turn (such as a
+     turn that invoked `server_tool_use:advisor`). The API runs `['message',
+     'advisor_message', 'message']` inside one turn and sets top-level `usage` to the
+     sum of the `type: "message"` iterations (~2x the actual window; measured
+     2026-11-03 on session `b1a99532` line 3112: top-level `679,806` = 68.0% over
+     iterations `339,005` and `340,801` = 34.1%). When `usage.iterations` carries
+     `type == "message"` entries, read the last one.
 
 The number is a FLOOR, not the live value: the last recorded usage predates the
 current turn's own growth (tool results already in flight are not in it). Treat the
@@ -117,6 +124,14 @@ def last_context_tokens(transcript: Path) -> int | None:
                 usage = msg.get("usage") if isinstance(msg, dict) else None
                 if not isinstance(usage, dict):
                     continue
+                iters = usage.get("iterations")
+                if isinstance(iters, list):
+                    msg_iters = [
+                        it for it in iters
+                        if isinstance(it, dict) and it.get("type") == "message"
+                    ]
+                    if msg_iters:
+                        usage = msg_iters[-1]
                 total = 0
                 for key in (
                     "input_tokens",

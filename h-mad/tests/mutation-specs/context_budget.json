@@ -53,7 +53,21 @@
    "file": "scripts/h_mad_context_budget.py",
    "find": "    for candidate in (cwd, *cwd.parents):",
    "replace": "    for candidate in (cwd,):"
+  },
+  {
+   "name": "sum-across-iterations-on-advisor-turn",
+   "_mechanism": "On a turn with `server_tool_use:advisor`, top-level `usage` sums both `type: \"message\"` iterations (~2x the window; measured 2026-11-03 on session b1a99532: 679,806 = 68.0% vs 340,801 = 34.1%). Reading top-level `usage` instead of the last `message` iteration double-counts the window.",
+   "file": "scripts/h_mad_context_budget.py",
+   "find": "                    if msg_iters:\n                        usage = msg_iters[-1]",
+   "replace": "                    if False:\n                        usage = msg_iters[-1]",
+   "test": "tests/test_h_mad_context_budget.py::TestWhichNumberItReads::test_takes_the_last_message_iteration_not_the_multi_iteration_billing_sum"
   }
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
  ],
  "command": [
   "python3.11",

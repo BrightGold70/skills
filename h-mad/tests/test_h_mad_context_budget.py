@@ -100,6 +100,54 @@ class TestWhichNumberItReads:
         t = _transcript(tmp_path, json.dumps({"type": "user", "message": {}}))
         assert cb.last_context_tokens(t) is None
 
+    def test_takes_the_last_message_iteration_not_the_multi_iteration_billing_sum(self, tmp_path):
+        """On a turn that invokes `server_tool_use:advisor`, the API runs
+        `['message', 'advisor_message', 'message']` in one turn and sets top-level
+        `usage` to the billing sum of the `message` iterations (~2x the window).
+        Measured 2026-11-03 on session `b1a99532` line 3112: top-level `679,806`
+        (68.0%) over iterations `339,005` and `340,801` (34.1%). Reading the
+        top-level sum reported 68.0% when the live context was 34.1%."""
+        advisor_turn = json.dumps({
+            "isSidechain": False,
+            "type": "assistant",
+            "message": {
+                "usage": {
+                    "input_tokens": 4,
+                    "cache_creation_input_tokens": 3_073,
+                    "cache_read_input_tokens": 676_729,
+                    "output_tokens": 1_459,
+                    "iterations": [
+                        {
+                            "type": "message",
+                            "input_tokens": 2,
+                            "cache_creation_input_tokens": 1_277,
+                            "cache_read_input_tokens": 337_726,
+                            "output_tokens": 545,
+                        },
+                        {
+                            "type": "advisor_message",
+                            "model": "claude-fable-5-1",
+                            "input_tokens": 323_673,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
+                            "output_tokens": 7_091,
+                        },
+                        {
+                            "type": "message",
+                            "input_tokens": 2,
+                            "cache_creation_input_tokens": 1_796,
+                            "cache_read_input_tokens": 339_003,
+                            "output_tokens": 914,
+                        },
+                    ],
+                },
+            },
+        })
+        t = _transcript(tmp_path, advisor_turn)
+        assert cb.last_context_tokens(t) == 340_801
+        tok = _token(_run("--transcript", str(t), "--window", "1000000").stdout)
+        assert tok.startswith("CTXBUDGET: OK used=340801 "), tok
+
 
 class TestVerdict:
     def test_ok_below_the_ceiling(self, tmp_path):
