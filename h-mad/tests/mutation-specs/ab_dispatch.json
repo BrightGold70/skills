@@ -149,6 +149,22 @@
       "find": "                 .replace(\"{arm}\", arm)",
       "replace": "                 .replace(\"{arm}\", \"\")",
       "test": "tests/test_h_mad_ab_dispatch.py::TestPerArmPathScoping::test_two_arms_no_longer_share_an_output_path"
+    },
+    {
+      "name": "run-argv-gets-the-same-value-for-both-arms",
+      "_mechanism": "Row 2958: collapse build_run_arms so both arms receive value_a in --run. An experiment varying --effort or --model with a constant prompt then runs arm A against arm A and reports SAME.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "        [token.replace(placeholder, value_b) for token in run_tokens],",
+      "replace": "        [token.replace(placeholder, value_a) for token in run_tokens],",
+      "test": "tests/test_h_mad_ab_dispatch.py::TestPerArmArgvControl::test_cli_substitutes_var_into_run_argv_per_arm"
+    },
+    {
+      "name": "run-argv-collision-is-not-checked",
+      "_mechanism": "Row 2958: skip the --run re-derivation check in is_controlled so an argv where an arm's value already appears in another token passes as controlled.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "        if value_a and [t.replace(value_a, placeholder) for t in run_a] != tokens:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_ab_dispatch.py::TestPerArmArgvControl::test_argv_collision_outside_placeholder_is_uncontrolled"
     }
   ]
 }

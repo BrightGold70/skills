@@ -44,31 +44,61 @@ def build_arms(template: str, var: str, value_a: str, value_b: str) -> tuple[str
     return template.replace(placeholder, value_a), template.replace(placeholder, value_b)
 
 
-def is_controlled(template: str, var: str, value_a: str, value_b: str) -> str:
+def build_run_arms(
+    run_tokens: list[str] | tuple[str, ...], var: str, value_a: str, value_b: str
+) -> tuple[list[str], list[str]]:
+    """The two dispatch argvs, identical except where `{{var}}` was substituted."""
+    placeholder = "{{" + var + "}}"
+    return (
+        [token.replace(placeholder, value_a) for token in run_tokens],
+        [token.replace(placeholder, value_b) for token in run_tokens],
+    )
+
+
+def is_controlled(
+    template: str,
+    var: str,
+    value_a: str,
+    value_b: str,
+    run_tokens: list[str] | tuple[str, ...] | None = None,
+) -> str:
     """Empty string when the pair is a controlled experiment, else the reason.
 
     The check is the point of the tool, so it is made against the built prompts
-    rather than trusted from construction: re-deriving the template from each
-    arm proves the substitution touched only the declared sites. A value that
-    contains the placeholder, or one arm's value appearing inside the other's,
-    fails here — those change more than one thing while still looking like a
-    single-variable diff.
+    (and built `--run` argvs when `{{var}}` lives in `--run`) rather than trusted
+    from construction: re-deriving the template and argv from each arm proves the
+    substitution touched only the declared sites. A value that contains the
+    placeholder, or one arm's value appearing outside the placeholder in the
+    template or `--run`, fails here — those change more than one thing while
+    still looking like a single-variable diff.
     """
     placeholder = "{{" + var + "}}"
+    tokens = list(run_tokens or ())
+    in_template = placeholder in template
+    in_run = any(placeholder in token for token in tokens)
     if placeholder not in template:
-        return f"the template has no {placeholder} — both arms would be identical"
+        if not in_run:
+            return f"the template has no {placeholder} — both arms would be identical"
     if value_a == value_b:
         return f"both arms set {var} to the same value, so nothing varies"
     if placeholder in value_a or placeholder in value_b:
         return f"a value contains {placeholder} and re-expands, changing more than {var}"
 
-    prompt_a, prompt_b = build_arms(template, var, value_a, value_b)
-    # Re-deriving the template from each arm is only meaningful when the value
-    # is non-empty; an empty arm IS the template with the placeholder removed.
-    if value_a and prompt_a.replace(value_a, placeholder) != template:
-        return f"arm a differs from the template outside {placeholder}"
-    if value_b and prompt_b.replace(value_b, placeholder) != template:
-        return f"arm b differs from the template outside {placeholder}"
+    if in_template:
+        prompt_a, prompt_b = build_arms(template, var, value_a, value_b)
+        # Re-deriving the template from each arm is only meaningful when the value
+        # is non-empty; an empty arm IS the template with the placeholder removed.
+        if value_a and prompt_a.replace(value_a, placeholder) != template:
+            return f"arm a differs from the template outside {placeholder}"
+        if value_b and prompt_b.replace(value_b, placeholder) != template:
+            return f"arm b differs from the template outside {placeholder}"
+
+    if in_run:
+        run_a, run_b = build_run_arms(tokens, var, value_a, value_b)
+        if value_a and [t.replace(value_a, placeholder) for t in run_a] != tokens:
+            return f"arm a argv differs from --run outside {placeholder}"
+        if value_b and [t.replace(value_b, placeholder) for t in run_b] != tokens:
+            return f"arm b argv differs from --run outside {placeholder}"
     return ""
 
 
@@ -133,6 +163,7 @@ def run_ab(
     value_b: str,
     runner,
     observe: str,
+    run_tokens: list[str] | tuple[str, ...] | None = None,
 ) -> dict:
     """Dispatch both arms through `runner` and diff one observable.
 
@@ -143,7 +174,7 @@ def run_ab(
     out_dir.mkdir(parents=True, exist_ok=True)
     pattern = re.compile(observe)
 
-    reason = is_controlled(template, var, value_a, value_b)
+    reason = is_controlled(template, var, value_a, value_b, run_tokens=run_tokens)
     if reason:
         # Refused BEFORE dispatching: an uncontrolled pair cannot produce a
         # finding, so paying for two agent runs to learn that is pure waste.
@@ -221,6 +252,8 @@ def main(argv: list[str] | None = None) -> int:
         print("[H-MAD] ab-dispatch UNREADABLE")
         return 2
 
+    run_arms = dict(zip(ARMS, build_run_arms(args.run, args.var, args.a, args.b)))
+
     def runner(arm: str, prompt_path: Path, log_path: Path) -> int:
         argv_arm = [
             # `{arm}` as well as `{prompt}`/`{log}`: without it every OTHER
@@ -233,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
             token.replace("{prompt}", str(prompt_path))
                  .replace("{log}", str(log_path))
                  .replace("{arm}", arm)
-            for token in args.run
+            for token in run_arms[arm]
         ]
         try:
             return subprocess.run(argv_arm, capture_output=True).returncode
@@ -241,7 +274,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: arm {arm} could not launch: {exc}", file=sys.stderr)
             return 127
 
-    result = run_ab(args.out, template, args.var, args.a, args.b, runner, args.observe)
+    result = run_ab(
+        args.out, template, args.var, args.a, args.b, runner, args.observe,
+        run_tokens=args.run,
+    )
     verdict = result["verdict"]
 
     print(f"AB: {verdict} var={args.var} a={result['a']} b={result['b']}")

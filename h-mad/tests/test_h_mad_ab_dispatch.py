@@ -26,7 +26,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 AB = SCRIPTS / "h_mad_ab_dispatch.py"
 
 sys.path.insert(0, str(SCRIPTS))
-from h_mad_ab_dispatch import build_arms, run_ab  # noqa: E402
+from h_mad_ab_dispatch import build_arms, build_run_arms, is_controlled, run_ab  # noqa: E402
 from skill_corpus import doc_text  # noqa: E402
 
 
@@ -518,3 +518,65 @@ def test_skill_states_the_environment_is_not_controlled():
     """
     skill = doc_text(Path(__file__).resolve().parents[1] / "SKILL.md")
     assert "does not control the environment" in skill
+
+
+class TestPerArmArgvControl:
+    """Row 2958 — varying a dispatch argv token (`--model`, `--effort`) per arm
+    inside the control check, without a dummy `{{VAR}}` marker in the prompt.
+    """
+
+    def test_build_run_arms_substitutes_only_the_variable_token(self) -> None:
+        a, b = build_run_arms(
+            ["codex", "-c", "model_reasoning_effort={{EFFORT}}", "{prompt}"],
+            "EFFORT", "high", "medium",
+        )
+        assert a == ["codex", "-c", "model_reasoning_effort=high", "{prompt}"]
+        assert b == ["codex", "-c", "model_reasoning_effort=medium", "{prompt}"]
+
+    def test_argv_only_variable_is_controlled_with_a_constant_prompt(
+        self, tmp_path: Path
+    ) -> None:
+        result = run_ab(
+            tmp_path, "Constant prompt with no placeholder.\n", "EFFORT", "high", "medium",
+            _fake_runner({"a": "EFFORT: high\n", "b": "EFFORT: medium\n"}),
+            observe=r"EFFORT: (\S+)",
+            run_tokens=["codex", "-c", "model_reasoning_effort={{EFFORT}}"],
+        )
+        assert result["verdict"] == "DIFFERENT", result
+        assert result["a"] == "high" and result["b"] == "medium"
+
+    def test_argv_collision_outside_placeholder_is_uncontrolled(self) -> None:
+        # Arm a's value ("sonnet") already appears in another `--run` token, so
+        # re-deriving `--run` from arm a's built argv does not recover the original
+        # token list; the check refuses the collision.
+        reason_a = is_controlled(
+            "Constant prompt.\n", "MODEL", "sonnet", "haiku",
+            run_tokens=["claude", "--tag", "sonnet", "--model", "{{MODEL}}"],
+        )
+        assert "arm a argv differs from --run" in reason_a
+        reason_b = is_controlled(
+            "Constant prompt.\n", "MODEL", "sonnet", "haiku",
+            run_tokens=["claude", "--tag", "haiku", "--model", "{{MODEL}}"],
+        )
+        assert "arm b argv differs from --run" in reason_b
+
+    def test_cli_substitutes_var_into_run_argv_per_arm(self, tmp_path: Path) -> None:
+        template = tmp_path / "t.md"
+        template.write_text("Constant prompt, no placeholder.\n", encoding="utf-8")
+        runner = tmp_path / "runner.py"
+        runner.write_text(
+            "import sys, pathlib\n"
+            "flag, log = sys.argv[1], pathlib.Path(sys.argv[2])\n"
+            "log.write_text('FLAG: ' + flag + chr(10))\n",
+            encoding="utf-8",
+        )
+        proc = _cli(
+            "--template", str(template), "--var", "EFFORT",
+            "--a", "high", "--b", "medium",
+            "--observe", r"FLAG: (\S+)", "--out", str(tmp_path / "o"),
+            "--run", sys.executable, "--run", str(runner),
+            "--run", "--effort={{EFFORT}}", "--run", "{log}",
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "AB: DIFFERENT var=EFFORT a=--effort=high b=--effort=medium" in proc.stdout
+
