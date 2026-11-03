@@ -58,7 +58,11 @@ These files exist: `R/scripts/tool.sh`, `R/bin/launch`, `R/scripts/other.sh`, `R
 
 ### FR-3: One listing matcher, shared by the judge and all three gates, alias-closed on the target side
 - **Description**: Whether a target is listed is decided by exactly one implementation: the impl-plan match inside `h_mad_tdd_judge.resolve`. That match walks each ancestor `base` of the target from its parent up to the root. For each `production` entry it compares `os.path.realpath(base / entry)` with the target's realpath.
-  - The codex and agy gates reach it in-process through `h_mad_target_identity._load_judge()`.
+  - The codex and agy gates reach it in-process, each through its own existing binding of the module `h_mad_tdd_judge`. Neither binding is on a code-like target's path today, so each gate needs a **new call site** for the listing decision, and the design names both:
+    - *codex* (`h-mad/hooks/h-mad-codex-tdd-gate.py`) imports `_load_judge` from `h_mad_target_identity` at module level. In its per-target loop it calls `_load_judge()` only after the guard `if not production: continue`, where `production` holds the names `_is_production_python` accepts. So `_load_judge()` runs on the production-`.py` path only, and a code-like target leaves the loop at that guard before any judge call.
+    - *agy* (`h-mad/hooks/h-mad-agy-tdd-gate.py`) never calls `_load_judge`. Inside `main` it prepends the hook's sibling `scripts/` directory to `sys.path` and binds `import h_mad_tdd_judge as judge`. Its T6–T7 loop calls `judge.read_chain` and `judge.judge` through that binding, again only after its own `if not production: continue` guard.
+    - Both bindings load `h_mad_tdd_judge` from the same directory, `h-mad/scripts/` beside the hook (`_load_judge` resolves `Path(__file__).resolve().parents[1] / "scripts"` from `h_mad_target_identity.py`, and the agy gate resolves the same expression from `hooks/`). The new call site may use the host's existing binding or a new `_load_judge()` call; either way it reaches the one matcher.
+    - The listing decision needs the active records, so on codex and agy the new call site reads the chain (`read_chain`) **before** it decides listing. FR-6 states the order.
   - The Claude gate reaches it through a judge CLI verb or flag. Its output is one line with an enumerated set of values: one for listed, one for not listed, and one for unreadable. The design must name every value.
   - The Claude gate refuses with `kind=judge-error` on zero lines, several lines, a non-zero exit or an unrecognised value, as it does for the `state` and `judge` verbs today.
   - No gate re-implements the match.
@@ -66,7 +70,7 @@ These files exist: `R/scripts/tool.sh`, `R/bin/launch`, `R/scripts/other.sh`, `R
 
   Alias spellings are closed by evaluating the predicate over the target's canonical names from `h_mad_target_identity.canonicalise`, never over the spelled path. `canonicalise` follows symlinks to the referent. For an existing file it returns the on-disk spelling, so a case-variant spelling folds. Its `names` holds every same-directory hard link. The target is listed if any of those names is listed.
 - **Acceptance Criteria**:
-  - AC-3.1: The codex gate, the agy gate and the Claude gate's CLI path all call the same function for the listing decision. A mutation that makes that function always return "not listed" turns AC-5.1, AC-6.1 and AC-7.1 from DENY to ALLOW on all three hosts. Each host has its own failing test, run with that host alone.
+  - AC-3.1: The codex gate, the agy gate and the Claude gate's CLI path all call the same function for the listing decision, each through the binding FR-3 names for it. A mutation that makes that function always return "not listed" turns AC-5.1, AC-6.1 and AC-7.1 from DENY to ALLOW on all three hosts. Each host has its own failing test, run with that host alone.
   - AC-3.2 (symlink): `R/link.sh` is a symlink to `R/scripts/tool.sh`. With the test absent, a write to `link.sh` is DENY `kind=test-missing` on each host.
   - AC-3.3 (case fold, existing file, case-insensitive volume): with the test absent, a write spelled `scripts/TOOL.SH` is DENY `kind=test-missing` on each host.
   - AC-3.4 (hard link, same directory): `R/scripts/hard.sh` is a hard link to `R/scripts/tool.sh`. With the test absent, a write to `scripts/hard.sh` is DENY `kind=test-missing` on each host. The judge receives a listed name, so its resolution source is `impl-plan` and never `name-map`.
@@ -96,7 +100,7 @@ These files exist: `R/scripts/tool.sh`, `R/bin/launch`, `R/scripts/other.sh`, `R
     1. Read state. `TDD-STATE: none` means ALLOW.
     2. Decide listing through FR-3. Not listed means ALLOW.
     3. A listed target passes through the existing implementer, peer-authorship and fallback refusals unchanged.
-    4. Call the judge with a listed canonical name as `--target`.
+    4. Call the judge with the **selected listed name** (FR-6, *Selection rule*) as `--target`.
   - The `.py` path is unchanged.
 - **Acceptance Criteria**:
   - AC-5.1: With the test absent, a Claude `Write` to `R/scripts/tool.sh` (with `implementer=null` so Claude is the author) is DENY `kind=test-missing`.
@@ -106,25 +110,35 @@ These files exist: `R/scripts/tool.sh`, `R/bin/launch`, `R/scripts/other.sh`, `R
   - AC-5.5: With the default implementer (codex resolves), a Claude `Write` to `R/scripts/tool.sh` is DENY `kind=codex-authorship`. A Claude `Write` to the unlisted `R/notes.md` in that state is ALLOW, as today.
   - AC-5.6: Without `docs/.bkit-memory.json`, or with a record that is not active, a Claude `Write` to `R/scripts/tool.sh` is ALLOW.
   - AC-5.7: A listed `R/tests/helper.sh` (listed as `tests/helper.sh`) is ALLOW, by the existing `_dir_match` exemption.
+  - AC-5.8 (selection observed): in the FR-6 selection fixture, a Claude `Write` to `R/scripts/tool.sh` is ALLOW in state S1 and DENY `kind=test-missing` in state S2 (AC-6.5 defines both).
 
 ### FR-6: codex gate — judge a listed code-like target
 - **Description**: In `h-mad/hooks/h-mad-codex-tdd-gate.py`'s per-target loop, a doc/data target is skipped first (FR-11), before any listing decision or `read_chain`. For any other target, a name qualifies when either of two things is true:
   - `_is_production_python(relative)` is true; or
   - the target is code-like, the name's `relative` path is not exempt, and the name is listed per FR-3.
 
-  If any name is production Python, the existing `min(production)` selection over the `.py` names is kept. Otherwise the smallest listed name is judged. The existing `read_chain`, `judge` and deny path is used unchanged.
+  The order, for a target that is not a doc/data file:
+  1. If any name is production Python, the existing path runs unchanged: `min(production)` over the `.py` names, `_load_judge()`, `read_chain`, `judge`, deny.
+  2. Otherwise, if no name is code-like and non-exempt, the target is skipped as today.
+  3. Otherwise the new call site (FR-3) calls `read_chain(root, <target>)`. `unreadable` is DENY `kind=judge-error` (FR-8). A value other than `active` skips the target, as today.
+  4. With `active`, the listing decision (FR-3) runs over the code-like, non-exempt names, with the chain's records. An unreadable impl-plan is DENY `kind=judge-error` (FR-8). No listed name skips the target.
+  5. Otherwise `judge(root, <selected listed name>, records)` runs, and any verdict other than ALLOW is denied through the existing deny form.
+
+  *Selection rule* (all three hosts): when several canonical names qualify, the judged name is the least one in Python `str` ordering of the basename. `canonicalise` returns `names` sorted, so this is also the first qualifying name in `names` order. It is the same name `min(production)` picks among `.py` names today, because those tuples begin with the name. The Claude gate's `--target` (FR-5 step 4) and agy's judged name (FR-7) follow this rule. Two qualifying names can resolve to different Tasks (same-directory hard links listed in different Tasks), so the choice can change the verdict; AC-5.8, AC-6.5 and AC-7.4 observe it.
 - **Acceptance Criteria**:
   - AC-6.1: With the test absent, a codex `apply_patch` with header `*** Update File: scripts/tool.sh` is DENY with `kind=test-missing` in the reason.
   - AC-6.2: Same with the test passing: DENY `kind=test-passing`. Same with the test failing: ALLOW.
   - AC-6.3 (controls): in the AC-6.1 state, `*** Update File: scripts/other.sh` is ALLOW (unlisted control) and `*** Add File: notes.md` is ALLOW (doc/data control).
   - AC-6.4: A patch touching both `scripts/other.sh` and `scripts/tool.sh` is DENY when the test is absent. One listed target in a multi-target patch is enough.
+  - AC-6.5 (selection observed): the *selection fixture* is the fixture plus `R/scripts/hard.sh` as a hard link to `R/scripts/tool.sh`, and a second Task, `## Task 2: hard`, with **Task shape** `new-behaviour`, **Production file** `scripts/hard.sh` and **Test file** `tests/test_hard.py`. Both names are listed, by different Tasks, and `hard.sh` is the least. State S1: `tests/test_tool.py` absent, `tests/test_hard.py` failing. State S2: `tests/test_hard.py` absent, `tests/test_tool.py` failing. `*** Update File: scripts/tool.sh` is ALLOW in S1 and DENY `kind=test-missing` in S2. Judging `tool.sh` instead inverts both results, and an "allow if any listed name allows" rule turns S2 to ALLOW, so each wrong rule fails one state.
 
 ### FR-7: agy gate — judge a listed code-like target
-- **Description**: `h-mad/hooks/h-mad-agy-tdd-gate.py` follows the same selection rule as FR-6, doc/data skip included, in its write-class (T6–T7) loop. The existing T1–T5 checks run first and are unchanged: unresolvable, directory, outside-root, and the allowance file.
+- **Description**: `h-mad/hooks/h-mad-agy-tdd-gate.py` follows FR-6's order and *Selection rule*, doc/data skip included, in its write-class (T6–T7) loop, with its deny in agy's `{"decision": "deny", …}` form. Its new call site uses the `judge` binding FR-3 names for agy, or a new `_load_judge()` call. The existing T1–T5 checks run first and are unchanged: unresolvable, directory, outside-root, and the allowance file.
 - **Acceptance Criteria**:
   - AC-7.1: With the test absent, an agy write call targeting `scripts/tool.sh` produces `{"decision": "deny", …}` with a reason ending `kind=test-missing`.
   - AC-7.2: Same with the test passing: deny `kind=test-passing`. Same with the test failing: `{"decision": "allow"}`.
   - AC-7.3 (controls): agy writes to `scripts/other.sh` (unlisted control) and `notes.md` (doc/data control) produce `{"decision": "allow"}`.
+  - AC-7.4 (selection observed): in the AC-6.5 selection fixture, an agy write targeting `scripts/tool.sh` produces `{"decision": "allow"}` in S1 and a deny ending `kind=test-missing` in S2.
 
 ### FR-8: An undecidable listing fails closed
 - **Description**: In some states, listing cannot be decided for a code-like, non-exempt target. Each gate then denies with `kind=judge-error` instead of allowing. The cases:
@@ -149,6 +163,15 @@ These files exist: `R/scripts/tool.sh`, `R/bin/launch`, `R/scripts/other.sh`, `R
   - Those installed paths resolve to another checkout (plan §"Measurements" M7). A reading taken through the helper would measure a hook that is not under test.
 
   The design names the driving mechanism.
+
+  **Incident replay** (base invariant §"Incident replay" in `h-mad/invariants.base.md`: synthetic cases alone are a violation when the real motivating artifacts are reachable). The fixture above is synthetic. The real artifacts are reachable: tracked impl-plans whose Task lists the motivating dispatcher `h-mad/scripts/hmad-dispatch.sh` on its **Production file(s)** line. Located at `e4979ecd` with `git grep -n -E '^\*\*Production files?\*\*:.*hmad-dispatch\.sh' -- '*.impl-plan.md'`: 41 matching lines in 17 files (4 lines in 3 files outside `docs/archive/`). The replay uses **Task 1 (`exec-empty-output-recovery`) of `docs/01-plan/features/exec-missing-report-recovery.impl-plan.md`**, chosen because its one Production line carries both the motivating code-like target and a doc file:
+
+  ```markdown
+  **Production files**: `h-mad/scripts/hmad-dispatch.sh` (function `_cmd_exec`) and `h-mad/SKILL.md` (exec-dispatch docs — FR-6)
+  **Test file**: `h-mad/tests/test_hmad_dispatch_exec.py`
+  ```
+
+  The Task has no **Task shape** line; `resolve` does not read the shape. At `e4979ecd`, `_parse_tasks` on that file gives this Task `production == []` and `ungated == ['h-mad/scripts/hmad-dispatch.sh', 'h-mad/SKILL.md']`; the backticked `_cmd_exec` holds neither `/` nor `.`, so `_NON_PY_PATH_RE` does not collect it. The replay repo holds that impl-plan **byte-for-byte** from the tracked blob, under its own name, with an active Phase-5 record whose key is `exec-missing-report-recovery` and whose authorship settings match AC-9.1's per-host rows. The files `h-mad/scripts/hmad-dispatch.sh`, `h-mad/SKILL.md` and the unlisted control `h-mad/scripts/h_mad_derive_test_path.sh` (a real tracked script that no Task of that plan lists) exist; their content is irrelevant to the verdict. Each spelling is the real one. "Before" drives the hooks as of the feature branch's base commit (`git merge-base HEAD main`, `d655d8cb` at `e4979ecd`), with every file under `h-mad/` taken from that commit, because each hook loads its siblings from `h-mad/scripts/`. "After" drives the worktree's hooks at the commit under test.
 - **Acceptance Criteria**:
   - AC-9.1: For each of Claude, codex and agy, the run records these verdicts:
     - listed `scripts/tool.sh` with the test absent: DENY `test-missing`;
@@ -156,27 +179,48 @@ These files exist: `R/scripts/tool.sh`, `R/bin/launch`, `R/scripts/other.sh`, `R
     - the unlisted `scripts/other.sh` in the test-absent state: ALLOW.
   - AC-9.2: Each host's run records which hook file it executed, by path and sha256 at the commit under test, so the reading cannot have come from the live `~/.claude/skills/h-mad` symlink or from the helper's installed paths, which point at a different checkout.
   - AC-9.3: Every new guard in FR-1, FR-3 to FR-8 and FR-11 has a mutation-spec entry. Each mutant is killed by a test that fails for the guard's own reason. Results are scored on the pytest summary, not on `$?`.
+  - AC-9.4 (incident replay, real Task): for each of Claude, codex and agy, run on its own, the replay records these verdicts, each in the host's own verdict form:
+
+    | Write target (real spelling) | Test `h-mad/tests/test_hmad_dispatch_exec.py` | Before (base commit) | After (commit under test) |
+    |---|---|---|---|
+    | `h-mad/scripts/hmad-dispatch.sh` (listed, code-like) | absent | ALLOW | DENY `kind=test-missing` |
+    | `h-mad/scripts/hmad-dispatch.sh` | failing on an assertion | ALLOW | ALLOW |
+    | `h-mad/scripts/h_mad_derive_test_path.sh` (unlisted control) | absent | ALLOW | ALLOW |
+    | `h-mad/SKILL.md` (listed doc/data, FR-11) | absent | ALLOW | ALLOW |
+
+    The first row's before/after pair is the incident: the base gates let the motivating dispatcher be written with no RED, and the shipped gates refuse it. The before readings follow from code at the base commit (the Claude gate's `ALL_SUFFIX_NAMES` second arm admits `*.sh`; the codex and agy loops `continue` at `if not production`); the replay must observe them, not assume them. A before reading other than ALLOW is a finding against this spec's premise, never a pass.
+  - AC-9.5 (replay provenance): the replay records the impl-plan's source commit and blob sha (`git rev-parse <commit>:docs/01-plan/features/exec-missing-report-recovery.impl-plan.md`; `fef08298…` at `e4979ecd`) and the sha256 of the copy it fed the hooks, and they agree. It records the base commit's sha and, per host and per side, the hook file's path and sha256 as AC-9.2 does. A replay whose Task text was retyped, trimmed or re-spelled does not satisfy AC-9.4.
 
 ### FR-10: The prose that states which files the gates judge states the shipped rule
-- **Description**: Every h-mad prose surface that states which files the Phase-5 write gates judge is updated to the rule this spec ships (operator ruling R-C, 2026-11-04). The rule has four parts:
+- **Description**: Every h-mad prose surface that states which files the Phase-5 write gates judge, or whose writes the Claude-side authorship refusals cover, is updated to the rule this spec ships (operator ruling R-C, 2026-11-04). The rule has five parts:
   - `.py` production code is judged.
   - Code-like non-`.py` files are judged when a Task's **Production file** line lists them.
   - Doc/data files (the nine suffixes in Terms) are allowed, listed or not.
   - Unlisted code-like files are allowed.
+  - The Claude-side authorship refusals (implementer, peer-authorship, fallback) cover Claude's write to a listed code-like file exactly as they cover its production `.py` write (FR-5 step 3).
 
-  The floor of surfaces comes from plan §"Measurements" M6, re-run at `a7bfcbe0`. There are two:
+  The floor of surfaces was first taken from plan §"Measurements" M6 and is re-derived here at `e4979ecd` with the AC-10.1 phrasing set (five branches). It is four surfaces in three files:
   1. In `h-mad/references/codex-implementer-prompt.md`, the bullets under its single `Hook: ` line. Their doc/data bullet names six of the nine suffixes, as words ("markdown / yaml / json / toml / txt / rst"). Their production bullet defines production code as "a `.py` suffix in any case".
   2. In `h-mad/references/codex-runtime.md`, §"Trust boundary", whose first sentence says the hook prevents "production-Python writes".
+  3. In `h-mad/references/phase5-substeps.md`, the gate-scope paragraph that opens `Test files, docs, config, and shell are never gated; only production `.py`.` This states the old rule in full: it says shell is never gated. `doc_text(SKILL)` restores this file into `SKILL.md`'s text (it is in `h_mad_skill_corpus.SPLIT_REFERENCES`), so it is the `SKILL.md` statement of the rule.
+  4. In `h-mad/references/phase5-substeps.md`, the bullet that opens `- **FR-3 — Claude-side authorship.**`, which says the first resolved peer "refuses Claude's production-`.py` write". After FR-5 step 3 the same refusals also cover Claude's write to a listed code-like target, so the bullet states the old scope.
 
   This floor is not a closure. The design re-runs the sweep with a wider phrasing set and names every surface it adds.
+
+  **Regression provenance for surface 3** (base invariant §"Regression provenance" in `h-mad/invariants.base.md`). `h-mad/tests/test_h_mad_tdd_gate_docs.py::test_skill_states_the_docs_first_component_rule` pins surface 3 verbatim: `anchor = "Test files, docs, config, and shell are never gated; only production `.py`."`, asserted to occur exactly once in `doc_text(SKILL)`. The test then asserts five tokens in the paragraph after the anchor: `FIRST component`, `relative to the project root`, `` `docs` ``, `` `src/docs/foo.py` `` and `Both gates`. The test therefore asserts two different things:
+  - The **anchor** asserts the rule this feature changes ("shell … never gated; only production `.py`"). It is a stale contract, not a regression: rewriting surface 3 makes it fail, and the change updates the anchor to the new gate-scope sentence in the same Task that rewrites surface 3.
+  - The **five tokens** assert the root-`docs/` first-component exemption, which this feature does not change (Terms, *Exempt*). They are current behaviour. The updated test still asserts all five, unchanged, in the paragraph after the new anchor, and still asserts the new anchor occurs exactly once.
 
   Locators and their residual:
   - Surface 1 is the one line that starts `Hook: ` plus the `- ` bullets that follow it. `_hook_block` in `h-mad/tests/test_h_mad_tdd_gate_docs.py` asserts there is exactly one such line (`M:D1`), so a rename fails loudly.
   - Surface 2 is found by its `### Trust boundary` heading, which `test_locators_fail_loudly` guards.
-  - Not caught by this FR: a rule statement outside both locators that uses none of the swept phrases. The design's widened sweep is the only net for it.
+  - Surface 3 is found by the test's anchor sentence, today's and then the updated one. The count-is-one assertion fails loudly if the sentence is reworded without the test.
+  - Surface 4 is found by its bold lead `**FR-3 — Claude-side authorship.**` under the heading `### Codex authors Phase 5 — enforced, not just instructed`. No test pins it, so a rename is silent; AC-10.1's `production-.\.py.` branch is its only net.
+  - Not caught by this FR: a rule statement outside all four locators that uses none of the swept phrases, and a swept phrase split across a hard line wrap, which a line-oriented `git grep` cannot see. At `e4979ecd` a newline-collapsed run of the same five-branch regex over the same corpus (`git ls-files` of the four pathspecs, whitespace runs folded to one space) finds 5 occurrences, the same 5 the line grep finds, so no wrapped instance exists there. The design's widened sweep is the only net for the first category.
 - **Acceptance Criteria**:
-  - AC-10.1: `git grep -n -E 'production-Python|a .\.py. suffix in any case' -- h-mad/SKILL.md h-mad/references h-mad/agents h-mad/invariants.base.md` prints no line. Control, run at `a7bfcbe0`: the same command prints 2 matching lines, one per alternation branch: `codex-implementer-prompt.md` (the production bullet) and `codex-runtime.md` (§"Trust boundary"). So each branch has its own pre-change hit. The design may add branches. Each branch it adds needs its own pre-change hit, or a stated reason why it has none.
-  - AC-10.2: `h-mad/tests/test_h_mad_tdd_gate_docs.py::test_hook_bullets_state_the_shipped_rule` keeps today's tokens and also asserts that the Hook bullets contain each of the nine doc/data suffix spellings, the phrase `Production file`, and `.sh`. Run against the `a7bfcbe0` bullets, the test fails on a missing token. Measured there: each of those eleven tokens matches 0 lines of the bullet block. The whole `test_h_mad_tdd_gate_docs.py` module passes after the change.
+  - AC-10.1: `git grep -n -E 'production-Python|a .\.py. suffix in any case|never gated|only production|production-.\.py.' -- h-mad/SKILL.md h-mad/references h-mad/agents h-mad/invariants.base.md` prints no line. Control, run at `e4979ecd`: the same command prints 4 matching lines in 3 files, holding 5 occurrences. Each branch, run alone, has its own pre-change hit: `production-Python` → `codex-runtime.md` (surface 2); `a .\.py. suffix in any case` → `codex-implementer-prompt.md` (surface 1); `never gated` and `only production` → the same line of `phase5-substeps.md` (surface 3); `production-.\.py.` → `phase5-substeps.md` (surface 4). The shipped prose therefore may not use any of these five phrasings. The design may add branches. Each branch it adds needs its own pre-change hit, or a stated reason why it has none.
+  - AC-10.2: `h-mad/tests/test_h_mad_tdd_gate_docs.py::test_hook_bullets_state_the_shipped_rule` keeps today's tokens and also asserts that the Hook bullets contain each of the nine doc/data suffix spellings, the phrase `Production file`, and `.sh`. Run against the `e4979ecd` bullets, the test fails on a missing token. Measured there: each of those eleven tokens matches 0 lines of the bullet block. The whole `test_h_mad_tdd_gate_docs.py` module passes after the change.
+  - AC-10.3: `test_skill_states_the_docs_first_component_rule` is updated as the regression-provenance paragraph above states. Its new anchor is a sentence of surface 3 that states the shipped rule and contains the phrase `Production file` and `.sh`. It asserts that anchor occurs exactly once in `doc_text(SKILL)`, and asserts the five docs-first tokens in the paragraph after it. Run against the `e4979ecd` text, the updated test fails on the anchor count (0). After the change it passes.
 
 ### FR-11: Doc/data files are allowed on every host, even when listed
 - **Description**: A doc/data file (Terms) is allowed by all three gates, in every Phase-5 state, whether or not a Task lists it (operator ruling R-A, 2026-11-04).
@@ -277,3 +321,4 @@ The out-of-root rules are unaffected, because a listed target is in-root by cons
 - v1.0: Initial specification draft (2026-11-03), from the approved brainstorm v1.0 and orchestrator decisions 1-3. Resolves open questions (a)-(d) from the tree at 0cb7b9b0. No audit cycle answered (first draft).
 - v1.1: Corrects the `verify-hmad-gates` availability claim in §"Assumptions" (2026-11-04): the skill is present at `/Users/kimhawk/orca/skills/.claude/skills/verify-hmad-gates/`, untracked and ignored by `.gitignore` `.claude/`, so absent from this worktree only; FR-9 stays independent of the skill's internals. Records the operator rulings of 2026-11-03 (judgement calls 1-5, all confirming v1.0) and removes FR-8's open "if the ruling is instead" alternative. Operator approval of v1.0 was conditional on this correction. No audit cycle answered (orchestrator-verified finding, no audit report).
 - v1.2: Applies the operator rulings of 2026-11-04 (R-A, R-B, R-C), raised by the plan v1.0 author against this spec (plan Risks R5, R6, R8; Measurements M5, M6, M7). R-A: adds Terms Doc/data suffix (nine suffixes, ASCII case-insensitive, end-of-basename), Doc/data file, Code-like and Judgeable; adds FR-11 (listed doc/data files are allowed on every host and never judged; residual stated with the M5 reach figure) with AC-11.1 to AC-11.6; extends the fixture with listed README.md and CHANGES.MD; re-targets AC-8.1 and AC-8.3 to scripts/other.sh and adds AC-8.4; relabels the notes.md controls in AC-5.4, AC-6.3, AC-7.3 as doc/data controls; updates Executive Summary, Goal, FR-1 to FR-8 descriptions, NFRs and Out-of-Scope. R-B: FR-9 follows the verify-hmad-gates method against the worktree's hook files by explicit path, and the skill's helper is not the instrument; Assumptions updated. R-C: adds FR-10 (prose surfaces state the shipped rule) with AC-10.1 (phrase sweep) and AC-10.2 (doc-test). AC count 40 to 49 (h_mad_ac_census). No audit cycle answered (operator rulings, no audit report).
+- v1.3: Answers plan audit cycle 1, gate-non-py-production-files.plan.audit.v1.p1.md, gate-non-py-production-files.plan.audit.v1.p2.md and gate-non-py-production-files.plan.audit.v1.p3.md (2026-11-04), the findings that land in the spec. p3 must (transport): FR-3 now names each host's real binding of h_mad_tdd_judge (codex calls _load_judge() only after its 'if not production: continue' guard; agy binds 'import h_mad_tdd_judge as judge' inside main and never calls _load_judge) and requires a new call site on codex and agy; FR-6 states the five-step order (read_chain before the listing decision) and FR-7 adopts it; AC-3.1 names the bindings. p3 must (tie-break): FR-6 gains the Selection rule for all three hosts (least basename in Python str order, which is the first qualifying name in canonicalise's sorted names) with AC-5.8, AC-6.5 and AC-7.4 observing which name is judged; FR-5 step 4 points to it. p1 must (incident replay): FR-9 gains the replay of Task 1 of docs/01-plan/features/exec-missing-report-recovery.impl-plan.md, byte-for-byte, with AC-9.4 (before at the merge-base, after at the commit under test, unlisted control, listed doc file) and AC-9.5 (provenance). p2 must and p3 should (prose floor): FR-10's floor re-derived at e4979ecd with a five-branch phrasing set is four surfaces in three files, adding the two in h-mad/references/phase5-substeps.md; the rule gains a fifth part (authorship refusals); FR-10 states regression provenance for test_skill_states_the_docs_first_component_rule and adds AC-10.3; AC-10.1 widened to five branches with per-branch pre-change hits; AC-10.2 control re-measured at e4979ecd. AC count 49 to 55 (h_mad_ac_census).
