@@ -258,7 +258,10 @@ resolved implementer and the independent review assignment:
 
 - **`exec codex`** — a resolved RED/GREEN IMPLEMENTER dispatch (writes tests + impl). Prompt
   via stdin; final message via `--output-last-message`; default `--sandbox workspace-write`.
-  **Pass no `--model`/`--effort` unless you mean to override.** Unset, codex
+  **Pass no `--model`/`--effort` unless you mean to override.** The one exception is
+  the assembler's GREEN policy: `h_mad_assemble_tdd.py` prints `--effort medium` for a
+  codex GREEN on a `new-behaviour`/`wiring` task and `--effort high` under `--escalate`
+  (row 2934; see its registry entry). It is printed in the block, never applied silently. Unset, codex
   resolves both from its own `$CODEX_HOME/config.toml` (`model`,
   `model_reasoning_effort`) — the same file its TUI writes — so the model shown
   in the CLI is the model 5d/5e runs, and changing it in one place moves both.

@@ -1,0 +1,99 @@
+{
+ "_why": "Row 2934: the codex GREEN effort policy (medium), its overrides (--effort, HMAD_GREEN_EFFORT, inherit) and the one-step --escalate to high. Each guard must bite, or a policy that silently stopped applying looks the same as one that applies.",
+ "root": "../..",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_assemble_tdd.py",
+  "-q"
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "drop-the-new-behaviour-policy",
+   "_mechanism": "A codex GREEN on a new-behaviour task silently falls back to the inherited effort.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "    (\"codex\", \"green\", \"new-behaviour\"): \"medium\",\n",
+   "replace": "",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_codex_green_runs_at_medium[Task 1]"
+  },
+  {
+   "name": "drop-the-wiring-policy",
+   "_mechanism": "A codex GREEN on a wiring task silently falls back to the inherited effort.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "    (\"codex\", \"green\", \"wiring\"): \"medium\",\n",
+   "replace": "",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_codex_green_runs_at_medium[Task 2]"
+  },
+  {
+   "name": "sever-the-resolved-effort-from-the-block",
+   "_mechanism": "The resolved effort is computed but the block is built from the raw --effort, so the policy never reaches the dispatch.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "effort=effort,  # M:AT-EFFORT-WIRE",
+   "replace": "effort=args.effort,  # M:AT-EFFORT-WIRE",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_codex_green_runs_at_medium[Task 1]"
+  },
+  {
+   "name": "ignore-escalate",
+   "_mechanism": "--escalate is accepted but the dispatch keeps the policy effort.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "    if escalate:\n        if override:",
+   "replace": "    if False:\n        if override:",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_escalate_dispatches_at_high_and_says_so"
+  },
+  {
+   "name": "accept-escalate-with-an-explicit-effort",
+   "_mechanism": "--escalate with --effort is not refused, so which effort ran is ambiguous.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "        if override:\n            raise Halt(\"effort_conflict\",",
+   "replace": "        if False:\n            raise Halt(\"effort_conflict\",",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_escalate_with_an_explicit_effort_is_refused_before_writing"
+  },
+  {
+   "name": "policy-outranks-an-explicit-effort",
+   "_mechanism": "An explicit --effort is ignored in favour of the policy.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "    if override:\n        return override, \"override\"",
+   "replace": "    if False:\n        return override, \"override\"",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_an_explicit_effort_overrides_the_policy"
+  },
+  {
+   "name": "ignore-the-green-effort-env",
+   "_mechanism": "HMAD_GREEN_EFFORT is never read.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "    from_env = (env.get(GREEN_EFFORT_ENV) or \"\").strip()",
+   "replace": "    from_env = \"\"",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_the_environment_can_set_the_green_effort"
+  },
+  {
+   "name": "ignore-the-inherit-escape",
+   "_mechanism": "HMAD_GREEN_EFFORT=inherit is passed through as an effort value instead of restoring inheritance.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "    if from_env == \"inherit\":\n        return None, \"inherited\"",
+   "replace": "    if False:\n        return None, \"inherited\"",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_the_environment_can_restore_the_inherited_effort"
+  },
+  {
+   "name": "drop-the-escalation-marker",
+   "_mechanism": "An escalated dispatch leaves no record that it escalated.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "    if args.escalate:\n        print(f\"[H-MAD] {args.feature} effort-escalated",
+   "replace": "    if False:\n        print(f\"[H-MAD] {args.feature} effort-escalated",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_escalate_dispatches_at_high_and_says_so"
+  },
+  {
+   "name": "hide-the-effort-line",
+   "_mechanism": "The block no longer says which effort h-mad chose, so the policy acts silently.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "        print(f\"# effort: {effort} ({effort_source})\")\n",
+   "replace": "        pass\n",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestGreenEffortPolicy::test_codex_green_runs_at_medium[Task 1]"
+  }
+ ]
+}

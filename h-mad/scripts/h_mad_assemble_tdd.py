@@ -19,6 +19,8 @@ invocation default rather than a judgement:
      that, a dispatch looks like a task verdict. Read the codex session header
      in the `--log`, which names the resolved model and effort.) Effort reaches
      codex as `-c model_reasoning_effort=<e>`; codex has no `--effort` flag.
+     The MODEL is never chosen here. EFFORT is, for codex GREEN only, and
+     visibly: see EFFORT_POLICY (row 2934).
   2. A bare `python3`, which on this machine is 3.14 and has no pytest. The
      independent re-run then errors instead of measuring.
   3. Passing the prompt inline when `exec` takes a FILE PATH — `no such prompt
@@ -83,6 +85,42 @@ AGY_WIRING_TIMEOUT_S = 60
 # config, so the model the TUI shows is the model 5d/5e runs. See mistake 1.
 DEFAULT_MODEL = None
 DEFAULT_EFFORT = None
+
+# Effort is the one setting h-mad DOES choose, per phase, and always visibly
+# (row 2934). Over four past GREEN tasks replayed at high vs medium (14f, 14a,
+# 14c, wire-registry), every medium arm passed in one round with no test edits
+# at 13% fewer tokens. A GREEN step's output is mechanically gated (re-run,
+# TDD gate, mutation harness), so a cheaper attempt that fails surfaces as a
+# red gate, and `--escalate` re-dispatches it once at high. The MODEL stays
+# inherited (mistake 1). Keyed on (agent, phase, shape): the A/B measured codex
+# GREEN on behaviour and wiring tasks, nothing else.
+EFFORT_POLICY = {
+    ("codex", "green", "new-behaviour"): "medium",
+    ("codex", "green", "wiring"): "medium",
+}
+ESCALATED_EFFORT = "high"
+GREEN_EFFORT_ENV = "HMAD_GREEN_EFFORT"
+
+
+def resolve_effort(*, agent: str, phase: str, shape: str, override: str | None,
+                   escalate: bool, env: dict) -> tuple[str | None, str]:
+    """(effort to pass, or None to inherit the CLI's config; where it came from)."""
+    if escalate:
+        if override:
+            raise Halt("effort_conflict",
+                       "--escalate sets the effort to " + ESCALATED_EFFORT + "; drop --effort")
+        return ESCALATED_EFFORT, "escalated"
+    if override:
+        return override, "override"
+    policy = EFFORT_POLICY.get((agent, phase, shape))
+    if policy is None:
+        return None, "inherited"
+    from_env = (env.get(GREEN_EFFORT_ENV) or "").strip()
+    if from_env == "inherit":
+        return None, "inherited"
+    if from_env:
+        return from_env, GREEN_EFFORT_ENV
+    return policy, f"policy: {agent} {phase}"
 
 # Only a real slot is bracketed; prose refers to a slot by bare name. A raw
 # `<INLINE_…>` reaching the agent reads as an unfilled template and is silently
@@ -861,6 +899,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--effort", default=DEFAULT_EFFORT,
                     help="OVERRIDE; unset inherits the CLI's own model_reasoning_effort. "
                          "Forwarded as -c model_reasoning_effort, since codex has no --effort flag")
+    ap.add_argument("--escalate", action="store_true",
+                    help="re-dispatch at effort " + ESCALATED_EFFORT + " after a failed GREEN or "
+                         "red_wrong_reason; prints an effort-escalated marker. Refused with --effort")
     ap.add_argument("--sandbox", help="passed through; read-only is refused for a phase that runs pytest")
     ap.add_argument("--template", type=Path, default=TEMPLATE)
     args = ap.parse_args(argv)
@@ -921,6 +962,10 @@ def main(argv: list[str] | None = None) -> int:
             env_known_failures=env_known,  # M:AT-ENV-WIRE
             authors_test=args.authors_test,  # M:AT-AUTHORS-WIRE
         )
+        effort, effort_source = resolve_effort(  # M:AT-EFFORT-RESOLVE
+            phase=args.phase, shape=meta["shape"], agent=args.agent,
+            override=args.effort, escalate=args.escalate, env=os.environ,
+        )
     except Halt as exc:
         print(f"{TOKEN}: HALT {exc.reason}")
         if exc.detail:
@@ -956,11 +1001,15 @@ def main(argv: list[str] | None = None) -> int:
               + ", ".join(f'"{r}"' for r in meta["unresolved_refs"]))
     print(command_block(
         feature=args.feature, module=args.module, phase=args.phase, prompt=prompt,
-        out=out, log=log, timeout=timeout, model=args.model, effort=args.effort,
+        out=out, log=log, timeout=timeout, model=args.model, effort=effort,  # M:AT-EFFORT-WIRE
         python=args.python, test_path=args.test_path, project_root=args.project_root,
         agent=args.agent,
         authors_test=args.authors_test,  # M:AT-AUTHORS-BLOCK-WIRE
     ))
+    if effort:  # inherited stays silent: no-agent RED output is pinned byte-identical
+        print(f"# effort: {effort} ({effort_source})")
+    if args.escalate:
+        print(f"[H-MAD] {args.feature} effort-escalated {args.phase} {meta['task']} {effort}")
     print(f"[H-MAD] {args.feature} tdd-assemble {args.phase} {meta['task']}")
     return 0
 

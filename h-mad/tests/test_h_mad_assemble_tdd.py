@@ -2208,3 +2208,96 @@ class TestAssembledReceipt:
         result, prompt = self._cli(tmp_path, "--template", str(template))
         assert "ASSEMBLE-TDD: PASS" in result.stdout, result.stdout + result.stderr
         assert not Path(str(prompt) + ".assembled").exists()
+
+
+def _green_cli(plan: Path, tmp_path: Path, *extra: str, task: str = "Task 1",
+               env: dict | None = None) -> subprocess.CompletedProcess[str]:
+    import os
+    run_env = {k: v for k, v in os.environ.items() if k != "HMAD_GREEN_EFFORT"}
+    run_env.update(env or {})
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "--feature", "f", "--task", task, "--phase", "green",
+         "--project-root", str(tmp_path), "--module", "m", "--test-path", "tests/t.py",
+         "--impl-plan", str(plan), "--python", PYTHON,
+         "--prompt", str(tmp_path / "prompt.txt"), *extra],
+        capture_output=True, text=True, env=run_env,
+    )
+
+
+def _dispatch_line(proc: subprocess.CompletedProcess[str]) -> str:
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    return next(l for l in proc.stdout.splitlines() if l.startswith("hmad-dispatch exec "))
+
+
+class TestGreenEffortPolicy:
+    """Row 2934: codex GREEN runs at medium effort, escalating once to high.
+
+    Measured on four past GREEN tasks (14f, 14a, 14c, wire-registry): every
+    medium arm passed in one round with no test edits, at 13% fewer tokens.
+    The MODEL stays inherited from `$CODEX_HOME/config.toml` (mistake 1); only
+    the effort is set, and it is printed in the command so it is never silent.
+    """
+
+    @pytest.mark.parametrize("task", ["Task 1", "Task 2"])  # new-behaviour, wiring
+    def test_codex_green_runs_at_medium(self, plan: Path, tmp_path: Path, task: str) -> None:
+        proc = _green_cli(plan, tmp_path, task=task)
+        line = _dispatch_line(proc)
+        assert "--effort medium" in line, line
+        assert "--model" not in line, "the model stays inherited from the codex config"
+        assert "# effort: medium (policy: codex green)" in proc.stdout
+
+    def test_red_keeps_the_inherited_effort(self, plan: Path, tmp_path: Path) -> None:
+        proc = run_cli(
+            "--feature", "f", "--task", "Task 1", "--phase", "red",
+            "--project-root", str(tmp_path), "--module", "m", "--test-path", "tests/t.py",
+            "--impl-plan", str(plan), "--expect-fail", "3", "--expect-pass", "1",
+            "--python", PYTHON, "--prompt", str(tmp_path / "prompt.txt"),
+        )
+        assert "--effort" not in _dispatch_line(proc)
+        assert "# effort:" not in proc.stdout, "an inherited effort prints nothing, as before row 2934"
+
+    def test_a_non_codex_green_keeps_the_inherited_effort(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """The A/B measured codex only."""
+        line = _dispatch_line(_green_cli(plan, tmp_path, "--agent", "grok"))
+        assert line.startswith("hmad-dispatch exec grok ")
+        assert "--effort" not in line
+
+    def test_an_explicit_effort_overrides_the_policy(self, plan: Path, tmp_path: Path) -> None:
+        proc = _green_cli(plan, tmp_path, "--effort", "xhigh")
+        line = _dispatch_line(proc)
+        assert "--effort xhigh" in line and "--effort medium" not in line
+        assert "# effort: xhigh (override)" in proc.stdout
+
+    def test_the_environment_can_set_the_green_effort(self, plan: Path, tmp_path: Path) -> None:
+        proc = _green_cli(plan, tmp_path, env={"HMAD_GREEN_EFFORT": "low"})
+        assert "--effort low" in _dispatch_line(proc)
+        assert "# effort: low (HMAD_GREEN_EFFORT)" in proc.stdout
+
+    def test_the_environment_can_restore_the_inherited_effort(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        proc = _green_cli(plan, tmp_path, env={"HMAD_GREEN_EFFORT": "inherit"})
+        assert "--effort" not in _dispatch_line(proc)
+        assert "# effort:" not in proc.stdout, "an inherited effort prints nothing, as before row 2934"
+
+    def test_escalate_dispatches_at_high_and_says_so(self, plan: Path, tmp_path: Path) -> None:
+        proc = _green_cli(plan, tmp_path, "--escalate")
+        line = _dispatch_line(proc)
+        assert "--effort high" in line and "--effort medium" not in line
+        assert "# effort: high (escalated)" in proc.stdout
+        assert "[H-MAD] f effort-escalated green Task 1 high" in proc.stdout.splitlines()
+
+    def test_an_unescalated_dispatch_prints_no_escalation_marker(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        assert "effort-escalated" not in _green_cli(plan, tmp_path).stdout
+
+    def test_escalate_with_an_explicit_effort_is_refused_before_writing(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        proc = _green_cli(plan, tmp_path, "--escalate", "--effort", "low")
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "ASSEMBLE-TDD: HALT effort_conflict" in proc.stdout
+        assert not (tmp_path / "prompt.txt").exists()
