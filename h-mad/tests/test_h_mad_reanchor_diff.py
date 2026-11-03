@@ -16,7 +16,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from skill_corpus import doc_text  # noqa: E402
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "h_mad_reanchor_diff.py"
+SKILL_MD = Path(__file__).resolve().parents[1] / "SKILL.md"
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -146,3 +149,13 @@ def test_spacing_inside_the_edited_region_is_ignored(tmp_path: Path) -> None:
     repo = _repo(tmp_path, [_row("swap-args", "f(a,b)", "f(b,a)")])
     _write(repo, [_row("swap-args", "f(a, b)", "f(b, a)")])
     assert "REANCHOR: SAME" in _run(repo, "specs/s.json").stdout
+
+
+def test_skill_wires_reanchor_diff_into_the_reanchor_step() -> None:
+    text = doc_text(SKILL_MD)
+    phase5 = text.split("## Phase 5 (Implementation) sub-steps", 1)[1].split("\n## ", 1)[0]
+    helpers = text.split("## Helper scripts", 1)[1].split("\n## ", 1)[0]
+    assert "h_mad_reanchor_diff.py --base" in phase5
+    assert "REANCHOR:" in phase5
+    assert "\n- `h_mad_reanchor_diff.py` — " in helpers
+

@@ -45,6 +45,13 @@
       "find": "        return 0, 0, [], [f\"{spec_arg} (unreadable: {type(exc).__name__})\"]",
       "replace": "        return 0, 0, [], []",
       "test": "tests/test_h_mad_reanchor_diff.py::test_an_unreadable_spec_is_unjudged_not_ok"
+    },
+    {
+      "name": "R7: REANCHOR STEP FORGETS TO WIRE REANCHOR_DIFF. A tool nobody is told to run after re-anchoring is never run.",
+      "file": "references/phase5-substeps.md",
+      "find": "After re-anchoring, check that each edited row kept its edit delta with `python3 ~/.claude/skills/h-mad/scripts/h_mad_reanchor_diff.py --base <ref> <spec.json>\u2026`, reading the `REANCHOR:` token",
+      "replace": "After re-anchoring, re-run the spec",
+      "test": "tests/test_h_mad_reanchor_diff.py::test_skill_wires_reanchor_diff_into_the_reanchor_step"
     }
   ]
 }
