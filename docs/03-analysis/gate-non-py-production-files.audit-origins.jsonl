@@ -23,3 +23,5 @@
 {"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Skip helper test cannot reject an always-skipping implementation", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
 {"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task 8 leaves the missing-base-plan contract open (also grok)", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
 {"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Regression-prototype reading lacks its command and corpus selector", "origin": "instrument", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 2, "leg": "codex", "item": "Tasks 4 and 5 omit mutation entries for their verdict guards", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 2, "leg": "codex", "item": "Task 6 keeps prototype timing and process readings without commands", "origin": "propagation-gap", "by_cycle": 1, "verified_by_execution": false}
