@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -109,7 +110,7 @@ def status_entries(root: Path) -> list[tuple[str, str]]:
         i += 1
         if not f:
             continue
-        xy, _, path = f.partition(" ")
+        xy, path = f[:2], f[3:]
         # Rename/copy records spend a second NUL-separated field on the source
         # path. Consume it, or it parses as a bogus entry of its own.
         if xy and xy[0] in ("R", "C"):
@@ -328,6 +329,185 @@ def push_ref(root: Path, ref: str, slug: str) -> tuple[bool, str]:
 
 
 # --------------------------------------------------------------------------
+# onto-default mode (row 2953)
+# --------------------------------------------------------------------------
+
+
+def _blob_oid(cwd: Path, rev: str, rel: str) -> str | None:
+    """Blob SHA of `rel` at `rev`, or None when `rel` is absent at `rev`."""
+    r = _git(["rev-parse", "--verify", "--quiet", f"{rev}:{rel}"], cwd, check=False)
+    return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else None
+
+
+def worktree_for_branch(root: Path, branch: str) -> Path | None:
+    """Worktree directory that currently has `refs/heads/<branch>` checked out."""
+    raw = _out(["worktree", "list", "--porcelain"], root, check=False)
+    target = f"refs/heads/{branch}"
+    wt_path: str | None = None
+    for line in raw.splitlines():
+        if line.startswith("worktree "):
+            wt_path = line[len("worktree ") :].strip()
+        elif line == f"branch {target}" and wt_path:
+            return Path(wt_path).resolve()
+        elif not line.strip():
+            wt_path = None
+    return None
+
+
+def commit_to_branch_ref(
+    worktree: Path, rel_paths: list[str], message: str, branch: str
+) -> tuple[str | None, str]:
+    """Commit `rel_paths` from `worktree` onto `refs/heads/<branch>` via throwaway index."""
+    ref = f"refs/heads/{branch}"
+    last_err = ""
+    for _ in range(_CAS_ATTEMPTS):
+        old = _out(["rev-parse", "--verify", "--quiet", ref], worktree, check=False)
+        if not old:
+            raise HandoffCommitError(f"default branch ref does not exist: {ref}")
+        with tempfile.TemporaryDirectory() as td:
+            env = dict(os.environ)
+            env["GIT_INDEX_FILE"] = str(Path(td) / "index")
+            _git(["read-tree", old], worktree, env=env)
+            _git(["add", "--", *rel_paths], worktree, env=env)
+            tree = _git(["write-tree"], worktree, env=env).stdout.strip()
+        if tree == _out(["rev-parse", f"{old}^{{tree}}"], worktree, check=False):
+            return None, ref
+        sha = _git(["commit-tree", tree, "-p", old, "-m", message], worktree).stdout.strip()
+        r = _git(["update-ref", ref, sha, old], worktree, check=False)
+        if r.returncode == 0:
+            return sha, ref
+        last_err = r.stderr.strip()
+    raise HandoffCommitError(f"could not update {ref} after {_CAS_ATTEMPTS} tries: {last_err}")
+
+
+def _restore_to_head(worktree: Path, rel_paths: list[str]) -> None:
+    """Restore `rel_paths` in `worktree` to `worktree`'s `HEAD` (or remove if untracked)."""
+    for rel in rel_paths:
+        if _blob_oid(worktree, "HEAD", rel) is not None:
+            _git(["checkout", "HEAD", "--", rel], worktree)
+        else:
+            _git(["rm", "-f", "--cached", "--ignore-unmatch", "--", rel], worktree)
+            (worktree / rel).unlink(missing_ok=True)
+
+
+def run_onto_default(
+    paths: list[str],
+    message: str,
+    cwd: Path,
+    root: Path,
+    push: bool = True,
+    dry_run: bool = False,
+) -> tuple[int, list[str]]:
+    """Commit `paths` onto `<default>` from a feature checkout and restore the checkout."""
+    top = _out(["rev-parse", "--show-toplevel"], cwd, check=False)
+    if not top:
+        raise HandoffCommitError(f"not inside a git worktree: {cwd}")
+    worktree = Path(top).resolve()
+    db = default_branch(root)
+    if db is None:
+        raise HandoffCommitError("default branch could not be established")
+    if not paths:
+        raise HandoffCommitError("no paths given")
+
+    rel_paths: list[str] = []
+    for p in paths:
+        cand = Path(p).expanduser()
+        pr = (cwd / cand).resolve() if not cand.is_absolute() else cand.resolve()
+        try:
+            rel = str(pr.relative_to(worktree))
+        except ValueError:
+            try:
+                rel = str(pr.relative_to(root.resolve()))
+            except ValueError:
+                raise HandoffCommitError(
+                    f"path is outside the worktree: {p} (worktree: {worktree})"
+                ) from None
+        if not (worktree / rel).exists():
+            raise HandoffCommitError(f"path does not exist in worktree: {worktree / rel}")
+        rel_paths.append(rel)
+
+    cb = current_branch(worktree)
+    if cb != db:
+        for rel in rel_paths:
+            head_oid = _blob_oid(worktree, "HEAD", rel)
+            db_oid = _blob_oid(root, f"refs/heads/{db}", rel)
+            if head_oid != db_oid:
+                raise HandoffCommitError(
+                    f"{rel} differs between HEAD and {db}; refusing to overwrite "
+                    f"or sweep feature changes onto {db}"
+                )
+
+    db_wt = worktree_for_branch(root, db)
+    if db_wt is not None and db_wt != worktree:
+        dirty_in_db = {path for _, path in status_entries(db_wt)}
+        conflicts = [rel for rel in rel_paths if rel in dirty_in_db]
+        if conflicts:
+            raise HandoffCommitError(
+                f"{db} worktree at {db_wt} has uncommitted changes to {', '.join(conflicts)}"
+            )
+
+    if db_wt is None:
+        why = f"throwaway index onto refs/heads/{db}; no worktree has {db!r} checked out"
+    elif db_wt == worktree:
+        why = f"current worktree is already on {db!r}"
+    else:
+        why = f"via {db!r} worktree at {db_wt}"
+
+    report: list[str] = [
+        f"canonical-root: {root}",
+        f"mode: onto-default ({why})",
+        "paths: " + ", ".join(rel_paths),
+    ]
+    if dry_run:
+        report.append("result: DRY-RUN (nothing written)")
+        return 0, report
+
+    if db_wt is None:
+        sha, ref = commit_to_branch_ref(worktree, rel_paths, message, db)
+        if sha is None:
+            report.append(f"result: NOTHING-TO-COMMIT ({ref} already carries this content)")
+            return 0, report
+        _restore_to_head(worktree, rel_paths)
+        report.append(f"result: COMMITTED {sha[:12]} -> {ref} (feature checkout restored)")
+        if push:
+            if not _out(["remote"], root, check=False):
+                ok, detail = False, "no remote configured"
+            else:
+                r = _git(["push", "origin", f"{ref}:{ref}"], root, check=False)
+                ok = r.returncode == 0
+                detail = ref if ok else (r.stderr.strip() or r.stdout.strip() or "push rejected")
+            report.append(
+                f"push: OK -> origin {detail}" if ok else f"push: FAILED ({detail}) "
+                "— the commit is local on the default branch"
+            )
+        else:
+            report.append("push: skipped (--no-push)")
+        return 0, report
+
+    if db_wt != worktree:
+        for rel in rel_paths:
+            dst = db_wt / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(worktree / rel, dst)
+    sha = commit_in_tree(db_wt, rel_paths, message)
+    if sha is None:
+        report.append(f"result: NOTHING-TO-COMMIT (paths already match {db})")
+        return 0, report
+    if db_wt != worktree:
+        _restore_to_head(worktree, rel_paths)
+    report.append(f"result: COMMITTED {sha[:12]} on {db}")
+    if push:
+        ok, detail = push_branch(db_wt, db)
+        report.append(
+            f"push: OK -> origin {detail}" if ok else f"push: FAILED ({detail}) "
+            "— the commit is local on the default branch"
+        )
+    else:
+        report.append("push: skipped (--no-push)")
+    return 0, report
+
+
+# --------------------------------------------------------------------------
 # driver
 # --------------------------------------------------------------------------
 
@@ -338,9 +518,14 @@ def run(
     repo: str | None = None,
     push: bool = True,
     dry_run: bool = False,
+    onto_default: bool = False,
 ) -> tuple[int, list[str]]:
     cwd = Path(repo).expanduser() if repo else Path.cwd()
     root = canonical_root(cwd)
+    if onto_default:
+        return run_onto_default(
+            paths, message, cwd=cwd, root=root, push=push, dry_run=dry_run
+        )
     rel = existing(root, to_repo_relative(root, paths))
     report: list[str] = [f"canonical-root: {root}"]
     if not rel:
@@ -414,6 +599,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--repo", default=None, help="resolve from PATH instead of the cwd")
     ap.add_argument("--no-push", action="store_true", help="do not push the handoff ref")
     ap.add_argument("--dry-run", action="store_true", help="print the routing decision only")
+    ap.add_argument(
+        "--onto-default",
+        action="store_true",
+        help="commit PATH(s) onto the default branch and restore the feature checkout",
+    )
     args = ap.parse_args(argv)
     try:
         rc, report = run(
@@ -422,6 +612,7 @@ def main(argv: list[str] | None = None) -> int:
             repo=args.repo,
             push=not args.no_push,
             dry_run=args.dry_run,
+            onto_default=args.onto_default,
         )
     except HandoffCommitError as e:
         print(f"handoff_commit: {e}", file=sys.stderr)

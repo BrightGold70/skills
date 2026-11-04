@@ -1,0 +1,64 @@
+{
+  "_why": "Row 2953 (--onto-default in handoff_commit.py) + status_entries porcelain XY slicing.",
+  "root": "../..",
+  "command": [
+    "/opt/anaconda3/bin/python3.11",
+    "-m",
+    "pytest",
+    "scripts/test_handoff_commit.py",
+    "-q"
+  ],
+  "target_command": [
+    "/opt/anaconda3/bin/python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "status-entries-partitions-on-leading-space",
+      "_mechanism": "An unstaged modification to a tracked file (such as docs/learnings.md or docs/skill-candidates.md) has porcelain prefix ' M ', so f.partition(' ') yields path='M docs/...' and misses the path.",
+      "file": "scripts/handoff_commit.py",
+      "symbol": "status_entries",
+      "find": "        xy, path = f[:2], f[3:]",
+      "replace": "        xy, _, path = f.partition(\" \")",
+      "test": "scripts/test_handoff_commit.py::test_the_handoff_paths_themselves_never_count_as_dirt"
+    },
+    {
+      "name": "onto-default-skips-head-vs-default-divergence-check",
+      "_mechanism": "Without the blob comparison between HEAD and refs/heads/<default>, --onto-default overwrites newer default-branch commits or sweeps earlier feature commits onto the default branch.",
+      "file": "scripts/handoff_commit.py",
+      "symbol": "run_onto_default",
+      "find": "            if head_oid != db_oid:",
+      "replace": "            if False:",
+      "test": "scripts/test_handoff_commit.py::test_onto_default_refuses_when_path_differs_between_head_and_default"
+    },
+    {
+      "name": "onto-default-skips-dirty-default-worktree-check",
+      "_mechanism": "Without checking status_entries(db_wt), copying from a linked worktree overwrites uncommitted edits to the same file in the default-branch worktree.",
+      "file": "scripts/handoff_commit.py",
+      "symbol": "run_onto_default",
+      "find": "        if conflicts:\n            raise HandoffCommitError(",
+      "replace": "        if False:\n            raise HandoffCommitError(",
+      "test": "scripts/test_handoff_commit.py::test_onto_default_refuses_when_checked_out_default_has_dirty_target_path"
+    },
+    {
+      "name": "onto-default-does-not-restore-feature-checkout",
+      "_mechanism": "If _restore_to_head is skipped after committing to refs/heads/<default>, the feature checkout remains dirty on the committed path.",
+      "file": "scripts/handoff_commit.py",
+      "symbol": "run_onto_default",
+      "find": "        _restore_to_head(worktree, rel_paths)\n        report.append(f\"result: COMMITTED {sha[:12]} -> {ref} (feature checkout restored)\")",
+      "replace": "        report.append(f\"result: COMMITTED {sha[:12]} -> {ref} (feature checkout restored)\")",
+      "test": "scripts/test_handoff_commit.py::test_onto_default_from_feature_checkout_commits_to_main_and_restores_checkout"
+    },
+    {
+      "name": "onto-default-does-not-remove-untracked-file-from-feature-checkout",
+      "_mechanism": "When a brand-new untracked file is committed onto <default> from a feature checkout, leaving it on disk leaves the feature checkout dirty.",
+      "file": "scripts/handoff_commit.py",
+      "symbol": "_restore_to_head",
+      "find": "            (worktree / rel).unlink(missing_ok=True)",
+      "replace": "            pass",
+      "test": "scripts/test_handoff_commit.py::test_onto_default_cli_flag_and_new_untracked_file_cleanup"
+    }
+  ]
+}

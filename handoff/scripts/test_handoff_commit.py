@@ -106,10 +106,18 @@ def test_the_handoff_paths_themselves_never_count_as_dirt(tmp_path):
     # send every run to `ref` mode, making `direct` dead code.
     repo = tmp_path / "r"
     _init_repo(repo)
+    learnings = repo / "docs" / "learnings.md"
+    learnings.parent.mkdir(parents=True, exist_ok=True)
+    learnings.write_text("# Learnings\n")
+    _git(repo, "add", "docs/learnings.md")
+    _git(repo, "commit", "-q", "-m", "seed learnings")
+
     f = _write_handoff(repo)
+    learnings.write_text("# Learnings\n- appended\n")
     rel = str(f.relative_to(repo))
     assert _git(repo, "status", "--porcelain") != ""
-    assert hc.is_clean_ignoring(repo, [rel]) is True
+    assert hc.is_clean_ignoring(repo, [rel, "docs/learnings.md"]) is True
+    assert hc.is_clean_ignoring(repo, [rel]) is False
     assert hc.is_clean_ignoring(repo, []) is False
 
 
@@ -325,3 +333,155 @@ def test_a_missing_handoff_doc_is_fatal_not_a_quiet_success(tmp_path):
             repo=str(repo),
             push=False,
         )
+
+
+# ---------------------------------------------------------------- onto-default (row 2953)
+
+
+def test_onto_default_from_feature_checkout_commits_to_main_and_restores_checkout(tmp_path):
+    repo = tmp_path / "r"
+    _init_repo(repo)
+    doc = repo / "docs" / "skill-candidates.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text("# Candidates\n- row 1 — candidate: yes\n")
+    _git(repo, "add", "docs/skill-candidates.md")
+    _git(repo, "commit", "-q", "-m", "seed candidates")
+    _with_origin(tmp_path, repo)
+    bare = tmp_path / "origin.git"
+
+    _git(repo, "checkout", "-q", "-b", "feature/split")
+    (repo / "feature.py").write_text("x = 1\n")
+    _git(repo, "add", "feature.py")
+    _git(repo, "commit", "-q", "-m", "feature commit")
+    feat_head = _git(repo, "rev-parse", "HEAD")
+
+    # Edit the doc in the feature checkout alongside unrelated in-flight work.
+    (repo / "in_flight.txt").write_text("wip\n")
+    doc.write_text("# Candidates\n- row 1 — candidate: yes\n  — **LANDED**\n")
+
+    rc, report = hc.run(
+        [str(doc)],
+        "docs(skill-candidates): stamp row 1",
+        repo=str(repo),
+        push=True,
+        onto_default=True,
+    )
+    assert rc == 0, report
+    joined = "\n".join(report)
+    assert "mode: onto-default" in joined, joined
+    assert "push: OK" in joined, joined
+
+    # Landed on main (and pushed to origin/main), while feature/split HEAD and tree are untouched.
+    assert "LANDED" in _git(repo, "show", "main:docs/skill-candidates.md")
+    assert "LANDED" in _git(bare, "show", "main:docs/skill-candidates.md")
+    assert _git(repo, "rev-parse", "HEAD") == feat_head
+    assert doc.read_text() == "# Candidates\n- row 1 — candidate: yes\n"
+    assert (repo / "in_flight.txt").read_text() == "wip\n"
+    assert _git(repo, "diff", "--name-only", "HEAD", "--", "docs/skill-candidates.md") == ""
+
+
+def test_onto_default_from_linked_worktree_updates_checked_out_main_and_restores_wt(tmp_path):
+    repo = tmp_path / "r"
+    _init_repo(repo)
+    doc = repo / "docs" / "skill-candidates.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text("# Candidates\n- row 1 — candidate: yes\n")
+    _git(repo, "add", "docs/skill-candidates.md")
+    _git(repo, "commit", "-q", "-m", "seed candidates")
+    _with_origin(tmp_path, repo)
+
+    wt = _linked(repo, tmp_path / "wt", branch="feature/y")
+    # Unrelated dirty file in the main worktree must not block or be swept into --only commit.
+    (repo / "README.md").write_text("unrelated main edit\n")
+    wt_doc = wt / "docs" / "skill-candidates.md"
+    wt_doc.write_text("# Candidates\n- row 1 — candidate: yes\n  — **LANDED**\n")
+
+    rc, report = hc.run(
+        [str(wt_doc)],
+        "docs(skill-candidates): stamp from wt",
+        repo=str(wt),
+        push=False,
+        onto_default=True,
+    )
+    assert rc == 0, report
+    assert "LANDED" in (repo / "docs" / "skill-candidates.md").read_text()
+    assert "LANDED" in _git(repo, "show", "main:docs/skill-candidates.md")
+    assert (repo / "README.md").read_text() == "unrelated main edit\n"
+    assert wt_doc.read_text() == "# Candidates\n- row 1 — candidate: yes\n"
+    assert _git(wt, "status", "--porcelain") == ""
+
+
+def test_onto_default_refuses_when_path_differs_between_head_and_default(tmp_path):
+    repo = tmp_path / "r"
+    _init_repo(repo)
+    doc = repo / "docs" / "skill-candidates.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text("base\n")
+    _git(repo, "add", "docs/skill-candidates.md")
+    _git(repo, "commit", "-q", "-m", "seed")
+
+    _git(repo, "checkout", "-q", "-b", "feature/diverged")
+    doc.write_text("feature committed change\n")
+    _git(repo, "add", "docs/skill-candidates.md")
+    _git(repo, "commit", "-q", "-m", "diverge doc on feature")
+    doc.write_text("feature committed change + new stamp\n")
+
+    with pytest.raises(hc.HandoffCommitError, match="differs between HEAD and main"):
+        hc.run(
+            [str(doc)],
+            "docs: unsafe stamp",
+            repo=str(repo),
+            push=False,
+            onto_default=True,
+        )
+
+
+def test_onto_default_refuses_when_checked_out_default_has_dirty_target_path(tmp_path):
+    repo = tmp_path / "r"
+    _init_repo(repo)
+    doc = repo / "docs" / "skill-candidates.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text("base\n")
+    _git(repo, "add", "docs/skill-candidates.md")
+    _git(repo, "commit", "-q", "-m", "seed")
+
+    wt = _linked(repo, tmp_path / "wt", branch="feature/z")
+    # Main worktree has uncommitted edits to the same target file.
+    doc.write_text("uncommitted edit in main\n")
+    wt_doc = wt / "docs" / "skill-candidates.md"
+    wt_doc.write_text("stamp in wt\n")
+
+    with pytest.raises(hc.HandoffCommitError, match="uncommitted changes"):
+        hc.run(
+            [str(wt_doc)],
+            "docs: conflict",
+            repo=str(wt),
+            push=False,
+            onto_default=True,
+        )
+
+
+def test_onto_default_cli_flag_and_new_untracked_file_cleanup(tmp_path):
+    repo = tmp_path / "r"
+    _init_repo(repo)
+    _git(repo, "checkout", "-q", "-b", "feature/newdoc")
+    new_doc = repo / "docs" / "note.md"
+    new_doc.parent.mkdir(parents=True, exist_ok=True)
+    new_doc.write_text("# New note\n")
+
+    rc = hc.main(
+        [
+            "--onto-default",
+            "--no-push",
+            "--repo",
+            str(repo),
+            "-m",
+            "docs: add note on main",
+            str(new_doc),
+        ]
+    )
+    assert rc == 0
+    assert _git(repo, "show", "main:docs/note.md") == "# New note"
+    assert not new_doc.exists()
+    assert _git(repo, "status", "--porcelain") == ""
+
