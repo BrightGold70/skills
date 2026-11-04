@@ -3,7 +3,7 @@
 > Source: docs/02-design/features/gate-non-py-production-files.design.md v1.4, following its §"Implementation Order"; spec v1.11; plan v1.6.
 > Branch target: BrightGold70/gate-non-py-production-files
 > Tree readings: taken at `26571a2d` from PROJECT_ROOT. Readings marked "prototype" ran on a throwaway scratch copy of the tree carrying this plan's edits, outside the repository, and it was removed after the run.
-> Existing tests this feature moves, prototype reading at `26571a2d` with the Tasks 1 to 6 production edits and the two stub edits applied: the 34 test files that name an edited module read 9 failures, the 8 retired `ungated` nodes of Task 1 and `test_py_suffixes_match_bash_fold` of Task 6, and every other test passed. The whole suite was not run on the prototype: it was stopped at 5% (447 passed, 0 failed), because it would have taken hours. Each Task's gate runs it for real.
+> Existing tests this feature moves, by enumeration and not by measurement: the 8 retired `ungated` nodes of Task 1 and `test_py_suffixes_match_bash_fold` of Task 6. This plan holds no measured reading of the rest of the suite: the regression-prototype reading v1.0 printed here had no recorded selector or invocation and its scratch tree is gone, so v1.1 withdraws it as unverified. Each Task's gate runs the whole suite for real.
 
 ## Executive Summary
 Eight Tasks in a chain: the parser widens `production` and retires `ungated` (Task 1), the doc/data definition lands in `h_mad_target_identity` (Task 2), the judge gains `_match_plans`, `listing` and the `listing` verb (Task 3), the codex, agy and Claude gates are wired to them in that order (Tasks 4, 5, 6), the prose states the shipped rule (Task 7), and the FR-9 driver takes the end-to-end proof and the whole mutation run (Task 8).
@@ -26,6 +26,8 @@ Each item is stated again in its Task, with the reason.
 6. **Driver refusals get mutation rows (Task 8).** This settles the plan D11 and FR-9 mismatch with option (a); the reasoning is in Task 8.
 7. **Added guard rows beyond the design's list.** `P-PYFILTER`, `DD-EXEMPT-DOCS`, `DD-EXEMPT-DIRS`, `DD-EXEMPT-PARENT`, `DD-EMIT`, `L-ABSENT`, `LV-NONE`, `LV-CHAIN-UNREADABLE`, `LV-RC`, `CX-NOT-CODE-LIKE`, `AG-NOT-CODE-LIKE`, and a second `# M:CX-DOCDATA` row with a verdict killer. AC-9.3 requires an entry for every new guard, and each of these is one.
 8. **Test names the design leaves open are named here.** Spelled once and used exactly as spelled in ACs, RED splits and mutation rows.
+9. **A plan path absent at the base commit is a ninth refusal (Task 8).** Design v1.4 states that this case exits 1 with no token and reads as no verdict, and it counts eight refusals. This plan follows the operator ruling of 2026-11-04 instead: `FR9-DRIVE: UNREADABLE plan-absent-at-base`, exit 2, marker `# M:D-PLAN-ABSENT`, one more node and one more mutation row.
+10. **The helper's test has three arms (Task 4).** Design v1.4 states only the forced-skip arm. That arm alone passes on a helper that always skips, so this plan adds an arm on the real volume and an arm with folding forced.
 
 The design's "mixed-plan fixture" (Components table) is the **two-record fixture** here, the name its §Test Strategy and Test Boundaries use.
 
@@ -223,9 +225,35 @@ class Listing(NamedTuple):
     error: str                   # exception class name iff value == "unreadable", else ""
 
 def _match_plans(root: Path, target: Path, records: Sequence[Record]) -> Tuple[PlanMatch, ...]:
-    # FileNotFoundError: result.append(PlanMatch(plan, "absent", "", ()))  # M:L-ABSENT
-    # OSError, UnicodeDecodeError: PlanMatch(plan, "unreadable", type(exc).__name__, ())
-    ...
+    real_root = Path(os.path.realpath(root))
+    real_target = Path(os.path.realpath(target))
+    plan_paths = list(dict.fromkeys(record.state_file.parent / "01-plan" / "features" /
+                                    f"{record.key}.impl-plan.md" for record in records))
+    result = []
+    for plan in plan_paths:
+        try:
+            text = plan.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            result.append(PlanMatch(plan, "absent", "", ()))  # M:L-ABSENT
+            continue
+        except (OSError, UnicodeDecodeError) as exc:
+            result.append(PlanMatch(plan, "unreadable", type(exc).__name__, ()))
+            continue
+        tasks = _parse_tasks(text)  # M:W3
+        matches = []
+        for task in tasks:
+            if not _inside(str(real_target), str(real_root)):
+                continue
+            base = real_target.parent
+            while _inside(str(base), str(real_root)):
+                if any(os.path.realpath(base / entry) == str(real_target) for entry in task["production"]):
+                    matches.append((task, base))
+                    break
+                if base == real_root:
+                    break
+                base = base.parent
+        result.append(PlanMatch(plan, "read", "", tuple(matches)))
+    return tuple(result)
 
 def listing(root: Path, names: Sequence[Path], records: Sequence[Record]) -> Listing:
     per_name = [(name, _match_plans(root, name, records)) for name in names]
@@ -417,7 +445,7 @@ The first check holds because a name that folds to `.py` with an empty `producti
 - `newline_name_fixture(root: Path, test_state: str) -> Path`: `scripts/alias.sh` a symlink to `scripts/tool\n`, a name ending in a newline; `f.impl-plan.md` lists `scripts/alias.sh` with `tests/test_tool.py`.
 - `member_fixture(root: Path, lower: str, upper: str) -> Path`: the AC-11.3 and AC-11.4 variants.
 - Every fixture with a listed target and a failing test also gets `tdd_gate_support.build_venv(root / ".venv", with_pytest=True)`, so its ALLOW does not depend on the `python3` on `PATH`.
-- `skip_unless_case_insensitive(directory: Path) -> None`: touches a probe file named `a`, calls `pytest.skip` unless `os.path.exists(directory / "A")`, and removes the probe. It uses `os.path.exists`, as `assert_case_insensitive` does: under a patched `os.path.exists`, `Path.exists` still returned `True` on python3.11, so a `Path.exists` helper would not see the patch (reading at `26571a2d`).
+- `skip_unless_case_insensitive(directory: Path) -> None`: touches a probe file named `a`, reads `os.path.exists(directory / "A")`, removes the probe, then calls `pytest.skip` when the read was false, so a skip leaves no probe behind. It uses `os.path.exists`, as `assert_case_insensitive` does: under a patched `os.path.exists`, `Path.exists` still returned `True` on python3.11, so a `Path.exists` helper would not see the patch (reading at `26571a2d`).
 - `run_codex(root: Path, relative: str, env: dict) -> Outcome`: `python3` on the real hook by its worktree path, stdin `{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Update File: RELATIVE\n@@\n-x\n+y\n*** End Patch\n"},"cwd":"ROOT"}`, cwd the root.
 - Environments drop every `GIT_*` name, as `test_h_mad_agy_tdd_gate.py`'s `_env` does: a dispatched worker can inherit git's worktree overrides and the fixtures must discover their own repositories.
 
@@ -455,9 +483,57 @@ Controls and preservation, green before and after (34 nodes):
 - `test_codex_listed_test_shaped_python_is_skipped`: a listed `scripts/test_helper.py` with the test absent stays ALLOW.
 - `test_codex_directory_target_is_skipped`: the existing directory `scripts`, active record.
 - `test_codex_no_state_file_allows_a_listed_target`, `test_codex_inactive_record_allows_a_listed_target`
-- `test_skip_unless_case_insensitive_skips_on_a_case_sensitive_volume`: first calls the helper unpatched and asserts it returns, which on a case-sensitive volume correctly skips the node; then, under `monkeypatch.context()`, patches `os.path.exists` to return `False` and expects `pytest.raises(pytest.skip.Exception)`. A helper that always skips fails the first arm on this Mac. It lives here because this Task introduces the module.
+- `test_skip_unless_case_insensitive_skips_on_a_case_sensitive_volume`: this literal body, with `skip_unless_case_insensitive` imported from `non_py_gate_support`. It lives here because this Task introduces the module.
+  ```python
+  def test_skip_unless_case_insensitive_skips_on_a_case_sensitive_volume(tmp_path, monkeypatch):
+      # Probe the volume without the helper: its own name, its own read.
+      (tmp_path / "VolumeProbe").touch()
+      try:
+          os.stat(tmp_path / "volumeprobe")
+          volume_folds_case = True
+      except FileNotFoundError:
+          volume_folds_case = False
+      (tmp_path / "VolumeProbe").unlink()
 
-Stated residual: on a case-sensitive volume the nodes that call the helper report as skipped, a mutant scored on them is not killed there, and the skip count in the summary line is the signal.
+      # Arm 1, the real volume: returns where it folds, skips where it does not.
+      try:
+          skip_unless_case_insensitive(tmp_path)
+          skipped = False
+      except pytest.skip.Exception:
+          skipped = True
+      if skipped == volume_folds_case:
+          pytest.fail(f"volume_folds_case={volume_folds_case} but helper skipped={skipped}")
+
+      # Arm 2, forced folding: the helper must return on any volume.
+      with monkeypatch.context() as m:
+          m.setattr(os.path, "exists", lambda path: True)
+          try:
+              skip_unless_case_insensitive(tmp_path)
+          except pytest.skip.Exception:
+              pytest.fail("helper skipped although the opposite-case spelling exists")
+
+      # Arm 3, forced non-folding: the helper must skip on any volume.
+      with monkeypatch.context() as m:
+          m.setattr(os.path, "exists", lambda path: False)
+          with pytest.raises(pytest.skip.Exception):
+              skip_unless_case_insensitive(tmp_path)
+
+      assert not (tmp_path / "a").exists()
+  ```
+  `pytest.skip.Exception` derives from `BaseException` through `OutcomeException`, so an uncaught one marks the whole node skipped before any later line runs; every arm therefore catches it. On a case-sensitive volume a skip is arm 1's correct outcome, which `volume_folds_case` decides without the helper. Arm 1 cannot catch an always-skipping helper there, so arm 2 does.
+
+**Reading of that test** at `472bb425` (pytest 9.1.1, python3.11), on a scratch copy of the test and three helper bodies: `python3.11 -m pytest TEST -q -p no:cacheprovider --basetemp=DIR`, each summary line below. The case-sensitive volume is real: `hdiutil create -size 30m -fs 'Case-sensitive APFS' -volname hmadcs -attach cs.dmg`, with `DIR` under `/Volumes/hmadcs`.
+
+| Helper body | This Mac's folding APFS | Case-sensitive APFS |
+|---|---|---|
+| as specified above | `1 passed` | `1 passed` |
+| always `pytest.skip` | `1 failed` (arm 1) | `1 failed` (arm 2) |
+| never skips | `1 failed` (arm 3) | `1 failed` (arm 1) |
+| always `pytest.skip`, under v1.0's two-arm test | `1 skipped` | `1 skipped` |
+
+The last row reproduces the defect this test replaces. These two mutants are not mutation-spec rows: the helper is test support, not a guard AC-9.3 counts.
+
+Stated residual: on a case-sensitive volume the nodes that call the helper report as skipped, a mutant scored on them is not killed there, and the skip count in the summary line is the signal. The helper's own test does not skip on either volume.
 
 **RED split**: 20 failed, 34 passed. Gate on the pin's failure reason and the mutation rows, not on the count alone.
 
@@ -754,7 +830,7 @@ LISTING_LISTED_RE='^TDD-LISTING: listed target=([^ ]+)$'
 
 **FR-5 order, as shipped.** Steps 1 and 2 run in one process: the `listing` verb does the state read and then the listing decision (the spec NFR permits this). Step 3: for a listed target `_read_state --target` and the implementer, peer and fallback refusals run unchanged. Step 4: the judge receives the selected listed name. A listed target's chain is read twice by `listing` and `state`, and a third time by the `judge` verb, as for `.py`.
 
-**NFR, as shipped.** An unlisted code-like write where state exists starts 2 extra short Python processes (`# M:W6`, `# M:W7`); the spec ceiling is 3. A doc/data write starts 0 extra in every state. An unlisted code-like write with no `docs/.bkit-memory.json` on the chain starts 0 extra. Prototype reading through a logging `python3` shim: 2, 4 and 2 launches for those three cases.
+**NFR, as shipped.** An unlisted code-like write where state exists starts 2 extra short Python processes (`# M:W6`, `# M:W7`); the spec ceiling is 3. A doc/data write starts 0 extra in every state. An unlisted code-like write with no `docs/.bkit-memory.json` on the chain starts 0 extra. Prototype reading through a logging `python3` shim, total launches, each including the hook's 2 launches before any of these decisions: 4 for the unlisted code-like write where state exists, 2 for the doc/data write, 2 for the unlisted code-like write with no state file.
 
 **Directory targets are unchanged.** Where the chain may hold state, an inactive record included, the unguarded `ALL_TEST_NAMES` loop stops the script under `set -u` on bash 3.2, the verdict is `kind=judge-error`, and `# M:H-DOCDATA` sits after that loop, so the `docdata yes` a directory prints is never read. Residual: a newer `/bin/bash` does not stop on that expansion and reads ALLOW, today as well.
 
@@ -977,7 +1053,7 @@ The `git grep` must print no line. Then the full suite and `--check-anchors` ove
 def main(argv: list[str] | None = None) -> int: ...
 def _replay_base(top: Path) -> str: ...            # missing-base, base-is-head
 def _check_hook_identity(top: Path, hook: Path) -> dict: ...  # dirty-hooks, hook-outside-tree, hook-blob-mismatch
-def _copy_plan(top: Path, base: str, root: Path) -> dict: ...  # plan-blob-mismatch
+def _copy_plan(top: Path, base: str, root: Path) -> dict: ...  # plan-absent-at-base, plan-blob-mismatch
 def _check_authorship(judge: Path, root: Path, key: str, env: dict, out: Path) -> None: ...  # authorship-line
 def _refuse(reason: str) -> int: ...               # prints FR9-DRIVE: UNREADABLE plus the reason, returns 2
 ```
@@ -992,7 +1068,7 @@ def _refuse(reason: str) -> int: ...               # prints FR9-DRIVE: UNREADABL
 1. Arguments: `no-before-side`.
 2. On `--scenario replay`, either side: `missing-base`, then `base-is-head`. These run before any hook check, so a replay with no base reports that.
 3. On the after side, for the executed hook, in this order: `dirty-hooks` (`git status --porcelain -- h-mad` prints a line), then **`hook-outside-tree` (the realpath is not under `git rev-parse --show-toplevel`), then `hook-blob-mismatch` (`git hash-object` differs from `git rev-parse HEAD:PATH`)**. The realpath check must run first: a committed symlink to an outside file has an empty `git status`, a `git hash-object` that follows the link and a `HEAD:PATH` that is the link text, so the blob check would otherwise print `hook-blob-mismatch` on the `hook-outside-tree` fixture. Design v1.4 states them in the other order; this plan's order is the fix.
-4. On `--scenario replay`, the copied plan: `plan-blob-mismatch`.
+4. On `--scenario replay`, either side, the copied plan: `plan-absent-at-base` (`git cat-file blob BASE:THAT_PATH` exits non-zero), then `plan-blob-mismatch`.
 5. On the Claude host, before each verdict: `authorship-line`.
 
 **Evidence is taken before the Phase 7 push.** Once this branch is on `origin/main`, `git merge-base HEAD origin/main` returns HEAD, so the before tree equals the after tree and AC-9.4's incident row reads DENY on both sides; hence `base-is-head`. Residual: a base other than HEAD whose `h-mad/` equals the commit under test passes this check, and its incident row then reads as a FAIL row.
@@ -1004,7 +1080,7 @@ def _refuse(reason: str) -> int: ...               # prints FR9-DRIVE: UNREADABL
 
 **Replay repo (AC-9.4, AC-9.5).** Built by `git init` in a mktemp dir, on both sides from the same base. It writes `docs/01-plan/features/exec-missing-report-recovery.impl-plan.md` from `git cat-file blob BASE:THAT_PATH` bytes, records the commit, `git rev-parse BASE:THAT_PATH` and the copy's sha256, and requires `git hash-object` of the copy to equal the blob id. Reading at `26571a2d`: base `e097dfcb`, blob `fef082989979cd8a7a1c0f896db4673a14e078e2`, the same blob the spec read. It writes `docs/.bkit-memory.json` with `orchestrator_state.exec-missing-report-recovery = {"phase": "step5"}`, the same record for all three hosts and with no `implementer` key. It creates `h-mad/scripts/hmad-dispatch.sh`, `h-mad/SKILL.md` and `h-mad/scripts/h_mad_derive_test_path.sh`, whose content does not affect the verdict. It runs `h-mad/tests/test_hmad_dispatch_exec.py` absent, then as `def test_red(): assert False`, and drives the four AC-9.4 rows.
 
-OPEN-DECISION: a plan path absent at the base commit crashes the driver with no token — resolve in 5d. `git cat-file blob BASE:THAT_PATH` exits 128 on such a path (reading at `26571a2d` on a scratch repo), and today the path exists at the base, so this is reachable only if `origin/main` archives or renames that plan. Option A, the design's residual: exit 1 with no token, read as no verdict. Option B: a ninth refusal `FR9-DRIVE: UNREADABLE plan-absent-at-base`, a marker `# M:D-PLAN-ABSENT`, one more node in `test_fr9_driver_refuses`, and one more row in `fr9_drive_refusals.json`. Both satisfy AC-9.4 and AC-9.5, since neither produces a reading. This plan counts Option A; choosing B moves the refusal count from 8 to 9 and the mutation total from 88 to 89. Recommendation: B, because base invariant §"Audit-gate signal discipline" prefers a token, and it is cheap.
+**Plan path absent at the base (operator ruling, 2026-11-04).** `git cat-file blob BASE:THAT_PATH` exits 128 on such a path (reading at `472bb425` on a scratch repo), and the driver then refuses with `FR9-DRIVE: UNREADABLE plan-absent-at-base`, exit 2, in `_copy_plan`, before it writes the copy. Today the path exists at the base (`git cat-file -e e097dfcb:THAT_PATH` exits 0 at `472bb425`), so this is reachable only if `origin/main` archives or renames that plan. Design v1.4 states exit 1 with no token for this case; the ruling replaces that. Residual: any other uncaught exception, such as a missing `git`, still exits 1 with no token and reads as no verdict.
 
 **Fixture scenario (AC-9.1).** Spec §"Fixture" verbatim, under the Claude-author arrangement on the Claude host: three rows per host, after side only.
 
@@ -1014,7 +1090,7 @@ OPEN-DECISION: a plan path absent at the base commit crashes the driver with no 
 
 **Verdict token.** The driver compares this invocation's rows against the AC-9.1 or AC-9.4 table and prints `FR9-DRIVE: PASS rows=N mismatched=0` or `FR9-DRIVE: FAIL rows=N mismatched=M`, exit 0 on either. A before reading other than ALLOW is a FAIL row, never a pass (spec AC-9.4).
 
-**New tests in `h-mad/tests/test_h_mad_fr9_drive_refusals.py`** (8 nodes, all RED). `docs/` is outside `testpaths`, so these hold the driver. Each node runs the real driver by path under `sys.executable -I`, with the current directory in a throwaway `git init` repo holding committed copies of `h-mad/hooks` and `h-mad/scripts`, and asserts the token line and exit 2. The test names the probes directory, so `h_mad_archive_feature.py` keeps the directory in place. The test's environment drops every `GIT_*` name before adding its own.
+**New tests in `h-mad/tests/test_h_mad_fr9_drive_refusals.py`** (9 nodes, all RED). `docs/` is outside `testpaths`, so these hold the driver. Each node runs the real driver by path under `sys.executable -I`, with the current directory in a throwaway `git init` repo holding committed copies of `h-mad/hooks` and `h-mad/scripts`, and asserts the token line and exit 2. The test names the probes directory, so `h_mad_archive_feature.py` keeps the directory in place. The test's environment drops every `GIT_*` name before adding its own.
 
 RED: the Task first writes the driver as an argument parser that prints nothing and exits 0, so each node fails on the missing token line, not on a missing file. `test_fr9_driver_refuses`, parametrised with these ids and arguments:
 
@@ -1027,11 +1103,12 @@ RED: the Task first writes the driver as an argument parser that prints nothing 
 | `authorship-line` | `--scenario fixture --side after --host claude` | a committed `h_mad_tdd_judge.py` stub whose `implementer` verb prints `TDD-IMPLEMENTER: codex chosen=codex switch=none` |
 | `missing-base` | `--scenario replay --side after --host claude` | no `refs/remotes/origin/main` |
 | `base-is-head` | `--scenario replay --side after --host claude` | `refs/remotes/origin/main` at HEAD |
+| `plan-absent-at-base` | `--scenario replay --side after --host claude` | a base commit without `docs/01-plan/features/exec-missing-report-recovery.impl-plan.md`, a later HEAD that adds it, and `refs/remotes/origin/main` at the base, so that path reads at HEAD and `git cat-file blob BASE:THAT_PATH` exits 128 |
 | `plan-blob-mismatch` | `--scenario replay --side after --host claude` | a base commit holding a CRLF plan, a later HEAD, and `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=core.autocrlf`, `GIT_CONFIG_VALUE_0=true` in the driver's environment, so `git hash-object` normalises the copy and differs from the blob id |
 
 `plan-blob-mismatch` uses `--side after` only, by necessity: under that same configuration `git archive` converts the before tree to CRLF (reading at `26571a2d`: a scratch `x.sh` archived with `\r\n` line ends, shebang included), so a `--side before` node would run a broken hook rather than reach this refusal.
 
-**RED split**: 8 failed, 0 passed. The FR-9 verdict rows have no RED: they are measurements, read from `FR9-DRIVE:`.
+**RED split**: 9 failed, 0 passed. The FR-9 verdict rows have no RED: they are measurements, read from `FR9-DRIVE:`.
 
 **Run order**, all before the Phase 7 push, on a commit holding Tasks 1 to 7 and the driver, with `git status --porcelain -- h-mad` printing nothing:
 ```bash
@@ -1083,9 +1160,9 @@ python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/agy_t
 - [ ] AC-9.3: every spec above prints `MUTATION: ALL_CAUGHT` with `refused=0`.
 - [ ] AC-9.4: `readings.tsv` holds the four AC-9.4 rows per host and per side as tabled, with `FR9-DRIVE: PASS rows=4 mismatched=0` on each of the six replay invocations.
 - [ ] AC-9.5: `provenance.json` holds the source commit (the base), the plan blob, the copy's sha256, the base sha, and per host and per side the hook path and sha256, and the blob id equals `git hash-object` of the copy.
-- [ ] The eight driver refusals: `test_fr9_driver_refuses` passes on all eight ids, each asserting the token line and exit 2.
+- [ ] The nine driver refusals: `test_fr9_driver_refuses` passes on all nine ids, each asserting the token line and exit 2.
 
-**Mutation rows** (8, in `fr9_drive_refusals.json`; `root` `../..`, `file` `../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py`, `command` `["python3.11", "-m", "pytest", "tests/test_h_mad_fr9_drive_refusals.py", "-q"]`).
+**Mutation rows** (9, in `fr9_drive_refusals.json`; `root` `../..`, `file` `../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py`, `command` `["python3.11", "-m", "pytest", "tests/test_h_mad_fr9_drive_refusals.py", "-q"]`).
 
 **Choice on plan D11 and plan FR-9**: option (a), mutation rows, rather than narrowing the plan to "each refusal has a test node". Plan D11 and plan FR-9 promise an entry for each refusal; spec AC-9.3 does not require one, so either satisfies the spec. Option (a) is the one that leaves all three documents true without editing a round-capped plan, and the mechanism already exists: `h-mad/tests/mutation-specs/grok_audit_surface.json` targets `../docs/03-analysis/probes/grok-audit-surface/` from the same `root`, and `--check-anchors` on it printed `ANCHORS_OK` at `26571a2d`. A refusal is a guard, so a refusal no mutant has bitten carries the same risk any other unmutated guard does. Design v1.4's Components table and its Task 8 omit this spec.
 
@@ -1097,9 +1174,10 @@ Each guard is a one-line `if` carrying its marker, and each row's replace is `if
 - `D-AUTHORSHIP` (`symbol` `_check_authorship`): marker `# M:D-AUTHORSHIP`. Test `tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[authorship-line]`.
 - `D-MISSING-BASE` (`symbol` `_replay_base`): marker `# M:D-MISSING-BASE`. Test `tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[missing-base]`.
 - `D-BASE-IS-HEAD` (`symbol` `_replay_base`): marker `# M:D-BASE-IS-HEAD`. Test `tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[base-is-head]`.
+- `D-PLAN-ABSENT` (`symbol` `_copy_plan`): marker `# M:D-PLAN-ABSENT`. Test `tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[plan-absent-at-base]`.
 - `D-PLAN-BLOB` (`symbol` `_copy_plan`): marker `# M:D-PLAN-BLOB`. Test `tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[plan-blob-mismatch]`.
 
-A mutant may kill through a later crash rather than a later token; the harness annotates that as `crash_kills`, and each node still fails for its own missing token.
+A mutant may kill through a later crash rather than a later token; the harness annotates that as `crash_kills`, and each node still fails for its own missing token. Under `D-PLAN-ABSENT` the driver may instead reach `plan-blob-mismatch`, also exit 2; the node still fails, because it asserts its own reason's token line.
 
 **Commands**:
 ```bash
@@ -1121,10 +1199,10 @@ Then the run order and mutation run above, the full suite, and `--check-anchors`
 | 5 | 18 | `agy_gate_listing.json` 5, `listing_connections.json` 2, `listing_matcher.json` 2, `doc_data_definition.json` 9 | `fr4-t7-unreadable-dropped` |
 | 6 | 22 | `claude_gate_listing.json` 9, `listing_connections.json` 2, `listing_matcher.json` 2, `doc_data_definition.json` 9 | `H11`, `CG-CANON` |
 | 7 | 0 | none | none |
-| 8 | 8 | `fr9_drive_refusals.json` 8 | none |
-| **Total** | **88** | | **5** |
+| 8 | 9 | `fr9_drive_refusals.json` 9 | none |
+| **Total** | **89** | | **5** |
 
-By spec, the `mutations=` each run must print: `wire_pin_ungated.json` 2, `parse_tasks_non_py.json` 3, `doc_data_definition.json` 34, `listing_matcher.json` 14, `listing_connections.json` 6, `judge_non_py.json` 1, `claude_gate_listing.json` 9, `codex_gate_listing.json` 6, `agy_gate_listing.json` 5, `fr9_drive_refusals.json` 8; these sum to 88. Design v1.4 states no overall total. The counts it does state hold here: six connection mutants (AC-3.1), three callee entries, and nine per-suffix mutants per host.
+By spec, the `mutations=` each run must print: `wire_pin_ungated.json` 2, `parse_tasks_non_py.json` 3, `doc_data_definition.json` 34, `listing_matcher.json` 14, `listing_connections.json` 6, `judge_non_py.json` 1, `claude_gate_listing.json` 9, `codex_gate_listing.json` 6, `agy_gate_listing.json` 5, `fr9_drive_refusals.json` 9; these sum to 89. Design v1.4 states no overall total. The counts it does state hold here: six connection mutants (AC-3.1), three callee entries, and nine per-suffix mutants per host.
 
 ## Acceptance-criteria coverage
 The spec's 55 ACs (`python3 h-mad/scripts/h_mad_ac_census.py docs/01-plan/features/gate-non-py-production-files.spec.md` prints `ACS: OK count=55 frs=11`, reading at `26571a2d`) land as follows. AC-1.1 to AC-1.5 and AC-2.1 to AC-2.4 in Task 1. AC-4.1 to AC-4.6 in Task 3. AC-3.1 to AC-3.5, AC-8.1 to AC-8.4 and AC-11.1 to AC-11.6 per host in Tasks 4, 5 and 6, with AC-3.5's judge side in Task 3 and the FR-11 definition in Task 2. AC-5.1 to AC-5.8 in Task 6. AC-6.1 to AC-6.5 in Task 4. AC-7.1 to AC-7.4 in Task 5. AC-10.1 to AC-10.3 in Task 7. AC-9.1 to AC-9.5 in Task 8.
@@ -1140,3 +1218,4 @@ Run from this feature's worktree the same command prints `BLOCKED reason=base_ch
 
 ## Version History
 - v1.0: Initial implementation plan draft (2026-11-04), from design v1.4, spec v1.11 and plan v1.6. Answers no audit cycle. Eight Tasks, three of them wiring, 88 new mutation rows and 5 re-anchored rows.
+- v1.1: Answers impl-plan.audit.v1.p1.md and impl-plan.audit.v1.p3.md (2026-11-04); impl-plan.audit.v1.p2.md filed nothing. Operator ruling 2026-11-04: Task 8's plan path absent at the base is a ninth refusal, FR9-DRIVE: UNREADABLE plan-absent-at-base, exit 2, marker # M:D-PLAN-ABSENT, which answers p1 must 2 and p3 must 1; 9 refusal nodes, 9 rows in fr9_drive_refusals.json, 89 new mutation rows, a departure from design v1.4. p1 must 1: the helper test gets a literal three-arm body that probes the volume independently, with a reading on folding and case-sensitive volumes. p1 must 3: the regression-prototype reading is withdrawn as unverified. p1 should and p3 should: Task 6's NFR reading is labelled per case. p3 should: Task 3's _match_plans sketch carries a real M:L-ABSENT statement.
