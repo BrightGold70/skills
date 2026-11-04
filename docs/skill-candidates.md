@@ -2988,3 +2988,6 @@ Reconciled the open rows first (census OPEN 5, against `origin/main` `94cfebf4`)
   — **LANDED 2026-11-04** (`h-mad/scripts/h_mad_delta_stage.py` `_active_tree_lock()` + `--force` halts with `DELTA-STAGE: HALT tree_lock:SUITE-HOLD ...` when a live holder holds `.h-mad/mutation.lock` unless `--force` is given, in which case it prints `DELTA-STAGE: SUITE-HOLD ... forced=true`; tested in `h-mad/tests/test_h_mad_delta_stage.py` and `h-mad/tests/mutation-specs/delta_stage.json` 40/40 caught).
 - **verify-hmad-gates cannot drive a worktree's hooks**: `.claude/skills/verify-hmad-gates/bin/hmad-verify.sh:32-34` hardwires `AGY_GATE`/`CODEX_GATE`/`DISPATCH` to the installed symlinks (another checkout) with no override and has no Claude drive, so gate features must build their own driver (gate-non-py-production-files FR-9). An env override (e.g. `HMAD_VERIFY_H_MAD_ROOT`) plus a `claude` verb would make it the instrument — remedy: existing-tool-repair — recurrence: 1 — candidate: maybe
   — **LANDED 2026-11-04** (`.claude/skills/verify-hmad-gates/bin/hmad-verify.sh` and `SKILL.md` support `HMAD_VERIFY_H_MAD_ROOT` override for `AGY_GATE`, `CODEX_GATE`, `CLAUDE_GATE`, and `DISPATCH`, plus a `claude` verb driving `h-mad-tdd-gate.sh` under `/bin/bash` with `hookSpecificOutput` verification).
+
+## 2026-11-04 — backlog-rows-closed-to-one — no candidates
+
