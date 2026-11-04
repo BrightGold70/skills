@@ -165,6 +165,38 @@
       "find": "        if value_a and [t.replace(value_a, placeholder) for t in run_a] != tokens:",
       "replace": "        if False:",
       "test": "tests/test_h_mad_ab_dispatch.py::TestPerArmArgvControl::test_argv_collision_outside_placeholder_is_uncontrolled"
+    },
+    {
+      "name": "replay-skips-red-positive-control",
+      "_mechanism": "Row 2965: skip the RED positive control so a replay whose RED test already passes at <red> dispatches both arms and scores a vacuous pass.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "        if red_run.returncode != 1:  # M:AB-REPLAY-RED-CTL",
+      "replace": "        if False:  # M:AB-REPLAY-RED-CTL",
+      "test": "tests/test_h_mad_ab_dispatch.py::TestReplayTask::test_replay_refuses_when_red_commit_already_passes_positive_control"
+    },
+    {
+      "name": "replay-skips-green-positive-control",
+      "_mechanism": "Row 2965: skip the reference GREEN positive control so a replay whose reference GREEN files do not pass the RED tests alone still dispatches.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "        if green_run.returncode != 0:  # M:AB-REPLAY-GREEN-CTL",
+      "replace": "        if False:  # M:AB-REPLAY-GREEN-CTL",
+      "test": "tests/test_h_mad_ab_dispatch.py::TestReplayTask::test_replay_refuses_when_reference_green_fails_positive_control"
+    },
+    {
+      "name": "replay-allows-editing-red-tests",
+      "_mechanism": "Row 2965: ignore tests_edited when scoring GREEN_RESULT so an arm that passes pytest by deleting or weakening the RED test scores pass.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "                green_result = \"pass\" if (pytest_res.returncode == 0 and tests_edited == 0) else \"fail\"  # M:AB-REPLAY-TESTS-EDITED",
+      "replace": "                green_result = \"pass\" if pytest_res.returncode == 0 else \"fail\"  # M:AB-REPLAY-TESTS-EDITED",
+      "test": "tests/test_h_mad_ab_dispatch.py::TestReplayTask::test_replay_marks_arm_fail_if_it_edits_a_red_test_file"
+    },
+    {
+      "name": "replay-leaks-arm-worktrees",
+      "_mechanism": "Row 2965: skip _remove_worktree in finally so every --replay run leaves two detached worktrees behind.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "                _remove_worktree(repo_root, wt_arm)  # M:AB-REPLAY-WT-CLEANUP",
+      "replace": "                pass  # M:AB-REPLAY-WT-CLEANUP",
+      "test": "tests/test_h_mad_ab_dispatch.py::TestReplayTask::test_replay_runs_positive_control_and_scores_each_arm_in_its_own_worktree"
     }
   ]
 }

@@ -580,3 +580,157 @@ class TestPerArmArgvControl:
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert "AB: DIFFERENT var=EFFORT a=--effort=high b=--effort=medium" in proc.stdout
 
+
+def _git(cwd: Path, *args: str) -> str:
+    r = subprocess.run(
+        ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
+    )
+    return r.stdout.strip()
+
+
+def _init_replay_repo(
+    tmp_path: Path,
+    red_test: str = "from calc import add\ndef test_add():\n    assert add(1, 1) == 2\n",
+    red_prod: str = "def add(a, b):\n    return 0\n",
+    green_prod: str = "def add(a, b):\n    return a + b\n",
+) -> tuple[Path, str, str]:
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True, exist_ok=True)
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@t.t")
+    _git(repo, "config", "user.name", "t")
+    (repo / "calc.py").write_text(red_prod, encoding="utf-8")
+    _git(repo, "add", "calc.py")
+    _git(repo, "commit", "-q", "-m", "base")
+
+    tests_dir = repo / "tests"
+    tests_dir.mkdir(exist_ok=True)
+    (tests_dir / "test_calc.py").write_text(red_test, encoding="utf-8")
+    _git(repo, "add", "tests/test_calc.py")
+    _git(repo, "commit", "-q", "-m", "red")
+    red_sha = _git(repo, "rev-parse", "HEAD")
+
+    (repo / "calc.py").write_text(green_prod, encoding="utf-8")
+    _git(repo, "add", "calc.py")
+    _git(repo, "commit", "-q", "-m", "green")
+    green_sha = _git(repo, "rev-parse", "HEAD")
+    return repo, red_sha, green_sha
+
+
+class TestReplayTask:
+    """Row 2965 — `--replay <red>..<green>` verifies the positive control (RED fails,
+    reference GREEN passes) and replays each arm in its own detached worktree at `<red>`.
+    """
+
+    def test_replay_runs_positive_control_and_scores_each_arm_in_its_own_worktree(
+        self, tmp_path: Path
+    ) -> None:
+        repo, red_sha, green_sha = _init_replay_repo(tmp_path)
+        template = tmp_path / "t.md"
+        template.write_text("Fix calc.py.\n", encoding="utf-8")
+        runner = tmp_path / "agent.py"
+        runner.write_text(
+            "import pathlib, sys\n"
+            "tier, wt = sys.argv[1], pathlib.Path(sys.argv[2])\n"
+            "if tier == 'good':\n"
+            "    (wt / 'calc.py').write_text('def add(a, b):\\n    return a + b\\n')\n"
+            "else:\n"
+            "    (wt / 'calc.py').write_text('def add(a, b):\\n    return -1\\n')\n",
+            encoding="utf-8",
+        )
+        proc = _cli(
+            "--template", str(template),
+            "--var", "TIER", "--a", "good", "--b", "bad",
+            "--observe", r"GREEN_RESULT: (\S+)",
+            "--out", str(tmp_path / "out"),
+            "--replay", f"{red_sha}..{green_sha}",
+            "--repo", str(repo),
+            "--run", sys.executable, "--run", str(runner),
+            "--run", "{{TIER}}", "--run", "{worktree}",
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "AB: DIFFERENT var=TIER a=pass b=fail" in proc.stdout
+        wts = [
+            ln for ln in _git(repo, "worktree", "list", "--porcelain").splitlines()
+            if ln.startswith("worktree ")
+        ]
+        assert len(wts) == 1, f"leaked replay worktrees: {wts}"
+
+    def test_replay_refuses_when_red_commit_already_passes_positive_control(
+        self, tmp_path: Path
+    ) -> None:
+        repo, red_sha, green_sha = _init_replay_repo(
+            tmp_path,
+            red_prod="def add(a, b):\n    return a + b\n",
+            green_prod="def add(a, b):\n    return (a + b)\n",
+        )
+        template = tmp_path / "t.md"
+        template.write_text("Prompt {{TIER}}\n", encoding="utf-8")
+        marker = tmp_path / "dispatched"
+        proc = _cli(
+            "--template", str(template),
+            "--var", "TIER", "--a", "good", "--b", "bad",
+            "--observe", r"GREEN_RESULT: (\S+)",
+            "--out", str(tmp_path / "out"),
+            "--replay", f"{red_sha}..{green_sha}",
+            "--repo", str(repo),
+            "--run", "sh", "--run", "-c", "--run", f"touch {marker}",
+        )
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "AB: UNCONTROLLED" in proc.stdout
+        assert "positive control failed: RED tests did not fail" in proc.stdout
+        assert not marker.exists(), "must refuse before dispatching any arm"
+
+    def test_replay_refuses_when_reference_green_fails_positive_control(
+        self, tmp_path: Path
+    ) -> None:
+        repo, red_sha, green_sha = _init_replay_repo(
+            tmp_path,
+            green_prod="def add(a, b):\n    return 999\n",
+        )
+        template = tmp_path / "t.md"
+        template.write_text("Prompt {{TIER}}\n", encoding="utf-8")
+        marker = tmp_path / "dispatched"
+        proc = _cli(
+            "--template", str(template),
+            "--var", "TIER", "--a", "good", "--b", "bad",
+            "--observe", r"GREEN_RESULT: (\S+)",
+            "--out", str(tmp_path / "out"),
+            "--replay", f"{red_sha}..{green_sha}",
+            "--repo", str(repo),
+            "--run", "sh", "--run", "-c", "--run", f"touch {marker}",
+        )
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert "AB: UNCONTROLLED" in proc.stdout
+        assert "positive control failed: reference GREEN did not pass" in proc.stdout
+        assert not marker.exists(), "must refuse before dispatching any arm"
+
+    def test_replay_marks_arm_fail_if_it_edits_a_red_test_file(
+        self, tmp_path: Path
+    ) -> None:
+        repo, red_sha, green_sha = _init_replay_repo(tmp_path)
+        template = tmp_path / "t.md"
+        template.write_text("Fix calc.py.\n", encoding="utf-8")
+        runner = tmp_path / "agent.py"
+        runner.write_text(
+            "import pathlib, sys\n"
+            "tier, wt = sys.argv[1], pathlib.Path(sys.argv[2])\n"
+            "(wt / 'calc.py').write_text('def add(a, b):\\n    return a + b\\n')\n"
+            "if tier == 'cheat':\n"
+            "    (wt / 'tests' / 'test_calc.py').write_text('def test_add():\\n    assert True\\n')\n",
+            encoding="utf-8",
+        )
+        proc = _cli(
+            "--template", str(template),
+            "--var", "TIER", "--a", "honest", "--b", "cheat",
+            "--observe", r"GREEN_RESULT: (\S+)",
+            "--out", str(tmp_path / "out"),
+            "--replay", f"{red_sha}..{green_sha}",
+            "--repo", str(repo),
+            "--run", sys.executable, "--run", str(runner),
+            "--run", "{{TIER}}", "--run", "{worktree}",
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "AB: DIFFERENT var=TIER a=pass b=fail" in proc.stdout
+
+

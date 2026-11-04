@@ -31,8 +31,10 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ARMS = ("a", "b")
@@ -155,6 +157,93 @@ def _observe(log_path: Path, pattern: re.Pattern) -> str | None:
     return matches[-1].group(1) if matches else None
 
 
+def _is_test_path(rel: str) -> bool:
+    name = Path(rel).name
+    return name.endswith(".py") and (
+        name.startswith("test_") or name.endswith("_test.py") or "/tests/" in f"/{rel}"
+    )
+
+
+def _remove_worktree(repo: Path, wt: Path) -> None:
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "remove", "--force", "--force", str(wt)],
+        capture_output=True,
+    )
+    shutil.rmtree(wt, ignore_errors=True)
+
+
+def verify_replay_control(
+    repo: Path, spec: str, python: str = sys.executable
+) -> tuple[str, str, list[str], str]:
+    """Verify `<red>..<green>` positive control (RED fails at `<red>`, reference GREEN passes).
+
+    Returns `(red_sha, green_sha, red_tests, error_reason)`. `error_reason` is empty
+    when the positive control passes.
+    """
+    red_ref, sep, green_ref = spec.partition("..")
+    if not sep or not red_ref or not green_ref:
+        return "", "", [], f"invalid --replay range {spec!r}; expected <red>..<green>"
+    r_red = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--verify", "--quiet", f"{red_ref}^{{commit}}"],
+        capture_output=True, text=True,
+    )
+    r_green = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--verify", "--quiet", f"{green_ref}^{{commit}}"],
+        capture_output=True, text=True,
+    )
+    if r_red.returncode != 0 or r_green.returncode != 0:
+        return "", "", [], f"could not resolve --replay commits {spec!r}"
+    red_sha, green_sha = r_red.stdout.strip(), r_green.stdout.strip()
+    red_files = subprocess.run(
+        ["git", "-C", str(repo), "show", "--name-only", "--format=", red_sha],
+        capture_output=True, text=True,
+    ).stdout.splitlines()
+    red_tests = [p.strip() for p in red_files if p.strip() and _is_test_path(p.strip())]
+    if not red_tests:
+        return red_sha, green_sha, [], f"no RED test files found in {red_ref}"
+    diff_files = subprocess.run(
+        ["git", "-C", str(repo), "diff-tree", "--no-commit-id", "--name-only", "-r", red_sha, green_sha],
+        capture_output=True, text=True,
+    ).stdout.splitlines()
+    prod_files = [p.strip() for p in diff_files if p.strip() and not _is_test_path(p.strip())]
+    if not prod_files:
+        return red_sha, green_sha, red_tests, f"no production files found in {green_ref}"
+
+    ctl_wt = Path(tempfile.mkdtemp(prefix=".h-mad-ab-ctl-", dir=repo.parent))
+    try:
+        add = subprocess.run(
+            ["git", "-C", str(repo), "worktree", "add", "--detach", "--quiet", str(ctl_wt), red_sha],
+            capture_output=True, text=True,
+        )
+        if add.returncode != 0:
+            return red_sha, green_sha, red_tests, f"could not add replay control worktree: {add.stderr.strip()}"
+        red_run = subprocess.run(
+            [python, "-m", "pytest", *red_tests, "-q", "-p", "no:cacheprovider"],
+            cwd=str(ctl_wt), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+        )
+        if red_run.returncode != 1:  # M:AB-REPLAY-RED-CTL
+            return (
+                red_sha, green_sha, red_tests,
+                f"positive control failed: RED tests did not fail at {red_ref} (rc={red_run.returncode})",
+            )
+        subprocess.run(
+            ["git", "-C", str(ctl_wt), "checkout", green_sha, "--", *prod_files],
+            capture_output=True, text=True,
+        )
+        green_run = subprocess.run(
+            [python, "-m", "pytest", *red_tests, "-q", "-p", "no:cacheprovider"],
+            cwd=str(ctl_wt), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+        )
+        if green_run.returncode != 0:  # M:AB-REPLAY-GREEN-CTL
+            return (
+                red_sha, green_sha, red_tests,
+                f"positive control failed: reference GREEN did not pass at {green_ref} (rc={green_run.returncode})",
+            )
+    finally:
+        _remove_worktree(repo, ctl_wt)
+    return red_sha, green_sha, red_tests, ""
+
+
 def run_ab(
     out_dir: Path,
     template: str,
@@ -221,6 +310,13 @@ def main(argv: list[str] | None = None) -> int:
                         help="regex with ONE capture group, applied to each arm's log")
     parser.add_argument("--out", type=Path, required=True,
                         help="directory for the two prompts and two logs")
+    parser.add_argument("--replay", default=None, metavar="RED..GREEN",
+                        help="replay a past task in per-arm detached worktrees at <red> "
+                             "after verifying the <red>..<green> positive control")
+    parser.add_argument("--repo", type=Path, default=Path("."),
+                        help="repository for --replay worktrees (default: .)")
+    parser.add_argument("--python", default=sys.executable,
+                        help="interpreter for --replay pytest runs")
     parser.add_argument("--run", action="append", metavar="TOKEN",
                         help="argv token for the dispatch; repeat. "
                              "{prompt}, {log} and {arm} are substituted per arm — "
@@ -253,26 +349,83 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     run_arms = dict(zip(ARMS, build_run_arms(args.run, args.var, args.a, args.b)))
+    replay_red_sha = ""
+    replay_tests: list[str] = []
+    repo_root = args.repo.resolve()
+    if args.replay:
+        top = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True,
+        )
+        if top.returncode == 0 and top.stdout.strip():
+            repo_root = Path(top.stdout.strip()).resolve()
+        replay_red_sha, _, replay_tests, ctl_err = verify_replay_control(
+            repo_root, args.replay, python=args.python
+        )
+        if ctl_err:
+            print(f"AB: UNCONTROLLED var={args.var} a=None b=None")
+            print(f"  {ctl_err}")
+            print(
+                "  the arms differ in more than the declared variable, so any "
+                "difference would be attributed to the wrong cause. Nothing was dispatched."
+            )
+            print("[H-MAD] ab-dispatch UNCONTROLLED")
+            return 2
 
     def runner(arm: str, prompt_path: Path, log_path: Path) -> int:
-        argv_arm = [
-            # `{arm}` as well as `{prompt}`/`{log}`: without it every OTHER
-            # per-arm path in the argv is byte-identical across arms, so arm B
-            # overwrites arm A's output and the comparison reads B against B —
-            # silently, and reporting SAME, which is the most believable wrong
-            # answer this tool can give (J40/F5). A placeholder rather than
-            # flag-awareness: the tool cannot know which of an arbitrary argv is a
-            # path, and a guess would be wrong for the next runner.
-            token.replace("{prompt}", str(prompt_path))
-                 .replace("{log}", str(log_path))
-                 .replace("{arm}", arm)
-            for token in run_arms[arm]
-        ]
+        wt_arm: Path | None = None
+        if args.replay:
+            wt_arm = Path(tempfile.mkdtemp(prefix=f".h-mad-ab-{arm}-", dir=repo_root.parent))
+            subprocess.run(
+                ["git", "-C", str(repo_root), "worktree", "add", "--detach", "--quiet", str(wt_arm), replay_red_sha],
+                capture_output=True, text=True,
+            )
         try:
-            return subprocess.run(argv_arm, capture_output=True).returncode
-        except OSError as exc:
-            print(f"ERROR: arm {arm} could not launch: {exc}", file=sys.stderr)
-            return 127
+            argv_arm = [
+                # `{arm}` as well as `{prompt}`/`{log}`: without it every OTHER
+                # per-arm path in the argv is byte-identical across arms, so arm B
+                # overwrites arm A's output and the comparison reads B against B —
+                # silently, and reporting SAME, which is the most believable wrong
+                # answer this tool can give (J40/F5). A placeholder rather than
+                # flag-awareness: the tool cannot know which of an arbitrary argv is a
+                # path, and a guess would be wrong for the next runner.
+                token.replace("{prompt}", str(prompt_path))
+                     .replace("{log}", str(log_path))
+                     .replace("{arm}", arm)
+                     .replace("{worktree}", str(wt_arm) if wt_arm else "")
+                for token in run_arms[arm]
+            ]
+            try:
+                rc = subprocess.run(
+                    argv_arm,
+                    cwd=str(wt_arm) if wt_arm else None,
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                ).returncode
+            except OSError as exc:
+                print(f"ERROR: arm {arm} could not launch: {exc}", file=sys.stderr)
+                return 127
+            if wt_arm is not None:
+                edited = subprocess.run(
+                    ["git", "-C", str(wt_arm), "status", "--porcelain", "--", *replay_tests],
+                    capture_output=True, text=True,
+                ).stdout.strip()
+                tests_edited = len([ln for ln in edited.splitlines() if ln.strip()])
+                pytest_res = subprocess.run(
+                    [args.python, "-m", "pytest", *replay_tests, "-q", "-p", "no:cacheprovider"],
+                    cwd=str(wt_arm), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                )
+                green_result = "pass" if (pytest_res.returncode == 0 and tests_edited == 0) else "fail"  # M:AB-REPLAY-TESTS-EDITED
+                existing_log = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+                log_path.write_text(
+                    existing_log
+                    + f"\nTESTS_EDITED: {tests_edited}\nPYTEST_RC: {pytest_res.returncode}\nGREEN_RESULT: {green_result}\n",
+                    encoding="utf-8",
+                )
+            return rc
+        finally:
+            if wt_arm is not None:
+                _remove_worktree(repo_root, wt_arm)  # M:AB-REPLAY-WT-CLEANUP
 
     result = run_ab(
         args.out, template, args.var, args.a, args.b, runner, args.observe,
