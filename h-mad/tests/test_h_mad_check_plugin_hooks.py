@@ -179,10 +179,27 @@ class TestAgainstTheLiveBinary:
         (`var Pft=5,Mft=40;function HPe…`) with the values unchanged, and a
         position anchor read that as "no longer parses". The emitter's own
         code says which is which: the cap is what `slice(0,X)…more` slices to,
-        the truncation length is what `n.length<=Y?n:` compares against."""
+        the truncation length is what `n.length<=Y?n:` compares against.
+
+        2.1.318 named them `D$t` and `L$t`, so an identifier here is `[\\w$]+`,
+        not `\\w+`. It also holds a second function of the same shape, an
+        unrelated `fB` with its own 40, EARLIER in the binary. So the truncator
+        is the one whose result the next function wraps in quotes; the first
+        match alone would pass on a value that is not this emitter's."""
         blob = self._blob()
-        cap = re.search(rb'slice\(0,(\w+)\)\.join\(", "\)\+\(\w+>0\?` and \$\{\w+\} more`', blob)
-        trunc = re.search(rb'return \w+\.length<=(\w+)\?\w+:`\$\{\w+\(\w+,\1\)\}\.\.\.`', blob)
+        ident = rb"[\w$]+"
+        cap = re.search(
+            rb'slice\(0,(' + ident + rb')\)\.join\(", "\)\+\(' + ident
+            + rb'>0\?` and \$\{' + ident + rb'\} more`',
+            blob,
+        )
+        trunc = re.search(
+            rb'function (' + ident + rb')\(' + ident + rb'\)\{[^{}]*?return ' + ident
+            + rb'\.length<=(' + ident + rb')\?' + ident + rb':`\$\{' + ident + rb'\(' + ident
+            + rb',\2\)\}\.\.\.`\}function ' + ident + rb'\(' + ident
+            + rb'\)\{return`"\$\{\1\(' + ident + rb'\)\}"`\}',
+            blob,
+        )
         assert cap and trunc, "the emitter's key-list cap or key truncation no longer parses"
 
         def value(name: bytes) -> int:
@@ -190,7 +207,7 @@ class TestAgainstTheLiveBinary:
             assert decl, f"no declaration found for {name!r}"
             return int(decl.group(1))
 
-        assert (value(cap.group(1)), value(trunc.group(1))) == (MAXKEYS, TRUNC)
+        assert (value(cap.group(1)), value(trunc.group(2))) == (MAXKEYS, TRUNC)
 
 
 class TestTheRecordedWarnings:
