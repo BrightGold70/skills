@@ -1,0 +1,14 @@
+PROMPT=<none — a delta review has no assembled prompt; your subject is below>
+PROJECT_ROOT=/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files
+REPORT=/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/docs/03-analysis/gate-non-py-production-files.plan.delta-review.a469d56-20261103T233158Z.md
+This pass is ADVISORY.
+
+Subject (gate-non-py-production-files, phase plan): `git show a469d56597f8d14f07a4c01b6a454de00bda47d8 -- docs/01-plan/features/gate-non-py-production-files.plan.md` — run it in PROJECT_ROOT — and the findings that revision answers:
+  - /Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/docs/01-plan/features/gate-non-py-production-files.plan.audit.v1.p1.md
+  - /Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/docs/01-plan/features/gate-non-py-production-files.plan.audit.v1.p2.md
+  - /Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/docs/01-plan/features/gate-non-py-production-files.plan.audit.v1.p3.md
+
+For each hunk: does it close the finding it claims, or only the instance the reviewer named?
+Did it break a claim elsewhere in this document or in a sibling — a count, a cross-reference, a value stated in more than one place?
+
+Write your report at REPORT exactly. Its name is deliberately outside the audit filename grammar (`<feature>.<phase>.audit.v<N>[.<token>].md`) so it never joins the audit ledger — do not rename it into that grammar.

@@ -2,3 +2,7 @@
 {"phase": "plan", "cycle": 1, "leg": "agy", "item": "phase5-substeps.md:230 'shell is never gated' + pinning doc-test omitted from D9", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
 {"phase": "plan", "cycle": 1, "leg": "grok", "item": "FR-3 transport false: codex _load_judge only on .py path; agy binds judge module", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
 {"phase": "plan", "cycle": 1, "leg": "grok", "item": "Plan FR-6 omits spec tie-break (min .py, else smallest listed name)", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 2, "leg": "codex", "item": "No per-host connection-only mutation in both directions (Connection enforcement)", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 2, "leg": "codex", "item": "M12 parser probe command not published beside its result", "origin": "instrument", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 2, "leg": "teammate", "item": "Doc-test token 'Both gates' stale: three gates apply docs-first", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 2, "leg": "teammate", "item": "Claude-gate process budget omits _find_judge python launch", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
