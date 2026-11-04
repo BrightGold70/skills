@@ -15,3 +15,8 @@
 {"phase": "design", "cycle": 1, "leg": "agy", "item": "listing conflates listed with has-.py-tests (quotes absent)", "origin": "rejected", "by_cycle": null, "verified_by_execution": false}
 {"phase": "design", "cycle": 1, "leg": "agy", "item": "names[0] IndexError on directory (is_doc_data(()) is True)", "origin": "rejected", "by_cycle": null, "verified_by_execution": false}
 {"phase": "design", "cycle": 1, "leg": "agy", "item": "probe h_mad_non_py_gate_probe.py lacks git init (no such probe)", "origin": "rejected", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "Selected target decode loses trailing newlines; use _pct_capture", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "assert_case_insensitive asserts, never skips, on a case-sensitive volume", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "FR-1 Test Boundaries row exposes only private _parse_tasks", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-10.1 verified by doc-review despite an executable assertion", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "teammate", "item": "TDD-IMPLEMENTER precondition invalid where a case has no readable record", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": true}

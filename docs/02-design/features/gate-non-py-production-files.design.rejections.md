@@ -12,3 +12,7 @@ Four of this report's quotes occur in no document at that commit: `def _match_pl
 - **Must 4 (rejected): the probe `h_mad_non_py_gate_probe.py` has no `git init`.** No such probe is in the design. The FR-9 driver's replay repo is built by `git init` (design §"FR-9 — the driver").
 - **Should 1 (rejected): `CX-LIST`/`AG-LIST` use `SimpleNamespace`.** The design's mutants use `judge.Listing(...)`.
 - **Kept:** Should 2 (agy `is_doc_data` import versus the `identity.is_doc_data` call), Should 3 (stale version citations), and the Nit, pending the design author's check.
+
+## Cycle 1 — codex (`design.audit.v1.p1.md`), must 2: superseded by operator ruling
+
+Design v1.2 and spec v1.9 applied this finding: unreadable outranks listed, with AC-8.5. The operator then ruled on 2026-11-04 that a listed code-like target is judged from the readable plan, accepting the residual that an unreadable sibling plan can hide an earlier listed hard-link name with different Task tests. Spec v1.10 and design v1.4 revert to listed-before-unreadable and remove AC-8.5. Do not re-raise without new evidence.
