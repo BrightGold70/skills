@@ -608,3 +608,58 @@ def test_a_minted_path_carrying_a_control_character_halts(project, capsys, monke
     assert rc == 3, out
     assert "DELTA-STAGE: HALT plan:control_char" in out
     _assert_nothing_happened(project, before)
+
+
+# --- row 2985: SUITE-HOLD refusal / --force warning when tree lock is held ----
+
+
+def _write_lock(root: Path, pid: int | None, spec: str = "pytest-session") -> Path:
+    import json
+    import time
+
+    lock = root / ".h-mad" / "mutation.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    if pid is None:
+        lock.write_text("{corrupt", encoding="utf-8")
+    else:
+        lock.write_text(
+            json.dumps({"pid": pid, "spec": spec, "root": str(root), "started": time.time()}),
+            encoding="utf-8",
+        )
+    return lock
+
+
+def test_live_tree_lock_halts_with_suite_hold_unless_forced(project, capsys):
+    """Staging while a suite holds the tree lock halts with SUITE-HOLD unless --force is given."""
+    holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        _write_lock(project["root"], holder.pid, spec="audit-cycle-suite")
+        before = _analysis_files(project)
+
+        rc, out = _stage(capsys, _argv(project, "plan"))
+        assert rc == 3, out
+        assert f"DELTA-STAGE: HALT tree_lock:SUITE-HOLD holder={holder.pid} spec=audit-cycle-suite" in out
+        assert "STAGED" not in out
+        _assert_nothing_happened(project, before)
+
+        rc_force, out_force = _stage(capsys, [*_argv(project, "plan"), "--force"])
+        assert rc_force == 0, out_force
+        assert f"DELTA-STAGE: SUITE-HOLD holder={holder.pid} spec=audit-cycle-suite" in out_force
+        assert "forced=true" in out_force
+        assert len(_staged(out_force)) == 1
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+def test_dead_tree_lock_holder_does_not_halt(project, capsys):
+    """A stale lock left by a dead process does not block delta-stage."""
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    _write_lock(project["root"], proc.pid, spec="stale-suite")
+
+    rc, out = _stage(capsys, _argv(project, "plan"))
+    assert rc == 0, out
+    assert "SUITE-HOLD" not in out
+    assert len(_staged(out)) == 1
+

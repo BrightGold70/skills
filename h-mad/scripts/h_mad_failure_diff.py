@@ -672,6 +672,99 @@ def _on_signal(signum, frame):
         _kill_group(_STATE["child"])
 
 
+def _suite_at_unreadable(reason: str, extra: str = "", tail: str = "",
+                         log: Path | None = None) -> int:
+    for line in tail.splitlines()[-15:]:
+        print(f"  | {line}")
+    if log is not None:
+        print(f"  log={log}")
+    suffix = f" {extra}" if extra else ""
+    print(f"SUITE-AT: UNREADABLE reason={reason}{suffix}")
+    return EXIT["UNREADABLE"]
+
+
+def suite_at_mode(args) -> int:
+    top = _git(Path(args.subject), "rev-parse", "--show-toplevel")
+    if top.returncode != 0 or not top.stdout.strip():
+        return _suite_at_unreadable("no-subject-repo")
+    subject = Path(top.stdout.strip())
+    resolved = _git(subject, "rev-parse", "--verify", "--quiet", f"{args.ref}^{{commit}}")
+    if resolved.returncode != 0 or not resolved.stdout.strip():  # M:FD-SUITEAT-BADREF
+        return _suite_at_unreadable("bad-ref", f"ref={args.ref}")
+    target_sha = resolved.stdout.strip()
+    dirty: list[str] = []
+    if args.include_dirty:
+        listed = _dirty_paths(subject)
+        if listed is None:
+            return _suite_at_unreadable("subject-snapshot-failed")
+        dirty = listed
+    try:
+        logs = Path(args.log_dir) if args.log_dir else Path(
+            tempfile.mkdtemp(prefix="h-mad-suite-at-logs-"))
+        logs.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return _suite_at_unreadable("log-dir")
+    parent = Path(args.control_parent) if args.control_parent else subject.parent
+    try:
+        wt = Path(os.path.realpath(tempfile.mkdtemp(prefix=".h-mad-suite-at-", dir=parent)))
+    except OSError:
+        return _suite_at_unreadable("worktree-dir")
+    admin: list[str] = []
+    try:
+        added = _git(subject, "worktree", "add", "--detach", "--quiet", str(wt), target_sha)
+        if added.returncode != 0:
+            code = _suite_at_unreadable("worktree-add-failed", tail=added.stderr)
+        else:
+            found = _git(wt, "rev-parse", "--absolute-git-dir")
+            if found.returncode == 0:
+                admin.append(found.stdout.strip())
+            code = _run_suite_at(args, subject, wt, target_sha, dirty, logs)
+    finally:
+        wt_removed = _remove_control(subject, wt, admin[0] if admin else None)  # M:FD-SUITEAT-REMOVE
+    if not wt_removed:
+        code = _suite_at_unreadable("worktree-not-removed", f"path={wt}")
+    return code
+
+
+def _run_suite_at(args, subject: Path, wt: Path, target_sha: str,
+                  dirty: list[str], logs: Path) -> int:
+    if dirty:  # M:FD-SUITEAT-DIRTY
+        try:
+            _copy_dirty(subject, wt, dirty)
+        except OSError:
+            return _suite_at_unreadable("dirty-copy-failed")
+    print(f"SUITE-AT: WORKTREE path={wt} ref={args.ref} sha={target_sha} "
+          f"dirty_copied={len(dirty)}")
+    env = _control_env(subject, wt)
+    try:
+        wt_leaked = _subject_on_control_path(args.python, subject, wt, env)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return _suite_at_unreadable("launch-failed", tail=str(exc))
+    except (ValueError, KeyError, TypeError) as exc:
+        return _suite_at_unreadable("probe-failed", tail=str(exc))
+    if wt_leaked:
+        return _suite_at_unreadable("control-imports-subject", tail="\n".join(wt_leaked))
+    log = logs / "suite-at.log"
+    argv = [args.python, "-m", "pytest", *PYTEST_FLAGS, *args.selection]
+    try:
+        reason, rc, output = _run_one(argv, wt, env, args.timeout, log)  # M:FD-SUITEAT-ROOT
+    except OSError as exc:
+        return _suite_at_unreadable("launch-failed", tail=str(exc))
+    if reason is not None:
+        return _suite_at_unreadable(reason, f"PYTEST_RC={rc} log={log}", tail=output, log=log)
+    try:
+        ids, summary = failure_set(output, rc)
+    except Unreadable as exc:
+        return _suite_at_unreadable(exc.reason, f"PYTEST_RC={rc} log={log}", tail=output, log=log)
+    for node in sorted(ids):
+        print(f"{ids[node]} {node}")
+    verdict = "PASS" if rc == 0 else "FAIL"  # M:FD-SUITEAT-VERDICT
+    print(f"SUITE-AT: {verdict} PYTEST_RC={rc} passed={summary.passed} "
+          f"failed={summary.failed} errors={summary.errors} sha={target_sha} "
+          f"dirty_copied={len(dirty)} log={log}")
+    return 0 if verdict == "PASS" else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
@@ -698,9 +791,32 @@ def main(argv: list[str] | None = None) -> int:
     logs = sub.add_parser("logs", help="compare two existing readings")
     logs.add_argument("--run", required=True, help="pytest log of the run under test")
     logs.add_argument("--control", required=True, help="pytest log, or node-id list")
-    args = parser.parse_args(argv)
+    suite_at = sub.add_parser(
+        "suite-at",
+        help="run pytest at an exact commit in a throwaway worktree, ending with PYTEST_RC",
+    )
+    suite_at.add_argument("ref", help="commit-ish to detach the throwaway worktree at")
+    suite_at.add_argument("--subject", default=".", help="subject tree (default: cwd's toplevel)")
+    suite_at.add_argument("--include-dirty", action="store_true",
+                          help="copy uncommitted changes and untracked files into the worktree")
+    suite_at.add_argument("--python", default=sys.executable, help="interpreter to run pytest")
+    suite_at.add_argument("--timeout", type=int, default=3600, help="seconds for the pytest run")
+    suite_at.add_argument("--control-parent", help="directory the worktree is created in "
+                          "(default: beside the subject's toplevel)")
+    suite_at.add_argument("--log-dir", help="where the run's output is kept")
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    suite_at_selection: list[str] = []
+    if raw_argv and raw_argv[0] == "suite-at" and "--" in raw_argv:
+        sep = raw_argv.index("--")
+        raw_argv, suite_at_selection = raw_argv[:sep], raw_argv[sep + 1:]
+    args = parser.parse_args(raw_argv)
     if args.mode == "logs":
         return logs_mode(args)
+    if args.mode == "suite-at":
+        args.selection = suite_at_selection
+        for sig_num in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+            signal.signal(sig_num, _on_signal)
+        return suite_at_mode(args)
     if args.repeat < 1:
         parser.error("--repeat must be at least 1")
     if args.include_dirty and not args.subject_snapshot:

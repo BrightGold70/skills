@@ -55,8 +55,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import re
+import subprocess
 import sys
 from pathlib import Path
+from typing import Callable
 
 # `<ROLE>: DONE ` — the four authors, the auditor and the change reviewer emit this shape. Anchored
 # at the start of the line so a DONE quoted mid-sentence in a report body cannot be
@@ -182,6 +184,67 @@ def run(message: str, repo: Path, expect_path: str | None) -> tuple[str, int]:
             f"lines_check={lines_check} lines={actual_lines}"), 0
 
 
+def run_commit(
+    message: str,
+    repo: Path,
+    expect_path: str | None,
+    commit_file: Path,
+    _after_stage: Callable[[], None] | None = None,
+) -> tuple[str, int]:
+    """Two-pass DONE gate + single-path commit (rule 7 in one call).
+
+    Pass 1 verifies the artifact before touching the index; `git add` stages
+    only `reported_path`; pass 2 re-verifies the sha immediately before commit;
+    `git commit --only -F <commit_file> -- <reported_path>` commits only that
+    artifact without sweeping unrelated staged files.
+    """
+    try:
+        msg_text = commit_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return f"DONEGATE: UNREADABLE reason=commit_file_unreadable path={commit_file}", 2
+    if not msg_text.strip():
+        return f"DONEGATE: UNREADABLE reason=commit_file_empty path={commit_file}", 2
+
+    token1, code1 = run(message, repo, expect_path)
+    if code1 != 0:
+        return token1, code1
+
+    _role, rest = find_done_line(message)
+    reported_path = parse_fields(rest)["path"]
+
+    add_proc = subprocess.run(
+        ["git", "-C", str(repo), "add", "--", reported_path],
+        capture_output=True, text=True,
+    )
+    if add_proc.returncode != 0:
+        return f"DONEGATE: UNREADABLE reason=git_add_failed path={reported_path}", 2
+
+    if _after_stage is not None:
+        _after_stage()
+
+    token2, code2 = run(message, repo, expect_path)
+    if code2 != 0:
+        return token2, code2
+
+    commit_proc = subprocess.run(
+        ["git", "-C", str(repo), "commit", "--only",
+         "-F", str(commit_file.resolve()), "--", reported_path],
+        capture_output=True, text=True,
+    )
+    if commit_proc.returncode != 0:
+        return f"DONEGATE: UNREADABLE reason=git_commit_failed path={reported_path}", 2
+
+    head_proc = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True, text=True,
+    )
+    if head_proc.returncode != 0:
+        return f"DONEGATE: UNREADABLE reason=git_rev_parse_failed path={reported_path}", 2
+
+    head_sha = head_proc.stdout.strip()
+    return f"{token2} committed={head_sha}", 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="verify an author's DONE line against the artifact on disk")
@@ -195,6 +258,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--expect-path",
                     help="the document this dispatch was for; when given, `path=` "
                          "must name it")
+    ap.add_argument("--commit", action="store_true",
+                    help="stage the verified artifact, re-verify its sha256 (rule 7), "
+                         "and commit only that path using -F/--commit-file")
+    ap.add_argument("-F", "--commit-file",
+                    help="commit message file used with --commit")
     args = ap.parse_args(argv)
 
     repo = Path(args.repo).resolve()
@@ -213,6 +281,12 @@ def main(argv: list[str] | None = None) -> int:
                          f"path={args.message_file}", 2)
     else:
         message = args.done_line
+
+    if args.commit or args.commit_file is not None:
+        if not args.commit or args.commit_file is None:
+            return _emit("DONEGATE: UNREADABLE reason=commit_file_missing", 2)
+        token, code = run_commit(message, repo, args.expect_path, Path(args.commit_file))
+        return _emit(token, code)
 
     token, code = run(message, repo, args.expect_path)
     return _emit(token, code)

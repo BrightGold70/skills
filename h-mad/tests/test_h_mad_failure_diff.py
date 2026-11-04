@@ -1338,3 +1338,73 @@ def test_snapshot_that_cannot_be_removed_is_UNREADABLE(tmp_path):
         for left in (tmp_path / "controls").glob(".h-mad-snapshot-*"):
             shutil.rmtree(left, ignore_errors=True)
         subprocess.run(["git", "-C", str(repo), "worktree", "prune"], capture_output=True)
+
+
+# --- suite-at <sha> [--include-dirty] (row 2981) ------------------------------
+
+
+def _suite_at(repo: Path, tmp_path: Path, ref: str, *selection: str,
+              extra: tuple = (), env: dict | None = None,
+              python: str = sys.executable) -> subprocess.CompletedProcess:
+    parent = tmp_path / "controls"
+    parent.mkdir(exist_ok=True)
+    cmd = [sys.executable, str(SCRIPT), "suite-at", ref,
+           "--subject", str(repo), "--python", python,
+           "--control-parent", str(parent), *extra]
+    if selection:
+        cmd += ["--", *selection]
+    return subprocess.run(
+        cmd, capture_output=True, text=True, env=env or _env(tmp_path), timeout=300,
+    )
+
+
+def test_suite_at_runs_exact_commit_in_throwaway_worktree_and_reports_pytest_rc(tmp_path):
+    """`suite-at <sha>` runs at `<sha>` even when the live tree has moved on or is dirty."""
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING},
+                 {"tests/test_new.py": FAILING})
+    main_sha = _git(repo, "rev-parse", "main")
+    feature_sha = _git(repo, "rev-parse", "HEAD")
+    # Dirty the live tree to prove suite-at without --include-dirty ignores live edits.
+    _write(repo, "tests/test_ok.py", FAILING)
+
+    r_pass = _suite_at(repo, tmp_path, main_sha, "tests")
+    tok_pass = _token(r_pass.stdout)
+    assert tok_pass.startswith(f"SUITE-AT: PASS PYTEST_RC=0 passed=1 failed=0 errors=0 sha={main_sha} dirty_copied=0 log="), \
+        r_pass.stdout + r_pass.stderr
+    assert r_pass.returncode == 0
+    _no_control_left(repo, tmp_path)
+
+    r_fail = _suite_at(repo, tmp_path, feature_sha, "tests")
+    tok_fail = _token(r_fail.stdout)
+    assert tok_fail.startswith(f"SUITE-AT: FAIL PYTEST_RC=1 passed=1 failed=1 errors=0 sha={feature_sha} dirty_copied=0 log="), \
+        r_fail.stdout + r_fail.stderr
+    assert "FAILED tests/test_new.py::test_broken" in r_fail.stdout
+    assert r_fail.returncode == 1
+    _no_control_left(repo, tmp_path)
+
+
+def test_suite_at_include_dirty_copies_uncommitted_changes_into_worktree(tmp_path):
+    """`suite-at HEAD --include-dirty` copies uncommitted files into the throwaway worktree."""
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING},
+                 {"tests/test_gone.py": FAILING})
+    _write(repo, "tests/test_untracked.py", FAILING)
+    (repo / "tests" / "test_gone.py").unlink()
+
+    r = _suite_at(repo, tmp_path, "HEAD", "tests", extra=("--include-dirty",))
+    tok = _token(r.stdout)
+    assert tok.startswith("SUITE-AT: FAIL PYTEST_RC=1 passed=1 failed=1 errors=0 "), r.stdout + r.stderr
+    assert "dirty_copied=2 " in tok, tok
+    assert "FAILED tests/test_untracked.py::test_broken" in r.stdout
+    assert "test_gone" not in r.stdout
+    assert r.returncode == 1
+    _no_control_left(repo, tmp_path)
+
+
+def test_suite_at_rejects_bad_ref_as_unreadable(tmp_path):
+    repo = _repo(tmp_path, {"tests/test_ok.py": PASSING}, {"tests/test_new.py": PASSING})
+    r = _suite_at(repo, tmp_path, "no-such-commit-ref", "tests")
+    assert _token(r.stdout) == "SUITE-AT: UNREADABLE reason=bad-ref ref=no-such-commit-ref", \
+        r.stdout + r.stderr
+    assert r.returncode == 2
+    _no_control_left(repo, tmp_path)
+

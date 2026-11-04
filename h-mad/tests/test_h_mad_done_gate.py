@@ -529,3 +529,150 @@ def test_rule_8_is_about_the_DOCUMENT_and_is_not_rule_5_restated() -> None:
     assert "rule 5" in section, section
     # A sha is named as insufficient — that is the whole point beside rule 6.
     assert "sha" in heading.lower() or "sha" in section.lower(), section
+
+
+# --- --commit -F <msgfile>: two-pass DONE gate + single-path commit (row 2984) ---
+
+
+def _init_git_repo(repo: Path) -> None:
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+                   check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test User"],
+                   check=True, capture_output=True)
+    seed = repo / "README.md"
+    seed.write_text("seed\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "README.md"],
+                   check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "initial"],
+                   check=True, capture_output=True)
+
+
+def test_commit_mode_stages_re_gates_and_commits_only_reported_path(tmp_path: Path) -> None:
+    """`--commit -F <msgfile>` runs pass 1 -> git add -> pass 2 -> git commit --only."""
+    _init_git_repo(tmp_path)
+    sha, lines = _doc(tmp_path, rel="docs/f.spec.md", body="spec v1.1\n")
+    # Stage an unrelated file to prove --commit only commits the gated artifact.
+    unrelated = tmp_path / "unrelated.txt"
+    unrelated.write_text("do not sweep\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "unrelated.txt"],
+                   check=True, capture_output=True)
+
+    msgfile = tmp_path / "commit_msg.txt"
+    msgfile.write_text("docs(h-mad): spec f v1.1\n", encoding="utf-8")
+
+    r = _run(tmp_path, "--expect-path", "docs/f.spec.md",
+             "--done-line", _done(sha, lines, path="docs/f.spec.md"),
+             "--commit", "-F", str(msgfile))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.startswith("DONEGATE: PASS path=docs/f.spec.md "), r.stdout
+    assert f"sha256={sha}" in r.stdout
+    assert "committed=" in r.stdout
+
+    head_sha = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert f"committed={head_sha}" in r.stdout
+
+    committed_files = subprocess.run(
+        ["git", "-C", str(tmp_path), "show", "--name-only", "--pretty=format:", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.splitlines()
+    assert committed_files == ["docs/f.spec.md"]
+
+    subject = subprocess.run(
+        ["git", "-C", str(tmp_path), "log", "-1", "--pretty=%s"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert subject == "docs(h-mad): spec f v1.1"
+
+
+def test_commit_mode_refuses_to_commit_on_sha_mismatch(tmp_path: Path) -> None:
+    """A FAIL verdict must never stage or commit the artifact."""
+    _init_git_repo(tmp_path)
+    _sha, lines = _doc(tmp_path, rel="docs/f.spec.md", body="spec v1.1\n")
+    before_head = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    msgfile = tmp_path / "commit_msg.txt"
+    msgfile.write_text("docs(h-mad): spec f v1.1\n", encoding="utf-8")
+
+    r = _run(tmp_path, "--expect-path", "docs/f.spec.md",
+             "--done-line", _done("0" * 64, lines, path="docs/f.spec.md"),
+             "--commit", "-F", str(msgfile))
+    assert r.returncode == 1, r.stdout
+    assert "DONEGATE: FAIL reason=sha_mismatch" in r.stdout
+    assert "committed=" not in r.stdout
+
+    after_head = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert after_head == before_head
+
+    staged = subprocess.run(
+        ["git", "-C", str(tmp_path), "diff", "--cached", "--name-only"],
+        check=True, capture_output=True, text=True,
+    ).stdout.splitlines()
+    assert staged == []
+
+
+def test_commit_mode_refuses_if_artifact_moves_before_second_gate_pass(tmp_path: Path) -> None:
+    """Rule 7's second pass catches an artifact that moved between staging and commit."""
+    import h_mad_done_gate
+
+    _init_git_repo(tmp_path)
+    sha, lines = _doc(tmp_path, rel="docs/f.spec.md", body="spec v1.1\n")
+    before_head = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    msgfile = tmp_path / "commit_msg.txt"
+    msgfile.write_text("docs(h-mad): spec f v1.1\n", encoding="utf-8")
+
+    def _mutate_after_stage() -> None:
+        (tmp_path / "docs/f.spec.md").write_text("post-DONE author overwrite\n", encoding="utf-8")
+
+    token, code = h_mad_done_gate.run_commit(
+        _done(sha, lines, path="docs/f.spec.md"),
+        tmp_path,
+        "docs/f.spec.md",
+        msgfile,
+        _after_stage=_mutate_after_stage,
+    )
+    assert code == 1, token
+    assert "DONEGATE: FAIL reason=sha_mismatch" in token
+    assert "committed=" not in token
+
+    after_head = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert after_head == before_head
+
+
+def test_commit_mode_rejects_missing_or_empty_commit_message_file(tmp_path: Path) -> None:
+    """Missing `-F`, unreadable `-F`, or empty `-F` is UNREADABLE (exit 2)."""
+    _init_git_repo(tmp_path)
+    sha, lines = _doc(tmp_path, rel="docs/f.spec.md", body="spec v1.1\n")
+    done = _done(sha, lines, path="docs/f.spec.md")
+
+    # --commit without -F
+    r_no_f = _run(tmp_path, "--done-line", done, "--commit")
+    assert r_no_f.returncode == 2, r_no_f.stdout
+    assert "DONEGATE: UNREADABLE reason=commit_file_missing" in r_no_f.stdout
+
+    # -F pointing to nonexistent file
+    r_missing = _run(tmp_path, "--done-line", done, "--commit", "-F", str(tmp_path / "no_msg.txt"))
+    assert r_missing.returncode == 2, r_missing.stdout
+    assert "DONEGATE: UNREADABLE reason=commit_file_unreadable" in r_missing.stdout
+
+    # -F pointing to empty file
+    empty_msg = tmp_path / "empty_msg.txt"
+    empty_msg.write_text("   \n", encoding="utf-8")
+    r_empty = _run(tmp_path, "--done-line", done, "--commit", "-F", str(empty_msg))
+    assert r_empty.returncode == 2, r_empty.stdout
+    assert "DONEGATE: UNREADABLE reason=commit_file_empty" in r_empty.stdout
+

@@ -8,7 +8,7 @@
   "tests/test_h_mad_failure_diff.py",
   "-q",
   "-k",
-  "snapshot or live_writer or include_dirty"
+  "snapshot or live_writer or include_dirty or suite_at"
  ],
  "mutations": [
   {
@@ -66,6 +66,33 @@
    "find": "        snap_removed = snap is None or _remove_control(  # M:FD-SNAP-REMOVE",
    "replace": "        snap_removed = True or _remove_control(  # M:FD-SNAP-REMOVE",
    "test": "tests/test_h_mad_failure_diff.py::test_snapshot_measures_head_while_the_live_tree_moves"
+  },
+  {
+   "name": "suite-at-runs-live-subject-instead-of-worktree",
+   "_mechanism": "If suite-at runs pytest in the live subject instead of the detached worktree, it measures the wrong commit and dirty live files.",
+   "file": "scripts/h_mad_failure_diff.py",
+   "symbol": "_run_suite_at",
+   "find": "        reason, rc, output = _run_one(argv, wt, env, args.timeout, log)  # M:FD-SUITEAT-ROOT",
+   "replace": "        reason, rc, output = _run_one(argv, subject, env, args.timeout, log)  # M:FD-SUITEAT-ROOT",
+   "test": "tests/test_h_mad_failure_diff.py::test_suite_at_runs_exact_commit_in_throwaway_worktree_and_reports_pytest_rc"
+  },
+  {
+   "name": "suite-at-skips-copying-dirty-files",
+   "_mechanism": "With --include-dirty, suite-at drops uncommitted changes and measures the bare commit instead.",
+   "file": "scripts/h_mad_failure_diff.py",
+   "symbol": "_run_suite_at",
+   "find": "    if dirty:  # M:FD-SUITEAT-DIRTY",
+   "replace": "    if False:  # M:FD-SUITEAT-DIRTY",
+   "test": "tests/test_h_mad_failure_diff.py::test_suite_at_include_dirty_copies_uncommitted_changes_into_worktree"
+  },
+  {
+   "name": "suite-at-never-removes-worktree",
+   "_mechanism": "The throwaway worktree created by suite-at is leaked on disk.",
+   "file": "scripts/h_mad_failure_diff.py",
+   "symbol": "suite_at_mode",
+   "find": "        wt_removed = _remove_control(subject, wt, admin[0] if admin else None)  # M:FD-SUITEAT-REMOVE",
+   "replace": "        wt_removed = True  # M:FD-SUITEAT-REMOVE",
+   "test": "tests/test_h_mad_failure_diff.py::test_suite_at_runs_exact_commit_in_throwaway_worktree_and_reports_pytest_rc"
   }
  ],
  "target_command": [

@@ -166,6 +166,33 @@
       "find": "     --done-line '<the first line of the author'\"'\"'s final message, verbatim>' || exit 1",
       "replace": "     --message-file \"$MSG\" || exit 1",
       "test": "tests/test_h_mad_done_gate.py::test_rule_6_prescribes_a_COMMAND_THAT_CAN_BE_RUN"
+    },
+    {
+      "name": "commit-mode-skips-pass-1-gate",
+      "_mechanism": "If --commit skips pass 1, a mismatched sha still stages the artifact into the git index before failing.",
+      "file": "scripts/h_mad_done_gate.py",
+      "symbol": "run_commit",
+      "find": "    if code1 != 0:\n        return token1, code1",
+      "replace": "    if False:\n        return token1, code1",
+      "test": "tests/test_h_mad_done_gate.py::test_commit_mode_refuses_to_commit_on_sha_mismatch"
+    },
+    {
+      "name": "commit-mode-skips-pass-2-re-gate",
+      "_mechanism": "If --commit skips pass 2 (rule 7), an artifact that moved between staging and commit is committed without verification.",
+      "file": "scripts/h_mad_done_gate.py",
+      "symbol": "run_commit",
+      "find": "    if code2 != 0:\n        return token2, code2",
+      "replace": "    if False:\n        return token2, code2",
+      "test": "tests/test_h_mad_done_gate.py::test_commit_mode_refuses_if_artifact_moves_before_second_gate_pass"
+    },
+    {
+      "name": "commit-mode-sweeps-unrelated-staged-files",
+      "_mechanism": "Without `--only -- <reported_path>`, `git commit -F` sweeps unrelated files that were already staged in the index into the author's artifact commit.",
+      "file": "scripts/h_mad_done_gate.py",
+      "symbol": "run_commit",
+      "find": "        [\"git\", \"-C\", str(repo), \"commit\", \"--only\",\n         \"-F\", str(commit_file.resolve()), \"--\", reported_path],",
+      "replace": "        [\"git\", \"-C\", str(repo), \"commit\",\n         \"-F\", str(commit_file.resolve())],",
+      "test": "tests/test_h_mad_done_gate.py::test_commit_mode_stages_re_gates_and_commits_only_reported_path"
     }
   ]
 }

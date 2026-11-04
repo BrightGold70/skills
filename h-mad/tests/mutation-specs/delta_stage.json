@@ -318,6 +318,24 @@
       "find": "        if _has_control(report) or _has_control(prompt):  # M:DSTAGE-CONTROL-MINTED",
       "replace": "        if False:  # M:DSTAGE-CONTROL-MINTED",
       "test": "tests/test_h_mad_delta_stage.py::test_a_minted_path_carrying_a_control_character_halts"
+    },
+    {
+      "name": "suite-hold-never-halts",
+      "_mechanism": "A live tree lock is ignored without --force, letting an advisory review write into docs/03-analysis/ while a suite holds the tree.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "symbol": "main",
+      "find": "    if lock_holder is not None and not args.force:  # M:DSTAGE-SUITE-HOLD",
+      "replace": "    if False:  # M:DSTAGE-SUITE-HOLD",
+      "test": "tests/test_h_mad_delta_stage.py::test_live_tree_lock_halts_with_suite_hold_unless_forced"
+    },
+    {
+      "name": "dead-lock-holder-treated-as-alive",
+      "_mechanism": "A stale lock left by a dead process permanently blocks delta-stage as SUITE-HOLD.",
+      "file": "scripts/h_mad_delta_stage.py",
+      "symbol": "_active_tree_lock",
+      "find": "    if holder.get(\"unparseable\") or not isinstance(pid, int) or mh._holder_alive(holder):  # M:DSTAGE-LOCK-ALIVE",
+      "replace": "    if True:  # M:DSTAGE-LOCK-ALIVE",
+      "test": "tests/test_h_mad_delta_stage.py::test_dead_tree_lock_holder_does_not_halt"
     }
   ]
 }

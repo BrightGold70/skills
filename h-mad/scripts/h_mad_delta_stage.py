@@ -49,6 +49,7 @@ from pathlib import Path
 import h_mad_assemble_audit as aa
 import h_mad_audit_gate as ag
 import h_mad_cycle_counts as cc
+import h_mad_mutation_harness as mh
 
 PHASES = ("spec", "plan", "design", "impl-plan")
 STAGE_HALT = 3
@@ -181,6 +182,21 @@ def _halt(lines: list[str],
     return STAGE_HALT
 
 
+def _active_tree_lock(root: Path) -> dict | None:
+    """Return the active tree-lock holder for `root`, or None if free/stale."""
+    lock = mh._lock_path(root)
+    if not lock.exists():
+        return None
+    if mh.held_by_an_enclosing_run(root):
+        return None
+    holder = mh._read_holder(lock)
+    pid = holder.get("pid")
+    if holder.get("unparseable") or not isinstance(pid, int) or mh._holder_alive(holder):  # M:DSTAGE-LOCK-ALIVE
+        holder["lock"] = str(lock)
+        return holder
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -191,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="repeatable; one delta review is staged per phase")
     ap.add_argument("--answers", required=True, action="append", metavar="PATH",
                     help="an audit report this revision answers (repeatable, >=1)")
+    ap.add_argument("--force", action="store_true",
+                    help="stage even when the tree lock is held (prints SUITE-HOLD warning)")
     args = ap.parse_args(argv)
 
     # Before every other check, so a tainted value never reaches a HALT line raw
@@ -230,6 +248,14 @@ def main(argv: list[str] | None = None) -> int:
     for path in answers:
         if why := _check_answers(path):
             halts.append(f"answers:{why} path={path}")
+    lock_holder = _active_tree_lock(root)
+    if lock_holder is not None and not args.force:  # M:DSTAGE-SUITE-HOLD
+        lpid = lock_holder.get("pid", "unparseable")
+        lspec = lock_holder.get("spec", "unknown")
+        halts.append(
+            f"tree_lock:SUITE-HOLD holder={lpid} spec={lspec} "
+            f"lock={lock_holder['lock']} (pass --force to stage anyway)"
+        )
     if halts:  # steps 2-4 need a resolved sha
         return _halt(halts)
 
@@ -299,6 +325,11 @@ def main(argv: list[str] | None = None) -> int:
                       footer="this run's prompt files and claims were removed; "
                              f"{analysis} may have been created and left empty.")
 
+    if lock_holder is not None:
+        lpid = lock_holder.get("pid", "unparseable")
+        lspec = lock_holder.get("spec", "unknown")
+        print(f"DELTA-STAGE: SUITE-HOLD holder={lpid} spec={lspec} "
+              f"lock={lock_holder['lock']} forced=true")
     for phase, report, prompt in staged:
         print(f"DELTA-STAGE: STAGED phase={phase} report={report} prompt={prompt}")
         print(f'Agent(subagent_type: "doc-auditor", prompt: "Read {prompt} and follow it '
