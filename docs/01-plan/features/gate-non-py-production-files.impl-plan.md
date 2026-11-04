@@ -1,9 +1,9 @@
 # Implementation Plan: gate-non-py-production-files
 
-> Source: docs/02-design/features/gate-non-py-production-files.design.md v1.4, following its §"Implementation Order"; spec v1.11; plan v1.6.
+> Source: docs/02-design/features/gate-non-py-production-files.design.md v1.4, following its §"Implementation Order"; spec v1.12, committed as `455cfdef` (a v1.13 changes one word and no meaning); plan v1.6.
 > Branch target: BrightGold70/gate-non-py-production-files
 > Tree readings: taken at `26571a2d` from PROJECT_ROOT. Readings marked "prototype" ran on a throwaway scratch copy of the tree carrying this plan's edits, outside the repository, and it was removed after the run.
-> Existing tests this feature moves, by enumeration and not by measurement: the 8 retired `ungated` nodes of Task 1 and `test_py_suffixes_match_bash_fold` of Task 6. This plan holds no measured reading of the rest of the suite: the regression-prototype reading v1.0 printed here had no recorded selector or invocation and its scratch tree is gone, so v1.1 withdraws it as unverified. Each Task's gate runs the whole suite for real.
+> Existing tests this feature moves through Task 6's production edits, by enumeration and not by measurement: the 8 retired `ungated` nodes of Task 1 and `test_py_suffixes_match_bash_fold` of Task 6. Task 6 also edits 2 stubs in `test_h_mad_tdd_gate_judge.py` with no assertion change, and Task 7 modifies 3 more existing tests, each with its own RED, listed in Task 7 as `(modified; ...)`. This plan holds no measured reading of the rest of the suite: the regression-prototype reading v1.0 printed here had no recorded selector or invocation and its scratch tree is gone, so v1.1 withdraws it as unverified. Each Task's gate runs the whole suite for real.
 
 ## Executive Summary
 Eight Tasks in a chain: the parser widens `production` and retires `ungated` (Task 1), the doc/data definition lands in `h_mad_target_identity` (Task 2), the judge gains `_match_plans`, `listing` and the `listing` verb (Task 3), the codex, agy and Claude gates are wired to them in that order (Tasks 4, 5, 6), the prose states the shipped rule (Task 7), and the FR-9 driver takes the end-to-end proof and the whole mutation run (Task 8).
@@ -21,10 +21,10 @@ Each item is stated again in its Task, with the reason.
 1. **`non_py_gate_support.py` is not on a **Test file** line (Task 4).** The design lists it among Task 4's tests. `resolve` turns every `.py` token of that line into a judge candidate, and a support module collects no tests. The module has its own `**Test support**` line, which `_PATHS_FIELD_RE` does not match.
 2. **Five existing rows are re-anchored, three beyond the design's two.** `--check-anchors` over all 192 specs on the prototype drifted 9 rows: `U1`, `U3`, `U4` and `U5` (rewritten or retired in Task 1), and five more. The design names `H11` and `CG-CANON` (Task 6). It does not name `declared-budget-not-read` (Task 3: the line moves from 20 spaces of indent to 12), `fr6-import-guard-dropped` (Task 4: it anchors codex's whole import block, which gains three names), or `fr4-t7-unreadable-dropped` (Task 5: agy's new line at 20 spaces contains that anchor's 16-space text, so the anchor matches twice). With the Task 3, 4 and 5 edits below applied, those three specs printed `ANCHORS_OK` on the prototype.
 3. **The parser guard's killer asserts `production` too (Task 1).** With `if key == "production":` forced true, a `.json` token on a **Test file** line lands in `production`, not in `tests`, so an assertion on `tests` alone cannot kill it.
-4. **`# M:H-LIST-INROOT`'s killer sits beside an unreadable state (Task 6).** On a readable state the mutant still reads ALLOW, because the matcher finds no out-of-root target (prototype reading in Task 6).
-5. **Three Claude guards are killed on the reason, not the kind (Task 6).** `# M:H-LIST-UNREADABLE` is the design's. `# M:H-LIST-LINES` and `# M:H-DOCDATA-LINE` are this plan's: without the line guard the same output falls through to "no well-formed listing line", also `judge-error` (prototype reading in Task 6).
+4. **`# M:H-LIST-INROOT`'s killer sits beside an unreadable state (Task 6).** On a readable state the mutant still reads ALLOW, because the matcher finds no out-of-root target (prototype reading in Task 6, unverified; its test re-reads it at 5d).
+5. **Three Claude guards are killed on the reason, not the kind (Task 6).** `# M:H-LIST-UNREADABLE` is the design's. `# M:H-LIST-LINES` and `# M:H-DOCDATA-LINE` are this plan's: without the line guard the same output falls through to "no well-formed listing line", also `judge-error` (prototype reading in Task 6, unverified; its test re-reads it at 5d).
 6. **Driver refusals get mutation rows (Task 8).** This settles the plan D11 and FR-9 mismatch with option (a); the reasoning is in Task 8.
-7. **Added guard rows beyond the design's list.** `P-PYFILTER`, `DD-EXEMPT-DOCS`, `DD-EXEMPT-DIRS`, `DD-EXEMPT-PARENT`, `DD-EMIT`, `L-ABSENT`, `LV-NONE`, `LV-CHAIN-UNREADABLE`, `LV-RC`, `CX-NOT-CODE-LIKE`, `AG-NOT-CODE-LIKE`, and a second `# M:CX-DOCDATA` row with a verdict killer. AC-9.3 requires an entry for every new guard, and each of these is one.
+7. **Added guard rows beyond the design's list.** `P-PYFILTER`, `DD-EXEMPT-DOCS`, `DD-EXEMPT-DIRS`, `DD-EXEMPT-PARENT`, `DD-EMIT`, `L-ABSENT`, `LV-NONE`, `LV-CHAIN-UNREADABLE`, `LV-RC`, `CX-NOT-CODE-LIKE`, `AG-NOT-CODE-LIKE`, `CX-VERDICT`, `AG-VERDICT`, `CX-NOT-LISTED`, `AG-NOT-LISTED`, `CX-ACTIVE`, `AG-ACTIVE`, `CX-DENY`, and a second `# M:CX-DOCDATA` row with a verdict killer. AC-9.3 requires an entry for every new guard, and each of these is one.
 8. **Test names the design leaves open are named here.** Spelled once and used exactly as spelled in ACs, RED splits and mutation rows.
 9. **A plan path absent at the base commit is a ninth refusal (Task 8).** Design v1.4 states that this case exits 1 with no token and reads as no verdict, and it counts eight refusals. This plan follows the operator ruling of 2026-11-04 instead: `FR9-DRIVE: UNREADABLE plan-absent-at-base`, exit 2, marker `# M:D-PLAN-ABSENT`, one more node and one more mutation row.
 10. **The helper's test has three arms (Task 4).** Design v1.4 states only the forced-skip arm. That arm alone passes on a helper that always skips, so this plan adds an arm on the real volume and an arm with folding forced.
@@ -331,7 +331,7 @@ RED (18 nodes):
 - `test_listing_cli_listed_prints_the_encoded_target`
 - `test_listing_cli_internal_exception_exits_2`: in process, `monkeypatch.setattr(judge, "read_chain", raiser)`, `judge.main(["listing", "--root", ROOT, "--name", "x.sh"]) == 2`, empty stdout, and stderr naming the exception. RED is argparse's `SystemExit`.
 - `test_target_module_names_is_empty_for_a_non_py_target[sh]`, `[extensionless]` (AC-4.5): RED reads `{'scripts.tool', 'tool'}`.
-- `test_non_py_module_not_found_scores_pytest_error` (AC-4.5): a listed `scripts/tool.sh`, absent on disk, and a `tests/test_tool.py` holding a module-level `import tool`, so the error is a **collection error**. `judge` reads DENY `kind=pytest-error`; RED reads ALLOW `kind=red-measured`. The collection form is required: a test body raising `ModuleNotFoundError` is `1 failed`, which `score` reads as `red-measured` with or without the guard, so that form would pass on a removed guard (prototype reading of both forms, with and without `# M:K-IMPORT-NONPY`).
+- `test_non_py_module_not_found_scores_pytest_error` (AC-4.5): a listed `scripts/tool.sh`, absent on disk, and a `tests/test_tool.py` holding a module-level `import tool`, so the error is a **collection error**. The test reads both verdicts on this fixture: `score` over its pytest output returns `pytest-error` and `judge` reads DENY `kind=pytest-error`; RED reads `red-measured` and ALLOW `kind=red-measured`. The collection form is required: a test body raising `ModuleNotFoundError` is `1 failed`, which `score` reads as `red-measured` with or without the guard, so that form would pass on a removed guard (reading of both forms, with and without `# M:K-IMPORT-NONPY`, below).
 
 Controls, green before and after (5 nodes; Task 1 already put the `.sh` in `production`):
 - `test_judge_listed_non_py_failing_test_is_red_measured` (AC-4.1)
@@ -339,6 +339,20 @@ Controls, green before and after (5 nodes; Task 1 already put the `.sh` in `prod
 - `test_judge_listed_non_py_absent_test_is_test_missing` (AC-4.3)
 - `test_judge_listed_non_py_with_no_pytest_file_is_test_missing` (AC-4.4)
 - `test_judge_unlisted_non_py_is_no_test_resolved` (AC-4.6)
+
+**Reading of both AC-4.5 forms** at `10a84075` (python3.11), on a scratch tree outside the repository. `T` is `git archive 10a84075 h-mad | tar -x -C "$T"` with Task 1's `# M:P-NONPY` edit and the FR-4 guard applied under `T/h-mad/scripts`; "no guard" replaces the guard's condition with `False`. `R` is a mktemp directory holding `docs/.bkit-memory.json` with `{"orchestrator_state":{"f":{"phase":"step5"}}}`, `docs/01-plan/features/f.impl-plan.md` with one Task listing `scripts/tool.sh` as its production file, `tests/test_tool.py` as its test file and shape `new-behaviour`, no `scripts/tool.sh`, and the form's `tests/test_tool.py`: collection is a module-level `import tool` plus a passing test, body is a test raising `ModuleNotFoundError("No module named 'tool'", name="tool")`. From `R`:
+```bash
+python3.11 "$T/h-mad/scripts/h_mad_tdd_judge.py" judge --root . --target scripts/tool.sh
+python3.11 -m pytest tests/test_tool.py -q -p no:cacheprovider > out.txt 2>&1
+python3.11 -c 'import sys,os;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import h_mad_tdd_judge as j;r=Path(os.path.realpath("."));t=r/"scripts/tool.sh";print(j.score(open("out.txt").read(),False,j.ImportTarget(j.target_module_names(r,t),str(t),t.is_file())))' "$T/h-mad/scripts"
+```
+
+| Form | Guard | pytest summary | `score` | `judge` |
+|---|---|---|---|---|
+| collection | present | `1 error` | `pytest-error` | DENY `kind=pytest-error` |
+| collection | no guard | `1 error` | `red-measured` | ALLOW `kind=red-measured` |
+| body | present | `1 failed` | `red-measured` | ALLOW `kind=red-measured` |
+| body | no guard | `1 failed` | `red-measured` | ALLOW `kind=red-measured` |
 
 **RED split**: 18 failed, 5 passed.
 
@@ -348,7 +362,7 @@ Controls, green before and after (5 nodes; Task 1 already put the `.sh` in `prod
 - [ ] AC-4.2: `test_judge_listed_non_py_passing_test_is_test_passing` passes.
 - [ ] AC-4.3: `test_judge_listed_non_py_absent_test_is_test_missing` passes, and the reason names `tests/test_tool.py`.
 - [ ] AC-4.4: `test_judge_listed_non_py_with_no_pytest_file_is_test_missing` passes.
-- [ ] AC-4.5: `test_target_module_names_is_empty_for_a_non_py_target` and `test_non_py_module_not_found_scores_pytest_error` pass, and the existing `M:K-IMPORT-*` tests in `h-mad/tests/test_h_mad_tdd_judge.py` pass unmodified.
+- [ ] AC-4.5: `test_target_module_names_is_empty_for_a_non_py_target` and `test_non_py_module_not_found_scores_pytest_error` pass, the second reading `score` `pytest-error` and `judge` DENY `kind=pytest-error`, and the existing `M:K-IMPORT-*` tests in `h-mad/tests/test_h_mad_tdd_judge.py` pass unmodified.
 - [ ] AC-4.6: `test_judge_unlisted_non_py_is_no_test_resolved` passes.
 - [ ] FR-3 matcher: `test_listing_selects_the_least_listed_name`, `test_listing_any_canonical_name_lists_the_target` and `test_listing_not_listed_when_no_name_matches` pass.
 - [ ] FR-3 CLI value set: `test_listing_cli_chain_none_prints_not_listed`, `test_listing_cli_chain_unreadable_prints_unreadable`, `test_listing_cli_active_not_listed_prints_not_listed`, `test_listing_cli_active_unreadable_prints_unreadable`, `test_listing_cli_listed_prints_the_encoded_target` and `test_listing_cli_internal_exception_exits_2` pass.
@@ -366,7 +380,7 @@ Controls, green before and after (5 nodes; Task 1 already put the `.sh` in `prod
 - `LV-RC` (`symbol` `main`): find `return 2  # M:LV-RC`, replace `return 0  # M:LV-RC`. Test `tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_internal_exception_exits_2`.
 
 `judge_non_py.json` (1):
-- `K-IMPORT-NONPY` (`symbol` `target_module_names`): find `if Path(fold_py_suffix(target.name)).suffix != ".py":  # M:K-IMPORT-NONPY`, replace `if False:  # M:K-IMPORT-NONPY`. Test `tests/test_h_mad_tdd_judge_listing.py::test_target_module_names_is_empty_for_a_non_py_target[sh]`.
+- `K-IMPORT-NONPY` (`symbol` `target_module_names`): find `if Path(fold_py_suffix(target.name)).suffix != ".py":  # M:K-IMPORT-NONPY`, replace `if False:  # M:K-IMPORT-NONPY`. Test `tests/test_h_mad_tdd_judge_listing.py::test_non_py_module_not_found_scores_pytest_error`, so the collection-error pin runs under the mutant: without the guard this node reads ALLOW `kind=red-measured` where it asserts DENY `kind=pytest-error` (the table above).
 
 **Re-anchored existing row** (1, in `tdd_judge_resolution.json`): `declared-budget-not-read`'s find is 20 spaces of indent plus `if task.get("judge_budget") is not None:  # M:J-BUDGET-READ`, which no longer exists after the edit above. Its find becomes the same text at 12 spaces and its replace `            if False:  # M:J-BUDGET-READ`; its test `tests/test_h_mad_tdd_judge.py::test_a_declared_budget_lets_a_slow_red_finish` is unchanged. Regression provenance: the line moved, the mutant's meaning did not.
 
@@ -406,7 +420,7 @@ Then the full suite and `--check-anchors` over all of `h-mad/tests/mutation-spec
 ```python
         if not production:
             reason = _judge_listed(root, resolved)
-            if reason:
+            if reason:  # M:CX-DENY
                 return _deny(reason)
             continue
 ```
@@ -423,15 +437,15 @@ def _judge_listed(root: Path, resolved: Identity) -> str:
     chain = judge.read_chain(root, names[0])
     if chain.value == "unreadable":  # M:CX-CHAIN-UNREADABLE
         return f"H-MAD state governing this write is unreadable ({chain.error_file}: {chain.error}); refusing fail-closed. kind=judge-error"
-    if chain.value != "active":
+    if chain.value != "active":  # M:CX-ACTIVE
         return ""
     listed = judge.listing(root, names, chain.records)  # M:CX-LIST
     if listed.value == "unreadable":  # M:CX-LIST-UNREADABLE
         return f"H-MAD Phase 5 listing is undecidable ({listed.error_file}: {listed.error}); refusing fail-closed. kind=judge-error"
-    if listed.value == "not-listed":
+    if listed.value == "not-listed":  # M:CX-NOT-LISTED
         return ""
     verdict = judge.judge(root, listed.selected, chain.records)
-    if verdict.decision != "ALLOW":
+    if verdict.decision != "ALLOW":  # M:CX-VERDICT
         relative = listed.selected.relative_to(root).as_posix()
         return f"H-MAD Phase 5 requires a failing test before {relative}: kind={verdict.kind}; {verdict.reason}"
     return ""
@@ -563,15 +577,21 @@ Stated residual: on a case-sensitive volume the nodes that call the helper repor
 - [ ] `test_skip_unless_case_insensitive_skips_on_a_case_sensitive_volume` passes.
 - [ ] The newline-ending name: `test_codex_listed_symlink_to_a_newline_name` passes on both parameters.
 
-**Mutation rows** (19; `file` `hooks/h-mad-codex-tdd-gate.py` and `symbol` `_judge_listed` unless stated).
+**Mutation rows** (23; `file` `hooks/h-mad-codex-tdd-gate.py` and `symbol` `_judge_listed` unless stated).
 
-`codex_gate_listing.json` (6):
+`codex_gate_listing.json` (10):
 - `CX-DOCDATA-VERDICT` (`symbol` `_main_guarded`): find `if is_doc_data(resolved.names):  # M:CX-DOCDATA`, replace `if False:  # M:CX-DOCDATA`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_doc_data_allows`.
 - `CX-DOCDATA-DIRECTORY` (`symbol` `_main_guarded`): the same find and replace. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_directory_target_is_skipped`. The mutant makes `_judge_listed` raise `IndexError` on `names[0]`, which reaches `# M:G2` as `kind=judge-error`.
 - `CX-NOT-CODE-LIKE`: find `if any(Path(fold_py_suffix(n)).suffix == ".py" for n in resolved.names):  # M:CX-NOT-CODE-LIKE`, replace `if False:  # M:CX-NOT-CODE-LIKE`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_test_shaped_python_is_skipped`.
 - `CX-LIST-EXEMPT`: find `if _is_exempt_location(names[0].relative_to(root).as_posix()):  # M:CX-LIST-EXEMPT`, replace `if False:  # M:CX-LIST-EXEMPT`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_exempt_location_allows[tests]`.
 - `CX-CHAIN-UNREADABLE`: find `if chain.value == "unreadable":  # M:CX-CHAIN-UNREADABLE`, replace `if False:  # M:CX-CHAIN-UNREADABLE`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_unreadable_state_is_judge_error`.
 - `CX-LIST-UNREADABLE`: find `if listed.value == "unreadable":  # M:CX-LIST-UNREADABLE`, replace `if False:  # M:CX-LIST-UNREADABLE`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_unreadable_plan_is_judge_error`.
+- `CX-VERDICT`: find `if verdict.decision != "ALLOW":  # M:CX-VERDICT`, replace `if False:  # M:CX-VERDICT`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies`.
+- `CX-DENY` (`symbol` `_main_guarded`): find `if reason:  # M:CX-DENY`, replace `if False:  # M:CX-DENY`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies`.
+- `CX-NOT-LISTED`: find `if listed.value == "not-listed":  # M:CX-NOT-LISTED`, replace `if False:  # M:CX-NOT-LISTED`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_unlisted_code_like_allows`. The mutant passes `None` to `judge.judge`, whose `os.path.realpath` raises `TypeError`, which reaches `# M:G2` as `kind=judge-error`.
+- `CX-ACTIVE`: find `if chain.value != "active":  # M:CX-ACTIVE`, replace `if True:  # M:CX-ACTIVE`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies`. This row forces the condition true because `if False:` here is an equivalent mutant: `read_chain` returns `none` only with no records (`Chain("active" if records else "none", ...)`), and `listing` over no records is `not-listed`.
+
+Reconciled against this Task's sketch, every new condition now has a row. Each of these four finds is unique by its marker: the `.py` branch's `if verdict.decision != "ALLOW":` and `if chain.value != "active":` are not edited and carry none.
 
 `listing_connections.json` (2; AC-3.1 connection mutants, matcher intact; the harness's landing check applies):
 - `CX-REMOVE`: find `listed = judge.listing(root, names, chain.records)  # M:CX-LIST`, replace `listed = judge.Listing("not-listed", None, None, "")  # M:CX-LIST`. Test `tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies`.
@@ -632,17 +652,17 @@ Then the full suite and `--check-anchors` over all of `h-mad/tests/mutation-spec
                         detail = f"{chain.error_file}: {chain.error}".replace("kind=", "kind:")
                         decision = {"decision": "deny", "reason": f"State governing the write is unreadable ({detail}). kind=judge-error"}
                         return 0
-                    if chain.value != "active":
+                    if chain.value != "active":  # M:AG-ACTIVE
                         continue
                     listed = judge.listing(root, names, chain.records)  # M:AG-LIST
                     if listed.value == "unreadable":  # M:AG-LIST-UNREADABLE
                         detail = f"{listed.error_file}: {listed.error}".replace("kind=", "kind:")
                         decision = {"decision": "deny", "reason": f"Listing is undecidable ({detail}). kind=judge-error"}
                         return 0
-                    if listed.value == "not-listed":
+                    if listed.value == "not-listed":  # M:AG-NOT-LISTED
                         continue
                     verdict = judge.judge(root, listed.selected, chain.records)
-                    if verdict.decision != "ALLOW":
+                    if verdict.decision != "ALLOW":  # M:AG-VERDICT
                         relative = listed.selected.relative_to(root).as_posix()
                         detail = f"{relative}: {verdict.reason}".replace("kind=", "kind:")
                         decision = {"decision": "deny", "reason": f"Phase 5 requires a failing test before {detail} kind={verdict.kind}"}
@@ -712,14 +732,19 @@ Controls, green before and after (32 nodes):
 - [ ] FR-7 order: `test_agy_listed_exempt_location_allows` (all three parameters), `test_agy_listed_test_shaped_python_is_skipped`, `test_agy_no_state_file_allows_a_listed_target` and `test_agy_inactive_record_allows_a_listed_target` pass.
 - [ ] The newline-ending name: `test_agy_listed_symlink_to_a_newline_name` passes on both parameters.
 
-**Mutation rows** (18; `file` `hooks/h-mad-agy-tdd-gate.py` and `symbol` `main` unless stated).
+**Mutation rows** (21; `file` `hooks/h-mad-agy-tdd-gate.py` and `symbol` `main` unless stated).
 
-`agy_gate_listing.json` (5):
+`agy_gate_listing.json` (8):
 - `AG-DOCDATA`: find `if identity.is_doc_data(resolved.names):  # M:AG-DOCDATA`, replace `if False:  # M:AG-DOCDATA`. Test `tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_doc_data_allows`.
 - `AG-NOT-CODE-LIKE`: find `if any(Path(identity.fold_py_suffix(n)).suffix == ".py" for n in resolved.names):  # M:AG-NOT-CODE-LIKE`, replace `if False:  # M:AG-NOT-CODE-LIKE`. Test `tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_test_shaped_python_is_skipped`.
 - `AG-LIST-EXEMPT`: find `if _is_exempt_location(names[0].relative_to(root).as_posix()):  # M:AG-LIST-EXEMPT`, replace `if False:  # M:AG-LIST-EXEMPT`. Test `tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_exempt_location_allows[tests]`.
 - `AG-CHAIN-UNREADABLE`: find `if chain.value == "unreadable":  # M:AG-CHAIN-UNREADABLE`, replace `if False:  # M:AG-CHAIN-UNREADABLE`. Test `tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_unreadable_state_is_judge_error`.
 - `AG-LIST-UNREADABLE`: find `if listed.value == "unreadable":  # M:AG-LIST-UNREADABLE`, replace `if False:  # M:AG-LIST-UNREADABLE`. Test `tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_unreadable_plan_is_judge_error`.
+- `AG-VERDICT`: find `if verdict.decision != "ALLOW":  # M:AG-VERDICT`, replace `if False:  # M:AG-VERDICT`. Test `tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies`.
+- `AG-NOT-LISTED`: find `if listed.value == "not-listed":  # M:AG-NOT-LISTED`, replace `if False:  # M:AG-NOT-LISTED`. Test `tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_unlisted_code_like_allows`. The mutant passes `None` to `judge.judge`, whose `os.path.realpath` raises `TypeError`, and the `finally` emits `Gate could not reach a judgement. kind=judge-error`.
+- `AG-ACTIVE`: find `if chain.value != "active":  # M:AG-ACTIVE`, replace `if True:  # M:AG-ACTIVE`. Test `tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies`. It forces the condition true for the reason `CX-ACTIVE` does: `if False:` here is an equivalent mutant.
+
+Reconciled against this Task's sketch, every new condition now has a row. Each of these three finds is unique by its marker: the `.py` branch's 16-space `if verdict.decision != "ALLOW":` and `if chain.value != "active":` are not edited and carry none.
 
 `listing_connections.json` (2):
 - `AG-REMOVE`: find `listed = judge.listing(root, names, chain.records)  # M:AG-LIST`, replace `listed = judge.Listing("not-listed", None, None, "")  # M:AG-LIST`. Test `tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies`.
@@ -761,7 +786,7 @@ Then the full suite and `--check-anchors` over all of `h-mad/tests/mutation-spec
 
 **Description**: FR-5, FR-8, FR-11 on Claude, and the NFR process count. Everything up to and including the path exemptions is unchanged, apart from the `# M:H11` tail and the docdata split. The hook stays runnable under macOS `/bin/bash` 3.2, and `test_claude_gate_is_bash_3_2_clean` stays green. `/bin/bash` is the gate's stated constraint, and no bash case-folding construct is added.
 
-**Why a budget**: a real hook call read 0.31 s absent and up to 0.76 s with a listed failing test on the prototype, and this file holds 66 nodes, each with a fixture, so a run reaching its later nodes can pass the 40 s default. The budget only raises the ceiling. It binds this Task's writes on the codex host, whose hook has no `timeout` in `.codex/hooks.json`; agy's hook is capped at 60 in `.agents/hooks.json`.
+**Why a budget**: the 120 s is an estimate, not a derived figure. A real hook call read 0.31 s absent and up to 0.76 s with a listed failing test on the prototype (unverified: no recorded invocation, and its scratch tree is gone; this file's run at 5d re-reads the cost), and this file holds 66 nodes, each with a fixture, so a run reaching its later nodes can pass the 40 s default. The budget only raises the ceiling. It binds this Task's writes on the codex host, whose hook has no `timeout` in `.codex/hooks.json`; agy's hook is capped at 60 in `.agents/hooks.json`.
 
 **WIRE-PIN RED**: the verb exists (Task 3), so no scaffold is needed. `test_claude_listed_absent_test_denies` drives the real hook under the Claude-author arrangement and reads ALLOW where DENY `kind=test-missing` is expected, with `assert_authorship` passing, so the failure is the verdict and not the arrangement. `test_claude_listed_beside_unreadable_absent_test_denies` reads the same way. `test_claude_unlisted_beside_unreadable_is_judge_error` reads ALLOW too; it is unasserted, as an "Either" state.
 
@@ -830,7 +855,7 @@ LISTING_LISTED_RE='^TDD-LISTING: listed target=([^ ]+)$'
 
 **FR-5 order, as shipped.** Steps 1 and 2 run in one process: the `listing` verb does the state read and then the listing decision (the spec NFR permits this). Step 3: for a listed target `_read_state --target` and the implementer, peer and fallback refusals run unchanged. Step 4: the judge receives the selected listed name. A listed target's chain is read twice by `listing` and `state`, and a third time by the `judge` verb, as for `.py`.
 
-**NFR, as shipped.** An unlisted code-like write where state exists starts 2 extra short Python processes (`# M:W6`, `# M:W7`); the spec ceiling is 3. A doc/data write starts 0 extra in every state. An unlisted code-like write with no `docs/.bkit-memory.json` on the chain starts 0 extra. Prototype reading through a logging `python3` shim, total launches, each including the hook's 2 launches before any of these decisions: 4 for the unlisted code-like write where state exists, 2 for the doc/data write, 2 for the unlisted code-like write with no state file.
+**NFR, as shipped.** An unlisted code-like write where state exists starts 2 extra short Python processes (`# M:W6`, `# M:W7`); the spec ceiling is 3. A doc/data write starts 0 extra in every state. An unlisted code-like write with no `docs/.bkit-memory.json` on the chain starts 0 extra. Prototype reading through a logging `python3` shim (unverified: no recorded invocation, and its scratch tree is gone; `test_claude_process_count` re-reads it at 5d), total launches, each including the hook's 2 launches before any of these decisions: 4 for the unlisted code-like write where state exists, 2 for the doc/data write, 2 for the unlisted code-like write with no state file.
 
 **Directory targets are unchanged.** Where the chain may hold state, an inactive record included, the unguarded `ALL_TEST_NAMES` loop stops the script under `set -u` on bash 3.2, the verdict is `kind=judge-error`, and `# M:H-DOCDATA` sits after that loop, so the `docdata yes` a directory prints is never read. Residual: a newer `/bin/bash` does not stop on that expansion and reads ALLOW, today as well.
 
@@ -932,12 +957,12 @@ Controls and preservation, green before and after (37 nodes):
 `claude_gate_listing.json` (9):
 - `H-DOCDATA`: find `[ "$DOC_DATA" = yes ] && _allow  # M:H-DOCDATA`, replace `:  # M:H-DOCDATA`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_listed_doc_data_allows`.
 - `H-DOCDATA-LINE`: find `*) _refuse judge-error "invalid docdata line" ;; esac  # M:H-DOCDATA-LINE`, replace `*) DOC_DATA=no ;; esac  # M:H-DOCDATA-LINE`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_malformed_docdata_line_is_judge_error`.
-- `H-LIST-LINES`: find `` case "$LOUT" in *$'\n'*|"") _refuse judge-error "listing verb printed zero or several lines" ;; esac  # M:H-LIST-LINES ``, replace `:  # M:H-LIST-LINES`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_several_lines_is_judge_error`, killed on the reason: the prototype mutant still read `kind=judge-error`, with `listing verb printed no well-formed listing line`.
+- `H-LIST-LINES`: find `` case "$LOUT" in *$'\n'*|"") _refuse judge-error "listing verb printed zero or several lines" ;; esac  # M:H-LIST-LINES ``, replace `:  # M:H-LIST-LINES`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_several_lines_is_judge_error`, killed on the reason: the prototype mutant still read `kind=judge-error`, with `listing verb printed no well-formed listing line` (unverified: no recorded invocation, and its scratch tree is gone; this test re-reads it at 5d).
 - `H-LIST-RC`: find `[ "$LRC" = 0 ] || _refuse judge-error "listing verb exited rc=$LRC"  # M:H-LIST-RC`, replace `:  # M:H-LIST-RC`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_nonzero_exit_is_judge_error`.
 - `H-LIST-UNREADABLE`: find `_refuse judge-error "listing is undecidable ($file: ${BASH_REMATCH[2]})"  # M:H-LIST-UNREADABLE`, replace `:  # M:H-LIST-UNREADABLE`. It falls through to the last refusal, also `judge-error`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_unreadable_plan_is_judge_error`, killed on the reason.
 - `H-LIST-DECODE`: find `_pct_capture LISTED_TARGET "${BASH_REMATCH[1]}"  # M:H-LIST-DECODE`, replace `LISTED_TARGET=$(_pct_decode "${BASH_REMATCH[1]}")  # M:H-LIST-DECODE`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_listed_symlink_to_a_newline_name[failing]`.
 - `H-LIST-NAME`: find `_refuse judge-error "listing verb named a target it was not given"  # M:H-LIST-NAME`, replace `return 0  # M:H-LIST-NAME`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_foreign_target_is_judge_error`.
-- `H-LIST-INROOT`: find `[ "$IN_ROOT" = yes ] || _allow  # M:H-LIST-INROOT`, replace `:  # M:H-LIST-INROOT`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_out_of_root_code_like_allows_beside_unreadable_state`. Prototype reading: on a readable state and on an unreadable plan with a readable state, the guarded hook reads ALLOW; the mutant reads ALLOW on the readable state and DENY `kind=judge-error` on either unreadable arrangement, so a test on a readable state could not kill it.
+- `H-LIST-INROOT`: find `[ "$IN_ROOT" = yes ] || _allow  # M:H-LIST-INROOT`, replace `:  # M:H-LIST-INROOT`. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_out_of_root_code_like_allows_beside_unreadable_state`. Prototype reading (unverified: no recorded invocation, and its scratch tree is gone; this test re-reads it at 5d): on a readable state and on an unreadable plan with a readable state, the guarded hook reads ALLOW; the mutant reads ALLOW on the readable state and DENY `kind=judge-error` on either unreadable arrangement, so a test on a readable state could not kill it.
 - `H-NO-DIR-ALLOW`: find `_chain_may_hold_state "$ROOT_ABS" "$TARGET_PATH" || _allow`, replace `[ "$DOC_DATA" = yes ] && _allow; _chain_may_hold_state "$ROOT_ABS" "$TARGET_PATH" || _allow`, the new allow path this feature forbids for a directory. Test `tests/test_h_mad_tdd_gate_non_py.py::test_claude_directory_stays_judge_error_where_state_may_exist`.
 
 `listing_connections.json` (2):
@@ -1068,7 +1093,7 @@ def _refuse(reason: str) -> int: ...               # prints FR9-DRIVE: UNREADABL
 1. Arguments: `no-before-side`.
 2. On `--scenario replay`, either side: `missing-base`, then `base-is-head`. These run before any hook check, so a replay with no base reports that.
 3. On the after side, for the executed hook, in this order: `dirty-hooks` (`git status --porcelain -- h-mad` prints a line), then **`hook-outside-tree` (the realpath is not under `git rev-parse --show-toplevel`), then `hook-blob-mismatch` (`git hash-object` differs from `git rev-parse HEAD:PATH`)**. The realpath check must run first: a committed symlink to an outside file has an empty `git status`, a `git hash-object` that follows the link and a `HEAD:PATH` that is the link text, so the blob check would otherwise print `hook-blob-mismatch` on the `hook-outside-tree` fixture. Design v1.4 states them in the other order; this plan's order is the fix.
-4. On `--scenario replay`, either side, the copied plan: `plan-absent-at-base` (`git cat-file blob BASE:THAT_PATH` exits non-zero), then `plan-blob-mismatch`.
+4. On `--scenario replay`, either side, the copied plan: `plan-absent-at-base` (`git cat-file blob BASE:THAT_PATH` exits non-zero), then `plan-blob-mismatch`. Residual: a path that is a directory at the base also exits 128 and prints this reason; the refusal still blocks, and only the reason's name is off.
 5. On the Claude host, before each verdict: `authorship-line`.
 
 **Evidence is taken before the Phase 7 push.** Once this branch is on `origin/main`, `git merge-base HEAD origin/main` returns HEAD, so the before tree equals the after tree and AC-9.4's incident row reads DENY on both sides; hence `base-is-head`. Residual: a base other than HEAD whose `h-mad/` equals the commit under test passes this check, and its incident row then reads as a FAIL row.
@@ -1078,7 +1103,7 @@ def _refuse(reason: str) -> int: ...               # prints FR9-DRIVE: UNREADABL
 - **PF-1.** `h_mad_wire_registry`'s `from h_mad_assemble_tdd import misrooted_candidates`, only inside its `register` CLI branch, which is not on any gate's path.
 - **PF-2.** `grep -c 'h_mad_mutation_harness.py' h-mad/scripts/h_mad_target_identity.py` prints 2 matching lines, the `SAFE_HMAD_SCRIPT_OPTIONS` key and the comparison in `_safe_hmad_script`; no line imports it, and no AC-9.4 row writes through a shell command, so a harness change at the base does not move a before reading.
 
-**Replay repo (AC-9.4, AC-9.5).** Built by `git init` in a mktemp dir, on both sides from the same base. It writes `docs/01-plan/features/exec-missing-report-recovery.impl-plan.md` from `git cat-file blob BASE:THAT_PATH` bytes, records the commit, `git rev-parse BASE:THAT_PATH` and the copy's sha256, and requires `git hash-object` of the copy to equal the blob id. Reading at `26571a2d`: base `e097dfcb`, blob `fef082989979cd8a7a1c0f896db4673a14e078e2`, the same blob the spec read. It writes `docs/.bkit-memory.json` with `orchestrator_state.exec-missing-report-recovery = {"phase": "step5"}`, the same record for all three hosts and with no `implementer` key. It creates `h-mad/scripts/hmad-dispatch.sh`, `h-mad/SKILL.md` and `h-mad/scripts/h_mad_derive_test_path.sh`, whose content does not affect the verdict. It runs `h-mad/tests/test_hmad_dispatch_exec.py` absent, then as `def test_red(): assert False`, and drives the four AC-9.4 rows.
+**Replay repo (AC-9.4, AC-9.5).** Built by `git init` in a mktemp dir, on both sides from the same base. It writes `docs/01-plan/features/exec-missing-report-recovery.impl-plan.md` from `git cat-file blob BASE:THAT_PATH` bytes, records the commit, `git rev-parse BASE:THAT_PATH` and the copy's sha256, and requires `git hash-object` of the copy, run with the repository under test as its working directory, to equal the blob id. Reading at `26571a2d`: base `e097dfcb`, blob `fef082989979cd8a7a1c0f896db4673a14e078e2`, the same blob the spec read. It writes `docs/.bkit-memory.json` with `orchestrator_state.exec-missing-report-recovery = {"phase": "step5"}`, the same record for all three hosts and with no `implementer` key. It creates `h-mad/scripts/hmad-dispatch.sh`, `h-mad/SKILL.md` and `h-mad/scripts/h_mad_derive_test_path.sh`, whose content does not affect the verdict. It runs `h-mad/tests/test_hmad_dispatch_exec.py` absent, then as `def test_red(): assert False`, and drives the four AC-9.4 rows.
 
 **Plan path absent at the base (operator ruling, 2026-11-04).** `git cat-file blob BASE:THAT_PATH` exits 128 on such a path (reading at `472bb425` on a scratch repo), and the driver then refuses with `FR9-DRIVE: UNREADABLE plan-absent-at-base`, exit 2, in `_copy_plan`, before it writes the copy. Today the path exists at the base (`git cat-file -e e097dfcb:THAT_PATH` exits 0 at `472bb425`), so this is reachable only if `origin/main` archives or renames that plan. Design v1.4 states exit 1 with no token for this case; the ruling replaces that. Residual: any other uncaught exception, such as a missing `git`, still exits 1 with no token and reads as no verdict.
 
@@ -1104,9 +1129,20 @@ RED: the Task first writes the driver as an argument parser that prints nothing 
 | `missing-base` | `--scenario replay --side after --host claude` | no `refs/remotes/origin/main` |
 | `base-is-head` | `--scenario replay --side after --host claude` | `refs/remotes/origin/main` at HEAD |
 | `plan-absent-at-base` | `--scenario replay --side after --host claude` | a base commit without `docs/01-plan/features/exec-missing-report-recovery.impl-plan.md`, a later HEAD that adds it, and `refs/remotes/origin/main` at the base, so that path reads at HEAD and `git cat-file blob BASE:THAT_PATH` exits 128 |
-| `plan-blob-mismatch` | `--scenario replay --side after --host claude` | a base commit holding a CRLF plan, a later HEAD, and `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=core.autocrlf`, `GIT_CONFIG_VALUE_0=true` in the driver's environment, so `git hash-object` normalises the copy and differs from the blob id |
+| `plan-blob-mismatch` | `--scenario replay --side after --host claude` | a base commit holding a CRLF plan, a later HEAD, `refs/remotes/origin/main` at the base, and `git config core.autocrlf true` in the fixture repo after the last commit, so `git hash-object` normalises the copy and differs from the blob id |
 
 `plan-blob-mismatch` uses `--side after` only, by necessity: under that same configuration `git archive` converts the before tree to CRLF (reading at `26571a2d`: a scratch `x.sh` archived with `\r\n` line ends, shebang included), so a `--side before` node would run a broken hook rather than reach this refusal.
+
+**Reading of that fixture** at `10a84075`, on a scratch repo with every command under `env -i` carrying `HOME` (an empty directory), `PATH`, `LANG`, `TMPDIR` and a commit identity, so no `GIT_CONFIG_*` name is present. The commits, then `git config core.autocrlf true`, then `git cat-file blob BASE:THAT_PATH > COPY` in a directory outside the repo:
+
+| Command | Working directory | Output |
+|---|---|---|
+| `git rev-parse` of that path in the first commit | fixture repo | blob `c30dea8a3641ea99b125d04d599d843712292759` |
+| `git hash-object COPY` | fixture repo | blob `422c2b7ab3b3c668038da977e4e93a5fc623169c`, exit 0 |
+| `git hash-object COPY` | a fresh `git init` repo | the blob id of the first row |
+| `git status --porcelain -- h-mad` | fixture repo | nothing |
+
+Local configuration therefore needs no environment, and it reaches `git hash-object` only from the fixture repo: run from the replay repo this refusal would never fire. The configuration comes after the commits, because with `core.autocrlf true` set first the committed blob holds LF (`od -c` on it printed `a \n b \n`) and the copy matches it.
 
 **RED split**: 9 failed, 0 passed. The FR-9 verdict rows have no RED: they are measurements, read from `FR9-DRIVE:`.
 
@@ -1195,14 +1231,14 @@ Then the run order and mutation run above, the full suite, and `--check-anchors`
 | 1 | 5 | `wire_pin_ungated.json` 2, `parse_tasks_non_py.json` 3 | none |
 | 2 | 7 | `doc_data_definition.json` 7 | none |
 | 3 | 9 | `listing_matcher.json` 8, `judge_non_py.json` 1 | `declared-budget-not-read` |
-| 4 | 19 | `codex_gate_listing.json` 6, `listing_connections.json` 2, `listing_matcher.json` 2, `doc_data_definition.json` 9 | `fr6-import-guard-dropped` |
-| 5 | 18 | `agy_gate_listing.json` 5, `listing_connections.json` 2, `listing_matcher.json` 2, `doc_data_definition.json` 9 | `fr4-t7-unreadable-dropped` |
+| 4 | 23 | `codex_gate_listing.json` 10, `listing_connections.json` 2, `listing_matcher.json` 2, `doc_data_definition.json` 9 | `fr6-import-guard-dropped` |
+| 5 | 21 | `agy_gate_listing.json` 8, `listing_connections.json` 2, `listing_matcher.json` 2, `doc_data_definition.json` 9 | `fr4-t7-unreadable-dropped` |
 | 6 | 22 | `claude_gate_listing.json` 9, `listing_connections.json` 2, `listing_matcher.json` 2, `doc_data_definition.json` 9 | `H11`, `CG-CANON` |
 | 7 | 0 | none | none |
 | 8 | 9 | `fr9_drive_refusals.json` 9 | none |
-| **Total** | **89** | | **5** |
+| **Total** | **96** | | **5** |
 
-By spec, the `mutations=` each run must print: `wire_pin_ungated.json` 2, `parse_tasks_non_py.json` 3, `doc_data_definition.json` 34, `listing_matcher.json` 14, `listing_connections.json` 6, `judge_non_py.json` 1, `claude_gate_listing.json` 9, `codex_gate_listing.json` 6, `agy_gate_listing.json` 5, `fr9_drive_refusals.json` 9; these sum to 89. Design v1.4 states no overall total. The counts it does state hold here: six connection mutants (AC-3.1), three callee entries, and nine per-suffix mutants per host.
+By spec, the `mutations=` each run must print: `wire_pin_ungated.json` 2, `parse_tasks_non_py.json` 3, `doc_data_definition.json` 34, `listing_matcher.json` 14, `listing_connections.json` 6, `judge_non_py.json` 1, `claude_gate_listing.json` 9, `codex_gate_listing.json` 10, `agy_gate_listing.json` 8, `fr9_drive_refusals.json` 9; these sum to 96. Design v1.4 states no overall total. The counts it does state hold here: six connection mutants (AC-3.1), three callee entries, and nine per-suffix mutants per host.
 
 ## Acceptance-criteria coverage
 The spec's 55 ACs (`python3 h-mad/scripts/h_mad_ac_census.py docs/01-plan/features/gate-non-py-production-files.spec.md` prints `ACS: OK count=55 frs=11`, reading at `26571a2d`) land as follows. AC-1.1 to AC-1.5 and AC-2.1 to AC-2.4 in Task 1. AC-4.1 to AC-4.6 in Task 3. AC-3.1 to AC-3.5, AC-8.1 to AC-8.4 and AC-11.1 to AC-11.6 per host in Tasks 4, 5 and 6, with AC-3.5's judge side in Task 3 and the FR-11 definition in Task 2. AC-5.1 to AC-5.8 in Task 6. AC-6.1 to AC-6.5 in Task 4. AC-7.1 to AC-7.4 in Task 5. AC-10.1 to AC-10.3 in Task 7. AC-9.1 to AC-9.5 in Task 8.
@@ -1219,3 +1255,4 @@ Run from this feature's worktree the same command prints `BLOCKED reason=base_ch
 ## Version History
 - v1.0: Initial implementation plan draft (2026-11-04), from design v1.4, spec v1.11 and plan v1.6. Answers no audit cycle. Eight Tasks, three of them wiring, 88 new mutation rows and 5 re-anchored rows.
 - v1.1: Answers impl-plan.audit.v1.p1.md and impl-plan.audit.v1.p3.md (2026-11-04); impl-plan.audit.v1.p2.md filed nothing. Operator ruling 2026-11-04: Task 8's plan path absent at the base is a ninth refusal, FR9-DRIVE: UNREADABLE plan-absent-at-base, exit 2, marker # M:D-PLAN-ABSENT, which answers p1 must 2 and p3 must 1; 9 refusal nodes, 9 rows in fr9_drive_refusals.json, 89 new mutation rows, a departure from design v1.4. p1 must 1: the helper test gets a literal three-arm body that probes the volume independently, with a reading on folding and case-sensitive volumes. p1 must 3: the regression-prototype reading is withdrawn as unverified. p1 should and p3 should: Task 6's NFR reading is labelled per case. p3 should: Task 3's _match_plans sketch carries a real M:L-ABSENT statement.
+- v1.2: corrective, round cap, not re-audited (2026-11-05). Follows spec v1.12, committed as 455cfdef; a v1.13 changes one word and no meaning. Answers impl-plan.audit.v2.p1.md and docs/03-analysis/gate-non-py-production-files.impl-plan.delta-review.9b79a0e5.md. p1 must 1: CX-VERDICT and AG-VERDICT added, scored on each host's listed-absent-test denial; reconciling the other new guards adds CX-NOT-LISTED, AG-NOT-LISTED, CX-ACTIVE, AG-ACTIVE and CX-DENY, so 96 new mutation rows (was 89). p1 must 2 and the delta reviewer's prototype-reading item, operator decision 2026-11-05: the hook timings, the launch reading, H-LIST-LINES and H-LIST-INROOT are marked unverified, each re-read by its Task's test at 5d, and Task 6's 120 s budget is stated as an estimate. Operator decision: K-IMPORT-NONPY is re-scored on test_non_py_module_not_found_scores_pytest_error. AC-4.5's reading now carries its command, and Task 3 names score as well as judge. Line 6 regains its scope and points at Task 7. p1 should: Task 8's plan-blob-mismatch fixture sets core.autocrlf in the repo's local config, with its reading, and git hash-object runs from the repository under test. Nit: refusal step 4 states its directory residual.
