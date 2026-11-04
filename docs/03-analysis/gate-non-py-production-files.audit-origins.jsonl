@@ -20,3 +20,6 @@
 {"phase": "design", "cycle": 2, "leg": "codex", "item": "FR-1 Test Boundaries row exposes only private _parse_tasks", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
 {"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-10.1 verified by doc-review despite an executable assertion", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
 {"phase": "design", "cycle": 2, "leg": "teammate", "item": "TDD-IMPLEMENTER precondition invalid where a case has no readable record", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Skip helper test cannot reject an always-skipping implementation", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task 8 leaves the missing-base-plan contract open (also grok)", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Regression-prototype reading lacks its command and corpus selector", "origin": "instrument", "by_cycle": null, "verified_by_execution": false}
