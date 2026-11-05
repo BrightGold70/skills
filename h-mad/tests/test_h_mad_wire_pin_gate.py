@@ -14,6 +14,7 @@ carries a verdict (PASS/FAIL) and non-zero is reserved for an operational error 
 so the caller reads the token, never `$?`.
 """
 
+import json
 import subprocess
 import sys
 import inspect
@@ -29,6 +30,7 @@ sys.path.insert(0, str(SCRIPTS))
 import h_mad_wire_pin_gate as gate  # noqa: E402
 import h_mad_wire_registry as registry  # noqa: E402
 from h_mad_wire_pin_gate import check  # noqa: E402
+from tdd_gate_support import hermetic_env  # noqa: E402
 
 
 HEADER = "# Implementation Plan: demo\n\n## Executive Summary\nDemo.\n\n"
@@ -1281,50 +1283,68 @@ def test_cli_prints_unlabeled_lines_and_keeps_the_token(tmp_path: Path) -> None:
     assert "  unlabeled: Task 1 (mod): no **Production file**" in proc.stdout, proc.stdout
 
 
-# --- a non-.py production file is reported as ungated (row 2853) -----------
-#
-# `_parse_tasks` keeps only `.py` tokens, and that list is the TDD judge's task
-# map too, so a `.sh` production file is never judged and no wire-pin covers it.
-# Gating it is an /h-mad feature (user ruling 2026-11-01); until then the gap is
-# printed on every 5b run as an advisory detail line, never a FAIL cause.
+# --- non-Python production paths and the retired advisory surface ----------
 
-def test_a_non_python_production_file_is_reported_ungated(tmp_path: Path) -> None:
+
+@pytest.fixture(scope="module")
+def hostile_plan_note() -> str:
+    env = {key: value for key, value in hermetic_env().items()
+           if not key.startswith("HMAD_STUB_")}
+    env["HMAD_STUB_HOSTILE"] = "all"
+    proc = subprocess.run(
+        ["bash", str(Path(__file__).parent / "stubs" / "orca"),
+         "worktree", "set", "--comment", "fixture", "--json"],
+        env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+        timeout=30.0, check=True,
+    )
+    note = json.loads(proc.stdout)["result"]["worktree"]["comment"]
+    assert "**bold**" in note and "⟦/h-mad⟧" in note and "\n" in note
+    return note
+
+
+def test_a_shell_production_file_is_collected_in_production(hostile_plan_note: str) -> None:
     body = _pathed_task("`h-mad/scripts/hmad-dispatch.sh`, `h-mad/scripts/a.py`",
                         "`h-mad/tests/test_a.py`")
+    task, = gate._parse_tasks(body + hostile_plan_note)
+    assert task["production"] == ["h-mad/scripts/a.py", "h-mad/scripts/hmad-dispatch.sh"], (
+        "the shell production path must be collected after the Python path", task,
+    )
+
+
+def test_an_extensionless_production_path_is_collected_in_production(hostile_plan_note: str) -> None:
+    body = _pathed_task("`h-mad/bin/hmad-dispatch`", "`tests/test_x.py`")
+    task, = gate._parse_tasks(body + hostile_plan_note)
+    assert task["production"] == ["h-mad/bin/hmad-dispatch"], (
+        "an extensionless production path must be collected", task,
+    )
+
+
+def test_cli_prints_no_ungated_line(tmp_path: Path, hostile_plan_note: str) -> None:
+    body = _pathed_task("`h-mad/scripts/x.sh`", "`tests/test_x.py`")
+    proc = _run(str(_plan(tmp_path, body + hostile_plan_note)))
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.splitlines()[0] == "WIREPIN: PASS tasks=1 wiring=0 unpinned=0 mislabeled=0", proc.stdout
+    assert not any("ungated:" in line for line in proc.stdout.splitlines()), (
+        "the CLI must retire every ungated advisory line", proc.stdout,
+    )
+
+
+def test_check_and_tasks_carry_no_ungated_key(tmp_path: Path, hostile_plan_note: str) -> None:
+    body = _pathed_task("`h-mad/scripts/x.sh`", "`tests/test_x.py`") + hostile_plan_note
+    task, = gate._parse_tasks(body)
     result = check(_plan(tmp_path, body))
-    assert result["ungated"] == ["Task 1 (mod): `h-mad/scripts/hmad-dispatch.sh`"], result
-    assert result["verdict"] == "PASS", "an ungated file is a detail line, not a new FAIL cause"
+    assert all("ungated" not in item for item in (result, task)), (
+        "check() results and parsed tasks must both retire the ungated key", result, task,
+    )
 
 
-def test_an_extensionless_script_path_is_ungated_too(tmp_path: Path) -> None:
-    result = check(_plan(tmp_path, _pathed_task("`h-mad/bin/hmad-dispatch`", "`tests/test_x.py`")))
-    assert result["ungated"] == ["Task 1 (mod): `h-mad/bin/hmad-dispatch`"], result
-
-
-@pytest.mark.parametrize("production", ["`engine/run.py`", "none", "`none`"],
-                         ids=["python", "none", "backticked-none"])
-def test_python_or_none_production_is_never_ungated(tmp_path: Path, production: str) -> None:
-    result = check(_plan(tmp_path, _pathed_task(production, "`tests/test_run.py`")))
-    assert result["ungated"] == [], result
-
-
-def test_a_non_python_test_file_is_not_ungated(tmp_path: Path) -> None:
-    body = _pathed_task("`engine/run.py`", "`h-mad/tests/mutation-specs/x.json`")
-    assert check(_plan(tmp_path, body))["ungated"] == []
-
-
-def test_an_unshaped_plan_still_carries_the_ungated_key(tmp_path: Path) -> None:
+def test_an_unshaped_plan_with_a_non_python_token_stays_unshaped(
+    tmp_path: Path, hostile_plan_note: str,
+) -> None:
     body = _pathed_task("`h-mad/scripts/x.sh`", "`tests/test_x.py`").replace(
         "**Task shape**: `new-behaviour`\n", "")
-    result = check(_plan(tmp_path, body))
+    result = check(_plan(tmp_path, body + hostile_plan_note))
     assert result["verdict"] == "UNSHAPED"
-    assert result["ungated"] == ["Task 1 (mod): `h-mad/scripts/x.sh`"], result
-
-
-def test_cli_prints_ungated_lines_and_keeps_the_token(tmp_path: Path) -> None:
-    proc = _run(str(_plan(tmp_path, _pathed_task("`h-mad/scripts/x.sh`", "`tests/test_x.py`"))))
-    assert proc.returncode == 0, proc.stderr
-    lines = proc.stdout.splitlines()
-    assert lines[0] == "WIREPIN: PASS tasks=1 wiring=0 unpinned=0 mislabeled=0", proc.stdout
-    assert ("  ungated: Task 1 (mod): `h-mad/scripts/x.sh` — not .py, so no TDD judge "
-            "or wire-pin covers it") in proc.stdout, proc.stdout
+    assert set(result) == {
+        "verdict", "tasks", "wiring", "unpinned", "unshaped", "mislabeled", "unlabeled",
+    }, "an unshaped result must keep its verdict and expose only the retained result keys"
