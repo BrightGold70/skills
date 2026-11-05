@@ -119,8 +119,8 @@
       "_mechanism": "Remove T7's unreadable refusal so the following non-active-chain branch allows the write.",
       "file": "hooks/h-mad-agy-tdd-gate.py",
       "symbol": "main",
-      "find": "                if chain.value == \"unreadable\":",
-      "replace": "                if False and chain.value == \"unreadable\":",
+      "find": "\n                if chain.value == \"unreadable\":",
+      "replace": "\n                if False and chain.value == \"unreadable\":",
       "test": "tests/test_h_mad_agy_tdd_gate.py::test_unsearchable_chain_denies_although_the_scan_is_inactive"
     },
     {

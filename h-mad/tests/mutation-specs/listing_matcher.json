@@ -98,6 +98,24 @@
       "find": "min(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
       "replace": "max(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
       "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_selection_s2_denies"
+    },
+    {
+      "name": "AG-CALLEE",
+      "_mechanism": "Disable listing in the callee while keeping the real caller connection.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "per_name = [(name, _match_plans(root, name, records)) for name in names]",
+      "replace": "return Listing(\"not-listed\", None, None, \"\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies"
+    },
+    {
+      "name": "AG-SELECT",
+      "_mechanism": "The caller must judge the least listed canonical basename.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "min(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "replace": "max(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_selection_s2_denies"
     }
   ]
 }

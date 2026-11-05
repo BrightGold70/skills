@@ -31,6 +31,24 @@
       "find": "listed = judge.listing(root, names, chain.records)  # M:CX-LIST",
       "replace": "listed = judge.Listing(\"listed\", min(names, key=lambda p: p.name), None, \"\")  # M:CX-LIST",
       "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_unlisted_code_like_allows"
+    },
+    {
+      "name": "AG-REMOVE",
+      "_mechanism": "Cut only the caller's listing connection; the matcher remains intact.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "listed = judge.listing(root, names, chain.records)  # M:AG-LIST",
+      "replace": "listed = judge.Listing(\"not-listed\", None, None, \"\")  # M:AG-LIST",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies"
+    },
+    {
+      "name": "AG-FORCE",
+      "_mechanism": "Force a listed result at the caller with the matcher intact.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "listed = judge.listing(root, names, chain.records)  # M:AG-LIST",
+      "replace": "listed = judge.Listing(\"listed\", min(names, key=lambda p: p.name), None, \"\")  # M:AG-LIST",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_unlisted_code_like_allows"
     }
   ]
 }
