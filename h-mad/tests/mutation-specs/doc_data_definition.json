@@ -1,0 +1,81 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_doc_data.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "DD-CASE",
+      "_mechanism": "Remove ASCII case folding so uppercase doc-data suffixes are rejected.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "has_doc_data_suffix",
+      "find": "name[-len(s):].translate(_ASCII_LOWER) == s",
+      "replace": "name[-len(s):] == s",
+      "test": "tests/test_h_mad_doc_data.py::test_has_doc_data_suffix_accepts[upper]"
+    },
+    {
+      "name": "DD-SUFFIX",
+      "_mechanism": "Use Path.suffix so a dotfile named exactly .md loses its qualifying suffix.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "has_doc_data_suffix",
+      "find": "name[-len(s):].translate(_ASCII_LOWER) == s",
+      "replace": "Path(name).suffix.translate(_ASCII_LOWER) == s",
+      "test": "tests/test_h_mad_doc_data.py::test_has_doc_data_suffix_accepts[dotfile]"
+    },
+    {
+      "name": "DD-ALL",
+      "_mechanism": "Accept a mixed collection when any name qualifies instead of requiring every name.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "is_doc_data",
+      "find": "return all(has_doc_data_suffix(n) for n in names)  # M:G-DOCDATA-ALL",
+      "replace": "return any(has_doc_data_suffix(n) for n in names)  # M:G-DOCDATA-ALL",
+      "test": "tests/test_h_mad_doc_data.py::test_is_doc_data_requires_every_name"
+    },
+    {
+      "name": "DD-EMIT",
+      "_mechanism": "Emit a negative record regardless of the identity's doc-data names.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "emit_doc_data",
+      "find": "print(\"docdata yes\" if is_doc_data(identity.names) else \"docdata no\")  # M:G-DOCDATA-EMIT",
+      "replace": "print(\"docdata no\")  # M:G-DOCDATA-EMIT",
+      "test": "tests/test_h_mad_doc_data.py::test_emit_doc_data_prints_exactly_one_line[yes]"
+    },
+    {
+      "name": "DD-EXEMPT-DOCS",
+      "_mechanism": "Remove the exemption for the project's first-component docs directory.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_is_exempt_location",
+      "find": "if parents[:1] == (\"docs\",):  # M:G-EXEMPT-DOCS",
+      "replace": "if False:  # M:G-EXEMPT-DOCS",
+      "test": "tests/test_h_mad_doc_data.py::test_is_exempt_location_matches_is_production_python[docs]"
+    },
+    {
+      "name": "DD-EXEMPT-DIRS",
+      "_mechanism": "Remove the tests and fixtures parent-directory exemptions.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_is_exempt_location",
+      "find": "return \"tests\" in parents or \"fixtures\" in parents  # M:G-EXEMPT-DIRS",
+      "replace": "return False  # M:G-EXEMPT-DIRS",
+      "test": "tests/test_h_mad_doc_data.py::test_is_exempt_location_matches_is_production_python[tests]"
+    },
+    {
+      "name": "DD-EXEMPT-PARENT",
+      "_mechanism": "Include the basename in directory checks so a file named tests becomes exempt.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_is_exempt_location",
+      "find": "parents = Path(relative).parts[:-1]  # M:G-EXEMPT-PARENT",
+      "replace": "parents = Path(relative).parts  # M:G-EXEMPT-PARENT",
+      "test": "tests/test_h_mad_doc_data.py::test_is_exempt_location_keeps_a_file_named_tests_non_exempt"
+    }
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ]
+}
