@@ -107,8 +107,8 @@
       "name": "H11",
       "_mechanism": "Task 10 H11: alter the hooks/h-mad-tdd-gate.sh branch; tests/test_h_mad_tdd_gate_judge.py::test_traversal_target_is_gated[absolute] must reject the changed behavior.",
       "file": "hooks/h-mad-tdd-gate.sh",
-      "find": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import canonicalise,emit_canon;emit_canon(canonicalise(sys.argv[2],sys.argv[3]))' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
-      "replace": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import Identity,emit_canon;root=os.path.realpath(sys.argv[2]);target=os.path.join(root,sys.argv[3]);emit_canon(Identity(root,target,os.path.dirname(target),(os.path.basename(target),),False,0,\"\"))' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
+      "find": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import canonicalise,emit_canon,emit_doc_data;i=canonicalise(sys.argv[2],sys.argv[3]);emit_canon(i);emit_doc_data(i)' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
+      "replace": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import Identity,emit_canon,emit_doc_data;root=os.path.realpath(sys.argv[2]);target=os.path.join(root,sys.argv[3]);i=Identity(root,target,os.path.dirname(target),(os.path.basename(target),),False,0,\"\");emit_canon(i);emit_doc_data(i)' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_traversal_target_is_gated[absolute]"
     },
     {
@@ -314,8 +314,8 @@
     {
       "name": "CG-CANON",
       "file": "hooks/h-mad-tdd-gate.sh",
-      "find": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import canonicalise,emit_canon;emit_canon(canonicalise(sys.argv[2],sys.argv[3]))' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
-      "replace": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import Identity,emit_canon;root=os.path.realpath(sys.argv[2]);target=os.path.normpath(os.path.join(root,sys.argv[3]));emit_canon(Identity(root,target,os.path.dirname(target),(os.path.basename(target),),False,0,\"\"))' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
+      "find": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import canonicalise,emit_canon,emit_doc_data;i=canonicalise(sys.argv[2],sys.argv[3]);emit_canon(i);emit_doc_data(i)' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
+      "replace": "CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),\"scripts\"));from h_mad_target_identity import Identity,emit_canon,emit_doc_data;root=os.path.realpath(sys.argv[2]);target=os.path.normpath(os.path.join(root,sys.argv[3]));i=Identity(root,target,os.path.dirname(target),(os.path.basename(target),),False,0,\"\");emit_canon(i);emit_doc_data(i)' \"${BASH_SOURCE[0]}\" \"${CLAUDE_PROJECT_DIR:-.}\" \"$TARGET_PATH\")  # M:H11",
       "test": "tests/test_h_mad_tdd_gate_judge.py::test_claude_case_directory_m9_denies"
     },
     {

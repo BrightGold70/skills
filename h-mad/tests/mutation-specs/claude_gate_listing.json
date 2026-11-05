@@ -1,0 +1,114 @@
+{
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_tdd_gate_non_py.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "H-DOCDATA",
+      "_mechanism": "Remove the doc/data exemption so a listed document reaches the judge.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "[ \"$DOC_DATA\" = yes ] && _allow  # M:H-DOCDATA",
+      "replace": ":  # M:H-DOCDATA",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listed_doc_data_allows"
+    },
+    {
+      "name": "H-DOCDATA-LINE",
+      "_mechanism": "Accept malformed doc/data output instead of refusing its protocol error.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "*) _refuse judge-error \"invalid docdata line\" ;; esac  # M:H-DOCDATA-LINE",
+      "replace": "*) DOC_DATA=no ;; esac  # M:H-DOCDATA-LINE",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_malformed_docdata_line_is_judge_error"
+    },
+    {
+      "name": "H-LIST-LINES",
+      "_mechanism": "Remove the listing line-count guard; the test must retain its specific refusal reason.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "case \"$LOUT\" in *$'\\n'*|\"\") _refuse judge-error \"listing verb printed zero or several lines\" ;; esac  # M:H-LIST-LINES",
+      "replace": ":  # M:H-LIST-LINES",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_several_lines_is_judge_error"
+    },
+    {
+      "name": "H-LIST-RC",
+      "_mechanism": "Trust not-listed output despite a nonzero listing exit status.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "[ \"$LRC\" = 0 ] || _refuse judge-error \"listing verb exited rc=$LRC\"  # M:H-LIST-RC",
+      "replace": ":  # M:H-LIST-RC",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_nonzero_exit_is_judge_error"
+    },
+    {
+      "name": "H-LIST-UNREADABLE",
+      "_mechanism": "Drop the listing-specific unreadable refusal; the test distinguishes the fallback reason.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "_refuse judge-error \"listing is undecidable ($file: ${BASH_REMATCH[2]})\"  # M:H-LIST-UNREADABLE",
+      "replace": ":  # M:H-LIST-UNREADABLE",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_unreadable_plan_is_judge_error"
+    },
+    {
+      "name": "H-LIST-DECODE",
+      "_mechanism": "Decode through bare command substitution, stripping a listed name's trailing newline.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "_pct_capture LISTED_TARGET \"${BASH_REMATCH[1]}\"  # M:H-LIST-DECODE",
+      "replace": "LISTED_TARGET=$(_pct_decode \"${BASH_REMATCH[1]}\")  # M:H-LIST-DECODE",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listed_symlink_to_a_newline_name[failing]"
+    },
+    {
+      "name": "H-LIST-NAME",
+      "_mechanism": "Accept a listed target that was never supplied among canonical names.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "_refuse judge-error \"listing verb named a target it was not given\"  # M:H-LIST-NAME",
+      "replace": "return 0  # M:H-LIST-NAME",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_foreign_target_is_judge_error"
+    },
+    {
+      "name": "H-LIST-INROOT",
+      "_mechanism": "Read the governing root's unreadable state for an outside-root code-like target.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "[ \"$IN_ROOT\" = yes ] || _allow  # M:H-LIST-INROOT",
+      "replace": ":  # M:H-LIST-INROOT",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_out_of_root_code_like_allows_beside_unreadable_state"
+    },
+    {
+      "name": "H-NO-DIR-ALLOW",
+      "_mechanism": "Prematurely exempt directories through doc/data before the existing Bash 3.2 name loop.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "_chain_may_hold_state \"$ROOT_ABS\" \"$TARGET_PATH\" || _allow",
+      "replace": "[ \"$DOC_DATA\" = yes ] && _allow; _chain_may_hold_state \"$ROOT_ABS\" \"$TARGET_PATH\" || _allow",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_directory_stays_judge_error_where_state_may_exist"
+    },
+    {
+      "name": "H-NOT-LISTED",
+      "_mechanism": "Drop the unlisted allow branch while keeping the listing call intact.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_listing",
+      "find": "  if [ \"$LOUT\" = 'TDD-LISTING: not-listed' ]; then _allow; fi  # M:H-NOT-LISTED",
+      "replace": "  :  # M:H-NOT-LISTED",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_unlisted_code_like_allows"
+    },
+    {
+      "name": "H-LIST-UNRECOGNISED",
+      "_mechanism": "Return without a verdict on unrecognised listing output; the test checks the protocol refusal reason.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_listing",
+      "find": "  _refuse judge-error \"listing verb printed no well-formed listing line\"  # M:H-LIST-UNRECOGNISED",
+      "replace": "  return 0  # M:H-LIST-UNRECOGNISED",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_unrecognised_line_is_judge_error"
+    },
+    {
+      "name": "H-CODE-LIKE",
+      "_mechanism": "Skip the code-like listing branch; the pin must distinguish no-test-resolved from test-missing.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_listing",
+      "find": "if [ \"$ALL_NON_PY\" = yes ]; then  # M:H-CODE-LIKE",
+      "replace": "if false; then  # M:H-CODE-LIKE",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listed_absent_test_denies"
+    },
+    {
+      "name": "H-LIST-CONTEXT",
+      "_mechanism": "Remove selected-target context from code-like denial diagnostics; S2 must expose the selected production name as well as its resolved test.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "if [[ $JOUT =~ $JUDGE_DENY_RE ]] && [ \"$ALL_NON_PY\" = yes ]; then _refuse \"${BASH_REMATCH[1]}\" \"target=$TARGET_PATH: ${BASH_REMATCH[2]}\"; fi  # M:H-LIST-CONTEXT",
+      "replace": ":  # M:H-LIST-CONTEXT",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_selection_s2_denies"
+    }
+  ]
+}

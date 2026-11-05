@@ -193,6 +193,27 @@ _read_state() {
   [ "$FALLBACK_POS" -le "$RECORDS" ] || _refuse judge-error "state fallback position out of range"  # M:F4
   FALLBACK_RECORD=$frecord
 }
+_read_listing() {
+  local LARGS=() name LOUT LRC file
+  for name in "${CANON_NAMES[@]}"; do LARGS[${#LARGS[@]}]=--name; LARGS[${#LARGS[@]}]=${CANON_TARGET%/*}/$name; done
+  LOUT=$(python3 "$JUDGE" listing --root "$ROOT_ABS" ${LARGS[@]+"${LARGS[@]}"} 2>/dev/null; printf 'rc=%s' "$?")  # M:W7
+  LRC=${LOUT##*rc=}; LOUT=${LOUT%rc=*}; LOUT=${LOUT%$'\n'}
+  case "$LOUT" in *$'\n'*|"") _refuse judge-error "listing verb printed zero or several lines" ;; esac  # M:H-LIST-LINES
+  [ "$LRC" = 0 ] || _refuse judge-error "listing verb exited rc=$LRC"  # M:H-LIST-RC
+  if [ "$LOUT" = 'TDD-LISTING: not-listed' ]; then _allow; fi  # M:H-NOT-LISTED
+  if [[ $LOUT =~ $LISTING_UNREADABLE_RE ]]; then
+    file=$(_pct_decode "${BASH_REMATCH[1]}")
+    _refuse judge-error "listing is undecidable ($file: ${BASH_REMATCH[2]})"  # M:H-LIST-UNREADABLE
+  fi
+  if [[ $LOUT =~ $LISTING_LISTED_RE ]]; then
+    _pct_capture LISTED_TARGET "${BASH_REMATCH[1]}"  # M:H-LIST-DECODE
+    for name in "${CANON_NAMES[@]}"; do
+      if [ "$LISTED_TARGET" = "${CANON_TARGET%/*}/$name" ]; then return 0; fi
+    done
+    _refuse judge-error "listing verb named a target it was not given"  # M:H-LIST-NAME
+  fi
+  _refuse judge-error "listing verb printed no well-formed listing line"  # M:H-LIST-UNRECOGNISED
+}
 
 trap _on_exit EXIT  # M:T1
 
@@ -242,8 +263,10 @@ else
 fi
 
 RAW_TARGET=$TARGET_PATH
-CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),"scripts"));from h_mad_target_identity import canonicalise,emit_canon;emit_canon(canonicalise(sys.argv[2],sys.argv[3]))' "${BASH_SOURCE[0]}" "${CLAUDE_PROJECT_DIR:-.}" "$TARGET_PATH")  # M:H11
+CANON_RECORD=$(python3 -c 'import os,sys;sys.path.insert(0,os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1]))),"scripts"));from h_mad_target_identity import canonicalise,emit_canon,emit_doc_data;i=canonicalise(sys.argv[2],sys.argv[3]);emit_canon(i);emit_doc_data(i)' "${BASH_SOURCE[0]}" "${CLAUDE_PROJECT_DIR:-.}" "$TARGET_PATH")  # M:H11
+DOC_DATA_LINE=${CANON_RECORD##*$'\n'}; CANON_RECORD=${CANON_RECORD%$'\n'*}
 _read_canon
+case "$DOC_DATA_LINE" in "docdata yes") DOC_DATA=yes ;; "docdata no") DOC_DATA=no ;; *) _refuse judge-error "invalid docdata line" ;; esac  # M:H-DOCDATA-LINE
 ROOT_ABS=$CANON_ROOT
 TARGET_PATH=$CANON_TARGET
 R=${ROOT_ABS%/}
@@ -254,6 +277,8 @@ STATE_UNREADABLE_RE='^TDD-STATE: unreadable file=([^ ]+) error=([A-Za-z_-][A-Za-
 STATE_ACTIVE_RE='^TDD-STATE: active codex-escape=(yes|no) blocker=(0|[1-9][0-9]*) records=([1-9][0-9]*) fallback=(none|(grok|invalid):([1-9][0-9]*))( record=[^ ,]+,[^ ,]+,[^ ,]+,(codex|agy|peers-out|invalid:[^ ,]+),(absent|null|grok|claude|invalid:[^ ,]+))+$'
 JUDGE_ALLOW_RE='^TDD-JUDGE: ALLOW kind=red-measured source=(impl-plan|name-map) test=[^ ]+$'
 JUDGE_DENY_RE='^TDD-JUDGE: DENY kind=(no-test-resolved|test-missing|venv-escapes-root|pytest-missing|pytest-error|no-tests-ran|no-summary|test-passing|timeout|judge-timeout|judge-error) reason=(.+)$'
+LISTING_UNREADABLE_RE='^TDD-LISTING: unreadable file=([^ ]+) error=([A-Za-z_-][A-Za-z0-9_-]*)$'
+LISTING_LISTED_RE='^TDD-LISTING: listed target=([^ ]+)$'
 
 if [ -z "$TARGET_PATH" ]; then
   if [ -z "$RAW_TARGET" ]; then
@@ -300,17 +325,7 @@ elif _scratch_shape "$TARGET_PATH" && _scratch_shape "$RAW_TARGET" \
      && _outside_every_work_tree "$TARGET_PATH"; then  # M:H-SCRATCH
   _allow
 fi
-ALL_SUFFIX_NAMES=yes
-for NAME in "${CANON_NAMES[@]}"; do
-  _fold_py FOLDED_NAME "$NAME"
-  case "$FOLDED_NAME" in
-    *.md|*.yaml|*.yml|*.json|*.toml|*.txt|*.rst|*.cfg|*.ini) ;;
-    *.sh|*.bash|Makefile|Dockerfile|*.dockerignore|*.gitignore) ;;
-    *) ALL_SUFFIX_NAMES=no ;;
-  esac
-done
-[ "$ALL_SUFFIX_NAMES" = yes ] && _allow
-
+[ "$DOC_DATA" = yes ] && _allow  # M:H-DOCDATA
 ALL_NON_PY=yes
 PRODUCTION_TARGET=
 for NAME in "${CANON_NAMES[@]}"; do
@@ -322,9 +337,14 @@ for NAME in "${CANON_NAMES[@]}"; do
   esac
   [ -n "$PRODUCTION_TARGET" ] || PRODUCTION_TARGET=${CANON_TARGET%/*}/$NAME
 done
-[ "$ALL_NON_PY" = yes ] && _allow
-TARGET_PATH=$PRODUCTION_TARGET
-
+if [ "$ALL_NON_PY" = yes ]; then  # M:H-CODE-LIKE
+  [ "$IN_ROOT" = yes ] || _allow  # M:H-LIST-INROOT
+  _find_judge
+  _read_listing  # M:H-LIST
+  TARGET_PATH=$LISTED_TARGET
+else
+  TARGET_PATH=$PRODUCTION_TARGET
+fi
 _find_judge
 _read_state --target "$TARGET_PATH"  # M:H3
 if [ -n "$INVALID_RECORD" ]; then
@@ -383,6 +403,7 @@ JOUT=$(python3 "$JUDGE" judge --root "$ROOT_ABS" --target "$TARGET_PATH" 2>/dev/
 JRC=${JOUT##*rc=}; JOUT=${JOUT%rc=*}; JOUT=${JOUT%$'\n'}  # M:H16
 case "$JOUT" in *$'\n'*|"") _refuse judge-error "judge verb printed zero or several lines" ;; esac
 if [ "$JRC" = 0 ] && [[ $JOUT =~ $JUDGE_ALLOW_RE ]]; then _allow; fi  # M:H4
+if [[ $JOUT =~ $JUDGE_DENY_RE ]] && [ "$ALL_NON_PY" = yes ]; then _refuse "${BASH_REMATCH[1]}" "target=$TARGET_PATH: ${BASH_REMATCH[2]}"; fi  # M:H-LIST-CONTEXT
 if [[ $JOUT =~ $JUDGE_DENY_RE ]]; then _refuse "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"; fi
 _refuse judge-error "judge verb rc=$JRC printed no well-formed verdict line"
 _refuse judge-error "gate fell through without a decision"
