@@ -95,9 +95,10 @@ def test_claude_unreadable_plan_is_judge_error(root):
         f"unreadable plan must use listing-specific refusal: {result!r}")
 
 
-def test_claude_unreadable_state_is_judge_error(root):
+@pytest.mark.parametrize("target", ["scripts/tool.sh", "scripts/other.sh"])
+def test_claude_unreadable_state_is_judge_error(root, target):
     (root / "docs/.bkit-memory.json").write_bytes(b"\xff\xfe")
-    result = _expect(root, "scripts/tool.sh", "deny", "judge-error",
+    result = _expect(root, target, "deny", "judge-error",
                      property="unreadable governing state makes code-like listing undecidable")
     assert "listing is undecidable" in result.reason, (
         f"unreadable listing state must use listing-specific refusal: {result!r}")

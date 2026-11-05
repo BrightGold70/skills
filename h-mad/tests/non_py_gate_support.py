@@ -178,9 +178,13 @@ def skip_unless_case_insensitive(directory: Path) -> None:
         pytest.skip("requires a case-insensitive volume")
 
 
-def run_codex(root: Path, relative: str, env: dict) -> Outcome:
+def run_codex(root: Path, relative: str, env: dict, *, add: bool = False) -> Outcome:
     # A second update header in relative drives the real multi-target parser.
-    patch = f"*** Begin Patch\n*** Update File: {relative}\n@@\n-x\n+y\n*** End Patch\n"
+    # add=True writes the Add File form, whose body is "+" lines with no hunk.
+    if add:
+        patch = f"*** Begin Patch\n*** Add File: {relative}\n+x\n*** End Patch\n"
+    else:
+        patch = f"*** Begin Patch\n*** Update File: {relative}\n@@\n-x\n+y\n*** End Patch\n"
     payload = {"tool_name": "apply_patch", "tool_input": {"command": patch}, "cwd": str(root)}
     clean_env = {k: v for k, v in env.items() if not k.startswith("GIT_")}
     proc = subprocess.run(["python3", str(CODEX_GATE)], input=json.dumps(payload),

@@ -18,8 +18,9 @@ def root(tmp_path):
     return build_fixture(tmp_path / 'repo "agent" % H-MAD-MARKER\nnext', "absent")
 
 
-def _expect(root, relative, expected, kind="", *, property="non-Python gate contract"):
-    result = run_codex(root, relative, gate_env(CODEX_PROJECT_DIR=str(root)))
+def _expect(root, relative, expected, kind="", *, property="non-Python gate contract",
+            add=False):
+    result = run_codex(root, relative, gate_env(CODEX_PROJECT_DIR=str(root)), add=add)
     assert result.decision == expected, (
         f"{property}: expected {expected.upper()} kind={kind}, received {result}")
     assert result.rc == 0, f"{property}: hook protocol must exit zero: {result}"
@@ -78,9 +79,10 @@ def test_codex_unreadable_plan_is_judge_error(root):
     assert "listing is undecidable" in result.reason
 
 
-def test_codex_unreadable_state_is_judge_error(root):
+@pytest.mark.parametrize("target", ["scripts/tool.sh", "scripts/other.sh"])
+def test_codex_unreadable_state_is_judge_error(root, target):
     (root / "docs/.bkit-memory.json").write_bytes(b"\xff\xfe")
-    _expect(root, "scripts/tool.sh", "deny", "judge-error",
+    _expect(root, target, "deny", "judge-error",
             property="unreadable governing state must fail closed for code-like targets")
 
 
@@ -133,6 +135,18 @@ def test_codex_unlisted_code_like_allows(root):
 
 def test_codex_unlisted_doc_data_allows(root):
     _expect(root, "notes.md", "allow", property="unlisted doc/data target is allowed")
+
+
+def test_codex_add_file_doc_data_allows(root):
+    _expect(root, "notes.md", "allow", add=True,
+            property="an Add File of an unlisted doc/data target is allowed")
+
+
+def test_codex_add_file_listed_absent_script_denies_test_missing(root):
+    (root / "scripts/tool.sh").unlink()
+    assert not (root / "scripts/tool.sh").exists()
+    _expect(root, "scripts/tool.sh", "deny", "test-missing", add=True,
+            property="an Add File of a listed script absent on disk must judge its absent test")
 
 
 def test_codex_selection_s1_allows(tmp_path):

@@ -109,6 +109,24 @@
       "find": "if [[ $JOUT =~ $JUDGE_DENY_RE ]] && [ \"$ALL_NON_PY\" = yes ]; then _refuse \"${BASH_REMATCH[1]}\" \"target=$TARGET_PATH: ${BASH_REMATCH[2]}\"; fi  # M:H-LIST-CONTEXT",
       "replace": ":  # M:H-LIST-CONTEXT",
       "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_selection_s2_denies"
+    },
+    {
+      "name": "W7R",
+      "_mechanism": "Replace the judge listing launch with a constant not-listed answer; a listed absent-test write must still be judged and denied, so the listed-DENY test must fail.",
+      "replace": "LOUT=$'TDD-LISTING: not-listed\\nrc=0'  # M:W7",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listed_absent_test_denies",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_listing",
+      "find": "LOUT=$(python3 \"$JUDGE\" listing --root \"$ROOT_ABS\" ${LARGS[@]+\"${LARGS[@]}\"} 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W7"
+    },
+    {
+      "name": "W7F",
+      "_mechanism": "Replace the judge listing launch with a constant listed answer naming the given target; the unlisted code-like control must stay ALLOW, so it must fail.",
+      "replace": "LOUT=\"TDD-LISTING: listed target=${CANON_TARGET%/*}/${CANON_NAMES[0]}\"$'\\nrc=0'  # M:W7",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_unlisted_code_like_allows",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_listing",
+      "find": "LOUT=$(python3 \"$JUDGE\" listing --root \"$ROOT_ABS\" ${LARGS[@]+\"${LARGS[@]}\"} 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W7"
     }
   ]
 }

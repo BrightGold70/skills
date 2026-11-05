@@ -78,9 +78,10 @@ def test_agy_unreadable_plan_is_judge_error(root):
         f"unreadable plan must take the listing-specific denial, not a generic exception: {result!r}")
 
 
-def test_agy_unreadable_state_is_judge_error(root):
+@pytest.mark.parametrize("target", ["scripts/tool.sh", "scripts/other.sh"])
+def test_agy_unreadable_state_is_judge_error(root, target):
     (root / "docs/.bkit-memory.json").write_bytes(b"\xff\xfe")
-    _expect(root, "scripts/tool.sh", "deny", "judge-error",
+    _expect(root, target, "deny", "judge-error",
             property="unreadable governing state must fail closed for code-like targets")
 
 
