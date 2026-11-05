@@ -2991,3 +2991,13 @@ Reconciled the open rows first (census OPEN 5, against `origin/main` `94cfebf4`)
 
 ## 2026-11-04 — backlog-rows-closed-to-one — no candidates
 
+
+## 2026-11-05 — gate-non-py-phase5-complete
+
+Reconciled the open rows first: census OPEN 1, row 2856, genuinely open (feature at Phase 6).
+
+- **assemble-tdd-red-forbids-plan-stubs**: the RED template says "do not modify production code" while an impl-plan can prescribe stubs as RED's first step, so a correct implementer stops at the count mismatch and the orchestrator hand-writes a second dispatch (gate-non-py Task 2) — remedy: existing-tool-repair — recurrence: 1 — candidate: yes
+- **green-prompt-demands-a-wire-cut-the-gate-refuses**: the GREEN prompt asks for a manual post-GREEN wire cut, and the Phase 5 gate denies that edit as `test-passing`, so codex reports BLOCKED on correct work; the harness's connection rows are the real proof — remedy: existing-tool-repair — recurrence: 1 — candidate: yes
+- **assembled-test-command-the-gate-denies**: `h_mad_assemble_tdd.py --python python3.11` bakes an interpreter the codex gate does not trust, the prompt's bounded example names a `python3` with no pytest here, and a worktree PATH makes bare `hmad-dispatch run` untrusted; the assembler could refuse what the gate would deny, and 5c could create the thin venv — remedy: existing-tool-repair — recurrence: 3 — candidate: yes
+- **hostile-path-limits-in-the-red-template**: fixture guidance says hostile names but not that pytest rejects `[]`, venv rejects `:`, and a listed token excludes whitespace; two Tasks lost a round until the orchestrator added it by hand — remedy: review-rule — recurrence: 2 — candidate: yes
+- **assemble-the-agy-spec-review**: the 5e agy spec review is still staged by hand; a scratch script filled it for all 8 Tasks, and `h_mad_assemble_tdd.py` could gain a `review` phase — remedy: tool-improvement — recurrence: 8 — candidate: yes
