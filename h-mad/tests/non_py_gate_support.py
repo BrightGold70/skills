@@ -5,15 +5,20 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 
 import pytest
 
-from tdd_gate_support import Outcome, build_venv, decision, hermetic_env, write_plan, write_state
+from tdd_gate_support import Outcome, build_venv, decision, hermetic_env, hook_form, write_plan, write_state
 
 
 CODEX_GATE = Path(__file__).resolve().parents[1] / "hooks/h-mad-codex-tdd-gate.py"
 AGY_GATE = Path(__file__).resolve().parents[1] / "hooks/h-mad-agy-tdd-gate.py"
+HOOK = CODEX_GATE.with_name("h-mad-tdd-gate.sh")
+JUDGE = HOOK.parents[1] / "scripts/h_mad_tdd_judge.py"
+CLAUDE_AUTHOR_LINE = "TDD-IMPLEMENTER: claude chosen=codex switch=peers-out reason=env"
+DEFAULT_AUTHOR_LINE = "TDD-IMPLEMENTER: codex chosen=codex switch=none"
 HOSTILE = 'agent "quoted" \\\n## [H-MAD:MARKER] *?[] Ω\nkind=forged'
 BASE_PRODUCTION = ("scripts/tool.sh", "bin/launch", "README.md", "CHANGES.MD")
 
@@ -26,6 +31,61 @@ def gate_env(**extra: str) -> dict[str, str]:
             env.pop(name)
     env.update(extra)
     return env
+
+
+def claude_author_env(**extra: str) -> dict[str, str]:
+    env = hermetic_env(HMAD_CODEX_UNAVAILABLE="1", HMAD_AGY_UNAVAILABLE="1",
+                       HMAD_STUB_HOSTILE="all", **extra)
+    return {key: value for key, value in env.items() if not key.startswith("GIT_")}
+
+
+def default_authorship_env(bin_dir: Path, **extra: str) -> dict[str, str]:
+    env = hermetic_env(HMAD_STUB_HOSTILE="all", **extra)
+    env.pop("HMAD_AGY_UNAVAILABLE", None)
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    codex = bin_dir / "codex"
+    codex.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    codex.chmod(0o755)
+    env["PATH"] = str(bin_dir) + os.pathsep + env["PATH"]
+    return env
+
+
+def assert_authorship(env: dict, root: Path, key: str,
+                      expected: str = CLAUDE_AUTHOR_LINE) -> None:
+    proc = subprocess.run(["python3", str(JUDGE), "implementer", "--root", str(root),
+                           "--feature", key], cwd=root, env=env, capture_output=True,
+                          text=True, timeout=30, check=False)
+    assert proc.returncode == 0, f"implementer arrangement failed: {proc.stderr!r}"
+    assert proc.stdout.rstrip("\n") == expected, (
+        f"authorship arrangement: expected {expected!r}, received {proc.stdout!r}")
+
+
+def run_claude(root: Path, target: Path, env: dict, hook: Path = HOOK) -> Outcome:
+    payload = {"tool_name": "Write", "tool_input": {"file_path": str(target), "content": "x"}}
+    proc = subprocess.run(["/bin/bash", str(hook)], input=json.dumps(payload), cwd=root,
+                          env={**env, "CLAUDE_PROJECT_DIR": str(root)}, capture_output=True,
+                          text=True, timeout=120, check=False)
+    return decision(proc, hook_form(hook))
+
+
+def stub_tree(tmp: Path, listing_stdout: str, listing_rc: int,
+              emit_doc_data_body: str = "") -> Path:
+    hook = tmp / "h-mad/hooks/h-mad-tdd-gate.sh"
+    hook.parent.mkdir(parents=True)
+    shutil.copyfile(HOOK, hook)
+    scripts = hook.parents[1] / "scripts"
+    scripts.mkdir()
+    (scripts / JUDGE.name).write_text(
+        "import sys\n"
+        "if sys.argv[1] == 'listing':\n"
+        f" sys.stdout.write({listing_stdout!r})\n sys.exit({listing_rc})\n"
+        "if sys.argv[1] == 'state':\n print('TDD-STATE: none')\n",
+        encoding="utf-8")
+    identity = JUDGE.with_name("h_mad_target_identity.py").read_text(encoding="utf-8")
+    if emit_doc_data_body:
+        identity += "\n\ndef emit_doc_data(record):\n" + emit_doc_data_body + "\n"
+    (scripts / "h_mad_target_identity.py").write_text(identity, encoding="utf-8")
+    return hook
 
 
 def write_file(root: Path, relative: str, body: str = "x\n") -> Path:
