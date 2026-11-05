@@ -1,5 +1,6 @@
 """Documentation pins for the Phase 5 TDD gate's shipped contract."""
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from skill_corpus import doc_text  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parent
 CODEX_RUNTIME = ROOT / "references" / "codex-runtime.md"
 SKILL = ROOT / "SKILL.md"
 AGY_RUNTIME = ROOT / "references" / "agy-runtime.md"
@@ -48,7 +50,8 @@ def test_helper_scripts_registers_the_judge():
         "Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)",
     )
     for token in ("h_mad_tdd_judge.py", "state", "judge", "TDD-STATE:",
-                  "TDD-JUDGE:", "judge-error", "copied", "symlinked"):
+                  "TDD-JUDGE:", "judge-error", "copied", "symlinked", "TDD-LISTING:",
+                  "listing"):
         assert token in section, f"Helper scripts must describe {token!r}"
 
 
@@ -76,7 +79,8 @@ def test_hook_line_names_both_gates():
 def test_hook_bullets_state_the_shipped_rule():
     bullets = "\n".join(_hook_block(IMPLEMENTER_PROMPT.read_text(encoding="utf-8")).splitlines()[1:])
     for token in ("impl-plan", "name map", "summary", "N failed", "test_*.py",
-                  "*_test.py", "conftest*.py"):
+                  "*_test.py", "conftest*.py", ".md", ".yaml", ".yml", ".json",
+                  ".toml", ".txt", ".rst", ".cfg", ".ini", "Production file", ".sh"):
         assert token in bullets, f"Hook bullets must state {token!r}"
     assert "<" not in bullets and ">" not in bullets, "Hook bullets must have no slot"
 
@@ -123,9 +127,34 @@ def test_locators_fail_loudly(locator):
 
 def test_skill_states_the_docs_first_component_rule():
     text = doc_text(SKILL)
-    anchor = "Test files, docs, config, and shell are never gated; only production `.py`."
+    anchor = "The gates judge production `.py`, and a code-like file such as a `.sh` script or an extensionless launcher when a Task's **Production file** line lists it; test files, docs, doc/data files (`.md` `.yaml` `.yml` `.json` `.toml` `.txt` `.rst` `.cfg` `.ini`, listed or not) and unlisted code-like files are allowed."
     assert text.count(anchor) == 1, "expected one gate-scope line in SKILL.md"
     paragraph = text.split(anchor, 1)[1].split("\n\n", 1)[0]
     for token in ("FIRST component", "relative to the project root", "`docs`",
-                  "`src/docs/foo.py`", "Both gates"):
+                  "`src/docs/foo.py`", "All three gates"):
         assert token in paragraph, f"gate-scope line must state {token!r}"
+
+
+@pytest.mark.parametrize("branch", (
+    pytest.param("production-Python", id="production-python"),
+    pytest.param(r"a .\.py. suffix in any case", id="suffix-in-any-case"),
+    pytest.param("never gated", id="never-gated"),
+    pytest.param("only production", id="only-production"),
+    pytest.param(r"production-.\.py.", id="production-dot-py"),
+    pytest.param("markdown / yaml", id="markdown-yaml"),
+    pytest.param("Both gates", id="both-gates"),
+    pytest.param("neither gate", id="neither-gate"),
+))
+def test_gate_prose_has_no_retired_phrasing(branch):
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "grep", "-n", "-E", branch, "--",
+         "h-mad/SKILL.md", "h-mad/references", "h-mad/agents", "h-mad/invariants.base.md"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1, (
+        f"gate prose must have no retired phrasing {branch!r}; "
+        f"git grep returned {result.returncode}\n{result.stdout}{result.stderr}"
+    )
+    assert result.stdout == "", f"gate prose must have no retired phrasing {branch!r}"
