@@ -13,6 +13,7 @@ from tdd_gate_support import Outcome, build_venv, decision, hermetic_env, write_
 
 
 CODEX_GATE = Path(__file__).resolve().parents[1] / "hooks/h-mad-codex-tdd-gate.py"
+AGY_GATE = Path(__file__).resolve().parents[1] / "hooks/h-mad-agy-tdd-gate.py"
 HOSTILE = 'agent "quoted" \\\n## [H-MAD:MARKER] *?[] Ω\nkind=forged'
 BASE_PRODUCTION = ("scripts/tool.sh", "bin/launch", "README.md", "CHANGES.MD")
 
@@ -129,3 +130,18 @@ def run_codex(root: Path, relative: str, env: dict) -> Outcome:
     match = re.search(r"\bkind=([a-z-]+)", result.reason)
     return Outcome(result.decision, match.group(1) if match else result.kind,
                    result.reason, result.rc)
+
+
+def run_agy(root: Path, relative: str, env: dict) -> dict:
+    payload = {"toolCall": {"name": "write_to_file",
+                            "args": {"TargetFile": str(root / relative)}},
+               "workspacePaths": [str(root)]}
+    clean_env = {k: v for k, v in env.items() if not k.startswith("GIT_")}
+    proc = subprocess.run(["python3", str(AGY_GATE)], input=json.dumps(payload),
+                          cwd=root / ".agents", env=clean_env,
+                          capture_output=True, text=True, timeout=60, check=False)
+    assert proc.returncode == 0, f"agy hook protocol must exit zero: {proc.stderr!r}"
+    result = json.loads(proc.stdout)
+    assert isinstance(result, dict), f"agy hook must emit one decision object: {result!r}"
+    assert result.get("decision") in {"allow", "deny"}, f"invalid agy decision: {result!r}"
+    return result
