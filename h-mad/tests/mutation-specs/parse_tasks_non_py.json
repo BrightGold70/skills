@@ -1,0 +1,35 @@
+{
+  "_why": "FR-1 collects non-Python Production file paths while preserving Python-only Test file parsing, Python path order and multiplicity.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_parse_tasks_non_py.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "P-GUARD: NON-PY TEST TOKENS LEAK INTO PRODUCTION",
+      "_mechanism": "Remove the production-only guard so non-Python Test file tokens are appended to production.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "symbol": "_parse_tasks",
+      "find": "if key == \"production\":",
+      "replace": "if True:",
+      "test": "tests/test_h_mad_parse_tasks_non_py.py::test_non_py_test_token_stays_out_of_tests_and_production"
+    },
+    {
+      "name": "P-NONPY: NON-PY PRODUCTION PATHS NEVER COLLECTED",
+      "_mechanism": "Disable collection of non-Python production tokens while leaving Python collection intact.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "symbol": "_parse_tasks",
+      "find": "current[\"production\"].extend(token for token in _NON_PY_PATH_RE.findall(paths.group(\"value\")) if not token.endswith(\".py\"))  # M:P-NONPY",
+      "replace": "pass  # M:P-NONPY",
+      "test": "tests/test_h_mad_parse_tasks_non_py.py::test_mixed_production_line_collects_all_three"
+    },
+    {
+      "name": "P-PYFILTER: PYTHON PRODUCTION TOKENS COLLECTED TWICE",
+      "_mechanism": "Remove the Python exclusion from the second collection pass so Python paths are duplicated.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "symbol": "_parse_tasks",
+      "find": " if not token.endswith(\".py\"))  # M:P-NONPY",
+      "replace": ")  # M:P-NONPY",
+      "test": "tests/test_h_mad_parse_tasks_non_py.py::test_python_only_production_line_keeps_items_and_order"
+    }
+  ]
+}

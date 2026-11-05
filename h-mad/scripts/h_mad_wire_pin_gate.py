@@ -100,8 +100,8 @@ _BUDGET_FIELD_RE = re.compile(
     re.IGNORECASE,
 )
 _PY_TOKEN_RE = re.compile(r"`([^`]+\.py)`")
-# Every other backticked path on a **Production file** line: kept apart, because
-# `production` is the TDD judge's map and holds `.py` only (row 2853).
+# Every other backticked path on a **Production file** line joins `production`;
+# only `tests` remains `.py`-only.
 _NON_PY_PATH_RE = re.compile(r"`([^`\s]*[/.][^`\s]*)`")
 _NONE_VALUE_RE = re.compile(r"^[\s*_`]*none(?![\w/-]|\.\w)", re.IGNORECASE)
 
@@ -206,11 +206,9 @@ def _parse_tasks(text: str) -> list[dict]:
                 "production": [],
                 "tests": [],
                 # Which path labels carry a declaration -- a path of ANY kind, or
-                # `none` -- judged on the raw value, since `production`/`tests`
-                # keep only `.py` tokens and a `.sh` production file is correct.
+                # `none` -- judged on the raw value, since only `tests` keeps
+                # `.py` tokens and a non-.py path is still a declaration.
                 "path_labels": set(),
-                # Non-.py production paths: no TDD judge or wire-pin covers them.
-                "ungated": [],
                 "judge_budget": None,
             }
             tasks.append(current)
@@ -246,9 +244,7 @@ def _parse_tasks(text: str) -> list[dict]:
                 key = "production" if paths.group("label").lower().startswith("production") else "tests"
                 current[key].extend(_PY_TOKEN_RE.findall(paths.group("value")))
                 if key == "production":
-                    current["ungated"].extend(
-                        token for token in _NON_PY_PATH_RE.findall(paths.group("value"))
-                        if not token.endswith(".py"))
+                    current["production"].extend(token for token in _NON_PY_PATH_RE.findall(paths.group("value")) if not token.endswith(".py"))  # M:P-NONPY
             continue
         label = " ".join(field.group("label").split()).lower()
         value = field.group("value")
@@ -296,21 +292,10 @@ def _unlabeled_entries(tasks: list[dict]) -> list[str]:
     return entries
 
 
-def _ungated_entries(tasks: list[dict]) -> list[str]:
-    """Production files the gates cannot see: a detail line, never a FAIL cause.
-
-    Gating them by task rather than by suffix is an /h-mad feature (row 2853,
-    user ruling 2026-11-01); until then the gap is printed on every 5b run.
-    """
-    return [f"{task['id']} ({task['name']}): `{path}`"
-            for task in tasks for path in task["ungated"]]
-
-
 def check(plan_path: Path) -> dict:
     """Classify an impl-plan. Raises OSError if the plan cannot be read."""
     tasks = _parse_tasks(plan_path.read_text(encoding="utf-8"))
     unlabeled = _unlabeled_entries(tasks)
-    ungated = _ungated_entries(tasks)
 
     if not any(task["shape"] for task in tasks):
         return {
@@ -321,7 +306,6 @@ def check(plan_path: Path) -> dict:
             "unshaped": [_unshaped_entry(task) for task in tasks],
             "mislabeled": [],
             "unlabeled": unlabeled,
-            "ungated": ungated,
         }
 
     # The plan is shape-aware, so a task with no shape is a hiding place for a
@@ -375,7 +359,6 @@ def check(plan_path: Path) -> dict:
         "unshaped": unshaped,
         "mislabeled": mislabeled,
         "unlabeled": unlabeled,
-        "ungated": ungated,
     }
 
 
@@ -533,8 +516,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  mislabeled: {item}")
     for item in result["unlabeled"]:
         print(f"  unlabeled: {item}")
-    for item in result["ungated"]:
-        print(f"  ungated: {item} — not .py, so no TDD judge or wire-pin covers it")
     if result["verdict"] == "PASS":
         if args.feature:
             tasks = _parse_tasks(args.impl_plan.read_text(encoding="utf-8"))

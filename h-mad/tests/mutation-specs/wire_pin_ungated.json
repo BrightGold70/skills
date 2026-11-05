@@ -1,43 +1,25 @@
 {
-  "_why": "Row 2853 (warn half): a non-.py **Production file** is never TDD-judged or wire-pinned, because `_parse_tasks` keeps `.py` only. The 5b wire-pin check prints it as an `ungated:` detail line on every run. Each mutant hides one part of that report.",
+  "_why": "FR-1 collects non-Python production paths; FR-2 retires the ungated surface. U1 and U2 now guard collection. U3, U4 and U5 were removed because their guarantees asserted the retired ungated report or key itself.",
   "root": "../..",
   "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_wire_pin_gate.py", "-q"],
   "target_command": ["python3.11", "-m", "pytest", "-q"],
   "mutations": [
     {
-      "name": "U1: NON-PY PATHS NEVER COLLECTED. The pre-fix parser: a `.sh` production file vanishes without a word.",
+      "name": "U1: NON-PY PRODUCTION PATHS NEVER COLLECTED",
+      "_mechanism": "Disable non-Python production collection so a shell production path disappears.",
       "file": "scripts/h_mad_wire_pin_gate.py",
-      "find": "                if key == \"production\":\n                    current[\"ungated\"].extend(",
-      "replace": "                if False:\n                    current[\"ungated\"].extend(",
-      "test": "tests/test_h_mad_wire_pin_gate.py::test_a_non_python_production_file_is_reported_ungated"
+      "symbol": "_parse_tasks",
+      "find": "current[\"production\"].extend(token for token in _NON_PY_PATH_RE.findall(paths.group(\"value\")) if not token.endswith(\".py\"))  # M:P-NONPY",
+      "replace": "pass  # M:P-NONPY",
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_a_shell_production_file_is_collected_in_production"
     },
     {
-      "name": "U2: EXTENSION REQUIRED. `h-mad/bin/hmad-dispatch` has no suffix and goes unreported.",
+      "name": "U2: EXTENSION REQUIRED. An extensionless production path disappears.",
+      "_mechanism": "Require an alphabetic extension so extensionless paths are excluded from production.",
       "file": "scripts/h_mad_wire_pin_gate.py",
       "find": "_NON_PY_PATH_RE = re.compile(r\"`([^`\\s]*[/.][^`\\s]*)`\")",
       "replace": "_NON_PY_PATH_RE = re.compile(r\"`([^`\\s]*\\.[A-Za-z]+)`\")",
-      "test": "tests/test_h_mad_wire_pin_gate.py::test_an_extensionless_script_path_is_ungated_too"
-    },
-    {
-      "name": "U3: PYTHON REPORTED TOO. Every `.py` production file reads as ungated, so the line is noise.",
-      "file": "scripts/h_mad_wire_pin_gate.py",
-      "find": "                        if not token.endswith(\".py\"))",
-      "replace": "                        if True)",
-      "test": "tests/test_h_mad_wire_pin_gate.py::test_python_or_none_production_is_never_ungated[python]"
-    },
-    {
-      "name": "U4: UNSHAPED PLAN DROPS THE KEY. The early UNSHAPED return reports no ungated files.",
-      "file": "scripts/h_mad_wire_pin_gate.py",
-      "find": "            \"unlabeled\": unlabeled,\n            \"ungated\": ungated,",
-      "replace": "            \"unlabeled\": unlabeled,\n            \"ungated\": [],",
-      "test": "tests/test_h_mad_wire_pin_gate.py::test_an_unshaped_plan_still_carries_the_ungated_key"
-    },
-    {
-      "name": "U5: COMPUTED, NEVER PRINTED. The CLI keeps the result but the 5b reader never sees it.",
-      "file": "scripts/h_mad_wire_pin_gate.py",
-      "find": "    for item in result[\"ungated\"]:",
-      "replace": "    for item in []:",
-      "test": "tests/test_h_mad_wire_pin_gate.py::test_cli_prints_ungated_lines_and_keeps_the_token"
+      "test": "tests/test_h_mad_wire_pin_gate.py::test_an_extensionless_production_path_is_collected_in_production"
     }
   ]
 }
