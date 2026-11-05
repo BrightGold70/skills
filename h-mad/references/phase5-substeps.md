@@ -210,8 +210,8 @@ as described below. Authorship is enforced mechanically:
 - **FR-3 — Claude-side authorship.** The `Write|Edit` PreToolUse hook
   (`hooks/h-mad-tdd-gate.sh`) folds **every** `step5` record on the target's state
   chain, not just one `ACTIVE` feature. Any invalid `implementer` refuses first
-  as `implementer-invalid`; otherwise the first resolved peer refuses Claude's
-  production-`.py` write as `codex-authorship` or `agy-authorship`. Only with no
+  as `implementer-invalid`; otherwise the first resolved peer refuses Claude's write to production `.py` or to a listed code-like file
+  as `codex-authorship` or `agy-authorship`. Only with no
   resolved peer does the existing fallback fold apply: `fallback-invalid` outranks
   `fallback-grok`; absent, `null`, or `claude` everywhere admits Claude's test-first
   fallback. These refusals use JSON `permissionDecision: deny` with exit 0.
@@ -227,12 +227,12 @@ as described below. Authorship is enforced mechanically:
 
 After any agy upgrade, re-run FR-8 step 2 and step 2a and re-take the class-(a) inventory.
 
-Test files, docs, config, and shell are never gated; only production `.py`. A
-`.py` counts as docs, and is not gated, only when the FIRST component of its
+The gates judge production `.py`, and a code-like file such as a `.sh` script or an extensionless launcher when a Task's **Production file** line lists it; test files, docs, doc/data files (`.md` `.yaml` `.yml` `.json` `.toml` `.txt` `.rst` `.cfg` `.ini`, listed or not) and unlisted code-like files are allowed.
+A `.py` counts as docs, and is not gated, only when the FIRST component of its
 resolved path relative to the project root is `docs` (e.g. a committed probe at
 `docs/03-analysis/probes/<feature>/x.py`); `src/docs/foo.py` and a top-level
 `docs.py` stay gated, and a `docs/` spelling that symlinks out of `docs/` is
-judged by its target. Both gates apply this same rule. The
+judged by its target. All three gates apply this same rule. The
 gate stands down outside `step5` and disarms at 5g (`phase = null`).
 
 ### Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot
