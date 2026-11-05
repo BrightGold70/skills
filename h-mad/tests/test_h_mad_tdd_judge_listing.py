@@ -218,7 +218,7 @@ def test_listing_cli_active_unreadable_prints_unreadable(root):
 
 def test_listing_cli_listed_prints_the_encoded_target(root):
     _records(root)
-    target = _target(root, 'scripts/tool "human" % [H-MAD:MARKER].sh')
+    target = _target(root, 'scripts/tool"human"%[H-MAD:MARKER].sh')
     hard = root / "scripts/hard.sh"
     os.link(target, hard)
     _plan(root, target.relative_to(root).as_posix())

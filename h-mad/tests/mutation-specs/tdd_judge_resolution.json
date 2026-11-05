@@ -99,8 +99,8 @@
       "name": "declared-budget-not-read",
       "_mechanism": "The matched Task's budget is never collected, so the declaration has no effect.",
       "file": "scripts/h_mad_tdd_judge.py",
-      "find": "                    if task.get(\"judge_budget\") is not None:  # M:J-BUDGET-READ",
-      "replace": "                    if False:  # M:J-BUDGET-READ",
+      "find": "            if task.get(\"judge_budget\") is not None:  # M:J-BUDGET-READ",
+      "replace": "            if False:  # M:J-BUDGET-READ",
       "test": "tests/test_h_mad_tdd_judge.py::test_a_declared_budget_lets_a_slow_red_finish"
     },
     {

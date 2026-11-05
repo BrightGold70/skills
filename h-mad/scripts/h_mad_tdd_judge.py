@@ -20,7 +20,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 from h_mad_audit_gate import _SGR_RE, _SUMMARY_LINE_RE, _suite_summary  # noqa: E402
 from h_mad_wire_pin_gate import _parse_tasks  # noqa: E402
-from h_mad_target_identity import TRUSTED_BIN_DIRS  # noqa: E402
+from h_mad_target_identity import TRUSTED_BIN_DIRS, fold_py_suffix  # noqa: E402
 
 KINDS = frozenset({"red-measured", "no-test-resolved", "test-missing",
                    "venv-escapes-root", "pytest-missing", "pytest-error",
@@ -56,6 +56,20 @@ class Implementer(NamedTuple):
 class Chain(NamedTuple):
     value: str
     records: tuple
+    error_file: Optional[Path]
+    error: str
+
+
+class PlanMatch(NamedTuple):
+    plan: Path
+    status: str
+    error: str
+    matches: tuple
+
+
+class Listing(NamedTuple):
+    value: str
+    selected: Optional[Path]
     error_file: Optional[Path]
     error: str
 
@@ -290,6 +304,49 @@ def _run_bounded(argv: Sequence[str], cwd: Path, deadline: float) -> BoundedRun:
                       err.decode("utf-8", errors="replace"), timed_out, "", reap_failed)
 
 
+def _match_plans(root: Path, target: Path, records: Sequence[Record]) -> Tuple[PlanMatch, ...]:
+    real_root = Path(os.path.realpath(root))
+    real_target = Path(os.path.realpath(target))
+    plan_paths = list(dict.fromkeys(record.state_file.parent / "01-plan" / "features" /
+                                    f"{record.key}.impl-plan.md" for record in records))
+    result = []
+    for plan in plan_paths:
+        try:
+            text = plan.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            result.append(PlanMatch(plan, "absent", "", ()))  # M:L-ABSENT
+            continue
+        except (OSError, UnicodeDecodeError) as exc:
+            result.append(PlanMatch(plan, "unreadable", type(exc).__name__, ()))
+            continue
+        tasks = _parse_tasks(text)  # M:W3
+        matches = []
+        for task in tasks:
+            if not _inside(str(real_target), str(real_root)):
+                continue
+            base = real_target.parent
+            while _inside(str(base), str(real_root)):
+                if any(os.path.realpath(base / entry) == str(real_target) for entry in task["production"]):
+                    matches.append((task, base))
+                    break
+                if base == real_root:
+                    break
+                base = base.parent
+        result.append(PlanMatch(plan, "read", "", tuple(matches)))
+    return tuple(result)
+
+
+def listing(root: Path, names: Sequence[Path], records: Sequence[Record]) -> Listing:
+    per_name = [(name, _match_plans(root, name, records)) for name in names]
+    listed = [name for name, plans in per_name if any(m.matches for m in plans)]
+    if listed:  # M:L-LISTED
+        return Listing("listed", min(listed, key=lambda p: p.name), None, "")  # M:L-SELECT
+    bad = next((m for _, plans in per_name for m in plans if m.status == "unreadable"), None)
+    if bad:  # M:L-UNREADABLE
+        return Listing("unreadable", None, bad.plan, bad.error)
+    return Listing("not-listed", None, None, "")
+
+
 def resolve(root: Path, target: Path, records: Sequence[Record], *, deadline: float) -> Resolution:
     real_root = Path(os.path.realpath(root))
     real_target = Path(os.path.realpath(target))
@@ -298,39 +355,26 @@ def resolve(root: Path, target: Path, records: Sequence[Record], *, deadline: fl
     seen_candidates = set()
     matched = False
     declared_budget = None
-    plan_paths = list(dict.fromkeys(record.state_file.parent / "01-plan" / "features" /
-                                    f"{record.key}.impl-plan.md" for record in records))
-    for plan in plan_paths:
-        try:
-            text = plan.read_text(encoding="utf-8")
-        except FileNotFoundError:
+    for found in _match_plans(root, target, records):
+        plan = found.plan
+        if found.status == "absent":
             notes.append(f"{plan}: absent")
             continue
-        except (OSError, UnicodeDecodeError) as exc:
-            notes.append(f"{plan}: impl-plan unreadable: {type(exc).__name__}")
+        if found.status == "unreadable":
+            notes.append(f"{plan}: impl-plan unreadable: {found.error}")
             continue
-        tasks = _parse_tasks(text)  # M:W3
         plan_matched = False
-        for task in tasks:
-            if not _inside(str(real_target), str(real_root)):
-                continue
-            base = real_target.parent
-            while _inside(str(base), str(real_root)):
-                if any(os.path.realpath(base / entry) == str(real_target) for entry in task["production"]):
-                    matched = plan_matched = True
-                    if task.get("judge_budget") is not None:  # M:J-BUDGET-READ
-                        declared_budget = max(declared_budget or 0, task["judge_budget"])
-                    for entry in task["tests"]:
-                        candidate = Path(os.path.realpath(base / entry))
-                        if not _inside(str(candidate), str(real_root)):
-                            notes.append(f"candidate outside root dropped: {entry}")
-                        elif candidate not in seen_candidates:
-                            candidates.append((candidate, base))
-                            seen_candidates.add(candidate)
-                    break
-                if base == real_root:
-                    break
-                base = base.parent
+        for task, base in found.matches:
+            matched = plan_matched = True
+            if task.get("judge_budget") is not None:  # M:J-BUDGET-READ
+                declared_budget = max(declared_budget or 0, task["judge_budget"])
+            for entry in task["tests"]:
+                candidate = Path(os.path.realpath(base / entry))
+                if not _inside(str(candidate), str(real_root)):
+                    notes.append(f"candidate outside root dropped: {entry}")
+                elif candidate not in seen_candidates:
+                    candidates.append((candidate, base))
+                    seen_candidates.add(candidate)
         notes.append(f"{plan}: {'matched' if plan_matched else 'matched none'}")
     present = [c for c in candidates if _is_present(c[0])]  # M:R4
     missing = tuple(c[0] for c in candidates if not _is_present(c[0]))
@@ -445,6 +489,8 @@ class ImportTarget(NamedTuple):
 
 def target_module_names(root: Path, target: Path) -> frozenset:
     """Every dotted suffix of the target's path that could be its import name."""
+    if Path(fold_py_suffix(target.name)).suffix != ".py":  # M:K-IMPORT-NONPY
+        return frozenset()
     try:
         parts = list(target.relative_to(root).with_suffix("").parts)
     except ValueError:
@@ -633,6 +679,9 @@ def main(argv: Optional[list] = None) -> int:
     implementer.add_argument("--root", required=True)
     implementer.add_argument("--feature", required=True)
     implementer.add_argument("--record", action="store_true")
+    listing_command = commands.add_parser("listing")
+    listing_command.add_argument("--root", required=True)
+    listing_command.add_argument("--name", action="append", required=True)
     args = parser.parse_args(argv)
     if not args.root or not Path(args.root).is_dir():
         parser.error("--root must name a directory")
@@ -677,6 +726,24 @@ def main(argv: Optional[list] = None) -> int:
                                 except (h_mad_state_write.StateWriteError, OSError):
                                     line += " record=failed"
         print("TDD-IMPLEMENTER: " + line)
+        return 0
+    if args.command == "listing":
+        try:
+            names = [root / name for name in args.name]
+            chain = read_chain(root, names[0])
+            line = "not-listed"  # M:LV-NONE
+            if chain.value == "unreadable":  # M:LV-CHAIN-UNREADABLE
+                line = f"unreadable file={_enc(str(chain.error_file))} error={chain.error}"
+            elif chain.value == "active":
+                result = listing(root, names, chain.records)
+                if result.value == "listed":
+                    line = f"listed target={_enc(str(result.selected))}"
+                elif result.value == "unreadable":
+                    line = f"unreadable file={_enc(str(result.error_file))} error={result.error}"
+        except Exception as exc:
+            print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2  # M:LV-RC
+        print("TDD-LISTING: " + line)
         return 0
     target = root / args.target if args.target else None
     try:
