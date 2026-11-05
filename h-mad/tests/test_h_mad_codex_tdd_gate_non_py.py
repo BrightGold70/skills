@@ -73,8 +73,9 @@ def test_codex_hard_link_denies(root):
 
 def test_codex_unreadable_plan_is_judge_error(root):
     write_plan(root, "f", "").write_bytes(b"\xff\xfe")
-    _expect(root, "scripts/other.sh", "deny", "judge-error",
-            property="unreadable active plan makes an unlisted code-like target undecidable")
+    result = _expect(root, "scripts/other.sh", "deny", "judge-error",
+                     property="unreadable active plan makes an unlisted code-like target undecidable")
+    assert "listing is undecidable" in result.reason
 
 
 def test_codex_unreadable_state_is_judge_error(root):

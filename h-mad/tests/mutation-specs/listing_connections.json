@@ -1,0 +1,36 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_codex_tdd_gate_non_py.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "CX-REMOVE",
+      "_mechanism": "Cut only the caller's listing connection; the matcher remains intact.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "listed = judge.listing(root, names, chain.records)  # M:CX-LIST",
+      "replace": "listed = judge.Listing(\"not-listed\", None, None, \"\")  # M:CX-LIST",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies"
+    },
+    {
+      "name": "CX-FORCE",
+      "_mechanism": "Force a listed result at the caller with the matcher intact.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "listed = judge.listing(root, names, chain.records)  # M:CX-LIST",
+      "replace": "listed = judge.Listing(\"listed\", min(names, key=lambda p: p.name), None, \"\")  # M:CX-LIST",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_unlisted_code_like_allows"
+    }
+  ]
+}

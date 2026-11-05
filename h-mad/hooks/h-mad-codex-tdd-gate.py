@@ -40,6 +40,9 @@ try:
         _contained_venv_executable,
         _cwd_escapes_root,
         _load_judge,
+        is_doc_data,
+        _is_exempt_location,
+        fold_py_suffix,
         _option_value,
         _path_within,
         _payload_cwd_base,
@@ -275,6 +278,31 @@ def main() -> int:
         return _deny(f"H-MAD Phase 5 gate raised {type(exc).__name__}: {exc}; refusing fail-closed. kind=judge-error")
 
 
+def _judge_listed(root: Path, resolved: Identity) -> str:
+    """Return "" to skip or allow, else a deny reason."""
+    if any(Path(fold_py_suffix(n)).suffix == ".py" for n in resolved.names):  # M:CX-NOT-CODE-LIKE
+        return ""
+    names = [Path(resolved.target).parent / n for n in resolved.names]
+    if _is_exempt_location(names[0].relative_to(root).as_posix()):  # M:CX-LIST-EXEMPT
+        return ""
+    judge = _load_judge()
+    chain = judge.read_chain(root, names[0])
+    if chain.value == "unreadable":  # M:CX-CHAIN-UNREADABLE
+        return f"H-MAD state governing this write is unreadable ({chain.error_file}: {chain.error}); refusing fail-closed. kind=judge-error"
+    if chain.value != "active":  # M:CX-ACTIVE
+        return ""
+    listed = judge.listing(root, names, chain.records)  # M:CX-LIST
+    if listed.value == "unreadable":  # M:CX-LIST-UNREADABLE
+        return f"H-MAD Phase 5 listing is undecidable ({listed.error_file}: {listed.error}); refusing fail-closed. kind=judge-error"
+    if listed.value == "not-listed":  # M:CX-NOT-LISTED
+        return ""
+    verdict = judge.judge(root, listed.selected, chain.records)
+    if verdict.decision != "ALLOW":  # M:CX-VERDICT
+        relative = listed.selected.relative_to(root).as_posix()
+        return f"H-MAD Phase 5 requires a failing test before {relative}: kind={verdict.kind}; {verdict.reason}"
+    return ""
+
+
 def _main_guarded() -> int:
     if _POLICY_IMPORT_ERROR is not None:
         raise _POLICY_IMPORT_ERROR
@@ -328,6 +356,8 @@ def _main_guarded() -> int:
             continue
         if phase5_status in {"active", "unknown"} and _is_shell_allowance(root, resolved):  # M:SA-GUARD
             return _deny(f"H-MAD Phase 5 forbids codex writing {SHELL_ALLOW_FILE}; only the operator declares allowances.")
+        if is_doc_data(resolved.names):  # M:CX-DOCDATA
+            continue
         production = []
         for name in resolved.names:
             absolute = Path(resolved.target).parent / name
@@ -335,6 +365,9 @@ def _main_guarded() -> int:
             if _is_production_python(relative):
                 production.append((name, absolute, relative))
         if not production:
+            reason = _judge_listed(root, resolved)
+            if reason:  # M:CX-DENY
+                return _deny(reason)
             continue
         _, absolute, relative = min(production)
         judge = _load_judge()
