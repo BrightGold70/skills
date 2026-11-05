@@ -16,6 +16,7 @@ from typing import Any, NamedTuple
 
 
 PY_SUFFIXES = (".py", ".pY", ".Py", ".PY")
+DOC_DATA_SUFFIXES = ()
 
 
 class Identity(NamedTuple):
@@ -26,6 +27,22 @@ class Identity(NamedTuple):
     unresolvable: bool
     arm: int
     component: str
+
+
+def has_doc_data_suffix(name: str) -> bool:
+    return False
+
+
+def is_doc_data(names: Sequence[str]) -> bool:
+    return False
+
+
+def _is_exempt_location(relative: str) -> bool:
+    return False
+
+
+def emit_doc_data(identity: Identity) -> None:
+    pass
 
 
 def _path_from_fd(fd: int, fallback: str) -> str:
