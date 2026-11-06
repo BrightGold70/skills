@@ -99,3 +99,23 @@ def test_a_report_named_link_to_python_under_tmp_is_refused(tmp_path, under_tmp)
     os.symlink(under_tmp / "pkg" / "prod.py", under_tmp / "notes.md")
     verdict, reason, _ = _run(root, _add(str(under_tmp / "notes.md")))
     assert verdict == "deny", reason
+
+
+def test_a_tmp_report_hard_link_in_another_directory_is_allowed(tmp_path, under_tmp):
+    root = _root(tmp_path)
+    (under_tmp / "elsewhere").mkdir()
+    source = under_tmp / "elsewhere" / "x.py"
+    source.write_text("# production\n")
+    target = under_tmp / "note.txt"
+    os.link(source, target)
+    verdict, reason, _ = _run(root, _add(str(target)))
+    assert verdict == "allow", reason
+
+
+def test_a_dangling_tmp_report_is_refused(tmp_path, under_tmp):
+    root = _root(tmp_path)
+    target = under_tmp / "note.txt"
+    target.symlink_to(under_tmp / "missing.txt")
+    verdict, reason, _ = _run(root, _add(str(target)))
+    assert verdict == "deny", reason
+    assert "kind=judge-error" in reason

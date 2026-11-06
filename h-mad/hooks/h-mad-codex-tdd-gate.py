@@ -196,20 +196,28 @@ def _relative_target(root: Path, raw: str, cwd: Any = None) -> Identity | None:
     return resolved
 
 
-def _tmp_report_target(raw: str, cwd: Any) -> bool:
+def _tmp_report_target(root: Path, raw: str, cwd: Any) -> bool:
     """An out-of-root write the gate admits: under /tmp and not Python.
 
     `/tmp` is where the orchestrator stages `<REPORT_FILE_PATH>` and the root this
     gate already trusts for `h_mad_assemble_tdd.py --report-file`. A `.py` in any
     case spelling stays refused, so codex cannot write production code into
     another checkout that happens to live under /tmp.
+    A hard link in a different directory is invisible, because canonicalise
+    scans only the target's parent directory.
     """
     path = Path(raw).expanduser()
     if not path.is_absolute():
         base = Path(cwd).expanduser() if isinstance(cwd, str) and cwd else Path.cwd()
         path = base / path
     resolved = path.resolve()
-    if _load_identity().fold_py_suffix(resolved.name).endswith(".py"):  # M:CX-TMP-PY-NAME
+    try:
+        canonical = _load_identity().canonicalise(str(root), str(path))
+    except Exception:
+        return False
+    if canonical.unresolvable:
+        return False  # M:CX-TMP-PY-UNRESOLVABLE
+    if any(_load_identity().fold_py_suffix(name).endswith(".py") for name in (resolved.name, *canonical.names)):  # M:CX-TMP-PY-NAME
         return False
     return _path_within(str(resolved), Path("/tmp"))  # M:G-TMP
 
@@ -345,7 +353,7 @@ def _main_guarded() -> int:
     for raw in targets:  # M:G5
         resolved = _relative_target(root, raw, payload.get("cwd"))
         if resolved is None:
-            if _tmp_report_target(raw, payload.get("cwd")):
+            if _tmp_report_target(root, raw, payload.get("cwd")):
                 continue
             if phase5_status in {"active", "unknown"}:
                 return _deny("H-MAD Phase 5 write target is outside or unreadable; refusing fail-closed.")

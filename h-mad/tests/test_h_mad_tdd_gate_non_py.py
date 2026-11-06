@@ -51,6 +51,32 @@ def test_claude_tmp_dot_py_denies(root):
         shutil.rmtree(directory)
 
 
+@pytest.mark.parametrize("source,alias", [("x.py", "note.txt"), (".py", "note.txt"),
+                                         ("x.py", "note.md"), ("X.PY", "note.txt")])
+def test_claude_tmp_hard_link_to_python_denies(root, source, alias):
+    directory = Path(tempfile.mkdtemp(dir="/tmp"))
+    try:
+        source_path = write_file(directory, source)
+        target = directory / alias
+        os.link(source_path, target)
+        _expect(root, str(target), "deny", "no-test-resolved",
+                property="a temporary report hard-linked to Python must deny")
+    finally:
+        shutil.rmtree(directory)
+
+
+def test_claude_tmp_hard_link_without_python_allows(root):
+    directory = Path(tempfile.mkdtemp(dir="/tmp"))
+    try:
+        source = write_file(directory, "other.txt")
+        target = directory / "note.txt"
+        os.link(source, target)
+        _expect(root, str(target), "allow",
+                property="a temporary report with only non-Python hard links may write")
+    finally:
+        shutil.rmtree(directory)
+
+
 @pytest.mark.parametrize("relative", ["scripts/.py", ".py", ".PY"])
 def test_claude_dot_py_unlisted_denies(root, relative):
     write_file(root, relative)

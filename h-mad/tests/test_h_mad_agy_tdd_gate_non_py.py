@@ -60,6 +60,23 @@ def test_agy_tmp_dot_py_note_txt_allows(root, under_tmp):
     _expect(root, str(target), "allow")
 
 
+@pytest.mark.parametrize("source,alias", [("x.py", "note.txt"), (".py", "note.txt"),
+                                         ("x.py", "note.md"), ("X.PY", "note.txt")])
+def test_agy_tmp_hard_link_to_python_denies(root, under_tmp, source, alias):
+    source_path = write_file(under_tmp, source)
+    target = under_tmp / alias
+    os.link(source_path, target)
+    _expect(root, str(target), "deny", "target-outside-root",
+            property="a temporary report hard-linked to Python must deny")
+
+
+def test_agy_tmp_hard_link_without_python_allows(root, under_tmp):
+    source = write_file(under_tmp, "other.txt")
+    target = under_tmp / "note.txt"
+    os.link(source, target)
+    _expect(root, str(target), "allow")
+
+
 @pytest.mark.parametrize("relative", ["scripts/.py", ".py", ".PY"])
 def test_agy_dot_py_unlisted_denies(root, relative):
     write_file(root, relative)
