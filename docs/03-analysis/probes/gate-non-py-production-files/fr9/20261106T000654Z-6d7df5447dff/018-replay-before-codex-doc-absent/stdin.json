@@ -1,0 +1,7 @@
+{
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Update File: h-mad/SKILL.md\n@@\n-x\n+y\n*** End Patch\n"
+  },
+  "cwd": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-f3ucidyt/root"
+}
