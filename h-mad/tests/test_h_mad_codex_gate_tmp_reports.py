@@ -119,3 +119,35 @@ def test_a_dangling_tmp_report_is_refused(tmp_path, under_tmp):
     verdict, reason, _ = _run(root, _add(str(target)))
     assert verdict == "deny", reason
     assert "kind=judge-error" in reason
+
+
+def test_a_relative_dangling_tmp_report_from_outside_root_is_refused(tmp_path, under_tmp):
+    root = _root(tmp_path)
+    cwd = under_tmp / "d"
+    cwd.mkdir()
+    (under_tmp / "e").mkdir()
+    (under_tmp / "e" / "note.txt").symlink_to(under_tmp / "missing.txt")
+    # Root-relative resolution sees an absent, out-of-root target; the /tmp
+    # admission resolves against cwd and encounters the dangling link instead.
+    payload = _add("../e/note.txt")
+    payload["cwd"] = str(cwd)
+    verdict, reason, _ = _run(root, payload)
+    assert verdict == "deny", reason
+    assert reason == "H-MAD Phase 5 write target is outside or unreadable; refusing fail-closed."
+
+
+def test_a_relative_tmp_report_symlink_loop_fails_closed(tmp_path, under_tmp):
+    root = _root(tmp_path)
+    cwd = under_tmp / "d"
+    cwd.mkdir()
+    (under_tmp / "e").mkdir()
+    target = under_tmp / "e" / "note.txt"
+    target.symlink_to(target)
+    # As above, only the /tmp admission encounters the link. Path.resolve()
+    # raises there, and main() must turn that exception into a valid denial.
+    payload = _add("../e/note.txt")
+    payload["cwd"] = str(cwd)
+    verdict, reason, _ = _run(root, payload)
+    assert verdict == "deny", reason
+    assert "gate raised RuntimeError: Symlink loop" in reason, reason
+    assert "refusing fail-closed. kind=judge-error" in reason, reason

@@ -211,10 +211,7 @@ def _tmp_report_target(root: Path, raw: str, cwd: Any) -> bool:
         base = Path(cwd).expanduser() if isinstance(cwd, str) and cwd else Path.cwd()
         path = base / path
     resolved = path.resolve()
-    try:
-        canonical = _load_identity().canonicalise(str(root), str(path))
-    except Exception:
-        return False
+    canonical = _load_identity().canonicalise(str(root), str(path))
     if canonical.unresolvable:
         return False  # M:CX-TMP-PY-UNRESOLVABLE
     if any(_load_identity().fold_py_suffix(name).endswith(".py") for name in (resolved.name, *canonical.names)):  # M:CX-TMP-PY-NAME
