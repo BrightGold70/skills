@@ -1,0 +1,88 @@
+{
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_fr9_drive_refusals.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "D-NO-BEFORE-SIDE",
+      "_mechanism": "Admit a fixture before side that has no defined comparison table.",
+      "file": "../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py",
+      "symbol": "main",
+      "find": "        if args.scenario == \"fixture\" and args.side == \"before\":  # M:D-NO-BEFORE-SIDE",
+      "replace": "        if False:  # M:D-NO-BEFORE-SIDE",
+      "test": "tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[no-before-side]"
+    },
+    {
+      "name": "D-DIRTY-HOOKS",
+      "_mechanism": "Permit uncommitted changes under h-mad in an after reading.",
+      "file": "../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py",
+      "symbol": "_check_hook_identity",
+      "find": "    if _git(top, \"status\", \"--porcelain\", \"--\", \"h-mad\").stdout.strip():  # M:D-DIRTY-HOOKS",
+      "replace": "    if False:  # M:D-DIRTY-HOOKS",
+      "test": "tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[dirty-hooks]"
+    },
+    {
+      "name": "D-HOOK-OUTSIDE-TREE",
+      "_mechanism": "Permit the executed hook's realpath to escape the checkout.",
+      "file": "../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py",
+      "symbol": "_check_hook_identity",
+      "find": "    if not realpath.is_relative_to(top):  # M:D-HOOK-OUTSIDE-TREE",
+      "replace": "    if False:  # M:D-HOOK-OUTSIDE-TREE",
+      "test": "tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[hook-outside-tree]"
+    },
+    {
+      "name": "D-HOOK-BLOB",
+      "_mechanism": "Permit a hook whose bytes differ from its committed blob despite a clean status.",
+      "file": "../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py",
+      "symbol": "_check_hook_identity",
+      "find": "    if committed.returncode or hashed.returncode or _value(hashed) != _value(committed):  # M:D-HOOK-BLOB",
+      "replace": "    if False:  # M:D-HOOK-BLOB",
+      "test": "tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[hook-blob-mismatch]"
+    },
+    {
+      "name": "D-AUTHORSHIP",
+      "_mechanism": "Accept a Claude reading without the required implementer line.",
+      "file": "../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py",
+      "symbol": "_check_authorship",
+      "find": "    if result.stdout.decode(\"utf-8\").splitlines() != [AUTHOR]:  # M:D-AUTHORSHIP",
+      "replace": "    if False:  # M:D-AUTHORSHIP",
+      "test": "tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[authorship-line]"
+    },
+    {
+      "name": "D-MISSING-BASE",
+      "_mechanism": "Proceed when origin/main yields no replay merge-base.",
+      "file": "../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py",
+      "symbol": "_replay_base",
+      "find": "    if result.returncode != 0 or not result.stdout.strip():  # M:D-MISSING-BASE",
+      "replace": "    if False:  # M:D-MISSING-BASE",
+      "test": "tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[missing-base]"
+    },
+    {
+      "name": "D-BASE-IS-HEAD",
+      "_mechanism": "Allow a replay comparison whose before tree is HEAD.",
+      "file": "../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py",
+      "symbol": "_replay_base",
+      "find": "    if base == _value(_git(top, \"rev-parse\", \"HEAD\")):  # M:D-BASE-IS-HEAD",
+      "replace": "    if False:  # M:D-BASE-IS-HEAD",
+      "test": "tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[base-is-head]"
+    },
+    {
+      "name": "D-PLAN-ABSENT",
+      "_mechanism": "Continue copying when the incident plan is absent at the base.",
+      "file": "../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py",
+      "symbol": "_copy_plan",
+      "find": "    if result.returncode != 0:  # M:D-PLAN-ABSENT",
+      "replace": "    if False:  # M:D-PLAN-ABSENT",
+      "test": "tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[plan-absent-at-base]"
+    },
+    {
+      "name": "D-PLAN-BLOB",
+      "_mechanism": "Accept a copied plan whose source-repository hash differs from the base blob.",
+      "file": "../docs/03-analysis/probes/gate-non-py-production-files/fr9_drive.py",
+      "symbol": "_copy_plan",
+      "find": "    if hashed != blob:  # M:D-PLAN-BLOB",
+      "replace": "    if False:  # M:D-PLAN-BLOB",
+      "test": "tests/test_h_mad_fr9_drive_refusals.py::test_fr9_driver_refuses[plan-blob-mismatch]"
+    }
+  ]
+}

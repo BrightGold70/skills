@@ -26,7 +26,7 @@ installing or changing the hook. If activation or trust cannot be established, h
 ### Trust boundary
 
 The hook is a **workflow guard, not an OS security sandbox**. It prevents accidental or direct
-production-Python writes through recognized Codex file tools and refuses unrecognized shell
+writes to production `.py` and to listed code-like files (such as a `.sh` script a Task's **Production file** line names) through recognized Codex file tools and refuses unrecognized shell
 execution during active `step5`. RED/GREEN necessarily executes pytest, so test modules and the
 exact H-MAD control-script allowlist are trusted code. A malicious test can mutate the worktree at
 import time; do not run unreviewed or adversarial tests under this contract. Use an OS/container

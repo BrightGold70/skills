@@ -114,7 +114,8 @@ def _tree_b(tmp_path: Path, *, judge_line: str = "TDD-JUDGE: DENY kind=judge-err
         " for key, value in (('root', root), ('target', target), ('prefix', prefix)):\n"
         "  print(key + ' ' + value)\n"
         " print('unresolvable no')\n print('arm 0')\n print('component ')\n"
-        " print('names 1')\n print('name ' + name)\n",
+        " print('names 1')\n print('name ' + name)\n"
+        "def emit_doc_data(record):\n print('docdata no')\n",
         encoding="utf-8",
     )
     return hook, tree
@@ -823,7 +824,8 @@ def test_claude_canon_protocol_error_is_judge_error(tmp_path, variant):
     record = "\n".join(fields)
     (tree / "h-mad/scripts/h_mad_target_identity.py").write_text(
         "def canonicalise(*args, **kwargs):\n return None\n"
-        f"def emit_canon(record):\n print({record!r})\n", encoding="utf-8")
+        f"def emit_canon(record):\n print({record!r})\n"
+        "def emit_doc_data(record):\n print('docdata no')\n", encoding="utf-8")
     _assert(_gate(root, arg=str(target), bin_dir=b, hook=hook), "deny", "judge-error", hook)
 
 

@@ -89,6 +89,7 @@ def main() -> int:
             SHELL_ALLOW_FILE,
             MALFORMED_WORKDIR,
             _any_phase5_status,
+            _is_exempt_location,
             _is_production_python,
             _is_shell_allowance,
             _operator_allowed,
@@ -157,7 +158,7 @@ def main() -> int:
                     Path(resolved.target).relative_to(root)
                 except ValueError:
                     outside_allowed = (
-                        not any(Path(identity.fold_py_suffix(name)).suffix == ".py" for name in resolved.names)
+                        not any(identity.fold_py_suffix(name).endswith(".py") for name in resolved.names)  # M:AG-TMP-PY-NAME
                         and (_path_within(resolved.target, Path("/tmp"))
                              or (artifact is not None and _path_within(resolved.target, artifact)))
                     )
@@ -170,6 +171,8 @@ def main() -> int:
                     decision = {"decision": "deny", "reason": "Writing the shell allowance file is forbidden. kind=allowance-file-write"}
                     return 0
                 # T6–T7: the chain is authoritative even after an inactive scan.
+                if identity.is_doc_data(resolved.names):  # M:AG-DOCDATA
+                    continue
                 production = []
                 for name in resolved.names:
                     absolute = Path(resolved.target).parent / name
@@ -177,6 +180,31 @@ def main() -> int:
                     if _is_production_python(relative):
                         production.append((name, absolute, relative))
                 if not production:
+                    if any(Path(identity.fold_py_suffix(n)).suffix == ".py" for n in resolved.names):  # M:AG-NOT-CODE-LIKE
+                        continue
+                    names = [Path(resolved.target).parent / n for n in resolved.names]
+                    if _is_exempt_location(names[0].relative_to(root).as_posix()):  # M:AG-LIST-EXEMPT
+                        continue
+                    chain = judge.read_chain(root, names[0])
+                    if chain.value == "unreadable":  # M:AG-CHAIN-UNREADABLE
+                        detail = f"{chain.error_file}: {chain.error}".replace("kind=", "kind:")
+                        decision = {"decision": "deny", "reason": f"State governing the write is unreadable ({detail}). kind=judge-error"}
+                        return 0
+                    if chain.value != "active":  # M:AG-ACTIVE
+                        continue
+                    listed = judge.listing(root, names, chain.records)  # M:AG-LIST
+                    if listed.value == "unreadable":  # M:AG-LIST-UNREADABLE
+                        detail = f"{listed.error_file}: {listed.error}".replace("kind=", "kind:")
+                        decision = {"decision": "deny", "reason": f"Listing is undecidable ({detail}). kind=judge-error"}
+                        return 0
+                    if listed.value == "not-listed":  # M:AG-NOT-LISTED
+                        continue
+                    verdict = judge.judge(root, listed.selected, chain.records)
+                    if verdict.decision != "ALLOW":  # M:AG-VERDICT
+                        relative = listed.selected.relative_to(root).as_posix()
+                        detail = f"{relative}: {verdict.reason}".replace("kind=", "kind:")
+                        decision = {"decision": "deny", "reason": f"Phase 5 requires a failing test before {detail} kind={verdict.kind}"}
+                        return 0
                     continue
                 _, absolute, relative = min(production)
                 chain = judge.read_chain(root, absolute)

@@ -83,7 +83,7 @@
       "_mechanism": "Remove the all-name Python-suffix refusal from T4, admitting a Python write beneath artifactDirectoryPath.",
       "file": "hooks/h-mad-agy-tdd-gate.py",
       "symbol": "main",
-      "find": "                        not any(Path(identity.fold_py_suffix(name)).suffix == \".py\" for name in resolved.names)",
+      "find": "                        not any(identity.fold_py_suffix(name).endswith(\".py\") for name in resolved.names)  # M:AG-TMP-PY-NAME",
       "replace": "                        True",
       "test": "tests/test_h_mad_agy_tdd_gate.py::test_artifact_directory_path"
     },
@@ -92,8 +92,8 @@
       "_mechanism": "Move T5 before T3 so the allowance helper raises on an outside target before T4 can admit a /tmp non-Python write.",
       "file": "hooks/h-mad-agy-tdd-gate.py",
       "symbol": "main",
-      "find": "                # T3–T4: containment must precede the allowance-file helper.\n                try:\n                    Path(resolved.target).relative_to(root)\n                except ValueError:\n                    outside_allowed = (\n                        not any(Path(identity.fold_py_suffix(name)).suffix == \".py\" for name in resolved.names)\n                        and (_path_within(resolved.target, Path(\"/tmp\"))\n                             or (artifact is not None and _path_within(resolved.target, artifact)))\n                    )\n                    if not outside_allowed and phase5_status in {\"active\", \"unknown\"}:\n                        decision = {\"decision\": \"deny\", \"reason\": \"Write target is outside the root. kind=target-outside-root\"}\n                        return 0\n                    continue\n                # T5: only the operator may declare shell allowances.\n                if phase5_status in {\"active\", \"unknown\"} and _is_shell_allowance(root, resolved):\n                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=allowance-file-write\"}\n                    return 0\n",
-      "replace": "                # T5: only the operator may declare shell allowances.\n                if phase5_status in {\"active\", \"unknown\"} and _is_shell_allowance(root, resolved):\n                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=allowance-file-write\"}\n                    return 0\n                # T3–T4: containment must precede the allowance-file helper.\n                try:\n                    Path(resolved.target).relative_to(root)\n                except ValueError:\n                    outside_allowed = (\n                        not any(Path(identity.fold_py_suffix(name)).suffix == \".py\" for name in resolved.names)\n                        and (_path_within(resolved.target, Path(\"/tmp\"))\n                             or (artifact is not None and _path_within(resolved.target, artifact)))\n                    )\n                    if not outside_allowed and phase5_status in {\"active\", \"unknown\"}:\n                        decision = {\"decision\": \"deny\", \"reason\": \"Write target is outside the root. kind=target-outside-root\"}\n                        return 0\n                    continue\n",
+      "find": "                # T3–T4: containment must precede the allowance-file helper.\n                try:\n                    Path(resolved.target).relative_to(root)\n                except ValueError:\n                    outside_allowed = (\n                        not any(identity.fold_py_suffix(name).endswith(\".py\") for name in resolved.names)  # M:AG-TMP-PY-NAME\n                        and (_path_within(resolved.target, Path(\"/tmp\"))\n                             or (artifact is not None and _path_within(resolved.target, artifact)))\n                    )\n                    if not outside_allowed and phase5_status in {\"active\", \"unknown\"}:\n                        decision = {\"decision\": \"deny\", \"reason\": \"Write target is outside the root. kind=target-outside-root\"}\n                        return 0\n                    continue\n                # T5: only the operator may declare shell allowances.\n                if phase5_status in {\"active\", \"unknown\"} and _is_shell_allowance(root, resolved):\n                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=allowance-file-write\"}\n                    return 0\n",
+      "replace": "                # T5: only the operator may declare shell allowances.\n                if phase5_status in {\"active\", \"unknown\"} and _is_shell_allowance(root, resolved):\n                    decision = {\"decision\": \"deny\", \"reason\": \"Writing the shell allowance file is forbidden. kind=allowance-file-write\"}\n                    return 0\n                # T3–T4: containment must precede the allowance-file helper.\n                try:\n                    Path(resolved.target).relative_to(root)\n                except ValueError:\n                    outside_allowed = (\n                        not any(identity.fold_py_suffix(name).endswith(\".py\") for name in resolved.names)  # M:AG-TMP-PY-NAME\n                        and (_path_within(resolved.target, Path(\"/tmp\"))\n                             or (artifact is not None and _path_within(resolved.target, artifact)))\n                    )\n                    if not outside_allowed and phase5_status in {\"active\", \"unknown\"}:\n                        decision = {\"decision\": \"deny\", \"reason\": \"Write target is outside the root. kind=target-outside-root\"}\n                        return 0\n                    continue\n",
       "test": "tests/test_h_mad_agy_tdd_gate.py::test_tmp_non_py_write_allowed_under_active"
     },
     {
@@ -119,8 +119,8 @@
       "_mechanism": "Remove T7's unreadable refusal so the following non-active-chain branch allows the write.",
       "file": "hooks/h-mad-agy-tdd-gate.py",
       "symbol": "main",
-      "find": "                if chain.value == \"unreadable\":",
-      "replace": "                if False and chain.value == \"unreadable\":",
+      "find": "\n                if chain.value == \"unreadable\":",
+      "replace": "\n                if False and chain.value == \"unreadable\":",
       "test": "tests/test_h_mad_agy_tdd_gate.py::test_unsearchable_chain_denies_although_the_scan_is_inactive"
     },
     {
@@ -210,6 +210,15 @@
       "find": "\"edit_file\": (\"Path\",)",
       "replace": "\"edit_file\": ()",
       "test": "tests/test_h_mad_agy_tdd_gate.py::test_captured_payload_is_judged_by_its_recorded_key[edit_file]"
+    },
+    {
+      "name": "AG-TMP-PY-NAME",
+      "_mechanism": "Restoring Path.suffix admits a dotfile named .py under /tmp while the x.py control remains denied.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "                        not any(identity.fold_py_suffix(name).endswith(\".py\") for name in resolved.names)  # M:AG-TMP-PY-NAME",
+      "replace": "                        not any(Path(identity.fold_py_suffix(name)).suffix == \".py\" for name in resolved.names)  # M:AG-TMP-PY-NAME",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_tmp_dot_py_denies_like_x_py[.py]"
     }
   ]
 }

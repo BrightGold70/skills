@@ -1,0 +1,324 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_doc_data.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "DD-CASE",
+      "_mechanism": "Remove ASCII case folding so uppercase doc-data suffixes are rejected.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "has_doc_data_suffix",
+      "find": "name[-len(s):].translate(_ASCII_LOWER) == s",
+      "replace": "name[-len(s):] == s",
+      "test": "tests/test_h_mad_doc_data.py::test_has_doc_data_suffix_accepts[upper]"
+    },
+    {
+      "name": "DD-SUFFIX",
+      "_mechanism": "Use Path.suffix so a dotfile named exactly .md loses its qualifying suffix.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "has_doc_data_suffix",
+      "find": "name[-len(s):].translate(_ASCII_LOWER) == s",
+      "replace": "Path(name).suffix.translate(_ASCII_LOWER) == s",
+      "test": "tests/test_h_mad_doc_data.py::test_has_doc_data_suffix_accepts[dotfile]"
+    },
+    {
+      "name": "DD-ALL",
+      "_mechanism": "Accept a mixed collection when any name qualifies instead of requiring every name.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "is_doc_data",
+      "find": "return all(has_doc_data_suffix(n) for n in names)  # M:G-DOCDATA-ALL",
+      "replace": "return any(has_doc_data_suffix(n) for n in names)  # M:G-DOCDATA-ALL",
+      "test": "tests/test_h_mad_doc_data.py::test_is_doc_data_requires_every_name"
+    },
+    {
+      "name": "DD-EMIT",
+      "_mechanism": "Emit a negative record regardless of the identity's doc-data names.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "emit_doc_data",
+      "find": "print(\"docdata yes\" if is_doc_data(identity.names) else \"docdata no\")  # M:G-DOCDATA-EMIT",
+      "replace": "print(\"docdata no\")  # M:G-DOCDATA-EMIT",
+      "test": "tests/test_h_mad_doc_data.py::test_emit_doc_data_prints_exactly_one_line[yes]"
+    },
+    {
+      "name": "DD-EXEMPT-DOCS",
+      "_mechanism": "Remove the exemption for the project's first-component docs directory.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_is_exempt_location",
+      "find": "if parents[:1] == (\"docs\",):  # M:G-EXEMPT-DOCS",
+      "replace": "if False:  # M:G-EXEMPT-DOCS",
+      "test": "tests/test_h_mad_doc_data.py::test_is_exempt_location_matches_is_production_python[docs]"
+    },
+    {
+      "name": "DD-EXEMPT-DIRS",
+      "_mechanism": "Remove the tests and fixtures parent-directory exemptions.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_is_exempt_location",
+      "find": "return \"tests\" in parents or \"fixtures\" in parents  # M:G-EXEMPT-DIRS",
+      "replace": "return False  # M:G-EXEMPT-DIRS",
+      "test": "tests/test_h_mad_doc_data.py::test_is_exempt_location_matches_is_production_python[tests]"
+    },
+    {
+      "name": "DD-EXEMPT-PARENT",
+      "_mechanism": "Include the basename in directory checks so a file named tests becomes exempt.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_is_exempt_location",
+      "find": "parents = Path(relative).parts[:-1]  # M:G-EXEMPT-PARENT",
+      "replace": "parents = Path(relative).parts  # M:G-EXEMPT-PARENT",
+      "test": "tests/test_h_mad_doc_data.py::test_is_exempt_location_keeps_a_file_named_tests_non_exempt"
+    },
+    {
+      "name": "DD-CX-MD",
+      "_mechanism": "Removing .md must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_doc_data_member_allows[.md]"
+    },
+    {
+      "name": "DD-CX-YAML",
+      "_mechanism": "Removing .yaml must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_doc_data_member_allows[.yaml]"
+    },
+    {
+      "name": "DD-CX-YML",
+      "_mechanism": "Removing .yml must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_doc_data_member_allows[.yml]"
+    },
+    {
+      "name": "DD-CX-JSON",
+      "_mechanism": "Removing .json must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_doc_data_member_allows[.json]"
+    },
+    {
+      "name": "DD-CX-TOML",
+      "_mechanism": "Removing .toml must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_doc_data_member_allows[.toml]"
+    },
+    {
+      "name": "DD-CX-TXT",
+      "_mechanism": "Removing .txt must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_doc_data_member_allows[.txt]"
+    },
+    {
+      "name": "DD-CX-RST",
+      "_mechanism": "Removing .rst must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_doc_data_member_allows[.rst]"
+    },
+    {
+      "name": "DD-CX-CFG",
+      "_mechanism": "Removing .cfg must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".ini\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_doc_data_member_allows[.cfg]"
+    },
+    {
+      "name": "DD-CX-INI",
+      "_mechanism": "Removing .ini must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_doc_data_member_allows[.ini]"
+    },
+    {
+      "name": "DD-AG-MD",
+      "_mechanism": "Removing .md must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_doc_data_member_allows[.md]"
+    },
+    {
+      "name": "DD-AG-YAML",
+      "_mechanism": "Removing .yaml must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_doc_data_member_allows[.yaml]"
+    },
+    {
+      "name": "DD-AG-YML",
+      "_mechanism": "Removing .yml must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_doc_data_member_allows[.yml]"
+    },
+    {
+      "name": "DD-AG-JSON",
+      "_mechanism": "Removing .json must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_doc_data_member_allows[.json]"
+    },
+    {
+      "name": "DD-AG-TOML",
+      "_mechanism": "Removing .toml must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_doc_data_member_allows[.toml]"
+    },
+    {
+      "name": "DD-AG-TXT",
+      "_mechanism": "Removing .txt must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_doc_data_member_allows[.txt]"
+    },
+    {
+      "name": "DD-AG-RST",
+      "_mechanism": "Removing .rst must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_doc_data_member_allows[.rst]"
+    },
+    {
+      "name": "DD-AG-CFG",
+      "_mechanism": "Removing .cfg must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".ini\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_doc_data_member_allows[.cfg]"
+    },
+    {
+      "name": "DD-AG-INI",
+      "_mechanism": "Removing .ini must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_doc_data_member_allows[.ini]"
+    },
+    {
+      "name": "DD-CL-MD",
+      "_mechanism": "Removing .md must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_doc_data_member_allows[.md]"
+    },
+    {
+      "name": "DD-CL-YAML",
+      "_mechanism": "Removing .yaml must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_doc_data_member_allows[.yaml]"
+    },
+    {
+      "name": "DD-CL-YML",
+      "_mechanism": "Removing .yml must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_doc_data_member_allows[.yml]"
+    },
+    {
+      "name": "DD-CL-JSON",
+      "_mechanism": "Removing .json must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_doc_data_member_allows[.json]"
+    },
+    {
+      "name": "DD-CL-TOML",
+      "_mechanism": "Removing .toml must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_doc_data_member_allows[.toml]"
+    },
+    {
+      "name": "DD-CL-TXT",
+      "_mechanism": "Removing .txt must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".rst\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_doc_data_member_allows[.txt]"
+    },
+    {
+      "name": "DD-CL-RST",
+      "_mechanism": "Removing .rst must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".cfg\", \".ini\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_doc_data_member_allows[.rst]"
+    },
+    {
+      "name": "DD-CL-CFG",
+      "_mechanism": "Removing .cfg must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".ini\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_doc_data_member_allows[.cfg]"
+    },
+    {
+      "name": "DD-CL-INI",
+      "_mechanism": "Removing .ini must make its listed doc/data node deny.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "<module>",
+      "find": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\", \".ini\")",
+      "replace": "DOC_DATA_SUFFIXES = (\".md\", \".yaml\", \".yml\", \".json\", \".toml\", \".txt\", \".rst\", \".cfg\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_doc_data_member_allows[.ini]"
+    }
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ]
+}

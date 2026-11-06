@@ -1,0 +1,22 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_judge_listing.py",
+    "-q"
+  ],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "K-IMPORT-NONPY",
+      "_mechanism": "Non-Python targets cannot repair Python collection imports; removing the guard wrongly allows red-measured.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "target_module_names",
+      "find": "if Path(fold_py_suffix(target.name)).suffix != \".py\":  # M:K-IMPORT-NONPY",
+      "replace": "if False:  # M:K-IMPORT-NONPY",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_non_py_module_not_found_scores_pytest_error"
+    }
+  ]
+}

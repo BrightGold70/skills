@@ -1,0 +1,256 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_tdd_judge_listing.py",
+    "-q"
+  ],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "L-SELECT",
+      "_mechanism": "Selecting the greatest listed basename violates the least-name contract.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "min(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "replace": "max(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_selects_the_least_listed_name"
+    },
+    {
+      "name": "L-UNREADABLE",
+      "_mechanism": "Ignoring an unreadable plan hides the error when no readable plan lists the target.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "if bad:  # M:L-UNREADABLE",
+      "replace": "if False:  # M:L-UNREADABLE",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_unreadable_when_no_plan_lists_the_target"
+    },
+    {
+      "name": "L-LISTED",
+      "_mechanism": "An unreadable sibling must not override a readable plan listing any canonical name.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "if listed:  # M:L-LISTED",
+      "replace": "if listed and not any(m.status == \"unreadable\" for _, plans in per_name for m in plans):  # M:L-LISTED",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_listed_outranks_an_unreadable_sibling"
+    },
+    {
+      "name": "L-ANY-NAME",
+      "_mechanism": "Considering only the first canonical name misses a later listed hard-link name.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "per_name = [(name, _match_plans(root, name, records)) for name in names]",
+      "replace": "per_name = [(name, _match_plans(root, name, records)) for name in names[:1]]",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_any_canonical_name_lists_the_target"
+    },
+    {
+      "name": "L-ABSENT",
+      "_mechanism": "An absent plan is not an unreadable plan and must yield not-listed.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "_match_plans",
+      "find": "result.append(PlanMatch(plan, \"absent\", \"\", ()))  # M:L-ABSENT",
+      "replace": "result.append(PlanMatch(plan, \"unreadable\", \"FileNotFoundError\", ()))  # M:L-ABSENT",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_absent_plan_is_not_listed"
+    },
+    {
+      "name": "LV-NONE",
+      "_mechanism": "A chain with no active records must print not-listed rather than an unreadable verdict.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "line = \"not-listed\"  # M:LV-NONE",
+      "replace": "line = \"unreadable file=x error=Mutant\"  # M:LV-NONE",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_chain_none_prints_not_listed"
+    },
+    {
+      "name": "LV-CHAIN-UNREADABLE",
+      "_mechanism": "The listing CLI must report the unreadable state file instead of not-listed.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "if chain.value == \"unreadable\":  # M:LV-CHAIN-UNREADABLE",
+      "replace": "if False:  # M:LV-CHAIN-UNREADABLE",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_chain_unreadable_prints_unreadable"
+    },
+    {
+      "name": "LV-UNREADABLE-ARM",
+      "_mechanism": "Dropping the unreadable arm of an active chain would print not-listed for a plan that could not be read, admitting a write the listing could not decide.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "elif result.value == \"unreadable\":",
+      "replace": "elif False:",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_active_unreadable_prints_unreadable"
+    },
+    {
+      "name": "LV-LISTED-ARM",
+      "_mechanism": "Dropping the listed arm would print not-listed for a listed target, so the gate would never judge a listed production file.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "if result.value == \"listed\":",
+      "replace": "if False:",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_listed_prints_the_encoded_target"
+    },
+    {
+      "name": "L-UNREADABLE-RECORD",
+      "_mechanism": "Recording an unreadable plan as absent would let an undecidable plan read as not-listed, admitting a write the plan may list.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "_match_plans",
+      "find": "result.append(PlanMatch(plan, \"unreadable\", type(exc).__name__, ()))",
+      "replace": "result.append(PlanMatch(plan, \"absent\", \"\", ()))",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_unreadable_when_no_plan_lists_the_target"
+    },
+    {
+      "name": "LV-RC",
+      "_mechanism": "An internal listing exception must return 2 while emitting only stderr.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "return 2  # M:LV-RC",
+      "replace": "return 0  # M:LV-RC",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_internal_exception_exits_2"
+    },
+    {
+      "name": "CX-CALLEE",
+      "_mechanism": "Disable listing in the callee while keeping the real caller connection.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "per_name = [(name, _match_plans(root, name, records)) for name in names]",
+      "replace": "return Listing(\"not-listed\", None, None, \"\")",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies"
+    },
+    {
+      "name": "CX-SELECT",
+      "_mechanism": "The caller must judge the least listed canonical basename.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "min(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "replace": "max(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_selection_s2_denies"
+    },
+    {
+      "name": "AG-CALLEE",
+      "_mechanism": "Disable listing in the callee while keeping the real caller connection.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "per_name = [(name, _match_plans(root, name, records)) for name in names]",
+      "replace": "return Listing(\"not-listed\", None, None, \"\")",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies"
+    },
+    {
+      "name": "AG-SELECT",
+      "_mechanism": "The caller must judge the least listed canonical basename.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "min(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "replace": "max(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_selection_s2_denies"
+    },
+    {
+      "name": "CL-CALLEE",
+      "_mechanism": "Disable listing in the callee while keeping the real caller connection.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "per_name = [(name, _match_plans(root, name, records)) for name in names]",
+      "replace": "return Listing(\"not-listed\", None, None, \"\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listed_absent_test_denies"
+    },
+    {
+      "name": "CL-SELECT",
+      "_mechanism": "The caller must judge the least listed canonical basename.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "min(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "replace": "max(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_selection_s2_denies"
+    },
+    {
+      "name": "LV-ACTIVE",
+      "_mechanism": "The listing verb must enter its matcher only on an active chain; otherwise a listed target reads not-listed and an unreadable plan reads allow.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "elif chain.value == \"active\":",
+      "replace": "elif False:",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_listed_prints_the_encoded_target"
+    },
+    {
+      "name": "L-ANY-PLAN",
+      "_mechanism": "A target is listed if ANY plan lists it; requiring ALL plans refuses to list a target that only one of several active plans names.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "listed = [name for name, plans in per_name if any(m.matches for m in plans)]",
+      "replace": "listed = [name for name, plans in per_name if all(m.matches for m in plans)]",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_listed_outranks_an_unreadable_sibling"
+    },
+    {
+      "name": "L-READ-RECORD",
+      "_mechanism": "A readable plan must record the matches it found; dropping them reads every listed target as not-listed.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "_match_plans",
+      "find": "result.append(PlanMatch(plan, \"read\", \"\", tuple(matches)))",
+      "replace": "result.append(PlanMatch(plan, \"read\", \"\", ()))",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_any_canonical_name_lists_the_target"
+    },
+    {
+      "name": "L-MATCH-RECORD",
+      "_mechanism": "A production-file match must be recorded; skipping the append reads a listed target as not-listed.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "_match_plans",
+      "find": "matches.append((task, base))",
+      "replace": "pass",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_any_canonical_name_lists_the_target"
+    },
+    {
+      "name": "L-NOT-LISTED",
+      "_mechanism": "The not-listed verdict itself: a target no plan lists must read not-listed, not undecidable (fail-closed direction).",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "return Listing(\"not-listed\", None, None, \"\")",
+      "replace": "return Listing(\"unreadable\", None, None, \"\")",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_not_listed_when_no_name_matches"
+    },
+    {
+      "name": "LV-NAMES",
+      "_mechanism": "Claude's verb must carry every canonical name; keeping only the first misses a listed hard-link name and wrongly admits the write.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "names = [root / name for name in args.name]",
+      "replace": "names = [root / name for name in args.name[:1]]",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_hard_link_denies"
+    },
+    {
+      "name": "LV-CHAIN-TARGET",
+      "_mechanism": "The chain is read for the target, so state nested under the target's own project governs it; a root-scoped read finds none and wrongly admits the write.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "chain = read_chain(root, names[0])",
+      "replace": "chain = read_chain(root, None)",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_nested_state_governs_a_subproject_target"
+    },
+    {
+      "name": "L-ANY-PLAN-FIRST",
+      "_mechanism": "A target is listed if ANY active plan lists it; consulting only the first plan misses a target that only a later readable plan names, and the write is allowed with its test absent.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "listed = [name for name, plans in per_name if any(m.matches for m in plans)]",
+      "replace": "listed = [name for name, plans in per_name if any(m.matches for m in plans[:1])]",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_only_in_a_later_active_plan_judges_its_test[absent]"
+    },
+    {
+      "name": "L-UNREADABLE-ANY-PLAN",
+      "_mechanism": "The listing is undecidable if ANY plan is unreadable; inspecting only the first plan hides an unreadable later plan and reads the target as not-listed.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "for m in plans if m.status == \"unreadable\"",
+      "replace": "for m in plans[:1] if m.status == \"unreadable\"",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_unreadable_when_no_plan_lists_the_target"
+    },
+    {
+      "name": "LV-RECORDS",
+      "_mechanism": "The listing verb must hand the matcher every record of the chain; passing only the first record hides a target that a later active plan lists.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "result = listing(root, names, chain.records)",
+      "replace": "result = listing(root, names, chain.records[:1])",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_only_in_a_later_active_plan_judges_its_test[absent]"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_codex_tdd_gate_non_py.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "CX-REMOVE",
+      "_mechanism": "Cut only the caller's listing connection; the matcher remains intact.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "listed = judge.listing(root, names, chain.records)  # M:CX-LIST",
+      "replace": "listed = judge.Listing(\"not-listed\", None, None, \"\")  # M:CX-LIST",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies"
+    },
+    {
+      "name": "CX-FORCE",
+      "_mechanism": "Force a listed result at the caller with the matcher intact.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "listed = judge.listing(root, names, chain.records)  # M:CX-LIST",
+      "replace": "listed = judge.Listing(\"listed\", min(names, key=lambda p: p.name), None, \"\")  # M:CX-LIST",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_unlisted_code_like_allows"
+    },
+    {
+      "name": "AG-REMOVE",
+      "_mechanism": "Cut only the caller's listing connection; the matcher remains intact.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "listed = judge.listing(root, names, chain.records)  # M:AG-LIST",
+      "replace": "listed = judge.Listing(\"not-listed\", None, None, \"\")  # M:AG-LIST",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies"
+    },
+    {
+      "name": "AG-FORCE",
+      "_mechanism": "Force a listed result at the caller with the matcher intact.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "listed = judge.listing(root, names, chain.records)  # M:AG-LIST",
+      "replace": "listed = judge.Listing(\"listed\", min(names, key=lambda p: p.name), None, \"\")  # M:AG-LIST",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_unlisted_code_like_allows"
+    },
+    {
+      "name": "CL-REMOVE",
+      "_mechanism": "Cut only the listing call; keep the caller and callee intact.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  _read_listing  # M:H-LIST",
+      "replace": "  _allow  # M:H-LIST",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listed_absent_test_denies"
+    },
+    {
+      "name": "CL-FORCE",
+      "_mechanism": "Force the canonical target to be listed without consulting the matcher.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "find": "  _read_listing  # M:H-LIST",
+      "replace": "  LISTED_TARGET=$CANON_TARGET  # M:H-LIST",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_unlisted_code_like_allows"
+    }
+  ]
+}

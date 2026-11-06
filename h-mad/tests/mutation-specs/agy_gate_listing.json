@@ -1,0 +1,117 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_agy_tdd_gate_non_py.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "AG-DOCDATA",
+      "_mechanism": "Removing the doc/data bypass judges a listed README with an absent test.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "if identity.is_doc_data(resolved.names):  # M:AG-DOCDATA",
+      "replace": "if False:  # M:AG-DOCDATA",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_doc_data_allows"
+    },
+    {
+      "name": "AG-NOT-CODE-LIKE",
+      "_mechanism": "A test-shaped Python file must not fall into the non-Python listing path.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "if any(Path(identity.fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:AG-NOT-CODE-LIKE",
+      "replace": "if False:  # M:AG-NOT-CODE-LIKE",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_test_shaped_python_is_skipped"
+    },
+    {
+      "name": "AG-LIST-EXEMPT",
+      "_mechanism": "Removing the location bypass judges an exempt listed target.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "if _is_exempt_location(names[0].relative_to(root).as_posix()):  # M:AG-LIST-EXEMPT",
+      "replace": "if False:  # M:AG-LIST-EXEMPT",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_exempt_location_allows[tests]"
+    },
+    {
+      "name": "AG-CHAIN-UNREADABLE",
+      "_mechanism": "Unreadable governing state must deny before the inactive-chain branch.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "if chain.value == \"unreadable\":  # M:AG-CHAIN-UNREADABLE",
+      "replace": "if False:  # M:AG-CHAIN-UNREADABLE",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_unreadable_state_is_judge_error"
+    },
+    {
+      "name": "AG-LIST-UNREADABLE",
+      "_mechanism": "Unreadable plans must take the listing-specific judge-error denial.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "if listed.value == \"unreadable\":  # M:AG-LIST-UNREADABLE",
+      "replace": "if False:  # M:AG-LIST-UNREADABLE",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_unreadable_plan_is_judge_error"
+    },
+    {
+      "name": "AG-VERDICT",
+      "_mechanism": "Ignoring the judge verdict admits a listed target whose test is absent.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "if verdict.decision != \"ALLOW\":  # M:AG-VERDICT",
+      "replace": "if False:  # M:AG-VERDICT",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies"
+    },
+    {
+      "name": "AG-NOT-LISTED",
+      "_mechanism": "Unlisted targets must skip the judge instead of passing it None.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "if listed.value == \"not-listed\":  # M:AG-NOT-LISTED",
+      "replace": "if False:  # M:AG-NOT-LISTED",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_unlisted_code_like_allows"
+    },
+    {
+      "name": "AG-ACTIVE",
+      "_mechanism": "Forcing the inactive branch bypasses active listed targets; False would be equivalent.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "if chain.value != \"active\":  # M:AG-ACTIVE",
+      "replace": "if True:  # M:AG-ACTIVE",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies"
+    },
+    {
+      "name": "AG-LIST-NAMES",
+      "_mechanism": "Agy must pass every canonical name to the listing; only the target's own name misses a listed hard link and wrongly admits the write.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "names = [Path(resolved.target).parent / n for n in resolved.names]",
+      "replace": "names = [Path(resolved.target)]",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_hard_link_denies"
+    },
+    {
+      "name": "AG-JUDGED",
+      "_mechanism": "Agy must judge the selected (least listed) name; judging the greatest flips selection scenarios S1 and S2 and wrongly admits S2.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "verdict = judge.judge(root, listed.selected, chain.records)",
+      "replace": "verdict = judge.judge(root, max(names, key=lambda p: p.name), chain.records)",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_selection_s2_denies"
+    },
+    {
+      "name": "AG-CHAIN-TARGET",
+      "_mechanism": "The chain is read for the target, so state nested under the target's own project governs it; a root-scoped read finds none and wrongly admits the write.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "chain = judge.read_chain(root, names[0])",
+      "replace": "chain = judge.read_chain(root, None)",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_nested_state_governs_a_subproject_target"
+    }
+  ]
+}

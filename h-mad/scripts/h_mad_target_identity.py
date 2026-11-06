@@ -12,10 +12,12 @@ import shlex
 import shutil
 import stat
 import sys
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Sequence
 
 
 PY_SUFFIXES = (".py", ".pY", ".Py", ".PY")
+DOC_DATA_SUFFIXES = (".md", ".yaml", ".yml", ".json", ".toml", ".txt", ".rst", ".cfg", ".ini")
+_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 
 class Identity(NamedTuple):
@@ -26,6 +28,25 @@ class Identity(NamedTuple):
     unresolvable: bool
     arm: int
     component: str
+
+
+def has_doc_data_suffix(name: str) -> bool:
+    return any(name[-len(s):].translate(_ASCII_LOWER) == s for s in DOC_DATA_SUFFIXES)  # M:G-DOCDATA-CASE
+
+
+def is_doc_data(names: Sequence[str]) -> bool:
+    return all(has_doc_data_suffix(n) for n in names)  # M:G-DOCDATA-ALL
+
+
+def _is_exempt_location(relative: str) -> bool:
+    parents = Path(relative).parts[:-1]  # M:G-EXEMPT-PARENT
+    if parents[:1] == ("docs",):  # M:G-EXEMPT-DOCS
+        return True
+    return "tests" in parents or "fixtures" in parents  # M:G-EXEMPT-DIRS
+
+
+def emit_doc_data(identity: Identity) -> None:
+    print("docdata yes" if is_doc_data(identity.names) else "docdata no")  # M:G-DOCDATA-EMIT
 
 
 def _path_from_fd(fd: int, fallback: str) -> str:
@@ -334,7 +355,7 @@ def _payload_cwd_base(root: Path, cwd: Any) -> Path:
 def _is_production_python(relative: str) -> bool:
     path = Path(fold_py_suffix(relative))
     name = path.name
-    if path.suffix != ".py":
+    if not name.endswith(".py"):  # M:G-PY-NAME
         return False
     if name.startswith("test_") or name.endswith("_test.py") or name.startswith("conftest"):
         return False

@@ -1,0 +1,12 @@
+{
+ "verdict": "PASS",
+ "files": {
+  "gate-non-py-production-files.impl-plan.md": "cd1402bb4b8cb1d534414718e4f17e9cbc9448a6e5e4a7f203ef018a360c05cd"
+ },
+ "suite": "PASS",
+ "legs": [
+  "agy",
+  "codex",
+  "grok"
+ ]
+}

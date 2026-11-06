@@ -17,10 +17,11 @@ You are the Phase-5 implementer for module `<INLINE_MODULE_NAME>` in feature `<I
 Working directory: `<INLINE_REPO_ROOT>`.
 Branch: `feature/NNN-<INLINE_FEATURE_SLUG>` (already checked out by Phase 5c).
 Hook: Codex's `h-mad-codex-tdd-gate.py` guards `apply_patch` and shell writes; agy's `h-mad-agy-tdd-gate.py` guards writes made through the class-(b) tools `write_to_file`, `replace_file_content`, `multi_replace_file_content`, `sed_file`, `notebook_edit`; grok has no write-time gate; Claude's `h-mad-tdd-gate.sh` guards `Write` and `Edit`. The gates are ARMED during this phase and block production-code writes unless:
-- The path is a test file (`test_*.py`, `*_test.py`, `conftest*.py`, `*/tests/*`, `*/fixtures/*`) — allowed unconditionally. Both gates judge a path by its resolved identity (the on-disk spelling reached through symlinks, from a canonical project root), so a re-cased, symlinked or hard-linked spelling of a production file is still production code; a target neither gate can resolve is denied with `judge-error`.
-- The path is markdown / yaml / json / toml / txt / rst — allowed unconditionally.
+- The path is a test file (`test_*.py`, `*_test.py`, `conftest*.py`, `*/tests/*`, `*/fixtures/*`) — allowed unconditionally. All three gates judge a path by its resolved identity (the on-disk spelling reached through symlinks, from a canonical project root), so a re-cased, symlinked or hard-linked spelling of a production file is still production code; a target no gate can resolve is denied with `judge-error`.
+- The path is a doc/data file — every resolved name ends in `.md`, `.yaml`, `.yml`, `.json`, `.toml`, `.txt`, `.rst`, `.cfg` or `.ini`, in any case — allowed, even when a Task lists it.
 - The path's FIRST component under the project root is `docs` (a committed probe such as `docs/03-analysis/probes/x/probe.py`) — allowed unconditionally, `.py` included. Only the first component counts: `src/docs/foo.py` is still production code.
-- For production code (a `.py` suffix in any case, `.PY` included), resolve the test from the impl-plan Task first, else the name map; allow the write only if that test exists and pytest's summary shows `N failed`.
+- For production `.py` (any case of the suffix, `.PY` included), resolve the test from the impl-plan Task first, else the name map; allow the write only if that test exists and pytest's summary shows `N failed`.
+- For a code-like file — a `.sh` script, an extensionless launcher, any suffix outside the nine — that a Task's **Production file** line lists, the test comes from that Task only (there is no name map); allow the write only if it exists and pytest's summary shows `N failed`. An unlisted code-like file is allowed.
 
 This means during RED phase (5d) you write tests freely (test paths bypass the hook); during GREEN phase (5e) you can only modify production code if a matching failing test exists.
 

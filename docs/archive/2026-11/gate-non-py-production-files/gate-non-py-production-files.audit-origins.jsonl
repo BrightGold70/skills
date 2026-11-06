@@ -1,0 +1,27 @@
+{"phase": "plan", "cycle": 1, "leg": "codex", "item": "No incident replay of a real impl-plan Task listing hmad-dispatch.sh (base Incid", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "agy", "item": "phase5-substeps.md:230 'shell is never gated' + pinning doc-test omitted from D9", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "grok", "item": "FR-3 transport false: codex _load_judge only on .py path; agy binds judge module", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 1, "leg": "grok", "item": "Plan FR-6 omits spec tie-break (min .py, else smallest listed name)", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 2, "leg": "codex", "item": "No per-host connection-only mutation in both directions (Connection enforcement)", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 2, "leg": "codex", "item": "M12 parser probe command not published beside its result", "origin": "instrument", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 2, "leg": "teammate", "item": "Doc-test token 'Both gates' stale: three gates apply docs-first", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "plan", "cycle": 2, "leg": "teammate", "item": "Claude-gate process budget omits _find_judge python launch", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "implementer=null does not make Claude the author; fixture hits authorship refusa", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "Readable plan outranking unreadable sibling can select wrong name, narrows FR-8", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "codex", "item": "Behavioural probes published without their runnable commands", "origin": "instrument", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "agy", "item": "_judge_listed step 6 uses {relative}, never bound", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "grok", "item": "Claude directory write is judge-error when state may exist, not ALLOW", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": true}
+{"phase": "design", "cycle": 1, "leg": "grok", "item": "Nine-suffix pin required RED in Task 2 and also added in Task 6", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "agy", "item": "listing conflates listed with has-.py-tests (quotes absent)", "origin": "rejected", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "agy", "item": "names[0] IndexError on directory (is_doc_data(()) is True)", "origin": "rejected", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 1, "leg": "agy", "item": "probe h_mad_non_py_gate_probe.py lacks git init (no such probe)", "origin": "rejected", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "Selected target decode loses trailing newlines; use _pct_capture", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "assert_case_insensitive asserts, never skips, on a case-sensitive volume", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "FR-1 Test Boundaries row exposes only private _parse_tasks", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "codex", "item": "AC-10.1 verified by doc-review despite an executable assertion", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "design", "cycle": 2, "leg": "teammate", "item": "TDD-IMPLEMENTER precondition invalid where a case has no readable record", "origin": "fix-introduced", "by_cycle": 1, "verified_by_execution": true}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Skip helper test cannot reject an always-skipping implementation", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Task 8 leaves the missing-base-plan contract open (also grok)", "origin": "new-consistency", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 1, "leg": "codex", "item": "Regression-prototype reading lacks its command and corpus selector", "origin": "instrument", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 2, "leg": "codex", "item": "Tasks 4 and 5 omit mutation entries for their verdict guards", "origin": "new-mechanism", "by_cycle": null, "verified_by_execution": false}
+{"phase": "impl-plan", "cycle": 2, "leg": "codex", "item": "Task 6 keeps prototype timing and process readings without commands", "origin": "propagation-gap", "by_cycle": 1, "verified_by_execution": false}

@@ -1,0 +1,135 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_codex_tdd_gate_non_py.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "CX-DOCDATA-VERDICT",
+      "_mechanism": "Listed doc/data must skip judging even when its test is absent.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_main_guarded",
+      "find": "if is_doc_data(resolved.names):  # M:CX-DOCDATA",
+      "replace": "if False:  # M:CX-DOCDATA",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_doc_data_allows"
+    },
+    {
+      "name": "CX-DOCDATA-DIRECTORY",
+      "_mechanism": "An empty identity name set must skip before names[0] is accessed.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_main_guarded",
+      "find": "if is_doc_data(resolved.names):  # M:CX-DOCDATA",
+      "replace": "if False:  # M:CX-DOCDATA",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_directory_target_is_skipped"
+    },
+    {
+      "name": "CX-NOT-CODE-LIKE",
+      "_mechanism": "Test-shaped Python must not enter the non-Python listing path.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "if any(Path(fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:CX-NOT-CODE-LIKE",
+      "replace": "if False:  # M:CX-NOT-CODE-LIKE",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_test_shaped_python_is_skipped"
+    },
+    {
+      "name": "CX-LIST-EXEMPT",
+      "_mechanism": "Exempt locations must skip judging listed targets.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "if _is_exempt_location(names[0].relative_to(root).as_posix()):  # M:CX-LIST-EXEMPT",
+      "replace": "if False:  # M:CX-LIST-EXEMPT",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_exempt_location_allows[tests]"
+    },
+    {
+      "name": "CX-CHAIN-UNREADABLE",
+      "_mechanism": "Unreadable governing state must deny with judge-error.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "if chain.value == \"unreadable\":  # M:CX-CHAIN-UNREADABLE",
+      "replace": "if False:  # M:CX-CHAIN-UNREADABLE",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_unreadable_state_is_judge_error"
+    },
+    {
+      "name": "CX-LIST-UNREADABLE",
+      "_mechanism": "Undecidable listing must deny with judge-error.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "if listed.value == \"unreadable\":  # M:CX-LIST-UNREADABLE",
+      "replace": "if False:  # M:CX-LIST-UNREADABLE",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_unreadable_plan_is_judge_error"
+    },
+    {
+      "name": "CX-VERDICT",
+      "_mechanism": "A DENY judge verdict must propagate to the caller.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "if verdict.decision != \"ALLOW\":  # M:CX-VERDICT",
+      "replace": "if False:  # M:CX-VERDICT",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies"
+    },
+    {
+      "name": "CX-DENY",
+      "_mechanism": "The per-target loop must emit the listing denial.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_main_guarded",
+      "find": "if reason:  # M:CX-DENY",
+      "replace": "if False:  # M:CX-DENY",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies"
+    },
+    {
+      "name": "CX-NOT-LISTED",
+      "_mechanism": "Unlisted targets must skip judging rather than pass None to the judge.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "if listed.value == \"not-listed\":  # M:CX-NOT-LISTED",
+      "replace": "if False:  # M:CX-NOT-LISTED",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_unlisted_code_like_allows"
+    },
+    {
+      "name": "CX-ACTIVE",
+      "_mechanism": "An active chain must reach listing and judging.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "if chain.value != \"active\":  # M:CX-ACTIVE",
+      "replace": "if True:  # M:CX-ACTIVE",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies"
+    },
+    {
+      "name": "CX-LIST-NAMES",
+      "_mechanism": "Codex must pass every canonical name to the listing; only the target's own name misses a listed hard link and wrongly admits the write.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "names = [Path(resolved.target).parent / n for n in resolved.names]",
+      "replace": "names = [Path(resolved.target)]",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_hard_link_denies"
+    },
+    {
+      "name": "CX-JUDGED",
+      "_mechanism": "Codex must judge the selected (least listed) name; judging the greatest flips selection scenarios S1 and S2 and wrongly admits S2.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "verdict = judge.judge(root, listed.selected, chain.records)",
+      "replace": "verdict = judge.judge(root, max(names, key=lambda p: p.name), chain.records)",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_selection_s2_denies"
+    },
+    {
+      "name": "CX-CHAIN-TARGET",
+      "_mechanism": "The chain is read for the target, so state nested under the target's own project governs it; a root-scoped read finds none and wrongly admits the write.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "chain = judge.read_chain(root, names[0])",
+      "replace": "chain = judge.read_chain(root, None)",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_nested_state_governs_a_subproject_target"
+    }
+  ]
+}

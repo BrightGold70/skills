@@ -339,11 +339,14 @@ def test_py_suffixes_match_bash_fold(identity):
     fold = _bash_function(source, "_fold_py")
     suffixes = tuple(dict.fromkeys(re.findall(r"\.(?:py|pY|Py|PY)\b", fold)))
     assert suffixes == identity.PY_SUFFIXES
-    for marker in ("# M:H6", "*.md|*.yaml", "!= *.py"):
+    for marker in ("# M:H6", "!= *.py"):
         site = source.find(marker)
         assert site >= 0, f"missing per-name classification site {marker}"
         preceding = source[max(0, site - 300):site]
         assert "_fold_py" in preceding, f"{marker} must read a folded name"
+    canon_line = next(line for line in source.splitlines() if "# M:H11" in line)
+    assert "emit_doc_data(i)" in canon_line, "canonical identity process must emit doc/data classification"
+    assert "ALL_SUFFIX_NAMES" not in source, "per-name suffix exemption must use identity doc/data classification"
 
 
 @pytest.mark.parametrize("leaf", ["tests/test_x.py", "src/prod.py"], ids=["exempt", "production"])

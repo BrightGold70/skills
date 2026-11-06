@@ -1,0 +1,21 @@
+{
+  "agy_events": 0,
+  "collected": "gate-non-py-production-files.impl-plan.audit.v1.p1.md",
+  "failed": 0,
+  "log": "/tmp/audit_gate-non-py-production-files_impl-plan_cycle1_run20261104T061113Z-52298_p1.log",
+  "log_retained": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/.h-mad/pass-logs/gate-non-py-production-files.impl-plan.audit.v1.p1.md.log",
+  "log_sha256": "0b3d9b33fffa92a2585de8cb0d4c52105f289ac44f5ed674b720cc81f675a5c0",
+  "ok": 0,
+  "pass": 1,
+  "readable": true,
+  "shape": "codex-text",
+  "status": null,
+  "targets": {
+    "code": 30,
+    "other": 8,
+    "paths": 38,
+    "unmeasured": 5
+  },
+  "thinking": 0,
+  "tools": 0
+}
