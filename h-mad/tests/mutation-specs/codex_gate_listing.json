@@ -103,6 +103,33 @@
       "find": "if chain.value != \"active\":  # M:CX-ACTIVE",
       "replace": "if True:  # M:CX-ACTIVE",
       "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_absent_test_denies"
+    },
+    {
+      "name": "CX-LIST-NAMES",
+      "_mechanism": "Codex must pass every canonical name to the listing; only the target's own name misses a listed hard link and wrongly admits the write.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "names = [Path(resolved.target).parent / n for n in resolved.names]",
+      "replace": "names = [Path(resolved.target)]",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_hard_link_denies"
+    },
+    {
+      "name": "CX-JUDGED",
+      "_mechanism": "Codex must judge the selected (least listed) name; judging the greatest flips selection scenarios S1 and S2 and wrongly admits S2.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "verdict = judge.judge(root, listed.selected, chain.records)",
+      "replace": "verdict = judge.judge(root, max(names, key=lambda p: p.name), chain.records)",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_selection_s2_denies"
+    },
+    {
+      "name": "CX-CHAIN-TARGET",
+      "_mechanism": "The chain is read for the target, so state nested under the target's own project governs it; a root-scoped read finds none and wrongly admits the write.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "chain = judge.read_chain(root, names[0])",
+      "replace": "chain = judge.read_chain(root, None)",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_nested_state_governs_a_subproject_target"
     }
   ]
 }

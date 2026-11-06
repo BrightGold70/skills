@@ -85,6 +85,33 @@
       "find": "if chain.value != \"active\":  # M:AG-ACTIVE",
       "replace": "if True:  # M:AG-ACTIVE",
       "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_absent_test_denies"
+    },
+    {
+      "name": "AG-LIST-NAMES",
+      "_mechanism": "Agy must pass every canonical name to the listing; only the target's own name misses a listed hard link and wrongly admits the write.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "names = [Path(resolved.target).parent / n for n in resolved.names]",
+      "replace": "names = [Path(resolved.target)]",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_hard_link_denies"
+    },
+    {
+      "name": "AG-JUDGED",
+      "_mechanism": "Agy must judge the selected (least listed) name; judging the greatest flips selection scenarios S1 and S2 and wrongly admits S2.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "verdict = judge.judge(root, listed.selected, chain.records)",
+      "replace": "verdict = judge.judge(root, max(names, key=lambda p: p.name), chain.records)",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_selection_s2_denies"
+    },
+    {
+      "name": "AG-CHAIN-TARGET",
+      "_mechanism": "The chain is read for the target, so state nested under the target's own project governs it; a root-scoped read finds none and wrongly admits the write.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "chain = judge.read_chain(root, names[0])",
+      "replace": "chain = judge.read_chain(root, None)",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_nested_state_governs_a_subproject_target"
     }
   ]
 }

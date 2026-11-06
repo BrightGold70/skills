@@ -341,3 +341,16 @@ def test_skip_unless_case_insensitive_skips_on_a_case_sensitive_volume(tmp_path,
             skip_unless_case_insensitive(tmp_path)
 
     assert not (tmp_path / "a").exists()
+
+
+def test_codex_nested_state_governs_a_subproject_target(root):
+    # The chain read must be bound to the target: state and plan live only
+    # under sub/, so a root-scoped read (read_chain(root, None)) sees nothing.
+    (root / "docs/.bkit-memory.json").unlink()
+    write_plan(root, "f", "").unlink()
+    sub = root / "sub"
+    write_state(sub, {"f": {"phase": "step5"}})
+    write_plan(sub, "f", task_text(1, ("scripts/s.sh",), "tests/test_s.py"))
+    write_file(sub, "scripts/s.sh")
+    _expect(root, "sub/scripts/s.sh", "deny", "test-missing",
+            property="the chain read is bound to the target, so sub/ state governs sub/scripts/s.sh")

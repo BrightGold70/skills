@@ -161,6 +161,69 @@
       "find": "min(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
       "replace": "max(listed, key=lambda p: p.name), None, \"\")  # M:L-SELECT",
       "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_selection_s2_denies"
+    },
+    {
+      "name": "LV-ACTIVE",
+      "_mechanism": "The listing verb must enter its matcher only on an active chain; otherwise a listed target reads not-listed and an unreadable plan reads allow.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "elif chain.value == \"active\":",
+      "replace": "elif False:",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_listed_prints_the_encoded_target"
+    },
+    {
+      "name": "L-ANY-PLAN",
+      "_mechanism": "A target is listed if ANY plan lists it; requiring ALL plans refuses to list a target that only one of several active plans names.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "listed = [name for name, plans in per_name if any(m.matches for m in plans)]",
+      "replace": "listed = [name for name, plans in per_name if all(m.matches for m in plans)]",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_listed_outranks_an_unreadable_sibling"
+    },
+    {
+      "name": "L-READ-RECORD",
+      "_mechanism": "A readable plan must record the matches it found; dropping them reads every listed target as not-listed.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "_match_plans",
+      "find": "result.append(PlanMatch(plan, \"read\", \"\", tuple(matches)))",
+      "replace": "result.append(PlanMatch(plan, \"read\", \"\", ()))",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_any_canonical_name_lists_the_target"
+    },
+    {
+      "name": "L-MATCH-RECORD",
+      "_mechanism": "A production-file match must be recorded; skipping the append reads a listed target as not-listed.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "_match_plans",
+      "find": "matches.append((task, base))",
+      "replace": "pass",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_any_canonical_name_lists_the_target"
+    },
+    {
+      "name": "L-NOT-LISTED",
+      "_mechanism": "The not-listed verdict itself: a target no plan lists must read not-listed, not undecidable (fail-closed direction).",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "return Listing(\"not-listed\", None, None, \"\")",
+      "replace": "return Listing(\"unreadable\", None, None, \"\")",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_not_listed_when_no_name_matches"
+    },
+    {
+      "name": "LV-NAMES",
+      "_mechanism": "Claude's verb must carry every canonical name; keeping only the first misses a listed hard-link name and wrongly admits the write.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "names = [root / name for name in args.name]",
+      "replace": "names = [root / name for name in args.name[:1]]",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_hard_link_denies"
+    },
+    {
+      "name": "LV-CHAIN-TARGET",
+      "_mechanism": "The chain is read for the target, so state nested under the target's own project governs it; a root-scoped read finds none and wrongly admits the write.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "chain = read_chain(root, names[0])",
+      "replace": "chain = read_chain(root, None)",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_nested_state_governs_a_subproject_target"
     }
   ]
 }

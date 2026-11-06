@@ -127,6 +127,33 @@
       "file": "hooks/h-mad-tdd-gate.sh",
       "symbol": "_read_listing",
       "find": "LOUT=$(python3 \"$JUDGE\" listing --root \"$ROOT_ABS\" ${LARGS[@]+\"${LARGS[@]}\"} 2>/dev/null; printf 'rc=%s' \"$?\")  # M:W7"
+    },
+    {
+      "name": "H-LIST-NAMES",
+      "_mechanism": "Claude must hand the verb every canonical name; only the canonical target misses a listed hard link and wrongly admits the write.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_listing",
+      "find": "for name in \"${CANON_NAMES[@]}\"; do LARGS[${#LARGS[@]}]=--name; LARGS[${#LARGS[@]}]=${CANON_TARGET%/*}/$name; done",
+      "replace": "LARGS=(--name \"$CANON_TARGET\")",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_hard_link_denies"
+    },
+    {
+      "name": "H-LIST-TARGET",
+      "_mechanism": "Claude must judge the target the listing selected; the last canonical name flips selection scenarios S1 and S2 and wrongly admits S2.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_listing",
+      "find": "TARGET_PATH=$LISTED_TARGET",
+      "replace": "TARGET_PATH=${CANON_TARGET%/*}/${CANON_NAMES[${#CANON_NAMES[@]}-1]}",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_selection_s2_denies"
+    },
+    {
+      "name": "H-DOCDATA-NO-ARM",
+      "_mechanism": "A code-like target must read docdata no and stay on the listing path; the yes arm exempts every code-like write.",
+      "file": "hooks/h-mad-tdd-gate.sh",
+      "symbol": "_read_listing",
+      "find": "\"docdata no\") DOC_DATA=no ;;",
+      "replace": "\"docdata no\") DOC_DATA=yes ;;",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listed_absent_test_denies"
     }
   ]
 }
