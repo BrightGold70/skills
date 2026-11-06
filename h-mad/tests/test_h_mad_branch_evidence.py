@@ -38,20 +38,22 @@ files = [a for a in sys.argv[1:] if a.endswith(".py")]
 def note(event):
     with open(log, "a") as fh:
         fh.write(json.dumps({"who": "pytest", "event": event, "t": time.time(),
-                             "args": files, "cwd": os.getcwd(),
+                             "args": files, "cwd": os.getcwd(), "argv": sys.argv[1:],
                              "venv": os.environ.get("STUB_VENV")}) + "\n")
 note("start")
 time.sleep(float(os.environ.get("STUB_SLEEP", "0")))
 mode = os.environ.get("STUB_PYTEST", "pass")
+if not files and os.environ.get("STUB_FULL_MODE"):  # the bare, whole-suite run only
+    mode = os.environ["STUB_FULL_MODE"]
 if os.path.exists("STUB_MODE"):  # a per-directory mode, for one group of a multi-group run
     mode = open("STUB_MODE").read().strip()
 note("end")
 if mode == "pass":
-    print(f"{len(files) * 2} passed in 0.01s")
+    print(f"{len(files) * 2 or 7} passed in 0.01s")
     sys.exit(0)
 if mode == "fail":
-    print("FAILED " + files[0] + "::test_x - assert 0")
-    print(f"1 failed, {len(files) * 2 - 1} passed in 0.01s")
+    print("FAILED " + (files or ["tests/test_x.py"])[0] + "::test_x - assert 0")
+    print(f"1 failed, {max(len(files) * 2 - 1, 0)} passed in 0.01s")
     sys.exit(1)
 if mode == "nosummary":
     print("Segmentation fault")
@@ -1032,3 +1034,139 @@ def test_an_unparseable_sibling_test_falls_back_to_the_word_match(tmp_path: Path
     proc = _run(repo, stubs["env"], "--no-mutation")
 
     assert _selected(proc).get("b/tests/test_broken.py") == "names eligibility", proc.stdout
+
+
+# --- `--full-suite`: the close-out run of bare `pytest` from the worktree top ---------------
+
+def _full_lines(proc: subprocess.CompletedProcess) -> list[str]:
+    return [ln for ln in proc.stdout.splitlines() if ln.startswith("FULL-SUITE: ")]
+
+
+def test_full_suite_is_off_by_default(tmp_path: Path, stubs: dict) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+
+    proc = _run(repo, stubs["env"])
+
+    assert _full_lines(proc) == [], proc.stdout
+    bare = [e for e in _events(stubs["log"]) if e["who"] == "pytest" and e["argv"] == ["-q"]]
+    assert bare == [], "a bare pytest ran without --full-suite"
+
+
+def test_full_suite_runs_bare_pytest_from_the_top_after_every_other_step(
+        tmp_path: Path, stubs: dict) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+
+    proc = _run(repo, stubs["env"], "--full-suite")
+
+    assert _full_lines(proc) == ["FULL-SUITE: PASS passed=7"], proc.stdout
+    assert _verdict(proc) == "EVIDENCE-VERDICT: COMPLETE", proc.stdout
+    starts = [e for e in _events(stubs["log"]) if e["event"] == "start"]
+    last = starts[-1]
+    assert (last["who"], last["argv"]) == ("pytest", ["-q"]), starts
+    assert Path(last["cwd"]).resolve() == repo.resolve()
+    assert [e["who"] for e in starts[:-1]].count("pytest") == 1, "the changed-test run is still one"
+
+
+def test_a_failing_full_suite_is_never_COMPLETE(tmp_path: Path, stubs: dict) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+
+    proc = _run(repo, stubs["env"], "--full-suite", STUB_FULL_MODE="fail")
+
+    assert _full_lines(proc) == ["FULL-SUITE: FAIL failed=1 errors=0 passed=0"], proc.stdout
+    assert "TESTS: PASS" in proc.stdout, "only the full suite failed"
+    assert _verdict(proc) == "EVIDENCE-VERDICT: INCOMPLETE reason=full-suite-failed"
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+@pytest.mark.parametrize("mode,reason", [("nosummary", "pytest-no-summary"),
+                                         ("crash", "pytest-rc3"),
+                                         ("busy", "suite-busy"),
+                                         ("skipped", "pytest-inconsistent")])
+def test_an_unreadable_full_suite_is_never_COMPLETE(tmp_path: Path, stubs: dict,
+                                                     mode: str, reason: str) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+
+    proc = _run(repo, stubs["env"], "--full-suite", STUB_FULL_MODE=mode)
+
+    assert _full_lines(proc) == [f"FULL-SUITE: UNREADABLE reason={reason}"], proc.stdout
+    assert _verdict(proc) == f"EVIDENCE-VERDICT: UNREADABLE reason=full-suite-{reason}"
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+
+
+def test_a_full_suite_timeout_is_UNREADABLE_with_its_own_timeout(
+        tmp_path: Path, stubs: dict) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+
+    proc = _run(repo, stubs["env"], "--full-suite", "--full-suite-timeout", "3",
+                STUB_FULL_MODE="hang")
+
+    assert _full_lines(proc) == ["FULL-SUITE: UNREADABLE reason=pytest-timeout"], proc.stdout
+    assert _verdict(proc) == "EVIDENCE-VERDICT: UNREADABLE reason=full-suite-pytest-timeout"
+
+
+def test_the_full_suite_has_its_own_timeout_not_the_child_one(
+        tmp_path: Path, stubs: dict) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+
+    proc = _run(repo, stubs["env"], "--full-suite", "--child-timeout", "1", STUB_SLEEP="2")
+
+    assert _full_lines(proc) == ["FULL-SUITE: PASS passed=7"], proc.stdout
+    assert "TESTS: UNREADABLE reason=pytest-timeout" in proc.stdout, "the child timeout still binds"
+
+
+def test_a_dirty_tree_names_the_skipped_full_suite(tmp_path: Path, stubs: dict) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+    (repo / "scratch.txt").write_text("x\n", encoding="utf-8")
+
+    proc = _run(repo, stubs["env"], "--full-suite")
+
+    assert _full_lines(proc) == ["FULL-SUITE: SKIPPED reason=dirty"], proc.stdout
+    assert _verdict(proc) == "EVIDENCE-VERDICT: INCOMPLETE reason=dirty"
+
+
+def test_a_relative_python_is_resolved_before_the_cwd_change(
+        tmp_path: Path, stubs: dict) -> None:
+    """The bug behind this row: a relative interpreter read as a red baseline."""
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+    shim = tmp_path / "bin" / "py"
+    shim.parent.mkdir()
+    shim.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n', encoding="utf-8")
+    shim.chmod(0o755)
+
+    proc = _run(repo, stubs["env"], "--full-suite", "--python", "bin/py", cwd=tmp_path)
+
+    assert _full_lines(proc) == ["FULL-SUITE: PASS passed=7"], proc.stdout
+    assert _verdict(proc) == "EVIDENCE-VERDICT: COMPLETE", proc.stdout
+
+
+def test_a_python_that_does_not_exist_is_UNREADABLE(tmp_path: Path, stubs: dict) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+
+    proc = _run(repo, stubs["env"], "--full-suite", "--python", "no/such/python")
+
+    assert _full_lines(proc) == ["FULL-SUITE: UNREADABLE reason=python-missing"], proc.stdout
+    assert _verdict(proc) == "EVIDENCE-VERDICT: UNREADABLE reason=full-suite-python-missing"
+    assert proc.returncode == 2
+
+
+def test_a_full_suite_interpreter_without_pytest_is_UNREADABLE(
+        tmp_path: Path, stubs: dict) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+    nopy = tmp_path / "nopytest"
+    nopy.write_text('#!/bin/sh\nif [ "$1" = "-c" ]; then exit 1; fi\nexit 0\n', encoding="utf-8")
+    nopy.chmod(0o755)
+
+    proc = _run(repo, stubs["env"], "--full-suite", "--python", str(nopy))
+
+    assert _full_lines(proc) == ["FULL-SUITE: UNREADABLE reason=pytest-missing"], proc.stdout
+    assert _verdict(proc) == "EVIDENCE-VERDICT: UNREADABLE reason=full-suite-pytest-missing"

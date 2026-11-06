@@ -563,6 +563,87 @@
       "replace": "            if True:\n",
       "test": "tests/test_h_mad_branch_evidence.py::test_a_sibling_rootdir_is_selected_only_by_an_import_shaped_match",
       "symbol": "_import_parts"
+    },
+    {
+      "name": "full-suite-failure-not-incomplete",
+      "_mechanism": "A red bare pytest is printed but the verdict stays COMPLETE.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        incomplete.append(\"full-suite-failed\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_failing_full_suite_is_never_COMPLETE",
+      "symbol": "_full_suite"
+    },
+    {
+      "name": "full-suite-unreadable-not-recorded",
+      "_mechanism": "A full suite that crashed, timed out or printed no summary is forgiven.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        unreadable.append(\"full-suite-\" + outcome[2:])\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_an_unreadable_full_suite_is_never_COMPLETE",
+      "symbol": "_full_suite"
+    },
+    {
+      "name": "full-suite-missing-python-runs-anyway",
+      "_mechanism": "A non-existent interpreter is not refused up front.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if not (os.path.isfile(python) and os.access(python, os.X_OK)):\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_python_that_does_not_exist_is_UNREADABLE",
+      "symbol": "_full_suite"
+    },
+    {
+      "name": "full-suite-interpreter-without-pytest",
+      "_mechanism": "An interpreter that cannot import pytest is run anyway.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    if not importable:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_full_suite_interpreter_without_pytest_is_UNREADABLE",
+      "symbol": "_full_suite"
+    },
+    {
+      "name": "full-suite-names-paths",
+      "_mechanism": "The full suite names a path, so it is no longer the pytest.ini selection.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "_pytest(top, [], timeout, python)",
+      "replace": "_pytest(top, [\"h-mad/tests\"], timeout, python)",
+      "test": "tests/test_h_mad_branch_evidence.py::test_full_suite_runs_bare_pytest_from_the_top_after_every_other_step",
+      "symbol": "_full_suite"
+    },
+    {
+      "name": "full-suite-uses-the-child-timeout",
+      "_mechanism": "The full suite is cut off by the per-step timeout instead of its own.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "_full_suite(top, python, full_timeout, out",
+      "replace": "_full_suite(top, python, timeout, out",
+      "test": "tests/test_h_mad_branch_evidence.py::test_the_full_suite_has_its_own_timeout_not_the_child_one",
+      "symbol": "collect"
+    },
+    {
+      "name": "full-suite-skip-unnamed",
+      "_mechanism": "A skipped full suite prints nothing, so the absence reads as off.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "            out.append(f\"FULL-SUITE: SKIPPED reason={','.join(incomplete)}\")\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_dirty_tree_names_the_skipped_full_suite",
+      "symbol": "collect"
+    },
+    {
+      "name": "full-suite-runs-when-not-asked",
+      "_mechanism": "The full suite runs on every invocation; the default output changes.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        if full_suite:\n            _full_suite(",
+      "replace": "        if True:\n            _full_suite(",
+      "test": "tests/test_h_mad_branch_evidence.py::test_full_suite_is_off_by_default",
+      "symbol": "collect"
+    },
+    {
+      "name": "python-not-made-absolute-before-chdir",
+      "_mechanism": "A relative --python reaches a child that has changed directory.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    python = _absolute_python(args.python)\n",
+      "replace": "    python = args.python\n",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_relative_python_is_resolved_before_the_cwd_change",
+      "symbol": "main"
     }
   ]
 }
