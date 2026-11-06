@@ -15,7 +15,7 @@ from non_py_gate_support import (
     DEFAULT_AUTHOR_LINE, assert_authorship, build_fixture, claude_author_env,
     default_authorship_env, member_fixture, newline_name_fixture, run_claude,
     selection_fixture, set_test_state, skip_unless_case_insensitive, stub_tree,
-    task_text, two_record_fixture, write_file,
+    task_text, two_record_fixture, later_plan_fixture, write_file,
 )
 from tdd_gate_support import write_plan, write_state
 
@@ -176,6 +176,14 @@ def test_claude_unlisted_beside_unreadable_is_judge_error(tmp_path):
                      property="unmatched target beside unreadable sibling is undecidable")
     assert "listing is undecidable" in result.reason, (
         f"unreadable sibling must use listing-specific refusal: {result!r}")
+
+
+@pytest.mark.parametrize("test_state", ["absent", "failing"])
+def test_claude_listing_only_in_a_later_active_plan_judges_its_test(tmp_path, test_state):
+    root = later_plan_fixture(tmp_path / "repo", test_state)
+    _expect(root, "scripts/tool.sh", "deny" if test_state == "absent" else "allow",
+            "test-missing" if test_state == "absent" else "", author=True,
+            property="a target listed only by a later readable active plan is listed")
 
 
 @pytest.mark.parametrize("test_state", ["absent", "failing"])

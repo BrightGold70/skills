@@ -151,6 +151,15 @@ def two_record_fixture(root: Path, listed: bool) -> Path:
     return root
 
 
+def later_plan_fixture(root: Path, test_state: str) -> Path:
+    """Two active records, both plans readable: f lists other.sh, g lists tool.sh."""
+    root = build_fixture(root, test_state)
+    write_state(root, {"f": {"phase": "step5"}, "g": {"phase": "step5"}})
+    write_plan(root, "f", task_text(1, ("scripts/other.sh",), "tests/test_other.py"))
+    write_plan(root, "g", task_text(1, ("scripts/tool.sh",), "tests/test_tool.py"))
+    return root
+
+
 def newline_name_fixture(root: Path, test_state: str) -> Path:
     root = build_fixture(root, test_state)
     write_file(root, "scripts/tool\n")

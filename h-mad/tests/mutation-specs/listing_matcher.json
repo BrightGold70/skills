@@ -224,6 +224,33 @@
       "find": "chain = read_chain(root, names[0])",
       "replace": "chain = read_chain(root, None)",
       "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_nested_state_governs_a_subproject_target"
+    },
+    {
+      "name": "L-ANY-PLAN-FIRST",
+      "_mechanism": "A target is listed if ANY active plan lists it; consulting only the first plan misses a target that only a later readable plan names, and the write is allowed with its test absent.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "listed = [name for name, plans in per_name if any(m.matches for m in plans)]",
+      "replace": "listed = [name for name, plans in per_name if any(m.matches for m in plans[:1])]",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_only_in_a_later_active_plan_judges_its_test[absent]"
+    },
+    {
+      "name": "L-UNREADABLE-ANY-PLAN",
+      "_mechanism": "The listing is undecidable if ANY plan is unreadable; inspecting only the first plan hides an unreadable later plan and reads the target as not-listed.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "listing",
+      "find": "for m in plans if m.status == \"unreadable\"",
+      "replace": "for m in plans[:1] if m.status == \"unreadable\"",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_unreadable_when_no_plan_lists_the_target"
+    },
+    {
+      "name": "LV-RECORDS",
+      "_mechanism": "The listing verb must hand the matcher every record of the chain; passing only the first record hides a target that a later active plan lists.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "result = listing(root, names, chain.records)",
+      "replace": "result = listing(root, names, chain.records[:1])",
+      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_only_in_a_later_active_plan_judges_its_test[absent]"
     }
   ]
 }
