@@ -29,6 +29,27 @@ def _expect(root, relative, expected, kind="", *, property="non-Python gate cont
     return result
 
 
+@pytest.mark.parametrize("relative", ["scripts/.py", ".py", ".PY"])
+def test_codex_dot_py_unlisted_denies(root, relative):
+    write_file(root, relative)
+    _expect(root, relative, "deny", "no-test-resolved",
+            property="an unlisted dot-py production file requires a resolved test")
+
+
+@pytest.mark.parametrize("relative", ["tests/.py", "docs/.py"])
+def test_codex_dot_py_exempt_allows(root, relative):
+    write_file(root, relative)
+    _expect(root, relative, "allow",
+            property="dot-py files under tests or docs are exempt")
+
+
+def test_codex_dot_py_listed_absent_test_denies(root):
+    write_file(root, "scripts/.py")
+    write_plan(root, "f", task_text(1, ("scripts/.py",), "tests/test_tool.py"))
+    _expect(root, "scripts/.py", "deny", "test-missing",
+            property="a listed dot-py production file with an absent test must deny")
+
+
 def test_codex_listed_absent_test_denies(root):
     _expect(root, "scripts/tool.sh", "deny", "test-missing",
             property="listed shell target must reach the judge with its absent test")

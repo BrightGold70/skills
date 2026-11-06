@@ -309,8 +309,8 @@ def test_judge_listed_non_py_absent_test_is_test_missing(root):
 def test_judge_listed_non_py_with_no_pytest_file_is_test_missing(root):
     records = _records(root)
     target = _target(root)
-    _plan(root, "scripts/tool.sh", test="tests/tool.sh")
-    other = root / "tests/tool.sh"
+    _plan(root, "scripts/tool.sh", test="tests/tool.bats")
+    other = root / "tests/tool.bats"
     other.parent.mkdir()
     other.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
 

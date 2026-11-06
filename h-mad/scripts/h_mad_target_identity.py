@@ -355,7 +355,7 @@ def _payload_cwd_base(root: Path, cwd: Any) -> Path:
 def _is_production_python(relative: str) -> bool:
     path = Path(fold_py_suffix(relative))
     name = path.name
-    if path.suffix != ".py":
+    if not name.endswith(".py"):  # M:G-PY-NAME
         return False
     if name.startswith("test_") or name.endswith("_test.py") or name.startswith("conftest"):
         return False

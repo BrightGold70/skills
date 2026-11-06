@@ -73,11 +73,11 @@ def _judge(root: Path, text: str, target: str) -> subprocess.CompletedProcess:
 
 def test_mixed_production_line_collects_all_three(hostile_plan_note: str) -> None:
     task = _one_task(_task(
-        "`h-mad/scripts/x.sh`, `h-mad/scripts/a.py`, `h-mad/bin/hmad-dispatch`",
+        "`h-mad/scripts/hmad-dispatch.sh`, `h-mad/scripts/a.py`, `h-mad/bin/hmad-dispatch`",
         "`tests/test_t.py`", hostile_plan_note,
     ))
     assert task["production"] == [
-        "h-mad/scripts/a.py", "h-mad/scripts/x.sh", "h-mad/bin/hmad-dispatch",
+        "h-mad/scripts/a.py", "h-mad/scripts/hmad-dispatch.sh", "h-mad/bin/hmad-dispatch",
     ], "production must collect Python first, then every non-Python path in line order"
 
 

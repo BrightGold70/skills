@@ -49,6 +49,15 @@
       "replace": "            print(\"CODEX-TDD-GATE: FAIL parser\")\n            return 2",
       "test": "tests/test_h_mad_shared_gate_policy.py::test_codex_gate_self_check_parser_fail_is_a_verdict_with_exit_0",
       "file": "hooks/h-mad-codex-tdd-gate.py"
+    },
+    {
+      "name": "G-PY-NAME",
+      "symbol": "_is_production_python",
+      "_mechanism": "Restoring Path.suffix misclassifies a dotfile named .py and allows an unlisted production write without a resolved test.",
+      "find": "if not name.endswith(\".py\"):  # M:G-PY-NAME",
+      "replace": "if path.suffix != \".py\":  # M:G-PY-NAME",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_dot_py_unlisted_denies[scripts/.py]",
+      "file": "scripts/h_mad_target_identity.py"
     }
   ]
 }
