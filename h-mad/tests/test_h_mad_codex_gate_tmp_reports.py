@@ -12,14 +12,17 @@ any `.py` (in any case spelling) outside the root, so codex cannot write product
 code into another checkout that happens to live under `/tmp`; and anything outside
 `/tmp`, including `$TMPDIR` under `/var/folders`.
 """
+import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from test_h_mad_codex_tdd_gate_judge import _root, _run
+from test_h_mad_codex_tdd_gate_judge import CODEX_GATE, _root, _run, hermetic_env
 
 
 def _add(path: str) -> dict:
@@ -176,3 +179,26 @@ def test_a_relative_tmp_report_symlink_loop_fails_closed(tmp_path, under_tmp):
     verdict, reason, _ = _run(root, payload)
     assert verdict == "deny", reason
     assert reason == "H-MAD Phase 5 write target is outside or unreadable; refusing fail-closed."
+
+
+@pytest.mark.parametrize("name,expected", [("report.md", "allow"), ("x.py", "deny")])
+def test_a_relative_target_with_no_payload_cwd_resolves_against_the_process_cwd(
+        tmp_path, under_tmp, name, expected):
+    # The root is outside /tmp and the hook process runs under it, so the two
+    # possible bases disagree: ../e/ is under /tmp only from the process cwd.
+    root = _root(tmp_path)
+    process_cwd = under_tmp / "d"
+    process_cwd.mkdir()
+    (under_tmp / "e").mkdir()
+    process = subprocess.run(
+        [sys.executable, str(CODEX_GATE)], input=json.dumps(_add(f"../e/{name}")),
+        capture_output=True, text=True, cwd=process_cwd,
+        env=hermetic_env(CODEX_PROJECT_DIR=str(root), HMAD_STUB_HOSTILE="all"),
+        timeout=60, check=False,
+    )
+    assert process.returncode == 0, process.stderr
+    output = process.stdout.strip()
+    verdict = "allow" if output in ("", "{}") else "deny"
+    assert verdict == expected, output
+    if expected == "deny":
+        assert "outside or unreadable" in output, output

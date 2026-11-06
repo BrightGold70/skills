@@ -86,6 +86,15 @@
       "find": "    if not path.is_absolute():\n        base = Path(cwd).expanduser() if isinstance(cwd, str) and cwd else Path.cwd()\n        path = base / path\n",
       "replace": "",
       "test": "tests/test_h_mad_codex_gate_tmp_reports.py::test_a_relative_tmp_report_from_outside_root_is_allowed"
+    },
+    {
+      "name": "CX-TMP-CWD-FALLBACK",
+      "_mechanism": "With no payload cwd, a relative target resolves against the root instead of the process cwd, so a report under /tmp reached from a process under /tmp is refused.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_tmp_report_target",
+      "find": "        base = Path(cwd).expanduser() if isinstance(cwd, str) and cwd else Path.cwd()\n        path = base / path",
+      "replace": "        base = Path(cwd).expanduser() if isinstance(cwd, str) and cwd else root\n        path = base / path",
+      "test": "tests/test_h_mad_codex_gate_tmp_reports.py::test_a_relative_target_with_no_payload_cwd_resolves_against_the_process_cwd[report.md-allow]"
     }
   ]
 }
