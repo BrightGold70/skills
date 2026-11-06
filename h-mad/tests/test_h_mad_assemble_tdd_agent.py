@@ -470,7 +470,7 @@ REVIEW_REPORT_TEXT = (
 
 def run_review(
     plan: Path, root: Path, prompt: Path, *extra: str, env: dict[str, str] | None = None,
-    report: Path | None | str = "default",
+    report: Path | None | str = "default", create_diff_paths: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     run_env = os.environ.copy()
     run_env["HMAD_STUB_HOSTILE"] = "all"
@@ -482,6 +482,13 @@ def run_review(
         "--project-root", str(root), "--module", MODULE, "--impl-plan", str(plan),
         "--prompt", str(prompt), "--out", str(root / "review.out"), "--log", str(root / "review.log"),
     ]
+    if create_diff_paths:  # a --diff-path naming a missing file is refused, so name real ones
+        for flag, value in zip(extra, extra[1:]):
+            candidate = root / value
+            if (flag == "--diff-path" and value and not os.path.isabs(value)
+                    and ".." not in Path(value).parts and "\n" not in value and not candidate.exists()):
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                candidate.write_text("x = 1\n", encoding="utf-8")
     if report == "default":
         report = root / "codex-report.md"
         report.write_text(REVIEW_REPORT_TEXT, encoding="utf-8")
@@ -631,9 +638,13 @@ class TestReviewPhase:
              "--prompt", str(tmp_path / "q.txt")], capture_output=True, text=True)
         assert _halt_reason(bad) == "task_not_found", bad.stdout
 
-    @pytest.mark.parametrize("flag", [("--expect-fail", "1"), ("--test-path", "tests/x.py"),
-                                       ("--guard", "g"), ("--mutation-spec", "s.json")],
-                             ids=["expect-fail", "test-path", "guard", "mutation-spec"])
+    @pytest.mark.parametrize("flag", [
+        ("--expect-fail", "1"), ("--expect-pass", "1"), ("--test-path", "tests/x.py"),
+        ("--authors-test", "tests/x.py"), ("--guard", "g"), ("--mutation-spec", "s.json"),
+        ("--env-known-failure", "tests/x.py::t"), ("--env-known-failures-file", "k.txt"),
+        ("--report-file", "r.md"), ("--sandbox", "workspace-write"), ("--python", "/nope/python"),
+    ], ids=["expect-fail", "expect-pass", "test-path", "authors-test", "guard", "mutation-spec",
+            "env-known-failure", "env-known-failures-file", "report-file", "sandbox", "python"])
     def test_a_flag_that_does_not_apply_to_a_review_halts_instead_of_being_dropped(
         self, plan: Path, tmp_path: Path, flag: tuple[str, str]
     ) -> None:
@@ -647,6 +658,110 @@ class TestReviewPhase:
         proc = run_cli(SCRIPT, plan, tmp_path, tmp_path / "p.txt", "--diff-path", "a.py")
         assert _halt_reason(proc) == "review_only_option", proc.stdout
         assert "--diff-path" in proc.stdout
+
+    def test_an_unset_python_is_not_a_given_python(self, plan: Path, tmp_path: Path) -> None:
+        proc = run_review(plan, tmp_path, tmp_path / "p.txt", "--diff-path", "a.py", "--agent", "codex")
+        assert proc.returncode == 0, "the default interpreter must not trip the not-applicable halt"
+
+    def test_a_base_ref_from_a_subdirectory_root_prints_real_paths(self, plan: Path, tmp_path: Path) -> None:
+        mono, root = tmp_path / "mono", tmp_path / "mono" / "sub"
+
+        def git(*a: str) -> None:
+            subprocess.run(["git", "-C", str(mono), "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                           check=True, capture_output=True)
+        (root / "src").mkdir(parents=True)
+        for rel in ("sub/src/a.py", "top.txt", "sub/gone.py"):
+            (mono / rel).write_text("v1\n", encoding="utf-8")
+        git("init", "-q")
+        git("add", ".")
+        git("commit", "-q", "-m", "base")
+        (mono / "sub/src/a.py").write_text("v2\n", encoding="utf-8")
+        (mono / "top.txt").write_text("v2\n", encoding="utf-8")
+        (mono / "sub/gone.py").unlink()
+        (root / "src/fresh.py").write_text("new\n", encoding="utf-8")
+        prompt = tmp_path / "p.txt"
+        proc = run_review(plan, root, prompt, "--base-ref", "HEAD", "--agent", "codex")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        text = prompt.read_text(encoding="utf-8")
+        listed = [l[2:] for l in text.split("## Files Codex Changed")[1].split("## CRITICAL")[0].splitlines()
+                  if l.startswith("- /")]
+        by_path = {entry.split(" (")[0]: entry for entry in listed}
+        assert f"{root}/src/a.py" in by_path, listed
+        assert by_path[f"{root}/src/a.py"] == f"{root}/src/a.py", "a file inside the root carries no label"
+        assert f"{mono}/top.txt" in by_path, "a file outside the root keeps its real path"
+        assert "outside" in by_path[f"{mono}/top.txt"], by_path[f"{mono}/top.txt"]
+        assert by_path[f"{root}/src/fresh.py"].endswith("(untracked; may be foreign to this task)")
+        assert by_path[f"{root}/gone.py"].endswith("(deleted)")
+        assert not any("/sub/sub/" in p or p == f"{root}/top.txt" for p in by_path), by_path
+        for path, entry in by_path.items():
+            assert os.path.exists(path) or entry.endswith("(deleted)"), f"listed but absent: {entry}"
+
+    def test_the_prompt_tells_the_reviewer_an_untracked_file_is_not_drift_by_itself(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True, capture_output=True)
+        prompt = tmp_path / "p.txt"
+        # no commit yet, so HEAD is unreadable: diff against the empty tree instead
+        empty = subprocess.run(["git", "-C", str(tmp_path), "hash-object", "-t", "tree", "/dev/null"],
+                               capture_output=True, text=True, check=True).stdout.strip()
+        proc = run_review(plan, tmp_path, prompt, "--base-ref", empty, "--agent", "codex")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        text = " ".join(prompt.read_text(encoding="utf-8").split())
+        assert "Do not report it as DRIFT" in text and "unless you have evidence it belongs to this task" in text
+        assert "(untracked; may be foreign to this task)" in text
+
+    def test_a_base_ref_naming_no_changed_file_halts(self, plan: Path, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+        for args in (("init", "-q"), ("add", "."), ("commit", "-q", "-m", "base")):
+            subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                           check=True, capture_output=True)
+        prompt = tmp_path / "p.txt"
+        proc = run_review(plan, repo, prompt, "--base-ref", "HEAD", "--agent", "codex",
+                          report=tmp_path / "report.md")
+        assert proc.returncode == 2 and _halt_reason(proc) == "codex_report_unreadable", proc.stdout
+        (tmp_path / "report.md").write_text("STATUS: DONE\n", encoding="utf-8")
+        proc = run_review(plan, repo, prompt, "--base-ref", "HEAD", "--agent", "codex",
+                          report=tmp_path / "report.md")
+        assert _halt_reason(proc) == "diff_paths_required", proc.stdout
+        assert not prompt.exists()
+
+    def test_a_diff_path_that_does_not_exist_halts(self, plan: Path, tmp_path: Path) -> None:
+        prompt = tmp_path / "p.txt"
+        proc = run_review(plan, tmp_path, prompt, "--diff-path", "nope/never.py", "--agent", "codex",
+                          create_diff_paths=False)
+        assert _halt_reason(proc) == "diff_path_missing", proc.stdout
+        assert "--base-ref" in proc.stdout, "the halt names the route for a deletion"
+        assert not prompt.exists()
+
+    def test_a_relative_project_root_still_prints_absolute_paths(self, plan: Path, tmp_path: Path) -> None:
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src/a.py").write_text("x = 1\n", encoding="utf-8")
+        report = tmp_path / "r.md"
+        report.write_text("STATUS: DONE\n", encoding="utf-8")
+        prompt = tmp_path / "p.txt"
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT), "--feature", "f", "--task", "Task 1", "--phase", "review",
+             "--project-root", ".", "--module", "m", "--impl-plan", str(plan), "--codex-report", str(report),
+             "--diff-path", "src/a.py", "--agent", "codex", "--prompt", str(prompt)],
+            capture_output=True, text=True, cwd=tmp_path)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert f"- {tmp_path.resolve() / 'src/a.py'}" in prompt.read_text(encoding="utf-8") or \
+            f"- {tmp_path / 'src/a.py'}" in prompt.read_text(encoding="utf-8")
+
+    def test_the_review_inlines_the_sections_the_task_cites(self, tmp_path: Path) -> None:
+        plan = tmp_path / "cites.impl-plan.md"
+        plan.write_text(
+            "# Plan\n\n## Contract\n\nexit 3 on refusal\n\n## Task 1: a\n\n"
+            "- **Task shape**: new-behaviour\n**Production**: `pkg/a.py`\n\n"
+            'Implement per §"Contract" and §"Nowhere at all".\n', encoding="utf-8")
+        prompt = tmp_path / "p.txt"
+        proc = run_review(plan, tmp_path, prompt, "--diff-path", "pkg/a.py", "--agent", "codex")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "exit 3 on refusal" in prompt.read_text(encoding="utf-8")
+        assert "inlined-sections: 1" in proc.stdout and '"Contract"' in proc.stdout
+        assert 'referenced-not-inlined: "Nowhere at all"' in proc.stdout
 
     def test_the_docs_say_the_review_is_staged_by_the_script(self) -> None:
         sub = (SKILL_DIR / "references" / "phase5-substeps.md").read_text(encoding="utf-8")

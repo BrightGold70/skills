@@ -60,7 +60,7 @@ payload and emits `{"decision": "deny", "reason": "..."}` for a refused producti
 during active `step5`. Wire it to `PreToolUse` with a matcher covering every tool so its
 classification also guards shell commands and tools outside the admitted inventory.
 
-Before an agy implementer dispatch, run `python3 "$HMAD_SKILL_ROOT/scripts/h_mad_hook_wiring.py" --agy --project-root <project-root>` and require `AGY-GATE: WIRED`.
+Before an agy implementer dispatch, and before the agy `--phase review` (a reviewer run without a gate could still write), run `python3 "$HMAD_SKILL_ROOT/scripts/h_mad_hook_wiring.py" --agy --project-root <project-root>` and require `AGY-GATE: WIRED`.
 Read the `AGY-GATE:` token, never `$?`: `UNWIRED` exits 0, while `UNREADABLE` exits 2.
 `h_mad_assemble_tdd.py --agent agy` runs this check before assembling. Anything other than
 `WIRED`, including a missing token, must **halt with `step5:agy_tdd_hook_unverified`**.

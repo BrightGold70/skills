@@ -1,10 +1,10 @@
 # agy Spec-Compliance Reviewer Prompt Template — /h-mad Phase 5e-review
 
 > Used by `~/.claude/skills/h-mad/SKILL.md` Phase 5e (GREEN) spec-compliance review.
-> Orchestrator stages this template at `/tmp/h_mad_<feature>_5e_review_<N>.txt` with
-> `INLINE_*` placeholders substituted, then dispatches via `hmad-dispatch send`
-> file-indirection (substrate-agnostic; see `references/agent-substrate.md`, F-12
-> discipline preserved).
+> `h_mad_assemble_tdd.py --phase review` stages this template (`INLINE_*` placeholders
+> substituted, written to `--prompt`, default `/tmp/h_mad_<slug>.txt`) and prints the
+> `hmad-dispatch exec` block that runs it; see `references/helper-scripts.md` and
+> `references/phase5-substeps.md`. Hand-staging a copy is the fallback, not the route.
 
 You are agy reviewing Codex's implementation of module `<INLINE_MODULE_NAME>` for feature `<INLINE_FEATURE>`.
 
@@ -19,6 +19,12 @@ You are agy reviewing Codex's implementation of module `<INLINE_MODULE_NAME>` fo
 ## Files Codex Changed
 
 <INLINE_DIFF_PATHS>
+
+A path marked `(untracked; may be foreign to this task)` was listed only because it is a new file in the
+tree; another lane or the operator may have put it there. Do not report it as DRIFT (extra work) unless you
+have evidence it belongs to this task (the report names it, or the task's production files include it). A
+path marked `(deleted)` has no file to `view_file`: judge the deletion against the task instead. A path
+marked `(outside --project-root)` is a real absolute path in the same repository.
 
 ## CRITICAL: Do Not Trust the Report
 
