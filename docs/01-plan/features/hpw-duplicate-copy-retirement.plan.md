@@ -1,6 +1,6 @@
 # Plan: hpw-duplicate-copy-retirement
 
-**Status:** Draft, awaiting user approval. Nothing has been moved or deleted.
+**Status:** Done 2026-11-06. Rescue: HemaSuite `6ab1ed2df` (branch `chore/rescue-hbv-scaffold`), stored per project. Operator chose outright deletion, no README. Correction to the findings below: HemaSuite's active topic was already HBV, spelled "disease", so nothing would have been overwritten. "Nothing consumes this copy" below is also wrong: `hemasuite/src-tauri/src/lib.rs:68` points `HPW_PATH` here by default, read by `sidecar/routers/hpw.py` and `sidecar/server.py`. That app copy last changed 2026-03-07; run this way, its HPW routes now return 503 unless `HEMASUITE_SKILLS_ROOT` names a tree holding the directory.
 **Written:** 2026-10-18 (handoff Next Step 4 from `2026-08-09-main__j29-out-clobber-guard.md`)
 
 ## Executive Summary
