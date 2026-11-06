@@ -13,12 +13,14 @@ from skill_corpus import doc_text  # noqa: E402
 SKILL_DIR = Path(__file__).resolve().parents[1]
 PROMPT = SKILL_DIR / "references" / "codex-implementer-prompt.md"
 
-# Verbatim spec FR-9's three-sentence block, with Markdown quote wrapping removed.
+# Spec FR-9's three-sentence block (sentence 3 rewritten 2026-11-06, row green-prompt-demands-a-wire-cut-the-gate-refuses: the cut is the verifier's, not GREEN's), with Markdown quote wrapping removed.
 CANONICAL = (
     "A missing-symbol RED on the pin is valid **only** when the missing symbol is "
     "the caller the task creates, and the callee resolves at the RED base. "
-    "The RED report must name both. GREEN must prove the wire by a wire-cut: "
-    "delete the call only, keep the caller and the callee, and confirm the pin fails."
+    "The RED report must name both. The wire-cut (delete the call only, keep the "
+    "caller and the callee, and confirm the pin fails) is the verifier's "
+    "wire-scoped revert, not GREEN's: GREEN proposes the connection's mutation "
+    "row and does not perform the cut."
 )
 
 RED_ANCHOR = "1. For each FAILING test:"

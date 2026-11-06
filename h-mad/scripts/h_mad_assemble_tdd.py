@@ -46,6 +46,12 @@ would quietly pick one.
       referenced-not-inlined: "<name>", …                       (only when any)
     ASSEMBLE-TDD: HALT <reason>
 
+`--phase review` stages the 5e agy spec review instead (`assemble_review`): the same
+PASS line with `phase=review`, an `exec agy` → `progress` → `VERDICT:` block and no pytest
+line; it needs `--codex-report` and `--diff-path`/`--base-ref` and halts without them.
+A `--python` the Phase-5 gate would deny draws `ASSEMBLE-TDD: WARN interpreter_gate_untrusted`
+on stderr and still assembles.
+
 A global impl-plan section the task cites by `§"…"` is inlined after the task
 (`referenced_sections`); a citation it cannot place is listed, never a halt.
 
@@ -78,6 +84,9 @@ from h_mad_target_identity import (  # noqa: E402
 
 TOKEN = "ASSEMBLE-TDD"
 TEMPLATE = SKILL_DIR / "references" / "codex-implementer-prompt.md"
+REVIEW_TEMPLATE = SKILL_DIR / "references" / "agy-spec-reviewer-prompt.md"
+# phase5-substeps.md's 5e-review command block uses 600; the review only reads.
+REVIEW_TIMEOUT_S = 600
 TIMEOUT_DEFAULTS = {"codex": 900, "grok": 1500, "agy": 900}
 AGY_WIRING_CHECK = str(Path(__file__).resolve().parent / "h_mad_hook_wiring.py")
 AGY_WIRING_TIMEOUT_S = 60
@@ -443,6 +452,19 @@ def _interpreter_runs(python: str) -> bool:
         return False
 
 
+def python_admitted_by_gate(python: str, project_root: Path) -> bool:
+    """The gate's own test for an interpreter: a trusted bin dir, or a project-contained venv.
+
+    One predicate for two readers: `anchor_check_python` keeps an admitted `--python`,
+    and `main` warns when the dispatch's pytest interpreter is not admitted.
+    """
+    if Path(python).parent in STATIC_TRUSTED_BIN_DIRS:  # M:AT-ANCHOR-KEEP
+        return True
+    if _contained_venv_executable(python, project_root, None) is not None:  # M:AT-ANCHOR-VENV
+        return True
+    return False
+
+
 def anchor_check_python(python: str, project_root: Path) -> str:
     """The interpreter GREEN runs `--check-anchors` under: one the Phase-5 gate admits.
 
@@ -453,9 +475,7 @@ def anchor_check_python(python: str, project_root: Path) -> str:
     contained in the project, is kept verbatim. With no runnable trusted candidate
     `--python` is kept: the check may be refused, as before, never mis-pointed.
     """
-    if Path(python).parent in STATIC_TRUSTED_BIN_DIRS:  # M:AT-ANCHOR-KEEP
-        return python
-    if _contained_venv_executable(python, project_root, None) is not None:  # M:AT-ANCHOR-VENV
+    if python_admitted_by_gate(python, project_root):  # M:AT-ANCHOR-ADMITTED
         return python
     for candidate in ANCHOR_CHECK_PYTHONS:
         if _interpreter_runs(candidate):  # M:AT-ANCHOR-TRUSTED
@@ -612,7 +632,14 @@ def assemble(
     # GREEN instructions and nothing in it says which one applies today.
     directive = {
         "red": "**THIS DISPATCH IS PHASE 5d (RED).** Write failing tests only. "
-               "Do not modify production code.",
+               "Do not modify production code, except a stub the task body above "
+               "explicitly prescribes as RED's first step: write the failing test file "
+               "first, then the stub, because the Phase-5 gate admits a production edit "
+               "only while the task's test is measured failing (a stub before the test "
+               "exists is denied as `test-missing`; a test that imports the stub's module "
+               "as `from pkg import mod` errors at collection and is denied as "
+               "`pytest-error`, so import it by full path, `from pkg.mod import name` or "
+               "`import pkg.mod`); make no other production edit.",
         "green": "**THIS DISPATCH IS PHASE 5e (GREEN).** Make the failing tests "
                  "pass with minimal production code. Do not weaken a test.",
         "gate": "**THIS DISPATCH IS A GATE TASK (no RED/GREEN).** Do not modify "
@@ -659,8 +686,10 @@ def assemble(
             "symbol. "
             "A missing-symbol RED on the pin is valid **only** when the missing symbol is "
             "the caller the task creates, and the callee resolves at the RED base. "
-            "The RED report must name both. GREEN must prove the wire by a wire-cut: "
-            "delete the call only, keep the caller and the callee, and confirm the pin fails."
+            "The RED report must name both. The wire-cut (delete the call only, keep the "
+            "caller and the callee, and confirm the pin fails) is the verifier's "
+            "wire-scoped revert, not GREEN's: GREEN proposes the connection's mutation "
+            "row and does not perform the cut."
         )
     # Counts are STATED whenever they were supplied, whatever the shape. The
     # exemption above is about not REQUIRING them on a wiring task; it was
@@ -771,6 +800,118 @@ def assemble(
     }
 
 
+def _review_diff_paths(*, project_root: Path, diff_paths: list[str], base_ref: str | None) -> list[str]:
+    """The files the review reads: given verbatim, or derived from `--base-ref`. Never empty."""
+    if diff_paths and base_ref:  # M:RV-DIFF-CONFLICT
+        raise Halt("diff_source_conflict", "give --diff-path or --base-ref, not both")
+    if base_ref:
+        if base_ref.startswith("-"):  # M:RV-BASE-DASH
+            raise Halt("diff_base_invalid", f"--base-ref {base_ref!r} must not start with '-'")
+        try:
+            changed = subprocess.run(
+                ["git", "-C", str(project_root), "diff", "--name-only", "-z", base_ref, "--"],
+                capture_output=True, text=True, timeout=30, check=True,
+            ).stdout
+            fresh = subprocess.run(
+                ["git", "-C", str(project_root), "ls-files", "--others", "--exclude-standard", "-z"],
+                capture_output=True, text=True, timeout=30, check=True,
+            ).stdout
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+            raise Halt("diff_base_unreadable", f"git diff against {base_ref!r} in {project_root}: {exc}") from None
+        diff_paths = [name for name in (changed + fresh).split("\0") if name]
+    if not diff_paths:  # M:RV-DIFF-REQUIRED
+        raise Halt("diff_paths_required", "the review needs --diff-path (repeatable) or --base-ref; "
+                   "or the base ref names no changed file")
+    ordered: list[str] = []
+    for changed_path in diff_paths:
+        if (not changed_path or os.path.isabs(changed_path) or ".." in Path(changed_path).parts
+                or any(ch in changed_path for ch in "\n\r\0")):  # M:RV-DIFF-INVALID
+            raise Halt("diff_path_invalid",
+                       f"diff path {changed_path!r} must be relative, free of '..', and one line")
+        if changed_path not in ordered:
+            ordered.append(changed_path)
+    return ordered
+
+
+def assemble_review(
+    *,
+    feature: str,
+    task_id: str,
+    impl_plan: Path,
+    project_root: Path,
+    module: str,
+    codex_report: Path | None,
+    diff_paths: list[str],
+    base_ref: str | None,
+    template: Path,
+) -> tuple[str, dict]:
+    """Stage the 5e agy spec review from `agy-spec-reviewer-prompt.md`, or Halt.
+
+    The task text is `task_body` (the implementer's own cut), the report is the
+    implementer's file verbatim, and the diff paths are absolute so `view_file` needs
+    no guess about the working directory. Every input is required and fails closed:
+    a review of a report it never read, or of no files, measures nothing.
+    """
+    if codex_report is None:  # M:RV-REPORT-REQUIRED
+        raise Halt("codex_report_required", "--phase review needs --codex-report <file>")
+    try:
+        report_text = codex_report.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Halt("codex_report_unreadable", f"{codex_report}: {exc}") from None
+    if not report_text.strip():  # M:RV-REPORT-EMPTY
+        raise Halt("codex_report_empty", f"{codex_report} is blank")
+    ordered = _review_diff_paths(project_root=project_root, diff_paths=diff_paths, base_ref=base_ref)
+    try:
+        plan_text = impl_plan.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise Halt("impl_plan_unreadable", f"{impl_plan}: {exc}") from None
+    try:
+        template_text = template.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise Halt("template_unreadable", f"{template}: {exc}") from None
+    meta = {t["id"].lower(): t for t in _parse_tasks(plan_text)}.get(task_id.strip().lower())
+    if meta is None:
+        raise Halt("task_not_found", f"task={task_id}")
+    body = task_body(plan_text, task_id)
+    filled, residue = fill_slots(template_text, {
+        "<INLINE_MODULE_NAME>": module,
+        "<INLINE_FEATURE>": feature,
+        "<INLINE_IMPL_PLAN_TASK>": body,
+        "<INLINE_CODEX_REPORT>": report_text.rstrip("\n"),
+        "<INLINE_DIFF_PATHS>": "\n".join(f"- {project_root / name}" for name in ordered),
+    })
+    leftover_slots = sorted(set(RESIDUAL.findall(residue)))
+    if leftover_slots:  # M:RV-RESIDUAL
+        raise Halt("residual_slots", ", ".join(leftover_slots))
+    return filled, {
+        "shape": meta["shape"] or "undeclared", "task": meta["id"], "pin": meta["pin"],
+        "diff_paths": ordered, "residue": residue,
+    }
+
+
+def review_command_block(
+    *, feature: str, prompt: Path, out: Path, log: Path, timeout: int,
+    project_root: Path, agent: str, model: str | None = None, effort: str | None = None,
+) -> str:
+    """The 5e-review dispatch exactly as phase5-substeps.md stages it: exec, progress, VERDICT.
+
+    No pytest line: a spec review reads code and reports `VERDICT:`; it has no counts.
+    """
+    q = shlex.quote
+    over = (f" --model {q(model)}" if model else "") + (f" --effort {q(effort)}" if effort else "")
+    return "\n".join([
+        f"hmad-dispatch exec {agent} {q(str(prompt))}{over} \\",
+        f"  --cd {q(str(project_root))} \\",
+        f"  --out {q(str(out))} --log {q(str(log))} --timeout {q(str(timeout))} &",
+        "dispatch_pid=$!",
+        f"hmad-dispatch progress {q(str(log))} --pid $dispatch_pid",
+        "wait $dispatch_pid; rc=$?",
+        "if [ \"$rc\" -ne 0 ]; then echo \"dispatch failed rc=$rc\" >&2; exit \"$rc\"; fi",
+        f"python3 {q(str(SKILL_DIR / 'scripts' / 'h_mad_extract_verdict.py'))} \\",
+        f"  {q(str(out))} --key VERDICT --feature {q(feature)} --phase 5e",
+    ])
+
+
 def command_block(
     *, feature: str, module: str, phase: str, prompt: Path, out: Path,
     log: Path, timeout: int, python: str, test_path: str | list[str],
@@ -861,7 +1002,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Stage a Phase-5d/5e Codex dispatch")
     ap.add_argument("--feature", required=True)
     ap.add_argument("--task", required=True, help='e.g. "Task 3" or "M2"')
-    ap.add_argument("--phase", required=True, choices=("red", "green", "gate"))
+    ap.add_argument("--phase", required=True, choices=("red", "green", "gate", "review"))
     ap.add_argument("--project-root", required=True, type=Path)
     ap.add_argument("--module", required=True)
     ap.add_argument("--test-path", action="append", default=[],
@@ -892,7 +1033,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--prompt", type=Path,
                     help="where the assembled prompt is written (default /tmp/h_mad_<slug>.txt)")
     ap.add_argument("--report-file", default="")
-    ap.add_argument("--agent", choices=("codex", "grok", "agy"), default="codex")
+    ap.add_argument("--agent", choices=("codex", "grok", "agy"), default=None,
+                    help="default: agy for --phase review, codex otherwise")
+    ap.add_argument("--codex-report", type=Path,
+                    help="review only: the implementer's report file, inlined verbatim")
+    ap.add_argument("--diff-path", action="append", default=[],
+                    help="review only: a changed file, relative to --project-root; repeatable")
+    ap.add_argument("--base-ref", default=None,
+                    help="review only: derive the changed files from `git diff --name-only <ref>` "
+                         "plus untracked files (instead of --diff-path)")
     ap.add_argument("--timeout", type=int, default=None)
     ap.add_argument("--model", default=DEFAULT_MODEL,
                     help="OVERRIDE; unset inherits the codex CLI's own configured model")
@@ -903,9 +1052,42 @@ def main(argv: list[str] | None = None) -> int:
                     help="re-dispatch at effort " + ESCALATED_EFFORT + " after a failed GREEN or "
                          "red_wrong_reason; prints an effort-escalated marker. Refused with --effort")
     ap.add_argument("--sandbox", help="passed through; read-only is refused for a phase that runs pytest")
-    ap.add_argument("--template", type=Path, default=TEMPLATE)
+    ap.add_argument("--template", type=Path, default=None,
+                    help="default: the implementer prompt, or the agy spec-reviewer prompt for review")
     args = ap.parse_args(argv)
-    timeout = args.timeout if args.timeout is not None else TIMEOUT_DEFAULTS[args.agent]
+    is_review = args.phase == "review"
+    if args.agent is None:
+        args.agent = "agy" if is_review else "codex"
+    if args.template is None:
+        args.template = REVIEW_TEMPLATE if is_review else TEMPLATE
+    if args.timeout is not None:
+        timeout = args.timeout
+    else:
+        timeout = REVIEW_TIMEOUT_S if is_review else TIMEOUT_DEFAULTS[args.agent]
+
+    # An option that does not apply is a halt, never a silent drop: the run would
+    # still end PASS with the value reaching no part of the prompt.
+    if is_review:
+        misapplied = [flag for flag, given in (
+            ("--test-path", args.test_path), ("--authors-test", args.authors_test),
+            ("--expect-fail", args.expect_fail is not None),
+            ("--expect-pass", args.expect_pass is not None), ("--guard", args.guard),
+            ("--env-known-failure", args.env_known_failure),
+            ("--env-known-failures-file", args.env_known_failures_file),
+            ("--mutation-spec", args.mutation_spec), ("--report-file", args.report_file),
+            ("--sandbox", args.sandbox),
+        ) if given]
+        halt = ("review_option_not_applicable", ", ".join(misapplied)) if misapplied else None  # M:RV-NOT-APPLICABLE
+    else:
+        stray = [flag for flag, given in (
+            ("--codex-report", args.codex_report), ("--diff-path", args.diff_path),
+            ("--base-ref", args.base_ref),
+        ) if given]
+        halt = ("review_only_option", ", ".join(stray)) if stray else None  # M:RV-ONLY-OPTION
+    if halt is not None:
+        print(f"{TOKEN}: HALT {halt[0]}")
+        print(f"  {halt[1]}")
+        return 2
 
     if args.agent == "agy":
         try:
@@ -952,16 +1134,25 @@ def main(argv: list[str] | None = None) -> int:
                            f"{args.env_known_failures_file}: {exc}") from None
             env_known += [l.strip() for l in listing.splitlines()
                           if l.strip() and not l.lstrip().startswith("#")]
-        filled, meta = assemble(
-            feature=args.feature, task_id=args.task, phase=args.phase,
-            impl_plan=impl_plan, project_root=args.project_root, module=args.module,
-            test_path=args.test_path, python=args.python,
-            expect_fail=args.expect_fail, expect_pass=args.expect_pass,
-            guards=args.guard, report_file=args.report_file, template=args.template,
-            mutation_spec=args.mutation_spec,  # M:AT-MUT-WIRE
-            env_known_failures=env_known,  # M:AT-ENV-WIRE
-            authors_test=args.authors_test,  # M:AT-AUTHORS-WIRE
-        )
+        if is_review:  # M:RV-DISPATCH
+            filled, meta = assemble_review(
+                feature=args.feature, task_id=args.task, impl_plan=impl_plan,
+                project_root=args.project_root, module=args.module,
+                codex_report=args.codex_report, diff_paths=args.diff_path,
+                base_ref=args.base_ref, template=args.template,
+            )
+            meta.update(inlined_sections=[], inlined_lines=0, unresolved_refs=[])
+        else:
+            filled, meta = assemble(
+                feature=args.feature, task_id=args.task, phase=args.phase,
+                impl_plan=impl_plan, project_root=args.project_root, module=args.module,
+                test_path=args.test_path, python=args.python,
+                expect_fail=args.expect_fail, expect_pass=args.expect_pass,
+                guards=args.guard, report_file=args.report_file, template=args.template,
+                mutation_spec=args.mutation_spec,  # M:AT-MUT-WIRE
+                env_known_failures=env_known,  # M:AT-ENV-WIRE
+                authors_test=args.authors_test,  # M:AT-AUTHORS-WIRE
+            )
         effort, effort_source = resolve_effort(  # M:AT-EFFORT-RESOLVE
             phase=args.phase, shape=meta["shape"], agent=args.agent,
             override=args.effort, escalate=args.escalate, env=os.environ,
@@ -988,6 +1179,18 @@ def main(argv: list[str] | None = None) -> int:
     # Both paths are named, because `--out` read as "where the prompt goes" and
     # was misused once. On stderr: stdout is parsed, and pinned byte-for-byte.
     sys.stdout.flush()  # so 2>&1 shows these after the PASS line, not before it
+    runs_pytest = args.phase in ("red", "green") or bool(args.authors_test)
+    if runs_pytest and not python_admitted_by_gate(args.python, args.project_root):  # M:AT-WARN-UNTRUSTED
+        # Operator ruling 2026-11-06: warn and continue, never refuse. Stderr only:
+        # stdout token lines are parsed.
+        print(
+            f"{TOKEN}: WARN interpreter_gate_untrusted {args.python} is outside the Phase-5 "
+            f"gate's trusted dirs and is not a venv contained in {args.project_root}, so the "
+            f"gate will deny the dispatch's pytest run; create a thin venv "
+            f"({args.project_root}/.venv with pytest only, never a symlink) and pass "
+            f"--python {args.project_root}/.venv/bin/python",
+            file=sys.stderr,
+        )
     print(f"  prompt (written, --prompt): {prompt}", file=sys.stderr)
     print(f"  dispatch output (--out, the agent's reply — NOT the prompt): {out}", file=sys.stderr)
     # Under the PASS line, never on it: the PASS line is parsed. Inlined size is
@@ -999,13 +1202,19 @@ def main(argv: list[str] | None = None) -> int:
     if meta["unresolved_refs"]:
         print("  referenced-not-inlined: "
               + ", ".join(f'"{r}"' for r in meta["unresolved_refs"]))
-    print(command_block(
-        feature=args.feature, module=args.module, phase=args.phase, prompt=prompt,
-        out=out, log=log, timeout=timeout, model=args.model, effort=effort,  # M:AT-EFFORT-WIRE
-        python=args.python, test_path=args.test_path, project_root=args.project_root,
-        agent=args.agent,
-        authors_test=args.authors_test,  # M:AT-AUTHORS-BLOCK-WIRE
-    ))
+    if is_review:  # M:RV-BLOCK
+        print(review_command_block(
+            feature=args.feature, prompt=prompt, out=out, log=log, timeout=timeout,
+            project_root=args.project_root, agent=args.agent, model=args.model, effort=effort,
+        ))
+    else:
+        print(command_block(
+            feature=args.feature, module=args.module, phase=args.phase, prompt=prompt,
+            out=out, log=log, timeout=timeout, model=args.model, effort=effort,  # M:AT-EFFORT-WIRE
+            python=args.python, test_path=args.test_path, project_root=args.project_root,
+            agent=args.agent,
+            authors_test=args.authors_test,  # M:AT-AUTHORS-BLOCK-WIRE
+        ))
     if effort:  # inherited stays silent: no-agent RED output is pinned byte-identical
         print(f"# effort: {effort} ({effort_source})")
     if args.escalate:

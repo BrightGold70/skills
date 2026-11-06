@@ -74,8 +74,8 @@
       "_mechanism": "Removing the requirement to name caller and callee must break the L4 canonical-block guard.",
       "file": "references/failure-recovery.md",
       "symbol": "Per-phase failure routes (v2.2)",
-      "find": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. GREEN must prove the wire by a wire-cut: delete the call only, keep the caller and the callee, and confirm the pin fails.",
-      "replace": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. GREEN must prove the wire by a wire-cut: delete the call only, keep the caller and the callee, and confirm the pin fails.",
+      "find": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. The wire-cut (delete the call only, keep the caller and the callee, and confirm the pin fails) is the verifier's wire-scoped revert, not GREEN's: GREEN proposes the connection's mutation row and does not perform the cut.",
+      "replace": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The wire-cut (delete the call only, keep the caller and the callee, and confirm the pin fails) is the verifier's wire-scoped revert, not GREEN's: GREEN proposes the connection's mutation row and does not perform the cut.",
       "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
     },
     {
@@ -83,7 +83,7 @@
       "_mechanism": "Replacing the wire-cut with callee deletion must break the L4 canonical-block guard.",
       "file": "references/failure-recovery.md",
       "symbol": "Per-phase failure routes (v2.2)",
-      "find": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. GREEN must prove the wire by a wire-cut: delete the call only, keep the caller and the callee, and confirm the pin fails.",
+      "find": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. The wire-cut (delete the call only, keep the caller and the callee, and confirm the pin fails) is the verifier's wire-scoped revert, not GREEN's: GREEN proposes the connection's mutation row and does not perform the cut.",
       "replace": "only the failure mode can. A missing-symbol RED on the pin is valid **only** when the missing symbol is the caller the task creates, and the callee resolves at the RED base. The RED report must name both. GREEN must prove the wire by a wire-cut: delete the callee only, keep the caller, and confirm the pin fails.",
       "test": "tests/test_h_mad_new_caller_carveout_copies.py::test_copy_carries_the_canonical_block"
     },

@@ -1,0 +1,187 @@
+{
+  "_why": "Lane A row 5 (2026-11-06): h_mad_assemble_tdd.py --phase review stages the 5e agy spec review.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_assemble_tdd_agent.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "rv-report-required-dropped",
+      "_mechanism": "A review with no --codex-report proceeds.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if codex_report is None:  # M:RV-REPORT-REQUIRED",
+      "replace": "if False:  # M:RV-REPORT-REQUIRED",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[no-report]"
+    },
+    {
+      "name": "rv-report-empty-dropped",
+      "_mechanism": "A blank report is reviewed as if it said something.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if not report_text.strip():  # M:RV-REPORT-EMPTY",
+      "replace": "if False:  # M:RV-REPORT-EMPTY",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[blank]"
+    },
+    {
+      "name": "rv-diff-required-dropped",
+      "_mechanism": "A review of no files proceeds.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if not diff_paths:  # M:RV-DIFF-REQUIRED",
+      "replace": "if False:  # M:RV-DIFF-REQUIRED",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[no-diff]"
+    },
+    {
+      "name": "rv-diff-conflict-dropped",
+      "_mechanism": "--diff-path and --base-ref are both accepted, one silently winning.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if diff_paths and base_ref:  # M:RV-DIFF-CONFLICT",
+      "replace": "if False:  # M:RV-DIFF-CONFLICT",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[both]"
+    },
+    {
+      "name": "rv-base-dash-dropped",
+      "_mechanism": "A --base-ref starting with '-' reaches git as an option.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if base_ref.startswith(\"-\"):  # M:RV-BASE-DASH",
+      "replace": "if False:  # M:RV-BASE-DASH",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[dash-ref]"
+    },
+    {
+      "name": "rv-base-unreadable-masked",
+      "_mechanism": "A failing git diff reads as an empty change list.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "capture_output=True, text=True, timeout=30, check=True,\n            ).stdout\n            fresh",
+      "replace": "capture_output=True, text=True, timeout=30, check=False,\n            ).stdout\n            fresh",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_an_unknown_base_ref_in_a_real_repo_halts"
+    },
+    {
+      "name": "rv-untracked-dropped",
+      "_mechanism": "A new, untracked file is missing from the base-ref list.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "for name in (changed + fresh).split(\"\\0\") if name]",
+      "replace": "for name in (changed).split(\"\\0\") if name]",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_names_changed_and_untracked_files"
+    },
+    {
+      "name": "rv-dotdot-dropped",
+      "_mechanism": "A '..' diff path is accepted.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "or os.path.isabs(changed_path) or \"..\" in Path(changed_path).parts",
+      "replace": "or os.path.isabs(changed_path)",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[dotdot]"
+    },
+    {
+      "name": "rv-absolute-dropped",
+      "_mechanism": "An absolute diff path is accepted.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "or os.path.isabs(changed_path) or \"..\" in",
+      "replace": "or \"..\" in",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[absolute]"
+    },
+    {
+      "name": "rv-newline-dropped",
+      "_mechanism": "A multi-line diff path is accepted.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "or any(ch in changed_path for ch in \"\\n\\r\\0\")):  # M:RV-DIFF-INVALID",
+      "replace": "):  # M:RV-DIFF-INVALID",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[newline]"
+    },
+    {
+      "name": "rv-dedupe-dropped",
+      "_mechanism": "A repeated diff path is listed twice.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if changed_path not in ordered:",
+      "replace": "if True:",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_repeated_diff_path_is_listed_once"
+    },
+    {
+      "name": "rv-paths-relative",
+      "_mechanism": "Diff paths are printed relative, leaving view_file to guess the cwd.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "f\"- {project_root / name}\" for name in ordered",
+      "replace": "f\"- {name}\" for name in ordered",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_review_defaults_to_agy_and_stages_a_working_dispatch"
+    },
+    {
+      "name": "rv-residual-dropped",
+      "_mechanism": "An unfilled slot reaches the reviewer.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if leftover_slots:  # M:RV-RESIDUAL",
+      "replace": "if False:  # M:RV-RESIDUAL",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_an_unfilled_slot_in_the_template_is_refused"
+    },
+    {
+      "name": "rv-not-applicable-dropped",
+      "_mechanism": "Counts/test flags are silently dropped on a review.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "halt = (\"review_option_not_applicable\", \", \".join(misapplied)) if misapplied else None  # M:RV-NOT-APPLICABLE",
+      "replace": "halt = None  # M:RV-NOT-APPLICABLE",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_flag_that_does_not_apply_to_a_review_halts_instead_of_being_dropped[expect-fail]"
+    },
+    {
+      "name": "rv-only-option-dropped",
+      "_mechanism": "--diff-path on a RED is silently dropped.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "halt = (\"review_only_option\", \", \".join(stray)) if stray else None  # M:RV-ONLY-OPTION",
+      "replace": "halt = None  # M:RV-ONLY-OPTION",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_review_only_flag_on_another_phase_halts_instead_of_being_dropped"
+    },
+    {
+      "name": "rv-dispatch-bypassed",
+      "_mechanism": "A review phase assembles through the implementer path.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if is_review:  # M:RV-DISPATCH",
+      "replace": "if False:  # M:RV-DISPATCH",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_review_defaults_to_agy_and_stages_a_working_dispatch"
+    },
+    {
+      "name": "rv-block-bypassed",
+      "_mechanism": "A review prints the implementer's block, with its pytest line.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if is_review:  # M:RV-BLOCK",
+      "replace": "if False:  # M:RV-BLOCK",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_review_defaults_to_agy_and_stages_a_working_dispatch"
+    },
+    {
+      "name": "rv-agent-codex-default",
+      "_mechanism": "A review defaults to codex.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "args.agent = \"agy\" if is_review else \"codex\"",
+      "replace": "args.agent = \"codex\"",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_review_defaults_to_agy_and_stages_a_working_dispatch"
+    },
+    {
+      "name": "rv-timeout-implementer",
+      "_mechanism": "A review takes the implementer's agy timeout.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "timeout = REVIEW_TIMEOUT_S if is_review else TIMEOUT_DEFAULTS[args.agent]",
+      "replace": "timeout = TIMEOUT_DEFAULTS[args.agent]",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_review_defaults_to_agy_and_stages_a_working_dispatch"
+    },
+    {
+      "name": "rv-template-implementer",
+      "_mechanism": "A review fills the implementer template.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "args.template = REVIEW_TEMPLATE if is_review else TEMPLATE",
+      "replace": "args.template = TEMPLATE",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_review_defaults_to_agy_and_stages_a_working_dispatch"
+    },
+    {
+      "name": "rv-docs-hand-clause",
+      "_mechanism": "The 5e doc again says the review half is assembled by hand.",
+      "file": "references/phase5-substeps.md",
+      "find": "(and the agy spec-review half with `h_mad_assemble_tdd.py --phase review",
+      "replace": "(the agy spec-review half is still assembled by hand; `h_mad_assemble_tdd.py --phase review",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_docs_say_the_review_is_staged_by_the_script"
+    }
+  ]
+}

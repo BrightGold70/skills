@@ -2063,7 +2063,7 @@ class TestGateProbeHandoffSpec:
         filled, _ = call(plan, tmp_path, phase=phase, template=template)
         directive = {
             "red": "**THIS DISPATCH IS PHASE 5d (RED).** Write failing tests only. "
-                   "Do not modify production code.",
+                   "Do not modify production code, except a stub the task body above explicitly prescribes as RED's first step: write the failing test file first, then the stub, because the Phase-5 gate admits a production edit only while the task's test is measured failing (a stub before the test exists is denied as `test-missing`; a test that imports the stub's module as `from pkg import mod` errors at collection and is denied as `pytest-error`, so import it by full path, `from pkg.mod import name` or `import pkg.mod`); make no other production edit.",
             "green": "**THIS DISPATCH IS PHASE 5e (GREEN).** Make the failing tests "
                      "pass with minimal production code. Do not weaken a test.",
         }[phase]
@@ -2301,3 +2301,258 @@ class TestGreenEffortPolicy:
         assert proc.returncode == 2, proc.stdout + proc.stderr
         assert "ASSEMBLE-TDD: HALT effort_conflict" in proc.stdout
         assert not (tmp_path / "prompt.txt").exists()
+
+
+# --- lane A rows 1-4 (2026-11-06) ---------------------------------------------------------------
+#
+# 1. assemble-tdd-red-forbids-plan-stubs      3. assembled-test-command-the-gate-denies
+# 2. green-prompt-demands-a-wire-cut          4. hostile-path-limits-in-the-red-template
+
+RED_DIRECTIVE_HEAD = "**THIS DISPATCH IS PHASE 5d (RED).**"
+IMPLEMENTER_TEXT = TEMPLATE.read_text(encoding="utf-8")
+
+
+def _line_starting(text: str, head: str) -> str:
+    matches = [line for line in text.splitlines() if line.startswith(head)]
+    assert len(matches) == 1, f"expected exactly one line starting {head!r}, got {len(matches)}"
+    return matches[0]
+
+
+class TestRedStubs:
+    def test_the_red_directive_allows_only_a_stub_the_task_body_prescribes(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        filled, _ = call(plan, tmp_path, phase="red")
+        directive = _line_starting(filled, RED_DIRECTIVE_HEAD)
+        assert "stub" in directive
+        assert "explicitly prescribes" in directive and "first step" in directive
+        assert "no other production" in directive.lower()
+
+    def test_the_green_directive_gains_no_stub_clause(self, plan: Path, tmp_path: Path) -> None:
+        filled, _ = call(plan, tmp_path, phase="green")
+        assert "stub" not in _line_starting(filled, "**THIS DISPATCH IS PHASE 5e (GREEN).**")
+
+    def test_the_self_review_checklist_allows_the_same_stub_and_nothing_else(self) -> None:
+        item = _line_starting(IMPLEMENTER_TEXT, "- [ ] No production code was modified during RED")
+        assert "stub" in item and "explicitly prescribes" in item and "first step" in item
+        assert "no other" in item.lower()
+
+
+# The premise of row 2, executed rather than assumed: the TDD judge scores a green suite
+# `test-passing`, and the Phase-5 hook admits a production edit only on `red-measured`.
+class TestWireCutIsNotGreensToPerform:
+    def test_the_gate_really_denies_an_edit_while_the_suite_is_green(self) -> None:
+        import h_mad_tdd_judge as judge
+        assert judge.score("tests/test_x.py .  [100%]\n1 passed in 0.01s\n", False) == "test-passing"
+        hook = (SKILL_DIR / "hooks" / "h-mad-tdd-gate.sh").read_text(encoding="utf-8")
+        allow = _line_starting(hook, "JUDGE_ALLOW_RE=")
+        assert "kind=red-measured" in allow and "test-passing" not in allow
+
+    def _wiring_green(self, plan: Path, tmp_path: Path) -> str:
+        filled, _ = call(plan, tmp_path, task_id="Task 2", phase="green",
+                         expect_fail=None, expect_pass=None)
+        return filled
+
+    def test_the_assembled_green_prompt_gives_the_cut_to_the_verifier(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        filled = " ".join(self._wiring_green(plan, tmp_path).split())
+        assert "GREEN must prove the wire by a wire-cut" not in filled
+        # template: L1 + L2 + L6, plus the assembler's own copy
+        assert filled.count("is the verifier's wire-scoped revert, not GREEN's") == 4
+        assert filled.count("GREEN proposes the connection's mutation row and does not perform the cut") == 4
+
+    def test_no_surface_still_tells_green_to_perform_the_cut(self) -> None:
+        for relative in ("references/codex-implementer-prompt.md", "references/phase5-substeps.md",
+                         "references/failure-recovery.md", "scripts/h_mad_assemble_tdd.py"):
+            text = " ".join((SKILL_DIR / relative).read_text(encoding="utf-8").split())
+            assert "GREEN must prove the wire by a wire-cut" not in text, relative
+
+    def test_the_wire_pin_clause_asks_green_to_propose_not_to_delete(self) -> None:
+        paragraph = " ".join(_line_starting(IMPLEMENTER_TEXT, "**If the dispatch carries a `WIRE:` / `WIRE-PIN:` line").split())
+        assert "In GREEN, propose the mutation row whose mutant deletes the connection alone" in paragraph
+        assert "if the connection alone is deleted" not in paragraph
+
+
+def _wrapper_python(path: Path) -> str:
+    """A python that imports pytest (it execs this one) at a path the gate does not trust."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n', encoding="utf-8")
+    path.chmod(0o755)
+    return str(path)
+
+
+def _wrapper_venv(root: Path) -> str:
+    python = _wrapper_python(root / ".venv" / "bin" / "python")
+    (root / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+    return python
+
+
+def _cli_red(plan: Path, root: Path, python: str, *extra: str) -> subprocess.CompletedProcess[str]:
+    return run_cli(
+        "--feature", "f", "--task", "Task 1", "--phase", "red", "--project-root", str(root),
+        "--module", "mod", "--test-path", "tests/test_mod.py", "--impl-plan", str(plan),
+        "--expect-fail", "3", "--expect-pass", "1", "--python", python,
+        "--prompt", str(root / "prompt.txt"), "--out", str(root / "o.out"),
+        "--log", str(root / "o.log"), *extra,
+    )
+
+
+class TestInterpreterGateWarning:
+    def test_the_predicate_admits_a_trusted_dir_and_a_contained_venv_only(
+        self, tmp_path: Path, tmp_path_factory: pytest.TempPathFactory
+    ) -> None:
+        import h_mad_assemble_tdd as at
+        assert at.python_admitted_by_gate("/usr/bin/python3", tmp_path) is True
+        assert at.python_admitted_by_gate(_wrapper_venv(tmp_path), tmp_path) is True
+        assert at.python_admitted_by_gate(
+            _wrapper_python(tmp_path / "anaconda3" / "bin" / "python3"), tmp_path) is False
+        outside = _wrapper_venv(tmp_path_factory.mktemp("elsewhere"))
+        assert at.python_admitted_by_gate(outside, tmp_path) is False
+
+    def test_the_anchor_check_and_the_warning_share_that_one_predicate(self) -> None:
+        source = SCRIPT.read_text(encoding="utf-8")
+        assert source.count("STATIC_TRUSTED_BIN_DIRS:") == 1, "the trusted-dir test lives in one helper"
+        assert source.count("_contained_venv_executable(") == 1
+
+    def test_an_untrusted_interpreter_warns_on_stderr_and_still_assembles(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        python = _wrapper_python(tmp_path / "anaconda3" / "bin" / "python3")
+        proc = _cli_red(plan, tmp_path, python)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert proc.stdout.startswith("ASSEMBLE-TDD: PASS "), proc.stdout
+        assert (tmp_path / "prompt.txt").is_file()
+        warns = [l for l in proc.stderr.splitlines() if l.startswith("ASSEMBLE-TDD: WARN interpreter_gate_untrusted")]
+        assert len(warns) == 1, proc.stderr
+        assert python in warns[0] and ".venv" in warns[0] and "thin" in warns[0]
+
+    def test_the_warning_never_reaches_stdout(self, plan: Path, tmp_path: Path) -> None:
+        proc = _cli_red(plan, tmp_path, _wrapper_python(tmp_path / "anaconda3" / "bin" / "python3"))
+        assert "WARN" not in proc.stdout
+
+    def test_a_venv_contained_in_the_project_does_not_warn(self, plan: Path, tmp_path: Path) -> None:
+        proc = _cli_red(plan, tmp_path, _wrapper_venv(tmp_path))
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "WARN" not in proc.stderr
+
+    def test_a_gate_dispatch_that_runs_no_pytest_does_not_warn(self, tmp_path: Path) -> None:
+        gate_plan = tmp_path / "gate.impl-plan.md"
+        gate_plan.write_text("## Task 1: probe\n\n- **Task shape**: gate\n\nRun the probes.\n", encoding="utf-8")
+        proc = run_cli(
+            "--feature", "f", "--task", "Task 1", "--phase", "gate", "--project-root", str(tmp_path),
+            "--module", "mod", "--impl-plan", str(gate_plan),
+            "--python", _wrapper_python(tmp_path / "anaconda3" / "bin" / "python3"),
+            "--prompt", str(tmp_path / "p.txt"),
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "WARN" not in proc.stderr
+
+    def test_the_bounded_test_example_names_the_dispatch_interpreter_not_a_bare_python3(self) -> None:
+        text = " ".join(IMPLEMENTER_TEXT.split())
+        assert "`hmad-dispatch run --timeout 600 -- python3 -m pytest <tests> -q`" not in text
+        assert "hmad-dispatch run --timeout 600 -- <the interpreter of your dispatch's test-run line> -m pytest" in text
+        assert "worktree" in text and "untrusted" in text
+
+
+class TestHostilePathLimits:
+    def test_the_hostile_fixture_paragraph_states_the_three_limits(self) -> None:
+        paragraph = " ".join(_line_starting(IMPLEMENTER_TEXT, "Drive any fixture value that originates").split())
+        following = " ".join(IMPLEMENTER_TEXT.split("Drive any fixture value that originates", 1)[1]
+                             .split("**If the dispatch carries", 1)[0].split())
+        text = paragraph + " " + following
+        assert "pytest rejects `[]` in a path argument" in text
+        assert "venv refuses a `:`" in text
+        assert "excludes whitespace" in text and "non-`.py`" in text
+
+    def test_the_measured_limits_are_true_under_this_interpreter(self, tmp_path: Path) -> None:
+        bracket = tmp_path / "d[x]"
+        bracket.mkdir()
+        (bracket / "test_a.py").write_text("def test_a():\n    assert True\n", encoding="utf-8")
+        refused = subprocess.run([sys.executable, "-m", "pytest", str(bracket / "test_a.py"), "-q",
+                                  "-p", "no:cacheprovider"], capture_output=True, text=True)
+        assert "path cannot contain [] parametrization" in refused.stdout + refused.stderr
+        ran = subprocess.run([sys.executable, "-m", "pytest", "test_a.py", "-q", "-p", "no:cacheprovider"],
+                             capture_output=True, text=True, cwd=bracket)
+        assert "1 passed" in ran.stdout
+        colon = tmp_path / "p:q"
+        colon.mkdir()
+        venv = subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(colon / ".venv")],
+                              capture_output=True, text=True)
+        assert "PATH separator" in venv.stdout + venv.stderr
+        assert not (colon / ".venv").exists()
+
+    def test_a_listed_non_py_token_with_whitespace_is_dropped_by_the_task_parser(self) -> None:
+        from h_mad_wire_pin_gate import _parse_tasks
+        task = ("## Task 1: x\n\n- **Task shape**: new-behaviour\n"
+                "**Production file**: `bin/run me.sh` `bin/ok.sh` `my dir/a.py`\n")
+        assert _parse_tasks(task)[0]["production"] == ["my dir/a.py", "bin/ok.sh"]
+
+
+# --- row 1, order of a RED stub: measured against the REAL Claude gate (2026-11-06) ----------------
+#
+# Probe in a disposable repo with an impl-plan Task listing `tools/w.py` and `tests/test_w.py`:
+#   no test file yet, stub first ............ deny  test-missing
+#   test imports `from tools import w` ....... deny  pytest-error   (collection error; a stub cannot fix it)
+#   test imports `from tools.w import f` ..... allow (module absent: the import error is the target's own)
+#   stub present, assertion fails ............ allow
+#   suite green .............................. deny  test-passing
+# so the prompt must say: failing test first, then the stub, imported by full path.
+
+class TestRedStubOrderMatchesTheGate:
+    @staticmethod
+    def _decide(tmp_path: Path, test_source: str | None, *, stub: str | None = None):
+        import test_h_mad_tdd_gate_judge as gate_support
+        from tdd_gate_support import write_state
+        root = tmp_path / "repo"
+        root.mkdir()
+        write_state(root, {"feat": {"phase": "step5", "codex_status": "exhausted"}})
+        plan_file = root / "docs" / "01-plan" / "features" / "feat.impl-plan.md"
+        plan_file.parent.mkdir(parents=True)
+        plan_file.write_text("## Task 1: w\n\n- **Task shape**: new-behaviour\n"
+                             "**Production file**: `tools/w.py`\n**Test file**: `tests/test_w.py`\n",
+                             encoding="utf-8")
+        (root / "tools").mkdir()
+        (root / "tools" / "__init__.py").write_text("", encoding="utf-8")
+        if test_source is not None:
+            (root / "tests").mkdir()
+            (root / "tests" / "test_w.py").write_text(test_source, encoding="utf-8")
+        if stub is not None:
+            (root / "tools" / "w.py").write_text(stub, encoding="utf-8")
+        result = gate_support._gate(root, payload=gate_support._payload(str(root / "tools" / "w.py")),
+                                    bin_dir=gate_support._bin(tmp_path))
+        return gate_support._out(result)
+
+    def test_a_stub_before_the_failing_test_is_denied(self, tmp_path: Path) -> None:
+        out = self._decide(tmp_path, None)
+        assert (out.decision, out.kind) == ("deny", "test-missing")
+
+    def test_a_package_attribute_import_of_the_stub_module_is_denied(self, tmp_path: Path) -> None:
+        out = self._decide(tmp_path, "from tools import w\n\ndef test_a():\n    assert w.f() == 1\n")
+        assert (out.decision, out.kind) == ("deny", "pytest-error")
+
+    @pytest.mark.parametrize("source", [
+        "from tools.w import f\n\ndef test_a():\n    assert f() == 1\n",
+        "import tools.w as w\n\ndef test_a():\n    assert w.f() == 1\n",
+    ], ids=["from-full-path", "import-full-path"])
+    def test_a_stub_after_a_full_path_failing_test_is_admitted(self, tmp_path: Path, source: str) -> None:
+        assert self._decide(tmp_path, source).decision == "allow"
+
+    def test_a_stub_is_still_admitted_while_the_test_fails_on_its_assertion(self, tmp_path: Path) -> None:
+        out = self._decide(tmp_path, "from tools.w import f\n\ndef test_a():\n    assert f() == 1\n",
+                           stub="def f():\n    return None\n")
+        assert out.decision == "allow"
+
+    def test_a_green_suite_denies_a_further_production_edit(self, tmp_path: Path) -> None:
+        out = self._decide(tmp_path, "from tools.w import f\n\ndef test_a():\n    assert f() == 1\n",
+                           stub="def f():\n    return 1\n")
+        assert (out.decision, out.kind) == ("deny", "test-passing")
+
+    def test_the_red_prompt_states_that_order(self, plan: Path, tmp_path: Path) -> None:
+        filled, _ = call(plan, tmp_path, phase="red")
+        directive = _line_starting(filled, RED_DIRECTIVE_HEAD)
+        assert "write the failing test file first, then the stub" in directive
+        assert "`test-missing`" in directive and "`pytest-error`" in directive
+        assert "from pkg.mod import name" in directive
+        item = _line_starting(IMPLEMENTER_TEXT, "- [ ] No production code was modified during RED")
+        assert "AFTER the failing test file" in item

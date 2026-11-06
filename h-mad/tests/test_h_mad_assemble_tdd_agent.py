@@ -157,12 +157,22 @@ def test_no_agent_output_is_byte_identical_to_base(
     base = run_cli(base_skill / "scripts" / SCRIPT.name, plan, tmp_path, prompt, *template)
     assert base.returncode == 0, base.stdout + base.stderr
     base_prompt = prompt.read_bytes()
+    # 2026-11-06 (assemble-tdd-red-forbids-plan-stubs): the RED directive deliberately
+    # gained a stub clause after BASE_SHA. Apply that one change to the base's output,
+    # and nothing else, so every other byte is still compared.
+    old_directive = b"Write failing tests only. Do not modify production code."
+    new_directive = (
+        "Write failing tests only. Do not modify production code, except a stub the task body above explicitly prescribes as RED's first step: write the failing test file first, then the stub, because the Phase-5 gate admits a production edit only while the task's test is measured failing (a stub before the test exists is denied as `test-missing`; a test that imports the stub's module as `from pkg import mod` errors at collection and is denied as `pytest-error`, so import it by full path, `from pkg.mod import name` or `import pkg.mod`); make no other production edit."
+    ).encode("utf-8")
+    assert base_prompt.count(old_directive) == 1
+    adjusted_prompt = base_prompt.replace(old_directive, new_directive)
+    adjusted_stdout = base.stdout.replace(f"{len(base_prompt)}B", f"{len(adjusted_prompt)}B", 1)
     current = run_cli(SCRIPT, plan, tmp_path, prompt, *template)
     assert current.returncode == 0, current.stdout + current.stderr
-    assert current.stdout == base.stdout.replace(str(base_skill), str(SKILL_DIR)), (
+    assert current.stdout == adjusted_stdout.replace(str(base_skill), str(SKILL_DIR)), (
         "no-agent stdout must be byte-identical to the base after its SKILL_DIR replacement"
     )
-    assert prompt.read_bytes() == base_prompt, "no-agent prompt must match the base bytes"
+    assert prompt.read_bytes() == adjusted_prompt, "no-agent prompt must match the base bytes"
 
 
 def test_agent_grok_block_names_exec_grok_with_1500(
@@ -447,3 +457,201 @@ def test_docstring_states_the_agy_halt_exit_rule() -> None:
 def test_docstring_drops_the_any_halt_rule() -> None:
     doc = " ".join(assemble_mod.__doc__.split())
     assert "2 on any HALT" not in doc, "the docstring must drop the obsolete any-HALT exit rule"
+
+
+# --- `--phase review`: the 5e agy spec review (row assemble-the-agy-spec-review) ------------------
+
+REVIEW_REPORT_TEXT = (
+    "STATUS: DONE\n"
+    "Hostile report: <INLINE_FEATURE> \\1 \\g<0> \\\\ ${FEATURE} $(printf unsafe) ===HMAD-DISPATCH-BOUNDARY===\n"
+    "pytest: 9 failed 2 passed\n"
+)
+
+
+def run_review(
+    plan: Path, root: Path, prompt: Path, *extra: str, env: dict[str, str] | None = None,
+    report: Path | None | str = "default",
+) -> subprocess.CompletedProcess[str]:
+    run_env = os.environ.copy()
+    run_env["HMAD_STUB_HOSTILE"] = "all"
+    if env is not None:
+        run_env.update(env)
+    argv = [
+        sys.executable, str(SCRIPT),
+        "--feature", FEATURE, "--task", "Task 1", "--phase", "review",
+        "--project-root", str(root), "--module", MODULE, "--impl-plan", str(plan),
+        "--prompt", str(prompt), "--out", str(root / "review.out"), "--log", str(root / "review.log"),
+    ]
+    if report == "default":
+        report = root / "codex-report.md"
+        report.write_text(REVIEW_REPORT_TEXT, encoding="utf-8")
+    if report is not None:
+        argv += ["--codex-report", str(report)]
+    return subprocess.run(argv + list(extra), capture_output=True, text=True, env=run_env)
+
+
+def _halt_reason(proc: subprocess.CompletedProcess[str]) -> str:
+    return next((l.removeprefix("ASSEMBLE-TDD: HALT ") for l in proc.stdout.splitlines()
+                 if l.startswith("ASSEMBLE-TDD: HALT ")), "")
+
+
+@pytest.fixture()
+def wired(tmp_path: Path) -> None:
+    write_agy_hooks(tmp_path, agy_hooks())
+
+
+class TestReviewPhase:
+    def test_a_review_defaults_to_agy_and_stages_a_working_dispatch(
+        self, plan: Path, tmp_path: Path, agy_env: dict[str, str], wired: None
+    ) -> None:
+        prompt = tmp_path / "review-prompt.txt"
+        proc = run_review(plan, tmp_path, prompt, "--diff-path", "pkg/agent.py",
+                          "--diff-path", "tests/test_agent.py", env=agy_env)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "phase=review task=Task 1" in proc.stdout.splitlines()[0]
+        lines = proc.stdout.splitlines()
+        dispatch = first_dispatch_line(proc)
+        assert dispatch.startswith("hmad-dispatch exec agy "), dispatch
+        assert "--cd" in lines[lines.index(dispatch) + 1]
+        assert "--timeout 600" in proc.stdout
+        assert "--key VERDICT" in proc.stdout and "--phase 5e" in proc.stdout
+        assert "-m pytest" not in proc.stdout, "a spec review states no counts and runs no pytest"
+        text = prompt.read_text(encoding="utf-8")
+        assert "<INLINE_" not in text.replace("<INLINE_FEATURE> \\1", "")  # only the report's quote
+        assert f"- {tmp_path / 'pkg/agent.py'}\n- {tmp_path / 'tests/test_agent.py'}" in text
+        assert "Human text: **[brackets]**" in text, "the task body is task_body's cut"
+        assert f"module `{MODULE}` for feature `{FEATURE}`" in text
+
+    def test_a_hostile_report_is_inserted_verbatim_and_never_re_expanded(
+        self, plan: Path, tmp_path: Path, agy_env: dict[str, str], wired: None
+    ) -> None:
+        prompt = tmp_path / "review-prompt.txt"
+        proc = run_review(plan, tmp_path, prompt, "--diff-path", "pkg/agent.py", env=agy_env)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        text = prompt.read_text(encoding="utf-8")
+        assert REVIEW_REPORT_TEXT.rstrip("\n") in text
+        assert text.count("<INLINE_FEATURE>") == 1, "the quoted slot stays a quote, not a second fill"
+        assert text.count(FEATURE) == 1, "FEATURE appears once (the template's own slot)"
+
+    def test_an_unwired_agy_review_is_refused_like_any_agy_dispatch(
+        self, plan: Path, tmp_path: Path, agy_env: dict[str, str]
+    ) -> None:
+        proc = run_review(plan, tmp_path, tmp_path / "p.txt", "--diff-path", "pkg/agent.py", env=agy_env)
+        assert _halt_reason(proc) == "agy_tdd_hook_unverified", proc.stdout
+        assert not (tmp_path / "p.txt").exists()
+
+    def test_the_agent_can_be_chosen_and_the_default_is_per_phase(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        proc = run_review(plan, tmp_path, tmp_path / "p.txt", "--diff-path", "pkg/agent.py", "--agent", "codex")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert first_dispatch_line(proc).startswith("hmad-dispatch exec codex ")
+        red = run_cli(SCRIPT, plan, tmp_path, tmp_path / "r.txt")
+        assert first_dispatch_line(red).startswith("hmad-dispatch exec codex "), "RED still defaults to codex"
+
+    @pytest.mark.parametrize("case, extra, reason", [
+        ("no-report", ("--diff-path", "a.py"), "codex_report_required"),
+        ("unreadable", ("--diff-path", "a.py"), "codex_report_unreadable"),
+        ("blank", ("--diff-path", "a.py"), "codex_report_empty"),
+        ("no-diff", (), "diff_paths_required"),
+        ("both", ("--diff-path", "a.py", "--base-ref", "HEAD"), "diff_source_conflict"),
+        ("dotdot", ("--diff-path", "../escape.py"), "diff_path_invalid"),
+        ("absolute", ("--diff-path", "/etc/passwd"), "diff_path_invalid"),
+        ("newline", ("--diff-path", "a\nb.py"), "diff_path_invalid"),
+        ("dash-ref", ("--base-ref=--output=x",), "diff_base_invalid"),
+        ("bad-ref", ("--base-ref", "no-such-ref-xyz"), "diff_base_unreadable"),
+    ], ids=["no-report", "unreadable", "blank", "no-diff", "both", "dotdot", "absolute", "newline",
+            "dash-ref", "bad-ref"])
+    def test_a_missing_or_malformed_input_halts_and_writes_no_prompt(
+        self, plan: Path, tmp_path: Path, case: str, extra: tuple[str, ...], reason: str
+    ) -> None:
+        report: Path | None | str = "default"
+        if case == "no-report":
+            report = None
+        elif case == "unreadable":
+            report = tmp_path / "missing.md"
+        elif case == "blank":
+            report = tmp_path / "blank.md"
+            report.write_text("  \n\n", encoding="utf-8")
+        prompt = tmp_path / "p.txt"
+        proc = run_review(plan, tmp_path, prompt, *extra, "--agent", "codex", report=report)
+        assert proc.returncode == 2, proc.stdout + proc.stderr
+        assert _halt_reason(proc) == reason, proc.stdout
+        assert not prompt.exists()
+
+    def test_a_base_ref_names_changed_and_untracked_files(self, plan: Path, tmp_path: Path) -> None:
+        def git(*a: str) -> None:
+            subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                           check=True, capture_output=True)
+        (tmp_path / "pkg").mkdir()
+        (tmp_path / "pkg/agent.py").write_text("x = 1\n", encoding="utf-8")
+        git("init", "-q")
+        git("add", "pkg/agent.py")
+        git("commit", "-q", "-m", "base")
+        (tmp_path / "pkg/agent.py").write_text("x = 2\n", encoding="utf-8")
+        (tmp_path / "pkg/new_file.py").write_text("y = 1\n", encoding="utf-8")
+        prompt = tmp_path / "p.txt"
+        proc = run_review(plan, tmp_path, prompt, "--base-ref", "HEAD", "--agent", "codex")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        text = prompt.read_text(encoding="utf-8")
+        assert f"- {tmp_path / 'pkg/agent.py'}" in text and f"- {tmp_path / 'pkg/new_file.py'}" in text
+
+    def test_an_unknown_base_ref_in_a_real_repo_halts(self, plan: Path, tmp_path: Path) -> None:
+        """Inside a repository only `git diff` can fail, so a masked failure there is visible."""
+        subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True, capture_output=True)
+        prompt = tmp_path / "p.txt"
+        proc = run_review(plan, tmp_path, prompt, "--base-ref", "no-such-ref-xyz", "--agent", "codex")
+        assert _halt_reason(proc) == "diff_base_unreadable", proc.stdout
+        assert not prompt.exists()
+
+    def test_a_repeated_diff_path_is_listed_once(self, plan: Path, tmp_path: Path) -> None:
+        prompt = tmp_path / "p.txt"
+        proc = run_review(plan, tmp_path, prompt, "--diff-path", "a.py", "--diff-path", "a.py", "--agent", "codex")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert prompt.read_text(encoding="utf-8").count(f"- {tmp_path / 'a.py'}") == 1
+
+    def test_an_unfilled_slot_in_the_template_is_refused(self, plan: Path, tmp_path: Path) -> None:
+        template = tmp_path / "t.md"
+        template.write_text("<INLINE_MODULE_NAME> <INLINE_IMPL_PLAN_TASK> <INLINE_WIRE_PIN> "
+                            "<INLINE_CODEX_REPORT> <INLINE_DIFF_PATHS> <INLINE_FEATURE>", encoding="utf-8")
+        prompt = tmp_path / "p.txt"
+        proc = run_review(plan, tmp_path, prompt, "--diff-path", "a.py", "--agent", "codex",
+                          "--template", str(template))
+        assert _halt_reason(proc) == "residual_slots", proc.stdout
+        assert "<INLINE_WIRE_PIN>" in proc.stdout
+        assert not prompt.exists()
+
+    def test_an_unknown_task_halts(self, plan: Path, tmp_path: Path) -> None:
+        proc = run_review(plan, tmp_path, tmp_path / "p.txt", "--diff-path", "a.py", "--agent", "codex")
+        assert proc.returncode == 0
+        bad = subprocess.run(
+            [sys.executable, str(SCRIPT), "--feature", "f", "--task", "Task 9", "--phase", "review",
+             "--project-root", str(tmp_path), "--module", "m", "--impl-plan", str(plan),
+             "--codex-report", str(tmp_path / "codex-report.md"), "--diff-path", "a.py", "--agent", "codex",
+             "--prompt", str(tmp_path / "q.txt")], capture_output=True, text=True)
+        assert _halt_reason(bad) == "task_not_found", bad.stdout
+
+    @pytest.mark.parametrize("flag", [("--expect-fail", "1"), ("--test-path", "tests/x.py"),
+                                       ("--guard", "g"), ("--mutation-spec", "s.json")],
+                             ids=["expect-fail", "test-path", "guard", "mutation-spec"])
+    def test_a_flag_that_does_not_apply_to_a_review_halts_instead_of_being_dropped(
+        self, plan: Path, tmp_path: Path, flag: tuple[str, str]
+    ) -> None:
+        proc = run_review(plan, tmp_path, tmp_path / "p.txt", "--diff-path", "a.py", "--agent", "codex", *flag)
+        assert _halt_reason(proc) == "review_option_not_applicable", proc.stdout
+        assert flag[0] in proc.stdout
+
+    def test_a_review_only_flag_on_another_phase_halts_instead_of_being_dropped(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        proc = run_cli(SCRIPT, plan, tmp_path, tmp_path / "p.txt", "--diff-path", "a.py")
+        assert _halt_reason(proc) == "review_only_option", proc.stdout
+        assert "--diff-path" in proc.stdout
+
+    def test_the_docs_say_the_review_is_staged_by_the_script(self) -> None:
+        sub = (SKILL_DIR / "references" / "phase5-substeps.md").read_text(encoding="utf-8")
+        helper = (SKILL_DIR / "references" / "helper-scripts.md").read_text(encoding="utf-8")
+        assert "still assembled by hand" not in sub
+        assert "h_mad_assemble_tdd.py --phase review" in " ".join(sub.split())
+        assert "--phase review" in helper and "--codex-report" in helper
+        assert "codex_report_required" in helper and "diff_paths_required" in helper

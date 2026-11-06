@@ -1,0 +1,139 @@
+{
+  "_why": "Lane A rows 1-4 (2026-11-06): RED stubs, GREEN does not wire-cut, untrusted-interpreter warning, hostile path limits. Docs rows are pinned by the named text tests.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_assemble_tdd.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "red-stub-clause-dropped",
+      "_mechanism": "The RED directive drops the order (failing test first, then the stub) the gate really requires.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "\"explicitly prescribes as RED's first step: write the failing test file \"",
+      "replace": "\"explicitly prescribes as RED's first step. \"",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestRedStubOrderMatchesTheGate::test_the_red_prompt_states_that_order"
+    },
+    {
+      "name": "red-stub-clause-open-ended",
+      "_mechanism": "The RED directive drops 'no other production edit', allowing any production edit.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "; make no other production edit.\",",
+      "replace": "\",",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestRedStubs::test_the_red_directive_allows_only_a_stub_the_task_body_prescribes"
+    },
+    {
+      "name": "checklist-stub-clause-dropped",
+      "_mechanism": "The self-review checklist again says no production code at all was modified in RED.",
+      "file": "references/codex-implementer-prompt.md",
+      "find": ", except a stub the task body explicitly prescribes as RED's first step, written AFTER the failing test file (the gate denies a stub before it: `test-missing`; and `from pkg import mod` of the stub's module: `pytest-error`) (no other production edit)",
+      "replace": "",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestRedStubs::test_the_self_review_checklist_allows_the_same_stub_and_nothing_else"
+    },
+    {
+      "name": "warn-dropped",
+      "_mechanism": "An untrusted interpreter is no longer warned about.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if runs_pytest and not python_admitted_by_gate(args.python, args.project_root):  # M:AT-WARN-UNTRUSTED",
+      "replace": "if False:  # M:AT-WARN-UNTRUSTED",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestInterpreterGateWarning::test_an_untrusted_interpreter_warns_on_stderr_and_still_assembles"
+    },
+    {
+      "name": "warn-always",
+      "_mechanism": "Every interpreter is warned about, trusted or not.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if runs_pytest and not python_admitted_by_gate(args.python, args.project_root):  # M:AT-WARN-UNTRUSTED",
+      "replace": "if runs_pytest:  # M:AT-WARN-UNTRUSTED",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestInterpreterGateWarning::test_a_venv_contained_in_the_project_does_not_warn"
+    },
+    {
+      "name": "warn-on-gate-without-pytest",
+      "_mechanism": "A gate dispatch that runs no pytest is warned about its interpreter.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "runs_pytest = args.phase in (\"red\", \"green\") or bool(args.authors_test)",
+      "replace": "runs_pytest = True",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestInterpreterGateWarning::test_a_gate_dispatch_that_runs_no_pytest_does_not_warn"
+    },
+    {
+      "name": "warn-on-stdout",
+      "_mechanism": "The warning goes to stdout, where token lines are parsed.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "--python {args.project_root}/.venv/bin/python\",\n            file=sys.stderr,\n",
+      "replace": "--python {args.project_root}/.venv/bin/python\",\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestInterpreterGateWarning::test_the_warning_never_reaches_stdout"
+    },
+    {
+      "name": "warn-refuses",
+      "_mechanism": "The warning becomes a refusal (exit 2) after printing.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "--python {args.project_root}/.venv/bin/python\",\n            file=sys.stderr,\n        )\n",
+      "replace": "--python {args.project_root}/.venv/bin/python\",\n            file=sys.stderr,\n        )\n        return 2\n",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestInterpreterGateWarning::test_an_untrusted_interpreter_warns_on_stderr_and_still_assembles"
+    },
+    {
+      "name": "interpreter-example-bare-python3",
+      "_mechanism": "The template's bounded-test example names a bare python3 again.",
+      "file": "references/codex-implementer-prompt.md",
+      "find": "<the interpreter of your dispatch's test-run line>",
+      "replace": "python3",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestInterpreterGateWarning::test_the_bounded_test_example_names_the_dispatch_interpreter_not_a_bare_python3"
+    },
+    {
+      "name": "hostile-bracket-limit-dropped",
+      "_mechanism": "The hostile-fixture paragraph loses the pytest bracket limit.",
+      "file": "references/codex-implementer-prompt.md",
+      "find": "pytest rejects `[]` in a path argument",
+      "replace": "pytest takes any path",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestHostilePathLimits::test_the_hostile_fixture_paragraph_states_the_three_limits"
+    },
+    {
+      "name": "hostile-venv-colon-limit-dropped",
+      "_mechanism": "The paragraph loses the venv colon limit.",
+      "file": "references/codex-implementer-prompt.md",
+      "find": "a venv refuses a `:` ",
+      "replace": "a venv takes any ",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestHostilePathLimits::test_the_hostile_fixture_paragraph_states_the_three_limits"
+    },
+    {
+      "name": "hostile-whitespace-limit-dropped",
+      "_mechanism": "The paragraph loses the listed-token whitespace limit.",
+      "file": "references/codex-implementer-prompt.md",
+      "find": "a listed token excludes whitespace",
+      "replace": "a listed token may hold anything",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestHostilePathLimits::test_the_hostile_fixture_paragraph_states_the_three_limits"
+    },
+    {
+      "name": "wire-cut-assembler-reverted",
+      "_mechanism": "The assembled wiring prompt tells GREEN to prove the wire by a wire-cut again.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "\"The RED report must name both. The wire-cut (delete the call only, keep the \"",
+      "replace": "\"The RED report must name both. GREEN must prove the wire by a wire-cut: delete the call only, keep the \"",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestWireCutIsNotGreensToPerform::test_the_assembled_green_prompt_gives_the_cut_to_the_verifier"
+    },
+    {
+      "name": "wire-cut-pin-clause-reverted",
+      "_mechanism": "The WIRE-PIN paragraph asks GREEN to delete the connection again.",
+      "file": "references/codex-implementer-prompt.md",
+      "find": "In GREEN, propose the mutation row whose mutant deletes the connection alone",
+      "replace": "In GREEN, the pin must still fail if the connection alone is deleted",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestWireCutIsNotGreensToPerform::test_the_wire_pin_clause_asks_green_to_propose_not_to_delete"
+    },
+    {
+      "name": "red-stub-denial-kinds-dropped",
+      "_mechanism": "The directive stops naming the gate's `test-missing` denial for a stub written first.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "\"exists is denied as `test-missing`; a test that imports the stub's module \"",
+      "replace": "\"exists is denied; a test that imports the stub's module \"",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestRedStubOrderMatchesTheGate::test_the_red_prompt_states_that_order"
+    }
+  ]
+}
