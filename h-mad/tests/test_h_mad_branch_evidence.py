@@ -1170,3 +1170,19 @@ def test_a_full_suite_interpreter_without_pytest_is_UNREADABLE(
 
     assert _full_lines(proc) == ["FULL-SUITE: UNREADABLE reason=pytest-missing"], proc.stdout
     assert _verdict(proc) == "EVIDENCE-VERDICT: UNREADABLE reason=full-suite-pytest-missing"
+
+
+def test_a_python_whose_shebang_names_a_missing_interpreter_is_named_not_a_traceback(
+        tmp_path: Path, stubs: dict) -> None:
+    repo = _base_repo(tmp_path)
+    _full_feature(repo)
+    broken = tmp_path / "broken-python"
+    broken.write_text("#!/no/such/interpreter\n", encoding="utf-8")
+    broken.chmod(0o755)
+
+    proc = _run(repo, stubs["env"], "--full-suite", "--python", str(broken))
+
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert _full_lines(proc) == ["FULL-SUITE: UNREADABLE reason=python-unrunnable"], proc.stdout + proc.stderr
+    assert _verdict(proc) == "EVIDENCE-VERDICT: INCOMPLETE reason=full-suite-python-unrunnable"
+    assert proc.returncode == 0, proc.stdout + proc.stderr

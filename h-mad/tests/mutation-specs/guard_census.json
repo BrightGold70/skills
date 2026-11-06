@@ -21,7 +21,7 @@
       "file": "scripts/h_mad_guard_census.py",
       "find": "    if not entries:\n",
       "replace": "    if False:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_missing_spec_directory_is_UNREADABLE_not_zero_anchors",
+      "test": "tests/test_h_mad_guard_census.py::test_no_default_directory_at_all_is_UNREADABLE",
       "symbol": "_anchor_spans"
     },
     {
@@ -52,33 +52,6 @@
       "symbol": "Spans.__init__"
     },
     {
-      "name": "deleted-file-read-as-a-target",
-      "_mechanism": "A deleted file is fetched as a census target and its missing blob is a crash.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        if ch.status == \"D\":\n",
-      "replace": "        if False:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_file_is_skipped_and_counted",
-      "symbol": "census"
-    },
-    {
-      "name": "symlink-read-as-source",
-      "_mechanism": "A symlink or submodule entry is parsed as source.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        elif ch.new_mode in (\"120000\", \"160000\"):\n",
-      "replace": "        elif False:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_symlink_and_a_submodule_are_skipped_and_counted",
-      "symbol": "census"
-    },
-    {
-      "name": "binary-change-read-as-source",
-      "_mechanism": "A binary change is decoded and parsed as source.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        elif ch.binary:\n",
-      "replace": "        elif False:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_binary_change_is_skipped_and_counted",
-      "symbol": "census"
-    },
-    {
       "name": "binary-not-detected-from-numstat",
       "_mechanism": "The numstat binary marker is never recognised.",
       "file": "scripts/h_mad_guard_census.py",
@@ -86,15 +59,6 @@
       "replace": "        if False:\n",
       "test": "tests/test_h_mad_guard_census.py::test_a_binary_change_is_skipped_and_counted",
       "symbol": "_changes"
-    },
-    {
-      "name": "test-files-are-targets",
-      "_mechanism": "Test files are census targets, flooding the list with their own assertions.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        elif not _is_test(ch.path):\n",
-      "replace": "        elif True:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_test_files_are_not_census_targets",
-      "symbol": "census"
     },
     {
       "name": "non-utf8-python-skipped-silently",
@@ -115,40 +79,22 @@
       "symbol": "_python_decisions"
     },
     {
-      "name": "non-utf8-shell-skipped",
-      "_mechanism": "A shell file that is not UTF-8 is silently dropped from the census.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "                raise Unreadable(\"unreadable-file\", f\"{ch.path}: not UTF-8\") from exc\n",
-      "replace": "                continue\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_non_utf8_shell_file_is_UNREADABLE",
-      "symbol": "census"
-    },
-    {
       "name": "unchanged-lines-are-decisions",
       "_mechanism": "A decision on an unchanged line counts: the census stops being about the diff.",
       "file": "scripts/h_mad_guard_census.py",
-      "find": "                if not touched:\n",
-      "replace": "                if False:\n",
+      "find": "            if not touched:\n",
+      "replace": "            if False:\n",
       "test": "tests/test_h_mad_guard_census.py::test_only_added_or_changed_lines_are_decisions",
-      "symbol": "census"
-    },
-    {
-      "name": "single-line-hunk-count-read-as-zero",
-      "_mechanism": "A hunk header without a count (one line) is read as no lines.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "            count = 1 if hit.group(2) is None else int(hit.group(2))\n",
-      "replace": "            count = int(hit.group(2) or 0)\n",
-      "test": "tests/test_h_mad_guard_census.py::test_only_added_or_changed_lines_are_decisions",
-      "symbol": "_changed_lines"
+      "symbol": "_census_added"
     },
     {
       "name": "python-line-never-anchored",
       "_mechanism": "No Python line is ever anchored, whatever the specs hold.",
       "file": "scripts/h_mad_guard_census.py",
-      "find": "                if spans.overlaps(lo, hi):\n",
-      "replace": "                if False:\n",
+      "find": "            if spans.overlaps(lo, hi):\n",
+      "replace": "            if False:\n",
       "test": "tests/test_h_mad_guard_census.py::test_a_row_whose_find_covers_a_line_anchors_it",
-      "symbol": "census"
+      "symbol": "_census_added"
     },
     {
       "name": "elif-reported-as-if",
@@ -166,43 +112,34 @@
       "find": "(d.kind.split(\",\")[0] not in HEADERS and d.parent is not None and d.parent_span",
       "replace": "(d.parent is not None and d.parent_span",
       "test": "tests/test_h_mad_guard_census.py::test_an_arm_of_an_anchored_guard_is_annotated_but_stays_a_candidate",
-      "symbol": "census"
+      "symbol": "_census_added"
     },
     {
       "name": "arm-annotation-dropped",
       "_mechanism": "The arm annotation and its count disappear.",
       "file": "scripts/h_mad_guard_census.py",
-      "find": "                    note = f\"arm-of-anchored:{d.parent}\"\n",
-      "replace": "                    note = \"\"\n",
+      "find": "                note = f\"arm-of-anchored:{d.parent}\"\n",
+      "replace": "                note = \"\"\n",
       "test": "tests/test_h_mad_guard_census.py::test_an_arm_of_an_anchored_guard_is_annotated_but_stays_a_candidate",
-      "symbol": "census"
+      "symbol": "_census_added"
     },
     {
       "name": "continuation-line-not-considered",
       "_mechanism": "Only the first line of a multi-line statement can anchor it.",
       "file": "scripts/h_mad_guard_census.py",
-      "find": "                lo, hi = span_of(touched[0], touched[-1])\n",
-      "replace": "                lo, hi = span_of(touched[0], touched[0])\n",
+      "find": "            lo, hi = span_of(touched[0], touched[-1])\n",
+      "replace": "            lo, hi = span_of(touched[0], touched[0])\n",
       "test": "tests/test_h_mad_guard_census.py::test_a_multi_line_statement_is_anchored_by_any_changed_line_of_it",
-      "symbol": "census"
+      "symbol": "_census_added"
     },
     {
       "name": "marker-comment-anchors",
       "_mechanism": "A `# M:` marker in the line counts as an anchor.",
       "file": "scripts/h_mad_guard_census.py",
-      "find": "                if spans.overlaps(lo, hi):\n",
-      "replace": "                if spans.overlaps(lo, hi) or \"# M:\" in text[lo:hi]:\n",
+      "find": "            if spans.overlaps(lo, hi):\n",
+      "replace": "            if spans.overlaps(lo, hi) or \"# M:\" in text[lo:hi]:\n",
       "test": "tests/test_h_mad_guard_census.py::test_a_marker_comment_with_no_row_anchors_nothing",
-      "symbol": "census"
-    },
-    {
-      "name": "one-case-arm-anchors-the-line",
-      "_mechanism": "A single case arm with a row anchors a line that has several.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "                hit = all(spans.overlaps(a, b) for a, b in arms) if arms else \\\n",
-      "replace": "                hit = any(spans.overlaps(a, b) for a, b in arms) if arms else \\\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_shell_case_line_needs_every_arm_anchored",
-      "symbol": "census"
+      "symbol": "_census_added"
     },
     {
       "name": "shell-comment-is-a-decision",
@@ -286,15 +223,6 @@
       "symbol": "_shell_kind"
     },
     {
-      "name": "suffixless-file-always-shell",
-      "_mechanism": "Every suffix-less changed file is read as a shell script.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "    return \".\" not in posixpath.basename(path) and SHELL_HEAD.match(blob.split(b\"\\n\", 1)[0]) is not None\n",
-      "replace": "    return True\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_suffixless_file_with_another_shebang_is_not_a_target",
-      "symbol": "_is_shell"
-    },
-    {
       "name": "git-failure-read-as-empty-output",
       "_mechanism": "A failing git is read as empty output.",
       "file": "scripts/h_mad_guard_census.py",
@@ -374,6 +302,294 @@
       "replace": "    if False:\n",
       "test": "tests/test_h_mad_guard_census.py::TestCannotJudgeCarriesNoCount::test_the_cannot_judge_line_has_no_count",
       "symbol": "render"
+    },
+    {
+      "name": "deleted-count-dropped",
+      "_mechanism": "A deleted file is no longer counted on SKIPPED.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            skipped[\"deleted\"] += 1\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_file_is_skipped_and_counted",
+      "symbol": "census"
+    },
+    {
+      "name": "deleted-file-blob-from-head",
+      "_mechanism": "A deleted file is read from the head side, where it does not exist.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        blob = contents[ch.old_sha if ch.status == \"D\" else ch.new_sha]\n",
+      "replace": "        blob = contents.get(ch.new_sha, b\"\")\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_suffixless_shell_script_lists_its_decisions_as_removed",
+      "symbol": "census"
+    },
+    {
+      "name": "symlink-read-as-source",
+      "_mechanism": "A symlink or submodule entry is parsed as source.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        if ch.new_mode in (\"120000\", \"160000\"):\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_symlink_and_a_submodule_are_skipped_and_counted",
+      "symbol": "census"
+    },
+    {
+      "name": "binary-change-read-as-source",
+      "_mechanism": "A binary change is decoded and parsed as source.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        elif ch.binary:\n",
+      "replace": "        elif False:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_binary_change_is_skipped_and_counted",
+      "symbol": "census"
+    },
+    {
+      "name": "test-files-are-targets",
+      "_mechanism": "Test files are census targets, flooding the list with their own assertions.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        elif _is_test(ch.path):\n",
+      "replace": "        elif False:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_test_files_are_not_census_targets",
+      "symbol": "census"
+    },
+    {
+      "name": "tests-not-counted",
+      "_mechanism": "Skipped test files vanish from SKIPPED.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            skipped[\"tests\"] += 1\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_guard_census.py::test_test_files_are_not_census_targets",
+      "symbol": "census"
+    },
+    {
+      "name": "non-utf8-shell-skipped",
+      "_mechanism": "A non-UTF-8 shell file reads as empty instead of UNREADABLE.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        raise Unreadable(\"unreadable-file\", f\"{path}: not UTF-8\") from exc\n",
+      "replace": "        return \"\"\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_non_utf8_shell_file_is_UNREADABLE",
+      "symbol": "_text"
+    },
+    {
+      "name": "single-line-hunk-count-read-as-zero",
+      "_mechanism": "A head hunk header without a count (one line) is read as no lines.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            n_start, n_count = int(hit.group(3)), 1 if hit.group(4) is None else int(hit.group(4))\n",
+      "replace": "            n_start, n_count = int(hit.group(3)), int(hit.group(4) or 0)\n",
+      "test": "tests/test_h_mad_guard_census.py::test_only_added_or_changed_lines_are_decisions",
+      "symbol": "_changed_lines"
+    },
+    {
+      "name": "single-line-base-hunk-read-as-zero",
+      "_mechanism": "A base hunk header without a count (one removed line) is read as none.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            o_start, o_count = int(hit.group(1)), 1 if hit.group(2) is None else int(hit.group(2))\n",
+      "replace": "            o_start, o_count = int(hit.group(1)), int(hit.group(2) or 0)\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_modified_decision_line_is_both_a_candidate_and_removed",
+      "symbol": "_changed_lines"
+    },
+    {
+      "name": "removed-numbered-on-the-head-side",
+      "_mechanism": "REMOVED lines carry head-side numbers.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            old.update(range(o_start, o_start + o_count))\n",
+      "replace": "            old.update(range(n_start, n_start + n_count))\n",
+      "test": "tests/test_h_mad_guard_census.py::test_removed_lines_are_numbered_on_the_base_side",
+      "symbol": "_changed_lines"
+    },
+    {
+      "name": "one-case-arm-anchors-the-line",
+      "_mechanism": "A single case arm with a row anchors a line that has several.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        hit = all(spans.overlaps(a, b) for a, b in arms) if arms else spans.overlaps(*span_of(n, n))\n",
+      "replace": "        hit = any(spans.overlaps(a, b) for a, b in arms) if arms else spans.overlaps(*span_of(n, n))\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_shell_case_line_needs_every_arm_anchored",
+      "symbol": "_census_added"
+    },
+    {
+      "name": "code-shebang-not-unmeasured",
+      "_mechanism": "A file with a foreign shebang is dropped silently.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    if first.startswith(b\"#!\") or suffix in CODE_SUFFIXES:\n",
+      "replace": "    if suffix in CODE_SUFFIXES:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_suffixless_file_with_another_shebang_is_not_a_target_but_is_counted",
+      "symbol": "_language"
+    },
+    {
+      "name": "code-suffix-not-unmeasured",
+      "_mechanism": "A .ts or .js file is dropped silently.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    if first.startswith(b\"#!\") or suffix in CODE_SUFFIXES:\n",
+      "replace": "    if first.startswith(b\"#!\"):\n",
+      "test": "tests/test_h_mad_guard_census.py::test_code_in_another_language_is_unmeasured_and_listed",
+      "symbol": "_language"
+    },
+    {
+      "name": "other-not-counted",
+      "_mechanism": "Documents and data vanish from SKIPPED.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            skipped[\"other\"] += 1\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_guard_census.py::test_documents_and_data_are_not_unmeasured_code",
+      "symbol": "census"
+    },
+    {
+      "name": "unmeasured-not-listed",
+      "_mechanism": "Unmeasured files are counted but not named.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            unmeasured.append(ch.path)\n",
+      "replace": "            pass\n",
+      "test": "tests/test_h_mad_guard_census.py::test_code_in_another_language_is_unmeasured_and_listed",
+      "symbol": "census"
+    },
+    {
+      "name": "shell-shebang-ignored",
+      "_mechanism": "A shell script with an odd suffix is not measured.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    if suffix in SHELL_SUFFIXES or SHELL_HEAD.match(first):\n",
+      "replace": "    if suffix in SHELL_SUFFIXES:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_shell_or_python_script_is_measured_whatever_its_suffix",
+      "symbol": "_language"
+    },
+    {
+      "name": "shell-suffix-ignored",
+      "_mechanism": "A .zsh file with no shebang is not measured.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    if suffix in SHELL_SUFFIXES or SHELL_HEAD.match(first):\n",
+      "replace": "    if SHELL_HEAD.match(first):\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_shell_or_python_script_is_measured_whatever_its_suffix",
+      "symbol": "_language"
+    },
+    {
+      "name": "python-shebang-not-python",
+      "_mechanism": "A python script with no suffix is not measured.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    if PY_HEAD.match(first):\n        return \"py\"\n",
+      "replace": "    if False:\n        return \"py\"\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_shell_or_python_script_is_measured_whatever_its_suffix",
+      "symbol": "_language"
+    },
+    {
+      "name": "path-matching-nothing-reads-as-zero",
+      "_mechanism": "A --path that matches no change reads as a clean zero.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        if not any(ch.path == stem or ch.path.startswith(stem + \"/\") for ch in changes):\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_path_that_matches_no_change_is_UNREADABLE_not_zero",
+      "symbol": "census"
+    },
+    {
+      "name": "removed-side-not-read",
+      "_mechanism": "The base side of the diff is never read: a deleted guard reads as nothing.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        if old_lines and ch.status != \"A\":\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_guard_deleted_inside_a_modified_file_is_listed_as_removed",
+      "symbol": "census"
+    },
+    {
+      "name": "deleted-file-removes-nothing",
+      "_mechanism": "A deleted file's decisions are not listed as removed.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            old_lines = set(range(1, old_text.count(\"\\n\") + 2))\n",
+      "replace": "            old_lines = set()\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_file_is_skipped_and_counted",
+      "symbol": "census"
+    },
+    {
+      "name": "undecodable-base-skipped",
+      "_mechanism": "An undecodable base is read as empty instead of UNREADABLE.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "                old_text = _text(_blobs(top, [ch.old_sha])[ch.old_sha], kind, ch.path)\n",
+      "replace": "                old_text = \"\"\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_removed_line_in_an_undecodable_base_is_UNREADABLE",
+      "symbol": "census"
+    },
+    {
+      "name": "removed-python-every-decision",
+      "_mechanism": "Every base decision is REMOVED, not only those on removed lines.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "                 if any(n in old_lines for n in range(d.lo, d.hi + 1))]\n",
+      "replace": "                 if True]\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_guard_deleted_inside_a_modified_file_is_listed_as_removed",
+      "symbol": "_census_removed"
+    },
+    {
+      "name": "removed-shell-every-line",
+      "_mechanism": "Every non-blank base shell line is REMOVED.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            if name is not None:\n                found.append((n, name))\n",
+      "replace": "            found.append((n, name or \"x\"))\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_removed_shell_decision_is_listed_by_the_shell_rule",
+      "symbol": "_census_removed"
+    },
+    {
+      "name": "removed-count-not-in-token",
+      "_mechanism": "The token drops the removed count.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            f\"unanchored={result['unanchored']} removed={result['removed']}\")",
+      "replace": "            f\"unanchored={result['unanchored']}\")",
+      "test": "tests/test_h_mad_guard_census.py::test_a_guard_deleted_inside_a_modified_file_is_listed_as_removed",
+      "symbol": "render"
+    },
+    {
+      "name": "default-spec-dirs-only-h-mad",
+      "_mechanism": "The default reads only the h-mad spec directory.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "else list(DEFAULT_SPEC_DIRS)",
+      "replace": "else [DEFAULT_SPEC_DIRS[0]]",
+      "test": "tests/test_h_mad_guard_census.py::test_the_default_reads_both_spec_directories",
+      "symbol": "census"
+    },
+    {
+      "name": "explicit-dir-missing-tolerated",
+      "_mechanism": "A missing explicit spec dir is skipped when another has specs.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    explicit = bool(spec_dirs)\n",
+      "replace": "    explicit = False\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_missing_explicit_directory_stays_UNREADABLE_even_if_another_exists",
+      "symbol": "census"
+    },
+    {
+      "name": "missing-default-dir-is-an-error",
+      "_mechanism": "A missing default spec dir is an error even though the other exists.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        if not found and explicit:\n",
+      "replace": "        if not found:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_missing_default_directory_is_not_an_error_when_the_other_exists",
+      "symbol": "_anchor_spans"
+    },
+    {
+      "name": "await-statement-not-a-decision",
+      "_mechanism": "`await deny(x)` is not a decision line.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    return isinstance(value, ast.Call) or (isinstance(value, ast.Await) and isinstance(value.value, ast.Call))\n",
+      "replace": "    return isinstance(value, ast.Call)\n",
+      "test": "tests/test_h_mad_guard_census.py::test_an_awaited_call_statement_and_a_with_header_are_decision_lines",
+      "symbol": "_is_call"
+    },
+    {
+      "name": "with-header-not-a-decision",
+      "_mechanism": "`with lock_or_refuse(x):` is not a decision line.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "                add(st, \"with\", max(item.context_expr.end_lineno for item in st.items), parent,\n                    expr=st.items[0].context_expr)\n",
+      "replace": "                pass\n",
+      "test": "tests/test_h_mad_guard_census.py::test_an_awaited_call_statement_and_a_with_header_are_decision_lines",
+      "symbol": "_python_decisions.visit"
+    },
+    {
+      "name": "cr-counted-as-a-git-line-break",
+      "_mechanism": "A bare CR shifts line attribution: ast lines are used as git lines.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        return git_line(a_starts[lineno - 1])\n",
+      "replace": "        return lineno\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_bare_carriage_return_does_not_shift_the_attribution",
+      "symbol": "_python_decisions.first"
+    },
+    {
+      "name": "ast-line-split-ignores-cr",
+      "_mechanism": "The ast line table does not split on a bare CR.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "re.finditer(r\"\\r\\n|\\r|\\n\", text)",
+      "replace": "re.finditer(r\"\\n\", text)",
+      "test": "tests/test_h_mad_guard_census.py::test_a_bare_carriage_return_does_not_shift_the_attribution",
+      "symbol": "_ast_starts"
     }
   ]
 }

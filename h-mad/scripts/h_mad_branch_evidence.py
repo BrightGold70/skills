@@ -65,6 +65,7 @@ Its result is its own line, and it fails closed:
     FULL-SUITE: PASS passed=N [skipped=N]
     FULL-SUITE: FAIL failed=N errors=N passed=N     -> INCOMPLETE reason=full-suite-failed
     FULL-SUITE: UNREADABLE reason=<r>               -> UNREADABLE reason=full-suite-<r>
+    FULL-SUITE: UNREADABLE reason=python-unrunnable -> INCOMPLETE reason=full-suite-python-unrunnable
     FULL-SUITE: SKIPPED reason=<dirty|no-commits>   (the verdict is already INCOMPLETE)
 
 Prints, first line `EVIDENCE: sha=<tip9> base=<base9> ahead=<n> dirty=<n>`,
@@ -482,6 +483,10 @@ def _full_suite(top: Path, python: str, timeout: float, out: list[str],
         importable = _child([python, "-c", "import pytest"], top, timeout).returncode == 0
     except subprocess.TimeoutExpired:
         importable = False
+    except OSError:  # a shebang naming an interpreter that is not there: exec fails
+        out.append("FULL-SUITE: UNREADABLE reason=python-unrunnable")
+        incomplete.append("full-suite-python-unrunnable")
+        return
     if not importable:
         out.append("FULL-SUITE: UNREADABLE reason=pytest-missing")
         unreadable.append("full-suite-pytest-missing")

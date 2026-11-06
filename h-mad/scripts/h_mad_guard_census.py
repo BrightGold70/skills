@@ -7,32 +7,42 @@ marker count had read as none. This enumerates the candidates mechanically; WHIC
 of them is a real guard is a reviewer's call, so the tool never says PASS on
 guards. It lists candidates and counts them.
 
-    h_mad_guard_census.py --base <ref> [--head <ref>] [--spec-dir DIR]
+    h_mad_guard_census.py --base <ref> [--head <ref>] [--spec-dir DIR ...]
                           [--path P ...] [--repo DIR]
 
     <file>:<line>\\t<kind>\\t<note>\\t<text>   one per UNANCHORED candidate
-    GUARD-CENSUS: DONE decision=<n> anchored=<m> unanchored=<k>
+    REMOVED: <file>:<line> <kind> "<text>"       one per decision line the head no longer has
+    GUARD-CENSUS: DONE decision=<n> anchored=<m> unanchored=<k> removed=<r>
     GUARD-CENSUS: UNREADABLE reason=<reason>
 
 exit 0 on DONE (even with candidates: the tool measures, it does not judge), 2 on
 UNREADABLE. The UNREADABLE line carries no counts, because a zero would be
 byte-identical to "nothing was measured". Read the token, never `$?`.
-`decision` is always `anchored + unanchored`.
+`decision` is always `anchored + unanchored`; `removed` is counted apart.
 
 What is compared. Everything is read from git objects, never the working tree:
-the files changed by `git diff <base> <head>` (A/M, regular files; `--path`
-narrows it, default the whole diff) and the spec directory (default
-`h-mad/tests/mutation-specs`, repo-relative) as it stands at `--head` (default
-HEAD). Test files (a `tests` or `test` directory component, `test_*.py`,
+the files changed by `git diff <base> <head>` (regular files; `--path`
+narrows it, default the whole diff; a `--path` that matches no change is
+UNREADABLE, never a zero) and the spec directories as they stand at `--head`
+(default HEAD). `--spec-dir` is repeatable and repo-relative; the default is
+`h-mad/tests/mutation-specs` AND `handoff/tests/mutation-specs`, of which one may
+be absent. An explicit `--spec-dir` replaces the default and must exist. Test files (a `tests` or `test` directory component, `test_*.py`,
 `*_test.py`, `conftest.py`) are not census targets.
+
+Language. `.py`, or a `#!` python script of any name, is Python; `.sh .bash .zsh .ksh`,
+or any file with a `#!` shell shebang (`gate.v2`), is shell. Source in a language
+with no rule here (`.js .ts .rb .go` ... or another `#!`) is never a silent zero:
+it is counted as `unmeasured=` on `SKIPPED:` and listed as `UNMEASURED: <file>`.
+Documents and data are counted as `other=`.
 
 Decision lines in Python (`ast`; the unit is a statement, reported at its first
 line, and it counts when any physical line of it is added or changed). For a
 compound statement only the header counts, its body statements are their own:
   * `if` / `elif` (kind `if`, `elif`), `while`, `for`, `except`, `match` / `case`
   * `return`, `raise`, `assert`, `continue`, `break`
+  * a `with` / `async with` header (a context manager can refuse)
   * any assignment (`=`, `+=`, annotated), and a call used as a statement
-    (`result.append(...)`), because the lines that moved a verdict in the
+    (`result.append(...)`, `await deny(x)`), because the lines that moved a verdict in the
     calibration were transports and recordings, not only conditions
   * the kind also names conditional forms inside the statement: `ifexp`,
     `comp-if`, `boolop`
@@ -65,6 +75,17 @@ A `# M:` marker with no row anchors nothing; that is the blind spot this closes.
 A shell line with several `;;` case arms is anchored only if every arm is
 overlapped, since a row on one arm says nothing about the others.
 
+Removed lines. A guard deleted from a modified file adds nothing to the head, so
+the base side is read too: every decision line (same rule, parsed from the base
+blob) on a line the hunk removes or rewrites is listed as `REMOVED:` with its
+BASE line number. A rewritten decision line is therefore both a candidate and a
+`REMOVED` line. A deleted file lists all its decision lines. A rename is read as
+delete plus add (`--no-renames`): the old file's lines are `REMOVED` and the new
+file's are candidates. REMOVED lines are never "anchored"; the code is gone.
+
+Line numbers are git's (LF-counted). `ast` also counts a bare CR as a newline, so
+statement lines are mapped through character offsets.
+
 Limits, stated so they are not read as coverage: a row's `find` overlapping a
 line does not prove the row kills a mutant of every decision on it; a mutant
 that moves only a reason string is a candidate here; and a spec whose `root` is
@@ -73,8 +94,9 @@ absolute and outside the repository cannot be mapped, and is counted as `outside
 UNREADABLE reasons: `git` (git fails or is absent), `bad-ref`, `spec-dir`
 (missing from the head tree, or outside the repository), `spec-unreadable` (not
 JSON, not UTF-8, or a row without string `file`/`find`), `unreadable-file`
-(a changed census target is not UTF-8 or does not parse). Deleted files,
-symlinks, submodules and binary changes are skipped and counted on `SKIPPED:`.
+(a changed census target, or the base of one with removed lines, is not UTF-8 or
+does not parse), `path-no-match`. Deleted files,
+symlinks, submodules, tests and binary changes are skipped and counted on `SKIPPED:`.
 
 Stdlib-only.
 """
@@ -82,6 +104,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import bisect
 import json
 import os
 import posixpath
@@ -94,11 +117,17 @@ from io import BytesIO
 from pathlib import Path
 
 TOKEN = "GUARD-CENSUS"
-DEFAULT_SPEC_DIR = "h-mad/tests/mutation-specs"
+DEFAULT_SPEC_DIRS = ("h-mad/tests/mutation-specs", "handoff/tests/mutation-specs")
+SHELL_SUFFIXES = (".sh", ".bash", ".zsh", ".ksh")
+PY_HEAD = re.compile(rb"^#!\s*(?:\S*/)?(?:env\s+(?:-\S+\s+)*)?python[\d.]*\b")
+# Source in a language this tool has no rule for: counted and listed, never read as clean.
+CODE_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".rb", ".pl", ".pm", ".go", ".rs",
+                 ".java", ".kt", ".kts", ".scala", ".c", ".cc", ".cpp", ".h", ".hpp", ".m", ".swift",
+                 ".lua", ".php", ".r", ".cs", ".sql", ".ps1", ".bat", ".cmd", ".fish", ".ex", ".exs"}
 SHELL_HEAD = re.compile(rb"^#!\s*(?:\S*/)?(?:env\s+(?:-\S+\s+)*)?(?:ba|z|da|k)?sh\b")
 # A branch header is a decision of its own, never an "arm" that an outer row speaks for.
 HEADERS = {"if", "elif", "while", "for", "except", "match", "case"}
-HUNK = re.compile(rb"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+HUNK = re.compile(rb"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 
 class Unreadable(Exception):
@@ -158,6 +187,7 @@ class Change:
     status: str
     new_mode: str
     new_sha: str
+    old_sha: str = ""
     binary: bool = False
 
 
@@ -178,22 +208,25 @@ def _changes(top: Path, base: str, head: str, paths: list[str]) -> list[Change]:
         if len(fields) < 5:
             continue
         name = path.decode("utf-8", "surrogateescape")
-        changes.append(Change(name, fields[4].decode(), fields[1].decode(),
-                              fields[3].decode(), name in binary))
+        changes.append(Change(name, fields[4].decode(), fields[1].decode(), fields[3].decode(),
+                              fields[2].decode(), name in binary))
     return changes
 
 
-def _changed_lines(top: Path, base: str, head: str, path: str) -> set[int]:
+def _changed_lines(top: Path, base: str, head: str, path: str) -> tuple[set[int], set[int]]:
+    """(added or changed lines on the head side, removed or changed lines on the base side)."""
     diff = _git(top, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--no-textconv",
                 "--no-renames", base, head, "--", path)
-    lines: set[int] = set()
+    new: set[int] = set()
+    old: set[int] = set()
     for row in diff.split(b"\n"):
         hit = HUNK.match(row)
         if hit:
-            start = int(hit.group(1))
-            count = 1 if hit.group(2) is None else int(hit.group(2))
-            lines.update(range(start, start + count))
-    return lines
+            o_start, o_count = int(hit.group(1)), 1 if hit.group(2) is None else int(hit.group(2))
+            n_start, n_count = int(hit.group(3)), 1 if hit.group(4) is None else int(hit.group(4))
+            old.update(range(o_start, o_start + o_count))
+            new.update(range(n_start, n_start + n_count))
+    return new, old
 
 
 # --------------------------------------------------------------------- specs
@@ -205,21 +238,32 @@ def _is_test(path: str) -> bool:
             or name.startswith("test_") or name.endswith("_test.py"))
 
 
-def _anchor_spans(top: Path, head: str, spec_dir: str, targets: set[str]
+def _anchor_spans(top: Path, head: str, spec_dirs: list[str], explicit: bool, targets: set[str]
                   ) -> tuple[dict[str, list[tuple[str, str]]], dict[str, int]]:
-    """{target file: [(spec name, find)]}, and the spec/row counts for the ROWS line."""
-    listing = _git(top, "ls-tree", "-r", "-z", head, "--", spec_dir.rstrip("/") + "/")
+    """{target file: [(spec name, find)]}, and the spec/row counts for the ROWS line.
+
+    A missing DEFAULT directory is skipped; a missing explicit one, or none at all, is UNREADABLE.
+    """
     entries = []
-    for row in listing.split(b"\0"):
-        if not row:
-            continue
-        meta, _, name = row.partition(b"\t")
-        mode, kind, sha = meta.decode().split()
-        text = name.decode("utf-8", "surrogateescape")
-        if kind == "blob" and mode != "120000" and text.endswith(".json"):
-            entries.append((text, sha))
+    seen: set[str] = set()
+    for spec_dir in spec_dirs:
+        listing = _git(top, "ls-tree", "-r", "-z", head, "--", spec_dir.rstrip("/") + "/")
+        found = 0
+        for row in listing.split(b"\0"):
+            if not row:
+                continue
+            meta, _, name = row.partition(b"\t")
+            mode, kind, sha = meta.decode().split()
+            text = name.decode("utf-8", "surrogateescape")
+            if kind == "blob" and mode != "120000" and text.endswith(".json"):
+                found += 1
+                if text not in seen:
+                    seen.add(text)
+                    entries.append((text, sha))
+        if not found and explicit:
+            raise Unreadable("spec-dir", f"no spec files under {spec_dir!r} at {head[:9]}")
     if not entries:
-        raise Unreadable("spec-dir", f"no spec files under {spec_dir!r} at {head[:9]}")
+        raise Unreadable("spec-dir", f"no spec files under {', '.join(spec_dirs)} at {head[:9]}")
     blobs = _blobs(top, [sha for _, sha in entries])
     rows: dict[str, list[tuple[str, str]]] = {}
     stats = {"specs": 0, "nonspec": 0, "outside": 0, "rows": 0}
@@ -307,18 +351,44 @@ def _flags(node: ast.AST) -> list[str]:
     return sorted(set(out))
 
 
+def _ast_starts(text: str) -> list[int]:
+    """Start offset of each line as the Python tokenizer counts them: LF, CRLF or a bare CR."""
+    return [0] + [m.end() for m in re.finditer(r"\r\n|\r|\n", text)]
+
+
+def _is_call(value: ast.AST) -> bool:
+    return isinstance(value, ast.Call) or (isinstance(value, ast.Await) and isinstance(value.value, ast.Call))
+
+
 def _python_decisions(text: str, path: str) -> list[Decision]:
+    """Decision statements, with git's line numbers (LF-counted) even where ast counts a bare CR."""
     try:
         tree = ast.parse(text)
     except (SyntaxError, ValueError, RecursionError) as exc:
         raise Unreadable("unreadable-file", f"{path}: does not parse ({type(exc).__name__})") from exc
-    source_lines = text.split("\n")
+    a_starts = _ast_starts(text)
+    g_starts = _line_offsets(text)
+
+    def git_line(offset: int) -> int:
+        return bisect.bisect_right(g_starts, offset)
+
+    def first(lineno: int) -> int:
+        return git_line(a_starts[lineno - 1])
+
+    def last(lineno: int) -> int:
+        end = a_starts[lineno] - 1 if lineno < len(a_starts) else len(text) - 1
+        return git_line(max(end, 0))
+
+    def ast_line_text(lineno: int) -> str:
+        end = a_starts[lineno] if lineno < len(a_starts) else len(text)
+        return text[a_starts[lineno - 1]:end]
+
     found: list[Decision] = []
 
     def add(node: ast.AST, kind: str, hi: int, parent: Decision | None, *, expr: ast.AST | None = None):
         flags = _flags(expr if expr is not None else node)
         label = ",".join([kind, *flags]) if flags else kind
-        found.append(Decision(node.lineno, label, node.lineno, hi,
+        found.append(Decision(first(node.lineno), label, first(node.lineno), last(hi),
                               parent.line if parent else None,
                               (parent.lo, parent.hi) if parent else None))
         return found[-1]
@@ -327,7 +397,7 @@ def _python_decisions(text: str, path: str) -> list[Decision]:
         for st in body:
             if isinstance(st, ast.If):
                 is_elif = (in_orelse_of is not None and len(in_orelse_of.orelse) == 1
-                           and source_lines[st.lineno - 1].lstrip().startswith("elif"))
+                           and ast_line_text(st.lineno).lstrip().startswith("elif"))
                 me = add(st, "elif" if is_elif else "if", st.test.end_lineno, parent, expr=st.test)
                 visit(st.body, me)
                 visit(st.orelse, me, st)
@@ -346,13 +416,15 @@ def _python_decisions(text: str, path: str) -> list[Decision]:
                 visit(st.orelse, parent)
                 visit(st.finalbody, parent)
             elif isinstance(st, (ast.With, ast.AsyncWith)):
+                add(st, "with", max(item.context_expr.end_lineno for item in st.items), parent,
+                    expr=st.items[0].context_expr)
                 visit(st.body, parent)
             elif isinstance(st, ast.Match):
                 me = add(st, "match", st.subject.end_lineno, parent)
                 for case in st.cases:
                     tail = (case.guard or case.pattern)
-                    sub = Decision(case.pattern.lineno, "case", case.pattern.lineno,
-                                   tail.end_lineno, me.line, (me.lo, me.hi))
+                    sub = Decision(first(case.pattern.lineno), "case", first(case.pattern.lineno),
+                                   last(tail.end_lineno), me.line, (me.lo, me.hi))
                     found.append(sub)
                     visit(case.body, sub)
             elif isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -363,7 +435,7 @@ def _python_decisions(text: str, path: str) -> list[Decision]:
                 add(st, type(st).__name__.lower(), st.end_lineno, parent)
             elif isinstance(st, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
                 add(st, "assign", st.end_lineno, parent)
-            elif isinstance(st, ast.Expr) and isinstance(st.value, ast.Call):
+            elif isinstance(st, ast.Expr) and _is_call(st.value):
                 add(st, "call", st.end_lineno, parent)
 
     visit(tree.body, None)
@@ -423,104 +495,171 @@ def _arm_segments(text: str, start: int, line: str) -> list[tuple[int, int]]:
 
 # ---------------------------------------------------------------------- core
 
-def _is_shell(path: str, blob: bytes) -> bool:
-    if path.endswith((".sh", ".bash")):
-        return True
-    return "." not in posixpath.basename(path) and SHELL_HEAD.match(blob.split(b"\n", 1)[0]) is not None
+def _language(path: str, blob: bytes) -> str:
+    """`py`, `sh`, `unmeasured` (code with no rule here) or `other` (documents, data, anything else)."""
+    suffix = posixpath.splitext(path)[1].lower()
+    if suffix == ".py":
+        return "py"
+    first = blob.split(b"\n", 1)[0]
+    if suffix in SHELL_SUFFIXES or SHELL_HEAD.match(first):
+        return "sh"
+    if PY_HEAD.match(first):
+        return "py"
+    if first.startswith(b"#!") or suffix in CODE_SUFFIXES:
+        return "unmeasured"
+    return "other"
 
 
-def census(repo: Path, base: str, head: str, spec_dir: str, paths: list[str]) -> dict:
+def _text(blob: bytes, kind: str, path: str) -> str:
+    if kind == "py":
+        return _decode_python(blob, path)
+    try:
+        return blob.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise Unreadable("unreadable-file", f"{path}: not UTF-8") from exc
+
+
+def _line_text(text: str, line: int) -> str:
+    rows = text.split("\n")
+    return rows[line - 1] if 0 < line <= len(rows) else ""
+
+
+def census(repo: Path, base: str, head: str, spec_dirs: list[str] | None, paths: list[str]) -> dict:
     top = _toplevel(repo)
     base_sha, head_sha = _commit(top, base), _commit(top, head)
-    spec_dir = _repo_relative(top, spec_dir)
-    changes = _changes(top, base_sha, head_sha, [_repo_relative(top, p) for p in paths])
-    skipped = {"deleted": 0, "binary": 0, "link": 0}
-    candidates: list[Change] = []
-    blobs_needed: list[str] = []
+    explicit = bool(spec_dirs)
+    dirs = [_repo_relative(top, d) for d in spec_dirs] if spec_dirs else list(DEFAULT_SPEC_DIRS)
+    wanted = [_repo_relative(top, p) for p in paths]
+    changes = _changes(top, base_sha, head_sha, wanted)
+    for want in wanted:
+        stem = want.rstrip("/")
+        if not any(ch.path == stem or ch.path.startswith(stem + "/") for ch in changes):
+            raise Unreadable("path-no-match", f"--path {want!r} matches no change between the refs")
+    skipped = {"deleted": 0, "binary": 0, "link": 0, "tests": 0, "other": 0}
+    unmeasured: list[str] = []
+    eligible: list[Change] = []
     for ch in changes:
         if ch.status == "D":
             skipped["deleted"] += 1
-        elif ch.new_mode in ("120000", "160000"):
-            skipped["link"] += 1
+        if ch.new_mode in ("120000", "160000"):
+            skipped["link"] += 1     # a gitlink's sha is a commit, not a blob: never fetched
         elif ch.binary:
             skipped["binary"] += 1
-        elif not _is_test(ch.path):
-            candidates.append(ch)
-            blobs_needed.append(ch.new_sha)
-    contents = _blobs(top, sorted(set(blobs_needed))) if blobs_needed else {}
-
-    work: list[tuple[Change, str, str]] = []   # (change, kind, text)
-    for ch in candidates:
-        blob = contents[ch.new_sha]
-        if ch.path.endswith(".py"):
-            work.append((ch, "py", _decode_python(blob, ch.path)))
-        elif _is_shell(ch.path, blob):
-            try:
-                work.append((ch, "sh", blob.decode("utf-8")))
-            except UnicodeDecodeError as exc:
-                raise Unreadable("unreadable-file", f"{ch.path}: not UTF-8") from exc
-    anchors, stats = _anchor_spans(top, head_sha, spec_dir, {ch.path for ch, _, _ in work})
+        elif _is_test(ch.path):
+            skipped["tests"] += 1
+        else:
+            eligible.append(ch)
+    contents = _blobs(top, sorted({ch.old_sha if ch.status == "D" else ch.new_sha for ch in eligible}))
+    work: list[tuple[Change, str, str]] = []   # (change, language, head text; "" for a deleted file)
+    for ch in eligible:
+        blob = contents[ch.old_sha if ch.status == "D" else ch.new_sha]
+        kind = _language(ch.path, blob)
+        if kind == "unmeasured":
+            unmeasured.append(ch.path)
+        elif kind == "other":
+            skipped["other"] += 1
+        elif ch.status == "D":
+            work.append((ch, kind, ""))
+        else:
+            work.append((ch, kind, _text(blob, kind, ch.path)))
+    anchors, stats = _anchor_spans(top, head_sha, dirs, explicit, {ch.path for ch, _, _ in work})
 
     out: list[str] = []
-    totals = {"decision": 0, "anchored": 0, "unanchored": 0, "arm": 0, "ambiguous": 0, "stale": 0}
+    removed_out: list[str] = []
+    totals = {"decision": 0, "anchored": 0, "unanchored": 0, "arm": 0, "ambiguous": 0, "stale": 0,
+              "removed": 0}
     for ch, kind, text in sorted(work, key=lambda w: w[0].path):
-        changed = _changed_lines(top, base_sha, head_sha, ch.path)
-        offsets = _line_offsets(text)
-        spans = Spans(text, anchors.get(ch.path, []))
-        totals["ambiguous"] += spans.ambiguous
-        totals["stale"] += spans.stale
-        n_lines = len(offsets)
-
-        def span_of(lo: int, hi: int) -> tuple[int, int]:
-            end = offsets[hi] if hi < n_lines else len(text)
-            return offsets[lo - 1], end
-
-        if kind == "py":
-            found = _python_decisions(text, ch.path)
-            for d in sorted(found, key=lambda d: (d.line, d.kind)):
-                touched = [n for n in range(d.lo, d.hi + 1) if n in changed]
-                if not touched:
-                    continue
-                totals["decision"] += 1
-                lo, hi = span_of(touched[0], touched[-1])
-                if spans.overlaps(lo, hi):
-                    totals["anchored"] += 1
-                    continue
-                totals["unanchored"] += 1
-                note = ""
-                if (d.kind.split(",")[0] not in HEADERS and d.parent is not None and d.parent_span
-                        and spans.overlaps(*span_of(*d.parent_span))):
-                    note = f"arm-of-anchored:{d.parent}"
-                    totals["arm"] += 1
-                out.append(_row(ch.path, d.line, d.kind, note, text))
+        if ch.status == "D":
+            new_lines: set[int] = set()
+            old_text = _text(contents[ch.old_sha], kind, ch.path)
+            old_lines = set(range(1, old_text.count("\n") + 2))
         else:
-            for n in sorted(changed):
-                if n > n_lines:
-                    continue
-                line = text[offsets[n - 1]:(offsets[n] if n < n_lines else len(text))].rstrip("\n")
-                kind_name = _shell_kind(line)
-                if kind_name is None:
-                    continue
-                totals["decision"] += 1
-                arms = _arm_segments(text, offsets[n - 1], line)
-                hit = all(spans.overlaps(a, b) for a, b in arms) if arms else \
-                    spans.overlaps(*span_of(n, n))
-                if hit:
-                    totals["anchored"] += 1
-                    continue
-                totals["unanchored"] += 1
-                note = "arms-not-all-anchored" if arms and any(spans.overlaps(a, b) for a, b in arms) else ""
-                out.append(_row(ch.path, n, kind_name, note, text))
+            new_lines, old_lines = _changed_lines(top, base_sha, head_sha, ch.path)
+            old_text = ""
+        _census_added(ch, kind, text, new_lines, anchors.get(ch.path, []), totals, out)
+        if old_lines and ch.status != "A":
+            if not old_text:
+                old_text = _text(_blobs(top, [ch.old_sha])[ch.old_sha], kind, ch.path)
+            _census_removed(ch, kind, old_text, old_lines, totals, removed_out)
     header = [
         f"CENSUS-SCOPE: base={base_sha[:9]} head={head_sha[:9]} files={len(work)} "
         f"specs={stats['specs']} spec_rows={stats['rows']}",
         f"SKIPPED: deleted={skipped['deleted']} binary={skipped['binary']} link={skipped['link']} "
+        f"tests={skipped['tests']} other={skipped['other']} unmeasured={len(unmeasured)} "
         f"nonspec_json={stats['nonspec']} outside_repo_specs={stats['outside']}",
         f"ROWS: ambiguous_find={totals['ambiguous']} stale_find={totals['stale']} "
         f"(rows over the census files that anchor nothing)",
         f"ARMS: unanchored_arm_of_anchored={totals['arm']}",
     ]
-    return {"lines": header + out, **totals}
+    header += [f"UNMEASURED: {_enc(path)}" for path in sorted(unmeasured)]
+    return {"lines": header + out + removed_out, **totals}
+
+
+def _census_added(ch: Change, kind: str, text: str, changed: set[int],
+                  finds: list[tuple[str, str]], totals: dict, out: list[str]) -> None:
+    offsets = _line_offsets(text)
+    spans = Spans(text, finds)
+    totals["ambiguous"] += spans.ambiguous
+    totals["stale"] += spans.stale
+    n_lines = len(offsets)
+
+    def span_of(lo: int, hi: int) -> tuple[int, int]:
+        end = offsets[hi] if hi < n_lines else len(text)
+        return offsets[lo - 1], end
+
+    if kind == "py":
+        for d in sorted(_python_decisions(text, ch.path), key=lambda d: (d.line, d.kind)):
+            touched = [n for n in range(d.lo, d.hi + 1) if n in changed]
+            if not touched:
+                continue
+            totals["decision"] += 1
+            lo, hi = span_of(touched[0], touched[-1])
+            if spans.overlaps(lo, hi):
+                totals["anchored"] += 1
+                continue
+            totals["unanchored"] += 1
+            note = ""
+            if (d.kind.split(",")[0] not in HEADERS and d.parent is not None and d.parent_span
+                    and spans.overlaps(*span_of(*d.parent_span))):
+                note = f"arm-of-anchored:{d.parent}"
+                totals["arm"] += 1
+            out.append(_row(ch.path, d.line, d.kind, note, text))
+        return
+    for n in sorted(changed):
+        if n > n_lines:
+            continue
+        line = text[offsets[n - 1]:(offsets[n] if n < n_lines else len(text))].rstrip("\n")
+        kind_name = _shell_kind(line)
+        if kind_name is None:
+            continue
+        totals["decision"] += 1
+        arms = _arm_segments(text, offsets[n - 1], line)
+        hit = all(spans.overlaps(a, b) for a, b in arms) if arms else spans.overlaps(*span_of(n, n))
+        if hit:
+            totals["anchored"] += 1
+            continue
+        totals["unanchored"] += 1
+        note = "arms-not-all-anchored" if arms and any(spans.overlaps(a, b) for a, b in arms) else ""
+        out.append(_row(ch.path, n, kind_name, note, text))
+
+
+def _census_removed(ch: Change, kind: str, old_text: str, old_lines: set[int],
+                    totals: dict, out: list[str]) -> None:
+    """Decision lines on the base side of the diff: guards the head no longer has (or has changed)."""
+    if kind == "py":
+        found = [(d.line, d.kind) for d in sorted(_python_decisions(old_text, ch.path),
+                                                   key=lambda d: (d.line, d.kind))
+                 if any(n in old_lines for n in range(d.lo, d.hi + 1))]
+    else:
+        found = []
+        for n in sorted(old_lines):
+            name = _shell_kind(_line_text(old_text, n))
+            if name is not None:
+                found.append((n, name))
+    for line, name in found:
+        totals["removed"] += 1
+        source = json.dumps(_line_text(old_text, line).strip()[:120], ensure_ascii=False)
+        out.append(f"REMOVED: {_enc(ch.path)}:{line} {name} {source}")
 
 
 def _enc(value: str) -> str:
@@ -528,7 +667,7 @@ def _enc(value: str) -> str:
 
 
 def _row(path: str, line: int, kind: str, note: str, text: str) -> str:
-    source = text.split("\n")[line - 1].strip()
+    source = _line_text(text, line).strip()
     return f"{_enc(path)}:{line}\t{kind}\t{note}\t{_enc(source)[:120]}"
 
 
@@ -546,21 +685,22 @@ def render(result: dict) -> str:
     if "decision" not in result:
         return f"{TOKEN}: {result['verdict']} reason={result['reason']}"
     return (f"{TOKEN}: DONE decision={result['decision']} anchored={result['anchored']} "
-            f"unanchored={result['unanchored']}")
+            f"unanchored={result['unanchored']} removed={result['removed']}")
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     ap.add_argument("--base", required=True, help="base ref")
     ap.add_argument("--head", default="HEAD", help="head ref (default HEAD)")
-    ap.add_argument("--spec-dir", default=DEFAULT_SPEC_DIR,
-                    help=f"repo-relative spec directory at --head (default {DEFAULT_SPEC_DIR})")
+    ap.add_argument("--spec-dir", action="append", default=[], metavar="DIR",
+                    help="repo-relative spec directory at --head, repeatable; replaces the default "
+                         f"({' and '.join(DEFAULT_SPEC_DIRS)})")
     ap.add_argument("--path", action="append", default=[], metavar="P",
                     help="limit the diff to this repo-relative path (repeatable)")
     ap.add_argument("--repo", type=Path, default=Path.cwd(), help="repository (default cwd)")
     args = ap.parse_args(argv)
     try:
-        result = census(args.repo, args.base, args.head, args.spec_dir, args.path)
+        result = census(args.repo, args.base, args.head, args.spec_dir or None, args.path)
     except Unreadable as exc:
         if exc.detail:
             print(f"  {_enc(exc.detail)}")
