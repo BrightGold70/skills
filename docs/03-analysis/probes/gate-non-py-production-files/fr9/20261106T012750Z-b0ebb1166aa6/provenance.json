@@ -1,0 +1,257 @@
+[
+  {
+    "scenario": "fixture",
+    "side": "after",
+    "host": "claude",
+    "commit_under_test": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+    "base": null,
+    "hook": {
+      "path": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-tdd-gate.sh",
+      "realpath": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-tdd-gate.sh",
+      "sha256": "73b0dbc5bd414915641f01392a07e4317c0fc5039694eb984b41f770bd58c5b3",
+      "source_commit": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+      "blob": "635f64b1240604be3c963973b29cc130400fa915",
+      "hash_object": "635f64b1240604be3c963973b29cc130400fa915"
+    },
+    "python3": {
+      "realpath": "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+      "version": "Python 3.15.2"
+    },
+    "interpreter": {
+      "path": "/opt/anaconda3/bin/python3.11",
+      "realpath": "/opt/anaconda3/bin/python3.11",
+      "version": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]",
+      "venv": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-qu4zkara/root/.venv/bin/python"
+    }
+  },
+  {
+    "scenario": "replay",
+    "side": "before",
+    "host": "claude",
+    "commit_under_test": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+    "base": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "source_commit": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "path": "docs/01-plan/features/exec-missing-report-recovery.impl-plan.md",
+    "plan_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "copy_sha256": "832298b3d74c28ba67f68f0d902b7420a3ebc26701427d74a9473f1641b33d39",
+    "copy_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "hook": {
+      "path": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-upvrrceq/before/h-mad/hooks/h-mad-tdd-gate.sh",
+      "realpath": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-upvrrceq/before/h-mad/hooks/h-mad-tdd-gate.sh",
+      "sha256": "c88d29f5d66f5732d54acd01db37114ece64cb693fec7be18c8308a651ffe61f",
+      "source_commit": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+      "blob": "01ed20e0be5df2387585226fe38e8965c3f18e75",
+      "hash_object": "01ed20e0be5df2387585226fe38e8965c3f18e75"
+    },
+    "python3": {
+      "realpath": "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+      "version": "Python 3.15.2"
+    },
+    "interpreter": {
+      "path": "/opt/anaconda3/bin/python3.11",
+      "realpath": "/opt/anaconda3/bin/python3.11",
+      "version": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]",
+      "venv": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-upvrrceq/root/.venv/bin/python"
+    }
+  },
+  {
+    "scenario": "replay",
+    "side": "after",
+    "host": "claude",
+    "commit_under_test": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+    "base": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "source_commit": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "path": "docs/01-plan/features/exec-missing-report-recovery.impl-plan.md",
+    "plan_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "copy_sha256": "832298b3d74c28ba67f68f0d902b7420a3ebc26701427d74a9473f1641b33d39",
+    "copy_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "hook": {
+      "path": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-tdd-gate.sh",
+      "realpath": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-tdd-gate.sh",
+      "sha256": "73b0dbc5bd414915641f01392a07e4317c0fc5039694eb984b41f770bd58c5b3",
+      "source_commit": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+      "blob": "635f64b1240604be3c963973b29cc130400fa915",
+      "hash_object": "635f64b1240604be3c963973b29cc130400fa915"
+    },
+    "python3": {
+      "realpath": "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+      "version": "Python 3.15.2"
+    },
+    "interpreter": {
+      "path": "/opt/anaconda3/bin/python3.11",
+      "realpath": "/opt/anaconda3/bin/python3.11",
+      "version": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]",
+      "venv": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-pfv5pqra/root/.venv/bin/python"
+    }
+  },
+  {
+    "scenario": "fixture",
+    "side": "after",
+    "host": "codex",
+    "commit_under_test": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+    "base": null,
+    "hook": {
+      "path": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-codex-tdd-gate.py",
+      "realpath": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-codex-tdd-gate.py",
+      "sha256": "563db30b82b5d482ab229c279812c79236b32406ea2f594070b1f0c11f28dcfd",
+      "source_commit": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+      "blob": "7fefcfa9c77ec6baa8dc37708181f6c459d62697",
+      "hash_object": "7fefcfa9c77ec6baa8dc37708181f6c459d62697"
+    },
+    "python3": {
+      "realpath": "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+      "version": "Python 3.15.2"
+    },
+    "interpreter": {
+      "path": "/opt/anaconda3/bin/python3.11",
+      "realpath": "/opt/anaconda3/bin/python3.11",
+      "version": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]",
+      "venv": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-fi72lkq_/root/.venv/bin/python"
+    }
+  },
+  {
+    "scenario": "replay",
+    "side": "before",
+    "host": "codex",
+    "commit_under_test": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+    "base": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "source_commit": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "path": "docs/01-plan/features/exec-missing-report-recovery.impl-plan.md",
+    "plan_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "copy_sha256": "832298b3d74c28ba67f68f0d902b7420a3ebc26701427d74a9473f1641b33d39",
+    "copy_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "hook": {
+      "path": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-363idabd/before/h-mad/hooks/h-mad-codex-tdd-gate.py",
+      "realpath": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-363idabd/before/h-mad/hooks/h-mad-codex-tdd-gate.py",
+      "sha256": "ca3074d96021eda166ba3d1e4f159f9446701bff341c4e3564e583d25b767ee5",
+      "source_commit": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+      "blob": "417392484535ffc53d82703514a5acf4dd07274d",
+      "hash_object": "417392484535ffc53d82703514a5acf4dd07274d"
+    },
+    "python3": {
+      "realpath": "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+      "version": "Python 3.15.2"
+    },
+    "interpreter": {
+      "path": "/opt/anaconda3/bin/python3.11",
+      "realpath": "/opt/anaconda3/bin/python3.11",
+      "version": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]",
+      "venv": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-363idabd/root/.venv/bin/python"
+    }
+  },
+  {
+    "scenario": "replay",
+    "side": "after",
+    "host": "codex",
+    "commit_under_test": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+    "base": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "source_commit": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "path": "docs/01-plan/features/exec-missing-report-recovery.impl-plan.md",
+    "plan_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "copy_sha256": "832298b3d74c28ba67f68f0d902b7420a3ebc26701427d74a9473f1641b33d39",
+    "copy_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "hook": {
+      "path": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-codex-tdd-gate.py",
+      "realpath": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-codex-tdd-gate.py",
+      "sha256": "563db30b82b5d482ab229c279812c79236b32406ea2f594070b1f0c11f28dcfd",
+      "source_commit": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+      "blob": "7fefcfa9c77ec6baa8dc37708181f6c459d62697",
+      "hash_object": "7fefcfa9c77ec6baa8dc37708181f6c459d62697"
+    },
+    "python3": {
+      "realpath": "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+      "version": "Python 3.15.2"
+    },
+    "interpreter": {
+      "path": "/opt/anaconda3/bin/python3.11",
+      "realpath": "/opt/anaconda3/bin/python3.11",
+      "version": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]",
+      "venv": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-2p431bb2/root/.venv/bin/python"
+    }
+  },
+  {
+    "scenario": "fixture",
+    "side": "after",
+    "host": "agy",
+    "commit_under_test": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+    "base": null,
+    "hook": {
+      "path": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-agy-tdd-gate.py",
+      "realpath": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-agy-tdd-gate.py",
+      "sha256": "183baa59b2998746651e8db24750ca833424f14580bc28594d1cbe30baa5c895",
+      "source_commit": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+      "blob": "1562044323f6a1f52044c0c74a91233ee5a779df",
+      "hash_object": "1562044323f6a1f52044c0c74a91233ee5a779df"
+    },
+    "python3": {
+      "realpath": "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+      "version": "Python 3.15.2"
+    },
+    "interpreter": {
+      "path": "/opt/anaconda3/bin/python3.11",
+      "realpath": "/opt/anaconda3/bin/python3.11",
+      "version": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]",
+      "venv": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-ucx7dvz7/root/.venv/bin/python"
+    }
+  },
+  {
+    "scenario": "replay",
+    "side": "before",
+    "host": "agy",
+    "commit_under_test": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+    "base": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "source_commit": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "path": "docs/01-plan/features/exec-missing-report-recovery.impl-plan.md",
+    "plan_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "copy_sha256": "832298b3d74c28ba67f68f0d902b7420a3ebc26701427d74a9473f1641b33d39",
+    "copy_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "hook": {
+      "path": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-7eo45lk0/before/h-mad/hooks/h-mad-agy-tdd-gate.py",
+      "realpath": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-7eo45lk0/before/h-mad/hooks/h-mad-agy-tdd-gate.py",
+      "sha256": "52ff55ff31903dc060ed8d7fa9d4776abe3a32acb589d2570ad633795014e9e7",
+      "source_commit": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+      "blob": "4eb278964fa4034550d1cd323b6514734bfbc20c",
+      "hash_object": "4eb278964fa4034550d1cd323b6514734bfbc20c"
+    },
+    "python3": {
+      "realpath": "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+      "version": "Python 3.15.2"
+    },
+    "interpreter": {
+      "path": "/opt/anaconda3/bin/python3.11",
+      "realpath": "/opt/anaconda3/bin/python3.11",
+      "version": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]",
+      "venv": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-7eo45lk0/root/.venv/bin/python"
+    }
+  },
+  {
+    "scenario": "replay",
+    "side": "after",
+    "host": "agy",
+    "commit_under_test": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+    "base": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "source_commit": "e097dfcb7b743dee57549045c43fb171b7b621a7",
+    "path": "docs/01-plan/features/exec-missing-report-recovery.impl-plan.md",
+    "plan_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "copy_sha256": "832298b3d74c28ba67f68f0d902b7420a3ebc26701427d74a9473f1641b33d39",
+    "copy_blob": "fef082989979cd8a7a1c0f896db4673a14e078e2",
+    "hook": {
+      "path": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-agy-tdd-gate.py",
+      "realpath": "/Users/kimhawk/orca/workspaces/skills/gate-non-py-production-files/h-mad/hooks/h-mad-agy-tdd-gate.py",
+      "sha256": "183baa59b2998746651e8db24750ca833424f14580bc28594d1cbe30baa5c895",
+      "source_commit": "b0ebb1166aa6f39f2dbf4c853a029e72d39695a2",
+      "blob": "1562044323f6a1f52044c0c74a91233ee5a779df",
+      "hash_object": "1562044323f6a1f52044c0c74a91233ee5a779df"
+    },
+    "python3": {
+      "realpath": "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/bin/python3.15",
+      "version": "Python 3.15.2"
+    },
+    "interpreter": {
+      "path": "/opt/anaconda3/bin/python3.11",
+      "realpath": "/opt/anaconda3/bin/python3.11",
+      "version": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]",
+      "venv": "/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-p9tnrtc4/root/.venv/bin/python"
+    }
+  }
+]
