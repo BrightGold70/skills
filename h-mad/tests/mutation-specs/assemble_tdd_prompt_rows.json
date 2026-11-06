@@ -117,7 +117,7 @@
       "file": "scripts/h_mad_assemble_tdd.py",
       "find": "\"The RED report must name both. The wire-cut (delete the call only, keep the \"",
       "replace": "\"The RED report must name both. GREEN must prove the wire by a wire-cut: delete the call only, keep the \"",
-      "test": "tests/test_h_mad_assemble_tdd.py::TestWireCutIsNotGreensToPerform::test_the_assembled_green_prompt_gives_the_cut_to_the_verifier"
+      "test": "tests/test_h_mad_assemble_tdd.py::TestWireCutIsNotGreensToPerform::test_the_assembled_green_prompt_gives_the_cut_to_the_orchestrator"
     },
     {
       "name": "wire-cut-pin-clause-reverted",
@@ -134,6 +134,14 @@
       "find": "\"exists is denied as `test-missing`; a test that imports the stub's module \"",
       "replace": "\"exists is denied; a test that imports the stub's module \"",
       "test": "tests/test_h_mad_assemble_tdd.py::TestRedStubOrderMatchesTheGate::test_the_red_prompt_states_that_order"
+    },
+    {
+      "name": "warn-claims-will-deny",
+      "_mechanism": "The warning again states the gate WILL deny, though the allow file or the hook interpreter admit it.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "gate may deny the dispatch's pytest run",
+      "replace": "gate will deny the dispatch's pytest run",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestInterpreterGateWarning::test_the_warning_says_may_deny_and_names_the_two_ways_the_gate_allows"
     }
   ]
 }

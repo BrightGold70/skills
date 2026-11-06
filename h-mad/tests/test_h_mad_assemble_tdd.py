@@ -2353,13 +2353,13 @@ class TestWireCutIsNotGreensToPerform:
                          expect_fail=None, expect_pass=None)
         return filled
 
-    def test_the_assembled_green_prompt_gives_the_cut_to_the_verifier(
+    def test_the_assembled_green_prompt_gives_the_cut_to_the_orchestrator(
         self, plan: Path, tmp_path: Path
     ) -> None:
         filled = " ".join(self._wiring_green(plan, tmp_path).split())
         assert "GREEN must prove the wire by a wire-cut" not in filled
         # template: L1 + L2 + L6, plus the assembler's own copy
-        assert filled.count("is the verifier's wire-scoped revert, not GREEN's") == 4
+        assert filled.count("is the orchestrator's wire-scoped revert, not GREEN's") == 4
         assert filled.count("GREEN proposes the connection's mutation row and does not perform the cut") == 4
 
     def test_no_surface_still_tells_green_to_perform_the_cut(self) -> None:
@@ -2426,6 +2426,14 @@ class TestInterpreterGateWarning:
         warns = [l for l in proc.stderr.splitlines() if l.startswith("ASSEMBLE-TDD: WARN interpreter_gate_untrusted")]
         assert len(warns) == 1, proc.stderr
         assert python in warns[0] and ".venv" in warns[0] and "thin" in warns[0]
+
+    def test_the_warning_says_may_deny_and_names_the_two_ways_the_gate_allows(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        proc = _cli_red(plan, tmp_path, _wrapper_python(tmp_path / "anaconda3" / "bin" / "python3"))
+        warn = next(l for l in proc.stderr.splitlines() if "interpreter_gate_untrusted" in l)
+        assert "may deny" in warn and "will deny" not in warn, warn
+        assert ".h-mad/phase5-shell-allow" in warn and "hook itself" in warn, warn
 
     def test_the_warning_never_reaches_stdout(self, plan: Path, tmp_path: Path) -> None:
         proc = _cli_red(plan, tmp_path, _wrapper_python(tmp_path / "anaconda3" / "bin" / "python3"))

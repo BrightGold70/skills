@@ -49,7 +49,7 @@ would quietly pick one.
 `--phase review` stages the 5e agy spec review instead (`assemble_review`): the same
 PASS line with `phase=review`, an `exec agy` → `progress` → `VERDICT:` block and no pytest
 line; it needs `--codex-report` and `--diff-path`/`--base-ref` and halts without them.
-A `--python` the Phase-5 gate would deny draws `ASSEMBLE-TDD: WARN interpreter_gate_untrusted`
+A `--python` the Phase-5 gate may deny draws `ASSEMBLE-TDD: WARN interpreter_gate_untrusted`
 on stderr and still assembles.
 
 A global impl-plan section the task cites by `§"…"` is inlined after the task
@@ -687,7 +687,7 @@ def assemble(
             "A missing-symbol RED on the pin is valid **only** when the missing symbol is "
             "the caller the task creates, and the callee resolves at the RED base. "
             "The RED report must name both. The wire-cut (delete the call only, keep the "
-            "caller and the callee, and confirm the pin fails) is the verifier's "
+            "caller and the callee, and confirm the pin fails) is the orchestrator's "
             "wire-scoped revert, not GREEN's: GREEN proposes the connection's mutation "
             "row and does not perform the cut."
         )
@@ -800,36 +800,71 @@ def assemble(
     }
 
 
-def _review_diff_paths(*, project_root: Path, diff_paths: list[str], base_ref: str | None) -> list[str]:
-    """The files the review reads: given verbatim, or derived from `--base-ref`. Never empty."""
+def _git_names(root: Path, *args: str) -> list[str]:
+    out = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+                         timeout=30, check=True).stdout
+    return [name for name in out.split("\0") if name]
+
+
+UNTRACKED_LABEL = "(untracked; may be foreign to this task)"
+DELETED_LABEL = "(deleted)"
+OUTSIDE_LABEL = "(outside --project-root)"
+
+
+def _review_diff_paths(*, project_root: Path, diff_paths: list[str], base_ref: str | None) -> list[tuple[str, str]]:
+    """The files the review reads, as (absolute path, label). Never empty.
+
+    Given with `--diff-path` (relative to the root, each must exist) or derived from
+    `--base-ref`. `git diff --name-only` is relative to the repository TOP and
+    `ls-files --others` to the root, so the root's `--show-prefix` is what maps a diff
+    name onto it; a changed file outside the root keeps its own real absolute path
+    rather than being joined under the root as a path that does not exist.
+    """
+    root = Path(os.path.abspath(project_root))
     if diff_paths and base_ref:  # M:RV-DIFF-CONFLICT
         raise Halt("diff_source_conflict", "give --diff-path or --base-ref, not both")
+    derived: list[tuple[str, str]] = []
     if base_ref:
         if base_ref.startswith("-"):  # M:RV-BASE-DASH
             raise Halt("diff_base_invalid", f"--base-ref {base_ref!r} must not start with '-'")
         try:
-            changed = subprocess.run(
-                ["git", "-C", str(project_root), "diff", "--name-only", "-z", base_ref, "--"],
-                capture_output=True, text=True, timeout=30, check=True,
-            ).stdout
-            fresh = subprocess.run(
-                ["git", "-C", str(project_root), "ls-files", "--others", "--exclude-standard", "-z"],
-                capture_output=True, text=True, timeout=30, check=True,
-            ).stdout
+            prefix = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-prefix"], capture_output=True,
+                                    text=True, timeout=30, check=True).stdout.rstrip("\n")
+            changed = _git_names(root, "diff", "--name-only", "-z", base_ref, "--")
+            gone = set(_git_names(root, "diff", "--name-only", "--diff-filter=D", "-z", base_ref, "--"))
+            fresh = _git_names(root, "ls-files", "--others", "--exclude-standard", "-z")
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             raise Halt("diff_base_unreadable", f"git diff against {base_ref!r} in {project_root}: {exc}") from None
-        diff_paths = [name for name in (changed + fresh).split("\0") if name]
-    if not diff_paths:  # M:RV-DIFF-REQUIRED
-        raise Halt("diff_paths_required", "the review needs --diff-path (repeatable) or --base-ref; "
-                   "or the base ref names no changed file")
-    ordered: list[str] = []
+        up = root
+        for _ in Path(prefix).parts:  # the repository top, spelled through the root's own path
+            up = up.parent
+        for name in changed:
+            label = DELETED_LABEL if name in gone else ""
+            if name.startswith(prefix):  # M:RV-PREFIX-MAP
+                derived.append((os.path.normpath(root / name[len(prefix):]), label))
+            else:
+                derived.append((os.path.normpath(up / name), f"{label} {OUTSIDE_LABEL}".strip()))
+        derived += [(os.path.normpath(root / name), UNTRACKED_LABEL) for name in fresh]  # M:RV-UNTRACKED-LABEL
+        if not derived:  # M:RV-BASE-EMPTY
+            raise Halt("diff_paths_required", "the base ref names no changed file")
+    elif not diff_paths:  # M:RV-DIFF-REQUIRED
+        raise Halt("diff_paths_required", "the review needs --diff-path (repeatable) or --base-ref")
     for changed_path in diff_paths:
         if (not changed_path or os.path.isabs(changed_path) or ".." in Path(changed_path).parts
                 or any(ch in changed_path for ch in "\n\r\0")):  # M:RV-DIFF-INVALID
             raise Halt("diff_path_invalid",
                        f"diff path {changed_path!r} must be relative, free of '..', and one line")
-        if changed_path not in ordered:
-            ordered.append(changed_path)
+        target = os.path.normpath(root / changed_path)
+        if not os.path.lexists(target):  # M:RV-DIFF-MISSING
+            raise Halt("diff_path_missing",
+                       f"{target} does not exist; a deleted file is named by --base-ref, not --diff-path")
+        derived.append((target, ""))
+    ordered: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for path, label in derived:
+        if path not in seen:  # M:RV-DEDUPE
+            seen.add(path)
+            ordered.append((path, label))
     return ordered
 
 
@@ -860,7 +895,7 @@ def assemble_review(
         raise Halt("codex_report_unreadable", f"{codex_report}: {exc}") from None
     if not report_text.strip():  # M:RV-REPORT-EMPTY
         raise Halt("codex_report_empty", f"{codex_report} is blank")
-    ordered = _review_diff_paths(project_root=project_root, diff_paths=diff_paths, base_ref=base_ref)
+    ordered = _review_diff_paths(project_root=project_root, diff_paths=diff_paths, base_ref=base_ref)  # M:RV-PATHS-WIRE
     try:
         plan_text = impl_plan.read_text(encoding="utf-8")
     except OSError as exc:
@@ -873,19 +908,27 @@ def assemble_review(
     if meta is None:
         raise Halt("task_not_found", f"task={task_id}")
     body = task_body(plan_text, task_id)
+    sections, unresolved_refs = referenced_sections(plan_text, task_id)
+    if sections:  # M:RV-REF-INLINE
+        body += ("\n\n**Referenced impl-plan sections (inlined — the task above cites them by §, "
+                 "and each is quoted whole from the impl-plan):**\n"
+                 + "".join(f"\n{section}\n" for _, section in sections))
     filled, residue = fill_slots(template_text, {
         "<INLINE_MODULE_NAME>": module,
         "<INLINE_FEATURE>": feature,
         "<INLINE_IMPL_PLAN_TASK>": body,
         "<INLINE_CODEX_REPORT>": report_text.rstrip("\n"),
-        "<INLINE_DIFF_PATHS>": "\n".join(f"- {project_root / name}" for name in ordered),
+        "<INLINE_DIFF_PATHS>": "\n".join(f"- {path} {label}".rstrip() for path, label in ordered),
     })
     leftover_slots = sorted(set(RESIDUAL.findall(residue)))
     if leftover_slots:  # M:RV-RESIDUAL
         raise Halt("residual_slots", ", ".join(leftover_slots))
     return filled, {
         "shape": meta["shape"] or "undeclared", "task": meta["id"], "pin": meta["pin"],
-        "diff_paths": ordered, "residue": residue,
+        "diff_paths": [path for path, _ in ordered], "residue": residue,
+        "inlined_sections": [heading for heading, _ in sections],
+        "inlined_lines": sum(len(sec.splitlines()) for _, sec in sections),
+        "unresolved_refs": unresolved_refs,
     }
 
 
@@ -999,7 +1042,7 @@ def _filename_slug(*parts: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Stage a Phase-5d/5e Codex dispatch")
+    ap = argparse.ArgumentParser(description="Stage a Phase-5d/5e TDD dispatch (RED/GREEN/gate), or the 5e agy spec review (--phase review)")
     ap.add_argument("--feature", required=True)
     ap.add_argument("--task", required=True, help='e.g. "Task 3" or "M2"')
     ap.add_argument("--phase", required=True, choices=("red", "green", "gate", "review"))
@@ -1011,8 +1054,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="gate only: a new test file this gate task creates; repeatable")
     ap.add_argument("--impl-plan", type=Path,
                     help="default: <project-root>/docs/01-plan/features/<feature>.impl-plan.md")
-    ap.add_argument("--python", default=sys.executable,
-                    help="interpreter for the independent re-run; refused if it has no pytest")
+    ap.add_argument("--python", default=None,
+                    help="interpreter for the independent re-run (default: this interpreter); "
+                         "refused if it has no pytest; not applicable to --phase review")
     ap.add_argument("--expect-fail", type=int,
                     help="failing tests in total across every --test-path, not per file")
     ap.add_argument("--expect-pass", type=int,
@@ -1038,10 +1082,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--codex-report", type=Path,
                     help="review only: the implementer's report file, inlined verbatim")
     ap.add_argument("--diff-path", action="append", default=[],
-                    help="review only: a changed file, relative to --project-root; repeatable")
+                    help="review only: a changed file that exists, relative to --project-root; repeatable. A deleted file is named by --base-ref, not here")
     ap.add_argument("--base-ref", default=None,
                     help="review only: derive the changed files from `git diff --name-only <ref>` "
-                         "plus untracked files (instead of --diff-path)")
+                         "plus untracked files, labelled (instead of --diff-path)")
     ap.add_argument("--timeout", type=int, default=None)
     ap.add_argument("--model", default=DEFAULT_MODEL,
                     help="OVERRIDE; unset inherits the codex CLI's own configured model")
@@ -1075,7 +1119,7 @@ def main(argv: list[str] | None = None) -> int:
             ("--env-known-failure", args.env_known_failure),
             ("--env-known-failures-file", args.env_known_failures_file),
             ("--mutation-spec", args.mutation_spec), ("--report-file", args.report_file),
-            ("--sandbox", args.sandbox),
+            ("--sandbox", args.sandbox), ("--python", args.python is not None),
         ) if given]
         halt = ("review_option_not_applicable", ", ".join(misapplied)) if misapplied else None  # M:RV-NOT-APPLICABLE
     else:
@@ -1088,6 +1132,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{TOKEN}: HALT {halt[0]}")
         print(f"  {halt[1]}")
         return 2
+    if args.python is None:  # M:AT-PY-DEFAULT
+        args.python = sys.executable
 
     if args.agent == "agy":
         try:
@@ -1141,7 +1187,6 @@ def main(argv: list[str] | None = None) -> int:
                 codex_report=args.codex_report, diff_paths=args.diff_path,
                 base_ref=args.base_ref, template=args.template,
             )
-            meta.update(inlined_sections=[], inlined_lines=0, unresolved_refs=[])
         else:
             filled, meta = assemble(
                 feature=args.feature, task_id=args.task, phase=args.phase,
@@ -1186,7 +1231,9 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"{TOKEN}: WARN interpreter_gate_untrusted {args.python} is outside the Phase-5 "
             f"gate's trusted dirs and is not a venv contained in {args.project_root}, so the "
-            f"gate will deny the dispatch's pytest run; create a thin venv "
+            f"gate may deny the dispatch's pytest run (it will not if a "
+            f".h-mad/phase5-shell-allow line names this command, or if the hook itself "
+            f"runs under this interpreter); otherwise create a thin venv "
             f"({args.project_root}/.venv with pytest only, never a symlink) and pass "
             f"--python {args.project_root}/.venv/bin/python",
             file=sys.stderr,

@@ -35,8 +35,8 @@
       "name": "rv-diff-required-dropped",
       "_mechanism": "A review of no files proceeds.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "if not diff_paths:  # M:RV-DIFF-REQUIRED",
-      "replace": "if False:  # M:RV-DIFF-REQUIRED",
+      "find": "elif not diff_paths:  # M:RV-DIFF-REQUIRED",
+      "replace": "elif False:  # M:RV-DIFF-REQUIRED",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[no-diff]"
     },
     {
@@ -59,16 +59,16 @@
       "name": "rv-base-unreadable-masked",
       "_mechanism": "A failing git diff reads as an empty change list.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "capture_output=True, text=True, timeout=30, check=True,\n            ).stdout\n            fresh",
-      "replace": "capture_output=True, text=True, timeout=30, check=False,\n            ).stdout\n            fresh",
+      "find": "timeout=30, check=True).stdout\n    return [name",
+      "replace": "timeout=30, check=False).stdout\n    return [name",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_an_unknown_base_ref_in_a_real_repo_halts"
     },
     {
       "name": "rv-untracked-dropped",
       "_mechanism": "A new, untracked file is missing from the base-ref list.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "for name in (changed + fresh).split(\"\\0\") if name]",
-      "replace": "for name in (changed).split(\"\\0\") if name]",
+      "find": "derived += [(os.path.normpath(root / name), UNTRACKED_LABEL) for name in fresh]  # M:RV-UNTRACKED-LABEL",
+      "replace": "derived += []  # M:RV-UNTRACKED-LABEL",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_names_changed_and_untracked_files"
     },
     {
@@ -99,17 +99,17 @@
       "name": "rv-dedupe-dropped",
       "_mechanism": "A repeated diff path is listed twice.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "if changed_path not in ordered:",
-      "replace": "if True:",
+      "find": "if path not in seen:  # M:RV-DEDUPE",
+      "replace": "if True:  # M:RV-DEDUPE",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_repeated_diff_path_is_listed_once"
     },
     {
       "name": "rv-paths-relative",
       "_mechanism": "Diff paths are printed relative, leaving view_file to guess the cwd.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "f\"- {project_root / name}\" for name in ordered",
-      "replace": "f\"- {name}\" for name in ordered",
-      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_review_defaults_to_agy_and_stages_a_working_dispatch"
+      "find": "\"\\n\".join(f\"- {path} {label}\".rstrip() for path, label in ordered)",
+      "replace": "\"\\n\".join(f\"- {os.path.relpath(path, project_root)} {label}\".rstrip() for path, label in ordered)",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_relative_project_root_still_prints_absolute_paths"
     },
     {
       "name": "rv-residual-dropped",
@@ -182,6 +182,86 @@
       "find": "(and the agy spec-review half with `h_mad_assemble_tdd.py --phase review",
       "replace": "(the agy spec-review half is still assembled by hand; `h_mad_assemble_tdd.py --phase review",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_docs_say_the_review_is_staged_by_the_script"
+    },
+    {
+      "name": "rv-prefix-map-dropped",
+      "_mechanism": "A base-ref run from a subdirectory root treats every name as outside the root.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if name.startswith(prefix):  # M:RV-PREFIX-MAP",
+      "replace": "if False:  # M:RV-PREFIX-MAP",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_from_a_subdirectory_root_prints_real_paths"
+    },
+    {
+      "name": "rv-outside-label-dropped",
+      "_mechanism": "A changed file outside the root is listed without saying so.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "f\"{label} {OUTSIDE_LABEL}\".strip()",
+      "replace": "label",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_from_a_subdirectory_root_prints_real_paths"
+    },
+    {
+      "name": "rv-deleted-label-dropped",
+      "_mechanism": "A deleted file is listed as an ordinary changed file.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "label = DELETED_LABEL if name in gone else \"\"",
+      "replace": "label = \"\"",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_from_a_subdirectory_root_prints_real_paths"
+    },
+    {
+      "name": "rv-untracked-label-dropped",
+      "_mechanism": "An untracked file loses its foreign-to-this-task label.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "derived += [(os.path.normpath(root / name), UNTRACKED_LABEL) for name in fresh]  # M:RV-UNTRACKED-LABEL",
+      "replace": "derived += [(os.path.normpath(root / name), \"\") for name in fresh]  # M:RV-UNTRACKED-LABEL",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_from_a_subdirectory_root_prints_real_paths"
+    },
+    {
+      "name": "rv-diff-missing-dropped",
+      "_mechanism": "A --diff-path naming no file ends PASS.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if not os.path.lexists(target):  # M:RV-DIFF-MISSING",
+      "replace": "if False:  # M:RV-DIFF-MISSING",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_diff_path_that_does_not_exist_halts"
+    },
+    {
+      "name": "rv-base-empty-dropped",
+      "_mechanism": "A base ref naming no changed file proceeds to a review of nothing.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if not derived:  # M:RV-BASE-EMPTY",
+      "replace": "if False:  # M:RV-BASE-EMPTY",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_naming_no_changed_file_halts"
+    },
+    {
+      "name": "rv-ref-inline-dropped",
+      "_mechanism": "The sections the task cites are not inlined into the review.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if sections:  # M:RV-REF-INLINE",
+      "replace": "if False:  # M:RV-REF-INLINE",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_review_inlines_the_sections_the_task_cites"
+    },
+    {
+      "name": "rv-python-given-ignored",
+      "_mechanism": "--python on a review is silently dropped.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "(\"--python\", args.python is not None),",
+      "replace": "(\"--python\", False),",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_flag_that_does_not_apply_to_a_review_halts_instead_of_being_dropped[python]"
+    },
+    {
+      "name": "rv-python-default-dropped",
+      "_mechanism": "An unset --python is never filled, so the default interpreter is None.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if args.python is None:  # M:AT-PY-DEFAULT",
+      "replace": "if False:  # M:AT-PY-DEFAULT",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_an_unset_python_is_not_a_given_python"
+    },
+    {
+      "name": "rv-untracked-note-dropped",
+      "_mechanism": "The prompt invites DRIFT for an untracked file.",
+      "file": "references/agy-spec-reviewer-prompt.md",
+      "find": "Do not report it as DRIFT (extra work)",
+      "replace": "Report it as DRIFT (extra work)",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_prompt_tells_the_reviewer_an_untracked_file_is_not_drift_by_itself"
     }
   ]
 }
