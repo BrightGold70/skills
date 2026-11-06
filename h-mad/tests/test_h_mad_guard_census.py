@@ -101,9 +101,20 @@ def token(proc: subprocess.CompletedProcess) -> str:
 
 
 def counts(proc: subprocess.CompletedProcess) -> tuple[int, int, int]:
-    m = re.fullmatch(r"GUARD-CENSUS: DONE decision=(\d+) anchored=(\d+) unanchored=(\d+)", token(proc))
+    m = re.fullmatch(r"GUARD-CENSUS: DONE decision=(\d+) anchored=(\d+) unanchored=(\d+) removed=(\d+)",
+                     token(proc))
     assert m, proc.stdout + proc.stderr
     return int(m[1]), int(m[2]), int(m[3])
+
+
+def removed_count(proc: subprocess.CompletedProcess) -> int:
+    m = re.fullmatch(r"GUARD-CENSUS: DONE decision=\d+ anchored=\d+ unanchored=\d+ removed=(\d+)", token(proc))
+    assert m, proc.stdout + proc.stderr
+    return int(m[1])
+
+
+def removed_lines(proc: subprocess.CompletedProcess) -> list[str]:
+    return [ln for ln in proc.stdout.splitlines() if ln.startswith("REMOVED: ")]
 
 
 def candidates(proc: subprocess.CompletedProcess) -> dict[str, list[str]]:
@@ -157,7 +168,8 @@ class TestDocsArePinnedBothWays:
         assert 'TOKEN = "GUARD-CENSUS"' in script
         printed = set(re.findall(r'f"([A-Z]+(?:-[A-Z]+)?):', script)) | {"GUARD-CENSUS"}
         documented = set(re.findall(r"`([A-Z]+(?:-[A-Z]+)?):", entry))
-        assert printed == {"GUARD-CENSUS", "CENSUS-SCOPE", "SKIPPED", "ROWS", "ARMS"}, printed
+        assert printed == {"GUARD-CENSUS", "CENSUS-SCOPE", "SKIPPED", "ROWS", "ARMS", "UNMEASURED",
+                           "REMOVED"}, printed
         assert printed - documented == set(), f"printed with no entry: {sorted(printed - documented)}"
         assert documented - printed == set(), f"documented, never printed: {sorted(documented - printed)}"
 
@@ -278,7 +290,10 @@ def test_test_files_are_not_census_targets(tmp_path: Path) -> None:
                       {"h-mad/tests/test_mod.py": PY_HEAD, "h-mad/tests/conftest.py": PY_HEAD,
                        "h-mad/scripts/test_inline.py": PY_HEAD, "h-mad/scripts/mod_test.py": PY_HEAD})
 
-    assert counts(census(repo, base)) == (0, 0, 0)
+    proc = census(repo, base)
+
+    assert counts(proc) == (0, 0, 0)
+    assert "tests=4" in proc.stdout, proc.stdout
 
 
 def test_path_limits_the_diff(tmp_path: Path) -> None:
@@ -341,6 +356,7 @@ def test_a_deleted_file_is_skipped_and_counted(tmp_path: Path) -> None:
 
     assert counts(proc) == (0, 0, 0)
     assert "SKIPPED: deleted=1" in proc.stdout, proc.stdout
+    assert removed_count(proc) == 6, "a deleted file's decisions are removed guards, not nothing"
 
 
 def test_a_binary_change_is_skipped_and_counted(tmp_path: Path) -> None:
@@ -519,10 +535,66 @@ def test_a_suffixless_file_with_a_shell_shebang_is_a_shell_target(tmp_path: Path
     assert counts(census(repo, base))[0] == 8
 
 
-def test_a_suffixless_file_with_another_shebang_is_not_a_target(tmp_path: Path) -> None:
+def test_a_suffixless_file_with_another_shebang_is_not_a_target_but_is_counted(tmp_path: Path) -> None:
     repo, base = sh_repo(tmp_path, None, "#!/usr/bin/env ruby\nif x\n", "h-mad/bin/launch")
 
-    assert counts(census(repo, base)) == (0, 0, 0)
+    proc = census(repo, base)
+
+    assert counts(proc) == (0, 0, 0)
+    assert "unmeasured=1" in proc.stdout, "a changed file nobody measured must not read as a clean zero"
+    assert "UNMEASURED: h-mad/bin/launch" in proc.stdout, proc.stdout
+
+
+@pytest.mark.parametrize("name", ["src/app.ts", "web/check.js", "lib/x.rb", "cmd/main.go"])
+def test_code_in_another_language_is_unmeasured_and_listed(tmp_path: Path, name: str) -> None:
+    repo, base = make(tmp_path, {"h-mad/scripts/mod.py": PY_BASE}, {name: "if (x) { return 1 }\n"})
+
+    proc = census(repo, base)
+
+    assert counts(proc) == (0, 0, 0)
+    assert "unmeasured=1" in proc.stdout and f"UNMEASURED: {name}" in proc.stdout, proc.stdout
+
+
+def test_documents_and_data_are_not_unmeasured_code(tmp_path: Path) -> None:
+    repo, base = make(tmp_path, {"h-mad/scripts/mod.py": PY_BASE},
+                      {"docs/a.md": "# x\n", "data/b.json": "{}\n", "c.txt": "x\n"})
+
+    proc = census(repo, base)
+
+    assert "unmeasured=0" in proc.stdout and "other=3" in proc.stdout, proc.stdout
+
+
+@pytest.mark.parametrize("name,body,expected", [
+    ("src/hook.zsh", SH_HEAD.replace("#!/bin/bash", "#!/bin/zsh"), 8),
+    ("src/nobang.zsh", SH_HEAD.replace("#!/bin/bash\n", ""), 8),
+    ("h-mad/hooks/gate.v2", SH_HEAD, 8),
+    ("h-mad/bin/tool", "#!/usr/bin/env python3\n" + PY_HEAD, 6),
+])
+def test_a_shell_or_python_script_is_measured_whatever_its_suffix(
+        tmp_path: Path, name: str, body: str, expected: int) -> None:
+    repo, base = make(tmp_path, {"h-mad/scripts/mod.py": PY_BASE}, {name: body})
+
+    proc = census(repo, base)
+
+    assert counts(proc)[0] == expected, proc.stdout
+    assert "unmeasured=0" in proc.stdout, proc.stdout
+
+
+def test_a_path_that_matches_no_change_is_UNREADABLE_not_zero(tmp_path: Path) -> None:
+    repo, base = simple(tmp_path, [])
+
+    proc = census(repo, base, "--path", "src/typo_nope.py")
+
+    assert token(proc) == "GUARD-CENSUS: UNREADABLE reason=path-no-match", proc.stdout
+    assert proc.returncode == 2
+
+
+def test_one_unmatched_path_among_matching_ones_is_still_UNREADABLE(tmp_path: Path) -> None:
+    repo, base = simple(tmp_path, [])
+
+    proc = census(repo, base, "--path", "h-mad", "--path", "nowhere")
+
+    assert token(proc) == "GUARD-CENSUS: UNREADABLE reason=path-no-match"
 
 
 def test_a_non_utf8_shell_file_is_UNREADABLE(tmp_path: Path) -> None:
@@ -534,28 +606,231 @@ def test_a_non_utf8_shell_file_is_UNREADABLE(tmp_path: Path) -> None:
 
 # ------------------------------------------------------------- calibration
 
-def test_the_gate_non_py_hand_census_is_listed_in_full() -> None:
-    """Replay of analysis v3 §Census at 246531ba: the 16 lines, and v4's 2, must all be listed.
-
-    Skipped, naming the missing object, in a clone that does not hold the commit.
-    """
+def _calibration(head: str) -> tuple[subprocess.CompletedProcess, list[str]]:
     repo = SKILL_DIR.parent
-    for commit_id in ("3489f86b", "246531ba"):
+    for commit_id in ("3489f86b", head):
         have = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{commit_id}^{{commit}}"],
                               capture_output=True).returncode == 0
         if not have:
             pytest.skip(f"commit {commit_id} is not in this clone; the calibration needs it")
     proc = subprocess.run([sys.executable, str(SCRIPT), "--repo", str(repo), "--base", "3489f86b",
-                           "--head", "246531ba", "--path", "h-mad/hooks", "--path", "h-mad/scripts"],
+                           "--head", head, "--path", "h-mad/hooks", "--path", "h-mad/scripts"],
                           capture_output=True, text=True, timeout=300)
     got = candidates(proc)
     files = {"judge": "h-mad/scripts/h_mad_tdd_judge.py", "cx": "h-mad/hooks/h-mad-codex-tdd-gate.py",
              "ag": "h-mad/hooks/h-mad-agy-tdd-gate.py", "sh": "h-mad/hooks/h-mad-tdd-gate.sh"}
     listed = ("judge:737 sh:269 judge:341 judge:335 judge:330 judge:347 judge:732 sh:198 cx:289 ag:185 "
               "cx:303 ag:202 sh:344 judge:733 cx:293 ag:188 judge:344 judge:738").split()
-    missed = [n for n in listed if f"{files[n.split(':')[0]]}:{n.split(':')[1]}" not in got]
-    assert not missed, f"hand-census lines the tool did not list: {missed}"
+    still = [n for n in listed if f"{files[n.split(':')[0]]}:{n.split(':')[1]}" in got]
+    return proc, still
+
+
+def test_the_gate_non_py_hand_census_is_listed_in_full() -> None:
+    """Replay of analysis v3 §Census at 246531ba: the 16 lines, and v4's 2, must all be listed.
+
+    Skipped, naming the missing object, in a clone that does not hold the commit.
+    """
+    proc, still = _calibration("246531ba")
+    assert len(still) == 18, f"hand-census lines the tool did not list: only {len(still)} of 18 listed"
     assert counts(proc) == (170, 58, 112)
+
+
+def test_after_the_task_8_rows_exactly_three_of_the_eighteen_remain() -> None:
+    """At 8a3fa99e the 16 rows closed 15 lines. Measured: judge:344, judge:738 (analysis v4's two) and
+    sh:269, whose `"docdata yes"` arm still has no row (`arms-not-all-anchored`)."""
+    proc, still = _calibration("8a3fa99e")
+    assert sorted(still) == ["judge:344", "judge:738", "sh:269"], still
+    assert counts(proc)[:3] == (170, 73, 97)
+
+
+def test_the_default_spec_dirs_anchor_handoffs_lines_in_the_real_history() -> None:
+    """Commit 5db87e97 over handoff/scripts: only the default's second directory holds its rows."""
+    repo = SKILL_DIR.parent
+    for commit_id in ("5db87e97", "5db87e97~1"):
+        if subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{commit_id}^{{commit}}"],
+                          capture_output=True).returncode != 0:
+            pytest.skip(f"commit {commit_id} is not in this clone; the replay needs it")
+    common = [sys.executable, str(SCRIPT), "--repo", str(repo), "--base", "5db87e97~1", "--head", "5db87e97",
+              "--path", "handoff/scripts"]
+    default = subprocess.run(common, capture_output=True, text=True, timeout=300)
+    h_mad_only = subprocess.run(common + ["--spec-dir", "h-mad/tests/mutation-specs"],
+                                capture_output=True, text=True, timeout=300)
+    assert counts(default)[1] == 7, default.stdout
+    assert counts(h_mad_only)[1] == 0, h_mad_only.stdout
+
+
+def test_the_default_spec_dirs_anchor_handoffs_lines_in_the_real_history() -> None:
+    """Commit 5db87e97 over handoff/scripts: only the default's second directory holds its rows."""
+    repo = SKILL_DIR.parent
+    for commit_id in ("5db87e97", "5db87e97~1"):
+        if subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{commit_id}^{{commit}}"],
+                          capture_output=True).returncode != 0:
+            pytest.skip(f"commit {commit_id} is not in this clone; the replay needs it")
+    common = [sys.executable, str(SCRIPT), "--repo", str(repo), "--base", "5db87e97~1", "--head", "5db87e97",
+              "--path", "handoff/scripts"]
+    default = subprocess.run(common, capture_output=True, text=True, timeout=300)
+    h_mad_only = subprocess.run(common + ["--spec-dir", "h-mad/tests/mutation-specs"],
+                                capture_output=True, text=True, timeout=300)
+    assert counts(default)[1] == 7, default.stdout
+    assert counts(h_mad_only)[1] == 0, h_mad_only.stdout
+
+
+# ------------------------------------------------------------ removed guards
+
+GUARDED = "def g(x):\n    if x:\n        raise ValueError\n    return x\n"
+UNGUARDED = "def g(x):\n    return x\n"
+
+
+def test_a_guard_deleted_inside_a_modified_file_is_listed_as_removed(tmp_path: Path) -> None:
+    repo, base = make(tmp_path, {"h-mad/scripts/mod.py": GUARDED}, {"h-mad/scripts/mod.py": UNGUARDED})
+
+    proc = census(repo, base)
+
+    assert counts(proc) == (0, 0, 0), "nothing was added"
+    assert removed_lines(proc) == ['REMOVED: h-mad/scripts/mod.py:2 if "if x:"',
+                                   'REMOVED: h-mad/scripts/mod.py:3 raise "raise ValueError"'], proc.stdout
+    assert token(proc) == "GUARD-CENSUS: DONE decision=0 anchored=0 unanchored=0 removed=2"
+
+
+def test_a_modified_decision_line_is_both_a_candidate_and_removed(tmp_path: Path) -> None:
+    head = GUARDED.replace("if x:", "if x > 1:")
+    repo, base = make(tmp_path, {"h-mad/scripts/mod.py": GUARDED}, {"h-mad/scripts/mod.py": head})
+
+    proc = census(repo, base)
+
+    assert list(candidates(proc)) == ["h-mad/scripts/mod.py:2"], proc.stdout
+    assert removed_lines(proc) == ['REMOVED: h-mad/scripts/mod.py:2 if "if x:"'], proc.stdout
+
+
+def test_removed_lines_are_numbered_on_the_base_side(tmp_path: Path) -> None:
+    base_py = "import os\n\n" + GUARDED
+    head_py = "import os\n" + UNGUARDED
+    repo, base = make(tmp_path, {"h-mad/scripts/mod.py": base_py}, {"h-mad/scripts/mod.py": head_py})
+
+    assert removed_lines(census(repo, base))[0] == 'REMOVED: h-mad/scripts/mod.py:4 if "if x:"'
+
+
+def test_a_removed_shell_decision_is_listed_by_the_shell_rule(tmp_path: Path) -> None:
+    repo, base = make(tmp_path, {"h-mad/hooks/gate.sh": SH_HEAD}, {"h-mad/hooks/gate.sh": SH_BASE})
+
+    proc = census(repo, base)
+
+    assert removed_count(proc) == 8, proc.stdout
+    assert 'REMOVED: h-mad/hooks/gate.sh:5 control,test "if [ \\"$want\\" = yes ]; then"' in proc.stdout, proc.stdout
+
+
+def test_a_renamed_file_reads_as_delete_plus_add(tmp_path: Path) -> None:
+    """`--no-renames`: the old file's decisions are all REMOVED, the new file's all candidates."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    base = commit(repo, {f"{SPECS}/keep.json": spec([]), "h-mad/scripts/old.py": PY_HEAD})
+    git(repo, "mv", "h-mad/scripts/old.py", "h-mad/scripts/new.py")
+    git(repo, "commit", "-q", "-am", "rename")
+
+    proc = census(repo, base)
+
+    assert counts(proc) == (6, 0, 6) and removed_count(proc) == 6, proc.stdout
+
+
+def test_a_removed_line_in_an_undecodable_base_is_UNREADABLE(tmp_path: Path) -> None:
+    repo, base = make(tmp_path, {"h-mad/scripts/mod.py": b"def f(x):\n    if x:\n        return '\xff'\n"},
+                      {"h-mad/scripts/mod.py": b"def f(x):\n    return 1\n"})
+
+    assert token(census(repo, base)) == "GUARD-CENSUS: UNREADABLE reason=unreadable-file"
+
+
+# ----------------------------------------------------------- several spec dirs
+
+HANDOFF_SPECS = "handoff/tests/mutation-specs"
+
+
+def two_trees(tmp_path: Path, with_h_mad_specs: bool = True) -> tuple[Path, str]:
+    base_files = {"handoff/scripts/h.py": PY_BASE}
+    if with_h_mad_specs:
+        base_files[f"{SPECS}/keep.json"] = spec([])
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    base = commit(repo, base_files, "base")
+    commit(repo, {"handoff/scripts/h.py": PY_HEAD,
+                  f"{HANDOFF_SPECS}/h.json": spec([row("scripts/h.py", "    elif x < 0:\n")])}, "head")
+    return repo, base
+
+
+def test_the_default_reads_both_spec_directories(tmp_path: Path) -> None:
+    repo, base = two_trees(tmp_path)
+
+    assert counts(census(repo, base))[1] == 1
+
+
+def test_a_missing_default_directory_is_not_an_error_when_the_other_exists(tmp_path: Path) -> None:
+    repo, base = two_trees(tmp_path, with_h_mad_specs=False)
+
+    proc = census(repo, base)
+
+    assert counts(proc)[1] == 1, proc.stdout
+
+
+def test_an_explicit_spec_dir_replaces_the_default(tmp_path: Path) -> None:
+    repo, base = two_trees(tmp_path)
+
+    assert counts(census(repo, base, "--spec-dir", SPECS))[1] == 0
+    assert counts(census(repo, base, "--spec-dir", HANDOFF_SPECS))[1] == 1
+
+
+def test_spec_dir_is_repeatable(tmp_path: Path) -> None:
+    repo, base = two_trees(tmp_path)
+
+    proc = census(repo, base, "--spec-dir", SPECS, "--spec-dir", HANDOFF_SPECS)
+
+    assert counts(proc)[1] == 1
+
+
+def test_a_missing_explicit_directory_stays_UNREADABLE_even_if_another_exists(tmp_path: Path) -> None:
+    repo, base = two_trees(tmp_path)
+
+    proc = census(repo, base, "--spec-dir", HANDOFF_SPECS, "--spec-dir", "no/such")
+
+    assert token(proc) == "GUARD-CENSUS: UNREADABLE reason=spec-dir"
+
+
+def test_no_default_directory_at_all_is_UNREADABLE(tmp_path: Path) -> None:
+    repo, base = make(tmp_path, {"x/a.py": PY_BASE}, {"x/a.py": PY_HEAD})
+    git(repo, "rm", "-q", f"{SPECS}/keep.json")
+    git(repo, "commit", "-q", "-m", "no specs")
+
+    assert token(census(repo, base)) == "GUARD-CENSUS: UNREADABLE reason=spec-dir"
+
+
+# ------------------------------------------------------------- python holes
+
+def test_an_awaited_call_statement_and_a_with_header_are_decision_lines(tmp_path: Path) -> None:
+    head = ("async def f(x):\n"
+            "    await deny(x)\n"
+            "    with lock_or_refuse(x):\n"
+            "        y = 1\n"
+            "    async with gate(x):\n"
+            "        pass\n")
+    repo, base = make(tmp_path, {"h-mad/scripts/mod.py": PY_BASE}, {"h-mad/scripts/mod.py": head})
+
+    got = candidates(census(repo, base))
+
+    assert {k.rsplit(":", 1)[1]: v[0] for k, v in got.items()} == {"2": "call", "3": "with", "4": "assign",
+                                                                   "5": "with"}, got
+
+
+def test_a_bare_carriage_return_does_not_shift_the_attribution(tmp_path: Path) -> None:
+    """ast counts a lone CR as a newline, git does not: lines are mapped by offset."""
+    head = b"a = 1\rb = 2\nif a:\n    print(b)\n"
+    repo, base = make(tmp_path, {"h-mad/scripts/cr.py": PY_BASE}, {"h-mad/scripts/cr.py": head})
+
+    proc = census(repo, base)
+
+    rows = [ln.split("\t") for ln in proc.stdout.splitlines() if ln.startswith("h-mad/scripts/cr.py:")]
+    assert [(r[0], r[1]) for r in rows] == [("h-mad/scripts/cr.py:1", "assign"), ("h-mad/scripts/cr.py:1", "assign"),
+                                            ("h-mad/scripts/cr.py:2", "if"), ("h-mad/scripts/cr.py:3", "call")], rows
+    assert counts(proc) == (4, 0, 4)
 
 
 def test_an_empty_find_anchors_nothing_and_counts_as_stale(tmp_path: Path) -> None:
@@ -594,3 +869,13 @@ def test_a_glob_character_name_does_not_pick_up_a_sibling_files_hunks(tmp_path: 
 
     assert counts(proc) == (6, 0, 6), proc.stdout
     assert not [k for k in candidates(proc) if k.startswith("h-mad/scripts/x*.py")], proc.stdout
+
+
+def test_a_deleted_suffixless_shell_script_lists_its_decisions_as_removed(tmp_path: Path) -> None:
+    """Only the deleted file's BASE blob can say it was a shell script; the head has nothing to read."""
+    repo, base = make(tmp_path, {"h-mad/bin/launch": SH_HEAD}, {}, remove=("h-mad/bin/launch",))
+
+    proc = census(repo, base)
+
+    assert removed_count(proc) == 8, proc.stdout
+    assert "deleted=1" in proc.stdout and "other=0" in proc.stdout, proc.stdout

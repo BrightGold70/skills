@@ -644,6 +644,15 @@
       "replace": "    python = args.python\n",
       "test": "tests/test_h_mad_branch_evidence.py::test_a_relative_python_is_resolved_before_the_cwd_change",
       "symbol": "main"
+    },
+    {
+      "name": "unrunnable-python-is-a-traceback",
+      "_mechanism": "An executable whose shebang names a missing interpreter raises out of the launch: a traceback, no FULL-SUITE token, no verdict.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "    except OSError:  # a shebang naming an interpreter that is not there: exec fails\n        out.append(\"FULL-SUITE: UNREADABLE reason=python-unrunnable\")\n        incomplete.append(\"full-suite-python-unrunnable\")\n        return\n",
+      "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_python_whose_shebang_names_a_missing_interpreter_is_named_not_a_traceback",
+      "symbol": "_full_suite"
     }
   ]
 }
