@@ -1,0 +1,82 @@
+{
+  "_why": "Skill-candidates row 'hook-tests-run-under-the-wrong-interpreter': the suite drives the TDD gate hooks with sys.executable while the live launch resolves python3 from PATH. These rows prove the live-interpreter smoke set bites: each hook's unresolvable-target refusal, that the launch really goes through PATH's python3 (not sys.executable), and that the file skips, naming the interpreter, when the run would be vacuous.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_hook_live_interpreter.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "codex-symlink-loop-target-allowed",
+      "_mechanism": "A loop target slips past the codex hook's unresolvable refusal and is allowed.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "                return _deny(f\"H-MAD Phase 5 target is unresolvable ({resolved.component}); refusing fail-closed. kind=judge-error\")\n",
+      "replace": "                pass\n",
+      "test": "tests/test_h_mad_hook_live_interpreter.py::test_a_symlink_loop_target_is_denied_as_unresolvable_not_crashed_or_allowed[codex]",
+      "symbol": "_main_guarded"
+    },
+    {
+      "name": "agy-symlink-loop-target-allowed",
+      "_mechanism": "A loop target slips past the agy hook's unresolvable refusal.",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "find": "                    if phase5_status in {\"active\", \"unknown\"}:\n                        detail = repr(resolved.component)",
+      "replace": "                    if False:\n                        detail = repr(resolved.component)",
+      "test": "tests/test_h_mad_hook_live_interpreter.py::test_a_symlink_loop_target_is_denied_as_unresolvable_not_crashed_or_allowed[agy]",
+      "symbol": "main"
+    },
+    {
+      "name": "agy-launched-through-sys-executable",
+      "_mechanism": "The agy hook is driven by the suite's interpreter, so the shebang no longer decides.",
+      "file": "tests/test_h_mad_hook_live_interpreter.py",
+      "find": "        argv = [str(AGY_GATE)]  # executed directly: the shebang decides\n",
+      "replace": "        argv = [sys.executable, str(AGY_GATE)]\n",
+      "test": "tests/test_h_mad_hook_live_interpreter.py::test_the_hook_runs_under_path_python3_not_sys_executable[agy]",
+      "symbol": "_launch"
+    },
+    {
+      "name": "codex-launched-through-sys-executable",
+      "_mechanism": "The codex hook is driven by the suite's interpreter instead of PATH's python3.",
+      "file": "tests/test_h_mad_hook_live_interpreter.py",
+      "find": "[\"python3\", str(CODEX_GATE)]",
+      "replace": "[sys.executable, str(CODEX_GATE)]",
+      "test": "tests/test_h_mad_hook_live_interpreter.py::test_the_hook_runs_under_path_python3_not_sys_executable[codex]",
+      "symbol": "_launch"
+    },
+    {
+      "name": "shim-not-first-on-path",
+      "_mechanism": "The recording shim is not first on PATH, so the control reads no launch at all.",
+      "file": "tests/test_h_mad_hook_live_interpreter.py",
+      "find": "    env[\"PATH\"] = str(bin_dir) + os.pathsep + env[\"PATH\"]\n",
+      "replace": "    env[\"PATH\"] = env[\"PATH\"]\n",
+      "test": "tests/test_h_mad_hook_live_interpreter.py::test_the_hook_runs_under_path_python3_not_sys_executable[agy]",
+      "symbol": "_launch"
+    },
+    {
+      "name": "same-interpreter-run-not-skipped",
+      "_mechanism": "python3 == sys.executable no longer skips: a vacuous run reads as a pass.",
+      "file": "tests/test_h_mad_hook_live_interpreter.py",
+      "find": "    if os.path.realpath(LIVE) == os.path.realpath(sys.executable):\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_h_mad_hook_live_interpreter.py::test_the_live_tests_skip_naming_the_interpreter_when_python3_is_sys_executable",
+      "symbol": "_skip_reason"
+    },
+    {
+      "name": "absent-python3-not-skipped",
+      "_mechanism": "A missing python3 no longer skips with its reason.",
+      "file": "tests/test_h_mad_hook_live_interpreter.py",
+      "find": "    if LIVE is None:\n        return (",
+      "replace": "    if False:\n        return (",
+      "test": "tests/test_h_mad_hook_live_interpreter.py::test_the_live_tests_skip_naming_the_interpreter_when_python3_is_absent",
+      "symbol": "_skip_reason"
+    }
+  ]
+}

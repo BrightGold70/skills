@@ -10,7 +10,8 @@ the changed scripts re-run. This does that sequence, once, from the worktree.
 
 Usage:
   h_mad_branch_evidence.py <worktree-or-branch> [--base main] [--no-mutation]
-                           [--child-timeout S]
+                           [--child-timeout S] [--full-suite [--python EXE]
+                           [--full-suite-timeout S]]
 
 The target is a worktree's top directory, or a branch name resolved to the
 worktree that has it checked out (`git worktree list`, from the current
@@ -52,6 +53,20 @@ at collection. `PYTEST-GROUPS:` lists the groups; their results fold into the on
 `TESTS:` token, where any UNREADABLE group makes it UNREADABLE and any failing
 group makes it FAIL.
 
+`--full-suite` (off by default; the output is then byte-identical) adds a last
+step: bare `python -m pytest -q` from the worktree top, after every step above.
+It is bare because `pytest.ini` testpaths is the only full selection: naming
+`h-mad/tests handoff/tests` silently skips the tests in handoff/scripts. The
+interpreter is `--python` (default this one), made absolute from the CALLER's
+directory before any child changes directory; a relative one used to read as a
+red baseline. It has its own timeout, `--full-suite-timeout` (default 7200 s).
+Its result is its own line, and it fails closed:
+
+    FULL-SUITE: PASS passed=N [skipped=N]
+    FULL-SUITE: FAIL failed=N errors=N passed=N     -> INCOMPLETE reason=full-suite-failed
+    FULL-SUITE: UNREADABLE reason=<r>               -> UNREADABLE reason=full-suite-<r>
+    FULL-SUITE: SKIPPED reason=<dirty|no-commits>   (the verdict is already INCOMPLETE)
+
 Prints, first line `EVIDENCE: sha=<tip9> base=<base9> ahead=<n> dirty=<n>`,
 then `TESTS:`, `CONSUMERS-RUN:`, `ANCHORS:` (the harness's own line) and one
 `MUTATION: <spec> <verdict …>` per run spec with its `survived:`/`refused:` rows,
@@ -89,6 +104,7 @@ import functools
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -101,6 +117,7 @@ from h_mad_audit_gate import SUITE_BUSY_EXIT  # noqa: E402
 from h_mad_mutation_harness import _resolve_root, classify_spec_file  # noqa: E402
 
 CHILD_TIMEOUT = 3600.0
+FULL_SUITE_TIMEOUT = 7200.0
 STOP_GRACE = 30.0
 CHILD_UNREADABLE = {"UNREADABLE", "BUSY", "TREE_MOVED", "RESTORE_FAILED"}
 _COUNT_RE = re.compile(r"(\d+) (passed|failed|errors?|skipped)\b")
@@ -442,8 +459,51 @@ def _import_parts(text: str) -> set[str] | None:
     return parts
 
 
+def _absolute_python(python: str) -> str:
+    """The interpreter as an absolute path, resolved from the caller's directory.
+
+    A path with a separator is made absolute (not symlink-resolved: a venv's
+    `python` is a symlink and resolving it drops the venv); a bare name is looked
+    up on PATH. Called before any child changes directory.
+    """
+    if os.sep in python:
+        return os.path.abspath(python)
+    return shutil.which(python) or python
+
+
+def _full_suite(top: Path, python: str, timeout: float, out: list[str],
+                incomplete: list[str], unreadable: list[str]) -> None:
+    """Bare `pytest` from the top under `python`, as its own `FULL-SUITE:` line."""
+    if not (os.path.isfile(python) and os.access(python, os.X_OK)):
+        out.append("FULL-SUITE: UNREADABLE reason=python-missing")
+        unreadable.append("full-suite-python-missing")
+        return
+    try:
+        importable = _child([python, "-c", "import pytest"], top, timeout).returncode == 0
+    except subprocess.TimeoutExpired:
+        importable = False
+    if not importable:
+        out.append("FULL-SUITE: UNREADABLE reason=pytest-missing")
+        unreadable.append("full-suite-pytest-missing")
+        return
+    _, outcome, lines, counts = _pytest(top, [], timeout, python)
+    if outcome is None:
+        skipped = f" skipped={counts['skipped']}" if counts["skipped"] else ""
+        out.append(f"FULL-SUITE: PASS passed={counts['passed']}{skipped}")
+    elif outcome == "failed":
+        out.append(f"FULL-SUITE: FAIL failed={counts['failed']} errors={counts['errors']} "
+                   f"passed={counts['passed']}")
+        out.extend(f"  {ln}" for ln in lines)
+        incomplete.append("full-suite-failed")
+    else:
+        out.append(f"FULL-SUITE: UNREADABLE reason={outcome[2:]}")
+        out.extend(lines)
+        unreadable.append("full-suite-" + outcome[2:])
+
+
 def collect(target: str, base: str, no_mutation: bool,
-            timeout: float) -> tuple[list[str], str, int]:
+            timeout: float, full_suite: bool = False, python: str = sys.executable,
+            full_timeout: float = FULL_SUITE_TIMEOUT) -> tuple[list[str], str, int]:
     out: list[str] = []
     incomplete: list[str] = []
     unreadable: list[str] = []
@@ -491,6 +551,8 @@ def collect(target: str, base: str, no_mutation: bool,
 
     if incomplete and ("dirty" in incomplete or "no-commits" in incomplete):
         out.append(f"TESTS: SKIPPED reason={','.join(incomplete)}")
+        if full_suite:
+            out.append(f"FULL-SUITE: SKIPPED reason={','.join(incomplete)}")
         return out, _verdict(incomplete, unreadable, no_mutation), 0
 
     # The pytest set: changed tests, tests naming a changed script, tests under a changed conftest.
@@ -575,6 +637,8 @@ def collect(target: str, base: str, no_mutation: bool,
     try:
         _execute(top, pytest_set, live["doc"], specs, sorted(run_specs), timeout,
                  out, incomplete, unreadable)
+        if full_suite:
+            _full_suite(top, python, full_timeout, out, incomplete, unreadable)
     except KeyboardInterrupt:
         out.append("INTERRUPTED: the step in flight got SIGTERM, then its group SIGKILL")
         unreadable.insert(0, "interrupted")
@@ -697,10 +761,18 @@ def main(argv: list[str] | None = None) -> int:
                     help="waive only the missing-spec refusal; existing specs still run")
     ap.add_argument("--child-timeout", type=float, default=CHILD_TIMEOUT,
                     help=f"seconds per child step before it is stopped (default {CHILD_TIMEOUT:g})")
+    ap.add_argument("--full-suite", action="store_true",
+                    help="after the other steps, run bare pytest from the worktree top")
+    ap.add_argument("--python", default=sys.executable,
+                    help="interpreter for --full-suite (default: this one); made absolute first")
+    ap.add_argument("--full-suite-timeout", type=float, default=FULL_SUITE_TIMEOUT,
+                    help=f"seconds for the full suite (default {FULL_SUITE_TIMEOUT:g})")
     args = ap.parse_args(argv)
+    python = _absolute_python(args.python)
     signal.signal(signal.SIGTERM, _interrupt)
     try:
-        lines, verdict, code = collect(args.target, args.base, args.no_mutation, args.child_timeout)
+        lines, verdict, code = collect(args.target, args.base, args.no_mutation, args.child_timeout,
+                                       args.full_suite, python, args.full_suite_timeout)
     except KeyboardInterrupt:
         print("EVIDENCE: UNREADABLE reason=interrupted")
         print("EVIDENCE-VERDICT: UNREADABLE reason=interrupted")
