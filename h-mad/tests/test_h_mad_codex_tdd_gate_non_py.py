@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+import shutil
+import tempfile
 
 import pytest
 
@@ -27,6 +30,30 @@ def _expect(root, relative, expected, kind="", *, property="non-Python gate cont
     if kind:
         assert result.kind == kind, f"{property}: expected kind={kind}, received {result}"
     return result
+
+
+@pytest.fixture
+def under_tmp():
+    directory = Path(tempfile.mkdtemp(dir="/tmp"))
+    try:
+        yield directory
+    finally:
+        shutil.rmtree(directory)
+
+
+@pytest.mark.parametrize("name", [".py", ".PY"])
+def test_codex_tmp_dot_py_denies_like_x_py(root, under_tmp, name):
+    control_path = write_file(under_tmp, "x.py")
+    target = write_file(under_tmp, name)
+    control = _expect(root, str(control_path), "deny")
+    result = run_codex(root, str(target), gate_env(CODEX_PROJECT_DIR=str(root)))
+    assert result.rc == 0, f"hook protocol must exit zero: {result}"
+    assert (result.decision, result.kind) == (control.decision, control.kind), result
+
+
+def test_codex_tmp_dot_py_note_txt_allows(root, under_tmp):
+    target = write_file(under_tmp, "note.txt")
+    _expect(root, str(target), "allow")
 
 
 @pytest.mark.parametrize("relative", ["scripts/.py", ".py", ".PY"])

@@ -158,7 +158,7 @@ def main() -> int:
                     Path(resolved.target).relative_to(root)
                 except ValueError:
                     outside_allowed = (
-                        not any(Path(identity.fold_py_suffix(name)).suffix == ".py" for name in resolved.names)
+                        not any(identity.fold_py_suffix(name).endswith(".py") for name in resolved.names)  # M:AG-TMP-PY-NAME
                         and (_path_within(resolved.target, Path("/tmp"))
                              or (artifact is not None and _path_within(resolved.target, artifact)))
                     )

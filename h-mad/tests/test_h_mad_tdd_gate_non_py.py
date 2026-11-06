@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -36,6 +39,16 @@ def _expect(root, relative, expected, kind="", *, property, author=False,
     if kind:
         assert result.kind == kind, f"{property}: expected kind={kind}, received {result!r}"
     return result
+
+
+def test_claude_tmp_dot_py_denies(root):
+    directory = Path(tempfile.mkdtemp(dir="/tmp"))
+    try:
+        target = write_file(directory, ".py")
+        _expect(root, str(target), "deny", "no-test-resolved",
+                property="an out-of-root dot-py file under /tmp must deny")
+    finally:
+        shutil.rmtree(directory)
 
 
 @pytest.mark.parametrize("relative", ["scripts/.py", ".py", ".PY"])

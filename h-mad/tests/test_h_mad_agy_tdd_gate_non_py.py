@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+import shutil
+import tempfile
 
 import pytest
 
@@ -31,6 +34,30 @@ def _expect(root, relative, expected, kind="", *, property="non-Python agy gate 
         assert result["reason"].count("kind=") == 1, (
             f"{property}: hostile input must not forge a second kind token: {result!r}")
     return result
+
+
+@pytest.fixture
+def under_tmp():
+    directory = Path(tempfile.mkdtemp(dir="/tmp"))
+    try:
+        yield directory
+    finally:
+        shutil.rmtree(directory)
+
+
+@pytest.mark.parametrize("name", [".py", ".PY"])
+def test_agy_tmp_dot_py_denies_like_x_py(root, under_tmp, name):
+    control_path = write_file(under_tmp, "x.py")
+    target = write_file(under_tmp, name)
+    control = _expect(root, str(control_path), "deny", "target-outside-root")
+    result = run_agy(root, str(target), gate_env())
+    assert (result["decision"], result.get("reason", "").rpartition(" kind=")[2]) == (
+        control["decision"], control["reason"].rpartition(" kind=")[2]), result
+
+
+def test_agy_tmp_dot_py_note_txt_allows(root, under_tmp):
+    target = write_file(under_tmp, "note.txt")
+    _expect(root, str(target), "allow")
 
 
 @pytest.mark.parametrize("relative", ["scripts/.py", ".py", ".PY"])

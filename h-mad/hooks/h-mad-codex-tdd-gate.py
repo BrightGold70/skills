@@ -209,7 +209,7 @@ def _tmp_report_target(raw: str, cwd: Any) -> bool:
         base = Path(cwd).expanduser() if isinstance(cwd, str) and cwd else Path.cwd()
         path = base / path
     resolved = path.resolve()
-    if Path(_load_identity().fold_py_suffix(resolved.name)).suffix == ".py":
+    if _load_identity().fold_py_suffix(resolved.name).endswith(".py"):  # M:CX-TMP-PY-NAME
         return False
     return _path_within(str(resolved), Path("/tmp"))  # M:G-TMP
 

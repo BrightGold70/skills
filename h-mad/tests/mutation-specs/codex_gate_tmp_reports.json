@@ -27,7 +27,7 @@
       "name": "python-under-tmp-admitted",
       "_mechanism": "The .py exclusion goes, so codex could write production code into a checkout that lives under /tmp without that checkout's failing-test gate.",
       "file": "hooks/h-mad-codex-tdd-gate.py",
-      "find": "    if Path(_load_identity().fold_py_suffix(resolved.name)).suffix == \".py\":\n        return False",
+      "find": "    if _load_identity().fold_py_suffix(resolved.name).endswith(\".py\"):  # M:CX-TMP-PY-NAME\n        return False",
       "replace": "    if False:\n        return False",
       "test": "tests/test_h_mad_codex_gate_tmp_reports.py::test_python_under_tmp_is_still_refused[prod.PY]"
     },
@@ -43,9 +43,17 @@
       "name": "the-name-check-reads-the-link-not-its-target",
       "_mechanism": "Lexical normalisation instead of resolution: the .py check then reads a link's own name, so `notes.md -> prod.py` under /tmp writes Python through the link. The /tmp boundary itself still holds, because `_path_within` resolves on its own.",
       "file": "hooks/h-mad-codex-tdd-gate.py",
-      "find": "    resolved = path.resolve()\n    if Path(_load_identity()",
-      "replace": "    resolved = Path(os.path.normpath(str(path)))\n    if Path(_load_identity()",
+      "find": "    resolved = path.resolve()\n    if _load_identity()",
+      "replace": "    resolved = Path(os.path.normpath(str(path)))\n    if _load_identity()",
       "test": "tests/test_h_mad_codex_gate_tmp_reports.py::test_a_report_named_link_to_python_under_tmp_is_refused"
+    },
+    {
+      "name": "CX-TMP-PY-NAME",
+      "_mechanism": "Restoring Path.suffix admits a dotfile named .py under /tmp while the x.py control remains denied.",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "find": "    if _load_identity().fold_py_suffix(resolved.name).endswith(\".py\"):  # M:CX-TMP-PY-NAME",
+      "replace": "    if Path(_load_identity().fold_py_suffix(resolved.name)).suffix == \".py\":  # M:CX-TMP-PY-NAME",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_tmp_dot_py_denies_like_x_py[.py]"
     }
   ]
 }
