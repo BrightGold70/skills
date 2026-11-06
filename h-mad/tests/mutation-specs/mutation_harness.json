@@ -955,6 +955,60 @@
       "find": "                    masked_hint = \"unmeasured\"",
       "replace": "                    suite_green, suite_output = _run(command, root)\n                    masked_hint = \"unmeasured\"",
       "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_preserves_existing_summary_and_mutation_lifecycle_existing_guard[suite-passes]"
+    },
+    {
+      "name": "isolate-passes-a-relative-python-verbatim",
+      "_mechanism": "The separate-value --python form is no longer resolved against the caller's cwd, so the child (cwd inside the temp worktree) re-resolves it there.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_isolate",
+      "find": "                child_args.append(_isolate_python_value(arg, cwd))",
+      "replace": "                child_args.append(arg)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_python_against_the_callers_cwd[separate]"
+    },
+    {
+      "name": "isolate-passes-an-equals-python-verbatim",
+      "_mechanism": "Same, for --python=REL.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_isolate",
+      "find": "                arg = \"--python=\" + _isolate_python_value(arg[len(\"--python=\"):], cwd)",
+      "replace": "                pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_python_against_the_callers_cwd[equals]"
+    },
+    {
+      "name": "isolate-python-resolution-ignores-the-callers-cwd",
+      "_mechanism": "Resolving against the temp worktree's cwd instead of the caller's reproduces the red baseline.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_isolate_python_value",
+      "find": "    return os.path.normpath(os.path.join(caller_cwd, value)) if \"/\" in value else value",
+      "replace": "    return value",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_python_against_the_callers_cwd[separate]"
+    },
+    {
+      "name": "missing-python-path-reads-as-a-red-baseline",
+      "_mechanism": "Dropping the existence check lets a nonexistent --python path reach the baseline and read as BASELINE_NOT_GREEN.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "        if not (os.path.isfile(missing_python) and os.access(missing_python, os.X_OK)):",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_names_a_missing_relative_python_instead_of_a_red_baseline"
+    },
+    {
+      "name": "zero-denominator-still-claims-no-traceback",
+      "_mechanism": "Without the zero-total branch a test file that cannot surface a crash still prints 'no traceback', which reads as absence.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                            if _returncode_assertion_coverage({pin_file})[1] == 0:",
+      "replace": "                            if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_zero_denominator_says_the_crash_reading_is_unavailable"
+    },
+    {
+      "name": "nonzero-denominator-claims-unavailable",
+      "_mechanism": "Positive control: the branch must not fire when the file has returncode assertions.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_run_spec_holding_the_tree",
+      "find": "                            if _returncode_assertion_coverage({pin_file})[1] == 0:",
+      "replace": "                            if True:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_nonzero_denominator_keeps_the_no_traceback_text"
     }
   ]
 }

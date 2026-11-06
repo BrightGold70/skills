@@ -2429,6 +2429,55 @@ def test_an_ordinary_assertion_kill_is_not_counted_as_a_crash(tmp_path: Path) ->
     assert "no traceback from guard.py" in mechanism, mechanism
 
 
+NO_RETURNCODE_TESTS = '''\
+import subprocess
+import sys
+from pathlib import Path
+
+GUARD = str(Path(__file__).resolve().parent / "guard.py")
+
+
+def test_the_property_under_test():
+    over = subprocess.run([sys.executable, GUARD, "6"], capture_output=True, text=True)
+    assert "OVER" in over.stdout
+'''
+
+QUIET_MUTATION = {"name": "change the printed word", "file": "guard.py",
+                  "find": 'print("OVER")', "replace": 'print("over")', "test": CRASH_PIN}
+
+
+def test_a_zero_denominator_says_the_crash_reading_is_unavailable(tmp_path: Path) -> None:
+    """`no traceback` proves nothing when the test file has no returncode assertion.
+
+    Its failing assertion cannot carry the child's stderr, so a crash and a clean
+    miss print identically. The token line keeps `crash_visible=0/0`; only the
+    per-mutation detail changes.
+    """
+    spec = _crash_project(tmp_path, [QUIET_MUTATION])
+    (tmp_path / "test_guard.py").write_text(NO_RETURNCODE_TESTS, encoding="utf-8")
+    result = run_spec(spec)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result["crash_visible"] == "0/0", result
+    mechanism = result["mechanism"]["change the printed word"]
+    assert "crash reading unavailable" in mechanism, mechanism
+    assert "no returncode assertion in test_guard.py" in mechanism, mechanism
+    assert "no traceback from" not in mechanism, mechanism
+
+
+def test_a_nonzero_denominator_keeps_the_no_traceback_text(tmp_path: Path) -> None:
+    """Positive control for the zero-denominator branch: same mutation, same
+    guard, a test that DOES assert on returncode, and the old text stays."""
+    spec = _crash_project(tmp_path, [QUIET_MUTATION])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result["crash_visible"] != "0/0", result
+    mechanism = result["mechanism"]["change the printed word"]
+    assert "no traceback from guard.py" in mechanism, mechanism
+    assert "crash reading unavailable" not in mechanism, mechanism
+
+
 def test_the_classifier_does_not_fire_on_a_test_about_tracebacks(
     tmp_path: Path
 ) -> None:
@@ -4015,6 +4064,54 @@ def _isolate_started(proc: subprocess.CompletedProcess, repo: Path) -> Path:
 def _isolate_assert_cleaned(repo: Path, before: tuple[str, dict[str, bytes], str]) -> None:
     assert _isolate_snapshot(repo) == before, "isolation changed the original tree or worktree registry"
     assert not list(repo.parent.glob(".h-mad-isolate-*")), "isolation left a temporary directory"
+
+
+def _isolate_relative_interpreter(repo: Path) -> Path:
+    """A launcher that exists ONLY in the original tree, never in the worktree.
+
+    Ignored through `.git/info/exclude`, so `--isolate` does not copy it: a
+    relative path to it resolves from the caller's cwd and from nowhere else.
+    (`../../../../opt/...` is a bad probe: it resolves the same from the temp
+    worktree, so it passed before the fix.)
+    """
+    launcher = repo / "only-here" / "py"
+    launcher.parent.mkdir()
+    launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n', encoding="utf-8")
+    launcher.chmod(0o755)
+    with (repo / ".git" / "info" / "exclude").open("a", encoding="utf-8") as handle:
+        handle.write("only-here/\n")
+    return launcher
+
+
+@pytest.mark.parametrize("form", ["separate", "equals"])
+def test_isolate_resolves_a_relative_python_against_the_callers_cwd(
+    tmp_path: Path, form: str,
+) -> None:
+    """The child runs with cwd inside the temp worktree, so a relative
+    `--python` re-passed verbatim named nothing there and read as a red baseline.
+    """
+    repo, spec, script = _isolate_project(tmp_path)
+    _isolate_relative_interpreter(repo)
+    relative = "../only-here/py"          # from `nested project/`, the caller's cwd
+    python_args = ["--python", relative] if form == "separate" else [f"--python={relative}"]
+
+    proc = _isolate_cli(script, spec.parent, *python_args, spec.name)
+
+    assert "MUTATION: ALL_CAUGHT" in proc.stdout, proc.stdout + proc.stderr
+    assert "BASELINE_NOT_GREEN" not in proc.stdout, proc.stdout
+
+
+def test_isolate_names_a_missing_relative_python_instead_of_a_red_baseline(
+    tmp_path: Path,
+) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+
+    proc = _isolate_cli(script, spec.parent, "--python", "../no-such-dir/py", spec.name)
+
+    assert "MUTATION: UNREADABLE reason=python-not-found" in proc.stdout, proc.stdout
+    assert "no-such-dir/py" in proc.stdout, proc.stdout
+    assert "BASELINE_NOT_GREEN" not in proc.stdout, proc.stdout
+    assert proc.returncode == 2, proc.stdout + proc.stderr
 
 
 @pytest.mark.parametrize("mode", ["single", "sweep", "anchors"])

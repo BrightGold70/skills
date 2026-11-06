@@ -136,7 +136,9 @@ see a crash the failing test never SURFACED: `assert r.returncode == 0` with no
 message discards the child's stderr, so `crash_kills=0` means "none found",
 never "none there". `crash_visible=M/T` on the token line is that caveat made
 reportable: T returncode assertions in the files this spec targets, M of which
-carry a message and could surface a traceback at all. `crash_kills=0` beside
+carry a message and could surface a traceback at all. Where a mutation's own
+test file has T=0, its detail reads `crash reading unavailable` instead of
+`no traceback from …`: silence from a test that cannot surface a crash is not evidence. `crash_kills=0` beside
 `crash_visible=19/19` is evidence; beside `12/19` it is a partial reading.
 
 Tier 2 has one sub-case the harness CAN name: the **hollow** crash kill,
@@ -1982,7 +1984,21 @@ def _run_spec_holding_the_tree(
                             detail = f" (crash: {crash} in {basename})"
                             detail += _hollow_note(result, pin_output, mutation["file"], span)
                         else:
-                            detail = f" (assertion: no traceback from {basename})"
+                            # "No traceback" is evidence only where the failing
+                            # test could have SURFACED one. Measured over THIS
+                            # mutation's own test file, not the spec-wide
+                            # `crash_visible`: a spec can total 5/5 over one
+                            # file and still have a row whose file has no
+                            # returncode assertion at all (0/0 there).
+                            pin_file = Path(root) / mutation["test"].split("::", 1)[0]
+                            if _returncode_assertion_coverage({pin_file})[1] == 0:
+                                detail = (
+                                    f" (assertion: crash reading unavailable — no "
+                                    f"returncode assertion in {pin_file.name} to surface "
+                                    f"a traceback from {basename})"
+                                )
+                            else:
+                                detail = f" (assertion: no traceback from {basename})"
                         # A timeout is a THIRD mechanism, not a flavour of the
                         # other two, and it is checked independently of `crash`
                         # for that reason: the run can carry both a traceback in
@@ -2415,6 +2431,15 @@ def _sweep(spec_paths: list[Path], *, reachability: bool = False) -> int:
     return 0 if swept and not counts["unmeasured"] else 2
 
 
+def _isolate_python_value(value: str, caller_cwd: Path) -> str:
+    """`--python`'s value as the isolated child must receive it.
+
+    A path (it contains `/`) is made absolute against the CALLER's cwd; a bare
+    name stays a PATH lookup, exactly as `main` treats it.
+    """
+    return os.path.normpath(os.path.join(caller_cwd, value)) if "/" in value else value
+
+
 def _isolate(argv: list[str], spec_paths: list[Path]) -> int:
     """Run the dirty tree's harness in a disposable detached worktree."""
     cwd = Path.cwd().resolve()
@@ -2479,11 +2504,23 @@ def _isolate(argv: list[str], spec_paths: list[Path]) -> int:
                 destination.unlink(missing_ok=True)
         child_args = []
         positional = False
+        isolate_python_value = False     # the previous arg was a bare `--python`
         for arg in argv:
+            if isolate_python_value:
+                # Resolved HERE, against the caller's cwd: the child runs with
+                # cwd inside the temp worktree, where a relative path names
+                # nothing (or another file) and read as BASELINE_NOT_GREEN.
+                isolate_python_value = False
+                child_args.append(_isolate_python_value(arg, cwd))
+                continue
             if arg == "--":
                 positional = True
             elif arg == "--isolate" and not positional:
                 continue
+            elif arg == "--python" and not positional:
+                isolate_python_value = True
+            elif arg.startswith("--python=") and not positional:
+                arg = "--python=" + _isolate_python_value(arg[len("--python="):], cwd)
             child_args.append(str(worktree / rewrites[arg]) if arg in rewrites else arg)
         print(f"ISOLATE: worktree={worktree} base={base} copied={copied}", flush=True)
         child = subprocess.Popen(
@@ -2712,6 +2749,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.only and (args.sweep or args.check_anchors):
         parser.error("--only scores rows of ONE spec; it cannot be combined with "
                      "--sweep or --check-anchors")
+    if args.python and "/" in args.python and not args.check_anchors:
+        # A path that names no executable file would otherwise surface as a red
+        # baseline, which reads as a verdict about the suite. `--check-anchors`
+        # never launches the interpreter, so it is not held to this.
+        missing_python = os.path.abspath(args.python)
+        if not (os.path.isfile(missing_python) and os.access(missing_python, os.X_OK)):
+            print(f"MUTATION: UNREADABLE reason=python-not-found interpreter={missing_python}")
+            return 2
     previous = os.environ.get(PYTHON_OVERRIDE_ENV)
     if args.python:
         # The environment, not a parameter, so `--sweep`/`--isolate` children inherit
