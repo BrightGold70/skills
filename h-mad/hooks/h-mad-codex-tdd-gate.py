@@ -210,13 +210,12 @@ def _tmp_report_target(root: Path, raw: str, cwd: Any) -> bool:
     if not path.is_absolute():
         base = Path(cwd).expanduser() if isinstance(cwd, str) and cwd else Path.cwd()
         path = base / path
-    resolved = path.resolve()
     canonical = _load_identity().canonicalise(str(root), str(path))
     if canonical.unresolvable:
         return False  # M:CX-TMP-PY-UNRESOLVABLE
-    if any(_load_identity().fold_py_suffix(name).endswith(".py") for name in (resolved.name, *canonical.names)):  # M:CX-TMP-PY-NAME
+    if any(_load_identity().fold_py_suffix(name).endswith(".py") for name in (Path(canonical.target).name, *canonical.names)):  # M:CX-TMP-PY-NAME
         return False
-    return _path_within(str(resolved), Path("/tmp"))  # M:G-TMP
+    return _path_within(canonical.target, Path("/tmp"))  # M:G-TMP
 
 
 def _command_cwd(payload: dict[str, Any]) -> object:

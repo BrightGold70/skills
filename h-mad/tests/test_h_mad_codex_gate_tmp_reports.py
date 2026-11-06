@@ -121,8 +121,12 @@ def test_a_dangling_tmp_report_is_refused(tmp_path, under_tmp):
     assert "kind=judge-error" in reason
 
 
-def test_a_relative_dangling_tmp_report_from_outside_root_is_refused(tmp_path, under_tmp):
-    root = _root(tmp_path)
+def test_a_relative_dangling_tmp_report_from_outside_root_is_refused(under_tmp):
+    # The root sits under /tmp on purpose. An unresolvable Identity has target "",
+    # and _path_within resolves "" against the process cwd, which is the root here.
+    # So only the unresolvable guard stands between this write and an ALLOW.
+    (under_tmp / "r").mkdir()
+    root = _root(under_tmp / "r")
     cwd = under_tmp / "d"
     cwd.mkdir()
     (under_tmp / "e").mkdir()
@@ -136,6 +140,28 @@ def test_a_relative_dangling_tmp_report_from_outside_root_is_refused(tmp_path, u
     assert reason == "H-MAD Phase 5 write target is outside or unreadable; refusing fail-closed."
 
 
+def test_a_relative_tmp_report_from_outside_root_is_allowed(tmp_path, under_tmp):
+    root = _root(tmp_path)
+    cwd = under_tmp / "d"
+    cwd.mkdir()
+    (under_tmp / "e").mkdir()
+    payload = _add("../e/report.md")
+    payload["cwd"] = str(cwd)
+    verdict, reason, _ = _run(root, payload)
+    assert verdict == "allow", reason
+
+
+def test_relative_python_from_outside_root_is_refused(tmp_path, under_tmp):
+    root = _root(tmp_path)
+    cwd = under_tmp / "d"
+    cwd.mkdir()
+    (under_tmp / "e").mkdir()
+    payload = _add("../e/x.py")
+    payload["cwd"] = str(cwd)
+    verdict, reason, _ = _run(root, payload)
+    assert verdict == "deny", reason
+
+
 def test_a_relative_tmp_report_symlink_loop_fails_closed(tmp_path, under_tmp):
     root = _root(tmp_path)
     cwd = under_tmp / "d"
@@ -143,11 +169,10 @@ def test_a_relative_tmp_report_symlink_loop_fails_closed(tmp_path, under_tmp):
     (under_tmp / "e").mkdir()
     target = under_tmp / "e" / "note.txt"
     target.symlink_to(target)
-    # As above, only the /tmp admission encounters the link. Path.resolve()
-    # raises there, and main() must turn that exception into a valid denial.
+    # As above, only the /tmp admission encounters the link. It must refuse
+    # the unresolvable target consistently across Python versions.
     payload = _add("../e/note.txt")
     payload["cwd"] = str(cwd)
     verdict, reason, _ = _run(root, payload)
     assert verdict == "deny", reason
-    assert "gate raised RuntimeError: Symlink loop" in reason, reason
-    assert "refusing fail-closed. kind=judge-error" in reason, reason
+    assert reason == "H-MAD Phase 5 write target is outside or unreadable; refusing fail-closed."
