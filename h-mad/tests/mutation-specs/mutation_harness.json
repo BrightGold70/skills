@@ -957,42 +957,6 @@
       "test": "tests/test_h_mad_mutation_harness.py::test_masked_hint_preserves_existing_summary_and_mutation_lifecycle_existing_guard[suite-passes]"
     },
     {
-      "name": "isolate-passes-a-relative-python-verbatim",
-      "_mechanism": "The separate-value --python form is no longer resolved against the caller's cwd, so the child (cwd inside the temp worktree) re-resolves it there.",
-      "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "_isolate",
-      "find": "                child_args.append(_isolate_python_value(arg, cwd))",
-      "replace": "                child_args.append(arg)",
-      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_python_against_the_callers_cwd[separate]"
-    },
-    {
-      "name": "isolate-passes-an-equals-python-verbatim",
-      "_mechanism": "Same, for --python=REL.",
-      "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "_isolate",
-      "find": "                arg = \"--python=\" + _isolate_python_value(arg[len(\"--python=\"):], cwd)",
-      "replace": "                pass",
-      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_python_against_the_callers_cwd[equals]"
-    },
-    {
-      "name": "isolate-python-resolution-ignores-the-callers-cwd",
-      "_mechanism": "Resolving against the temp worktree's cwd instead of the caller's reproduces the red baseline.",
-      "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "_isolate_python_value",
-      "find": "    return os.path.normpath(os.path.join(caller_cwd, value)) if \"/\" in value else value",
-      "replace": "    return value",
-      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_python_against_the_callers_cwd[separate]"
-    },
-    {
-      "name": "missing-python-path-reads-as-a-red-baseline",
-      "_mechanism": "Dropping the existence check lets a nonexistent --python path reach the baseline and read as BASELINE_NOT_GREEN.",
-      "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
-      "find": "        if not (os.path.isfile(missing_python) and os.access(missing_python, os.X_OK)):",
-      "replace": "        if False:",
-      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_names_a_missing_relative_python_instead_of_a_red_baseline"
-    },
-    {
       "name": "zero-denominator-still-claims-no-traceback",
       "_mechanism": "Without the zero-total branch a test file that cannot surface a crash still prints 'no traceback', which reads as absence.",
       "file": "scripts/h_mad_mutation_harness.py",
@@ -1009,6 +973,51 @@
       "find": "                            if _returncode_assertion_coverage({pin_file})[1] == 0:",
       "replace": "                            if True:",
       "test": "tests/test_h_mad_mutation_harness.py::test_a_nonzero_denominator_keeps_the_no_traceback_text"
+    },
+    {
+      "name": "isolate-child-rereads-its-own-python-flag",
+      "_mechanism": "Drops the isolated-child marker so the child re-resolves `--python` from inside the worktree.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "    if os.environ.pop(ISOLATED_CHILD_ENV, None):",
+      "replace": "    if os.environ.pop(ISOLATED_CHILD_ENV, None) and False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_honours_an_abbreviated_python_flag[--pyth]"
+    },
+    {
+      "name": "isolate-does-not-mark-its-child",
+      "_mechanism": "Parent stops marking the child, so the child re-reads its own relative flag.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "_isolate",
+      "find": "            env={**os.environ, ISOLATED_CHILD_ENV: \"1\"},",
+      "replace": "            env={**os.environ},",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_python_against_the_callers_cwd[separate]"
+    },
+    {
+      "name": "env-override-not-made-absolute",
+      "_mechanism": "A relative HMAD_MUTATION_PYTHON is left relative.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "            resolved = os.path.abspath(wanted) if \"/\" in wanted else wanted",
+      "replace": "            resolved = wanted",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_env_override_against_the_callers_cwd"
+    },
+    {
+      "name": "bare-python-lookup-skipped",
+      "_mechanism": "A bare name not on PATH is waved through to a red baseline.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "if \"/\" in wanted else shutil.which(wanted) is not None)",
+      "replace": "if \"/\" in wanted else True)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_names_a_bare_python_that_is_not_on_path[nosuchpy]"
+    },
+    {
+      "name": "python-not-found-swallows-red-baseline",
+      "_mechanism": "The refusal fires for any run, hiding a truly red suite.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "            if not launchable and not args.check_anchors:",
+      "replace": "            if not args.check_anchors:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_with_a_valid_python_still_reads_a_red_suite_as_red"
     }
   ]
 }
