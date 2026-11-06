@@ -1,6 +1,6 @@
 # Plan: backlog-row-cycle
 
-**Status:** Draft, awaiting user approval. No code has been written.
+**Status:** Shipped 2026-10-18 (row 2661: `51eab3a0` RED, `6a2de974` GREEN; residuals `f5201e5e`, `066c34df`). The driver is `h-mad/scripts/h_mad_backlog_cycle.py`. Kept as the record of the design.
 **Written:** 2026-10-18. Source row: `docs/skill-candidates.md:2661` ("backlog-row TDD cycle driver", recurrence 10, verdict `yes`).
 
 ## Executive Summary
