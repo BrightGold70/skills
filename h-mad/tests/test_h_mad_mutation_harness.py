@@ -4101,6 +4101,70 @@ def test_isolate_resolves_a_relative_python_against_the_callers_cwd(
     assert "BASELINE_NOT_GREEN" not in proc.stdout, proc.stdout
 
 
+def _isolate_cli_env(script: Path, cwd: Path, env_python: str | None, *args: str,
+                     ) -> subprocess.CompletedProcess:
+    env = {k: v for k, v in os.environ.items() if k != "HMAD_MUTATION_PYTHON"}
+    if env_python is not None:
+        env["HMAD_MUTATION_PYTHON"] = env_python
+    return subprocess.run(
+        [sys.executable, str(script), "--isolate", *args],
+        cwd=cwd, capture_output=True, text=True, timeout=60, env=env,
+    )
+
+
+@pytest.mark.parametrize("spelling", ["--pyth", "--pyth="])
+def test_isolate_honours_an_abbreviated_python_flag(tmp_path: Path, spelling: str) -> None:
+    """argparse accepts `--pyth`; the interpreter must still be resolved from the
+    caller's cwd, not re-read by the child inside the temp worktree."""
+    repo, spec, script = _isolate_project(tmp_path)
+    _isolate_relative_interpreter(repo)
+    flag = [spelling + "../only-here/py"] if spelling.endswith("=") else [spelling, "../only-here/py"]
+
+    proc = _isolate_cli(script, spec.parent, *flag, spec.name)
+
+    assert "MUTATION: ALL_CAUGHT" in proc.stdout, proc.stdout + proc.stderr
+    assert "python-not-found" not in proc.stdout, proc.stdout
+
+
+def test_isolate_resolves_a_relative_env_override_against_the_callers_cwd(tmp_path: Path) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+    _isolate_relative_interpreter(repo)
+
+    proc = _isolate_cli_env(script, spec.parent, "../only-here/py", spec.name)
+
+    assert "MUTATION: ALL_CAUGHT" in proc.stdout, proc.stdout + proc.stderr
+
+
+@pytest.mark.parametrize("name", ["nosuchpy", "py311local"])
+def test_isolate_names_a_bare_python_that_is_not_on_path(tmp_path: Path, name: str) -> None:
+    """A bare name is a PATH lookup. `py311local` exists in the caller's cwd but
+    not on PATH, so it is just as unlaunchable as a name that exists nowhere."""
+    repo, spec, script = _isolate_project(tmp_path)
+    local = spec.parent / "py311local"
+    local.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n', encoding="utf-8")
+    local.chmod(0o755)
+
+    proc = _isolate_cli(script, spec.parent, "--python", name, spec.name)
+
+    assert f"MUTATION: UNREADABLE reason=python-not-found interpreter={name}" in proc.stdout, proc.stdout
+    assert "BASELINE_NOT_GREEN" not in proc.stdout, proc.stdout
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+
+
+def test_isolate_with_a_valid_python_still_reads_a_red_suite_as_red(tmp_path: Path) -> None:
+    """Control: the python-not-found refusals must not swallow a truly red baseline."""
+    repo, spec, script = _isolate_project(tmp_path)
+    _isolate_relative_interpreter(repo)
+    data = json.loads(spec.read_text(encoding="utf-8"))
+    data["command"] += ["-k", "no_such_test_name_anywhere"]    # collects nothing: exit 5
+    spec.write_text(json.dumps(data), encoding="utf-8")
+
+    proc = _isolate_cli(script, spec.parent, "--python", "../only-here/py", spec.name)
+
+    assert "MUTATION: BASELINE_NOT_GREEN" in proc.stdout, proc.stdout + proc.stderr
+    assert "python-not-found" not in proc.stdout, proc.stdout
+
+
 def test_isolate_names_a_missing_relative_python_instead_of_a_red_baseline(
     tmp_path: Path,
 ) -> None:
