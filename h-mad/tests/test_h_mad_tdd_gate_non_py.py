@@ -241,8 +241,11 @@ def test_claude_malformed_docdata_line_is_judge_error(root, tmp_path):
     assert "invalid docdata line" in result.reason, "malformed docdata must fail strict classification parse"
 
 
-def test_claude_missing_docdata_line_is_judge_error(root, tmp_path):
-    _listing_stub(root, tmp_path, "TDD-LISTING: not-listed\n", docdata=" pass")
+def test_claude_empty_docdata_output_is_a_canon_field_count_mismatch(root, tmp_path):
+    # With emit_doc_data silent the hook takes the record's last canon line as the
+    # docdata line and truncates the record, so _read_canon refuses first.
+    result = _listing_stub(root, tmp_path, "TDD-LISTING: not-listed\n", docdata=" pass")
+    assert "CANON field count mismatch" in result.reason, "a silent emit_doc_data must truncate the canon record"
 
 
 def test_claude_listed_failing_test_allows(root):

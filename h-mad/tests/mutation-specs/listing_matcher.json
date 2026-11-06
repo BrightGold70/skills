@@ -73,6 +73,33 @@
       "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_chain_unreadable_prints_unreadable"
     },
     {
+      "name": "LV-UNREADABLE-ARM",
+      "_mechanism": "Dropping the unreadable arm of an active chain would print not-listed for a plan that could not be read, admitting a write the listing could not decide.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "elif result.value == \"unreadable\":",
+      "replace": "elif False:",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_active_unreadable_prints_unreadable"
+    },
+    {
+      "name": "LV-LISTED-ARM",
+      "_mechanism": "Dropping the listed arm would print not-listed for a listed target, so the gate would never judge a listed production file.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "main",
+      "find": "if result.value == \"listed\":",
+      "replace": "if False:",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_cli_listed_prints_the_encoded_target"
+    },
+    {
+      "name": "L-UNREADABLE-RECORD",
+      "_mechanism": "Recording an unreadable plan as absent would let an undecidable plan read as not-listed, admitting a write the plan may list.",
+      "file": "scripts/h_mad_tdd_judge.py",
+      "symbol": "_match_plans",
+      "find": "result.append(PlanMatch(plan, \"unreadable\", type(exc).__name__, ()))",
+      "replace": "result.append(PlanMatch(plan, \"absent\", \"\", ()))",
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_unreadable_when_no_plan_lists_the_target"
+    },
+    {
       "name": "LV-RC",
       "_mechanism": "An internal listing exception must return 2 while emitting only stderr.",
       "file": "scripts/h_mad_tdd_judge.py",
