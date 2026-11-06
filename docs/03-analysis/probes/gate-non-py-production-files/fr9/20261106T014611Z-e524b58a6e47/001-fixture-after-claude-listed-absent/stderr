@@ -1,0 +1,1 @@
+[H-MAD-TDD-GATE] BLOCK kind=test-missing: target=/private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-oxsy3fif/root/scripts/tool.sh: no resolved test file exists (tests/test_tool.py); author the failing test first; /private/var/folders/7s/9n332lmj54511rf57fgf8pz40000gn/T/fr9-drive-oxsy3fif/root/docs/01-plan/features/f.impl-plan.md: matched
