@@ -125,6 +125,8 @@ def resolve_effort(*, agent: str, phase: str, shape: str, override: str | None,
     if policy is None:
         return None, "inherited"
     from_env = (env.get(GREEN_EFFORT_ENV) or "").strip()
+    if not from_env.isprintable():  # M:AT-EFFORT-ENV-PRINTABLE  it is printed in the command block
+        raise Halt("effort_env_not_printable", f"{GREEN_EFFORT_ENV}={from_env!r}")
     if from_env == "inherit":
         return None, "inherited"
     if from_env:
@@ -814,7 +816,7 @@ def _git_names(root: Path, *args: str) -> list[str]:
 def _refuse_bad_name(name: str, way_out: str = "") -> None:
     """The one name check, applied to every route: --diff-path and each name git prints."""
     if (not name or os.path.isabs(name) or ".." in Path(name).parts
-            or any(ch in name for ch in "\n\r\0")):  # M:RV-DIFF-INVALID
+            or "".join(name.splitlines()) != name or "\0" in name):  # M:RV-DIFF-INVALID  every break splitlines() honours
         raise Halt("diff_path_invalid", f"diff path {name!r} must be relative, free of '..', and one line{way_out}")
 
 
@@ -1066,6 +1068,37 @@ def _filename_slug(*parts: str) -> str:
     return "_".join(part for part in cleaned if part) or "unnamed"
 
 
+# Validated later with their own way out (diff_path_invalid / diff_base_invalid).
+_OWN_LINE_CHECKS = frozenset({"diff_path", "base_ref"})
+
+
+def _unprintable_argument(args: argparse.Namespace) -> str | None:
+    """The flag of the first string argument that is not one printable line, or None.
+
+    Every argv value reaches stdout somewhere (HALT details, the PASS line, the command
+    block, the `[H-MAD]` marker), and readers take the token by line prefix, so a line
+    break in any of them forges a token line. This gate covers argv; the one environment
+    value that is printed (HMAD_GREEN_EFFORT) is checked in resolve_effort. Values read
+    from files reach stdout only as `splitlines()` products (task ids, section headings,
+    the agy check line), so none can carry a line break; _enc at the HALT detail, agy
+    check and OSError printers is defence in depth, and only the detail printer is pinned."""
+    for dest, value in vars(args).items():
+        if dest in _OWN_LINE_CHECKS:
+            continue
+        for item in value if isinstance(value, list) else [value]:
+            if isinstance(item, (str, Path)) and not str(item).isprintable():  # M:AT-ARG-PRINTABLE
+                return "--" + dest.replace("_", "-")
+    return None
+
+
+def _enc(value: object) -> str:
+    """One printable line: each non-printable code point as an escape."""
+    def esc(c: str) -> str:
+        n = ord(c)
+        return f"\\x{n:02x}" if n < 0x100 else f"\\u{n:04x}" if n < 0x10000 else f"\\U{n:08x}"
+    return "".join(c if c.isprintable() else esc(c) for c in str(value))
+
+
 def _bind_dash_values(argv: list[str], ap: argparse.ArgumentParser, flag: str) -> list[str]:
     """Spell `FLAG -x` (or an unambiguous `--` prefix of FLAG, as argparse accepts)
     as `FLAG=-x`, which argparse otherwise refuses as a missing
@@ -1153,6 +1186,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--template", type=Path, default=None,
                     help="default: the implementer prompt, or the agy spec-reviewer prompt for review")
     args = ap.parse_args(_bind_dash_values(sys.argv[1:] if argv is None else list(argv), ap, "--diff-path"))
+    bad_flag = _unprintable_argument(args)
+    if bad_flag is not None:  # M:AT-ARG-GATE
+        print(f"{TOKEN}: HALT argument_not_printable")
+        print(f"  {bad_flag}")
+        return 2
     is_review = args.phase == "review"
     if args.agent is None:
         args.agent = "agy" if is_review else "codex"
@@ -1203,7 +1241,7 @@ def main(argv: list[str] | None = None) -> int:
         if verdict != "WIRED":
             if verdict in ("UNWIRED", "UNREADABLE"):
                 print(f"{TOKEN}: HALT agy_tdd_hook_unverified")
-                print(f"  {check_line}")
+                print(f"  {_enc(check_line)}")
             else:
                 print(f"{TOKEN}: HALT agy_tdd_hook_unverified check=no-token")
             print(f"[H-MAD] {args.feature} tdd-assemble halt agy_tdd_hook_unverified {args.task}")
@@ -1259,14 +1297,14 @@ def main(argv: list[str] | None = None) -> int:
     except Halt as exc:
         print(f"{TOKEN}: HALT {exc.reason}")
         if exc.detail:
-            print(f"  {exc.detail}")
+            print(f"  {_enc(exc.detail)}")
         return 2
 
     try:
         prompt.write_text(filled, encoding="utf-8")
     except OSError as exc:
         print(f"{TOKEN}: HALT prompt_unwritable")
-        print(f"  {prompt}: {exc}")
+        print(f"  {prompt}: {_enc(exc)}")
         return 2
     stamp_assembled(prompt, residue=meta["residue"])  # M:ASSEMBLED-STAMP-TDD
 

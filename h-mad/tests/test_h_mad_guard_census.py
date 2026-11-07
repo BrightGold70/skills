@@ -1115,3 +1115,14 @@ def test_a_dot_beside_another_path_still_names_everything(tmp_path: Path) -> Non
 
     listed = candidates(census(repo, base, "--path", ".", "--path", "sub"))
     assert "b.py:2" in listed and "sub/a.py:2" in listed, listed
+
+
+def test_a_dot_does_not_excuse_another_path_that_matches_no_change(tmp_path: Path) -> None:
+    """Residual of 2026-11-07: `--path . --path nope` read DONE, against helper-scripts.md,
+    which says a path that matches no change is `UNREADABLE reason=path-no-match`."""
+    repo, base = make(tmp_path, {"b.py": "x = 1\n"}, {"b.py": "x = 1\nif x:\n    pass\n"})
+
+    proc = census(repo, base, "--path", ".", "--path", "nope")
+
+    assert token(proc) == "GUARD-CENSUS: UNREADABLE reason=path-no-match", proc.stdout
+    assert proc.returncode == 2

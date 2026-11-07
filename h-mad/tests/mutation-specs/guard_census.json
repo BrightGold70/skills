@@ -485,11 +485,11 @@
     },
     {
       "name": "path-naming-the-repo-is-a-pathspec",
-      "_mechanism": "`.` is handed to git as a path and must then match a change by name.",
+      "_mechanism": "A `.` beside another path must widen the diff to everything, not drop to the other path. (Re-aimed 2026-11-07: once the name check skips `.`, handing `.` to git is equivalent, so the old replacement was an equivalent mutant.)",
       "file": "scripts/h_mad_guard_census.py",
       "find": "wanted = [] if \".\" in named_paths else named_paths",
-      "replace": "wanted = named_paths",
-      "test": "tests/test_h_mad_guard_census.py::test_a_path_naming_the_whole_repo_matches_everything",
+      "replace": "wanted = [p for p in named_paths if p != \".\"]",
+      "test": "tests/test_h_mad_guard_census.py::test_a_dot_beside_another_path_still_names_everything",
       "symbol": "census"
     },
     {
@@ -693,6 +693,14 @@
       "find": "    if rel == \"..\" or rel.startswith(\"../\"):\n        raise Unreadable(reason, f\"outside the repository: {value}\")\n",
       "replace": "",
       "test": "tests/test_h_mad_guard_census.py::test_a_relative_path_that_climbs_out_of_the_repository_is_path_no_match[../x]"
+    },
+    {
+      "name": "census-dot-excuses-an-unmatched-path",
+      "_mechanism": "Residual: beside `.`, `--path nope` was never checked and read DONE.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    for want in [p for p in named_paths if p != \".\"]:  # M:GC-DOT-NO-EXCUSE",
+      "replace": "    for want in wanted:  # M:GC-DOT-NO-EXCUSE",
+      "test": "tests/test_h_mad_guard_census.py::test_a_dot_does_not_excuse_another_path_that_matches_no_change"
     }
   ]
 }

@@ -572,7 +572,7 @@ def census(repo: Path, base: str, head: str, spec_dirs: list[str] | None, paths:
     named_paths = [_repo_relative(top, p, "path-no-match") for p in paths]
     wanted = [] if "." in named_paths else named_paths
     changes = _changes(top, base_sha, head_sha, wanted)
-    for want in wanted:
+    for want in [p for p in named_paths if p != "."]:  # M:GC-DOT-NO-EXCUSE  a dot widens, never excuses
         stem = want.rstrip("/")
         if not any(ch.path == stem or ch.path.startswith(stem + "/") for ch in changes):
             raise Unreadable("path-no-match", f"--path {want!r} matches no change between the refs")

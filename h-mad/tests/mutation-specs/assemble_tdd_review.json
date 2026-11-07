@@ -91,7 +91,7 @@
       "name": "rv-newline-dropped",
       "_mechanism": "A multi-line diff path is accepted.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "or any(ch in name for ch in \"\\n\\r\\0\")):  # M:RV-DIFF-INVALID",
+      "find": "or \"\".join(name.splitlines()) != name or \"\\0\" in name):  # M:RV-DIFF-INVALID",
       "replace": "):  # M:RV-DIFF-INVALID",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[newline]"
     },
@@ -267,8 +267,8 @@
       "name": "rv-bare-cr-allowed",
       "_mechanism": "A name with a bare carriage return passes the name check.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "or any(ch in name for ch in \"\\n\\r\\0\")):  # M:RV-DIFF-INVALID",
-      "replace": "or any(ch in name for ch in \"\\n\\0\")):  # M:RV-DIFF-INVALID",
+      "find": "or \"\".join(name.splitlines()) != name or \"\\0\" in name):  # M:RV-DIFF-INVALID",
+      "replace": "or \"\".join(name.replace(\"\\r\", \"\").splitlines()) != name.replace(\"\\r\", \"\") or \"\\0\" in name):  # M:RV-DIFF-INVALID",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[untracked-carriage-return]"
     },
     {
@@ -398,6 +398,54 @@
       "find": "        if not base_ref.isprintable():  # M:RV-BASE-LINE",
       "replace": "        if False:  # M:RV-BASE-LINE",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_with_a_line_break_halts_and_forges_no_token_line[line-separator]"
+    },
+    {
+      "name": "at-line-broken-argument-passes-the-gate",
+      "_mechanism": "Row assemble-tdd-halt-details-print-values-raw: with the printability test gone, a line break in --task reaches stdout raw and forges a PASS line (with a raw value it halts task_not_found instead, which the test also refuses).",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            if isinstance(item, (str, Path)) and not str(item).isprintable():  # M:AT-ARG-PRINTABLE",
+      "replace": "            if False:  # M:AT-ARG-PRINTABLE",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_line_broken_argument_halts_naming_its_flag_and_forges_no_token_line[line-separator---task]"
+    },
+    {
+      "name": "at-argument-gate-never-halts",
+      "_mechanism": "The gate's verdict is computed but not acted on.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if bad_flag is not None:  # M:AT-ARG-GATE",
+      "replace": "    if False:  # M:AT-ARG-GATE",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_line_broken_argument_halts_naming_its_flag_and_forges_no_token_line[newline---prompt]"
+    },
+    {
+      "name": "at-argument-gate-skips-list-values",
+      "_mechanism": "A repeatable flag (--guard, --test-path) holds a list; the gate must read each item.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        for item in value if isinstance(value, list) else [value]:",
+      "replace": "        for item in [value]:",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_a_line_broken_repeatable_argument_halts[--guard]"
+    },
+    {
+      "name": "at-effort-env-line-break-printed-raw",
+      "_mechanism": "Review: HMAD_GREEN_EFFORT reached the command block raw and forged a token line on an rc-0 run.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if not from_env.isprintable():  # M:AT-EFFORT-ENV-PRINTABLE",
+      "replace": "    if False:  # M:AT-EFFORT-ENV-PRINTABLE",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_a_line_broken_effort_from_the_environment_halts"
+    },
+    {
+      "name": "at-halt-detail-printed-unescaped",
+      "_mechanism": "Review: nothing pinned _enc; a detail from a file would print raw.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            print(f\"  {_enc(exc.detail)}\")",
+      "replace": "            print(f\"  {exc.detail}\")",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_a_halt_detail_is_printed_as_one_escaped_line"
+    },
+    {
+      "name": "rv-name-check-misses-unicode-line-breaks",
+      "_mechanism": "Review: the name check refused only \\n\\r\\0, so a U+2028 name passed.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            or \"\".join(name.splitlines()) != name or \"\\0\" in name):  # M:RV-DIFF-INVALID",
+      "replace": "            or any(ch in name for ch in \"\\n\\r\\0\")):  # M:RV-DIFF-INVALID",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[untracked-line-separator]"
     }
   ]
 }
