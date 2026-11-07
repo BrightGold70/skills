@@ -277,15 +277,6 @@
       "symbol": "_anchor_spans"
     },
     {
-      "name": "outside-spec-dir-crashes",
-      "_mechanism": "A spec directory outside the repository is a crash, not UNREADABLE.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        except ValueError as exc:\n            raise Unreadable(\"spec-dir\"",
-      "replace": "        except KeyError as exc:\n            raise Unreadable(\"spec-dir\"",
-      "test": "tests/test_h_mad_guard_census.py::test_a_spec_directory_outside_the_repository_is_UNREADABLE",
-      "symbol": "_repo_relative"
-    },
-    {
       "name": "unreadable-exits-zero",
       "_mechanism": "A cannot-judge exits 0.",
       "file": "scripts/h_mad_guard_census.py",
@@ -302,42 +293,6 @@
       "replace": "    if False:\n",
       "test": "tests/test_h_mad_guard_census.py::TestCannotJudgeCarriesNoCount::test_the_cannot_judge_line_has_no_count",
       "symbol": "render"
-    },
-    {
-      "name": "deleted-count-dropped",
-      "_mechanism": "A deleted file is no longer counted on SKIPPED.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "            skipped[\"deleted\"] += 1\n",
-      "replace": "            pass\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_file_is_skipped_and_counted",
-      "symbol": "census"
-    },
-    {
-      "name": "deleted-file-blob-from-head",
-      "_mechanism": "A deleted file is read from the head side, where it does not exist.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        blob = contents[ch.old_sha if ch.status == \"D\" else ch.new_sha]\n",
-      "replace": "        blob = contents.get(ch.new_sha, b\"\")\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_suffixless_shell_script_lists_its_decisions_as_removed",
-      "symbol": "census"
-    },
-    {
-      "name": "symlink-read-as-source",
-      "_mechanism": "A symlink or submodule entry is parsed as source.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        if ch.new_mode in (\"120000\", \"160000\"):\n",
-      "replace": "        if False:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_symlink_and_a_submodule_are_skipped_and_counted",
-      "symbol": "census"
-    },
-    {
-      "name": "binary-change-read-as-source",
-      "_mechanism": "A binary change is decoded and parsed as source.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        elif ch.binary:\n",
-      "replace": "        elif False:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_binary_change_is_skipped_and_counted",
-      "symbol": "census"
     },
     {
       "name": "test-files-are-targets",
@@ -403,60 +358,6 @@
       "symbol": "_census_added"
     },
     {
-      "name": "code-shebang-not-unmeasured",
-      "_mechanism": "A file with a foreign shebang is dropped silently.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "    if first.startswith(b\"#!\") or suffix in CODE_SUFFIXES:\n",
-      "replace": "    if suffix in CODE_SUFFIXES:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_suffixless_file_with_another_shebang_is_not_a_target_but_is_counted",
-      "symbol": "_language"
-    },
-    {
-      "name": "code-suffix-not-unmeasured",
-      "_mechanism": "A .ts or .js file is dropped silently.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "    if first.startswith(b\"#!\") or suffix in CODE_SUFFIXES:\n",
-      "replace": "    if first.startswith(b\"#!\"):\n",
-      "test": "tests/test_h_mad_guard_census.py::test_code_in_another_language_is_unmeasured_and_listed",
-      "symbol": "_language"
-    },
-    {
-      "name": "other-not-counted",
-      "_mechanism": "Documents and data vanish from SKIPPED.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "            skipped[\"other\"] += 1\n",
-      "replace": "            pass\n",
-      "test": "tests/test_h_mad_guard_census.py::test_documents_and_data_are_not_unmeasured_code",
-      "symbol": "census"
-    },
-    {
-      "name": "unmeasured-not-listed",
-      "_mechanism": "Unmeasured files are counted but not named.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "            unmeasured.append(ch.path)\n",
-      "replace": "            pass\n",
-      "test": "tests/test_h_mad_guard_census.py::test_code_in_another_language_is_unmeasured_and_listed",
-      "symbol": "census"
-    },
-    {
-      "name": "shell-shebang-ignored",
-      "_mechanism": "A shell script with an odd suffix is not measured.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "    if suffix in SHELL_SUFFIXES or SHELL_HEAD.match(first):\n",
-      "replace": "    if suffix in SHELL_SUFFIXES:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_shell_or_python_script_is_measured_whatever_its_suffix",
-      "symbol": "_language"
-    },
-    {
-      "name": "shell-suffix-ignored",
-      "_mechanism": "A .zsh file with no shebang is not measured.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "    if suffix in SHELL_SUFFIXES or SHELL_HEAD.match(first):\n",
-      "replace": "    if SHELL_HEAD.match(first):\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_shell_or_python_script_is_measured_whatever_its_suffix",
-      "symbol": "_language"
-    },
-    {
       "name": "python-shebang-not-python",
       "_mechanism": "A python script with no suffix is not measured.",
       "file": "scripts/h_mad_guard_census.py",
@@ -466,39 +367,12 @@
       "symbol": "_language"
     },
     {
-      "name": "path-matching-nothing-reads-as-zero",
-      "_mechanism": "A --path that matches no change reads as a clean zero.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        if not any(ch.path == stem or ch.path.startswith(stem + \"/\") for ch in changes):\n",
-      "replace": "        if False:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_path_that_matches_no_change_is_UNREADABLE_not_zero",
-      "symbol": "census"
-    },
-    {
-      "name": "removed-side-not-read",
-      "_mechanism": "The base side of the diff is never read: a deleted guard reads as nothing.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "        if old_lines and ch.status != \"A\":\n",
-      "replace": "        if False:\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_guard_deleted_inside_a_modified_file_is_listed_as_removed",
-      "symbol": "census"
-    },
-    {
       "name": "deleted-file-removes-nothing",
       "_mechanism": "A deleted file's decisions are not listed as removed.",
       "file": "scripts/h_mad_guard_census.py",
       "find": "            old_lines = set(range(1, old_text.count(\"\\n\") + 2))\n",
       "replace": "            old_lines = set()\n",
       "test": "tests/test_h_mad_guard_census.py::test_a_deleted_file_is_skipped_and_counted",
-      "symbol": "census"
-    },
-    {
-      "name": "undecodable-base-skipped",
-      "_mechanism": "An undecodable base is read as empty instead of UNREADABLE.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "                old_text = _text(_blobs(top, [ch.old_sha])[ch.old_sha], kind, ch.path)\n",
-      "replace": "                old_text = \"\"\n",
-      "test": "tests/test_h_mad_guard_census.py::test_a_removed_line_in_an_undecodable_base_is_UNREADABLE",
       "symbol": "census"
     },
     {
@@ -518,15 +392,6 @@
       "replace": "            found.append((n, name or \"x\"))\n",
       "test": "tests/test_h_mad_guard_census.py::test_a_removed_shell_decision_is_listed_by_the_shell_rule",
       "symbol": "_census_removed"
-    },
-    {
-      "name": "removed-count-not-in-token",
-      "_mechanism": "The token drops the removed count.",
-      "file": "scripts/h_mad_guard_census.py",
-      "find": "            f\"unanchored={result['unanchored']} removed={result['removed']}\")",
-      "replace": "            f\"unanchored={result['unanchored']}\")",
-      "test": "tests/test_h_mad_guard_census.py::test_a_guard_deleted_inside_a_modified_file_is_listed_as_removed",
-      "symbol": "render"
     },
     {
       "name": "default-spec-dirs-only-h-mad",
@@ -590,6 +455,220 @@
       "replace": "re.finditer(r\"\\n\", text)",
       "test": "tests/test_h_mad_guard_census.py::test_a_bare_carriage_return_does_not_shift_the_attribution",
       "symbol": "_ast_starts"
+    },
+    {
+      "name": "outside-spec-dir-crashes",
+      "_mechanism": "A spec directory outside the repository is a crash, not UNREADABLE.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        except ValueError as exc:\n            raise Unreadable(reason, f\"outside the repository: {value}\") from exc\n",
+      "replace": "        except KeyError as exc:\n            raise Unreadable(reason, f\"outside the repository: {value}\") from exc\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_spec_directory_outside_the_repository_is_UNREADABLE",
+      "symbol": "_repo_relative"
+    },
+    {
+      "name": "path-outside-repo-crashes",
+      "_mechanism": "A --path outside the repository is a crash, not UNREADABLE.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        except ValueError as exc:\n            raise Unreadable(reason, f\"outside the repository: {value}\") from exc\n",
+      "replace": "        except KeyError as exc:\n            raise Unreadable(reason, f\"outside the repository: {value}\") from exc\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_path_outside_the_repository_is_UNREADABLE",
+      "symbol": "_repo_relative"
+    },
+    {
+      "name": "path-outside-repo-has-the-spec-dir-reason",
+      "_mechanism": "A --path outside the repository is reported as a spec-dir problem.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "_repo_relative(top, p, \"path-no-match\")",
+      "replace": "_repo_relative(top, p)",
+      "test": "tests/test_h_mad_guard_census.py::test_a_path_outside_the_repository_is_UNREADABLE",
+      "symbol": "census"
+    },
+    {
+      "name": "path-naming-the-repo-is-a-pathspec",
+      "_mechanism": "`.` is handed to git as a path and must then match a change by name.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "if w != \".\"]",
+      "replace": "if True]",
+      "test": "tests/test_h_mad_guard_census.py::test_a_path_naming_the_whole_repo_matches_everything",
+      "symbol": "census"
+    },
+    {
+      "name": "path-matching-nothing-reads-as-zero",
+      "_mechanism": "A --path that matches no change reads as a clean zero.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        if not any(ch.path == stem or ch.path.startswith(stem + \"/\") for ch in changes):\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_path_that_matches_no_change_is_UNREADABLE_not_zero",
+      "symbol": "census"
+    },
+    {
+      "name": "deleted-count-dropped",
+      "_mechanism": "The deleted= count on CENSUS-SCOPE is always 0.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        f\"deleted={sum(1 for e in work if e.ch.status == 'D')} \"\n",
+      "replace": "        f\"deleted=0 \"\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_file_is_skipped_and_counted",
+      "symbol": "census"
+    },
+    {
+      "name": "base-blob-never-fetched",
+      "_mechanism": "No base side is ever read: a deleted file's guards vanish.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        b_blob = contents[ch.old_sha] if base_regular(ch) else None\n",
+      "replace": "        b_blob = None\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_suffixless_shell_script_lists_its_decisions_as_removed",
+      "symbol": "census"
+    },
+    {
+      "name": "base-language-read-from-the-head-blob",
+      "_mechanism": "The base is typed from the head blob (bash that became python).",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "b_kind = _language(ch.path, b_blob) if b_blob is not None else (",
+      "replace": "b_kind = _language(ch.path, h_blob if h_blob is not None else b_blob) if b_blob is not None else (",
+      "test": "tests/test_h_mad_guard_census.py::test_the_base_side_language_comes_from_the_old_blob",
+      "symbol": "census"
+    },
+    {
+      "name": "head-no-longer-code-keeps-only-hunk-lines",
+      "_mechanism": "When the head is not code, only hunk lines are removed (none are).",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            if not e.h_kind:   # the head is no longer code: every base decision is gone\n",
+      "replace": "            if False:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_python_script_that_became_data_still_lists_its_removed_guards",
+      "symbol": "census"
+    },
+    {
+      "name": "symlink-is-a-regular-file",
+      "_mechanism": "A symlink is read as source (its target text is parsed).",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "REGULAR = (\"100644\", \"100755\")\n",
+      "replace": "REGULAR = (\"100644\", \"100755\", \"120000\")\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_symlink_is_a_link_not_python"
+    },
+    {
+      "name": "gitlink-is-a-regular-file",
+      "_mechanism": "A gitlink is fetched as a blob.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "REGULAR = (\"100644\", \"100755\")\n",
+      "replace": "REGULAR = (\"100644\", \"100755\", \"160000\")\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_gitlink_does_not_lose_the_census"
+    },
+    {
+      "name": "base-link-not-recognised",
+      "_mechanism": "An old symlink or gitlink side is not counted as a link.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            \"link\" if ch.status != \"A\" and ch.old_mode in LINKS else None)\n",
+      "replace": "            None)\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_deleted_gitlink_does_not_lose_the_census",
+      "symbol": "census"
+    },
+    {
+      "name": "head-link-not-recognised",
+      "_mechanism": "A new symlink or gitlink side is not counted as a link.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            \"link\" if ch.status != \"D\" and ch.new_mode in LINKS else None)\n",
+      "replace": "            None)\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_symlink_and_a_submodule_are_skipped_and_counted",
+      "symbol": "census"
+    },
+    {
+      "name": "skipped-entry-not-counted",
+      "_mechanism": "A link or document entry is dropped without a count.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "                skipped[\"link\" if \"link\" in (h_kind, b_kind) else \"other\"] += 1\n",
+      "replace": "                pass\n",
+      "test": "tests/test_h_mad_guard_census.py::test_documents_and_data_are_other",
+      "symbol": "census"
+    },
+    {
+      "name": "binary-change-read-as-source",
+      "_mechanism": "A binary change is decoded and parsed as source.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        if ch.binary:\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_binary_change_is_skipped_and_counted",
+      "symbol": "census"
+    },
+    {
+      "name": "unknown-suffix-reads-as-a-document",
+      "_mechanism": "An unknown suffix is a document, not unmeasured.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    return \"unmeasured\"\n\n\n",
+      "replace": "    return \"other\"\n\n\n",
+      "test": "tests/test_h_mad_guard_census.py::test_an_unknown_suffix_is_unmeasured_not_a_document",
+      "symbol": "_language"
+    },
+    {
+      "name": "foreign-side-not-listed-unmeasured",
+      "_mechanism": "A side in a language with no rule is not named.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        if \"unmeasured\" in (h_kind, b_kind):\n            unmeasured.append(ch.path)\n",
+      "replace": "        if False:\n            unmeasured.append(ch.path)\n",
+      "test": "tests/test_h_mad_guard_census.py::test_code_in_another_language_is_unmeasured_and_listed",
+      "symbol": "census"
+    },
+    {
+      "name": "shell-shebang-ignored",
+      "_mechanism": "A shell script with an odd suffix is not measured.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    if SHELL_HEAD.match(first):\n        return \"sh\"\n",
+      "replace": "    if False:\n        return \"sh\"\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_shell_or_python_script_is_measured_whatever_its_suffix",
+      "symbol": "_language"
+    },
+    {
+      "name": "shell-suffix-ignored",
+      "_mechanism": "A .zsh file with no shebang is not measured.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    if suffix in SHELL_SUFFIXES:\n        return \"sh\"\n",
+      "replace": "    if False:\n        return \"sh\"\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_shell_or_python_script_is_measured_whatever_its_suffix",
+      "symbol": "_language"
+    },
+    {
+      "name": "removed-side-not-read",
+      "_mechanism": "The base side of the diff is never read: a deleted guard reads as nothing.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            if old_lines:\n                try:\n",
+      "replace": "            if False:\n                try:\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_guard_deleted_inside_a_modified_file_is_listed_as_removed",
+      "symbol": "census"
+    },
+    {
+      "name": "unparsed-base-silent",
+      "_mechanism": "A base that cannot be read is dropped without a name.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            except Unreadable:\n                unparsed.append(ch.path)   # a file that never parsed never ran a guard\n                continue\n",
+      "replace": "            except Unreadable:\n                continue\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_removed_line_in_an_undecodable_base_is_unparsed_base_not_unreadable",
+      "symbol": "census"
+    },
+    {
+      "name": "unparsable-base-loses-the-census",
+      "_mechanism": "A base that does not parse is UNREADABLE for the whole diff.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "                except Unreadable:\n                    unparsed.append(ch.path)\n",
+      "replace": "                except Unreadable:\n                    raise\n",
+      "test": "tests/test_h_mad_guard_census.py::test_an_unparsable_base_is_listed_and_the_census_goes_on",
+      "symbol": "census"
+    },
+    {
+      "name": "unparsed-base-not-in-token",
+      "_mechanism": "The token drops the unparsed_base count.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            f\"unparsed_base={result['unparsed_base']}\")",
+      "replace": "            f\"unparsed_base=0\")",
+      "test": "tests/test_h_mad_guard_census.py::test_an_unparsable_base_is_listed_and_the_census_goes_on",
+      "symbol": "render"
+    },
+    {
+      "name": "removed-count-not-in-token",
+      "_mechanism": "The token drops the removed count.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "f\"unanchored={result['unanchored']} removed={result['removed']} \"",
+      "replace": "f\"unanchored={result['unanchored']} \"",
+      "test": "tests/test_h_mad_guard_census.py::test_a_guard_deleted_inside_a_modified_file_is_listed_as_removed",
+      "symbol": "render"
     }
   ]
 }

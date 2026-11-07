@@ -649,8 +649,17 @@
       "name": "unrunnable-python-is-a-traceback",
       "_mechanism": "An executable whose shebang names a missing interpreter raises out of the launch: a traceback, no FULL-SUITE token, no verdict.",
       "file": "scripts/h_mad_branch_evidence.py",
-      "find": "    except OSError:  # a shebang naming an interpreter that is not there: exec fails\n        out.append(\"FULL-SUITE: UNREADABLE reason=python-unrunnable\")\n        incomplete.append(\"full-suite-python-unrunnable\")\n        return\n",
+      "find": "    except OSError:  # a shebang naming an interpreter that is not there: exec fails\n        out.append(\"FULL-SUITE: UNREADABLE reason=python-unrunnable\")\n        unreadable.append(\"full-suite-python-unrunnable\")\n        return\n",
       "replace": "",
+      "test": "tests/test_h_mad_branch_evidence.py::test_a_python_whose_shebang_names_a_missing_interpreter_is_named_not_a_traceback",
+      "symbol": "_full_suite"
+    },
+    {
+      "name": "unrunnable-python-reads-as-incomplete",
+      "_mechanism": "An unrunnable interpreter is INCOMPLETE (exit 0) though nothing was measured, unlike python-missing.",
+      "file": "scripts/h_mad_branch_evidence.py",
+      "find": "        unreadable.append(\"full-suite-python-unrunnable\")\n",
+      "replace": "        incomplete.append(\"full-suite-python-unrunnable\")\n",
       "test": "tests/test_h_mad_branch_evidence.py::test_a_python_whose_shebang_names_a_missing_interpreter_is_named_not_a_traceback",
       "symbol": "_full_suite"
     }
