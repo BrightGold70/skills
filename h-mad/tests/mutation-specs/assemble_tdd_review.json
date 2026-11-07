@@ -59,8 +59,8 @@
       "name": "rv-base-unreadable-masked",
       "_mechanism": "A failing git diff reads as an empty change list.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "timeout=30, check=True).stdout\n    return [name",
-      "replace": "timeout=30, check=False).stdout\n    return [name",
+      "find": "timeout=30, check=True).stdout\n    try:",
+      "replace": "timeout=30, check=False).stdout\n    try:",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_an_unknown_base_ref_in_a_real_repo_halts"
     },
     {
@@ -75,15 +75,15 @@
       "name": "rv-dotdot-dropped",
       "_mechanism": "A '..' diff path is accepted.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "or os.path.isabs(changed_path) or \"..\" in Path(changed_path).parts",
-      "replace": "or os.path.isabs(changed_path)",
+      "find": "or os.path.isabs(name) or \"..\" in Path(name).parts",
+      "replace": "or os.path.isabs(name)",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[dotdot]"
     },
     {
       "name": "rv-absolute-dropped",
       "_mechanism": "An absolute diff path is accepted.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "or os.path.isabs(changed_path) or \"..\" in",
+      "find": "or os.path.isabs(name) or \"..\" in",
       "replace": "or \"..\" in",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[absolute]"
     },
@@ -91,7 +91,7 @@
       "name": "rv-newline-dropped",
       "_mechanism": "A multi-line diff path is accepted.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "or any(ch in changed_path for ch in \"\\n\\r\\0\")):  # M:RV-DIFF-INVALID",
+      "find": "or any(ch in name for ch in \"\\n\\r\\0\")):  # M:RV-DIFF-INVALID",
       "replace": "):  # M:RV-DIFF-INVALID",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_missing_or_malformed_input_halts_and_writes_no_prompt[newline]"
     },
@@ -219,7 +219,7 @@
       "name": "rv-diff-missing-dropped",
       "_mechanism": "A --diff-path naming no file ends PASS.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "if not os.path.lexists(target):  # M:RV-DIFF-MISSING",
+      "find": "if not os.path.isfile(target):  # M:RV-DIFF-MISSING",
       "replace": "if False:  # M:RV-DIFF-MISSING",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_diff_path_that_does_not_exist_halts"
     },
@@ -262,6 +262,78 @@
       "find": "Do not report it as DRIFT (extra work)",
       "replace": "Report it as DRIFT (extra work)",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_prompt_tells_the_reviewer_an_untracked_file_is_not_drift_by_itself"
+    },
+    {
+      "name": "rv-bare-cr-allowed",
+      "_mechanism": "A name with a bare carriage return passes the name check.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "or any(ch in name for ch in \"\\n\\r\\0\")):  # M:RV-DIFF-INVALID",
+      "replace": "or any(ch in name for ch in \"\\n\\0\")):  # M:RV-DIFF-INVALID",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[untracked-carriage-return]"
+    },
+    {
+      "name": "rv-git-changed-names-unchecked",
+      "_mechanism": "Names git reports as changed or deleted skip the name check.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "for name in changed + fresh:\n            _refuse_bad_name(name)",
+      "replace": "for name in fresh:\n            _refuse_bad_name(name)",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[modified-newline]"
+    },
+    {
+      "name": "rv-git-untracked-names-unchecked",
+      "_mechanism": "Untracked names skip the name check.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "for name in changed + fresh:\n            _refuse_bad_name(name)",
+      "replace": "for name in changed:\n            _refuse_bad_name(name)",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[untracked-newline]"
+    },
+    {
+      "name": "rv-name-utf8-unguarded",
+      "_mechanism": "A non-UTF-8 name from git is a traceback again.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "except UnicodeDecodeError as exc:  # M:RV-NAME-UTF8",
+      "replace": "except ZeroDivisionError as exc:  # M:RV-NAME-UTF8",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_non_utf8_name_from_git_halts_with_a_named_reason"
+    },
+    {
+      "name": "rv-outside-path-spelled-from-root",
+      "_mechanism": "An outside-root path is climbed from the root's spelled path, wrong through a symlink.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "os.path.normpath(os.path.join(top, name))",
+      "replace": "os.path.normpath(os.path.join(os.path.dirname(str(root)), name))",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_symlinked_root_prints_the_real_path_of_a_file_outside_it"
+    },
+    {
+      "name": "rv-no-relative-dropped-changed",
+      "_mechanism": "diff.relative=true shifts the changed names off the prefix.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "\"diff\", \"--no-relative\", \"--name-only\", \"-z\", base_ref",
+      "replace": "\"diff\", \"--name-only\", \"-z\", base_ref",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_diff_relative_config_does_not_change_the_listing"
+    },
+    {
+      "name": "rv-no-relative-dropped-deleted",
+      "_mechanism": "diff.relative=true makes the deleted set miss the names.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "\"diff\", \"--no-relative\", \"--name-only\", \"--diff-filter=D\"",
+      "replace": "\"diff\", \"--name-only\", \"--diff-filter=D\"",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_diff_relative_config_does_not_change_the_listing"
+    },
+    {
+      "name": "rv-diff-path-directory-allowed",
+      "_mechanism": "A directory passes as a --diff-path.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "if not os.path.isfile(target):  # M:RV-DIFF-MISSING",
+      "replace": "if not os.path.lexists(target):  # M:RV-DIFF-MISSING",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_diff_path_that_is_a_directory_halts"
+    },
+    {
+      "name": "rv-docs-recovery-row-unscoped",
+      "_mechanism": "The agy_tdd_hook_unverified recovery row names only 5d staging.",
+      "file": "references/failure-recovery.md",
+      "find": "| 5d / 5e | `--agent agy` staging, or the 5e review",
+      "replace": "| 5d | `--agent agy` staging, or the 5e review",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_agy_unverified_recovery_row_covers_the_review"
     }
   ]
 }
