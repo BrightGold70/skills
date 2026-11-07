@@ -975,49 +975,121 @@
       "test": "tests/test_h_mad_mutation_harness.py::test_a_nonzero_denominator_keeps_the_no_traceback_text"
     },
     {
-      "name": "isolate-child-rereads-its-own-python-flag",
-      "_mechanism": "Drops the isolated-child marker so the child re-resolves `--python` from inside the worktree.",
+      "name": "isolate-child-not-given-the-resolved-python",
+      "_mechanism": "Child is not handed the parent's absolute interpreter, so it re-resolves its own relative flag inside the worktree.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "symbol": "main",
-      "find": "    if os.environ.pop(ISOLATED_CHILD_ENV, None):",
-      "replace": "    if os.environ.pop(ISOLATED_CHILD_ENV, None) and False:",
+      "symbol": "_isolate",
+      "find": "            child_args.insert(at, f\"--python={resolved_python}\")",
+      "replace": "            pass",
       "test": "tests/test_h_mad_mutation_harness.py::test_isolate_honours_an_abbreviated_python_flag[--pyth]"
     },
     {
-      "name": "isolate-does-not-mark-its-child",
-      "_mechanism": "Parent stops marking the child, so the child re-reads its own relative flag.",
+      "name": "isolate-puts-the-python-flag-after-the-double-dash",
+      "_mechanism": "The inserted flag lands after `--` and becomes a spec path.",
       "file": "scripts/h_mad_mutation_harness.py",
       "symbol": "_isolate",
-      "find": "            env={**os.environ, ISOLATED_CHILD_ENV: \"1\"},",
-      "replace": "            env={**os.environ},",
-      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_python_against_the_callers_cwd[separate]"
+      "find": "            at = child_args.index(\"--\") if \"--\" in child_args else len(child_args)",
+      "replace": "            at = len(child_args)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_keeps_the_resolved_python_a_flag_when_the_spec_follows_a_double_dash"
     },
     {
       "name": "env-override-not-made-absolute",
-      "_mechanism": "A relative HMAD_MUTATION_PYTHON is left relative.",
+      "_mechanism": "A relative HMAD_MUTATION_PYTHON stays relative.",
       "file": "scripts/h_mad_mutation_harness.py",
       "symbol": "main",
-      "find": "            resolved = os.path.abspath(wanted) if \"/\" in wanted else wanted",
-      "replace": "            resolved = wanted",
+      "find": "        resolved = os.path.abspath(wanted) if \"/\" in wanted else wanted",
+      "replace": "        resolved = wanted",
       "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_env_override_against_the_callers_cwd"
     },
     {
-      "name": "bare-python-lookup-skipped",
+      "name": "env-override-ignored",
+      "_mechanism": "The env override is not consulted at all.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "    wanted = args.python or previous",
+      "replace": "    wanted = args.python",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_env_override_against_the_callers_cwd"
+    },
+    {
+      "name": "resolved-python-not-exported",
+      "_mechanism": "The resolved interpreter is never put in the env, so children and the spec swap use the raw one.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "        os.environ[PYTHON_OVERRIDE_ENV] = resolved",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_resolves_a_relative_python_against_the_callers_cwd[separate]"
+    },
+    {
+      "name": "bare-python-path-lookup-skipped",
       "_mechanism": "A bare name not on PATH is waved through to a red baseline.",
       "file": "scripts/h_mad_mutation_harness.py",
       "symbol": "main",
-      "find": "if \"/\" in wanted else shutil.which(wanted) is not None)",
-      "replace": "if \"/\" in wanted else True)",
+      "find": "else shutil.which(wanted)",
+      "replace": "else wanted",
       "test": "tests/test_h_mad_mutation_harness.py::test_isolate_names_a_bare_python_that_is_not_on_path[nosuchpy]"
     },
     {
-      "name": "python-not-found-swallows-red-baseline",
+      "name": "python-executable-bit-not-checked",
+      "_mechanism": "A non-executable --python file passes the existence check.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "os.path.isfile(resolved) and os.access(resolved, os.X_OK)",
+      "replace": "os.path.isfile(resolved)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_python_file_that_is_not_executable_is_refused_by_name"
+    },
+    {
+      "name": "python-not-found-check-turned-off",
+      "_mechanism": "The not-found refusal never fires.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "            if found is None:",
+      "replace": "            if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_isolate_names_a_missing_relative_python_instead_of_a_red_baseline"
+    },
+    {
+      "name": "python-refusal-swallows-red-baseline",
       "_mechanism": "The refusal fires for any run, hiding a truly red suite.",
       "file": "scripts/h_mad_mutation_harness.py",
       "symbol": "main",
-      "find": "            if not launchable and not args.check_anchors:",
-      "replace": "            if not args.check_anchors:",
+      "find": "            if reason:",
+      "replace": "            if True:",
       "test": "tests/test_h_mad_mutation_harness.py::test_isolate_with_a_valid_python_still_reads_a_red_suite_as_red"
+    },
+    {
+      "name": "check-anchors-held-to-the-interpreter-probe",
+      "_mechanism": "--check-anchors is no longer exempt.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "        if not args.check_anchors:",
+      "replace": "        if True:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_check_anchors_run_is_exempt_from_the_interpreter_probe"
+    },
+    {
+      "name": "unlaunchable-python-probe-ignores-launch-errors",
+      "_mechanism": "An interpreter whose shebang is missing is not reported.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "                except (OSError, subprocess.SubprocessError):\n                    reason = \"python-unrunnable\"",
+      "replace": "                except (OSError, subprocess.SubprocessError):\n                    pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_launcher_whose_shebang_is_missing_is_unrunnable_not_a_red_baseline[plain]"
+    },
+    {
+      "name": "unrunnable-python-nonzero-exit-ignored",
+      "_mechanism": "A launcher that exits non-zero on a no-op passes the probe.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "                    if probe.returncode != 0:",
+      "replace": "                    if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_launcher_that_exits_nonzero_on_a_noop_is_unrunnable"
+    },
+    {
+      "name": "sweep-refusal-prints-no-sweep-line",
+      "_mechanism": "A bad interpreter under --sweep prints no SWEEP line.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "symbol": "main",
+      "find": "                if args.sweep:",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_sweep_with_a_bad_interpreter_still_ends_in_a_sweep_line"
     }
   ]
 }
