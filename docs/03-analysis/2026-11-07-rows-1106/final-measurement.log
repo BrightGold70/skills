@@ -1,0 +1,36 @@
+HEAD aed1cae4 python3=/opt/homebrew/bin/python3 10:58:28
+8892 passed, 3 warnings in 2669.12s (0:44:29)
+--- anchors 11:42:58
+ANCHORS: ANCHORS_OK specs=218 mutations=3208 ok=3208 drifted=0 unreadable=0 skipped=0 unclassifiable=0
+[H-MAD] anchors ANCHORS_OK
+--- specs
+h-mad/tests/mutation-specs/anchor_check_python.json: MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=27/27 timeout_kills=0 untargeted=0/7
+h-mad/tests/mutation-specs/assemble_tdd_agent.json: MUTATION: ALL_CAUGHT mutations=2 caught=2 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=49/51 timeout_kills=0 untargeted=0/2
+h-mad/tests/mutation-specs/assemble_tdd_agy.json: MUTATION: ALL_CAUGHT mutations=4 caught=4 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=22/24 timeout_kills=0 untargeted=0/4
+h-mad/tests/mutation-specs/assemble_tdd_authors_test.json: MUTATION: ALL_CAUGHT mutations=16 caught=16 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=27/27 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/assemble_tdd_effort.json: MUTATION: ALL_CAUGHT mutations=10 caught=10 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=27/27 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/assemble_tdd_env_known.json: MUTATION: ALL_CAUGHT mutations=5 caught=5 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=27/27 timeout_kills=0 untargeted=0/5
+h-mad/tests/mutation-specs/assemble_tdd_mutation_rows.json: MUTATION: ALL_CAUGHT mutations=5 caught=5 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=32/39 timeout_kills=0 untargeted=0/5
+h-mad/tests/mutation-specs/assemble_tdd_prompt_rows.json: MUTATION: ALL_CAUGHT mutations=16 caught=16 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=27/27 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/assemble_tdd_review.json: MUTATION: ALL_CAUGHT mutations=41 caught=41 survived=0 refused=0 unreadable=0 crash_kills=2 crash_visible=22/24 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/assemble_tdd.json: MUTATION: ALL_CAUGHT mutations=66 caught=66 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=27/27 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/auto_param_ids.json: MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/7 h
+h-mad/tests/mutation-specs/branch_evidence.json: MUTATION: ALL_CAUGHT mutations=72 caught=72 survived=0 refused=0 unreadable=0 crash_kills=1 crash_visible=10/11 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/codex_gate_tmp_reports.json: MUTATION: ALL_CAUGHT mutations=9 caught=9 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=1/1 timeout_kills=0 untargeted=0/9 h
+h-mad/tests/mutation-specs/fill_slots.json: MUTATION: ALL_CAUGHT mutations=11 caught=11 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=85/90 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/grok_wire_reverts.json: MUTATION: ALL_CAUGHT mutations=14 caught=14 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=61/67 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/guard_census.json: MUTATION: ALL_CAUGHT mutations=75 caught=75 survived=0 refused=0 unreadable=0 crash_kills=6 crash_visible=2/7 timeout_kills=0 untargeted=0/7
+h-mad/tests/mutation-specs/harness_blind_spots.json: MUTATION: ALL_CAUGHT mutations=9 caught=9 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=61/70 timeout_kills=0 untargeted=0/9
+h-mad/tests/mutation-specs/harness_check_anchors_discovery.json: MUTATION: ALL_CAUGHT mutations=4 caught=4 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=61/70 timeout_kills=0 untargeted=0/4
+h-mad/tests/mutation-specs/harness_sweep.json: MUTATION: ALL_CAUGHT mutations=6 caught=6 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=61/70 timeout_kills=0 untargeted=0/6
+h-mad/tests/mutation-specs/hollow_kill.json: MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=61/70 timeout_kills=0 untargeted=0/7
+h-mad/tests/mutation-specs/hook_live_interpreter.json: MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/7 h
+h-mad/tests/mutation-specs/ledger_declares_itself.json: MUTATION: ALL_CAUGHT mutations=2 caught=2 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=61/70 timeout_kills=0 untargeted=0/2
+h-mad/tests/mutation-specs/mutation_append_row.json: MUTATION: ALL_CAUGHT mutations=9 caught=9 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/3 timeout_kills=0 untargeted=0/9 h
+h-mad/tests/mutation-specs/mutation_crash_kill_classification.json: MUTATION: ALL_CAUGHT mutations=11 caught=11 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=61/70 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/mutation_harness.json: MUTATION: ALL_CAUGHT mutations=125 caught=125 survived=0 refused=0 unreadable=0 crash_kills=3 crash_visible=61/70 timeout_kills=0 untargeted
+h-mad/tests/mutation-specs/new_caller_carveout_copies.json: MUTATION: ALL_CAUGHT mutations=10 caught=10 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=2/3 timeout_kills=0 untargeted=0/1
+h-mad/tests/mutation-specs/suite_lock.json: MUTATION: ALL_CAUGHT mutations=17 caught=17 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=21/21 timeout_kills=0 untargeted=0
+h-mad/tests/mutation-specs/suite_tree_digest.json: MUTATION: ALL_CAUGHT mutations=10 caught=10 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=7/7 timeout_kills=0 untargeted=0/1
+h-mad/tests/mutation-specs/tdd_gate_peers.json: MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/7 h
+END 13:20:38
