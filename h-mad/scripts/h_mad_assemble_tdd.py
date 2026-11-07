@@ -801,9 +801,21 @@ def assemble(
 
 
 def _git_names(root: Path, *args: str) -> list[str]:
-    out = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+    raw = subprocess.run(["git", "-C", str(root), *args], capture_output=True,
                          timeout=30, check=True).stdout
+    try:
+        out = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:  # M:RV-NAME-UTF8
+        raise Halt("diff_name_not_utf8",
+                   f"git printed a file name that is not UTF-8 ({exc}); rename it or name the files with --diff-path") from None
     return [name for name in out.split("\0") if name]
+
+
+def _refuse_bad_name(name: str) -> None:
+    """The one name check, applied to every route: --diff-path and each name git prints."""
+    if (not name or os.path.isabs(name) or ".." in Path(name).parts
+            or any(ch in name for ch in "\n\r\0")):  # M:RV-DIFF-INVALID
+        raise Halt("diff_path_invalid", f"diff path {name!r} must be relative, free of '..', and one line")
 
 
 UNTRACKED_LABEL = "(untracked; may be foreign to this task)"
@@ -830,34 +842,32 @@ def _review_diff_paths(*, project_root: Path, diff_paths: list[str], base_ref: s
         try:
             prefix = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-prefix"], capture_output=True,
                                     text=True, timeout=30, check=True).stdout.rstrip("\n")
-            changed = _git_names(root, "diff", "--name-only", "-z", base_ref, "--")
-            gone = set(_git_names(root, "diff", "--name-only", "--diff-filter=D", "-z", base_ref, "--"))
+            top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True,
+                                 text=True, timeout=30, check=True).stdout.rstrip("\n")  # M:RV-TOPLEVEL
+            changed = _git_names(root, "diff", "--no-relative", "--name-only", "-z", base_ref, "--")  # M:RV-NO-RELATIVE
+            gone = set(_git_names(root, "diff", "--no-relative", "--name-only", "--diff-filter=D", "-z", base_ref, "--"))
             fresh = _git_names(root, "ls-files", "--others", "--exclude-standard", "-z")
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             raise Halt("diff_base_unreadable", f"git diff against {base_ref!r} in {project_root}: {exc}") from None
-        up = root
-        for _ in Path(prefix).parts:  # the repository top, spelled through the root's own path
-            up = up.parent
+        for name in changed + fresh:
+            _refuse_bad_name(name)
         for name in changed:
             label = DELETED_LABEL if name in gone else ""
             if name.startswith(prefix):  # M:RV-PREFIX-MAP
                 derived.append((os.path.normpath(root / name[len(prefix):]), label))
             else:
-                derived.append((os.path.normpath(up / name), f"{label} {OUTSIDE_LABEL}".strip()))
+                derived.append((os.path.normpath(os.path.join(top, name)), f"{label} {OUTSIDE_LABEL}".strip()))
         derived += [(os.path.normpath(root / name), UNTRACKED_LABEL) for name in fresh]  # M:RV-UNTRACKED-LABEL
         if not derived:  # M:RV-BASE-EMPTY
             raise Halt("diff_paths_required", "the base ref names no changed file")
     elif not diff_paths:  # M:RV-DIFF-REQUIRED
         raise Halt("diff_paths_required", "the review needs --diff-path (repeatable) or --base-ref")
     for changed_path in diff_paths:
-        if (not changed_path or os.path.isabs(changed_path) or ".." in Path(changed_path).parts
-                or any(ch in changed_path for ch in "\n\r\0")):  # M:RV-DIFF-INVALID
-            raise Halt("diff_path_invalid",
-                       f"diff path {changed_path!r} must be relative, free of '..', and one line")
+        _refuse_bad_name(changed_path)
         target = os.path.normpath(root / changed_path)
-        if not os.path.lexists(target):  # M:RV-DIFF-MISSING
+        if not os.path.isfile(target):  # M:RV-DIFF-MISSING
             raise Halt("diff_path_missing",
-                       f"{target} does not exist; a deleted file is named by --base-ref, not --diff-path")
+                       f"{target} is not a file on disk; a deleted file is named by --base-ref, not --diff-path")
         derived.append((target, ""))
     ordered: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -1082,7 +1092,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--codex-report", type=Path,
                     help="review only: the implementer's report file, inlined verbatim")
     ap.add_argument("--diff-path", action="append", default=[],
-                    help="review only: a changed file that exists, relative to --project-root; repeatable. A deleted file is named by --base-ref, not here")
+                    help="review only: a regular file that exists, relative to --project-root; repeatable. A deleted file is named by --base-ref, not here")
     ap.add_argument("--base-ref", default=None,
                     help="review only: derive the changed files from `git diff --name-only <ref>` "
                          "plus untracked files, labelled (instead of --diff-path)")
