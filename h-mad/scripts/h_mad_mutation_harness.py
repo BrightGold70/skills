@@ -339,8 +339,6 @@ def _load_spec(spec_path: Path) -> dict:
 
 
 PYTHON_OVERRIDE_ENV = "HMAD_MUTATION_PYTHON"
-# Set by `--isolate` on its child only: "the parent already resolved the interpreter".
-ISOLATED_CHILD_ENV = "HMAD_MUTATION_ISOLATED_CHILD"
 _PYTHON_ARGV0 = re.compile(r"python(?:\d+(?:\.\d+)*)?")
 
 
@@ -2503,16 +2501,20 @@ def _isolate(argv: list[str], spec_paths: list[Path]) -> int:
             elif arg == "--isolate" and not positional:
                 continue
             child_args.append(str(worktree / rewrites[arg]) if arg in rewrites else arg)
+        # The parent resolved the interpreter (any spelling: `--python`,
+        # `--python=`, an argparse abbreviation, or the env var) against the
+        # caller's cwd. The child gets it as an ABSOLUTE `--python=`, placed after
+        # every caller flag so it wins (argparse keeps the last) and before any
+        # `--` so it stays a flag. An absolute path resolves to itself, so the
+        # child's own resolution is idempotent and needs no marker.
+        resolved_python = os.environ.get(PYTHON_OVERRIDE_ENV)
+        if resolved_python:
+            at = child_args.index("--") if "--" in child_args else len(child_args)
+            child_args.insert(at, f"--python={resolved_python}")
         print(f"ISOLATE: worktree={worktree} base={base} copied={copied}", flush=True)
         child = subprocess.Popen(
             [sys.executable, str(worktree / script), *child_args],
             cwd=worktree / cwd.relative_to(top),
-            # The parent resolved the interpreter (any spelling: `--python`,
-            # `--python=`, an argparse abbreviation, or the env var) against the
-            # caller's cwd and put it in PYTHON_OVERRIDE_ENV. The child must use
-            # that and not re-read its own `--python`, which would resolve again
-            # from inside the worktree.
-            env={**os.environ, ISOLATED_CHILD_ENV: "1"},
         )
         status = child.wait()
     except (OSError, subprocess.CalledProcessError) as exc:
@@ -2737,30 +2739,39 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--only scores rows of ONE spec; it cannot be combined with "
                      "--sweep or --check-anchors")
     previous = os.environ.get(PYTHON_OVERRIDE_ENV)
-    if os.environ.pop(ISOLATED_CHILD_ENV, None):
-        # An --isolate child: the parent already resolved and validated the
-        # interpreter and exported it. Re-reading `--python` here would resolve
-        # a relative path from inside the temp worktree. Popped, so the suite
-        # this child runs does not inherit the marker.
-        pass
-    else:
-        wanted = args.python or previous
-        if wanted:
-            # A path is made absolute against the CALLER's cwd, because spec
-            # commands run with cwd=root (a temp worktree under --isolate),
-            # where a caller-relative path names nothing. A bare name stays a
-            # PATH lookup. The environment, not a parameter, so
-            # `--sweep`/`--isolate` children inherit it.
-            resolved = os.path.abspath(wanted) if "/" in wanted else wanted
+    wanted = args.python or previous
+    if wanted:
+        # A path is made absolute against the CALLER's cwd, because spec commands
+        # run with cwd=root (a temp worktree under --isolate), where a
+        # caller-relative path names nothing. A bare name stays a PATH lookup.
+        # The environment, not a parameter, so `--sweep`/`--isolate` children
+        # inherit it. Resolution is idempotent: an absolute path resolves to itself.
+        resolved = os.path.abspath(wanted) if "/" in wanted else wanted
+        if not args.check_anchors:
             # An interpreter that cannot launch would otherwise surface as a red
             # baseline, which reads as a verdict about the suite.
             # `--check-anchors` never launches it, so it is not held to this.
-            launchable = (os.path.isfile(resolved) and os.access(resolved, os.X_OK)
-                          if "/" in wanted else shutil.which(wanted) is not None)
-            if not launchable and not args.check_anchors:
-                print(f"MUTATION: UNREADABLE reason=python-not-found interpreter={resolved}")
+            found = (resolved if os.path.isfile(resolved) and os.access(resolved, os.X_OK)
+                     else None) if "/" in wanted else shutil.which(wanted)
+            reason = None
+            if found is None:
+                reason = "python-not-found"
+            else:
+                # Present is not runnable: an executable whose shebang names a
+                # missing interpreter exists and cannot start.
+                try:
+                    probe = subprocess.run([found, "-c", ""], capture_output=True, timeout=60)
+                    if probe.returncode != 0:
+                        reason = "python-unrunnable"
+                except (OSError, subprocess.SubprocessError):
+                    reason = "python-unrunnable"
+            if reason:
+                print(f"MUTATION: UNREADABLE reason={reason} interpreter={resolved}")
+                if args.sweep:
+                    # A token reader of `SWEEP:` must not see no verdict at all.
+                    print(f"SWEEP: INCOMPLETE specs=0 — {reason} interpreter={resolved}")
                 return 2
-            os.environ[PYTHON_OVERRIDE_ENV] = resolved
+        os.environ[PYTHON_OVERRIDE_ENV] = resolved
     if os.environ.get(PYTHON_OVERRIDE_ENV):
         # On stderr: a verdict measured under another interpreter than the spec
         # pins must not read like one on the spec as written.

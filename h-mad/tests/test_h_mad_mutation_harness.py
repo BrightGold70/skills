@@ -4165,6 +4165,103 @@ def test_isolate_with_a_valid_python_still_reads_a_red_suite_as_red(tmp_path: Pa
     assert "python-not-found" not in proc.stdout, proc.stdout
 
 
+def _plain_cli(script: Path, cwd: Path, *args: str, env_extra: dict | None = None,
+               ) -> subprocess.CompletedProcess:
+    env = {k: v for k, v in os.environ.items() if k != "HMAD_MUTATION_PYTHON"}
+    env.update(env_extra or {})
+    return subprocess.run([sys.executable, str(script), *args],
+                          cwd=cwd, capture_output=True, text=True, timeout=60, env=env)
+
+
+@pytest.mark.parametrize("stray", ["1", "0", "x"])
+def test_a_stray_isolate_variable_does_not_discard_the_operators_python(
+    tmp_path: Path, stray: str,
+) -> None:
+    """The old child marker was an env var any shell could leave exported, and any
+    non-empty value skipped the interpreter handling: `--python ./nope` then ran
+    under the spec's own python with nothing saying so."""
+    repo, spec, script = _isolate_project(tmp_path)
+
+    proc = _plain_cli(script, spec.parent, "--python", "./nope", spec.name,
+                      env_extra={"HMAD_MUTATION_ISOLATED_CHILD": stray})
+
+    assert "MUTATION: UNREADABLE reason=python-not-found" in proc.stdout, proc.stdout + proc.stderr
+    assert "ALL_CAUGHT" not in proc.stdout, proc.stdout
+
+
+@pytest.mark.parametrize("isolate", [False, True], ids=["plain", "isolate"])
+def test_a_launcher_whose_shebang_is_missing_is_unrunnable_not_a_red_baseline(
+    tmp_path: Path, isolate: bool,
+) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+    broken = spec.parent / "broken"
+    broken.write_text("#!/no/such/interpreter\n", encoding="utf-8")
+    broken.chmod(0o755)
+    args = (["--isolate"] if isolate else []) + ["--python", "./broken", spec.name]
+
+    proc = _plain_cli(script, spec.parent, *args)
+
+    assert "MUTATION: UNREADABLE reason=python-unrunnable" in proc.stdout, proc.stdout + proc.stderr
+    assert "BASELINE_NOT_GREEN" not in proc.stdout, proc.stdout
+    assert proc.returncode == 2, proc.stdout
+
+
+def test_a_launcher_that_exits_nonzero_on_a_noop_is_unrunnable(tmp_path: Path) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+    sick = spec.parent / "sick"
+    sick.write_text("#!/bin/sh\nexit 3\n", encoding="utf-8")
+    sick.chmod(0o755)
+
+    proc = _plain_cli(script, spec.parent, "--python", "./sick", spec.name)
+
+    assert "MUTATION: UNREADABLE reason=python-unrunnable" in proc.stdout, proc.stdout
+    assert "BASELINE_NOT_GREEN" not in proc.stdout, proc.stdout
+
+
+def test_isolate_keeps_the_resolved_python_a_flag_when_the_spec_follows_a_double_dash(
+    tmp_path: Path,
+) -> None:
+    """The env override reaches the child as a `--python=` flag; placed after the
+    `--` it would become a spec path."""
+    repo, spec, script = _isolate_project(tmp_path)
+    _isolate_relative_interpreter(repo)
+
+    proc = _isolate_cli_env(script, spec.parent, "../only-here/py", "--", spec.name)
+
+    assert "MUTATION: ALL_CAUGHT" in proc.stdout, proc.stdout + proc.stderr
+
+
+def test_a_python_file_that_is_not_executable_is_refused_by_name(tmp_path: Path) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+    plain = spec.parent / "notexec"
+    plain.write_text("#!/bin/sh\n", encoding="utf-8")
+    plain.chmod(0o644)
+
+    proc = _plain_cli(script, spec.parent, "--python", "./notexec", spec.name)
+
+    assert "MUTATION: UNREADABLE reason=python-not-found" in proc.stdout, proc.stdout
+    assert "notexec" in proc.stdout, proc.stdout
+
+
+def test_a_sweep_with_a_bad_interpreter_still_ends_in_a_sweep_line(tmp_path: Path) -> None:
+    """A token reader of `SWEEP:` must not see no verdict at all."""
+    repo, spec, script = _isolate_project(tmp_path)
+
+    proc = _plain_cli(script, spec.parent, "--sweep", "--python", "nosuchpy", spec.name)
+
+    assert "SWEEP: INCOMPLETE specs=0" in proc.stdout, proc.stdout
+    assert "python-not-found" in proc.stdout, proc.stdout
+    assert proc.returncode == 2, proc.stdout
+
+
+def test_a_check_anchors_run_is_exempt_from_the_interpreter_probe(tmp_path: Path) -> None:
+    repo, spec, script = _isolate_project(tmp_path)
+
+    proc = _plain_cli(script, spec.parent, "--check-anchors", "--python", "./nope", spec.name)
+
+    assert "ANCHORS: ANCHORS_OK" in proc.stdout, proc.stdout + proc.stderr
+
+
 def test_isolate_names_a_missing_relative_python_instead_of_a_red_baseline(
     tmp_path: Path,
 ) -> None:
