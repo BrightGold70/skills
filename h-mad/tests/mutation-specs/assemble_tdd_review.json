@@ -446,6 +446,70 @@
       "find": "            or \"\".join(name.splitlines()) != name or \"\\0\" in name):  # M:RV-DIFF-INVALID",
       "replace": "            or any(ch in name for ch in \"\\n\\r\\0\")):  # M:RV-DIFF-INVALID",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[untracked-line-separator]"
+    },
+    {
+      "name": "rv-fence-id-is-a-constant",
+      "_mechanism": "A fixed fence id is guessable, so a report could carry the END line that closes it.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    return digest.hexdigest()[:32]  # M:RV-FENCE-ID",
+      "replace": "    return \"0\" * 32  # M:RV-FENCE-ID",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_the_review_fence_follows_both_quoted_blocks_and_their_boundary"
+    },
+    {
+      "name": "rv-fence-slot-unfilled",
+      "_mechanism": "The fence id slot is not filled, so the review halts residual_slots instead of fencing.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        \"<INLINE_FENCE>\": fence,\n",
+      "replace": "",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_report_and_task_are_fenced_so_a_heading_or_verdict_in_them_reads_as_data"
+    },
+    {
+      "name": "rv-template-report-unfenced",
+      "_mechanism": "Row review-prompt-inserts-report-unfenced: the template quotes the report under a plain heading again.",
+      "file": "references/agy-spec-reviewer-prompt.md",
+      "find": "=== BEGIN REPORT <INLINE_FENCE> ===\n",
+      "replace": "",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_report_and_task_are_fenced_so_a_heading_or_verdict_in_them_reads_as_data"
+    },
+    {
+      "name": "rv-fence-parts-not-length-prefixed",
+      "_mechanism": "Review nit: without a length prefix, two splits of the same bytes between the blocks share a fence id.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        digest.update(len(data).to_bytes(8, \"big\") + data)  # M:RV-FENCE-LENGTH",
+      "replace": "        digest.update(data)  # M:RV-FENCE-LENGTH",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::test_the_review_fence_follows_both_quoted_blocks_and_their_boundary"
+    },
+    {
+      "name": "rv-unfenced-custom-template-staged",
+      "_mechanism": "Review nit: a copied pre-fence --template stages the unfenced prompt silently.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if \"<INLINE_CODEX_REPORT>\" in template_text and fenced_report not in template_text:  # M:RV-TEMPLATE-FENCED",
+      "replace": "    if False:  # M:RV-TEMPLATE-FENCED",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_custom_template_that_quotes_the_report_unfenced_is_refused[no-fence]"
+    },
+    {
+      "name": "rv-closing-rule-drops-the-id",
+      "_mechanism": "Review should-fix: the sentence that says only this run's id closes a block is what defeats a look-alike END line.",
+      "file": "references/agy-spec-reviewer-prompt.md",
+      "find": "carrying exactly `<INLINE_FENCE>` closes a block.",
+      "replace": "carrying exactly the id closes a block.",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_report_and_task_are_fenced_so_a_heading_or_verdict_in_them_reads_as_data"
+    },
+    {
+      "name": "rv-fence-body-keeps-trailing-newline",
+      "_mechanism": "Round-2 review: with a section inlined the body ended in a newline, so the documented recipe gave a different id.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    body = body.rstrip(\"\\n\")  # each block holds no trailing newline",
+      "replace": "    body = body  # each block holds no trailing newline",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_review_inlines_the_sections_the_task_cites"
+    },
+    {
+      "name": "rv-fence-named-only-in-prose-passes",
+      "_mechanism": "Round-2 nit: a template naming <INLINE_FENCE> only in prose still quotes the report bare.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "and fenced_report not in template_text:  # M:RV-TEMPLATE-FENCED",
+      "replace": "and \"<INLINE_FENCE>\" not in template_text:  # M:RV-TEMPLATE-FENCED",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_custom_template_that_quotes_the_report_unfenced_is_refused[fence-only-in-prose]"
     }
   ]
 }

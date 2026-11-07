@@ -61,6 +61,7 @@ exit 0 on PASS and on HALT agy_tdd_hook_unverified after AGY-GATE: UNWIRED;
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import shlex
@@ -895,6 +896,22 @@ def _review_diff_paths(*, project_root: Path, diff_paths: list[str], base_ref: s
     return ordered
 
 
+def review_fence(task: str, report: str) -> str:
+    """The fence id the review template's BEGIN/END lines carry (row review-prompt-inserts-report-unfenced).
+
+    Derived from the quoted text rather than random, so a prompt is byte-stable for the
+    same inputs. Each part is length-prefixed, so no split of the same bytes between the
+    two blocks shares an id. 128 bits: text that carries its own closing line by accident
+    is out of reach, and forging one deliberately costs about 2**128 / k hashes for k
+    guessed END lines. A hand-staged review fills <INLINE_FENCE> with this function.
+    """
+    digest = hashlib.sha256()
+    for part in (task, report):
+        data = part.encode("utf-8")
+        digest.update(len(data).to_bytes(8, "big") + data)  # M:RV-FENCE-LENGTH
+    return digest.hexdigest()[:32]  # M:RV-FENCE-ID
+
+
 def assemble_review(
     *,
     feature: str,
@@ -940,16 +957,25 @@ def assemble_review(
         body += ("\n\n**Referenced impl-plan sections (inlined — the task above cites them by §, "
                  "and each is quoted whole from the impl-plan):**\n"
                  + "".join(f"\n{section}\n" for _, section in sections))
+    report_quote = report_text.rstrip("\n")
+    body = body.rstrip("\n")  # each block holds no trailing newline, so the recipe is "the block's text"
+    fence = review_fence(body, report_quote)
     filled, residue = fill_slots(template_text, {
         "<INLINE_MODULE_NAME>": module,
         "<INLINE_FEATURE>": feature,
+        "<INLINE_FENCE>": fence,
         "<INLINE_IMPL_PLAN_TASK>": body,
-        "<INLINE_CODEX_REPORT>": report_text.rstrip("\n"),
+        "<INLINE_CODEX_REPORT>": report_quote,
         "<INLINE_DIFF_PATHS>": "\n".join(f"- {path} {label}".rstrip() for path, label in ordered),
     })
     leftover_slots = sorted(set(RESIDUAL.findall(residue)))
     if leftover_slots:  # M:RV-RESIDUAL
         raise Halt("residual_slots", ", ".join(leftover_slots))
+    fenced_report = "=== BEGIN REPORT <INLINE_FENCE> ===\n<INLINE_CODEX_REPORT>\n=== END REPORT <INLINE_FENCE> ==="
+    if "<INLINE_CODEX_REPORT>" in template_text and fenced_report not in template_text:  # M:RV-TEMPLATE-FENCED
+        raise Halt("template_unfenced",
+                   f"{template} quotes the report with no <INLINE_FENCE> lines around it; start from "
+                   "references/agy-spec-reviewer-prompt.md")
     return filled, {
         "shape": meta["shape"] or "undeclared", "task": meta["id"], "pin": meta["pin"],
         "diff_paths": [path for path, _ in ordered], "residue": residue,
