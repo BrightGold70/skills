@@ -2998,17 +2998,34 @@ Reconciled the open rows first (census OPEN 5, against `origin/main` `94cfebf4`)
 Reconciled the open rows first: census OPEN 1, row 2856, genuinely open (feature at Phase 6).
 
 - **assemble-tdd-red-forbids-plan-stubs**: the RED template says "do not modify production code" while an impl-plan can prescribe stubs as RED's first step, so a correct implementer stops at the count mismatch and the orchestrator hand-writes a second dispatch (gate-non-py Task 2) — remedy: existing-tool-repair — recurrence: 1 — candidate: yes
+  — **LANDED** 2026-11-07 `aed1cae4`: RED allows only a stub the task body prescribes, written after the failing test; order driven through all three real gates.
 - **green-prompt-demands-a-wire-cut-the-gate-refuses**: the GREEN prompt asks for a manual post-GREEN wire cut, and the Phase 5 gate denies that edit as `test-passing`, so codex reports BLOCKED on correct work; the harness's connection rows are the real proof — remedy: existing-tool-repair — recurrence: 1 — candidate: yes
+  — **LANDED** 2026-11-07 `aed1cae4`: FR-9 sentence 3 rewritten on every surface; the cut is the orchestrator's wire-scoped revert, GREEN proposes the row.
 - **assembled-test-command-the-gate-denies**: `h_mad_assemble_tdd.py --python python3.11` bakes an interpreter the codex gate does not trust, the prompt's bounded example names a `python3` with no pytest here, and a worktree PATH makes bare `hmad-dispatch run` untrusted; the assembler could refuse what the gate would deny, and 5c could create the thin venv — remedy: existing-tool-repair — recurrence: 3 — candidate: yes
+  — **LANDED** 2026-11-07 `aed1cae4`: warn and continue by operator ruling (`interpreter_gate_untrusted` on stderr, "may deny"); prompt example fixed; 5c names the thin venv.
 - **hostile-path-limits-in-the-red-template**: fixture guidance says hostile names but not that pytest rejects `[]`, venv rejects `:`, and a listed token excludes whitespace; two Tasks lost a round until the orchestrator added it by hand — remedy: review-rule — recurrence: 2 — candidate: yes
+  — **LANDED** 2026-11-07 `aed1cae4`: limits measured, narrower than filed: `[]` only in a path handed to pytest, including a bracketed project root; whitespace only in non-`.py` listed tokens.
 - **assemble-the-agy-spec-review**: the 5e agy spec review is still staged by hand; a scratch script filled it for all 8 Tasks, and `h_mad_assemble_tdd.py` could gain a `review` phase — remedy: tool-improvement — recurrence: 8 — candidate: yes
+  — **LANDED** 2026-11-07 `aed1cae4`: `--phase review`. Its first version was written before its tests. Not run against real agy; the printed block ran against the stub.
 
 ## 2026-11-06 — gate-non-py-landed
 
 Reconciled the open rows first: 2856 is LANDED, stamped on its own line, merge `fbb47d8a`. The five rows filed 2026-11-05 are unchanged and still open.
 
 - **guard-census-from-the-diff**: a `# M:` marker census cannot see an unmarked arm; hand-built diff censuses took two Phase 6 rounds and found 16 and 2 lines a marker count had read as none. A script enumerating changed decision lines against spec anchors would replace the hand lists, with "guard" left to a reviewer — remedy: deterministic-check — recurrence: 2 — candidate: yes
+  — **LANDED** 2026-11-07 `aed1cae4`: `h_mad_guard_census.py`, calibrated by file:line: all 18 hand-census lines listed among 112 candidates (16% true guards), so a reviewer aid, not a verdict. Residuals: a foreign-interpreter shebang under an allow-listed name reads as a document; `--path . --path nope` reads DONE.
 - **hook-tests-run-under-the-wrong-interpreter**: `_run` drives hooks with `sys.executable` (3.11) while the live shebang resolves `python3` (3.15), so version-sensitive behaviour is tested on a path the live hook does not take; found once through `Path.resolve()` on a symlink loop. A check could run a small hook smoke set under the live `python3` — remedy: deterministic-check — recurrence: 1 — candidate: yes
+  — **LANDED** 2026-11-07 `aed1cae4`: `test_h_mad_hook_live_interpreter.py` launches hooks under the live `python3`; skips with a reason when that is the suite interpreter.
 - **isolate-relative-python-false-baseline**: `h_mad_mutation_harness.py --isolate --python <relative>` prints `BASELINE_NOT_GREEN` on every spec, reading as a red suite; it should resolve the path before entering the temporary worktree or say why — remedy: existing-tool-repair — recurrence: 1 — candidate: yes
+  — **LANDED** 2026-11-07 `aed1cae4`: the harness resolves and probes `--python` in the parent for every spelling; `python-not-found` or `python-unrunnable`, never a red baseline.
 - **close-out-measurement-wrapper**: the same run of the feature specs, `--check-anchors` and the full suite was launched by a scratch script six times, and a relative-path bug in that script read as a red baseline. `h_mad_branch_evidence.py` covers part of this; widen it or add a verb — remedy: tool-improvement — recurrence: 6 — candidate: maybe
+  — **LANDED** 2026-11-07 `aed1cae4`: `h_mad_branch_evidence.py --full-suite` runs bare pytest. Real run read `PASS passed=8752` on a clone with a doc-only diff; not yet run after a code diff.
 - **crash-visible-empty-denominator**: `crash_visible=0/0` on specs whose tests assert through a helper leaves `crash_kills=0` with no denominator, and the `no traceback` annotation proves nothing there. The harness could print that the reading is unavailable — remedy: existing-tool-repair — recurrence: 1 — candidate: maybe
+  — **LANDED** 2026-11-07 `aed1cae4`: at 0/0 the mechanism reads `crash reading unavailable`; the token line is unchanged.
+
+## 2026-11-07 — rows-1106
+
+All ten rows filed 2026-11-05 and 2026-11-06 are LANDED at `aed1cae4`, after four review rounds; the second round's two must-fix findings were regressions from the first round's fixes.
+
+- **mutation-harness-tests-not-hermetic-under-the-override**: with `HMAD_MUTATION_PYTHON` set, 5 cases of `test_h_mad_mutation_harness.py` fail on an untouched tree, so `mutation_harness.json` reads `BASELINE_NOT_GREEN` under its own `--python`; those tests' subprocess env should drop the variable — remedy: existing-tool-repair — recurrence: 2 — candidate: yes
+- **review-prompt-inserts-report-unfenced**: `agy-spec-reviewer-prompt.md` places the implementer's report and the task body under plain `##` headings, so a report holding its own heading or `VERDICT: COMPLIANT` reads as template text; a per-run delimiter would separate them — remedy: existing-tool-repair — recurrence: 1 — candidate: maybe
