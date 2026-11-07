@@ -172,7 +172,7 @@ def apply_table(store, table):
         text = stream.read()
     candidates = open_candidates(text)
     insertions = collections.defaultdict(list)
-    header = True
+    header, expect_separator = True, False
     for line_number, line in enumerate(Path(table).read_text(encoding="utf-8").splitlines(), 1):
         line = line.strip()
         if not line.startswith("|"):
@@ -180,7 +180,15 @@ def apply_table(store, table):
         cells = [cell.strip().replace(r"\|", "|")
                  for cell in re.split(r"(?<!\\)\|", line[1:-1])]
         if header:
-            header = False
+            header, expect_separator = False, True
+            continue
+        if expect_separator:
+            # The first line is only a header if a separator follows it. A lone
+            # `|` line stays `empty-table`: it reaches no data row, so loses none.
+            expect_separator = False
+            if len(cells) != 2 or not all(re.fullmatch(r":?-+:?", cell) for cell in cells):
+                print(f"APPLY: REFUSED reason=missing-separator line={line_number}")
+                return 2
             continue
         if len(cells) != 2 or not line.endswith("|"):
             print(f"APPLY: REFUSED reason=malformed-row line={line_number}")

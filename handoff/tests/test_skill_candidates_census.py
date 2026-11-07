@@ -1086,6 +1086,63 @@ def test_apply_zero_data_rows_refuses_empty_table_without_writing(
     assert result.stderr == ""
 
 
+@pytest.mark.parametrize(
+    ("text", "line"),
+    [
+        pytest.param(
+            "| an open one | LANDED x |\n| a maybe one | LANDED y |\n", 2, id="data-rows-only",
+        ),
+        pytest.param(
+            "# Decisions\n\n| an open one | LANDED x |\n\n| a maybe one | LANDED y |\n",
+            5,
+            id="prose-and-blank-lines-between-rows",
+        ),
+        pytest.param(
+            "| --- | --- |\n| an open one | LANDED x |\n", 2, id="separator-with-no-header",
+        ),
+        pytest.param(
+            "| open-line | status-line |\n| --- |\n| an open one | LANDED x |\n",
+            2,
+            id="one-cell-separator",
+        ),
+    ],
+)
+def test_apply_table_without_a_separator_refuses_rather_than_eating_its_first_row(
+    tmp_path: Path, text: str, line: int,
+) -> None:
+    """Row census-apply-eats-the-first-row-as-a-header: inserted=9 of 10, no refusal."""
+    store = _store(tmp_path)
+    table = tmp_path / "reconcile.md"
+    table.write_text(text, encoding="utf-8")
+    before = {p: p.read_bytes() for p in (store, table)}
+
+    result = run_flag("--apply", str(table), str(store))
+
+    assert {p: p.read_bytes() for p in before} == before
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.stdout.splitlines() == [f"APPLY: REFUSED reason=missing-separator line={line}"]
+    assert result.stderr == ""
+
+
+def test_apply_separator_gate_still_inserts_every_row_of_a_well_formed_table(
+    tmp_path: Path,
+) -> None:
+    """Positive control: the gate above must not refuse what a real header and separator hold."""
+    store = _store(tmp_path)
+    table = reconciliation_table(
+        tmp_path,
+        ("an open one", "**LANDED 2026-11-07** x"),
+        ("a maybe one", "**LANDED 2026-11-07** y"),
+    )
+
+    result = run_flag("--apply", str(table), str(store))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines() == ["APPLY: inserted=2 OPEN 2\u21920"]
+    assert "  \u2014 **LANDED 2026-11-07** x\n" in store.read_text(encoding="utf-8")
+    assert "  \u2014 **LANDED 2026-11-07** y\n" in store.read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize("separator", ["| --- | --- |", "| :--- | ---: |"])
 def test_apply_valid_table_guard_preserves_escaped_cells_and_all_insertions(
     tmp_path: Path, separator: str,

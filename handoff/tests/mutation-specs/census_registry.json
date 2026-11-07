@@ -308,6 +308,22 @@
       "find": "    if \"-h\" in paths or \"--help\" in paths:",
       "replace": "    if False:",
       "test": "tests/test_skill_candidates_census.py::test_help_flag_prints_usage_and_exits_zero_without_opening_flag_as_path[--help]"
+    },
+    {
+      "name": "apply-takes-a-second-line-without-a-separator-as-data",
+      "_mechanism": "Row census-apply-eats-the-first-row-as-a-header: with the check gone a table with no separator again loses its first row to the header skip and reads inserted=9 of 10.",
+      "file": "scripts/skill_candidates_census.py",
+      "find": "            if len(cells) != 2 or not all(re.fullmatch(r\":?-+:?\", cell) for cell in cells):\n                print(f\"APPLY: REFUSED reason=missing-separator line={line_number}\")\n                return 2\n            continue\n",
+      "replace": "            if all(re.fullmatch(r\":?-+:?\", cell) for cell in cells):\n                continue\n",
+      "test": "tests/test_skill_candidates_census.py::test_apply_table_without_a_separator_refuses_rather_than_eating_its_first_row[data-rows-only]"
+    },
+    {
+      "name": "apply-accepts-a-one-cell-separator",
+      "_mechanism": "A malformed second line of dashes must not pass as the separator just because every cell it has is dashes.",
+      "file": "scripts/skill_candidates_census.py",
+      "find": "            if len(cells) != 2 or not all(re.fullmatch(r\":?-+:?\", cell) for cell in cells):\n",
+      "replace": "            if not all(re.fullmatch(r\":?-+:?\", cell) for cell in cells):\n",
+      "test": "tests/test_skill_candidates_census.py::test_apply_table_without_a_separator_refuses_rather_than_eating_its_first_row[one-cell-separator]"
     }
   ]
 }
