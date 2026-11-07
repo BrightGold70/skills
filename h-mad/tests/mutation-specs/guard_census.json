@@ -685,6 +685,14 @@
       "find": "wanted = [] if \".\" in named_paths else named_paths",
       "replace": "wanted = [w for w in named_paths if w != \".\"]",
       "test": "tests/test_h_mad_guard_census.py::test_a_dot_beside_another_path_still_names_everything"
+    },
+    {
+      "name": "census-passes-a-climbing-relative-path-to-git",
+      "_mechanism": "Review-3 nit: `--path ../x` reached git and read reason=git, not the documented path-no-match.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    if rel == \"..\" or rel.startswith(\"../\"):\n        raise Unreadable(reason, f\"outside the repository: {value}\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_guard_census.py::test_a_relative_path_that_climbs_out_of_the_repository_is_path_no_match[../x]"
     }
   ]
 }

@@ -741,7 +741,10 @@ def _repo_relative(top: Path, value: str, reason: str = "spec-dir") -> str:
             return p.resolve().relative_to(top.resolve()).as_posix()
         except ValueError as exc:
             raise Unreadable(reason, f"outside the repository: {value}") from exc
-    return posixpath.normpath(value)
+    rel = posixpath.normpath(value)
+    if rel == ".." or rel.startswith("../"):
+        raise Unreadable(reason, f"outside the repository: {value}")
+    return rel
 
 
 def render(result: dict) -> str:

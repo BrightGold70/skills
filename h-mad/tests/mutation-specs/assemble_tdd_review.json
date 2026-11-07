@@ -275,16 +275,16 @@
       "name": "rv-git-changed-names-unchecked",
       "_mechanism": "Names git reports as changed or deleted skip the name check.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "for name in changed + fresh:",
-      "replace": "for name in fresh:",
+      "find": "        for name in changed:  # M:RV-TRACKED-WAY-OUT",
+      "replace": "        for name in []:  # M:RV-TRACKED-WAY-OUT",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[modified-newline]"
     },
     {
       "name": "rv-git-untracked-names-unchecked",
       "_mechanism": "Untracked names skip the name check.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "for name in changed + fresh:",
-      "replace": "for name in changed:",
+      "find": "        for name in fresh:\n            _refuse_bad_name(",
+      "replace": "        for name in []:\n            _refuse_bad_name(",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[untracked-newline]"
     },
     {
@@ -342,6 +342,62 @@
       "find": "\"; rename or gitignore it, or name the files with --diff-path\"",
       "replace": "\"\"",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route"
+    },
+    {
+      "name": "rv-tracked-name-offers-a-dead-way-out",
+      "_mechanism": "Review-4 nit: gitignore never takes a tracked name out of `git diff <base>`; a modified one is offered only --diff-path, or git mv when git detects the rename.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "                           \"then lists only the new name\")",
+      "replace": "                           \"then lists only the new name; or gitignore it\")",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[modified-newline]"
+    },
+    {
+      "name": "rv-dash-valued-diff-path-is-a-usage-error",
+      "_mechanism": "Review-3 nit: `--diff-path -dash.py` died in argparse with no ASSEMBLE-TDD token.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if (names_flag and nxt is not None and nxt.startswith(\"-\")\n",
+      "replace": "        if (names_flag and nxt is not None and not nxt.startswith(\"-\")\n",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_diff_path_value_starting_with_a_dash_is_listed[exact]"
+    },
+    {
+      "name": "rv-dash-rewrite-swallows-an-abbreviated-option",
+      "_mechanism": "Without the option-prefix check, `--diff-path --agen` binds the option as a file name.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "                and not any(o.startswith(nxt.split(\"=\", 1)[0]) for o in options)):  # M:RV-DASH-VALUE\n",
+      "replace": "                and nxt not in options):  # M:RV-DASH-VALUE\n",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_an_option_after_a_bare_diff_path_stays_an_option[abbreviated]"
+    },
+    {
+      "name": "rv-deleted-name-offered-git-mv",
+      "_mechanism": "A deleted name cannot be git mv'd; only --diff-path gets out.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            if name in gone:  # M:RV-DELETED-WAY-OUT",
+      "replace": "            if False:  # M:RV-DELETED-WAY-OUT",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[deleted-newline]"
+    },
+    {
+      "name": "rv-dash-rewrite-ignores-an-abbreviated-flag",
+      "_mechanism": "Review nit: argparse takes `--diff` for `--diff-path`, so `--diff -dash.py` must bind too.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            token.startswith(\"--\") and [o for o in options if o.startswith(token)] == [flag])",
+      "replace": "            False)",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_diff_path_value_starting_with_a_dash_is_listed[abbreviated]"
+    },
+    {
+      "name": "rv-added-name-offered-the-modified-way-out",
+      "_mechanism": "Round-2 review: an added name is told git mv helps only on a detected rename and gitignore never; both always work for it.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "            elif name in added:  # M:RV-ADDED-WAY-OUT",
+      "replace": "            elif False:  # M:RV-ADDED-WAY-OUT",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[added-newline]"
+    },
+    {
+      "name": "rv-base-ref-line-break-forges-a-token",
+      "_mechanism": "Round-3 review: a --base-ref holding a newline reached a HALT detail raw and printed a column-0 ASSEMBLE-TDD: PASS line.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if not base_ref.isprintable():  # M:RV-BASE-LINE",
+      "replace": "        if False:  # M:RV-BASE-LINE",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_with_a_line_break_halts_and_forges_no_token_line[line-separator]"
     }
   ]
 }

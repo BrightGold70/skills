@@ -839,6 +839,10 @@ def _review_diff_paths(*, project_root: Path, diff_paths: list[str], base_ref: s
     if base_ref:
         if base_ref.startswith("-"):  # M:RV-BASE-DASH
             raise Halt("diff_base_invalid", f"--base-ref {base_ref!r} must not start with '-'")
+        # Format and space characters other than ASCII space (ZWJ, NBSP, bidi controls) are refused
+        # too; such a ref is named through --diff-path instead.
+        if not base_ref.isprintable():  # M:RV-BASE-LINE  covers \u2028, \x85, \x0b … that splitlines() breaks on
+            raise Halt("diff_base_invalid", f"--base-ref {base_ref!r} must be one printable line")
         try:
             prefix = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-prefix"], capture_output=True,
                                     text=True, timeout=30, check=True).stdout.rstrip("\n")
@@ -846,10 +850,21 @@ def _review_diff_paths(*, project_root: Path, diff_paths: list[str], base_ref: s
                                  text=True, timeout=30, check=True).stdout.rstrip("\n")  # M:RV-TOPLEVEL
             changed = _git_names(root, "diff", "--no-relative", "--name-only", "-z", base_ref, "--")  # M:RV-NO-RELATIVE
             gone = set(_git_names(root, "diff", "--no-relative", "--name-only", "--diff-filter=D", "-z", base_ref, "--"))
+            added = set(_git_names(root, "diff", "--no-relative", "--name-only", "--diff-filter=A", "-z", base_ref, "--"))
             fresh = _git_names(root, "ls-files", "--others", "--exclude-standard", "-z")
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             raise Halt("diff_base_unreadable", f"git diff against {base_ref!r} in {project_root}: {exc}") from None
-        for name in changed + fresh:
+        for name in changed:  # M:RV-TRACKED-WAY-OUT  each route has its own ways out
+            if name in gone:  # M:RV-DELETED-WAY-OUT
+                way_out = "; name the files with --diff-path"
+            elif name in added:  # M:RV-ADDED-WAY-OUT  the base has no side to pair it with
+                way_out = "; git mv it, or git rm --cached and gitignore it, or name the files with --diff-path"
+            else:  # the base holds it, or git paired it with a base file as a rename: gitignore cannot drop
+                # it, and git mv only when git detects a rename. base_ref is one line (M:RV-BASE-LINE).
+                way_out = (f"; name the files with --diff-path, or git mv it if `git diff --name-only {shlex.quote(base_ref)}` "
+                           "then lists only the new name")
+            _refuse_bad_name(name, way_out)
+        for name in fresh:
             _refuse_bad_name(name, "; rename or gitignore it, or name the files with --diff-path")
         for name in changed:
             label = DELETED_LABEL if name in gone else ""
@@ -1051,6 +1066,35 @@ def _filename_slug(*parts: str) -> str:
     return "_".join(part for part in cleaned if part) or "unnamed"
 
 
+def _bind_dash_values(argv: list[str], ap: argparse.ArgumentParser, flag: str) -> list[str]:
+    """Spell `FLAG -x` (or an unambiguous `--` prefix of FLAG, as argparse accepts)
+    as `FLAG=-x`, which argparse otherwise refuses as a missing
+    value. A file may be named `-dash.py` (`--base-ref` lists one without trouble);
+    a value that names one of the parser's options, or a prefix of one argparse
+    would accept as an abbreviation, is left alone so it still parses as that option.
+    A value whose text before any `=` is a bare `-` or `--` prefixes every option
+    and stays refused; a lone `-` already parses as a value."""
+    options = [o for action in ap._actions for o in action.option_strings]
+    out: list[str] = []
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token == "--":
+            out += argv[i:]
+            break
+        nxt = argv[i + 1] if i + 1 < len(argv) else None
+        names_flag = token == flag or (  # argparse also takes an unambiguous prefix (`--diff`)
+            token.startswith("--") and [o for o in options if o.startswith(token)] == [flag])
+        if (names_flag and nxt is not None and nxt.startswith("-")
+                and not any(o.startswith(nxt.split("=", 1)[0]) for o in options)):  # M:RV-DASH-VALUE
+            out.append(f"{token}={nxt}")
+            i += 2
+            continue
+        out.append(token)
+        i += 1
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Stage a Phase-5d/5e TDD dispatch (RED/GREEN/gate), or the 5e agy spec review (--phase review)")
     ap.add_argument("--feature", required=True)
@@ -1108,7 +1152,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sandbox", help="passed through; read-only is refused for a phase that runs pytest")
     ap.add_argument("--template", type=Path, default=None,
                     help="default: the implementer prompt, or the agy spec-reviewer prompt for review")
-    args = ap.parse_args(argv)
+    args = ap.parse_args(_bind_dash_values(sys.argv[1:] if argv is None else list(argv), ap, "--diff-path"))
     is_review = args.phase == "review"
     if args.agent is None:
         args.agent = "agy" if is_review else "codex"

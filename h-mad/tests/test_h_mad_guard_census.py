@@ -1018,6 +1018,20 @@ def test_a_path_outside_the_repository_is_UNREADABLE(tmp_path: Path) -> None:
     assert token(census(repo, base, "--path", str(tmp_path))) == "GUARD-CENSUS: UNREADABLE reason=path-no-match"
 
 
+@pytest.mark.parametrize("value", ["../x", "..", "src/../../x"])
+def test_a_relative_path_that_climbs_out_of_the_repository_is_path_no_match(
+    tmp_path: Path, value: str,
+) -> None:
+    """Review-3 nit: `--path ../x` reached git and read `reason=git`, against
+    helper-scripts.md, which names `path-no-match` for a path outside the repo."""
+    repo, base = simple(tmp_path, [])
+
+    proc = census(repo, base, "--path", value)
+
+    assert token(proc) == "GUARD-CENSUS: UNREADABLE reason=path-no-match", proc.stdout
+    assert proc.returncode == 2
+
+
 def test_the_base_side_language_comes_from_the_old_blob(tmp_path: Path) -> None:
     """bash -> python: the old shell text must not be parsed as Python, nor the new Python as shell."""
     repo, base = make(tmp_path, {"h-mad/bin/tool": SH_HEAD}, {"h-mad/bin/tool": "#!/usr/bin/env python3\n" + PY_HEAD})

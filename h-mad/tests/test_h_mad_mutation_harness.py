@@ -23,6 +23,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 HARNESS = SCRIPTS / "h_mad_mutation_harness.py"
 
@@ -35,6 +37,16 @@ from h_mad_mutation_harness import (  # noqa: E402
     run_spec,
 )
 from skill_corpus import doc_text  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_python_override(monkeypatch):
+    """Row mutation-harness-tests-not-hermetic-under-the-override: the harness
+    exports HMAD_MUTATION_PYTHON to the suite it scores, and every CLI subprocess
+    here inherits it, so 5 cases failed on an untouched tree and this file's own
+    spec read BASELINE_NOT_GREEN under --python. A test that wants the override
+    sets it itself."""
+    monkeypatch.delenv("HMAD_MUTATION_PYTHON", raising=False)
 
 
 GUARD = "THRESHOLD = 5\n# a comment that no test observes\n"
