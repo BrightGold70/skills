@@ -1184,5 +1184,5 @@ def test_a_python_whose_shebang_names_a_missing_interpreter_is_named_not_a_trace
 
     assert "Traceback" not in proc.stderr, proc.stderr
     assert _full_lines(proc) == ["FULL-SUITE: UNREADABLE reason=python-unrunnable"], proc.stdout + proc.stderr
-    assert _verdict(proc) == "EVIDENCE-VERDICT: INCOMPLETE reason=full-suite-python-unrunnable"
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert _verdict(proc) == "EVIDENCE-VERDICT: UNREADABLE reason=full-suite-python-unrunnable"
+    assert proc.returncode == 2, "measured nothing: the same class as python-missing"

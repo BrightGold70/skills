@@ -12,28 +12,41 @@ guards. It lists candidates and counts them.
 
     <file>:<line>\\t<kind>\\t<note>\\t<text>   one per UNANCHORED candidate
     REMOVED: <file>:<line> <kind> "<text>"       one per decision line the head no longer has
-    GUARD-CENSUS: DONE decision=<n> anchored=<m> unanchored=<k> removed=<r>
+    UNPARSED-BASE: <file>                        a base side that could not be read (not a guard)
+    GUARD-CENSUS: DONE decision=<n> anchored=<m> unanchored=<k> removed=<r> unparsed_base=<u>
     GUARD-CENSUS: UNREADABLE reason=<reason>
 
 exit 0 on DONE (even with candidates: the tool measures, it does not judge), 2 on
 UNREADABLE. The UNREADABLE line carries no counts, because a zero would be
 byte-identical to "nothing was measured". Read the token, never `$?`.
-`decision` is always `anchored + unanchored`; `removed` is counted apart.
+`decision` is always `anchored + unanchored`; `removed` and `unparsed_base` are counted apart.
 
 What is compared. Everything is read from git objects, never the working tree:
-the files changed by `git diff <base> <head>` (regular files; `--path`
-narrows it, default the whole diff; a `--path` that matches no change is
-UNREADABLE, never a zero) and the spec directories as they stand at `--head`
+every entry of `git diff <base> <head>`, each side read by its own mode and blob
+(`--path` narrows it, repeatable; `.`, `./` and the repo top name everything; a
+`--path` that matches no change, or lies outside the repo, is UNREADABLE, never a zero) and the spec directories as they stand at `--head`
 (default HEAD). `--spec-dir` is repeatable and repo-relative; the default is
 `h-mad/tests/mutation-specs` AND `handoff/tests/mutation-specs`, of which one may
-be absent. An explicit `--spec-dir` replaces the default and must exist. Test files (a `tests` or `test` directory component, `test_*.py`,
-`*_test.py`, `conftest.py`) are not census targets.
+be absent. An explicit `--spec-dir` replaces the default and must exist.
 
-Language. `.py`, or a `#!` python script of any name, is Python; `.sh .bash .zsh .ksh`,
-or any file with a `#!` shell shebang (`gate.v2`), is shell. Source in a language
-with no rule here (`.js .ts .rb .go` ... or another `#!`) is never a silent zero:
-it is counted as `unmeasured=` on `SKIPPED:` and listed as `UNMEASURED: <file>`.
-Documents and data are counted as `other=`.
+Entries that are not measured, each counted ONCE on `SKIPPED:` (the counters are
+disjoint; a measured file is never counted there): `binary` (a binary change),
+`tests` (a `tests`/`test` directory component, `test_*.py`, `*_test.py`,
+`conftest.py`: not census targets), `link` (a symlink or gitlink on every side
+that exists; a deleted symlink or gitlink, or one changed to a file, is never
+read as source), `unmeasured` (see Language), `other` (documents and data from
+the allow-list below). `CENSUS-SCOPE:` gives `files=` (measured entries) and
+`deleted=` (how many of those are deletions).
+
+Language, read PER SIDE from that side's own blob (a script that was bash and is
+now python is read as shell on the base and python on the head). `.py`, or a `#!`
+python script of any name, is Python; `.sh .bash .zsh .ksh`, or any file with a
+`#!` shell shebang (`gate.v2`), is shell. Fail closed: only an allow-list of
+documents and data (`DOC_SUFFIXES`, `DOC_NAMES` in the source: `.md .json .txt
+.log .csv .xsd .png ...`, `LICENSE`, `rc`) is `other`; EVERYTHING else (`.ts .vue
+.pyw .r`, an unknown suffix, `Makefile`, any other `#!`) is `unmeasured`, counted
+on `SKIPPED:` and listed as `UNMEASURED: <file>`. An entry with one measured
+side and one unmeasured side is measured and also counted unmeasured.
 
 Decision lines in Python (`ast`; the unit is a statement, reported at its first
 line, and it counts when any physical line of it is added or changed). For a
@@ -53,8 +66,7 @@ enclosing branch header is itself anchored is annotated `arm-of-anchored:<line>`
 matter on its own. Only non-header statements are annotated: an `elif`, a
 nested `if` or a loop is a decision of its own and never an arm.
 
-Decision lines in a shell hook (`.sh`, `.bash`, or a suffix-less file whose
-first line is a `#!` shell). The unit is the physical line; blank lines,
+Decision lines in a shell hook (see Language). The unit is the physical line; blank lines,
 comments, bare `then do else fi done esac { } ;;` and function headers are not.
 A line counts when it:
   * starts a control command: `if elif while until for case select`
@@ -79,9 +91,13 @@ Removed lines. A guard deleted from a modified file adds nothing to the head, so
 the base side is read too: every decision line (same rule, parsed from the base
 blob) on a line the hunk removes or rewrites is listed as `REMOVED:` with its
 BASE line number. A rewritten decision line is therefore both a candidate and a
-`REMOVED` line. A deleted file lists all its decision lines. A rename is read as
+`REMOVED` line. A deleted file, or a file whose head is no longer code (python
+that became data or a symlink), lists all its decision lines. A rename is read as
 delete plus add (`--no-renames`): the old file's lines are `REMOVED` and the new
-file's are candidates. REMOVED lines are never "anchored"; the code is gone.
+file's are candidates. REMOVED lines are never "anchored"; the code is gone. A base
+side that cannot be read (not UTF-8, does not parse) never ran a guard, so it does not
+lose the census: it is listed as `UNPARSED-BASE:` and counted as `unparsed_base=`.
+An unreadable HEAD side stays UNREADABLE.
 
 Line numbers are git's (LF-counted). `ast` also counts a bare CR as a newline, so
 statement lines are mapped through character offsets.
@@ -94,9 +110,7 @@ absolute and outside the repository cannot be mapped, and is counted as `outside
 UNREADABLE reasons: `git` (git fails or is absent), `bad-ref`, `spec-dir`
 (missing from the head tree, or outside the repository), `spec-unreadable` (not
 JSON, not UTF-8, or a row without string `file`/`find`), `unreadable-file`
-(a changed census target, or the base of one with removed lines, is not UTF-8 or
-does not parse), `path-no-match`. Deleted files,
-symlinks, submodules, tests and binary changes are skipped and counted on `SKIPPED:`.
+(a measured HEAD side is not UTF-8 or does not parse), `path-no-match`.
 
 Stdlib-only.
 """
@@ -120,10 +134,17 @@ TOKEN = "GUARD-CENSUS"
 DEFAULT_SPEC_DIRS = ("h-mad/tests/mutation-specs", "handoff/tests/mutation-specs")
 SHELL_SUFFIXES = (".sh", ".bash", ".zsh", ".ksh")
 PY_HEAD = re.compile(rb"^#!\s*(?:\S*/)?(?:env\s+(?:-\S+\s+)*)?python[\d.]*\b")
-# Source in a language this tool has no rule for: counted and listed, never read as clean.
-CODE_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".rb", ".pl", ".pm", ".go", ".rs",
-                 ".java", ".kt", ".kts", ".scala", ".c", ".cc", ".cpp", ".h", ".hpp", ".m", ".swift",
-                 ".lua", ".php", ".r", ".cs", ".sql", ".ps1", ".bat", ".cmd", ".fish", ".ex", ".exs"}
+# Fail closed: only these are documents or data. Everything else that is not Python or shell
+# is `unmeasured`, so a new language shows up as a count, never as a document.
+DOC_SUFFIXES = {".md", ".markdown", ".rst", ".txt", ".json", ".jsonl", ".ndjson", ".yaml", ".yml",
+                ".toml", ".ini", ".cfg", ".conf", ".csv", ".tsv", ".lock", ".log", ".out", ".stdout",
+                ".stderr", ".xsd", ".xml", ".html", ".htm", ".css", ".svg", ".png", ".jpg", ".jpeg",
+                ".gif", ".ico", ".icns", ".pdf", ".tex", ".sty", ".bib", ".patch", ".diff", ".plist",
+                ".canvas", ".dot", ".mplstyle", ".gz", ".zip", ".docx", ".xlsx", ".pptx", ".pbtxt",
+                ".sample", ".example", ".backup", ".original", ".pending", ".wall", ".zh",
+                ".sha_before", ".sha_after", ".enl", ".ris", ".rtf"}
+DOC_NAMES = {"LICENSE", "README", "NOTICE", "CHANGELOG", "AUTHORS", ".gitignore", ".gitattributes",
+             ".gitmodules", ".gitkeep", ".ignore", ".DS_Store", "rc", "stdout", "stderr"}
 SHELL_HEAD = re.compile(rb"^#!\s*(?:\S*/)?(?:env\s+(?:-\S+\s+)*)?(?:ba|z|da|k)?sh\b")
 # A branch header is a decision of its own, never an "arm" that an outer row speaks for.
 HEADERS = {"if", "elif", "while", "for", "except", "match", "case"}
@@ -188,7 +209,23 @@ class Change:
     new_mode: str
     new_sha: str
     old_sha: str = ""
+    old_mode: str = ""
     binary: bool = False
+
+
+REGULAR = ("100644", "100755")
+LINKS = ("120000", "160000")
+MEASURED = ("py", "sh")
+
+
+@dataclass
+class Entry:
+    """One changed path with the sides that can be measured (None = not measured)."""
+    ch: Change
+    h_kind: str | None
+    h_text: str
+    b_kind: str | None
+    b_blob: bytes | None
 
 
 def _changes(top: Path, base: str, head: str, paths: list[str]) -> list[Change]:
@@ -209,7 +246,7 @@ def _changes(top: Path, base: str, head: str, paths: list[str]) -> list[Change]:
             continue
         name = path.decode("utf-8", "surrogateescape")
         changes.append(Change(name, fields[4].decode(), fields[1].decode(), fields[3].decode(),
-                              fields[2].decode(), name in binary))
+                              fields[2].decode(), fields[0].decode(), name in binary))
     return changes
 
 
@@ -496,18 +533,21 @@ def _arm_segments(text: str, start: int, line: str) -> list[tuple[int, int]]:
 # ---------------------------------------------------------------------- core
 
 def _language(path: str, blob: bytes) -> str:
-    """`py`, `sh`, `unmeasured` (code with no rule here) or `other` (documents, data, anything else)."""
-    suffix = posixpath.splitext(path)[1].lower()
+    """`py`, `sh`, `other` (an allow-listed document or data file) or `unmeasured` (anything else)."""
+    name = posixpath.basename(path)
+    suffix = posixpath.splitext(name)[1].lower()
     if suffix == ".py":
         return "py"
+    if suffix in SHELL_SUFFIXES:
+        return "sh"
+    if suffix in DOC_SUFFIXES or name in DOC_NAMES:
+        return "other"
     first = blob.split(b"\n", 1)[0]
-    if suffix in SHELL_SUFFIXES or SHELL_HEAD.match(first):
+    if SHELL_HEAD.match(first):
         return "sh"
     if PY_HEAD.match(first):
         return "py"
-    if first.startswith(b"#!") or suffix in CODE_SUFFIXES:
-        return "unmeasured"
-    return "other"
+    return "unmeasured"
 
 
 def _text(blob: bytes, kind: str, path: str) -> str:
@@ -529,62 +569,83 @@ def census(repo: Path, base: str, head: str, spec_dirs: list[str] | None, paths:
     base_sha, head_sha = _commit(top, base), _commit(top, head)
     explicit = bool(spec_dirs)
     dirs = [_repo_relative(top, d) for d in spec_dirs] if spec_dirs else list(DEFAULT_SPEC_DIRS)
-    wanted = [_repo_relative(top, p) for p in paths]
+    wanted = [w for w in (_repo_relative(top, p, "path-no-match") for p in paths) if w != "."]
     changes = _changes(top, base_sha, head_sha, wanted)
     for want in wanted:
         stem = want.rstrip("/")
         if not any(ch.path == stem or ch.path.startswith(stem + "/") for ch in changes):
             raise Unreadable("path-no-match", f"--path {want!r} matches no change between the refs")
-    skipped = {"deleted": 0, "binary": 0, "link": 0, "tests": 0, "other": 0}
+    skipped = {"binary": 0, "link": 0, "tests": 0, "other": 0}
     unmeasured: list[str] = []
-    eligible: list[Change] = []
+    plan: list[Change] = []
     for ch in changes:
-        if ch.status == "D":
-            skipped["deleted"] += 1
-        if ch.new_mode in ("120000", "160000"):
-            skipped["link"] += 1     # a gitlink's sha is a commit, not a blob: never fetched
-        elif ch.binary:
+        if ch.binary:
             skipped["binary"] += 1
         elif _is_test(ch.path):
             skipped["tests"] += 1
         else:
-            eligible.append(ch)
-    contents = _blobs(top, sorted({ch.old_sha if ch.status == "D" else ch.new_sha for ch in eligible}))
-    work: list[tuple[Change, str, str]] = []   # (change, language, head text; "" for a deleted file)
-    for ch in eligible:
-        blob = contents[ch.old_sha if ch.status == "D" else ch.new_sha]
-        kind = _language(ch.path, blob)
-        if kind == "unmeasured":
+            plan.append(ch)
+    # A side is read only if it exists and is a regular file: a gitlink's sha is a commit, a
+    # symlink's blob is its target text, and neither is source.
+    def head_regular(ch: Change) -> bool:
+        return ch.status != "D" and ch.new_mode in REGULAR
+
+    def base_regular(ch: Change) -> bool:
+        return ch.status != "A" and ch.old_mode in REGULAR
+
+    wanted_shas = {ch.new_sha for ch in plan if head_regular(ch)} | {ch.old_sha for ch in plan if base_regular(ch)}
+    contents = _blobs(top, sorted(wanted_shas))
+    work: list[Entry] = []
+    for ch in plan:
+        h_blob = contents[ch.new_sha] if head_regular(ch) else None
+        b_blob = contents[ch.old_sha] if base_regular(ch) else None
+        h_kind = _language(ch.path, h_blob) if h_blob is not None else (
+            "link" if ch.status != "D" and ch.new_mode in LINKS else None)
+        b_kind = _language(ch.path, b_blob) if b_blob is not None else (
+            "link" if ch.status != "A" and ch.old_mode in LINKS else None)
+        measured = [k for k in (h_kind, b_kind) if k in MEASURED]
+        if "unmeasured" in (h_kind, b_kind):
             unmeasured.append(ch.path)
-        elif kind == "other":
-            skipped["other"] += 1
-        elif ch.status == "D":
-            work.append((ch, kind, ""))
-        else:
-            work.append((ch, kind, _text(blob, kind, ch.path)))
-    anchors, stats = _anchor_spans(top, head_sha, dirs, explicit, {ch.path for ch, _, _ in work})
+        if not measured:
+            if "unmeasured" not in (h_kind, b_kind):
+                skipped["link" if "link" in (h_kind, b_kind) else "other"] += 1
+            continue
+        h_text = _text(h_blob, h_kind, ch.path) if h_kind in MEASURED else ""
+        work.append(Entry(ch, h_kind if h_kind in MEASURED else None, h_text,
+                          b_kind if b_kind in MEASURED else None, b_blob))
+    anchors, stats = _anchor_spans(top, head_sha, dirs, explicit,
+                                   {e.ch.path for e in work if e.h_kind})
 
     out: list[str] = []
     removed_out: list[str] = []
     totals = {"decision": 0, "anchored": 0, "unanchored": 0, "arm": 0, "ambiguous": 0, "stale": 0,
               "removed": 0}
-    for ch, kind, text in sorted(work, key=lambda w: w[0].path):
-        if ch.status == "D":
-            new_lines: set[int] = set()
-            old_text = _text(contents[ch.old_sha], kind, ch.path)
-            old_lines = set(range(1, old_text.count("\n") + 2))
-        else:
+    unparsed: list[str] = []
+    for e in sorted(work, key=lambda w: w.ch.path):
+        ch = e.ch
+        new_lines: set[int] = set()
+        old_lines: set[int] = set()
+        if e.h_kind:
             new_lines, old_lines = _changed_lines(top, base_sha, head_sha, ch.path)
-            old_text = ""
-        _census_added(ch, kind, text, new_lines, anchors.get(ch.path, []), totals, out)
-        if old_lines and ch.status != "A":
-            if not old_text:
-                old_text = _text(_blobs(top, [ch.old_sha])[ch.old_sha], kind, ch.path)
-            _census_removed(ch, kind, old_text, old_lines, totals, removed_out)
+            _census_added(ch, e.h_kind, e.h_text, new_lines, anchors.get(ch.path, []), totals, out)
+        if e.b_kind:
+            try:
+                old_text = _text(e.b_blob, e.b_kind, ch.path)
+            except Unreadable:
+                unparsed.append(ch.path)   # a file that never parsed never ran a guard
+                continue
+            if not e.h_kind:   # the head is no longer code: every base decision is gone
+                old_lines = set(range(1, old_text.count("\n") + 2))
+            if old_lines:
+                try:
+                    _census_removed(ch, e.b_kind, old_text, old_lines, totals, removed_out)
+                except Unreadable:
+                    unparsed.append(ch.path)
     header = [
         f"CENSUS-SCOPE: base={base_sha[:9]} head={head_sha[:9]} files={len(work)} "
+        f"deleted={sum(1 for e in work if e.ch.status == 'D')} "
         f"specs={stats['specs']} spec_rows={stats['rows']}",
-        f"SKIPPED: deleted={skipped['deleted']} binary={skipped['binary']} link={skipped['link']} "
+        f"SKIPPED: binary={skipped['binary']} link={skipped['link']} "
         f"tests={skipped['tests']} other={skipped['other']} unmeasured={len(unmeasured)} "
         f"nonspec_json={stats['nonspec']} outside_repo_specs={stats['outside']}",
         f"ROWS: ambiguous_find={totals['ambiguous']} stale_find={totals['stale']} "
@@ -592,7 +653,8 @@ def census(repo: Path, base: str, head: str, spec_dirs: list[str] | None, paths:
         f"ARMS: unanchored_arm_of_anchored={totals['arm']}",
     ]
     header += [f"UNMEASURED: {_enc(path)}" for path in sorted(unmeasured)]
-    return {"lines": header + out + removed_out, **totals}
+    header += [f"UNPARSED-BASE: {_enc(path)}" for path in sorted(unparsed)]
+    return {"lines": header + out + removed_out, **totals, "unparsed_base": len(unparsed)}
 
 
 def _census_added(ch: Change, kind: str, text: str, changed: set[int],
@@ -671,13 +733,13 @@ def _row(path: str, line: int, kind: str, note: str, text: str) -> str:
     return f"{_enc(path)}:{line}\t{kind}\t{note}\t{_enc(source)[:120]}"
 
 
-def _repo_relative(top: Path, value: str) -> str:
+def _repo_relative(top: Path, value: str, reason: str = "spec-dir") -> str:
     p = Path(value)
     if p.is_absolute():
         try:
             return p.resolve().relative_to(top.resolve()).as_posix()
         except ValueError as exc:
-            raise Unreadable("spec-dir", f"outside the repository: {value}") from exc
+            raise Unreadable(reason, f"outside the repository: {value}") from exc
     return posixpath.normpath(value)
 
 
@@ -685,7 +747,8 @@ def render(result: dict) -> str:
     if "decision" not in result:
         return f"{TOKEN}: {result['verdict']} reason={result['reason']}"
     return (f"{TOKEN}: DONE decision={result['decision']} anchored={result['anchored']} "
-            f"unanchored={result['unanchored']} removed={result['removed']}")
+            f"unanchored={result['unanchored']} removed={result['removed']} "
+            f"unparsed_base={result['unparsed_base']}")
 
 
 def main(argv: list[str] | None = None) -> int:
