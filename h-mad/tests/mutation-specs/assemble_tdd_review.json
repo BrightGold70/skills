@@ -275,16 +275,16 @@
       "name": "rv-git-changed-names-unchecked",
       "_mechanism": "Names git reports as changed or deleted skip the name check.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "for name in changed + fresh:\n            _refuse_bad_name(name)",
-      "replace": "for name in fresh:\n            _refuse_bad_name(name)",
+      "find": "for name in changed + fresh:",
+      "replace": "for name in fresh:",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[modified-newline]"
     },
     {
       "name": "rv-git-untracked-names-unchecked",
       "_mechanism": "Untracked names skip the name check.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "for name in changed + fresh:\n            _refuse_bad_name(name)",
-      "replace": "for name in changed:\n            _refuse_bad_name(name)",
+      "find": "for name in changed + fresh:",
+      "replace": "for name in changed:",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route[untracked-newline]"
     },
     {
@@ -334,6 +334,14 @@
       "find": "| 5d / 5e | `--agent agy` staging, or the 5e review",
       "replace": "| 5d | `--agent agy` staging, or the 5e review",
       "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_the_agy_unverified_recovery_row_covers_the_review"
+    },
+    {
+      "name": "rv-git-name-no-way-out",
+      "_mechanism": "A refused name git printed gets no way out in its message.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "\"; rename or gitignore it, or name the files with --diff-path\"",
+      "replace": "\"\"",
+      "test": "tests/test_h_mad_assemble_tdd_agent.py::TestReviewPhase::test_a_base_ref_name_with_a_line_break_is_refused_on_every_route"
     }
   ]
 }

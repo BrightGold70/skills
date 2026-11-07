@@ -540,13 +540,13 @@ def _language(path: str, blob: bytes) -> str:
         return "py"
     if suffix in SHELL_SUFFIXES:
         return "sh"
-    if suffix in DOC_SUFFIXES or name in DOC_NAMES:
-        return "other"
     first = blob.split(b"\n", 1)[0]
     if SHELL_HEAD.match(first):
         return "sh"
     if PY_HEAD.match(first):
         return "py"
+    if suffix in DOC_SUFFIXES or name in DOC_NAMES:
+        return "other"
     return "unmeasured"
 
 
@@ -569,7 +569,8 @@ def census(repo: Path, base: str, head: str, spec_dirs: list[str] | None, paths:
     base_sha, head_sha = _commit(top, base), _commit(top, head)
     explicit = bool(spec_dirs)
     dirs = [_repo_relative(top, d) for d in spec_dirs] if spec_dirs else list(DEFAULT_SPEC_DIRS)
-    wanted = [w for w in (_repo_relative(top, p, "path-no-match") for p in paths) if w != "."]
+    named_paths = [_repo_relative(top, p, "path-no-match") for p in paths]
+    wanted = [] if "." in named_paths else named_paths
     changes = _changes(top, base_sha, head_sha, wanted)
     for want in wanted:
         stem = want.rstrip("/")

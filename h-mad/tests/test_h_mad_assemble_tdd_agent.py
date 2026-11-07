@@ -776,6 +776,7 @@ class TestReviewPhase:
         proc = run_review(plan, repo, prompt, "--base-ref", "HEAD", "--agent", "codex", report=report)
         assert _halt_reason(proc) == "diff_path_invalid", proc.stdout + proc.stderr
         assert not prompt.exists()
+        assert "gitignore" in proc.stdout + proc.stderr, "a name git printed needs a way out"
 
     def test_a_symlinked_root_prints_the_real_path_of_a_file_outside_it(self, plan: Path, tmp_path: Path) -> None:
         mono, root, _ = self._mono(tmp_path)

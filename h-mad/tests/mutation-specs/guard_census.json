@@ -487,8 +487,8 @@
       "name": "path-naming-the-repo-is-a-pathspec",
       "_mechanism": "`.` is handed to git as a path and must then match a change by name.",
       "file": "scripts/h_mad_guard_census.py",
-      "find": "if w != \".\"]",
-      "replace": "if True]",
+      "find": "wanted = [] if \".\" in named_paths else named_paths",
+      "replace": "wanted = named_paths",
       "test": "tests/test_h_mad_guard_census.py::test_a_path_naming_the_whole_repo_matches_everything",
       "symbol": "census"
     },
@@ -669,6 +669,22 @@
       "replace": "f\"unanchored={result['unanchored']} \"",
       "test": "tests/test_h_mad_guard_census.py::test_a_guard_deleted_inside_a_modified_file_is_listed_as_removed",
       "symbol": "render"
+    },
+    {
+      "name": "doc-allow-list-beats-shebang",
+      "_mechanism": "An allow-listed name hides its shebang, so a script reads as a document.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    first = blob.split(b\"\\n\", 1)[0]\n",
+      "replace": "    first = b\"\" if suffix in DOC_SUFFIXES or name in DOC_NAMES else blob.split(b\"\\n\", 1)[0]\n",
+      "test": "tests/test_h_mad_guard_census.py::test_a_shell_shebang_beats_the_document_allow_list"
+    },
+    {
+      "name": "dot-narrowed-by-sibling-path",
+      "_mechanism": "A dot beside another path is dropped, narrowing the scope silently.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "wanted = [] if \".\" in named_paths else named_paths",
+      "replace": "wanted = [w for w in named_paths if w != \".\"]",
+      "test": "tests/test_h_mad_guard_census.py::test_a_dot_beside_another_path_still_names_everything"
     }
   ]
 }

@@ -811,11 +811,11 @@ def _git_names(root: Path, *args: str) -> list[str]:
     return [name for name in out.split("\0") if name]
 
 
-def _refuse_bad_name(name: str) -> None:
+def _refuse_bad_name(name: str, way_out: str = "") -> None:
     """The one name check, applied to every route: --diff-path and each name git prints."""
     if (not name or os.path.isabs(name) or ".." in Path(name).parts
             or any(ch in name for ch in "\n\r\0")):  # M:RV-DIFF-INVALID
-        raise Halt("diff_path_invalid", f"diff path {name!r} must be relative, free of '..', and one line")
+        raise Halt("diff_path_invalid", f"diff path {name!r} must be relative, free of '..', and one line{way_out}")
 
 
 UNTRACKED_LABEL = "(untracked; may be foreign to this task)"
@@ -850,7 +850,7 @@ def _review_diff_paths(*, project_root: Path, diff_paths: list[str], base_ref: s
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             raise Halt("diff_base_unreadable", f"git diff against {base_ref!r} in {project_root}: {exc}") from None
         for name in changed + fresh:
-            _refuse_bad_name(name)
+            _refuse_bad_name(name, "; rename or gitignore it, or name the files with --diff-path")
         for name in changed:
             label = DELETED_LABEL if name in gone else ""
             if name.startswith(prefix):  # M:RV-PREFIX-MAP

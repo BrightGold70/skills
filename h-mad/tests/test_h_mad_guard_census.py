@@ -1079,3 +1079,25 @@ def test_the_unparsable_base_replay_on_the_real_history() -> None:
                            "--head", "ff8234bb"], capture_output=True, text=True, timeout=300)
     assert proc.returncode == 0 and token(proc).startswith("GUARD-CENSUS: DONE"), proc.stdout
     assert "UNPARSED-BASE: hematology-paper-writer/tools/draft_generator/hpw_upgrade_core.py" in proc.stdout
+
+
+@pytest.mark.parametrize("name", ["hooks/pre-commit.sample", "hooks/rc", "hooks/run.conf"])
+def test_a_shell_shebang_beats_the_document_allow_list(tmp_path: Path, name: str) -> None:
+    repo, base = sh_repo(tmp_path, None, SH_HEAD, name)
+
+    assert counts(census(repo, base))[0] == 8
+
+
+def test_a_python_shebang_beats_the_document_allow_list(tmp_path: Path) -> None:
+    head = "#!/usr/bin/env python3\nx = 1\n"
+    repo, base = make(tmp_path, {"run.conf": head}, {"run.conf": head + "if x:\n    pass\n"})
+
+    assert "run.conf:3" in candidates(census(repo, base))
+
+
+def test_a_dot_beside_another_path_still_names_everything(tmp_path: Path) -> None:
+    repo, base = make(tmp_path, {"b.py": "x = 1\n", "sub/a.py": "x = 1\n"},
+                      {"b.py": "x = 1\nif x:\n    pass\n", "sub/a.py": "x = 1\nif x:\n    pass\n"})
+
+    listed = candidates(census(repo, base, "--path", ".", "--path", "sub"))
+    assert "b.py:2" in listed and "sub/a.py:2" in listed, listed
