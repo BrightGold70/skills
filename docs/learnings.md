@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-08 · gotcha · [0.5] · `handoff,carry-forward,handoff:2026-11-08-carries-closed-codex-gate-armed` — A carried one-liner like 'residuals unchanged since <date>' hides its list: trace back to the dated handoff before calling it unrecoverable
+- 2026-11-08 · gotcha · [0.7] · `mutation,anchors,h-mad,handoff:2026-11-08-carries-closed-codex-gate-armed` — After reshaping any guarded line, run --check-anchors over ALL mutation specs: a row in an untouched spec can anchor on it (AH2 went hits=0)
+- 2026-11-08 · gotcha · [0.7] · `codex,hooks,h-mad,gate,handoff:2026-11-08-carries-closed-codex-gate-armed` — codex 0.167 skips untrusted hooks: trust is keyed by hooks.json absolute path + hash, so every worktree starts untrusted; prove a codex gate fires in a real run, not by driving the hook script
 - 2026-11-08 · pattern · [0.5] · `h-mad,background-tasks,full-suite,handoff:2026-11-08-quick-fixes-backlog-zero` — Stop a background suite or mutation run by task id before editing the tree it measures; a stale run reports on code that no longer exists. Needed four times in one session of review-driven fixes.
 - 2026-11-08 · gotcha · [0.7] · `h-mad,mutation-harness,equivalent-mutant,handoff:2026-11-08-quick-fixes-backlog-zero` — A mutation row can pass the anchor check yet bite nothing: a test comparing inputs that also differ elsewhere (a \0 byte), or a guard the later code re-checks anyway, makes the mutant equivalent. Only a harness run shows it; re-aim the…
 - 2026-11-08 · gotcha · [0.7] · `h-mad,guard-census,ast,recursion,handoff:2026-11-08-quick-fixes-backlog-zero` — A pre-check that re-parses with ast at a shallower stack depth is not the same parse: near the recursion limit it passed and the census's own parse one frame deeper failed. Parse once and reuse the result.
