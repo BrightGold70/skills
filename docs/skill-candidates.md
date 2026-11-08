@@ -3050,3 +3050,5 @@ All ten rows filed 2026-11-05 and 2026-11-06 are LANDED at `aed1cae4`, after fou
   — **LANDED** 2026-11-08 `533ccff1`: one advisory line per h-mad gate entry after the verdict, never in `issues=`: `CODEX_HOOK_UNTRUSTED:`, `CODEX_HOOK_DISABLED:` (explicit `enabled = false` only), `CODEX_HOOK_TRUST_RECORDED: … (hash not verified)` or `CODEX_HOOK_TRUST_UNKNOWN: … reason=`; the config is `$CODEX_HOME/config.toml`, and live here it prints UNTRUSTED for this repo's gate.
 
 ## 2026-11-09 — codex-trust-advisory-macmini-sync — no candidates
+
+## 2026-11-09 — macstudio-resume-scratch-closed — no candidates

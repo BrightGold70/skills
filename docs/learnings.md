@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-09 · gotcha · [0.5] · `handoff,multi-host,handoff:2026-11-09-macstudio-resume-scratch-closed` — Two-Mac repo (MacStudio + Macmini): a handoff's scratch paths/PIDs/untracked files are host-local. Check hostname before reconciling. Macmini can't be reached from MacStudio (no ssh/Bonjour/tailscale); the operator runs Macmini steps.
 - 2026-11-09 · solution · [0.7] · `h-mad,failure-diff,handoff:2026-11-09-codex-trust-advisory-macmini-sync` — h_mad_failure_diff: use --subject-snapshot (+ --include-dirty if untracked files) when the checkout may change mid-run; plain run ends UNREADABLE subject-changed, snapshot w/o include-dirty ends subject-dirty.
 - 2026-11-09 · pattern · [0.5] · `mutation-testing,h-mad,handoff:2026-11-09-codex-trust-advisory-macmini-sync` — Test 'summary unchanged by advisory' must compare against a run with NO advisory; comparing two advisory-carrying runs lets a counting mutant survive.
 - 2026-11-09 · gotcha · [0.7] · `h-mad,install-check,codex,hermetic-tests,handoff:2026-11-09-codex-trust-advisory-macmini-sync` — A check that reads real host config (.codex/hooks.json, CODEX_HOME) breaks existing tests that call main(); give it an env override and an autouse conftest fixture pointing at absent paths, test-first.
