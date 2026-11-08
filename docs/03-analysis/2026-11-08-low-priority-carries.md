@@ -56,11 +56,13 @@ A listed `scripts/tool.sh` hard-linked to a same-directory test-shaped `.py` (`t
 - Run 8 attempts 1–2: evidence only, never scored. That is a standing rule, not a task.
 - Watch-only triage rows 19 and 51: watched, with no action defined.
 - `READY_TO_MERGE` under a narrowed rubric; AC-9.3 resting on v4's census; the 2026-11-06 machine-wide `pkill` disclosure; the HemaSuite restores static limit (2525 sites); autopilot `b1a99532` without a notepad closeout. Each is a recorded acceptance or a disclosure, and none has a next action.
-## Still open — the 2026-10-31 stamp residuals (NOT settled)
+## F — the 2026-10-31 stamp residuals
 
-Every later handoff carried these as one line, "unchanged since 2026-10-31", with no content. The list lives only in `docs/handoffs/2026-10-31-main__skill-backlog-clusters-a-d.md:75-79`. An earlier draft of this doc called them unrecoverable and dropped them; that was wrong, and is corrected here.
+Every later handoff carried these as one line, "unchanged since 2026-10-31", with no content. The list lives only in `docs/handoffs/2026-10-31-main__skill-backlog-clusters-a-d.md:75-79`. An earlier draft of this doc (`cbef15f3`) called them unrecoverable; `0e3beea7` corrected that, and the operator then chose all four.
 
-1. **Name map:** the generic `*test_*` skip still hides `h_mad_test_boundaries_check.py`.
-2. **Missing receipt:** `h_mad_archreview_cycle.py` prompts write no `.assembled` receipt.
-3. **Install check scope:** no user-level agy `hooks.json` is read.
-4. **Codex hook timeout:** the default is unmeasured, and `.codex/hooks.json` sets none, so it may cut short a `**Judge budget**` above it. A cut-off hook refuses.
+| Residual | Outcome |
+|---|---|
+| Name map: the `*test_*` skip hides `h_mad_test_boundaries_check.py` | **Fixed.** `h_mad_derive_test_path.sh` reads the basename the way `_is_production_python` does. Wider than recorded: HPW's `latest_test_data.py` was hidden too, and a pytest-collected `x_test.py` was mapped as production. 6 new parametrized tests; rows `NM-TEST-SUBSTRING`/`-SUFFIX`/`-DIR` 3/3 caught. |
+| `h_mad_archreview_cycle.py` writes no `.assembled` receipt | **Fixed.** `stage` calls `stamp_assembled(prompt, residue=residue)` after writing, as the TDD assembler does. 1 new test; row `ASSEMBLED-STAMP-ARCHREVIEW` caught. There is no logged instance of the false advisory; the fix is on mechanism. |
+| Install check reads no user-level agy `hooks.json` | **Fixed.** By default it also reads `<agy skills root>/../hooks.json` (`~/.gemini/config/hooks.json`, `agy-runtime.md:33`). Deriving it from the root keeps tests hermetic. Help text and `helper-scripts.md` updated. 1 new test; row `AH-GLOBAL-HOOKS` caught. The live check still reads `INSTALL: PASS`. |
+| Codex default hook timeout unmeasured | **Still unmeasured; open.** The binary logs "clamping hook timeout to Ns" from `hooks/src/engine/discovery.rs`, so a maximum exists, but no default is in the strings. A live probe (scratch repo, PreToolUse hook sleeping 75 s, codex-cli 0.167.0) never ran the project's `.codex/hooks.json`, untrusted or trusted through `-c projects."…".trust_level`; only the global hooks fired. The remaining routes touch shared state: the real repo's `.codex/hooks.json` (the live gate) or a copied `CODEX_HOME` with credentials. Next probe: an operator-approved run with the slow hook in a disposable `CODEX_HOME`. No timeout value was set, because its unit (s vs ms; graft's global entries use `10000`) is unconfirmed. |

@@ -227,6 +227,14 @@
       "find": "        except (OSError, ValueError, RecursionError):  # M:AH-UNREADABLE",
       "replace": "        except (OSError, ValueError):  # M:AH-UNREADABLE",
       "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_deeply_nested_hooks_json_still_prints_a_verdict"
+    },
+    {
+      "name": "AH-GLOBAL-HOOKS",
+      "_mechanism": "agy's global hooks.json beside its skills root is read by default (2026-10-31 residual, fixed 2026-11-08).",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "            Path(agy_dir).expanduser().parent / \"hooks.json\",  # M:AH-GLOBAL-HOOKS",
+      "replace": "            # M:AH-GLOBAL-HOOKS",
+      "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_global_hooks_json_beside_the_skills_root_read_by_default"
     }
   ]
 }

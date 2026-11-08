@@ -726,6 +726,11 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
         return 2
 
     prompt.write_text(body, encoding="utf-8")
+    # The receipt `hmad-dispatch exec` checks before its live-slot advisory, as the
+    # audit and TDD assemblers leave (2026-10-31 residual): this prompt inlines a whole
+    # diff, which quotes `<INLINE_*>` whenever h-mad itself changed.
+    from h_mad_assemble_audit import stamp_assembled
+    stamp_assembled(prompt, residue=residue)  # M:ASSEMBLED-STAMP-ARCHREVIEW
     _emit(f"STAGED prompt={prompt} base={base} head={head} "
           f"bytes={len(body.encode('utf-8'))}")
     # Advisory, printed after the verdict so nothing reads it as a blocker.

@@ -1150,6 +1150,24 @@ def test_name_map_covers_h_mad_scripts(prod, expected):
     assert out.stdout.strip() == expected
 
 
+# 2026-10-31 residual: the test-file skip matched `test_` ANYWHERE in the path, so
+# production names containing it (h_mad_test_boundaries_check.py) fell to
+# no-test-resolved, while a pytest-collected `x_test.py` was mapped as production.
+# The skip now reads the basename the way `_is_production_python` does.
+@pytest.mark.parametrize("prod,expected", [
+    ("h-mad/scripts/h_mad_test_boundaries_check.py", "h-mad/tests/test_h_mad_test_boundaries_check.py"),
+    ("hematology-paper-writer/src/latest_test_data.py", "hematology-paper-writer/tests/test_latest_test_data.py"),
+    ("h-mad/scripts/test_x.py", ""),
+    ("h-mad/scripts/x_test.py", ""),
+    ("h-mad/scripts/conftest_extra.py", ""),
+    ("hematology-paper-writer/tests/helpers.py", ""),
+], ids=["test_-inside-name", "test_-inside-hpw-name", "test_-prefix", "_test-suffix",
+        "conftest-prefix", "under-tests"])
+def test_name_map_skips_test_files_by_basename(prod, expected):
+    out = subprocess.run(["bash", str(judge.NAME_MAP), prod], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == expected
+
+
 def test_an_h_mad_script_with_no_task_resolves_through_the_name_map(tmp_path):
     root = _root(tmp_path)
     target = _target(root, "h-mad/scripts/h_mad_widget.py")

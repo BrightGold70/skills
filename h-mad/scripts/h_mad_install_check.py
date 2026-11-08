@@ -311,7 +311,8 @@ def main() -> int:
         action="append",
         default=None,
         help="hooks.json whose commands may run from the agy skills root; "
-             "repeatable; defaults to the project's .agents/hooks.json",
+             "repeatable; defaults to the project's .agents/hooks.json plus "
+             "agy's global hooks.json beside the agy skills root",
     )
     args = parser.parse_args()
 
@@ -347,7 +348,13 @@ def main() -> int:
         agents_skills_dir=agents_dir,
         agy_skills_dir=agy_dir,
         details=details,
-        hooks_files=[Path(p) for p in (args.hooks_json or [Path.cwd() / ".agents" / "hooks.json"])],
+        # The project's hooks, and agy's GLOBAL hooks beside its skills root
+        # (`~/.gemini/config/hooks.json`; 2026-10-31 residual). Derived from the skills
+        # root, so a test that redirects that root never reads the real home.
+        hooks_files=[Path(p) for p in (args.hooks_json or [
+            Path.cwd() / ".agents" / "hooks.json",
+            Path(agy_dir).expanduser().parent / "hooks.json",  # M:AH-GLOBAL-HOOKS
+        ])],
     )
 
     if issues:

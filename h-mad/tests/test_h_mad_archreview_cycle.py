@@ -1348,6 +1348,22 @@ def test_a_design_that_quotes_a_slot_token_is_staged_verbatim(tmp_path):
     assert quote in prompt.read_text(encoding="utf-8")
 
 
+def test_a_staged_prompt_carries_the_assembled_receipt(tmp_path):
+    """2026-10-31 residual: the audit and TDD assemblers stamp `<prompt>.assembled`, so
+    `hmad-dispatch exec` skips its live-slot advisory for a prompt they built. The
+    6a-prime prompt inlines a whole diff, which quotes `<INLINE_*>` whenever h-mad
+    itself changed, and it carried no receipt, so every such dispatch warned falsely."""
+    import hashlib
+    quote = "The template's slots are `<INLINE_PHASE_5_SUMMARY>` and `<INLINE_REPORT_FILE>`."
+    proc, prompt = TestTheStagedPromptMustBeDeliverable()._stage(
+        tmp_path, "design body\n" + quote + "\n", report_file="/tmp/r.md")
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    receipt = Path(f"{prompt}.assembled")
+    assert receipt.is_file(), "stage must leave the receipt hmad-dispatch exec checks"
+    assert receipt.read_text(encoding="utf-8").strip() == hashlib.sha256(prompt.read_bytes()).hexdigest()
+
+
 def _tree_git(repo: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-C", str(repo), *args], check=True,

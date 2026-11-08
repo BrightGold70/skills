@@ -296,6 +296,15 @@
       "find": "    if args.tree_snapshot is not None:",
       "replace": "    if args.tree_snapshot is not None and result == 0:",
       "test": "tests/test_h_mad_archreview_cycle.py::TestArchreviewTreeSnapshot::test_finding_preserves_verdict_recording_and_exit[changed-READY_TO_MERGE-0-2-None]"
+    },
+    {
+      "name": "ASSEMBLED-STAMP-ARCHREVIEW",
+      "_mechanism": "stage leaves the <prompt>.assembled receipt so hmad-dispatch exec skips its live-slot advisory for an assembled 6a-prime prompt (2026-10-31 residual, fixed 2026-11-08).",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "symbol": "stage",
+      "find": "    stamp_assembled(prompt, residue=residue)  # M:ASSEMBLED-STAMP-ARCHREVIEW",
+      "replace": "    pass  # M:ASSEMBLED-STAMP-ARCHREVIEW",
+      "test": "tests/test_h_mad_archreview_cycle.py::test_a_staged_prompt_carries_the_assembled_receipt"
     }
   ]
 }

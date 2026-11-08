@@ -374,6 +374,23 @@ def test_agy_hook_project_hooks_json_read_by_default(tmp_path, hermetic_env):
                             f"AGY_HOOK_TARGET_MISSING:{agy.joinpath(*AGY_GATE)}"]
 
 
+def test_agy_hook_global_hooks_json_beside_the_skills_root_read_by_default(tmp_path, hermetic_env):
+    """2026-10-31 residual: agy's global hooks live in `<config>/hooks.json`, the
+    parent of its skills root (`~/.gemini/config/hooks.json`), and were never read."""
+    repo, claude, hook = _install(tmp_path)
+    config = tmp_path / "gemini-config"
+    agy = config / "skills"
+    project = tmp_path / "project"
+    project.mkdir()
+    hooks = _hooks_json(tmp_path / "scratch", f"python3 {agy.joinpath(*AGY_GATE)}")
+    config.mkdir(parents=True)
+    hooks.rename(config / "hooks.json")
+    proc = _run_in(project, repo, claude, hook, hermetic_env, agy)
+    assert proc.returncode == 0, proc.stderr
+    assert _lines(proc) == ["INSTALL: FAIL issues=1",
+                            f"AGY_HOOK_TARGET_MISSING:{agy.joinpath(*AGY_GATE)}"]
+
+
 def test_agy_hook_tilde_command_expands_home(tmp_path, hermetic_env):
     repo, claude, hook = _install(tmp_path)
     home = tmp_path / "home"

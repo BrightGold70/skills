@@ -13,8 +13,12 @@ PROD_PATH="${1:-}"
 # Non-.py files → empty
 [[ "$PROD_PATH" != *.py ]] && exit 0
 
-# Test files themselves → empty (caller shouldn't ask)
-[[ "$PROD_PATH" == *test_* || "$PROD_PATH" == */tests/* || "$PROD_PATH" == *conftest* ]] && exit 0
+# Test files themselves → empty (caller shouldn't ask). Read the BASENAME the way
+# _is_production_python does: `test_` anywhere in the path used to hide production
+# names such as h_mad_test_boundaries_check.py (2026-10-31 residual).
+BASE_NAME="${PROD_PATH##*/}"
+[[ "$BASE_NAME" == test_* || "$BASE_NAME" == *_test.py || "$BASE_NAME" == conftest* ]] && exit 0  # M:NM-TEST-BASENAME
+[[ "$PROD_PATH" == */tests/* || "$PROD_PATH" == tests/* ]] && exit 0  # M:NM-TEST-DIR
 
 # Extract project root
 case "$PROD_PATH" in
