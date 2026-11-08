@@ -50,6 +50,24 @@
       "find": "  [ -f \"$hooks\" ] || return 0  # M:HT-NO-HOOKS nothing to run, nothing to bypass",
       "replace": "  true  # M:HT-NO-HOOKS nothing to run, nothing to bypass",
       "test": "tests/test_hmad_dispatch_exec.py::test_codex_exec_without_project_hooks_adds_no_bypass_and_no_warning"
+    },
+    {
+      "name": "HT-TOP",
+      "_mechanism": "Hooks live at the git top; --cd may be a subdirectory.",
+      "file": "scripts/hmad-dispatch.sh",
+      "symbol": "_codex_hook_trust_arg",
+      "find": "  top=\"$(git -C \"$dir\" rev-parse --show-toplevel 2>/dev/null)\" || top=\"$dir\"",
+      "replace": "  top=\"$dir\"",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_exec_vets_the_hooks_at_the_git_top_when_cd_is_a_subdirectory"
+    },
+    {
+      "name": "HT-SANDBOX-RETURN",
+      "_mechanism": "The unsafe-sandbox arm must stop, not fall through to vetting and grant the flag.",
+      "file": "scripts/hmad-dispatch.sh",
+      "symbol": "_codex_hook_trust_arg",
+      "find": "       return 0 ;;\n  esac\n  if python3",
+      "replace": "       ;;\n  esac\n  if python3",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_exec_withholds_the_bypass_under_a_sandbox_that_can_write_codex_dir"
     }
   ]
 }

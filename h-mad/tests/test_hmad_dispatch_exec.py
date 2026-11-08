@@ -554,6 +554,18 @@ def test_codex_exec_withholds_the_bypass_for_an_unparsable_hooks_json(tmp_path):
     assert "NOT enforced" in r.stderr, r.stderr
 
 
+def test_codex_exec_vets_the_hooks_at_the_git_top_when_cd_is_a_subdirectory(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    _hooks(tmp_path, _GATE_CMD)
+    sub = tmp_path / "hematology-paper-writer"
+    sub.mkdir()
+    b = _bindir(tmp_path, ["codex"])
+    cap = tmp_path / "cap.txt"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(sub)], env=_env(b), capture=cap)
+    assert r.returncode == 0, r.stderr
+    assert "--dangerously-bypass-hook-trust" in cap.read_text(), "codex reads .codex/ at the repo top"
+
+
 def test_codex_exec_without_project_hooks_adds_no_bypass_and_no_warning(tmp_path):
     r, argv = _exec_codex(tmp_path)
     assert r.returncode == 0, r.stderr
