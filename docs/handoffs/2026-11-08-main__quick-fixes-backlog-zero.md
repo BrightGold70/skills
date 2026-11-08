@@ -4,7 +4,7 @@
 **Branch:** main
 **Project:** skills
 **Supersedes:** 2026-11-07-main__rows-1106-landed.md
-**Next-Session Focus:** No feature is in flight and `docs/skill-candidates.md` has 0 open rows. What remains needs a real agy run (#27), the operator (#18, #20), or the other machine (#16).
+**Next-Session Focus:** No feature is in flight. `docs/skill-candidates.md` has 1 open row, the `maybe` `full-suite-runs-on-a-moving-tree` the closeout scout filed; every row open at session start is closed. What remains needs a real agy run (#27), the operator (#18, #20), or the other machine (#16).
 **Suggested-Skills:** handoff (resume), verify-hmad-gates (only if a gate is touched)
 
 ## Session Summary
@@ -21,7 +21,7 @@ Done. Seven pushes to `origin/main`, ending at `6108f65e`:
 
 The rest are row stamps and review reports.
 
-The candidate census reads `OPEN(yes+maybe)=0`. Last full suite, at `6108f65e`'s tree: 8958 passed, 0 skipped. `ANCHORS_OK` 3239/3239.
+The candidate census read `OPEN(yes+maybe)=0` after `cdd36a6f`; the closeout scout then filed one `maybe` and one `no` row, so it reads `OPEN=1`. Last full suite, at `6108f65e`'s tree: 8958 passed, 0 skipped. `ANCHORS_OK` 3239/3239.
 
 Also done: HemaSuite main fast-forwarded to `origin/main`, and `chore/rescue-hbv-scaffold` deleted.
 
@@ -77,6 +77,8 @@ Also done: HemaSuite main fast-forwarded to `origin/main`, and `chore/rescue-hbv
 
   Status: informational.
 
+- **Scout rows filed at closeout** (`docs/skill-candidates.md` §2026-11-08): `full-suite-runs-on-a-moving-tree` (maybe); `hand-applied-single-mutants` (no; use `h_mad_mutation_harness.py <spec> --only NAME`). Status: open / informational.
+
 **Carried from 2026-11-07, updated:**
 - **`--phase review` never run against real agy** — open, merged into Next Step 1 (now also the fence).
 - **`--full-suite` has one real run, on a doc-only diff** — open, Next Step 1.
@@ -120,7 +122,7 @@ Also done: HemaSuite main fast-forwarded to `origin/main`, and `chore/rescue-hbv
 ```bash
 cd /Users/kimhawk/orca/skills
 git status --short --branch
-python3 handoff/scripts/skill_candidates_census.py docs/skill-candidates.md   # expect OPEN(yes+maybe)=0
+python3 handoff/scripts/skill_candidates_census.py docs/skill-candidates.md   # expect OPEN(yes+maybe)=1 (the scout's maybe row)
 ```
 
 Full suite: bare `pytest` under an absolute interpreter and the default `PATH`, about 43 minutes.
