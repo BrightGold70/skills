@@ -124,7 +124,11 @@ codex` now passes that flag (`_codex_hook_trust_arg`), but only when the project
 `.codex/hooks.json` holds nothing but the h-mad gate command and the sandbox is `workspace-write`
 or `read-only`, which refuse writes under `.codex/`. Otherwise it warns on stderr that the gate is
 NOT enforced. A codex session started by hand, outside `hmad-dispatch`, still needs the trust record
-or the flag.
+or the flag. `h_mad_install_check.py` now reports it after its verdict: one `CODEX_HOOK_UNTRUSTED:`
+line per gate entry with no record, naming the key it looked for and the `config.toml` it read
+(`$CODEX_HOME`, which on an Orca host is a per-account home, not `~/.codex`). A record present prints
+`CODEX_HOOK_TRUST_RECORDED: … (hash not verified)`, never "enforced". The advisory never changes
+`INSTALL:` or `issues=`.
 
 Check the installed links with:
 

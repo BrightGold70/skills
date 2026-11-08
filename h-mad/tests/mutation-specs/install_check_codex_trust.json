@@ -1,0 +1,75 @@
+{
+  "_why": "The codex hook-trust advisory exists because a hand-started codex skips the h-mad gate and nothing said so. Every mutation here makes the advisory quiet or falsely reassuring in one spelling: a missing record read as present, could-not-check read as an answer, an absent `enabled` read as disabled, or the lines never reaching main().",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_install_check_codex_trust.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "codex-trust-checks-only-the-h-mad-gate",
+      "_mechanism": "M:CT-GATE-ONLY. Drop the gate-command filter and every hook in the file is checked, so a user's own hooks raise h-mad advisories the skill has no business raising.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "hook.get(\"command\") == CODEX_GATE_COMMAND:  # M:CT-GATE-ONLY",
+      "replace": "hook.get(\"command\"):  # M:CT-GATE-ONLY",
+      "test": "tests/test_h_mad_install_check_codex_trust.py::test_hooks_without_the_h_mad_gate_are_silent"
+    },
+    {
+      "name": "codex-trust-unreadable-config-is-unknown",
+      "_mechanism": "M:CT-UNKNOWN. Swallow the config error as an empty record table and could-not-check becomes an answer: a missing or broken config reads as UNTRUSTED (or, with records, as trusted) instead of UNKNOWN.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "            except ValueError as exc:  # M:CT-UNKNOWN\n                lines.append(f\"CODEX_HOOK_TRUST_UNKNOWN:{codex_config} reason={exc}\")\n                return lines",
+      "replace": "            except ValueError as exc:  # M:CT-UNKNOWN\n                records = {}",
+      "test": "tests/test_h_mad_install_check_codex_trust.py::test_unreadable_inputs_report_unknown_never_recorded[config-missing]"
+    },
+    {
+      "name": "codex-trust-absent-record-is-untrusted",
+      "_mechanism": "M:CT-ABSENT. Default a missing record to an empty table and the one defect this advisory exists for -- no trust record, gate silently skipped -- reports as TRUST_RECORDED.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "            record = records.get(key)\n            if not isinstance(record, dict):  # M:CT-ABSENT",
+      "replace": "            record = records.get(key) or {}\n            if not isinstance(record, dict):  # M:CT-ABSENT",
+      "test": "tests/test_h_mad_install_check_codex_trust.py::test_no_trust_record_reports_untrusted_with_the_key_it_looked_for"
+    },
+    {
+      "name": "codex-trust-absent-enabled-is-not-disabled",
+      "_mechanism": "M:CT-DISABLED. Read a missing `enabled` as off and the measured HemaSuite record (trusted_hash, no `enabled`) reports DISABLED.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "elif record.get(\"enabled\") is False:  # M:CT-DISABLED",
+      "replace": "elif not record.get(\"enabled\"):  # M:CT-DISABLED",
+      "test": "tests/test_h_mad_install_check_codex_trust.py::test_record_without_enabled_key_is_recorded_not_disabled"
+    },
+    {
+      "name": "codex-trust-explicit-disable-is-reported",
+      "_mechanism": "M:CT-DISABLED. Never take the disabled branch and `enabled = false` reports TRUST_RECORDED, reassuring about a gate codex will not run.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "elif record.get(\"enabled\") is False:  # M:CT-DISABLED",
+      "replace": "elif False:  # M:CT-DISABLED",
+      "test": "tests/test_h_mad_install_check_codex_trust.py::test_record_explicitly_disabled_reports_disabled"
+    },
+    {
+      "name": "codex-trust-advisory-reaches-main",
+      "_mechanism": "M:CT-MAIN-WIRE. Unwire the advisory from main() and every unit test still passes while the installed check prints nothing.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "for line in check_codex_hook_trust(codex_hooks, codex_config):  # M:CT-MAIN-WIRE",
+      "replace": "for line in []:  # M:CT-MAIN-WIRE",
+      "test": "tests/test_h_mad_install_check_codex_trust.py::test_main_prints_the_advisory_and_leaves_the_summary_and_issue_count"
+    },
+    {
+      "name": "codex-trust-hooks-env-override-is-read",
+      "_mechanism": "M:CT-HOOKS-ENV. Ignore the override and the suite reads this repo's real `.codex/hooks.json`, putting an advisory into every exact-output install-check test.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "    if override:  # M:CT-HOOKS-ENV",
+      "replace": "    if False:  # M:CT-HOOKS-ENV",
+      "test": "tests/test_h_mad_install_check_codex_trust.py::test_main_reads_the_default_hooks_json_from_the_env_override"
+    }
+  ]
+}

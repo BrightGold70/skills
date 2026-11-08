@@ -139,6 +139,18 @@ def _hermetic_host_skill_roots(monkeypatch, tmp_path):
     monkeypatch.setenv("HMAD_AGY_SKILLS_DIR", str(tmp_path / "absent-agy-skills"))
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_codex_home(monkeypatch, tmp_path):
+    """`h_mad_install_check.py` reads codex hook-trust records from
+    `$CODEX_HOME/config.toml` (default `~/.codex`). A test that reached the real
+    home would report the developer's trust state, which on an Orca host is a
+    per-account home, so a test's output would vary by machine and account."""
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "absent-codex-home"))
+    # The suite runs inside this repo, whose own `.codex/hooks.json` carries the
+    # gate; the default hooks file would put an advisory into every test's output.
+    monkeypatch.setenv("HMAD_CODEX_HOOKS_JSON", str(tmp_path / "absent-codex-hooks.json"))
+
+
 # `audit-cycle` mints a fresh `audit_<feature>_<phase>_cycle<N>_run<ts>-<pid>` stem
 # per invocation (claim once, never re-hand a report path), about 900 per full
 # suite, under `$HMAD_AUDIT_STEM_DIR` (default `/tmp`). The session points it at a
