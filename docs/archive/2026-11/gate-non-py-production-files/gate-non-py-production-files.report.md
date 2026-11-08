@@ -37,7 +37,7 @@ The Claude, codex and agy gates share one listing matcher and one doc/data defin
 - `test_hmad_dispatch_exec_stamp.py::test_heartbeat_stamps_across_three_intervals` failed one of two full runs, cause unestablished. `FAILDIFF: SAME` with 0 failures over 5 repeats, and `FLAKE-VERDICT: NOT_REPRODUCED runs=30`. The feature does not touch the test or the wrapper.
 - AC-9.3 clause 1 holds against analysis v4's census. Censuses found 3, 16 and 2 lines; the operator chose on 2026-11-06 not to run a fourth, so further unanchored lines may exist.
 - Named residuals, not fixed: a listed file with a same-directory `test_*.py` hard link reads DENY on Claude and ALLOW on codex and agy; a hard link in a different directory reads ALLOW on all three hosts.
-- The primary record of the 2026-11-04 operator ruling behind the ninth FR-9 refusal is not found. AC-9.5 does not depend on it.
+- The primary record of the 2026-11-04 operator ruling behind the ninth FR-9 refusal was not found at closure. Located 2026-11-08: a typed operator prompt, recorded in `gate-non-py-production-files.ruling-2026-11-04.md`. AC-9.5 does not depend on it.
 - `crash_visible=0/0` on the host specs means their crash count has no denominator. Only reading an assertion line tells a crash from a guard.
 - Analysis v5's 11 nits, at `docs/archive/2026-11/gate-non-py-production-files/gate-non-py-production-files.analysis.v5.md`.
 - Merging changes live gates at once, because `~/.claude/skills/h-mad` links to the main checkout. Effect on other active Phase 5 lanes is to be measured before the push.
