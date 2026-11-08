@@ -701,6 +701,54 @@
       "find": "    for want in [p for p in named_paths if p != \".\"]:  # M:GC-DOT-NO-EXCUSE",
       "replace": "    for want in wanted:  # M:GC-DOT-NO-EXCUSE",
       "test": "tests/test_h_mad_guard_census.py::test_a_dot_does_not_excuse_another_path_that_matches_no_change"
+    },
+    {
+      "name": "census-foreign-shebang-reads-as-a-document",
+      "_mechanism": "Residual: a #!/usr/bin/perl script under an allow-listed name vanished into `other`.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "    if first.startswith(b\"#!\"):  # M:GC-FOREIGN-SHEBANG",
+      "replace": "    if False:  # M:GC-FOREIGN-SHEBANG",
+      "test": "tests/test_h_mad_guard_census.py::test_a_foreign_shebang_under_a_document_name_is_unmeasured_not_a_document[run.conf]"
+    },
+    {
+      "name": "census-doc-named-shebang-code-fails-the-census",
+      "_mechanism": "Residual: one document-named file that is code only by shebang and does not parse made the whole census UNREADABLE.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            if not _doc_named(ch.path):  # a real .py/.sh",
+      "replace": "            if True:  # a real .py/.sh",
+      "test": "tests/test_h_mad_guard_census.py::test_a_document_name_whose_shebang_code_cannot_be_read_is_unmeasured[py-unparsable]"
+    },
+    {
+      "name": "census-unreadable-py-relaxed-too",
+      "_mechanism": "Control: the relaxation must not reach a real .py that does not parse.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            if not _doc_named(ch.path):  # a real .py/.sh",
+      "replace": "            if False:  # a real .py/.sh",
+      "test": "tests/test_h_mad_guard_census.py::test_a_real_python_file_that_does_not_parse_stays_UNREADABLE[undecodable]"
+    },
+    {
+      "name": "census-doc-shebang-precheck-skipped",
+      "_mechanism": "Without the pre-check, a document-named shebang head that does not parse fails the whole census in _census_added.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            h_decisions = _python_decisions(h_text, ch.path) if h_kind == \"py\" else None  # M:GC-DOC-SHEBANG-PRECHECK",
+      "replace": "            h_decisions = None  # M:GC-DOC-SHEBANG-PRECHECK",
+      "test": "tests/test_h_mad_guard_census.py::test_a_document_name_whose_shebang_code_recurses_too_deep_is_unmeasured"
+    },
+    {
+      "name": "census-doc-shebang-drops-the-base-side",
+      "_mechanism": "Review should-fix: skipping the whole entry hid the guards the base side had.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "            h_kind, h_text, h_decisions = None, \"\", None  # M:GC-DOC-SHEBANG-HEAD-ONLY\n",
+      "replace": "            continue  # M:GC-DOC-SHEBANG-HEAD-ONLY\n",
+      "test": "tests/test_h_mad_guard_census.py::test_an_unreadable_document_named_head_still_counts_the_guards_its_base_had"
+    },
+    {
+      "name": "census-head-parsed-twice",
+      "_mechanism": "Round-2 review: a second parse one frame deeper failed near the recursion limit where the pre-check passed.",
+      "file": "scripts/h_mad_guard_census.py",
+      "find": "        parsed = decisions if decisions is not None else _python_decisions(text, ch.path)  # M:GC-ONE-PARSE",
+      "replace": "        parsed = _python_decisions(text, ch.path)  # M:GC-ONE-PARSE",
+      "test": "tests/test_h_mad_guard_census.py::test_each_python_head_is_parsed_once_so_the_pre_check_and_the_census_cannot_disagree"
     }
   ]
 }

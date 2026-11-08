@@ -1109,6 +1109,95 @@ def test_a_python_shebang_beats_the_document_allow_list(tmp_path: Path) -> None:
     assert "run.conf:3" in candidates(census(repo, base))
 
 
+@pytest.mark.parametrize("name", ["run.conf", "notes.txt", "hooks/rc"])
+def test_a_foreign_shebang_under_a_document_name_is_unmeasured_not_a_document(tmp_path: Path, name: str) -> None:
+    """Residual of 2026-11-07: `#!/usr/bin/perl` under an allow-listed name read as a
+    document, so a changed perl script vanished into `other` with no count."""
+    head = "#!/usr/bin/perl\nprint 1;\n"
+    repo, base = make(tmp_path, {name: head}, {name: head + "if ($x) { die; }\n"})
+
+    proc = census(repo, base)
+
+    assert counts(proc) == (0, 0, 0)
+    assert "unmeasured=1" in proc.stdout and "other=0" in proc.stdout, proc.stdout
+    assert f"UNMEASURED: {name}" in proc.stdout, proc.stdout
+
+
+@pytest.mark.parametrize("head", [
+    "#!/usr/bin/env python3\nif x\n",                  # python by shebang, does not parse
+    "#!/usr/bin/env python3\n# coding: nope-codec\nx = 1\n",  # cannot decode
+    b"#!/bin/sh\necho \xff\n",                         # shell by shebang, not UTF-8
+], ids=["py-unparsable", "py-undecodable", "sh-not-utf8"])
+def test_a_document_name_whose_shebang_code_cannot_be_read_is_unmeasured(tmp_path: Path, head: str | bytes) -> None:
+    """Residual of 2026-11-07: only the shebang said code, under a name that says document,
+    and one such file made the whole census UNREADABLE. It is now counted unmeasured."""
+    repo, base = make(tmp_path, {"run.conf": "x = 1\n", "b.py": "x = 1\n"},
+                      {"run.conf": head, "b.py": "x = 1\nif x:\n    pass\n"})
+
+    proc = census(repo, base)
+
+    assert token(proc).startswith("GUARD-CENSUS: DONE"), proc.stdout
+    assert "UNMEASURED: run.conf" in proc.stdout, proc.stdout
+    assert "b.py:2" in candidates(proc), "the rest of the census still runs"
+
+
+def test_a_document_name_whose_shebang_code_recurses_too_deep_is_unmeasured(tmp_path: Path) -> None:
+    """Review must-fix: a RecursionError from the parse escaped and crashed the census
+    with no token line; HEAD's code at least printed UNREADABLE."""
+    head = "#!/usr/bin/env python3\nx = " + "+".join(["1"] * 200000) + "\n"
+    repo, base = make(tmp_path, {"run.conf": "x = 1\n", "b.py": "x = 1\n"},
+                      {"run.conf": head, "b.py": "x = 1\nif x:\n    pass\n"})
+
+    proc = census(repo, base)
+
+    assert token(proc).startswith("GUARD-CENSUS: DONE"), proc.stdout + proc.stderr[-500:]
+    assert "UNMEASURED: run.conf" in proc.stdout
+
+
+def test_each_python_head_is_parsed_once_so_the_pre_check_and_the_census_cannot_disagree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round-2 review: the pre-check parsed at one stack depth and the census again one frame
+    deeper, so a head near the recursion limit passed the first and failed the second
+    (UNREADABLE at 2978-2980 terms). One parse, reused, closes that window."""
+    sys.path.insert(0, str(SCRIPT.parent))
+    import h_mad_guard_census as gc
+    repo, base = make(tmp_path, {"run.conf": "#!/usr/bin/env python3\nx = 1\n", "b.py": "x = 1\n"},
+                      {"run.conf": "#!/usr/bin/env python3\nx = 1\nif x:\n    pass\n",
+                       "b.py": "x = 1\nif x:\n    pass\n"})
+    seen: list[tuple[str, str]] = []
+    real = gc._python_decisions
+    monkeypatch.setattr(gc, "_python_decisions", lambda text, path: seen.append((path, text)) or real(text, path))
+
+    result = gc.census(repo, base, "HEAD", None, [])
+
+    heads = [p for p, text in seen if "if x:" in text]
+    assert sorted(heads) == ["b.py", "run.conf"], seen
+    assert result["decision"] == 2, result
+
+
+def test_an_unreadable_document_named_head_still_counts_the_guards_its_base_had(tmp_path: Path) -> None:
+    """Review should-fix: skipping the whole entry hid the base side's guards. The head is
+    unmeasured; every base decision is listed as removed, as when a head stops being code."""
+    base_text = "#!/usr/bin/env python3\nif x:\n    raise SystemExit(1)\nassert y\n"
+    repo, base = make(tmp_path, {"run.conf": base_text}, {"run.conf": "#!/usr/bin/env python3\nif x\n"})
+
+    proc = census(repo, base)
+
+    assert "UNMEASURED: run.conf" in proc.stdout, proc.stdout
+    assert counts(proc) == (0, 0, 0)
+    assert "removed=3" in token(proc), proc.stdout
+
+
+@pytest.mark.parametrize("head", ["#!/usr/bin/env python3\nif x\n", "# coding: nope-codec\nx = 1\n"],
+                         ids=["unparsable", "undecodable"])
+def test_a_real_python_file_that_does_not_parse_stays_UNREADABLE(tmp_path: Path, head: str) -> None:
+    """Control: the relaxation is for document names only; `.py` keeps the hard refusal."""
+    repo, base = make(tmp_path, {"a.py": "x = 1\n"}, {"a.py": head})
+
+    assert token(census(repo, base)) == "GUARD-CENSUS: UNREADABLE reason=unreadable-file"
+
+
 def test_a_dot_beside_another_path_still_names_everything(tmp_path: Path) -> None:
     repo, base = make(tmp_path, {"b.py": "x = 1\n", "sub/a.py": "x = 1\n"},
                       {"b.py": "x = 1\nif x:\n    pass\n", "sub/a.py": "x = 1\nif x:\n    pass\n"})

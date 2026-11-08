@@ -46,7 +46,12 @@ documents and data (`DOC_SUFFIXES`, `DOC_NAMES` in the source: `.md .json .txt
 .log .csv .xsd .png ...`, `LICENSE`, `rc`) is `other`; EVERYTHING else (`.ts .vue
 .pyw .r`, an unknown suffix, `Makefile`, any other `#!`) is `unmeasured`, counted
 on `SKIPPED:` and listed as `UNMEASURED: <file>`. An entry with one measured
-side and one unmeasured side is measured and also counted unmeasured.
+side and one unmeasured side is measured and also counted unmeasured. A head side
+that is code only by its shebang, under an allow-listed document name, and that
+does not decode or parse is `unmeasured` rather than the census UNREADABLE; its base
+side is still read, so every decision the base had is listed as removed. A `.py`/`.sh`
+or a suffixless script that cannot be read stays UNREADABLE. (A BOM or leading space
+before `#!` is not a shebang: such a file is read by its name, as the kernel would.)
 
 Decision lines in Python (`ast`; the unit is a statement, reported at its first
 line, and it counts when any physical line of it is added or changed). For a
@@ -226,6 +231,7 @@ class Entry:
     h_text: str
     b_kind: str | None
     b_blob: bytes | None
+    h_decisions: list | None = None   # the head's one parse, reused by _census_added
 
 
 def _changes(top: Path, base: str, head: str, paths: list[str]) -> list[Change]:
@@ -545,9 +551,17 @@ def _language(path: str, blob: bytes) -> str:
         return "sh"
     if PY_HEAD.match(first):
         return "py"
-    if suffix in DOC_SUFFIXES or name in DOC_NAMES:
+    if first.startswith(b"#!"):  # M:GC-FOREIGN-SHEBANG  any other interpreter is code we cannot read
+        return "unmeasured"
+    if _doc_named(path):
         return "other"
     return "unmeasured"
+
+
+def _doc_named(path: str) -> bool:
+    """The allow-list of documents and data, by name alone."""
+    name = posixpath.basename(path)
+    return posixpath.splitext(name)[1].lower() in DOC_SUFFIXES or name in DOC_NAMES
 
 
 def _text(blob: bytes, kind: str, path: str) -> str:
@@ -611,9 +625,25 @@ def census(repo: Path, base: str, head: str, spec_dirs: list[str] | None, paths:
             if "unmeasured" not in (h_kind, b_kind):
                 skipped["link" if "link" in (h_kind, b_kind) else "other"] += 1
             continue
-        h_text = _text(h_blob, h_kind, ch.path) if h_kind in MEASURED else ""
+        try:
+            h_text = _text(h_blob, h_kind, ch.path) if h_kind in MEASURED else ""
+            # Every python head is parsed here, once, and the result is reused below: a second
+            # parse a frame deeper could fail near the recursion limit where this one passed.
+            h_decisions = _python_decisions(h_text, ch.path) if h_kind == "py" else None  # M:GC-DOC-SHEBANG-PRECHECK
+        except Unreadable:
+            if not _doc_named(ch.path):  # a real .py/.sh, or a suffixless script, stays UNREADABLE
+                raise
+            # M:GC-DOC-SHEBANG-UNREADABLE  only the shebang said code, under a name that says
+            # document: the head is unmeasured rather than the whole census UNREADABLE. The base
+            # side is still read, so every guard it had is listed as removed. (The path is already
+            # listed only when the base side was itself unmeasured.)
+            if ch.path not in unmeasured:
+                unmeasured.append(ch.path)
+            h_kind, h_text, h_decisions = None, "", None  # M:GC-DOC-SHEBANG-HEAD-ONLY
+            if b_kind not in MEASURED:
+                continue
         work.append(Entry(ch, h_kind if h_kind in MEASURED else None, h_text,
-                          b_kind if b_kind in MEASURED else None, b_blob))
+                          b_kind if b_kind in MEASURED else None, b_blob, h_decisions))
     anchors, stats = _anchor_spans(top, head_sha, dirs, explicit,
                                    {e.ch.path for e in work if e.h_kind})
 
@@ -628,7 +658,8 @@ def census(repo: Path, base: str, head: str, spec_dirs: list[str] | None, paths:
         old_lines: set[int] = set()
         if e.h_kind:
             new_lines, old_lines = _changed_lines(top, base_sha, head_sha, ch.path)
-            _census_added(ch, e.h_kind, e.h_text, new_lines, anchors.get(ch.path, []), totals, out)
+            _census_added(ch, e.h_kind, e.h_text, new_lines, anchors.get(ch.path, []), totals, out,
+                          e.h_decisions)
         if e.b_kind:
             try:
                 old_text = _text(e.b_blob, e.b_kind, ch.path)
@@ -659,7 +690,8 @@ def census(repo: Path, base: str, head: str, spec_dirs: list[str] | None, paths:
 
 
 def _census_added(ch: Change, kind: str, text: str, changed: set[int],
-                  finds: list[tuple[str, str]], totals: dict, out: list[str]) -> None:
+                  finds: list[tuple[str, str]], totals: dict, out: list[str],
+                  decisions: list | None = None) -> None:
     offsets = _line_offsets(text)
     spans = Spans(text, finds)
     totals["ambiguous"] += spans.ambiguous
@@ -671,7 +703,8 @@ def _census_added(ch: Change, kind: str, text: str, changed: set[int],
         return offsets[lo - 1], end
 
     if kind == "py":
-        for d in sorted(_python_decisions(text, ch.path), key=lambda d: (d.line, d.kind)):
+        parsed = decisions if decisions is not None else _python_decisions(text, ch.path)  # M:GC-ONE-PARSE
+        for d in sorted(parsed, key=lambda d: (d.line, d.kind)):
             touched = [n for n in range(d.lo, d.hi + 1) if n in changed]
             if not touched:
                 continue
