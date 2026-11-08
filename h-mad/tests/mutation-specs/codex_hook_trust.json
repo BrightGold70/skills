@@ -1,0 +1,55 @@
+{
+  "_why": "2026-11-08: codex 0.167 skipped the untrusted h-mad gate, so a real codex worker wrote a listed file with no RED. Dispatch passes --dangerously-bypass-hook-trust only for a gate-only hooks.json under a sandbox that keeps .codex/ unwritable. Each row reverts one of those conditions.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_exec.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "HT-ARG",
+      "_mechanism": "Without the flag codex skips the untrusted h-mad gate.",
+      "file": "scripts/hmad-dispatch.sh",
+      "symbol": "_cmd_exec",
+      "find": "    [ -n \"$trust_arg\" ] && args+=(\"$trust_arg\")  # M:HT-ARG",
+      "replace": "    true  # M:HT-ARG",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_exec_bypasses_hook_trust_for_the_vetted_h_mad_gate[None]"
+    },
+    {
+      "name": "HT-ONLY-GATE",
+      "_mechanism": "A hooks.json holding any foreign hook must not be run unreviewed.",
+      "file": "scripts/hmad-dispatch.sh",
+      "symbol": "_codex_hook_trust_arg",
+      "find": "sys.exit(0 if commands and all(c == GATE for c in commands) else 1)  # M:HT-ONLY-GATE",
+      "replace": "sys.exit(0 if commands and any(c == GATE for c in commands) else 1)  # M:HT-ONLY-GATE",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_exec_withholds_the_bypass_when_hooks_json_holds_a_foreign_hook"
+    },
+    {
+      "name": "HT-SANDBOX",
+      "_mechanism": "Under a sandbox that can write .codex/ the worker could plant a hook, so no bypass.",
+      "file": "scripts/hmad-dispatch.sh",
+      "symbol": "_codex_hook_trust_arg",
+      "find": "    workspace-write|read-only) ;;  # M:HT-SANDBOX",
+      "replace": "    *) ;;  # M:HT-SANDBOX",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_exec_withholds_the_bypass_under_a_sandbox_that_can_write_codex_dir"
+    },
+    {
+      "name": "HT-NO-HOOKS",
+      "_mechanism": "No project hooks: nothing to bypass and nothing to warn about.",
+      "file": "scripts/hmad-dispatch.sh",
+      "symbol": "_codex_hook_trust_arg",
+      "find": "  [ -f \"$hooks\" ] || return 0  # M:HT-NO-HOOKS nothing to run, nothing to bypass",
+      "replace": "  true  # M:HT-NO-HOOKS nothing to run, nothing to bypass",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_exec_without_project_hooks_adds_no_bypass_and_no_warning"
+    }
+  ]
+}

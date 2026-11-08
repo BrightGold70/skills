@@ -315,8 +315,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    **Judge budget** (optional, any shape): `<N>s` — only when one of this Task's test files runs longer than the
    Phase-5 TDD judge's 40 s default before its RED. A whole number of seconds; it only ever raises the default
    and is capped at 300 s. Each host's own hook timeout also bounds it, and a hook cut short refuses the write:
-   agy's wiring floor is 60 s, so raise that hook's `timeout` too; `.codex/hooks.json` sets none, so Codex's
-   default applies (unmeasured). Every judge timeout DENY names the budget it used.
+   agy's wiring floor is 60 s, so raise that hook's `timeout` too; `.codex/hooks.json` sets none, and under
+   `codex exec` a hook still running at ~38 s is cancelled whatever its timeout (measured 2026-11-08), so a
+   budget above that cannot complete on codex. Every judge timeout DENY names the budget it used.
    **WIRE** (`wiring` shape only): `<caller/path.py>:<symbol>` → `<callee-symbol>`
    **WIRE-PIN** (`wiring` shape only): `<test id that fails when ONLY the wire is removed, callee intact>`
    **WIRE-RUNNER** (optional, `wiring` shape only): `<playwright — only when the pin is not a pytest test>`

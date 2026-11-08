@@ -115,6 +115,17 @@ HemaSuite's tracked `.codex/hooks.json` registers `h-mad-codex-tdd-gate.py` unde
 Codex has trusted that entry (`hooks.state` in `$CODEX_HOME/config.toml`). Verified live 2026-09-29:
 a `codex exec` in HemaSuite logged `hook: PreToolUse Blocked` while a feature there was in `step5`.
 
+**That trust does not last, and dispatch no longer relies on it (2026-11-08).** Codex 0.167 keys a
+hook's trust by the `hooks.json` ABSOLUTE path plus a content hash, so every Orca worktree is a new,
+untrusted path, and an edit to the file drops it. On 2026-11-08 `config.toml` held no record for
+either repo's gate. A real `codex exec` then appended to a listed file with its test absent, while
+the same run with `--dangerously-bypass-hook-trust` was denied by the gate. `hmad-dispatch exec
+codex` now passes that flag (`_codex_hook_trust_arg`), but only when the project's
+`.codex/hooks.json` holds nothing but the h-mad gate command and the sandbox is `workspace-write`
+or `read-only`, which refuse writes under `.codex/`. Otherwise it warns on stderr that the gate is
+NOT enforced. A codex session started by hand, outside `hmad-dispatch`, still needs the trust record
+or the flag.
+
 Check the installed links with:
 
 ```bash

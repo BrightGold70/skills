@@ -15,6 +15,7 @@ Both keep the two signals separate: `$?` answers "did the CLI run", the stdout
 token answers "did the WORK pass" (exit 0 never means the task passed — a caller
 still pipes stdout into h_mad_extract_verdict.py).
 """
+import json
 import os
 import sys
 import re
@@ -494,6 +495,70 @@ def test_codex_exec_delivers_stdin_even_through_the_timeout_path(tmp_path):
     # J23: the boundary must survive the backgrounded path too — if it were dropped
     # here, verdict recovery would silently fall back to grepping the echoed prompt.
     assert seen.read_text().rstrip().endswith(_BOUNDARY)
+
+
+# 2026-11-08: codex 0.167 runs a project hook only with a persisted trust record
+# (~/.codex/config.toml [hooks.state]) or --dangerously-bypass-hook-trust. The
+# h-mad gate had neither, so a real codex worker wrote production code with no
+# RED (probe: docs/03-analysis/2026-11-08-low-priority-carries.md). Dispatch now
+# passes the bypass only for a hooks.json that holds nothing but the h-mad gate,
+# under a sandbox that keeps .codex/ unwritable.
+_GATE_CMD = "python3 $HOME/.agents/skills/h-mad/hooks/h-mad-codex-tdd-gate.py"
+
+
+def _hooks(root, *commands):
+    (root / ".codex").mkdir(parents=True, exist_ok=True)
+    hooks = [{"type": "command", "command": c} for c in commands]
+    (root / ".codex" / "hooks.json").write_text(json.dumps({"hooks": {"PreToolUse": [
+        {"matcher": "apply_patch|exec_command|Bash|Shell|shell|shell_command|Write|Edit",
+         "hooks": hooks}]}}), encoding="utf-8")
+
+
+def _exec_codex(tmp_path, *extra):
+    b = _bindir(tmp_path, ["codex"])
+    cap = tmp_path / "cap.txt"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path), *extra],
+            env=_env(b), capture=cap)
+    return r, cap.read_text()
+
+
+@pytest.mark.parametrize("sandbox", [None, "read-only"])
+def test_codex_exec_bypasses_hook_trust_for_the_vetted_h_mad_gate(tmp_path, sandbox):
+    _hooks(tmp_path, _GATE_CMD)
+    r, argv = _exec_codex(tmp_path, *(("--sandbox", sandbox) if sandbox else ()))
+    assert r.returncode == 0, r.stderr
+    assert "--dangerously-bypass-hook-trust" in argv, "the h-mad gate must actually run under codex"
+
+
+def test_codex_exec_withholds_the_bypass_when_hooks_json_holds_a_foreign_hook(tmp_path):
+    _hooks(tmp_path, _GATE_CMD, "sh -c 'curl example.invalid'")
+    r, argv = _exec_codex(tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "--dangerously-bypass-hook-trust" not in argv
+    assert "hook trust" in r.stderr and "NOT enforced" in r.stderr, r.stderr
+
+
+def test_codex_exec_withholds_the_bypass_under_a_sandbox_that_can_write_codex_dir(tmp_path):
+    _hooks(tmp_path, _GATE_CMD)
+    r, argv = _exec_codex(tmp_path, "--sandbox", "danger-full-access")
+    assert "--dangerously-bypass-hook-trust" not in argv
+    assert "NOT enforced" in r.stderr, r.stderr
+
+
+def test_codex_exec_withholds_the_bypass_for_an_unparsable_hooks_json(tmp_path):
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex" / "hooks.json").write_text("{not json", encoding="utf-8")
+    r, argv = _exec_codex(tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "--dangerously-bypass-hook-trust" not in argv
+    assert "NOT enforced" in r.stderr, r.stderr
+
+
+def test_codex_exec_without_project_hooks_adds_no_bypass_and_no_warning(tmp_path):
+    r, argv = _exec_codex(tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "--dangerously-bypass-hook-trust" not in argv
+    assert "hook trust" not in r.stderr
 
 
 def test_codex_exec_passes_model(tmp_path):

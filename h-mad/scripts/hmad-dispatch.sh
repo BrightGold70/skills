@@ -3001,6 +3001,43 @@ sys.exit(0 if want == got else 1)  # M:ASSEMBLED-HASH-MATCH
 PY
 }
 
+# codex 0.167 runs a project hook only with a persisted trust record (keyed by the
+# hooks.json ABSOLUTE path and a content hash, so every Orca worktree is untrusted)
+# or under --dangerously-bypass-hook-trust. Without either the h-mad Phase-5 gate
+# never runs: measured 2026-11-08, a real codex worker appended to a listed file
+# with its test absent, and the same run with the flag was denied. So pass the
+# flag, but only when the project's hooks.json holds NOTHING but the h-mad gate
+# (the flag applies to every enabled hook) and the sandbox keeps .codex/
+# unwritable (workspace-write and read-only refuse it: `Operation not permitted`).
+# Prints the flag, or nothing; a withheld bypass over present hooks warns.
+_codex_hook_trust_arg() {  # <cd_dir> <sandbox>
+  local dir="${1:-$PWD}" sandbox="$2" top hooks
+  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || top="$dir"
+  hooks="$top/.codex/hooks.json"
+  [ -f "$hooks" ] || return 0  # M:HT-NO-HOOKS nothing to run, nothing to bypass
+  case "$sandbox" in
+    workspace-write|read-only) ;;  # M:HT-SANDBOX
+    *) echo "hmad-dispatch: exec: codex hook trust NOT bypassed under --sandbox ${sandbox}: the worker could rewrite .codex/; the h-mad gate is NOT enforced in this run" >&2
+       return 0 ;;
+  esac
+  if python3 - "$hooks" <<'PY'
+import json, sys
+GATE = "python3 $HOME/.agents/skills/h-mad/hooks/h-mad-codex-tdd-gate.py"
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+    commands = [h.get("command") for groups in data["hooks"].values()
+                for group in groups for h in group["hooks"]]
+except Exception:
+    sys.exit(1)
+sys.exit(0 if commands and all(c == GATE for c in commands) else 1)  # M:HT-ONLY-GATE
+PY
+  then
+    printf '%s\n' --dangerously-bypass-hook-trust
+  else
+    echo "hmad-dispatch: exec: codex hook trust NOT bypassed: ${hooks} holds something other than the h-mad gate (or does not parse); codex skips untrusted hooks, so the h-mad gate is NOT enforced in this run" >&2
+  fi
+}
+
 _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox] [grok: --sandbox <profile> (default strict), --allow-weaker-sandbox]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
@@ -3330,6 +3367,8 @@ _cmd_exec() {  # <codex|agy|grok> <promptfile> [--cd <dir>] [--model <m>] [--eff
     local last; last="$(mktemp "$(dirname -- "$log")/hmad_exec_last.XXXXXX")" || { rm -f "$bounded_prompt"; return 1; }  # M:EXEC-LAST-BESIDE-LOG
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
                 --output-last-message "$last" --skip-git-repo-check)
+    local trust_arg; trust_arg="$(_codex_hook_trust_arg "$cd_dir" "$sandbox")"
+    [ -n "$trust_arg" ] && args+=("$trust_arg")  # M:HT-ARG
     [ -n "$model" ] && args+=(--model "$model")
     # Codex has no --effort flag; reasoning effort is a config override. `-c` parses
     # the value as TOML and falls back to the raw string, so a bare `high` lands as
