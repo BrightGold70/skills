@@ -216,10 +216,16 @@ def test_main_prints_the_advisory_and_leaves_the_summary_and_issue_count(tmp_pat
                       {_key(hooks): {"enabled": True, "trusted_hash": HASH}})
     a = _main(tmp_path, hermetic_env, untrusted, hooks)
     b = _main(tmp_path, hermetic_env, trusted, hooks)
-    assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
-    first_a, first_b = a.stdout.splitlines()[0], b.stdout.splitlines()[0]
-    assert first_a.startswith("INSTALL: ")
-    assert first_a == first_b, "an advisory must not change the INSTALL: summary or issues="
+    # The reference: the same install with no codex wiring, so no advisory at all.
+    # Comparing a with b alone cannot see advisories counted into issues=: both
+    # carry exactly one, so both would read FAIL issues=N+1 and still match.
+    c = _main(tmp_path, hermetic_env, untrusted, tmp_path / "unwired" / ".codex" / "hooks.json")
+    assert a.returncode == b.returncode == c.returncode == 0, (a.stderr, b.stderr, c.stderr)
+    first_a, first_b, first_c = (p.stdout.splitlines()[0] for p in (a, b, c))
+    assert first_c.startswith("INSTALL: ")
+    assert not any(l.startswith("CODEX_HOOK_") for l in c.stdout.splitlines())
+    assert first_a == first_b == first_c, \
+        "an advisory must not change the INSTALL: summary or issues="
     assert any(l.startswith("CODEX_HOOK_UNTRUSTED:") for l in a.stdout.splitlines())
     assert any(l.startswith("CODEX_HOOK_TRUST_RECORDED:") for l in b.stdout.splitlines())
 

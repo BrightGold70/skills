@@ -77,6 +77,24 @@
       "find": "    if override:  # M:CT-HOOKS-ENV",
       "replace": "    if False:  # M:CT-HOOKS-ENV",
       "test": "tests/test_h_mad_install_check_codex_trust.py::test_main_reads_the_default_hooks_json_from_the_env_override"
+    },
+    {
+      "name": "codex-trust-advisory-never-counts-as-an-issue",
+      "_mechanism": "Count the advisories into `issues` and every host that uses dispatch only reads `INSTALL: FAIL`; consumers read that line by substring, so the accepted gap becomes a failing install.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "main",
+      "find": "    if issues:\n        print(f\"INSTALL: FAIL issues={len(issues)}\")",
+      "replace": "    issues = issues + check_codex_hook_trust([Path(p) for p in args.codex_hooks_json] or [default_codex_hooks_json()], Path(args.codex_config) if args.codex_config else default_codex_config())\n    if issues:\n        print(f\"INSTALL: FAIL issues={len(issues)}\")",
+      "test": "tests/test_h_mad_install_check_codex_trust.py::test_main_prints_the_advisory_and_leaves_the_summary_and_issue_count"
+    },
+    {
+      "name": "codex-trust-config-defaults-to-codex-home",
+      "_mechanism": "Ignore CODEX_HOME and the check reads `~/.codex`, which on an Orca host is stale: it reports on a config no codex here reads (measured 2026-11-08).",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "default_codex_config",
+      "find": "    home = env.get(\"CODEX_HOME\") or str(Path.home() / \".codex\")",
+      "replace": "    home = str(Path.home() / \".codex\")",
+      "test": "tests/test_h_mad_install_check_codex_trust.py::test_main_defaults_the_config_to_codex_home"
     }
   ]
 }
