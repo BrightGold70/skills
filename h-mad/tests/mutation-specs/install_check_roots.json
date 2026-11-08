@@ -171,8 +171,8 @@
       "name": "AH2",
       "_mechanism": "Stop reading the project's .agents/hooks.json by default.",
       "file": "scripts/h_mad_install_check.py",
-      "find": "(args.hooks_json or [Path.cwd() / \".agents\" / \"hooks.json\"])",
-      "replace": "(args.hooks_json or [])",
+      "find": "            Path.cwd() / \".agents\" / \"hooks.json\",",
+      "replace": "",
       "test": "tests/test_h_mad_install_check_roots.py::test_agy_hook_project_hooks_json_read_by_default"
     },
     {

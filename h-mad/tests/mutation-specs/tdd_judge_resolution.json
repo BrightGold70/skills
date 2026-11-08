@@ -158,6 +158,14 @@
       "find": "[[ \"$PROD_PATH\" == */tests/* || \"$PROD_PATH\" == tests/* ]] && exit 0  # M:NM-TEST-DIR",
       "replace": "true  # M:NM-TEST-DIR",
       "test": "tests/test_h_mad_tdd_judge.py::test_name_map_skips_test_files_by_basename[under-tests]"
+    },
+    {
+      "name": "NM-TEST-BASENAME-OF",
+      "_mechanism": "The test-file skip must read the basename: matched against the whole path, a test_ prefix check misses scripts/test_x.py and maps a test as production (2026-11-08).",
+      "file": "scripts/h_mad_derive_test_path.sh",
+      "find": "BASE_NAME=\"${PROD_PATH##*/}\"",
+      "replace": "BASE_NAME=\"$PROD_PATH\"",
+      "test": "tests/test_h_mad_tdd_judge.py::test_name_map_skips_test_files_by_basename[test_-prefix]"
     }
   ]
 }
