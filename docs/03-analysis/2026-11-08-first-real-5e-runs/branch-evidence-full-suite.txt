@@ -1,0 +1,41 @@
+EVIDENCE: sha=2a3cc11d1 base=4113b5317 ahead=2 dirty=0
+  worktree=/private/tmp/claude-501/-Users-kimhawk-orca-skills/f7b82980-9b1f-439b-b8a2-d143865d9b9f/scratchpad/replay-t2 branch=HEAD base_ref=a17cd4c8^
+  commit 2a3cc11d1 feat(h-mad): shared doc/data definition in target identity (Task 2)
+  commit a17cd4c80 test(h-mad): RED for gate-non-py Task 2, doc/data definition, with stubs
+CHANGED: files=3 prod=1 tests=1 specs=1 docs=0 support=0 deleted=0
+  prod h-mad/scripts/h_mad_target_identity.py
+  test h-mad/tests/test_h_mad_doc_data.py
+  spec h-mad/tests/mutation-specs/doc_data_definition.json
+PYTEST-SET: n=9
+  h-mad/tests/test_h_mad_agy_tdd_gate.py (names h_mad_target_identity)
+  h-mad/tests/test_h_mad_agy_tdd_gate_differential.py (names h_mad_target_identity)
+  h-mad/tests/test_h_mad_assemble_tdd.py (names h_mad_target_identity)
+  h-mad/tests/test_h_mad_codex_tdd_gate_judge.py (names h_mad_target_identity)
+  h-mad/tests/test_h_mad_doc_data.py (changed)
+  h-mad/tests/test_h_mad_gate_git_verbs.py (names h_mad_target_identity)
+  h-mad/tests/test_h_mad_shared_gate_policy.py (names h_mad_target_identity)
+  h-mad/tests/test_h_mad_target_identity.py (names h_mad_target_identity)
+  h-mad/tests/test_h_mad_tdd_gate_judge.py (names h_mad_target_identity)
+SPEC-SET: n=7 run=7 anchors-only=0
+  h-mad/tests/mutation-specs/assemble_tdd_mutation_rows.json
+  h-mad/tests/mutation-specs/codex_gate_judge_wiring.json
+  h-mad/tests/mutation-specs/codex_gate_shell_allowance.json
+  h-mad/tests/mutation-specs/doc_data_definition.json
+  h-mad/tests/mutation-specs/gate_git_verbs.json
+  h-mad/tests/mutation-specs/target_identity.json
+  h-mad/tests/mutation-specs/tdd_gate_differential.json
+PYTEST-GROUPS: n=1
+  . exe=/opt/anaconda3/bin/python3.11 files=9
+TESTS: PASS files=9 passed=762
+CONSUMERS-RUN: NONE docs=0
+ANCHORS: ANCHORS_OK specs=7 mutations=96 ok=96 drifted=0 unreadable=0 skipped=0 unclassifiable=0
+MUTATION: h-mad/tests/mutation-specs/assemble_tdd_mutation_rows.json ALL_CAUGHT mutations=5 caught=5 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=29/36 timeout_kills=0 untargeted=0/5 hollow_kills=0 host_skipped=0
+MUTATION: h-mad/tests/mutation-specs/codex_gate_judge_wiring.json ALL_CAUGHT mutations=45 caught=45 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=6/13 timeout_kills=0 untargeted=0/45 hollow_kills=0 host_skipped=0
+MUTATION: h-mad/tests/mutation-specs/codex_gate_shell_allowance.json ALL_CAUGHT mutations=14 caught=14 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/14 hollow_kills=0 host_skipped=0
+MUTATION: h-mad/tests/mutation-specs/doc_data_definition.json ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/7 hollow_kills=0 host_skipped=0
+MUTATION: h-mad/tests/mutation-specs/gate_git_verbs.json ALL_CAUGHT mutations=6 caught=6 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/6 hollow_kills=0 host_skipped=0
+MUTATION: h-mad/tests/mutation-specs/target_identity.json ALL_CAUGHT mutations=11 caught=11 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=0/0 timeout_kills=0 untargeted=0/11 hollow_kills=0 host_skipped=0
+MUTATION: h-mad/tests/mutation-specs/tdd_gate_differential.json ALL_CAUGHT mutations=8 caught=8 survived=0 refused=0 unreadable=0 crash_kills=0 crash_visible=1/1 timeout_kills=0 untargeted=0/8 hollow_kills=0 host_skipped=0
+FULL-SUITE: PASS passed=8372
+TREE: UNCHANGED
+EVIDENCE-VERDICT: COMPLETE
