@@ -56,4 +56,11 @@ A listed `scripts/tool.sh` hard-linked to a same-directory test-shaped `.py` (`t
 - Run 8 attempts 1–2: evidence only, never scored. That is a standing rule, not a task.
 - Watch-only triage rows 19 and 51: watched, with no action defined.
 - `READY_TO_MERGE` under a narrowed rubric; AC-9.3 resting on v4's census; the 2026-11-06 machine-wide `pkill` disclosure; the HemaSuite restores static limit (2525 sites); autopilot `b1a99532` without a notepad closeout. Each is a recorded acceptance or a disclosure, and none has a next action.
-- The 2026-10-31 stamp residuals: no item list survives in any handoff ("unchanged since 2026-10-31", carried six times without content). They cannot be re-probed, so they are dropped as unrecoverable rather than carried forever.
+## Still open — the 2026-10-31 stamp residuals (NOT settled)
+
+Every later handoff carried these as one line, "unchanged since 2026-10-31", with no content. The list lives only in `docs/handoffs/2026-10-31-main__skill-backlog-clusters-a-d.md:75-79`. An earlier draft of this doc called them unrecoverable and dropped them; that was wrong, and is corrected here.
+
+1. **Name map:** the generic `*test_*` skip still hides `h_mad_test_boundaries_check.py`.
+2. **Missing receipt:** `h_mad_archreview_cycle.py` prompts write no `.assembled` receipt.
+3. **Install check scope:** no user-level agy `hooks.json` is read.
+4. **Codex hook timeout:** the default is unmeasured, and `.codex/hooks.json` sets none, so it may cut short a `**Judge budget**` above it. A cut-off hook refuses.
