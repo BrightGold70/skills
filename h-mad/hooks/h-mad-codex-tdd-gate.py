@@ -284,7 +284,7 @@ def main() -> int:
 
 def _judge_listed(root: Path, resolved: Identity) -> str:
     """Return "" to skip or allow, else a deny reason."""
-    if any(Path(fold_py_suffix(n)).suffix == ".py" for n in resolved.names):  # M:CX-NOT-CODE-LIKE
+    if resolved.names and all(Path(fold_py_suffix(n)).suffix == ".py" for n in resolved.names):  # M:CX-NOT-CODE-LIKE
         return ""
     names = [Path(resolved.target).parent / n for n in resolved.names]
     if _is_exempt_location(names[0].relative_to(root).as_posix()):  # M:CX-LIST-EXEMPT

@@ -180,7 +180,7 @@ def main() -> int:
                     if _is_production_python(relative):
                         production.append((name, absolute, relative))
                 if not production:
-                    if any(Path(identity.fold_py_suffix(n)).suffix == ".py" for n in resolved.names):  # M:AG-NOT-CODE-LIKE
+                    if resolved.names and all(Path(identity.fold_py_suffix(n)).suffix == ".py" for n in resolved.names):  # M:AG-NOT-CODE-LIKE
                         continue
                     names = [Path(resolved.target).parent / n for n in resolved.names]
                     if _is_exempt_location(names[0].relative_to(root).as_posix()):  # M:AG-LIST-EXEMPT

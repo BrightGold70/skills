@@ -28,9 +28,18 @@
       "_mechanism": "A test-shaped Python file must not fall into the non-Python listing path.",
       "file": "hooks/h-mad-agy-tdd-gate.py",
       "symbol": "main",
-      "find": "if any(Path(identity.fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:AG-NOT-CODE-LIKE",
+      "find": "if resolved.names and all(Path(identity.fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:AG-NOT-CODE-LIKE",
       "replace": "if False:  # M:AG-NOT-CODE-LIKE",
       "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_listed_test_shaped_python_is_skipped"
+    },
+    {
+      "name": "AG-NOT-CODE-LIKE-ALL",
+      "_mechanism": "A listed non-.py file reached through a same-directory test-shaped .py hard link is judged; only an all-.py name set skips the listing path (2026-11-08, Claude parity).",
+      "file": "hooks/h-mad-agy-tdd-gate.py",
+      "symbol": "main",
+      "find": "if resolved.names and all(Path(identity.fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:AG-NOT-CODE-LIKE",
+      "replace": "if resolved.names and any(Path(identity.fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:AG-NOT-CODE-LIKE",
+      "test": "tests/test_h_mad_agy_tdd_gate_non_py.py::test_agy_test_shaped_hard_link_to_a_listed_file_denies[test_t.py]"
     },
     {
       "name": "AG-LIST-EXEMPT",

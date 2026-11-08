@@ -37,9 +37,18 @@
       "_mechanism": "Test-shaped Python must not enter the non-Python listing path.",
       "file": "hooks/h-mad-codex-tdd-gate.py",
       "symbol": "_judge_listed",
-      "find": "if any(Path(fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:CX-NOT-CODE-LIKE",
+      "find": "if resolved.names and all(Path(fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:CX-NOT-CODE-LIKE",
       "replace": "if False:  # M:CX-NOT-CODE-LIKE",
       "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_listed_test_shaped_python_is_skipped"
+    },
+    {
+      "name": "CX-NOT-CODE-LIKE-ALL",
+      "_mechanism": "A listed non-.py file reached through a same-directory test-shaped .py hard link is judged; only an all-.py name set skips the listing path (2026-11-08, Claude parity).",
+      "file": "hooks/h-mad-codex-tdd-gate.py",
+      "symbol": "_judge_listed",
+      "find": "if resolved.names and all(Path(fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:CX-NOT-CODE-LIKE",
+      "replace": "if resolved.names and any(Path(fold_py_suffix(n)).suffix == \".py\" for n in resolved.names):  # M:CX-NOT-CODE-LIKE",
+      "test": "tests/test_h_mad_codex_tdd_gate_non_py.py::test_codex_test_shaped_hard_link_to_a_listed_file_denies[test_t.py]"
     },
     {
       "name": "CX-LIST-EXEMPT",

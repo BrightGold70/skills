@@ -137,6 +137,13 @@ def test_codex_hard_link_denies(root):
             property="same-directory hard link must resolve the listed name, not the name map")
 
 
+@pytest.mark.parametrize("alias", ["test_t.py", "conftest.py", "t_test.py"])
+def test_codex_test_shaped_hard_link_to_a_listed_file_denies(root, alias):
+    os.link(root / "scripts/tool.sh", root / "scripts" / alias)
+    _expect(root, f"scripts/{alias}", "deny", "test-missing",
+            property="a listed .sh reached through a same-directory test-shaped .py alias is judged, as on Claude")
+
+
 def test_codex_unreadable_plan_is_judge_error(root):
     write_plan(root, "f", "").write_bytes(b"\xff\xfe")
     result = _expect(root, "scripts/other.sh", "deny", "judge-error",
