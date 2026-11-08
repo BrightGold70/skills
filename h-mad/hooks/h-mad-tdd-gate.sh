@@ -1,5 +1,6 @@
 #!/bin/bash
-# Claude Code PreToolUse gate for production Python writes during H-MAD step 5.
+# Claude Code PreToolUse gate for production writes during H-MAD step 5: production
+# Python, and non-.py files an active impl-plan Task lists as production.
 set -euo pipefail
 readonly REFUSAL_FORM=b
 DECIDED=""

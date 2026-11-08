@@ -9,9 +9,9 @@ import tempfile
 import pytest
 
 from non_py_gate_support import (
-    build_fixture, gate_env, member_fixture, newline_name_fixture,
-    run_agy, selection_fixture, set_test_state, skip_unless_case_insensitive,
-    task_text, two_record_fixture, later_plan_fixture, write_file,
+    build_fixture, gate_env, later_plan_fixture, member_fixture, newline_name_fixture,
+    run_agy, selection_fixture, set_test_state, skip_unless_case_insensitive, task_text,
+    two_record_fixture, write_file,
 )
 from tdd_gate_support import write_plan, write_state
 

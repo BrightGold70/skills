@@ -112,6 +112,18 @@ def test_listing_any_canonical_name_lists_the_target(root):
         "a later listed canonical hard-link name must be considered", result)
 
 
+def test_listing_a_target_only_a_later_readable_plan_lists_is_listed(root):
+    records = _records(root, "f", "g")
+    target = _target(root)
+    _plan(root, "scripts/other.sh", key="f", test="tests/test_other.py")
+    _plan(root, "scripts/tool.sh", key="g")
+
+    result = judge.listing(root, [target], records)
+
+    assert result == judge.Listing("listed", target, None, ""), (
+        "every readable active plan is consulted, not only the first", result)
+
+
 def test_listing_not_listed_when_no_name_matches(root):
     records = _records(root)
     target = _target(root)

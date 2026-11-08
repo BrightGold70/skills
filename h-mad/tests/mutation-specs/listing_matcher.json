@@ -232,7 +232,7 @@
       "symbol": "listing",
       "find": "listed = [name for name, plans in per_name if any(m.matches for m in plans)]",
       "replace": "listed = [name for name, plans in per_name if any(m.matches for m in plans[:1])]",
-      "test": "tests/test_h_mad_tdd_gate_non_py.py::test_claude_listing_only_in_a_later_active_plan_judges_its_test[absent]"
+      "test": "tests/test_h_mad_tdd_judge_listing.py::test_listing_a_target_only_a_later_readable_plan_lists_is_listed"
     },
     {
       "name": "L-UNREADABLE-ANY-PLAN",
