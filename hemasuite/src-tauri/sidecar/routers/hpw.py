@@ -7,6 +7,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from routers.projects import _projects_dir
+
 router = APIRouter(prefix="/hpw", tags=["hpw"])
 
 HPW_PATH = Path(os.environ.get("HPW_PATH", ""))
@@ -37,9 +39,6 @@ async def list_phases():
     return PHASES
 
 
-PROJECTS_DIR = Path(os.environ.get("HEMASUITE_PROJECTS_DIR", "")).resolve()
-
-
 class ManuscriptBody(BaseModel):
     content: str
 
@@ -47,7 +46,7 @@ class ManuscriptBody(BaseModel):
 @router.get("/manuscript/{project_id}/{phase_id}")
 async def get_manuscript(project_id: str, phase_id: int):
     """Read phase HTML content from project directory."""
-    file_path = PROJECTS_DIR / project_id / f"phase-{phase_id}.html"
+    file_path = _projects_dir() / project_id / f"phase-{phase_id}.html"
     if not file_path.exists():
         return {"content": ""}
     return {"content": file_path.read_text(encoding="utf-8")}
@@ -56,7 +55,7 @@ async def get_manuscript(project_id: str, phase_id: int):
 @router.put("/manuscript/{project_id}/{phase_id}")
 async def save_manuscript(project_id: str, phase_id: int, body: ManuscriptBody):
     """Save phase HTML content to project directory."""
-    project_dir = PROJECTS_DIR / project_id
+    project_dir = _projects_dir() / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
     file_path = project_dir / f"phase-{phase_id}.html"
     file_path.write_text(body.content, encoding="utf-8")
@@ -89,7 +88,7 @@ async def insert_results(req: InsertResultsRequest):
                 snippets.append(f'<img src="data:{mime};base64,{data}" alt="{f.stem}" />')
 
     # Read current manuscript
-    manuscript_path = PROJECTS_DIR / req.project_id / f"phase-{req.phase_id}.html"
+    manuscript_path = _projects_dir() / req.project_id / f"phase-{req.phase_id}.html"
     current = manuscript_path.read_text(encoding="utf-8") if manuscript_path.exists() else ""
 
     insert_html = "\n".join(snippets)

@@ -46,4 +46,25 @@ mod tests {
 
         assert_eq!(python, "python3");
     }
+
+    /// A tool path already set in the environment wins over the skills-root default (HPW moved out of skills).
+    #[test]
+    fn test_tool_path_env_override_wins() {
+        let p = crate::resolve_tool_path(Some("/elsewhere/hpw".to_string()), "/skills", "hematology-paper-writer");
+        assert_eq!(p, "/elsewhere/hpw");
+    }
+
+    /// With no override, the default is <skills_root>/<name>, unchanged.
+    #[test]
+    fn test_tool_path_default_under_skills_root() {
+        let p = crate::resolve_tool_path(None, "/skills", "hematology-paper-writer");
+        assert_eq!(p, "/skills/hematology-paper-writer");
+    }
+
+    /// An empty override is not a path: it falls back to the default instead of becoming "".
+    #[test]
+    fn test_tool_path_empty_override_ignored() {
+        let p = crate::resolve_tool_path(Some(String::new()), "/skills", "clinical-statistics-analyzer");
+        assert_eq!(p, "/skills/clinical-statistics-analyzer");
+    }
 }

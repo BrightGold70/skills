@@ -29,6 +29,16 @@ fn resolve_sidecar_dir(app: &tauri::App) -> std::path::PathBuf {
     }
 }
 
+/// A tool path set in the environment (e.g. `HPW_PATH`) wins; an unset or empty one
+/// falls back to `<skills_root>/<name>`. HPW no longer lives under the skills root,
+/// so the default alone points at a directory that does not exist.
+pub(crate) fn resolve_tool_path(env_value: Option<String>, skills_root: &str, name: &str) -> String {
+    match env_value {
+        Some(v) if !v.is_empty() => v,
+        _ => format!("{}/{}", skills_root, name),
+    }
+}
+
 fn spawn_sidecar(app: &tauri::App, working_dir: &std::path::Path) {
     let resource_dir = app.path().resource_dir().unwrap_or_default();
 
@@ -58,6 +68,14 @@ fn spawn_sidecar(app: &tauri::App, working_dir: &std::path::Path) {
             .to_string()
     });
 
+    let hpw_path = resolve_tool_path(std::env::var("HPW_PATH").ok(), &skills_root, "hematology-paper-writer");
+    let csa_path = resolve_tool_path(std::env::var("CSA_PATH").ok(), &skills_root, "clinical-statistics-analyzer");
+    for (var, path) in [("HPW_PATH", &hpw_path), ("CSA_PATH", &csa_path)] {
+        if !std::path::Path::new(path).is_dir() {
+            eprintln!("Warning: {var}={path} does not exist; its routes will return 503. Set {var} or HEMASUITE_SKILLS_ROOT.");
+        }
+    }
+
     match Command::new(&python)
         .args([
             "-m", "uvicorn", "server:app",
@@ -65,8 +83,8 @@ fn spawn_sidecar(app: &tauri::App, working_dir: &std::path::Path) {
         ])
         .current_dir(working_dir)
         .env("RSCRIPT_PATH", &rscript)
-        .env("HPW_PATH", format!("{}/hematology-paper-writer", skills_root))
-        .env("CSA_PATH", format!("{}/clinical-statistics-analyzer", skills_root))
+        .env("HPW_PATH", &hpw_path)
+        .env("CSA_PATH", &csa_path)
         .spawn()
     {
         Ok(child) => {
