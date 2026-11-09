@@ -3052,3 +3052,9 @@ All ten rows filed 2026-11-05 and 2026-11-06 are LANDED at `aed1cae4`, after fou
 ## 2026-11-09 — codex-trust-advisory-macmini-sync — no candidates
 
 ## 2026-11-09 — macstudio-resume-scratch-closed — no candidates
+
+## 2026-11-09 — heartbeat-flakes-fixed
+
+- **heartbeat-sync-mutation-rows**: The positive control for the beat-sync tests was run twice by hand: `sed` the `-ge "$hb_interval"` line in `hmad-dispatch.sh` to `-ge 999`, expect red, then `git checkout` the file. Registering it as a mutation row in the existing harness would re-prove on every sweep that the codex and agy beat-sync tests still discriminate. — remedy: deterministic-check — recurrence: 2 — candidate: maybe
+- **cpu-burner-load-runner**: Ran a test N times under self-terminating `python3 -c` busy loops, killed by PID, 3 times this session. Only needed for flake hunting, and the suite lock already blocks the obvious misuse. Not worth a tool. — remedy: tool-improvement — recurrence: 3 — candidate: no
+- **shared-stub-wait-helper**: The codex and agy stubs each got a small "wait for an event, with a deadline" loop. Their predicates differ (a stamp count in the capture file vs. a literal in the log), and there are only two sites, so a shared helper would add coupling for about 10 lines. — remedy: existing-tool-repair — recurrence: 2 — candidate: no
