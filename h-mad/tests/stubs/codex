@@ -34,6 +34,26 @@ fi
 # Simulate a long-running task so the wrapper's --timeout watchdog can fire.
 [ -n "${HMAD_STUB_CODEX_SLEEP:-}" ] && sleep "$HMAD_STUB_CODEX_SLEEP"
 
+# Stay "running" until the wrapper has written N `running` worktree stamps (start
+# + heartbeats) into the shared capture file, instead of for a fixed wall-clock
+# time. A fixed `sleep 3.3` against a 1s heartbeat left ~0.3s of slack, so the
+# heartbeat tests could flake under load. The predicate matches the tests' own
+# filter ("worktree set" AND "running"). On the deadline the stub exits normally,
+# so a broken heartbeat fails the test's own assertion with the beats it saw.
+if [ -n "${HMAD_STUB_CODEX_WAIT_BEATS:-}" ]; then
+  if [ -z "${HMAD_STUB_CAPTURE:-}" ]; then
+    echo "codex stub: HMAD_STUB_CODEX_WAIT_BEATS needs HMAD_STUB_CAPTURE" >&2
+    exit 97
+  fi
+  _deadline=$(( SECONDS + ${HMAD_STUB_CODEX_WAIT_DEADLINE:-20} ))
+  while :; do
+    _n="$(grep 'worktree set' "$HMAD_STUB_CAPTURE" 2>/dev/null | grep -c 'running')"
+    [ "${_n:-0}" -ge "$HMAD_STUB_CODEX_WAIT_BEATS" ] && break
+    [ "$SECONDS" -ge "$_deadline" ] && break
+    sleep 0.1
+  done
+fi
+
 # Locate `--output-last-message <file>` / `-o <file>` and write the canned reply.
 # `${VAR-default}` deliberately distinguishes an explicitly empty reply from an
 # unset knob, which is needed to exercise the empty-report recovery path.

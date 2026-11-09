@@ -426,8 +426,8 @@ def test_exit_stamp_is_written_for_empty_final_message(tmp_path):
 def test_heartbeat_stamps_across_three_intervals(tmp_path):
     cap = tmp_path / "calls"
     state = tmp_path / "orca.state"
-    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.3",
-                       HMAD_EXEC_HEARTBEAT_SEC="1")
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, timeout="30",
+                       HMAD_STUB_CODEX_WAIT_BEATS="3", HMAD_EXEC_HEARTBEAT_SEC="1")
     assert r.returncode == 0, r.stderr
     beats = [line for line in _orca_calls(cap) if "running" in line and "worktree set" in line]
     assert len(beats) >= 3, f"expected at least three heartbeat writes, got {beats!r}"
@@ -436,8 +436,8 @@ def test_heartbeat_stamps_across_three_intervals(tmp_path):
 def test_heartbeat_elapsed_values_are_monotonic(tmp_path):
     cap = tmp_path / "calls"
     state = tmp_path / "orca.state"
-    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.2",
-                       HMAD_EXEC_HEARTBEAT_SEC="1")
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, timeout="30",
+                       HMAD_STUB_CODEX_WAIT_BEATS="3", HMAD_EXEC_HEARTBEAT_SEC="1")
     assert r.returncode == 0, r.stderr
     values = [int(m.group(1)) for line in _orca_calls(cap)
               if "worktree set" in line and "running" in line
@@ -455,8 +455,8 @@ def test_heartbeat_elapsed_values_are_monotonic(tmp_path):
 def test_heartbeat_without_timeout_keeps_the_same_cadence(tmp_path):
     cap = tmp_path / "calls"
     state = tmp_path / "orca.state"
-    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.2",
-                       timeout=None, HMAD_EXEC_HEARTBEAT_SEC="1")
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, timeout=None,
+                       HMAD_STUB_CODEX_WAIT_BEATS="3", HMAD_EXEC_HEARTBEAT_SEC="1")
     assert r.returncode == 0, r.stderr
     assert len([line for line in _orca_calls(cap)
                 if "worktree set" in line and "running" in line]) >= 3
@@ -484,8 +484,8 @@ def test_heartbeat_preserves_handoff_and_one_span_after_three_beats(tmp_path):
     cap = tmp_path / "calls"
     state = tmp_path / "orca.state"
     state.write_text("handoff: keep-me")
-    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.3",
-                       HMAD_EXEC_HEARTBEAT_SEC="1")
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, timeout="30",
+                       HMAD_STUB_CODEX_WAIT_BEATS="3", HMAD_EXEC_HEARTBEAT_SEC="1")
     assert r.returncode == 0, r.stderr
     comment = state.read_text()
     assert "handoff: keep-me" in comment
@@ -509,8 +509,8 @@ def test_heartbeat_keeps_inherited_stdin_intact(tmp_path):
     cap = tmp_path / "calls"
     state = tmp_path / "orca.state"
     seen = tmp_path / "agent.stdin"
-    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.2",
-                       HMAD_EXEC_HEARTBEAT_SEC="1", HMAD_STUB_STDIN_CAPTURE=seen)
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, timeout="30",
+                       HMAD_STUB_CODEX_WAIT_BEATS="3", HMAD_EXEC_HEARTBEAT_SEC="1", HMAD_STUB_STDIN_CAPTURE=seen)
     assert r.returncode == 0, r.stderr
     assert "wire test prompt" in seen.read_text()
     assert "===HMAD-DISPATCH-BOUNDARY===" in seen.read_text()
