@@ -46,7 +46,24 @@ if [ ${#scripts[@]} -eq 0 ]; then
   exit 0
 fi
 
-fp="$( { cat "$INSTALLED" 2>/dev/null; ls -1 "$HOME/.claude/plugins/cache/bkit-marketplace/bkit" 2>/dev/null; cat "${scripts[@]}"; } | shasum -a 256 | awk '{print $1}')"
+# Global npm packages that carry a patch too (omc-codex-mcp-no-type patches the `omc` CLI).
+# installed_plugins.json does not change on `npm update -g`, so fingerprint each package's
+# package.json plus the mtime+size of its patched files: a same-version reinstall rewrites
+# the files and drops the patch without changing the version.
+NPM_ROOT="${PATCH_VERIFY_NPM_ROOT:-/opt/homebrew/lib/node_modules}"
+NPM_FILES=(
+  "oh-my-claude-sisyphus/package.json"
+  "oh-my-claude-sisyphus/dist/installer/mcp-registry.js"
+  "oh-my-claude-sisyphus/bridge/cli.cjs"
+)
+npm_fp() {
+  local rel
+  for rel in "${NPM_FILES[@]}"; do
+    stat -f '%N %m %z' "$NPM_ROOT/$rel" 2>/dev/null || echo "absent $rel"
+  done
+}
+
+fp="$( { cat "$INSTALLED" 2>/dev/null; ls -1 "$HOME/.claude/plugins/cache/bkit-marketplace/bkit" 2>/dev/null; npm_fp; cat "${scripts[@]}"; } | shasum -a 256 | awk '{print $1}')"
 
 if [ -f "$STATE" ] && [ "$(sed -n 1p "$STATE")" = "$fp" ] && [ "$(sed -n 2p "$STATE")" = "OK" ]; then
   exit 0

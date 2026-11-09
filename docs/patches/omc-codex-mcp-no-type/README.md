@@ -50,7 +50,7 @@ python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/verify.py 
 
 `verify.py` exit codes: 0 = patched everywhere, and the real renderer, fed entries that carry `type`, emits 2 server blocks and 0 `type` lines; 1 = MISSING; 2 = could not judge, which is not a pass. Before the patch it reported MISSING on all 4 files and "renderer still emits 2 type lines" (the control).
 
-The SessionStart hook `patch-verify-on-update.sh` runs `verify.py` whenever the plugin fingerprint changes. **Gap:** that fingerprint covers `installed_plugins.json`, not the npm package. A `npm update -g oh-my-claude-sisyphus` on its own will not trigger a re-check, so after updating the npm CLI run `verify.py` by hand (or delete `~/.claude/state/patch-verify.state`).
+The SessionStart hook `patch-verify-on-update.sh` runs `verify.py` whenever its fingerprint changes. Since 2026-11-09 that fingerprint also covers the npm package: `package.json` plus the mtime and size of the 2 patched files (`NPM_FILES` in the hook). So a `npm update -g oh-my-claude-sisyphus`, or a same-version reinstall, triggers a re-check. Measured: with the npm `cli.cjs` reverted to unpatched, the previous hook stayed silent and the new one reported `omc-codex-mcp-no-type: patch MISSING`.
 
 ## Retiring
 
