@@ -1,0 +1,50 @@
+{
+  "_why": "verify.py is the only thing that notices when a plugin or npm reinstall drops the omc-codex-mcp-no-type patch: the SessionStart patch-verify hook trusts its exit code. These rows prove the tests would notice if verify.py stopped detecting a dropped patch, whether in the static check, in the exit code, or in the render probe.",
+  "_provenance": "docs/patches/omc-codex-mcp-no-type/README.md; OMC issue Yeachan-Heo/oh-my-claudecode#4899.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_verify.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "static-drop-not-recorded",
+      "_mechanism": "A file that went back to the upstream emission line is no longer recorded as missing. A bundle-only drop (bridge/cli.cjs, which the render probe never loads) then reads VERIFY: OK.",
+      "file": "verify.py",
+      "symbol": "main",
+      "find": "missing.append(str(path))",
+      "replace": "pass",
+      "test": "tests/test_verify.py::test_dropped_patch_in_the_bundle_alone_is_reported_missing",
+      "requires": ["node", "--version"]
+    },
+    {
+      "name": "missing-exits-zero",
+      "_mechanism": "MISSING is printed, but the exit code is 0. The SessionStart hook reads only the exit code, so it would stay silent.",
+      "file": "verify.py",
+      "symbol": "main",
+      "find": "        return 1\n",
+      "replace": "        return 0\n",
+      "test": "tests/test_verify.py::test_dropped_patch_in_the_bundle_alone_is_reported_missing",
+      "requires": ["node", "--version"]
+    },
+    {
+      "name": "probe-type-lines-ignored",
+      "_mechanism": "The render probe's `type` count is never acted on. An emission the static regex does not know (marker present, second spelling) reads VERIFY: OK.",
+      "file": "verify.py",
+      "symbol": "main",
+      "find": "elif res.get(\"typeLines\") != 0:",
+      "replace": "elif False:",
+      "test": "tests/test_verify.py::test_render_probe_catches_an_emission_the_regex_does_not_know",
+      "requires": ["node", "--version"]
+    }
+  ]
+}

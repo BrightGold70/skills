@@ -1,5 +1,6 @@
 """Shared target list and patterns for the omc-codex-mcp-no-type patch."""
 import json
+import os
 import re
 from pathlib import Path
 
@@ -12,8 +13,18 @@ ORIGINAL = re.compile(r"lines\.push\(`type = \$\{renderTomlString\((entry2?)\.ty
 RELATIVE = ("dist/installer/mcp-registry.js", "bridge/cli.cjs")
 
 
+ROOTS_ENV = "OMC_PATCH_ROOTS"
+
+
 def roots() -> list[Path]:
-    """Every installed OMC copy that runs: the active plugin cache and the global npm CLI."""
+    """Every installed OMC copy that runs: the active plugin cache and the global npm CLI.
+
+    `OMC_PATCH_ROOTS` (os.pathsep-separated) replaces the lookup entirely, with no
+    fallback, so tests can point apply/verify at fixture roots and never at the host.
+    """
+    override = os.environ.get(ROOTS_ENV)
+    if override is not None:
+        return [Path(p) for p in override.split(os.pathsep) if p]
     found: list[Path] = []
     installed = Path.home() / ".claude/plugins/installed_plugins.json"
     try:
