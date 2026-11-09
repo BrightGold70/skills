@@ -2857,6 +2857,8 @@ def _run_main(args: argparse.Namespace, argv: list[str] | None,
         except SpecError as exc:
             print(f"SWEEP: INCOMPLETE specs=0 — {exc}")
             return 2
+        if not args.spec:
+            _warn_untracked_specs(Path.cwd())
         return _sweep(specs, reachability=True) if args.reachability else _sweep(specs)
     if not args.spec:
         parser.error("a mutation run takes exactly one spec")

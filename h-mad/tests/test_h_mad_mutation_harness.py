@@ -3861,6 +3861,34 @@ def test_sweep_with_no_spec_discovers_committed_specs(tmp_path: Path) -> None:
     assert proc.stdout.splitlines()[-1].startswith("SWEEP: ALL_CAUGHT specs=1"), proc.stdout
 
 
+def test_sweep_with_no_spec_warns_about_an_untracked_spec(tmp_path: Path) -> None:
+    """Row `untracked-spec-warning` named `--sweep` too: same `git ls-files`
+    discovery, same silent skip. The note is on stderr; the summary is unchanged."""
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+    control = _sweep(cwd=repo)
+    _project(repo / "other", [_kills_the_guard()])
+
+    proc = _sweep(cwd=repo)
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.splitlines()[-1].startswith("SWEEP: ALL_CAUGHT specs=1"), proc.stdout
+    assert proc.stdout == control.stdout, "the advisory must not touch the parsed stdout"
+    assert "untracked spec not swept: other/mutations.json" in proc.stderr, proc.stderr
+
+
+def test_sweep_no_spec_warning_is_skipped_for_explicit_specs(tmp_path: Path) -> None:
+    """Named specs are swept tracked or not, so nothing was skipped."""
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+    loose = _project(repo / "loose", [_kills_the_guard()])
+
+    proc = _sweep(loose, cwd=repo)
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "untracked" not in proc.stderr, proc.stderr
+
+
 def test_sweep_and_check_anchors_are_exclusive(tmp_path: Path) -> None:
     proc = subprocess.run([sys.executable, str(HARNESS), "--sweep", "--check-anchors"],
                           capture_output=True, text=True, cwd=str(tmp_path))

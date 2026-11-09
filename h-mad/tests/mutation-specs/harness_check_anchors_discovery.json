@@ -142,6 +142,24 @@
       "replace": "        raise\n",
       "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_reports_a_listing_failure_and_keeps_its_verdict",
       "symbol": "_warn_untracked_specs"
+    },
+    {
+      "name": "sweep-untracked-advisory-never-printed",
+      "_mechanism": "The bare --sweep keeps the silent skip the row named.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            print(f\"SWEEP: INCOMPLETE specs=0 — {exc}\")\n            return 2\n        if not args.spec:\n            _warn_untracked_specs(Path.cwd())\n",
+      "replace": "            print(f\"SWEEP: INCOMPLETE specs=0 — {exc}\")\n            return 2\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_with_no_spec_warns_about_an_untracked_spec",
+      "symbol": "_run_main"
+    },
+    {
+      "name": "sweep-untracked-advisory-on-named-specs",
+      "_mechanism": "A sweep of named specs reports a skip that did not happen.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            print(f\"SWEEP: INCOMPLETE specs=0 — {exc}\")\n            return 2\n        if not args.spec:\n            _warn_untracked_specs(Path.cwd())\n",
+      "replace": "            print(f\"SWEEP: INCOMPLETE specs=0 — {exc}\")\n            return 2\n        _warn_untracked_specs(Path.cwd())\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_no_spec_warning_is_skipped_for_explicit_specs",
+      "symbol": "_run_main"
     }
   ]
 }
