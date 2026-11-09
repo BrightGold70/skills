@@ -3877,6 +3877,49 @@ def test_sweep_with_no_spec_warns_about_an_untracked_spec(tmp_path: Path) -> Non
     assert "untracked spec not swept: other/mutations.json" in proc.stderr, proc.stderr
 
 
+def test_sweep_isolate_with_no_spec_warns_about_an_untracked_spec(tmp_path: Path) -> None:
+    """Under `--isolate` the sweep runs in a child, in a detached worktree. The
+    untracked spec reaches the caller's stderr only if the parent copies untracked
+    files into that worktree and the child's stderr is not swallowed."""
+    import shutil
+
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+    script = repo / "h-mad" / "scripts" / HARNESS.name
+    script.parent.mkdir(parents=True)
+    shutil.copy2(HARNESS, script)
+    (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    for cmd in (["add", "-A"], ["-c", "commit.gpgsign=false", "commit", "-qm", "harness"]):
+        subprocess.run(["git", "-C", str(repo), *cmd], check=True, env=env,
+                       capture_output=True)
+
+    def sweep() -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(script), "--sweep", "--isolate"],
+            capture_output=True, text=True, cwd=str(repo), timeout=120,
+        )
+
+    control = sweep()
+    _project(repo / "other", [_kills_the_guard()])
+    proc = sweep()
+
+    def summary(p: subprocess.CompletedProcess) -> list[str]:
+        # Per-spec lines carry the random `.h-mad-isolate-*` worktree path.
+        return [re.sub(r"\.h-mad-isolate-[^/]+", "<wt>", line)
+                for line in p.stdout.splitlines() if line.startswith("SWEEP:")]
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert summary(proc) and summary(proc)[-1].startswith("SWEEP: ALL_CAUGHT specs=1"), (
+        proc.stdout
+    )
+    assert summary(proc) == summary(control), "the advisory must not touch the summary"
+    assert "ISOLATE: removed=yes" in proc.stdout, proc.stdout
+    assert "untracked" not in control.stderr, control.stderr
+    assert "untracked spec not swept: other/mutations.json" in proc.stderr, proc.stderr
+
+
 def test_sweep_no_spec_warning_is_skipped_for_explicit_specs(tmp_path: Path) -> None:
     """Named specs are swept tracked or not, so nothing was skipped."""
     repo = tmp_path / "repo"

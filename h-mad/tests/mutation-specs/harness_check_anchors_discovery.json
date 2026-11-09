@@ -160,6 +160,24 @@
       "replace": "            print(f\"SWEEP: INCOMPLETE specs=0 — {exc}\")\n            return 2\n        _warn_untracked_specs(Path.cwd())\n",
       "test": "tests/test_h_mad_mutation_harness.py::test_sweep_no_spec_warning_is_skipped_for_explicit_specs",
       "symbol": "_run_main"
+    },
+    {
+      "name": "isolate-copy-skips-untracked",
+      "_mechanism": "The detached worktree gets only HEAD plus the diff, so the child never sees the untracked spec and the bare --sweep --isolate stays silent.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        paths.update(git(\"ls-files\", \"--others\", \"--exclude-standard\", \"-z\").split(\"\\0\"))\n",
+      "replace": "",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_isolate_with_no_spec_warns_about_an_untracked_spec",
+      "symbol": "_isolate"
+    },
+    {
+      "name": "isolate-child-stderr-swallowed",
+      "_mechanism": "The child warns, but its stderr never reaches the caller.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            cwd=worktree / cwd.relative_to(top),\n        )\n",
+      "replace": "            cwd=worktree / cwd.relative_to(top), stderr=subprocess.DEVNULL,\n        )\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_sweep_isolate_with_no_spec_warns_about_an_untracked_spec",
+      "symbol": "_isolate"
     }
   ]
 }
