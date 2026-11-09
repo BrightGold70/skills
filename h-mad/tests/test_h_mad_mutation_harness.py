@@ -3653,6 +3653,121 @@ def test_check_anchors_with_no_spec_ignores_untracked_specs(tmp_path: Path) -> N
     assert "ANCHORS_OK" in proc.stdout and "specs=1" in proc.stdout, proc.stdout
 
 
+def test_check_anchors_with_no_spec_warns_about_an_untracked_spec(tmp_path: Path) -> None:
+    """Skill-candidates row `untracked-spec-warning`: twice in one session a new
+    spec was left untracked and the bare sweep skipped it in silence. Discovery
+    stays committed-only; an advisory on stderr names the file it did not read,
+    and the parsed stdout summary is unchanged."""
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+    (repo / "tests").mkdir(exist_ok=True)
+
+    def sweep() -> subprocess.CompletedProcess:
+        # From a subdirectory: the habitual sweep is `cd h-mad && ... --check-anchors`,
+        # and a spec forgotten in a sibling directory must still be named.
+        return subprocess.run(
+            [sys.executable, str(HARNESS), "--check-anchors"],
+            capture_output=True, text=True, cwd=str(repo / "tests"),
+        )
+
+    control = sweep()
+    _project(repo / "other" / "new", [_drifted_anchor()])
+    # A half-written spec is the one most likely to be untracked.
+    (repo / "other" / "half.json").write_text('{"mutations": [{"name": "n"}', encoding="utf-8")
+    proc = sweep()
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ANCHORS_OK" in proc.stdout and "specs=1" in proc.stdout, proc.stdout
+    assert proc.stdout == control.stdout, "the advisory must not touch the parsed stdout"
+    assert "untracked" not in control.stderr, control.stderr
+    assert "untracked spec not swept: other/new/mutations.json" in proc.stderr, proc.stderr
+    assert "untracked spec not swept: other/half.json" in proc.stderr, proc.stderr
+
+
+def test_check_anchors_with_no_spec_survives_an_undecodable_untracked_json(
+    tmp_path: Path,
+) -> None:
+    """Review must-fix: the advisory opens untracked files the sweep never used
+    to read, so a UTF-16 export crashed the verdict with a UnicodeDecodeError."""
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+    (repo / "utf16.json").write_bytes(b"\xff\xfe{\x00}\x00")
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors"],
+        capture_output=True, text=True, cwd=str(repo),
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ANCHORS_OK" in proc.stdout, proc.stdout
+    assert "Traceback" not in proc.stderr, proc.stderr
+
+
+def test_check_anchors_with_no_spec_reports_a_listing_failure_and_keeps_its_verdict(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """The advisory annotates the verdict; git failing to list must say so on
+    stderr and must neither crash the sweep nor read as "nothing untracked"."""
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+
+    def refuse(_cwd):
+        raise h_mad_mutation_harness.SpecError("could not list untracked specs: boom")
+
+    monkeypatch.setattr(h_mad_mutation_harness, "_untracked_specs", refuse)
+    monkeypatch.chdir(repo)
+    rc = h_mad_mutation_harness.main(["--check-anchors"])
+    out = capsys.readouterr()
+
+    assert rc == 0, out.out + out.err
+    assert "ANCHORS_OK" in out.out, out.out
+    assert "could not list untracked specs: boom" in out.err, out.err
+
+
+def test_check_anchors_with_no_spec_does_not_warn_for_non_specs_or_ignored_specs(
+    tmp_path: Path,
+) -> None:
+    """An untracked `package.json`, or a spec the repo deliberately ignores, is
+    not a forgotten spec; warning on them would teach people to ignore the note."""
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+    (repo / "tests" / "mutation-specs" / "config.json").write_text('{"a": 1}', encoding="utf-8")
+    _project(repo / "ignored", [_drifted_anchor()])
+    (repo / ".git" / "info" / "exclude").write_text("ignored/\n", encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors"],
+        capture_output=True, text=True, cwd=str(repo),
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "untracked" not in proc.stderr, proc.stderr
+
+
+def test_check_anchors_no_spec_warning_is_skipped_for_explicit_specs(tmp_path: Path) -> None:
+    """Named specs are swept whether tracked or not, so nothing was skipped."""
+    repo = tmp_path / "repo"
+    _git_repo_with_specs(repo, {"tests/mutation-specs": [_kills_the_guard()]})
+    loose = _project(repo / "loose", [_kills_the_guard()])
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(loose)],
+        capture_output=True, text=True, cwd=str(repo),
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "untracked" not in proc.stderr, proc.stderr
+
+
+def test_untracked_specs_outside_git_raises_rather_than_reporting_none(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """"Could not list" must not read as "nothing untracked"."""
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+    with pytest.raises(h_mad_mutation_harness.SpecError, match="could not list untracked"):
+        h_mad_mutation_harness._untracked_specs(tmp_path)
+
+
 def test_check_anchors_with_no_spec_outside_git_refuses_rather_than_passing(
     tmp_path: Path,
 ) -> None:

@@ -1,8 +1,21 @@
 {
-  "_why": "Skill-candidates row '`--check-anchors` should sweep every spec directory by default': a habitual one-directory sweep said ANCHORS_OK while `h-mad/tests/specs/` had drifted. A no-argument `--check-anchors` now discovers every committed spec through `git ls-files` and the classifier. These rows prove the tests bite if discovery narrows back to one directory, admits untracked files, or turns a failed discovery into an empty (vacuous) sweep.",
+  "_why": "Skill-candidates row '`--check-anchors` should sweep every spec directory by default': a habitual one-directory sweep said ANCHORS_OK while `h-mad/tests/specs/` had drifted. A no-argument `--check-anchors` now discovers every committed spec through `git ls-files` and the classifier. These rows prove the tests bite if discovery narrows back to one directory, admits untracked files, or turns a failed discovery into an empty (vacuous) sweep. The untracked-spec rows (skill-candidates `untracked-spec-warning`) prove the stderr advisory names a forgotten spec, stays off the parsed stdout, ignores non-specs, ignored files and named specs, and fails loud when git cannot list.",
   "root": "../..",
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_mutation_harness.py", "-q", "-k", "no_spec or without_a_spec or exactly_one"],
-  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_mutation_harness.py",
+    "-q",
+    "-k",
+    "no_spec or without_a_spec or exactly_one or untracked_specs"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
   "mutations": [
     {
       "name": "discovery-narrows-to-one-directory",
@@ -39,6 +52,96 @@
       "replace": "    return paths\n",
       "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_sweeps_every_committed_spec_directory",
       "symbol": "_committed_specs"
+    },
+    {
+      "name": "untracked-advisory-never-printed",
+      "_mechanism": "The silent skip the row records, restored.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        _warn_untracked_specs(Path.cwd())\n        return _check_anchors(specs)\n",
+      "replace": "        return _check_anchors(specs)\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_warns_about_an_untracked_spec",
+      "symbol": "_run_main"
+    },
+    {
+      "name": "untracked-advisory-on-parsed-stdout",
+      "_mechanism": "The note lands on stdout, where the suite and pre-push hook parse ANCHORS lines by exact string.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        print(f\"[H-MAD] note: untracked spec not swept: {rel} — `git add` it to include it\",\n              file=sys.stderr)\n",
+      "replace": "        print(f\"[H-MAD] note: untracked spec not swept: {rel} — `git add` it to include it\")\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_warns_about_an_untracked_spec",
+      "symbol": "_warn_untracked_specs"
+    },
+    {
+      "name": "untracked-advisory-names-non-specs",
+      "_mechanism": "Every untracked JSON is reported, so the note becomes noise people learn to ignore.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if kind != \"not-a-spec\":\n            found.append(rel)\n",
+      "replace": "        found.append(rel)\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_does_not_warn_for_non_specs_or_ignored_specs",
+      "symbol": "_untracked_specs"
+    },
+    {
+      "name": "untracked-advisory-names-ignored-files",
+      "_mechanism": "Without --exclude-standard a deliberately ignored spec is reported as forgotten.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "         \"--others\", \"--exclude-standard\", \"--full-name\",",
+      "replace": "         \"--others\", \"--full-name\",",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_does_not_warn_for_non_specs_or_ignored_specs",
+      "symbol": "_untracked_specs"
+    },
+    {
+      "name": "untracked-advisory-on-named-specs",
+      "_mechanism": "Named specs are swept tracked or not; warning there reports a skip that did not happen.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if args.spec:\n            return _check_anchors(args.spec)\n        try:\n            specs = _committed_specs(Path.cwd())\n",
+      "replace": "        if args.spec:\n            _warn_untracked_specs(Path.cwd())\n            return _check_anchors(args.spec)\n        try:\n            specs = _committed_specs(Path.cwd())\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_no_spec_warning_is_skipped_for_explicit_specs",
+      "symbol": "_run_main"
+    },
+    {
+      "name": "untracked-listing-failure-reads-as-none",
+      "_mechanism": "Fail-open: git cannot list, the advisory says nothing, which reads as nothing untracked.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if listed.returncode != 0:\n        raise SpecError(f\"could not list untracked specs: {listed.stderr.strip()}\")\n",
+      "replace": "    if listed.returncode != 0:\n        return []\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_untracked_specs_outside_git_raises_rather_than_reporting_none",
+      "symbol": "_untracked_specs"
+    },
+    {
+      "name": "untracked-listing-scoped-to-cwd",
+      "_mechanism": "Without the `:/` anchor git lists only under cwd, so `cd h-mad && --check-anchors` misses a spec forgotten in a sibling directory.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "\"-z\", \"--\", \":/*.json\"],",
+      "replace": "\"-z\", \"--\", \"*.json\"],",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_warns_about_an_untracked_spec",
+      "symbol": "_untracked_specs"
+    },
+    {
+      "name": "untracked-half-written-spec-dropped",
+      "_mechanism": "Only fully valid specs are named; the half-written one, likeliest to be untracked, is skipped in silence.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if kind != \"not-a-spec\":\n",
+      "replace": "        if kind == \"spec\":\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_warns_about_an_untracked_spec",
+      "symbol": "_untracked_specs"
+    },
+    {
+      "name": "untracked-undecodable-file-crashes-sweep",
+      "_mechanism": "Review must-fix restored: a UTF-16 untracked JSON raises UnicodeDecodeError and the sweep prints no verdict.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        try:\n            kind = classify_spec_file(repo / rel)[0]\n        except (OSError, ValueError):\n",
+      "replace": "        kind = classify_spec_file(repo / rel)[0]\n        if False:\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_survives_an_undecodable_untracked_json",
+      "symbol": "_untracked_specs"
+    },
+    {
+      "name": "untracked-listing-failure-crashes-sweep",
+      "_mechanism": "The advisory's own failure escapes and takes the anchor verdict down with it.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        print(f\"[H-MAD] note: {exc}\", file=sys.stderr)\n        return\n",
+      "replace": "        raise\n",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_with_no_spec_reports_a_listing_failure_and_keeps_its_verdict",
+      "symbol": "_warn_untracked_specs"
     }
   ]
 }

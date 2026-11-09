@@ -2177,6 +2177,55 @@ def _committed_specs(cwd: Path) -> list[Path]:
     return [p for p in paths if classify_spec_file(p)[0] != "not-a-spec"]
 
 
+def _untracked_specs(cwd: Path) -> list[str]:
+    """Repo-relative paths of untracked, non-ignored JSON that is, or may be, a spec.
+
+    Advisory only (skill-candidates row `untracked-spec-warning`): discovery stays
+    committed-only, but a spec someone forgot to `git add` is skipped in silence,
+    which happened twice in one session. Raises `SpecError` when git cannot
+    answer, so "could not list" never reads as "nothing untracked".
+    """
+    listed = subprocess.run(
+        ["git", "-C", str(cwd), "-c", "core.quotePath=false", "ls-files",
+         "--others", "--exclude-standard", "--full-name", "-z", "--", ":/*.json"],
+        capture_output=True, text=True,
+    )
+    if listed.returncode != 0:
+        raise SpecError(f"could not list untracked specs: {listed.stderr.strip()}")
+    top = subprocess.run(["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+                         capture_output=True, text=True)
+    if top.returncode != 0:
+        raise SpecError(f"could not list untracked specs: {top.stderr.strip()}")
+    repo = Path(top.stdout.strip())
+    found = []
+    for rel in sorted(rel for rel in listed.stdout.split("\0") if rel):
+        try:
+            kind = classify_spec_file(repo / rel)[0]
+        except (OSError, ValueError):
+            # A UTF-16 export or other undecodable untracked file. Before this
+            # advisory untracked files were never opened; one must not crash the
+            # sweep whose verdict the advisory is only annotating.
+            continue
+        # Same filter as `_committed_specs`: a half-written spec is unclassifiable,
+        # and that is the spec most likely to be untracked.
+        if kind != "not-a-spec":
+            found.append(rel)
+    return found
+
+
+def _warn_untracked_specs(cwd: Path) -> None:
+    """Print the advisory on stderr. The `ANCHORS:` stdout lines are parsed by
+    exact string in the suite and the pre-push hook, so nothing is added there."""
+    try:
+        untracked = _untracked_specs(cwd)
+    except SpecError as exc:
+        print(f"[H-MAD] note: {exc}", file=sys.stderr)
+        return
+    for rel in untracked:
+        print(f"[H-MAD] note: untracked spec not swept: {rel} — `git add` it to include it",
+              file=sys.stderr)
+
+
 def _check_anchors(spec_paths: list[Path]) -> int:
     """Print an anchor sweep over every spec. 0 iff every anchor still matches once."""
     specs = ok = drifted = unreadable = mutations = skipped = unclassifiable = 0
@@ -2795,11 +2844,13 @@ def _run_main(args: argparse.Namespace, argv: list[str] | None,
         if args.spec:
             return _check_anchors(args.spec)
         try:
-            return _check_anchors(_committed_specs(Path.cwd()))
+            specs = _committed_specs(Path.cwd())
         except SpecError as exc:
             print(f"ANCHORS: ANCHORS_UNREADABLE — {exc}")
             print("[H-MAD] anchors ANCHORS_UNREADABLE")
             return 2
+        _warn_untracked_specs(Path.cwd())
+        return _check_anchors(specs)
     if args.sweep:
         try:
             specs = args.spec or _committed_specs(Path.cwd())
