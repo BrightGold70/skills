@@ -22,6 +22,24 @@ if [ -n "${HMAD_STUB_AGY_PROMPT_CAPTURE:-}" ]; then
 fi
 
 
+# Stay "running" until FILE contains STRING, instead of for a fixed wall-clock
+# time: HMAD_STUB_AGY_WAIT_FILE=<path> HMAD_STUB_AGY_WAIT_FOR=<literal>. A fixed
+# sleep races the wrapper's heartbeat under load; this waits for the event the
+# test asserts on. On the deadline it returns normally, so a broken heartbeat
+# fails the test's own assertion instead of a timeout. Opt-in; no-op when unset.
+_wait_for_file() {
+  [ -n "${HMAD_STUB_AGY_WAIT_FILE:-}" ] || return 0
+  if [ -z "${HMAD_STUB_AGY_WAIT_FOR:-}" ]; then
+    echo "agy stub: HMAD_STUB_AGY_WAIT_FILE needs HMAD_STUB_AGY_WAIT_FOR" >&2
+    exit 97
+  fi
+  local deadline=$(( SECONDS + ${HMAD_STUB_AGY_WAIT_DEADLINE:-20} ))
+  until grep -qF -- "$HMAD_STUB_AGY_WAIT_FOR" "$HMAD_STUB_AGY_WAIT_FILE" 2>/dev/null; do
+    [ "$SECONDS" -ge "$deadline" ] && return 0
+    sleep 0.1
+  done
+}
+
 # The response. `${VAR-default}` allows an explicitly empty response while
 # retaining the old default.
 if [ -n "${HMAD_STUB_AGY_RESP+x}" ]; then
@@ -57,6 +75,7 @@ if [ "$_streaming" -eq 1 ]; then
   printf '%s\n' '{"event":"step_update","step_update":{"conversation_id":"stub","step_index":1,"state":"DONE","step_type":"tool","tool_name":"run_command","duration_seconds":1.5,"tool_info":{"parameters":{"CommandLine":"stub-work"}}}}'
   # Simulate a long-running task so the wrapper's --timeout watchdog can fire.
   [ -n "${HMAD_STUB_AGY_SLEEP:-}" ] && sleep "$HMAD_STUB_AGY_SLEEP"
+  _wait_for_file
 
   # An EMPTY response emits no `result` — the shape a killed or crashed turn
   # leaves behind, which is what drives the wrapper's final_empty path.
@@ -69,6 +88,7 @@ if [ "$_streaming" -eq 1 ]; then
   fi
 else
   [ -n "${HMAD_STUB_AGY_SLEEP:-}" ] && sleep "$HMAD_STUB_AGY_SLEEP"
+  _wait_for_file
   [ -n "$_resp" ] && printf '%s\n' "$_resp"
 fi
 # Test-only escape hatch: populate the wrapper's redirected transcript without

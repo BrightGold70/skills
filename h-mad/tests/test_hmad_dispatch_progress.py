@@ -410,7 +410,8 @@ def test_heartbeat_writes_a_beat_line_into_the_transcript(tmp_path):
     log = tmp_path / "run.log"
     r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
             env=_env(b, HMAD_STUB_AGY_RESP="VERDICT: COMPLIANT",
-                     HMAD_STUB_AGY_SLEEP="4", HMAD_EXEC_HEARTBEAT_SEC="1"))
+                     HMAD_STUB_AGY_WAIT_FILE=str(log), HMAD_STUB_AGY_WAIT_FOR="#hmad-beat",
+                     HMAD_EXEC_HEARTBEAT_SEC="1"))
     assert r.returncode == 0, r.stderr
     assert "#hmad-beat" in log.read_text()
     # a beat must not corrupt the stream it shares
