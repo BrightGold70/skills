@@ -1,0 +1,39 @@
+{
+  "_why": "Positive control for the beat-sync stub tests (d99d33ec, aaf3caf5). The codex and agy stubs wait for the beat the test asserts on and exit normally at a 20 s deadline, so a heartbeat that never fires must fail the test's own assertion rather than time out. This positive control was run twice by hand; these rows re-run it on every sweep. The two rows are the same mutant on purpose: a row pins one `test`, and each beat-sync test needs its own pin.",
+  "_provenance": "docs/skill-candidates.md row heartbeat-sync-mutation-rows; docs/handoffs/2026-11-09-main__heartbeat-flakes-fixed.md Key Learnings.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_exec_stamp.py",
+    "tests/test_hmad_dispatch_progress.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "codex-heartbeat-never-due",
+      "_mechanism": "Raise the beat threshold to 999 s. No beat fires within the stub's 20 s deadline, so the worktree comment gets no `running` stamps and the three-interval count fails.",
+      "file": "scripts/hmad-dispatch.sh",
+      "symbol": "_exec_run",
+      "find": "-ge \"$hb_interval\" ]; then",
+      "replace": "-ge 999 ]; then",
+      "test": "tests/test_hmad_dispatch_exec_stamp.py::test_heartbeat_stamps_across_three_intervals"
+    },
+    {
+      "name": "agy-heartbeat-never-due",
+      "_mechanism": "Same threshold mutant, pinned to the agy transcript beat. No `#hmad-beat` reaches the log, the stub's wait times out and exits normally, and the test's `#hmad-beat in log` assertion fails.",
+      "file": "scripts/hmad-dispatch.sh",
+      "symbol": "_exec_run",
+      "find": "-ge \"$hb_interval\" ]; then",
+      "replace": "-ge 999 ]; then",
+      "test": "tests/test_hmad_dispatch_progress.py::test_heartbeat_writes_a_beat_line_into_the_transcript"
+    }
+  ]
+}
