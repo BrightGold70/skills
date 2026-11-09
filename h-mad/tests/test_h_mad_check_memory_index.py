@@ -60,7 +60,7 @@ MEMORY_CAPS = r'"MEMORY\.md",[\w$]+=(?P<lines>\d+),[\w$]+=(?P<bytes>\d+),'
 
 
 class TestAgainstTheLiveBinary:
-    """Re-derive the contract rather than trusting the transcription.
+    r"""Re-derive the contract rather than trusting the transcription.
 
     Matched on VALUES in their declaring context, never on the minified names
     (`F2`, `hD`, `Ams`, `xZn`) — those are regenerated per build and pinning them

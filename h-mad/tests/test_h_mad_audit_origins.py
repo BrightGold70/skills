@@ -229,7 +229,8 @@ class TestAgainstTheRealCorpus:
     """The 152 records from `gateway-consolidation` cycles 98–103."""
 
     @pytest.fixture(scope="class")
-    def parsed(self):
+    @classmethod
+    def parsed(cls):
         return origins.read_sidecar(PROTOTYPE)
 
     def test_the_fixture_is_present_and_whole(self, parsed):

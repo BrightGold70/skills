@@ -581,7 +581,8 @@ class TestAppend:
     """FR-7: additions preserve history and validate the whole write atomically."""
 
     @pytest.fixture(scope="class")
-    def hostile_module(self):
+    @classmethod
+    def hostile_module(cls):
         env = {key: value for key, value in os.environ.items()
                if not key.startswith("HMAD_STUB_")}
         env["HMAD_STUB_HOSTILE"] = "all"
