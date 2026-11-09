@@ -1,6 +1,7 @@
 # omc-codex-mcp-no-type: stop OMC writing `type` into Codex MCP blocks
 
 **Status:** applied locally on 2026-11-09 (OMC 5.8.0). Retire it once upstream fixes this; see "Retiring" below.
+**2026-11-10, OMC 5.8.3:** NOT retirable yet. #4903 (merged to `dev`, contained in the v5.8.3 tag) fixed only `src/installer/mcp-registry.ts`. The compiled `dist/installer/mcp-registry.js` in the same tag, and the npm `oh-my-claude-sisyphus@5.8.3` tarball (`gitHead 73e0d61`), still contain `lines.push(`type = ${renderTomlString(entry.type)}`)`. The auto-update to 5.8.3 dropped the patch (`verify.py`: MISSING, renderer emits 2 `type` lines). It was re-applied (`VERIFY: OK files=4`).
 **Upstream:** [Yeachan-Heo/oh-my-claudecode#4899](https://github.com/Yeachan-Heo/oh-my-claudecode/issues/4899)
 
 ## The problem
@@ -55,3 +56,5 @@ The SessionStart hook `patch-verify-on-update.sh` runs `verify.py` whenever its 
 ## Retiring
 
 When #4899 is fixed in a released OMC: update, run `verify.py`. It will report MISSING, because the marker is gone. Then grep the new renderer: if no `type =` emission is left, delete this directory and mark it RETIRED here.
+
+Grep the **installed `dist/` and `bridge/cli.cjs`**, not the upstream source or the release notes. 5.8.3 shipped a fixed `.ts` with a stale build. `verify.py`'s real-renderer check settles it: after an update, `MISSING` together with `renderer still emits N type lines` means the build is still unfixed, so re-apply.
