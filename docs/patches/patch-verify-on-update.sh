@@ -63,7 +63,28 @@ npm_fp() {
   done
 }
 
-fp="$( { cat "$INSTALLED" 2>/dev/null; ls -1 "$HOME/.claude/plugins/cache/bkit-marketplace/bkit" 2>/dev/null; npm_fp; cat "${scripts[@]}"; } | shasum -a 256 | awk '{print $1}')"
+# Codex plugins and configs (codex-mattpocock-handoff-disable pins a version-bearing SKILL.md
+# path in each Codex config). A Codex plugin update adds a version folder and removes the old
+# one without touching anything above, so fingerprint each config's plugin version folders and
+# its skills.config / mattpocock lines. Only those lines, and without line numbers: Codex adds
+# a table on every newly trusted project, and hashing the whole file (or `grep -n` positions)
+# would re-run every verify on each such write. Configs are deduplicated by realpath so that
+# CODEX_HOME pointing at an Orca account (set in one session, unset in the next) changes nothing.
+codex_fp() {
+  local c r seen=""
+  for c in "$HOME/.codex/config.toml" ${CODEX_HOME:+"$CODEX_HOME/config.toml"} \
+           "$HOME/Library/Application Support/orca/codex-accounts"/*/home/config.toml; do
+    [ -f "$c" ] || continue
+    r="$(realpath "$c" 2>/dev/null)" || r="$c"
+    case "$seen" in *"|$r|"*) continue ;; esac
+    seen="$seen|$r|"
+    echo "$r"
+    r="$(realpath "$(dirname "$c")/plugins/cache" 2>/dev/null)" && ls -1d "$r"/*/*/*/ 2>/dev/null
+    grep -A2 -F -e '[[skills.config]]' -e 'mattpocock' "$c" 2>/dev/null
+  done
+}
+
+fp="$( { cat "$INSTALLED" 2>/dev/null; ls -1 "$HOME/.claude/plugins/cache/bkit-marketplace/bkit" 2>/dev/null; npm_fp; codex_fp; cat "${scripts[@]}"; } | shasum -a 256 | awk '{print $1}')"
 
 if [ -f "$STATE" ] && [ "$(sed -n 1p "$STATE")" = "$fp" ] && [ "$(sed -n 2p "$STATE")" = "OK" ]; then
   exit 0
