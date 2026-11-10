@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-10 · gotcha · [0.7] · `skill-candidates,census,handoff:2026-11-10-untracked-spec-warning` — skill_candidates_census counts a verdict as terminal only when bold: 'candidate: LANDED (...)' fell into a lowercase landed bucket; write 'candidate: **LANDED** (...)' and recount after every flip.
+- 2026-11-10 · gotcha · [0.7] · `omc,codex,patches,upstream,handoff:2026-11-10-untracked-spec-warning` — OMC v5.8.3 has the #4899 fix (#4903) in src/ only; dist/ in the tag and the npm tarball still emit type =. Judge an upstream fix by the INSTALLED build (verify.py real-renderer check), not release notes or source.
 - 2026-11-09 · gotcha · [0.7] · `h-mad,mutation-specs,handoff:2026-11-09-omc-codex-type-patch` — A new mutation spec is invisible to bare --check-anchors/--sweep and to the corpus tests until staged: discovery is git ls-files. Stage it before the corpus checks (hit twice in one session)
 - 2026-11-09 · gotcha · [0.5] · `zsh,json,shell,handoff:2026-11-09-omc-codex-type-patch` — zsh echo "$json" expands \n escapes inside JSON strings and breaks json.load; pipe captured JSON with printf '%s'
 - 2026-11-09 · gotcha · [0.5] · `pytest,testpaths,h-mad,handoff:2026-11-09-omc-codex-type-patch` — Adding a path to root pytest.ini testpaths makes its top-level dir a 'skill' for test_suite_collection.py: every test dir under it must then be declared too (docs/ became one via docs/patches/omc-codex-mcp-no-type/tests)
