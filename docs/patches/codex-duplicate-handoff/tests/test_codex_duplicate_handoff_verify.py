@@ -1073,3 +1073,247 @@ def test_agents_skills_linked_to_the_repo_root_is_fine(tmp_path, agents_link):
     agents_link.parent.symlink_to(REPO_HANDOFF.parent)     # ~/.agents/skills -> the repo root
     rc, out = run(tmp_path)
     assert not missing_lines(out), out
+
+
+# --- --fix for MISSING: create or repair the repo handoff link --------------------------------
+
+def link_temps(link: Path) -> list[Path]:
+    return sorted(link.parent.glob(f".{link.name}.fix-*")) if link.parent.is_dir() else []
+
+
+def test_fix_creates_an_absent_link(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    assert os.readlink(agents_link) == str(REPO_HANDOFF)
+    assert f"FIXED {agents_link} -> {REPO_HANDOFF}" in out
+
+
+def test_fix_creates_the_parent_too(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    shutil.rmtree(agents_link.parents[1])
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    assert os.path.realpath(agents_link) == str(REPO_HANDOFF)
+
+
+@pytest.mark.parametrize("kind", ["dangling", "loop"])
+def test_fix_replaces_a_broken_link_and_names_the_old_target(tmp_path, agents_link, kind):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    old = agents_link if kind == "loop" else tmp_path / "moved-away/handoff"
+    agents_link.symlink_to(old)
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    assert os.readlink(agents_link) == str(REPO_HANDOFF)
+    assert f"was {old}" in out and not link_temps(agents_link)
+
+
+def test_fix_leaves_a_link_to_another_folder_alone(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    other = tmp_path / "other-checkout/handoff"
+    skill(other, "handoff")
+    agents_link.unlink()
+    agents_link.symlink_to(other)
+    rc, out = fix(tmp_path)
+    assert rc == 1, out
+    assert os.readlink(agents_link) == str(other) and f"NOT FIXED {agents_link}" in out
+    assert "another folder" in out                          # refused for this reason, not by accident
+
+
+def test_fix_never_touches_a_real_folder_in_the_links_place(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    md = skill(agents_link, "notes")
+    rc, out = fix(tmp_path)
+    assert rc == 1, out
+    assert md.read_text().startswith("---") and not agents_link.is_symlink()
+    assert f"NOT FIXED {agents_link}" in out and "never removed" in out
+
+
+def test_fix_will_not_link_to_a_broken_repo_handoff(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    empty = tmp_path / "branch-without-handoff/handoff"
+    empty.mkdir(parents=True)
+    agents_link.unlink()
+    env = {k: v for k, v in os.environ.items() if k != "CODEX_HOME"}
+    env.update(HOME=str(tmp_path), HANDOFF_REPO_DIR=str(empty))
+    out = subprocess.run([VERIFY_PY, str(VERIFY), "--fix"], capture_output=True, text=True, env=env, timeout=30)
+    assert out.returncode == 1, out.stdout
+    assert not agents_link.is_symlink() and not agents_link.exists()
+    assert f"NOT FIXED {agents_link}" in out.stdout
+
+
+def test_fix_repairs_the_link_and_a_stale_pin_together(tmp_path, agents_link):
+    cfg, old, new = stale_setup(tmp_path)
+    agents_link.unlink()
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    assert os.readlink(agents_link) == str(REPO_HANDOFF) and str(new) in cfg.read_text()
+
+
+def test_fix_does_not_clobber_a_link_created_meanwhile(tmp_path, agents_link, monkeypatch, capsys):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    mod = load_verify()
+    real_symlink = mod.os.symlink
+    elsewhere = tmp_path / "someone-elses"
+
+    def racing_symlink(src, dst, *a, **k):
+        if Path(dst) == agents_link:
+            real_symlink(elsewhere, dst)                    # another process got there first
+        return real_symlink(src, dst, *a, **k)
+
+    monkeypatch.setattr(mod.os, "symlink", racing_symlink)
+    mod.main(["--fix"])
+    out = capsys.readouterr().out
+    assert os.readlink(agents_link) == str(elsewhere)
+    assert f"NOT FIXED {agents_link}" in out
+
+
+def test_fix_aborts_when_a_broken_link_changes_meanwhile(tmp_path, agents_link, monkeypatch, capsys):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    agents_link.symlink_to(tmp_path / "gone")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    mod = load_verify()
+    monkeypatch.setattr(mod, "link_target", lambda p: str(tmp_path / "retargeted-meanwhile"))
+    mod.main(["--fix"])
+    out = capsys.readouterr().out
+    assert os.readlink(agents_link) == str(tmp_path / "gone")
+    assert f"NOT FIXED {agents_link}" in out and not link_temps(agents_link)
+
+
+def in_process(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    return load_verify()
+
+
+def test_fix_leaves_a_dangling_link_whose_target_comes_back(tmp_path, agents_link, monkeypatch, capsys):
+    pinned_home(tmp_path)
+    other = tmp_path / "other-checkout/handoff"
+    agents_link.unlink()
+    agents_link.symlink_to(other)                           # dangling at check() time
+    mod = in_process(tmp_path, monkeypatch)
+    real = mod.link_target
+
+    def checkout_restored(link):
+        skill(other, "handoff")                            # git checkout / volume mount meanwhile
+        return real(link)
+
+    monkeypatch.setattr(mod, "link_target", checkout_restored)
+    mod.main(["--fix"])
+    out = capsys.readouterr().out
+    assert os.readlink(agents_link) == str(other), out
+    assert f"NOT FIXED {agents_link}" in out
+
+
+def test_fix_uses_the_target_it_classified_not_a_later_read(tmp_path, agents_link, monkeypatch, capsys):
+    pinned_home(tmp_path)
+    mine = tmp_path / "mine/handoff"
+    skill(mine, "handoff")
+    agents_link.unlink()
+    agents_link.symlink_to(tmp_path / "gone")               # dangling when classified
+    mod = in_process(tmp_path, monkeypatch)
+    real = mod.config_paths
+    calls = []
+
+    def user_relinks_during_config_loop(home):
+        if not calls:
+            agents_link.unlink()
+            agents_link.symlink_to(mine)                   # user: ln -sfn ~/mine/handoff ...
+        calls.append(1)
+        return real(home)
+
+    monkeypatch.setattr(mod, "config_paths", user_relinks_during_config_loop)
+    mod.main(["--fix"])
+    out = capsys.readouterr().out
+    assert os.readlink(agents_link) == str(mine), out
+    assert f"NOT FIXED {agents_link}" in out
+
+
+def test_fix_reports_a_link_that_vanishes_meanwhile(tmp_path, agents_link, monkeypatch, capsys):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    agents_link.symlink_to(tmp_path / "gone")
+    mod = in_process(tmp_path, monkeypatch)
+
+    def vanished(link):
+        raise FileNotFoundError(link)
+
+    monkeypatch.setattr(mod, "link_target", vanished)
+    rc = mod.main(["--fix"])
+    out = capsys.readouterr().out
+    assert f"NOT FIXED {agents_link}" in out and "VERIFY:" in out.strip().splitlines()[-1]
+    assert not link_temps(agents_link)
+
+
+def test_fix_never_removes_a_temp_link_it_did_not_create(tmp_path, agents_link, monkeypatch, capsys):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    agents_link.symlink_to(tmp_path / "gone")
+    planted = agents_link.with_name(f".{agents_link.name}.fix-{os.getpid()}")
+    planted.symlink_to(tmp_path / "someone-elses")
+    mod = in_process(tmp_path, monkeypatch)
+    mod.main(["--fix"])
+    out = capsys.readouterr().out
+    assert planted.is_symlink() and os.readlink(planted) == str(tmp_path / "someone-elses")
+    assert f"NOT FIXED {agents_link}" in out
+    assert os.readlink(agents_link) == str(tmp_path / "gone")
+
+
+def test_fix_refuses_when_agents_is_a_dangling_symlink(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    shutil.rmtree(agents_link.parents[1])
+    agents_link.parents[1].symlink_to(tmp_path / "nowhere")  # ~/.agents -> missing
+    rc, out = fix(tmp_path)
+    assert rc == 1, out
+    assert f"NOT FIXED {agents_link}" in out and "Traceback" not in out and "unexpected" not in out
+    assert out.strip().splitlines()[-1].startswith("VERIFY: MISSING")
+
+
+def test_fix_refuses_a_link_repointed_to_another_dangling_target(tmp_path, agents_link, monkeypatch, capsys):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    agents_link.symlink_to(tmp_path / "gone")               # dangling when classified
+    mod = in_process(tmp_path, monkeypatch)
+    real = mod.config_paths
+    calls = []
+
+    def relinked_to_another_broken_target(home):
+        if not calls:
+            agents_link.unlink()
+            agents_link.symlink_to(tmp_path / "not-mounted-yet/handoff")   # still dangling, but chosen
+        calls.append(1)
+        return real(home)
+
+    monkeypatch.setattr(mod, "config_paths", relinked_to_another_broken_target)
+    mod.main(["--fix"])
+    out = capsys.readouterr().out
+    assert os.readlink(agents_link) == str(tmp_path / "not-mounted-yet/handoff"), out
+    assert f"NOT FIXED {agents_link}" in out
+
+
+def test_fix_reports_a_folder_that_appears_at_the_last_moment(tmp_path, agents_link, monkeypatch, capsys):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    agents_link.symlink_to(tmp_path / "gone")
+    mod = in_process(tmp_path, monkeypatch)
+    real = mod.still_broken
+
+    def folder_lands_after_the_check(plan):
+        ok = real(plan)
+        agents_link.unlink()
+        skill(agents_link, "notes")                        # appears between check and swap
+        return ok
+
+    monkeypatch.setattr(mod, "still_broken", folder_lands_after_the_check)
+    mod.main(["--fix"])
+    out = capsys.readouterr().out
+    assert (agents_link / "SKILL.md").is_file() and not agents_link.is_symlink()
+    assert f"NOT FIXED {agents_link}" in out and not link_temps(agents_link)

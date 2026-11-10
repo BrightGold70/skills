@@ -78,9 +78,16 @@ A skill folder that cannot be listed or read makes the check exit 2, never 0.
 python3 /Users/kimhawk/orca/skills/docs/patches/codex-duplicate-handoff/verify.py
 ```
 
-- `PROBLEM missing repo handoff: …` — run the `ln -s` / `ln -sfn` command the line names
-  (`-sfn` replaces a dangling or wrong link). A real folder in the link's place must be moved
-  away first; it is never removed for you.
+- `PROBLEM missing repo handoff: …` — `verify.py --fix` creates an absent link (and
+  `~/.agents/skills` if needed) or replaces a dangling or looping one, printing the old target
+  (`was …`). It refuses (`NOT FIXED`) a link that points at another folder (maybe on purpose:
+  run the `ln -sfn` the line names), a real file or folder in the link's place (move it away
+  first; it is never removed for you), and a repo whose `handoff/SKILL.md` is missing or
+  misnamed (it will not link to a broken skill). It re-checks, as its last step before swapping,
+  that the link still has the target it saw and is still broken the same way, and never
+  clobbers a link or folder created meanwhile. One race is not closable: a plain *file* created
+  at that path in the instant between that check and the swap would be replaced (rename(2) has
+  no "only if a symlink" form).
 - `PROBLEM <config>: no enabled=false entry for <path>` — run `verify.py --fix`. It repoints the
   stale `[[skills.config]]` entry's `path` to `<path>` (or appends the entry if there is none),
   touching nothing else in the file (line endings included), keeping its mode (the temp file is

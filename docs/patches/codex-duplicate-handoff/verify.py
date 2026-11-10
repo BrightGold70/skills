@@ -29,7 +29,9 @@ Exit 0: every config that enables the plugin disables every installed handoff co
         (or the plugin, or its handoff skill, is not installed).
 Exit 1: a disable is missing or stale, or a duplicate handoff skill exists; fix per README.md.
 
---fix repoints each stale pin to the installed copy (or adds the pin), editing only the `path`
+--fix creates an absent repo handoff link, or replaces a dangling/looping one, but never one that
+points at another folder, a real folder in its place, or a link to a broken repo handoff/. It also
+repoints each stale pin to the installed copy (or adds the pin), editing only the `path`
 line or appending one block, with a timestamped backup; then re-runs the check. It never deletes
 a duplicate skill, never overrides an entry that explicitly enables the handoff, and refuses a
 stale path it cannot place unambiguously.
@@ -146,8 +148,22 @@ def skill_files(root: Path, unreadable: list[str]) -> list[Path]:
     return out
 
 
-def missing_handoff(home: Path, unreadable: list[str]) -> str | None:
-    """Why Codex would get NO repo handoff, or None. The repo's handoff reaches Codex (both the
+def link_state(link: Path) -> str:
+    """For a path known to be a symlink: resolves, dangling, loop, or an error name."""
+    try:
+        os.stat(link)
+        return "resolves"
+    except (FileNotFoundError, NotADirectoryError):
+        return "dangling"
+    except OSError as exc:
+        return "loop" if exc.errno == errno.ELOOP else type(exc).__name__
+
+
+def missing_handoff(home: Path, unreadable: list[str]) -> tuple[str, str, str | None] | None:
+    """Why Codex would get NO repo handoff, as (message, kind, seen), or None. kind is one of
+    absent, dangling, loop (what --fix repairs), elsewhere, real, repo_skill (what it leaves to
+    you). seen is the link's target as read WHILE classifying it (None when not a link): --fix
+    acts only if the link still has that target and is still broken the same way. The repo's handoff reaches Codex (both the
     plain and the Orca CODEX_HOME) through one link, ~/.agents/skills/handoff -> <repo>/handoff.
     Decided with lstat/stat so that a permission error is "could not judge" (appended to
     unreadable), never "absent": pathlib's exists() swallows it on 3.15 but raises on 3.11."""
@@ -157,32 +173,36 @@ def missing_handoff(home: Path, unreadable: list[str]) -> str | None:
         st = os.lstat(link)
     except FileNotFoundError:
         mk = "" if link.parent.is_dir() else f"mkdir -p {link.parent} && "
-        return f"{link} is absent; run: {mk}ln -s {repo} {link}"
+        return f"{link} is absent; run: {mk}ln -s {repo} {link}", "absent", None
     except OSError as exc:
         unreadable.append(f"{link} ({type(exc).__name__})")
         return None
     if stat.S_ISLNK(st.st_mode):
         try:
-            os.stat(link)
-        except (FileNotFoundError, NotADirectoryError) as exc:
-            return f"{link} is a dangling link to {os.readlink(link)}; {relink}"
+            seen = os.readlink(link)
         except OSError as exc:
-            if exc.errno == errno.ELOOP:
-                return f"{link} is a link loop; {relink}"
             unreadable.append(f"{link} ({type(exc).__name__})")
             return None
+        state = link_state(link)
+        if state == "dangling":
+            return f"{link} is a dangling link to {seen}; {relink}", "dangling", seen
+        if state == "loop":
+            return f"{link} is a link loop; {relink}", "loop", seen
+        if state != "resolves":
+            unreadable.append(f"{link} ({state})")
+            return None
         if os.path.realpath(link) != repo:
-            return f"{link} links to {os.path.realpath(link)}, not {repo}; {relink}"
+            return f"{link} links to {os.path.realpath(link)}, not {repo}; {relink}", "elsewhere", seen
     elif os.path.realpath(link) != repo:   # not a link itself; fine if reached through a linked parent
         kind = "folder" if stat.S_ISDIR(st.st_mode) else "file"
-        return f"{link} is a real {kind}, not a link to {repo}; move it away, then ln -s {repo} {link}"
+        return f"{link} is a real {kind}, not a link to {repo}; move it away, then ln -s {repo} {link}", "real", None
     md = Path(repo) / "SKILL.md"
     try:
         name = skill_name(read_raw(md))
     except (OSError, UnicodeDecodeError):
-        return f"{md} is missing or unreadable (is the repo on a branch without handoff/?)"
+        return f"{md} is missing or unreadable (is the repo on a branch without handoff/?)", "repo_skill", None
     if name != "handoff":
-        return f"{md} is named {name!r}, not 'handoff'"
+        return f"{md} is named {name!r}, not 'handoff'", "repo_skill", None
     return None
 
 
@@ -220,7 +240,8 @@ def check(home: Path) -> tuple[int, list[str], list[dict]]:
     is missing or stale)."""
     problems, unreadable, versions, pinned, plans = [], [], set(), 0, []
     dupes = duplicate_handoffs(home, unreadable)
-    missing_link = missing_handoff(home, unreadable)
+    missing = missing_handoff(home, unreadable)
+    missing_link, missing_kind, missing_seen = missing if missing else (None, None, None)
     if missing_link:
         # The link itself (its target, or a folder in its place) is MISSING's to repair; reporting
         # it again as a duplicate would tell the user to delete what the link points at.
@@ -260,6 +281,9 @@ def check(home: Path) -> tuple[int, list[str], list[dict]]:
             plans.append({"cfg": cfg, "text": text, "stale": stale, "missing": missing,
                           "explicitly_enabled": [h for h in missing if norm(str(h)) in not_disabled]})
 
+    if missing_link:
+        plans.append({"kind": "link", "state": missing_kind, "link": home / ".agents/skills/handoff",
+                      "seen": missing_seen})
     lines = [f"PROBLEM missing repo handoff: {missing_link}"] if missing_link else []
     lines += problems
     lines += [f"PROBLEM duplicate handoff skill: {d} (delete it per README)" for d in dupes]
@@ -375,6 +399,75 @@ def apply_fix(plan: dict) -> str:
     return f"FIXED {cfg}: " + ", ".join(os.path.realpath(h) for h in plan["missing"]) + f" (backup {backup.name})"
 
 
+def link_target(link: Path) -> str:
+    """Re-read a link just before replacing it: a seam so a test can play a concurrent change."""
+    return os.readlink(link)
+
+
+def still_broken(plan: dict) -> bool:
+    """The link still has the target it was classified with, and is still broken the same way.
+    A target string alone is not enough: a dangling link whose folder comes back (a checkout,
+    a mounted volume) keeps its string and now works, and must not be replaced."""
+    link = plan["link"]
+    try:
+        if link_target(link) != plan["seen"]:
+            return False
+    except OSError:              # vanished, or became a real folder/file
+        return False
+    return link_state(link) == plan["state"]
+
+
+def fix_link(plan: dict) -> str:
+    """Create the repo handoff link (absent) or replace a broken one (dangling, loop). Anything
+    else is someone's choice or the repo's state, and is left alone."""
+    link, repo, state = plan["link"], repo_handoff(), plan["state"]
+    if state not in ("absent", "dangling", "loop"):
+        why = {"elsewhere": "it links to another folder, maybe on purpose",
+               "real": "a real file or folder sits there; it is never removed for you",
+               "repo_skill": "the repo's own handoff/SKILL.md is missing or misnamed"}[state]
+        return f"NOT FIXED {link}: {why}; see the PROBLEM line"
+    try:
+        name = skill_name(read_raw(Path(repo) / "SKILL.md"))
+    except (OSError, UnicodeDecodeError):
+        name = None
+    if name != "handoff":
+        return f"NOT FIXED {link}: {repo}/SKILL.md is not a readable skill named handoff; not linking to it"
+    if state == "absent":
+        try:
+            link.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:   # e.g. ~/.agents is a dangling symlink or a file
+            return f"NOT FIXED {link}: cannot create {link.parent} ({type(exc).__name__}); check it by hand"
+        try:
+            os.symlink(repo, link)          # fails, never clobbers, if something appeared meanwhile
+        except FileExistsError:
+            return f"NOT FIXED {link}: something was created there meanwhile; re-run --fix"
+        except OSError as exc:
+            return f"NOT FIXED {link}: {type(exc).__name__}; check it by hand"
+        return f"FIXED {link} -> {repo}"
+    tmp = link.with_name(f".{link.name}.fix-{os.getpid()}")
+    created = False
+    try:
+        try:
+            os.symlink(repo, tmp)
+        except OSError as exc:              # e.g. a leftover temp from a killed run: not ours
+            return f"NOT FIXED {link}: cannot create temp link {tmp.name} ({type(exc).__name__})"
+        created = True
+        if not still_broken(plan):          # the LAST check before the swap
+            return f"NOT FIXED {link}: it changed meanwhile; re-run --fix"
+        try:
+            # Swaps only the link; nothing it pointed at is touched. A directory landing at the
+            # link path in the instant since the check makes this fail (reported, not clobbered);
+            # a plain FILE landing there would be replaced: rename(2) has no "only if a symlink".
+            os.replace(tmp, link)
+        except OSError as exc:
+            return f"NOT FIXED {link}: it changed meanwhile ({type(exc).__name__}); re-run --fix"
+        created = False
+    finally:
+        if created:                         # never remove a temp this call did not make
+            tmp.unlink(missing_ok=True)
+    return f"FIXED {link} -> {repo} (was {plan['seen']})"
+
+
 def current_text_safe(path: Path) -> str | None:
     try:
         return read_raw(path)
@@ -392,7 +485,7 @@ def main(argv: list[str] | None = None) -> int:
     rc, lines, plans = check(home)
     if "--fix" in args and plans:
         for plan in plans:
-            print(apply_fix(plan))
+            print(fix_link(plan) if plan.get("kind") == "link" else apply_fix(plan))
         rc, lines, _ = check(home)
     for line in lines:
         print(line)
