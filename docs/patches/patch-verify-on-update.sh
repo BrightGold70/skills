@@ -63,25 +63,40 @@ npm_fp() {
   done
 }
 
-# Codex plugins and configs (codex-mattpocock-handoff-disable pins a version-bearing SKILL.md
-# path in each Codex config). A Codex plugin update adds a version folder and removes the old
-# one without touching anything above, so fingerprint each config's plugin version folders and
-# its skills.config / mattpocock lines. Only those lines, and without line numbers: Codex adds
-# a table on every newly trusted project, and hashing the whole file (or `grep -n` positions)
-# would re-run every verify on each such write. Configs are deduplicated by realpath so that
-# CODEX_HOME pointing at an Orca account (set in one session, unset in the next) changes nothing.
-codex_fp() {
-  local c r seen=""
-  for c in "$HOME/.codex/config.toml" ${CODEX_HOME:+"$CODEX_HOME/config.toml"} \
-           "$HOME/Library/Application Support/orca/codex-accounts"/*/home/config.toml; do
-    [ -f "$c" ] || continue
-    r="$(realpath "$c" 2>/dev/null)" || r="$c"
-    case "$seen" in *"|$r|"*) continue ;; esac
-    seen="$seen|$r|"
-    echo "$r"
-    r="$(realpath "$(dirname "$c")/plugins/cache" 2>/dev/null)" && ls -1d "$r"/*/*/*/ 2>/dev/null
-    grep -A2 -F -e '[[skills.config]]' -e 'mattpocock' "$c" 2>/dev/null
+# Codex plugins, configs and skills (codex-duplicate-handoff). Its STALE check pins a
+# version-bearing SKILL.md path in each Codex config: a plugin update adds a version folder and
+# removes the old one without touching anything above, so fingerprint each Codex home's plugin
+# version folders and its config's skills.config / mattpocock lines -- only those lines, and
+# without line numbers, because Codex adds a table on every newly trusted project. Its DUPLICATE
+# check looks for a second skill named `handoff`, so fingerprint every SKILL.md under each home's
+# skills/ and ~/.agents/skills: path, the directory it resolves to (a link to the repo replaced by
+# a real copy keeps path and name), and its name line.
+# Homes are deduplicated and sorted by realpath and read through it, so CODEX_HOME set, unset or
+# naming any Orca account gives the same fingerprint. -maxdepth 3 matches verify.py's MAX_DEPTH
+# (skills/<a>/<b>/SKILL.md) and bounds the walk when a skill folder links to a big tree.
+skills_fp() {  # $1 = a skills root (a realpath)
+  [ -d "$1" ] || return 0
+  find -L "$1" -maxdepth 3 -name SKILL.md -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r f; do
+    printf '%s %s %s\n' "${f#"$1"/}" "$(realpath "$(dirname "$f")" 2>/dev/null)" \
+      "$(grep -m1 -E "^[[:space:]]*[\"']?name" "$f" 2>/dev/null)"
   done
+}
+codex_fp() {
+  local h r homes=""
+  for h in "$HOME/.codex" ${CODEX_HOME:+"$CODEX_HOME"} \
+           "$HOME/Library/Application Support/orca/codex-accounts"/*/home; do
+    [ -d "$h" ] || continue
+    r="$(realpath "$h" 2>/dev/null)" || r="$h"
+    homes="$homes$r"$'\n'
+  done
+  printf '%s' "$homes" | LC_ALL=C sort -u | while IFS= read -r h; do
+    [ -n "$h" ] || continue
+    echo "$h"
+    r="$(realpath "$h/plugins/cache" 2>/dev/null)" && ls -1d "$r"/*/*/*/ 2>/dev/null
+    [ -f "$h/config.toml" ] && grep -A2 -F -e '[[skills.config]]' -e 'mattpocock' "$h/config.toml" 2>/dev/null
+    skills_fp "$h/skills"
+  done
+  r="$(realpath "$HOME/.agents/skills" 2>/dev/null)" && skills_fp "$r"
 }
 
 fp="$( { cat "$INSTALLED" 2>/dev/null; ls -1 "$HOME/.claude/plugins/cache/bkit-marketplace/bkit" 2>/dev/null; npm_fp; codex_fp; cat "${scripts[@]}"; } | shasum -a 256 | awk '{print $1}')"

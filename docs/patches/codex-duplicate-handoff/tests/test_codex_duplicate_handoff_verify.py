@@ -1,4 +1,8 @@
-"""verify.py must flag a Matt Pocock handoff disable that no longer names the installed copy.
+"""verify.py must flag anything that gives Codex a second `handoff` skill.
+
+Two ways: a Matt Pocock handoff disable that no longer names the installed copy, and a
+standalone `handoff` skill reappearing in a Codex home (the Orca account copy, removed
+2026-11-10, was probably installed by OMX setup and can come back).
 
 Every test builds a fake HOME under tmp_path (a Codex plugin cache, ~/.codex/config.toml and an
 Orca codex-account config) and runs verify.py with HOME pointed at it, so nothing here reads the
@@ -46,9 +50,10 @@ def link_plugins(codex_home: Path, home: Path) -> None:
     (codex_home / "plugins").symlink_to(home / ".codex/plugins")
 
 
-def run(home: Path):
-    env = {k: v for k, v in os.environ.items() if k not in ("CODEX_HOME",)}
+def run(home: Path, extra_env: dict | None = None):
+    env = {k: v for k, v in os.environ.items() if k not in ("CODEX_HOME", "HANDOFF_REPO_DIR")}
     env["HOME"] = str(home)
+    env.update(extra_env or {})
     out = subprocess.run([sys.executable, str(VERIFY)], capture_output=True, text=True, env=env, timeout=30)
     return out.returncode, out.stdout + out.stderr
 
@@ -187,13 +192,241 @@ def test_no_codex_config_cannot_judge(tmp_path):
     assert rc == 2, out
 
 
+# --- a standalone `handoff` skill in a Codex home --------------------------------------------
+
+def skill(dirpath: Path, name: str) -> Path:
+    dirpath.mkdir(parents=True, exist_ok=True)
+    (dirpath / "SKILL.md").write_text(f"---\nname: {name}\ndescription: x\n---\n# body\n")
+    return dirpath / "SKILL.md"
+
+
+def pinned_home(tmp_path: Path) -> Path:
+    """A passing baseline: the plugin installed and pinned in ~/.codex and the Orca account."""
+    hp = plugin(tmp_path, "1.3.2")
+    config(tmp_path / ".codex/config.toml", str(hp))
+    link_plugins((tmp_path / ORCA).parent, tmp_path)
+    config(tmp_path / ORCA, str(hp))
+    rc, out = run(tmp_path)
+    assert rc == 0, out
+    return hp
+
+
+def test_orca_account_handoff_copy_reappearing_is_caught(tmp_path):
+    pinned_home(tmp_path)
+    copy = skill((tmp_path / ORCA).parent / "skills/handoff", "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert str(copy.parent) in out
+    assert "DUPLICATE" in out.strip().splitlines()[-1]
+
+
+def test_copy_under_another_folder_name_is_caught(tmp_path):
+    pinned_home(tmp_path)
+    copy = skill((tmp_path / ORCA).parent / "skills/handoff-codex", "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert str(copy.parent) in out
+
+
+def test_quoted_name_is_caught(tmp_path):
+    pinned_home(tmp_path)
+    d = (tmp_path / ORCA).parent / "skills/hx"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text('---\nname: "handoff"\n---\n')
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+
+
+def test_home_codex_skills_copy_is_caught(tmp_path):
+    pinned_home(tmp_path)
+    skill(tmp_path / ".codex/skills/handoff", "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+
+
+def test_system_skills_copy_is_caught(tmp_path):
+    pinned_home(tmp_path)
+    skill((tmp_path / ORCA).parent / "skills/.system/handoff", "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+
+
+def repo_handoff(tmp_path: Path) -> tuple[Path, dict]:
+    repo = tmp_path / "repo/handoff"
+    skill(repo, "handoff")
+    (tmp_path / ".agents/skills").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".agents/skills/handoff").symlink_to(repo)
+    return repo, {"HANDOFF_REPO_DIR": str(repo)}
+
+
+def test_link_to_the_repo_handoff_is_allowed(tmp_path):
+    pinned_home(tmp_path)
+    repo, env = repo_handoff(tmp_path)
+    ((tmp_path / ORCA).parent / "skills").mkdir(parents=True)
+    ((tmp_path / ORCA).parent / "skills/handoff").symlink_to(repo)
+    rc, out = run(tmp_path, env)
+    assert rc == 0, out
+
+
+def test_only_the_repo_is_exempt_not_whatever_agents_points_at(tmp_path):
+    pinned_home(tmp_path)
+    _, env = repo_handoff(tmp_path)
+    (tmp_path / ".agents/skills/handoff").unlink()
+    copy = skill(tmp_path / ".agents/skills/handoff", "handoff")       # a real copy, not the repo
+    (tmp_path / ".codex/skills").mkdir(parents=True)
+    (tmp_path / ".codex/skills/handoff").symlink_to(copy.parent)
+    rc, out = run(tmp_path, env)
+    assert rc == 1, out
+    problems = [l for l in out.splitlines() if l.startswith("PROBLEM duplicate")]
+    assert len(problems) == 1, out                          # one copy, two roots: one report
+    assert str(tmp_path / ".agents/skills/handoff") in problems[0]   # names the folder to delete
+
+
+def test_second_handoff_in_agents_skills_is_caught(tmp_path):
+    pinned_home(tmp_path)
+    _, env = repo_handoff(tmp_path)
+    skill(tmp_path / ".agents/skills/handoff-for-codex", "handoff")
+    rc, out = run(tmp_path, env)
+    assert rc == 1, out
+
+
+def test_production_exemption_is_this_repos_handoff(tmp_path):
+    pinned_home(tmp_path)
+    real = Path(__file__).resolve().parents[4] / "handoff"
+    if not (real / "SKILL.md").is_file():
+        pytest.skip(f"{real} absent (a checkout without handoff/): the production exemption has nothing to name")
+    (tmp_path / ".codex/skills").mkdir(parents=True)
+    (tmp_path / ".codex/skills/handoff").symlink_to(real)               # no HANDOFF_REPO_DIR
+    rc, out = run(tmp_path)
+    assert rc == 0, out
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("front", [
+    "\ufeff---\nname: handoff\n---\n",
+    "---\nname: handoff # codex copy\n---\n",
+    "---\nname: >-\n  handoff\n---\n",
+    '---\n"name": handoff\n---\n',
+    "---\nname : handoff\n---\n",
+    "---\r\nname: handoff\r\n---\r\n",
+    "---\nmetadata:\n  name: helper\nname: handoff\n---\n",          # nested key first
+    "---\ndescription: |\n  name: notes\nname: handoff\n---\n",       # block text first
+])
+def test_frontmatter_variants_are_caught(tmp_path, front):
+    pinned_home(tmp_path)
+    d = tmp_path / ".codex/skills/x"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(front, encoding="utf-8", newline="")
+    rc, out = run(tmp_path)
+    assert rc == 1, (front, out)
+
+
+def test_link_to_a_copy_outside_every_scanned_root_is_caught(tmp_path):
+    pinned_home(tmp_path)
+    copy = skill(tmp_path / "somewhere/else/handoff", "handoff")
+    (tmp_path / ".codex/skills").mkdir(parents=True)
+    (tmp_path / ".codex/skills/handoff").symlink_to(copy.parent)
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+
+
+def test_nested_name_key_alone_is_not_a_handoff(tmp_path):
+    pinned_home(tmp_path)
+    d = tmp_path / ".codex/skills/x"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("---\nmetadata:\n  name: handoff\ndescription: x\n---\n")
+    rc, out = run(tmp_path)
+    assert rc == 0, out
+
+
+def test_looped_folder_reports_a_copy_once(tmp_path):
+    pinned_home(tmp_path)
+    copy = skill(tmp_path / ".codex/skills/vendor/handoff", "handoff")
+    (tmp_path / ".codex/skills/alias").symlink_to(tmp_path / ".codex/skills/vendor")
+    (tmp_path / ".codex/skills/vendor/up").symlink_to(tmp_path / ".codex/skills/vendor")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert len([l for l in out.splitlines() if l.startswith("PROBLEM duplicate")]) == 1, out
+
+
+def test_copy_first_reached_through_a_deep_link_is_still_caught(tmp_path):
+    pinned_home(tmp_path)
+    copy = skill(tmp_path / ".codex/skills/zzz/handoff", "handoff")
+    (tmp_path / ".codex/skills/aaa").mkdir(parents=True)
+    (tmp_path / ".codex/skills/aaa/vendor").symlink_to(tmp_path / ".codex/skills/zzz")   # walked first
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert len([l for l in out.splitlines() if l.startswith("PROBLEM duplicate")]) == 1, out
+
+
+def test_template_deep_inside_a_skill_is_not_scanned(tmp_path):
+    pinned_home(tmp_path)
+    skill(tmp_path / ".codex/skills/.system/skill-creator/assets/example", "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 0, out
+
+
+def test_nested_copy_is_caught(tmp_path):
+    pinned_home(tmp_path)
+    skill(tmp_path / ".codex/skills/vendor/handoff", "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+
+
+def test_duplicate_wins_over_missing_config(tmp_path):
+    skill(tmp_path / ".codex/skills/handoff", "handoff")             # no config.toml anywhere
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert "DUPLICATE" in out.strip().splitlines()[-1]
+
+
+def test_unlistable_skill_dir_cannot_judge(tmp_path):
+    pinned_home(tmp_path)
+    d = tmp_path / ".codex/skills/locked"
+    skill(d, "notes")
+    d.chmod(0)
+    try:
+        rc, out = run(tmp_path)
+    finally:
+        d.chmod(0o755)
+    assert rc == 2, out
+    assert "config(s)" not in out.strip().splitlines()[-1]
+
+
+def test_other_handoff_named_skills_are_fine(tmp_path):
+    pinned_home(tmp_path)
+    skill((tmp_path / ORCA).parent / "skills/ai-memory-handoff", "ai-memory-handoff")
+    skill(tmp_path / ".codex/skills/notes", "handoffs")
+    rc, out = run(tmp_path)
+    assert rc == 0, out
+
+
+def test_copy_is_caught_even_when_the_plugin_is_not_installed(tmp_path):
+    config(tmp_path / ".codex/config.toml")
+    skill(tmp_path / ".codex/skills/handoff", "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+
+
+def test_stale_pin_and_copy_both_reported(tmp_path):
+    new = plugin(tmp_path, "1.3.3")
+    config(tmp_path / ".codex/config.toml", str(new).replace("1.3.3", "1.3.2"))
+    skill(tmp_path / ".codex/skills/handoff", "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    last = out.strip().splitlines()[-1]
+    assert last.startswith("VERIFY: STALE") and "DUPLICATE" in last
+
+
 # --- the SessionStart hook: a Codex plugin update must re-trigger the check -------------------
 
-def hook(home: Path, patches: Path, extra_env: dict | None = None):
+def hook(home: Path, patches: Path, extra_env: dict | None = None, stdin: str = ""):
     env = {k: v for k, v in os.environ.items() if k != "CODEX_HOME"}
     env.update(HOME=str(home), PATCH_VERIFY_DIR=str(patches), PATCH_VERIFY_NPM_ROOT=str(home / "npm"))
     env.update(extra_env or {})
-    out = subprocess.run(["bash", str(HOOK)], capture_output=True, text=True, env=env, timeout=60)
+    out = subprocess.run(["bash", str(HOOK)], input=stdin, capture_output=True, text=True, env=env, timeout=60)
     assert out.returncode == 0, out.stderr
     return out.stdout.strip()
 
@@ -248,9 +481,13 @@ def test_hook_rechecks_after_edit_in_outside_codex_home(tmp_path):
 
 def test_hook_fingerprint_ignores_codex_home_pointing_at_a_known_config(tmp_path):
     patches, *_ = setup_hook(tmp_path)
+    acct = (tmp_path / ORCA).parent
+    skill(acct / "skills/notes", "notes")                    # gives the skill-name lines content
+    alias = tmp_path / "alias-home"
+    alias.symlink_to(acct)                                   # CODEX_HOME spelled differently
     assert hook(tmp_path, patches) == ""
     before = fp(tmp_path)
-    assert hook(tmp_path, patches, {"CODEX_HOME": str((tmp_path / ORCA).parent)}) == ""
+    assert hook(tmp_path, patches, {"CODEX_HOME": str(alias)}) == ""
     assert fp(tmp_path) == before
 
 
@@ -261,6 +498,15 @@ def test_hook_fingerprint_ignores_unrelated_lines_above_the_pin(tmp_path):
     home_cfg.write_text('[projects."/new/trusted/dir"]\ntrust_level = "trusted"\n\n' + home_cfg.read_text())
     assert hook(tmp_path, patches) == ""
     assert fp(tmp_path) == before
+
+
+def test_hook_rechecks_when_orca_handoff_copy_reappears(tmp_path):
+    patches, *_ = setup_hook(tmp_path)
+    assert hook(tmp_path, patches) == ""
+    skill((tmp_path / ORCA).parent / "skills/handoff", "handoff")   # e.g. OMX setup re-runs
+    out = hook(tmp_path, patches)
+    assert out, "hook stayed silent: its fingerprint does not see Codex homes' skills"
+    assert "DUPLICATE" in json.loads(out)["systemMessage"], out
 
 
 def test_hook_rechecks_after_config_edit(tmp_path):
