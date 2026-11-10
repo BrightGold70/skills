@@ -3069,3 +3069,10 @@ All ten rows filed 2026-11-05 and 2026-11-06 are LANDED at `aed1cae4`, after fou
 ## 2026-11-10 — untracked-spec-warning
 
 Reconciled first: the census read `OPEN(yes+maybe)=0` after `untracked-spec-warning` was flipped to `**LANDED**` in place (`f7d54ef3`, `15b4f477`). No new candidates: checking whether an upstream fix actually shipped in the installed build is already what `verify.py`'s real-renderer check does, and the README §Retiring now says to use it.
+
+## 2026-11-11 — codex-single-handoff
+
+Reconciled first: the census read `OPEN(yes+maybe)=0` before this entry; no open row to flip.
+
+- **hand-rolled-mutant-loop-again**: about 70 hand mutants over 7 rounds this session, each run through an ad-hoc `mut()` shell helper (copy, exact-string replace with a count==1 assert, run the targeted tests, restore, cmp). It is the same need as `hand-applied-single-mutants` (2026-11-08, `no`). The bundled `h_mad_mutation_harness.py` already does exactly this with spec files. The loop was used because the mutants were exploratory and changed every round, not because a tool was missing. — remedy: existing-tool-repair — recurrence: 7 — candidate: no
+- **real-host-positive-control**: three times, a live artifact was broken on purpose (restored the deleted Orca copy, removed the `~/.agents/skills/handoff` link, introduced a stale pin), the installed hook or verify was run, and the artifact was restored with a byte comparison. This is a judgment call about which live state is safe to touch for a few seconds, so it stays a working habit, not a tool. — remedy: review-rule — recurrence: 3 — candidate: no
