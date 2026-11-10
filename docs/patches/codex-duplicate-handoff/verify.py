@@ -26,11 +26,19 @@ entry when it enables the plugin and its home has a handoff copy installed. Proj
 Exit 0: every config that enables the plugin disables every installed handoff copy
         (or the plugin, or its handoff skill, is not installed).
 Exit 1: a disable is missing or stale, or a duplicate handoff skill exists; fix per README.md.
+
+--fix repoints each stale pin to the installed copy (or adds the pin), editing only the `path`
+line or appending one block, with a timestamped backup; then re-runs the check. It never deletes
+a duplicate skill, never overrides an entry that explicitly enables the handoff, and refuses a
+stale path it cannot place unambiguously.
 Exit 2: could not judge (no Codex config found, a config unreadable). That is not a pass.
 """
 import os
 import re
+import shutil
+import stat
 import sys
+import time
 import tomllib
 from pathlib import Path
 
@@ -164,19 +172,18 @@ def table(d, key) -> dict:
     return v if isinstance(v, dict) else {}
 
 
-def main() -> int:
-    home = Path.home()
-    problems, unreadable, versions, pinned = [], [], set(), 0
+def check(home: Path) -> tuple[int, list[str], list[dict]]:
+    """Run both checks. Returns (exit code, output lines, one repair plan per config whose pin
+    is missing or stale)."""
+    problems, unreadable, versions, pinned, plans = [], [], set(), 0, []
     dupes = duplicate_handoffs(home, unreadable)
     configs = config_paths(home)
     if not configs and not dupes:
-        for u in unreadable:
-            print(f"UNREADABLE {u}")
-        print("VERIFY: UNREADABLE no Codex config.toml found")
-        return 2
+        return 2, [f"UNREADABLE {u}" for u in unreadable] + ["VERIFY: UNREADABLE no Codex config.toml found"], []
     for cfg in configs:
         try:
-            data = tomllib.loads(cfg.read_text(encoding="utf-8"))
+            text = read_raw(cfg)
+            data = tomllib.loads(text)
         except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
             unreadable.append(f"{cfg} ({type(exc).__name__})")
             continue
@@ -189,6 +196,7 @@ def main() -> int:
             entries = []
         entries = [e for e in entries if isinstance(e, dict) and isinstance(e.get("path"), str)]
         disabled = {norm(e["path"]) for e in entries if e.get("enabled") is False}
+        not_disabled = {norm(e["path"]) for e in entries if e.get("enabled") is not False}
         stale = [e["path"] for e in entries
                  if e.get("enabled") is False and "/mattpocock-skills/" in e["path"]
                  and e["path"].endswith("/handoff/SKILL.md") and not Path(norm(e["path"])).exists()]
@@ -200,30 +208,145 @@ def main() -> int:
             if stale:
                 line += "; stale entry: " + ", ".join(stale)
             problems.append(line)
+            plans.append({"cfg": cfg, "text": text, "stale": stale, "missing": missing,
+                          "explicitly_enabled": [h for h in missing if norm(str(h)) in not_disabled]})
 
-    for line in problems:
-        print(line)
-    for d in dupes:
-        print(f"PROBLEM duplicate handoff skill: {d} (delete it per README)")
-    for u in unreadable:
-        print(f"UNREADABLE {u}")
+    lines = list(problems)
+    lines += [f"PROBLEM duplicate handoff skill: {d} (delete it per README)" for d in dupes]
+    lines += [f"UNREADABLE {u}" for u in unreadable]
     parts = []
     if problems:
-        parts.append(f"STALE Matt Pocock handoff disable in {len(problems)} Codex config(s); "
-                     f"installed {', '.join(sorted(versions))}")
+        parts.append(f"STALE Matt Pocock handoff pin in {len(problems)} Codex config(s); "
+                     f"installed {', '.join(sorted(versions))}; run verify.py --fix")
     if dupes:
-        parts.append(f"DUPLICATE {len(dupes)} extra handoff skill(s) in Codex homes")
+        parts.append(f"DUPLICATE {len(dupes)} extra handoff skill(s) in Codex homes; delete per README")
     if parts:
-        print("VERIFY: " + "; ".join(parts) + "; fix per README")
-        return 1
+        return 1, lines + ["VERIFY: " + "; ".join(parts)], plans
     if unreadable:
-        print(f"VERIFY: UNREADABLE {len(unreadable)} item(s); see UNREADABLE lines")
-        return 2
+        return 2, lines + [f"VERIFY: UNREADABLE {len(unreadable)} item(s); see UNREADABLE lines"], plans
     if not pinned:
-        print("VERIFY: OK no Codex config enables an installed Matt Pocock handoff")
-        return 0
-    print(f"VERIFY: OK {pinned} Codex config(s) disable every installed Matt Pocock handoff")
-    return 0
+        return 0, lines + ["VERIFY: OK no Codex config enables an installed Matt Pocock handoff"], plans
+    return 0, lines + [f"VERIFY: OK {pinned} Codex config(s) disable every installed Matt Pocock handoff"], plans
+
+
+PATH_LINE = re.compile(r"""^(?P<lead>[ \t]*path[ \t]*=[ \t]*)(?P<q>["'])(?P<p>[^"'\n]*)(?P=q)""", re.M)
+
+
+def toml_basic(s: str) -> str:
+    """Body of a TOML basic ("...") string."""
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def read_raw(path: Path) -> str:
+    """Text with line endings untouched (no universal-newline translation): CRLF stays CRLF."""
+    with open(path, encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def current_text(path: Path) -> str:
+    """Re-read just before replacing: a seam so a test can play Codex writing meanwhile."""
+    return read_raw(path)
+
+
+def plan_text(plan: dict) -> tuple[str | None, list[str]]:
+    """New config text for one plan, or (None, reasons) when it cannot be done safely."""
+    # Pin the resolved path: under Orca, Codex named the skill by its ~/.codex/... realpath
+    # (measured 2026-11-10), not via the account's plugins symlink.
+    text = plan["text"]
+    todo = [os.path.realpath(h) for h in plan["missing"] if h not in plan["explicitly_enabled"]]
+    reasons = [f"{h} is explicitly enabled there; not overriding it" for h in plan["explicitly_enabled"]]
+    if reasons:
+        return None, reasons
+    for old in plan["stale"]:
+        if not todo:
+            break
+        sites = [m for m in PATH_LINE.finditer(text) if m.group("p") == old]
+        if text.count(old) != 1:
+            return None, [f"stale path {old} appears {text.count(old)} time(s); edit it by hand"]
+        if len(sites) != 1:
+            return None, [f"stale path {old} is not on a plain `path = \"...\"` line "
+                          "(inline table, or a quote in the path); edit it by hand"]
+        m = sites[0]
+        new = todo.pop(0)
+        body = toml_basic(new) if m.group("q") == '"' else new   # a literal ('...') string has no escapes
+        text = text[:m.start("p")] + body + text[m.end("p"):]
+    nl = "\r\n" if "\r\n" in text else "\n"
+    for h in todo:
+        block = ("\n# Disable the Matt Pocock handoff; this repo-owned handoff skill replaces it.\n"
+                 f'[[skills.config]]\npath = "{toml_basic(h)}"\nenabled = false\n')
+        text += ("" if text.endswith("\n") else nl) + block.replace("\n", nl)
+    try:
+        tomllib.loads(text)   # e.g. a "'" in a path that sits in a literal ('...') string
+    except tomllib.TOMLDecodeError as exc:
+        return None, [f"the edit would not parse ({exc}); edit it by hand"]
+    return text, []
+
+
+def apply_fix(plan: dict) -> str:
+    cfg = plan["cfg"]
+    if cfg.is_symlink():
+        # os.replace onto the link would swap it for a plain file and leave the managed target
+        # (dotfiles, a sync tool) stale, while every later check reads the detached copy as OK.
+        return (f"NOT FIXED {cfg}: it is a symlink to {os.path.realpath(cfg)}; "
+                "fix the pin there by hand (the tool that manages it owns that file)")
+    new, reasons = plan_text(plan)
+    if new is None:
+        return f"NOT FIXED {cfg}: " + "; ".join(reasons)
+    stamp, n = time.strftime("%Y%m%d%H%M%S"), 0
+    backup = cfg.with_name(f"{cfg.name}.bak-handoff-{stamp}")
+    while backup.exists():   # two fixes in one second must not overwrite the first backup
+        n += 1
+        backup = cfg.with_name(f"{cfg.name}.bak-handoff-{stamp}-{n}")
+    mode = stat.S_IMODE(cfg.stat().st_mode)
+    tmp = cfg.with_name(f".{cfg.name}.handoff-fix-{os.getpid()}")
+    replaced = created = False
+    try:
+        # Created at the config's mode (never wider, even for an instant); O_EXCL refuses a
+        # leftover or planted temp instead of following it.
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+        created = True
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(new)
+        os.chmod(tmp, mode)
+        shutil.copy2(cfg, backup)
+        # Compare LAST, right before the replace: a Codex write after this point is the only
+        # window left, and it is as short as one rename.
+        if current_text(cfg) != plan["text"]:
+            backup.unlink()
+            return f"NOT FIXED {cfg}: it changed while fixing (Codex wrote it?); re-run --fix"
+        os.replace(tmp, cfg)
+        replaced = True
+    finally:
+        if not replaced:   # nothing was written: drop the temp, and the backup if it is redundant
+            if created:   # never remove a temp this run did not make
+                tmp.unlink(missing_ok=True)
+            if backup.exists() and current_text_safe(cfg) == current_text_safe(backup):
+                backup.unlink()
+    return f"FIXED {cfg}: " + ", ".join(os.path.realpath(h) for h in plan["missing"]) + f" (backup {backup.name})"
+
+
+def current_text_safe(path: Path) -> str | None:
+    try:
+        return read_raw(path)
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    unknown = [a for a in args if a != "--fix"]
+    if unknown:
+        print(f"usage: verify.py [--fix]   (unknown: {' '.join(unknown)})")
+        return 2
+    home = Path.home()
+    rc, lines, plans = check(home)
+    if "--fix" in args and plans:
+        for plan in plans:
+            print(apply_fix(plan))
+        rc, lines, _ = check(home)
+    for line in lines:
+        print(line)
+    return rc
 
 
 if __name__ == "__main__":

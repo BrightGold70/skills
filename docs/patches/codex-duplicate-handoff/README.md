@@ -73,8 +73,17 @@ A skill folder that cannot be listed or read makes the check exit 2, never 0.
 python3 /Users/kimhawk/orca/skills/docs/patches/codex-duplicate-handoff/verify.py
 ```
 
-- `PROBLEM <config>: no enabled=false entry for <path>` — in that config, change the `path` of
-  the stale `[[skills.config]]` entry to `<path>` (or add the entry if none exists).
+- `PROBLEM <config>: no enabled=false entry for <path>` — run `verify.py --fix`. It repoints the
+  stale `[[skills.config]]` entry's `path` to `<path>` (or appends the entry if there is none),
+  touching nothing else in the file (line endings included), keeping its mode (the temp file is
+  created at that mode), and leaving a `config.toml.bak-handoff-<timestamp>` beside it. It
+  writes the resolved (`~/.codex/...`) path, which is what Codex under Orca matches. It refuses,
+  says `NOT FIXED`, and writes nothing when:
+  - the config is a symlink (fix the file it points to; the tool that manages it owns it);
+  - the stale path appears more than once, or not on a plain `path = "…"` line (inline table);
+  - an entry explicitly sets that handoff `enabled = true`;
+  - the result would not parse;
+  - Codex rewrote the config while it ran (re-run it). By hand: change the `path` of the stale entry to `<path>`.
 - `PROBLEM duplicate handoff skill: <dir>` — back up and delete `<dir>`. If OMX setup put it
   back, it will again on its next run; this warning is how you find out.
 

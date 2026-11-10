@@ -518,3 +518,338 @@ def test_hook_rechecks_after_config_edit(tmp_path):
     config(cfg)                                              # someone drops the disable entry
     out = hook(tmp_path, patches)
     assert out, "hook stayed silent: its fingerprint does not see the Codex configs"
+
+
+# --- verify.py --fix: repoint (or add) the Matt Pocock pin -----------------------------------
+
+import importlib.util  # noqa: E402
+import stat  # noqa: E402
+import tomllib  # noqa: E402
+
+
+def fix(home: Path, *args: str):
+    env = {k: v for k, v in os.environ.items() if k not in ("CODEX_HOME", "HANDOFF_REPO_DIR")}
+    env["HOME"] = str(home)
+    out = subprocess.run([sys.executable, str(VERIFY), "--fix", *args], capture_output=True, text=True,
+                         env=env, timeout=30)
+    return out.returncode, out.stdout + out.stderr
+
+
+def backups(cfg: Path) -> list[Path]:
+    return sorted(cfg.parent.glob(cfg.name + ".bak-handoff-*"))
+
+
+def temps(cfg: Path) -> list[Path]:
+    return sorted(cfg.parent.glob("." + cfg.name + ".handoff-fix-*"))
+
+
+def stale_setup(tmp_path: Path, quote: str = '"'):
+    old = str(tmp_path / ".codex/plugins/cache/mattpocock/mattpocock-skills/1.3.2" / REL)
+    new = plugin(tmp_path, "1.3.3")
+    cfg = tmp_path / ".codex/config.toml"
+    cfg.write_text(
+        "# my settings\nmodel = \"x\"\n\n"
+        '[plugins."mattpocock-skills@mattpocock"]\nenabled = true\n\n'
+        f"# keep the duplicate handoff off\n[[skills.config]]\npath = {quote}{old}{quote}\nenabled = false\n\n"
+        '[projects."/a"]\ntrust_level = "trusted"\n')
+    return cfg, old, new
+
+
+def test_fix_repoints_a_stale_pin_and_nothing_else(tmp_path):
+    cfg, old, new = stale_setup(tmp_path)
+    before = cfg.read_text()
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    after = cfg.read_text()
+    assert after == before.replace(old, str(new))           # only the path changed, comments kept
+    assert backups(cfg) and backups(cfg)[0].read_text() == before
+    assert "VERIFY: OK" in out.strip().splitlines()[-1]
+
+
+def test_fix_handles_a_single_quoted_path(tmp_path):
+    cfg, old, new = stale_setup(tmp_path, quote="'")
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    assert f"'{new}'" in cfg.read_text() and old not in cfg.read_text()
+
+
+def test_fix_adds_a_pin_when_none_exists(tmp_path):
+    new = plugin(tmp_path, "1.3.2")
+    cfg = config(tmp_path / ".codex/config.toml", extra='\n[projects."/a"]\ntrust_level = "trusted"\n')
+    before = cfg.read_text()
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    after = cfg.read_text()
+    assert after.startswith(before)                          # appended, nothing rewritten
+    data = tomllib.loads(after)
+    assert {"path": str(new), "enabled": False} in data["skills"]["config"]
+    assert data["projects"]["/a"]["trust_level"] == "trusted"
+
+
+def test_fix_covers_every_config_and_every_missing_version(tmp_path):
+    a = plugin(tmp_path, "1.3.3")
+    b = plugin(tmp_path, "1.3.4")
+    old = str(a).replace("1.3.3", "1.3.2")
+    home_cfg = config(tmp_path / ".codex/config.toml", old)
+    link_plugins((tmp_path / ORCA).parent, tmp_path)
+    orca = config(tmp_path / ORCA)
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    for cfg in (home_cfg, orca):
+        paths = {e["path"] for e in tomllib.loads(cfg.read_text())["skills"]["config"] if e["enabled"] is False}
+        assert {str(a), str(b)} <= paths, (cfg, paths)
+    assert old not in home_cfg.read_text()
+
+
+def test_fix_refuses_an_ambiguous_stale_path(tmp_path):
+    cfg, old, new = stale_setup(tmp_path)
+    cfg.write_text(cfg.read_text() + f'\n# was "{old}"\n')
+    before = cfg.read_text()
+    rc, out = fix(tmp_path)
+    assert rc == 1, out
+    assert cfg.read_text() == before and not backups(cfg) and not temps(cfg)
+    assert "NOT FIXED" in out
+
+
+def test_fix_refuses_an_edit_that_would_not_parse(tmp_path):
+    plugin(tmp_path, "1.3.2")
+    cfg = tmp_path / ".codex/config.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text('[plugins."mattpocock-skills@mattpocock"]\nenabled = true\n\n'
+                   '[skills]\nconfig = [{ path = "/elsewhere/SKILL.md", enabled = false }]\n')
+    before = cfg.read_text()
+    rc, out = fix(tmp_path)                                  # appending [[skills.config]] would redefine it
+    assert rc == 1, out
+    assert cfg.read_text() == before and not backups(cfg) and not temps(cfg)
+    assert "would not parse" in out
+
+
+def test_fix_refuses_a_symlinked_config(tmp_path):
+    cfg, old, new = stale_setup(tmp_path)
+    managed = tmp_path / "dotfiles/codex.toml"
+    managed.parent.mkdir()
+    cfg.rename(managed)
+    cfg.symlink_to(managed)
+    before = managed.read_text()
+    rc, out = fix(tmp_path)
+    assert rc == 1, out
+    assert cfg.is_symlink() and managed.read_text() == before
+    assert "NOT FIXED" in out and str(managed) in out
+    assert not backups(cfg) and not temps(cfg) and not list(managed.parent.glob("*.bak-handoff-*"))
+
+
+def test_fix_keeps_crlf_line_endings(tmp_path):
+    cfg, old, new = stale_setup(tmp_path)
+    crlf = cfg.read_text().replace("\n", "\r\n")
+    cfg.write_bytes(crlf.encode())
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    assert cfg.read_bytes() == crlf.replace(old, str(new)).encode()
+
+
+def test_fix_appends_with_crlf_in_a_crlf_file(tmp_path):
+    plugin(tmp_path, "1.3.2")
+    cfg = config(tmp_path / ".codex/config.toml")
+    cfg.write_bytes(cfg.read_text().replace("\n", "\r\n").encode())
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    raw = cfg.read_bytes()
+    assert b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")
+
+
+def test_fix_leaves_no_temp_when_the_config_vanishes(tmp_path, monkeypatch, capsys):
+    cfg, old, new = stale_setup(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    mod = load_verify()
+
+    def gone(path):
+        raise FileNotFoundError(path)
+
+    monkeypatch.setattr(mod, "current_text", gone)
+    try:
+        mod.main(["--fix"])
+    except FileNotFoundError:
+        pass
+    assert not temps(cfg) and not backups(cfg)
+
+
+def test_fix_temp_is_never_wider_than_the_config(tmp_path, monkeypatch, capsys):
+    cfg, old, new = stale_setup(tmp_path)
+    cfg.chmod(0o600)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    mod = load_verify()
+    seen = []
+    real = mod.current_text
+
+    def spy(path):
+        seen.extend(stat.S_IMODE(t.stat().st_mode) for t in temps(cfg))
+        return real(path)
+
+    monkeypatch.setattr(mod, "current_text", spy)
+    monkeypatch.setattr(mod.os, "chmod", lambda *a, **k: None)   # the mode must come from creation
+    assert mod.main(["--fix"]) == 0
+    assert seen == [0o600], seen
+
+
+def test_fix_leaves_an_explicitly_enabled_handoff_alone(tmp_path):
+    new = plugin(tmp_path, "1.3.2")
+    cfg = tmp_path / ".codex/config.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text('[plugins."mattpocock-skills@mattpocock"]\nenabled = true\n\n'
+                   f'[[skills.config]]\npath = "{new}"\nenabled = true\n')
+    before = cfg.read_text()
+    rc, out = fix(tmp_path)
+    assert rc == 1, out
+    assert cfg.read_text() == before and "NOT FIXED" in out
+
+
+def test_fix_does_not_touch_duplicates(tmp_path):
+    cfg, old, new = stale_setup(tmp_path)
+    copy = skill(tmp_path / ".codex/skills/handoff", "handoff")
+    rc, out = fix(tmp_path)
+    assert rc == 1, out
+    assert copy.exists()
+    assert str(new) in cfg.read_text()
+    last = out.strip().splitlines()[-1]
+    assert "DUPLICATE" in last and "STALE" not in last
+
+
+def test_fix_with_nothing_to_fix_writes_nothing(tmp_path):
+    hp = plugin(tmp_path, "1.3.2")
+    cfg = config(tmp_path / ".codex/config.toml", str(hp))
+    before, mtime = cfg.read_text(), cfg.stat().st_mtime_ns
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    assert cfg.read_text() == before and cfg.stat().st_mtime_ns == mtime and not backups(cfg)
+
+
+def test_fix_keeps_the_file_mode(tmp_path):
+    cfg, old, new = stale_setup(tmp_path)
+    cfg.chmod(0o600)
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    assert stat.S_IMODE(cfg.stat().st_mode) == 0o600
+
+
+def test_fix_never_touches_an_unreadable_config(tmp_path):
+    plugin(tmp_path, "1.3.2")
+    cfg = tmp_path / ".codex/config.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text("[plugins\nnot toml")
+    rc, out = fix(tmp_path)
+    assert rc == 2, out
+    assert cfg.read_text() == "[plugins\nnot toml" and not backups(cfg)
+
+
+def test_stale_summary_points_at_fix(tmp_path):
+    cfg, old, new = stale_setup(tmp_path)
+    rc, out = run(tmp_path)
+    assert rc == 1 and "--fix" in out.strip().splitlines()[-1], out
+    assert len(out.strip().splitlines()[-1]) <= 160
+
+
+def load_verify():
+    spec = importlib.util.spec_from_file_location("verify_under_test", VERIFY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_fix_aborts_when_the_config_changes_underneath(tmp_path, monkeypatch, capsys):
+    cfg, old, new = stale_setup(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    mod = load_verify()
+    real = mod.current_text
+
+    def codex_wrote_meanwhile(path):
+        text = real(path)
+        cfg.write_text(text + '\n[projects."/new"]\ntrust_level = "trusted"\n')   # Codex trusts a dir
+        return cfg.read_text()
+
+    monkeypatch.setattr(mod, "current_text", codex_wrote_meanwhile)
+    rc = mod.main(["--fix"])
+    out = capsys.readouterr().out
+    assert rc == 1, out
+    assert "changed while fixing" in out
+    assert old in cfg.read_text() and '"/new"' in cfg.read_text()   # Codex's write survives
+    assert not temps(cfg) and not backups(cfg)
+
+
+def test_fix_escapes_a_backslash_in_the_new_path(tmp_path):
+    new = plugin(tmp_path, "1.3\\3")
+    old = str(new).replace("1.3\\3", "1.3.2")
+    cfg = config(tmp_path / ".codex/config.toml", old)
+    rc, out = fix(tmp_path)
+    assert rc == 0, out
+    paths = [e["path"] for e in tomllib.loads(cfg.read_text())["skills"]["config"]]
+    assert str(new) in paths, paths
+
+
+def test_fix_refuses_a_quote_it_cannot_put_in_a_literal_string(tmp_path):
+    new = plugin(tmp_path, "1.3'3")
+    old = str(new).replace("1.3'3", "1.3.2")
+    cfg = tmp_path / ".codex/config.toml"
+    cfg.write_text('[plugins."mattpocock-skills@mattpocock"]\nenabled = true\n\n'
+                   f"[[skills.config]]\npath = '{old}'\nenabled = false\n")
+    before = cfg.read_text()
+    rc, out = fix(tmp_path)
+    assert rc == 1, out
+    assert cfg.read_text() == before and not backups(cfg) and "would not parse" in out
+
+
+def test_two_fixes_in_one_second_keep_both_backups(tmp_path, monkeypatch, capsys):
+    cfg, old, new = stale_setup(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    mod = load_verify()
+    monkeypatch.setattr(mod.time, "strftime", lambda fmt: "20261110120000")
+    first = cfg.read_text()
+    assert mod.main(["--fix"]) == 0
+    cfg.write_text(first)                                   # stale again, same second
+    assert mod.main(["--fix"]) == 0
+    assert [b.read_text() for b in backups(cfg)] == [first, first]
+
+
+def test_fix_refuses_a_stale_path_inside_an_inline_table(tmp_path):
+    new = plugin(tmp_path, "1.3.3")
+    old = str(new).replace("1.3.3", "1.3.2")
+    cfg = tmp_path / ".codex/config.toml"
+    cfg.write_text('[plugins."mattpocock-skills@mattpocock"]\nenabled = true\n\n'
+                   f'[skills]\nconfig = [{{ path = "{old}", enabled = false }}]\n')
+    before = cfg.read_text()
+    rc, out = fix(tmp_path)
+    assert rc == 1, out
+    assert cfg.read_text() == before and not backups(cfg) and not temps(cfg)
+    assert "not on a plain" in out and "Traceback" not in out
+
+
+def test_fix_never_removes_a_temp_it_did_not_create(tmp_path, monkeypatch, capsys):
+    cfg, old, new = stale_setup(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    mod = load_verify()
+    planted = cfg.with_name(f".{cfg.name}.handoff-fix-{os.getpid()}")
+    planted.write_text("someone else's")
+    with pytest.raises(FileExistsError):
+        mod.main(["--fix"])
+    assert planted.read_text() == "someone else's"
+    assert cfg.read_text().count(old) == 1 and not backups(cfg)
+
+
+def test_cleanup_survives_a_config_rewritten_as_non_utf8(tmp_path, monkeypatch, capsys):
+    cfg, old, new = stale_setup(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    mod = load_verify()
+
+    def binary_write(path):
+        cfg.write_bytes(b"\xff\xfe not utf-8")
+        raise RuntimeError("original failure")
+
+    monkeypatch.setattr(mod, "current_text", binary_write)
+    with pytest.raises(RuntimeError, match="original failure"):   # not masked by cleanup
+        mod.main(["--fix"])
+    assert not temps(cfg)
