@@ -70,15 +70,20 @@ npm_fp() {
 # without line numbers, because Codex adds a table on every newly trusted project. Its DUPLICATE
 # check looks for a second skill named `handoff`, so fingerprint every SKILL.md under each home's
 # skills/ and ~/.agents/skills: path, the directory it resolves to (a link to the repo replaced by
-# a real copy keeps path and name), and its name line.
+# a real copy keeps path and name), and a hash of its content.
 # Homes are deduplicated and sorted by realpath and read through it, so CODEX_HOME set, unset or
 # naming any Orca account gives the same fingerprint. -maxdepth 3 matches verify.py's MAX_DEPTH
 # (skills/<a>/<b>/SKILL.md) and bounds the walk when a skill folder links to a big tree.
 skills_fp() {  # $1 = a skills root (a realpath)
   [ -d "$1" ] || return 0
   find -L "$1" -maxdepth 3 -name SKILL.md -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r f; do
+    # The whole SKILL.md, hashed. Parsing its frontmatter here (a name line, then an awk block
+    # reader) twice missed changes verify.py does see: a lost opening `---`, a renamed block
+    # scalar, and under a UTF-8 locale a BOM or an indented fence. A content hash cannot diverge
+    # from verify's reader; the cost is that editing ANY SKILL.md under these folders re-runs
+    # every carried verify once (about a second on this host), then the state is OK again.
     printf '%s %s %s\n' "${f#"$1"/}" "$(realpath "$(dirname "$f")" 2>/dev/null)" \
-      "$(grep -m1 -E "^[[:space:]]*[\"']?name" "$f" 2>/dev/null)"
+      "$(shasum -a 256 < "$f" 2>/dev/null | cut -c1-16)"
   done
 }
 codex_fp() {

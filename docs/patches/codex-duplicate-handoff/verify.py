@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Verify Codex is offered exactly one `handoff` skill: this repo's.
 
-Two independent checks, either of which fails the verify:
+Three independent checks, any of which fails the verify:
 
+0. MISSING: ~/.agents/skills/handoff exists and resolves to this repo's handoff/, whose
+   SKILL.md is named `handoff`. Without it Codex has no handoff at all.
 1. STALE: every Codex config still disables the INSTALLED Matt Pocock `handoff` skill.
 2. DUPLICATE: no skill named `handoff` exists, at any depth, under the `skills/` of a Codex home
    (~/.codex, $CODEX_HOME, each Orca codex account's home) or under ~/.agents/skills, unless it
@@ -33,6 +35,7 @@ a duplicate skill, never overrides an entry that explicitly enables the handoff,
 stale path it cannot place unambiguously.
 Exit 2: could not judge (no Codex config found, a config unreadable). That is not a pass.
 """
+import errno
 import os
 import re
 import shutil
@@ -143,6 +146,46 @@ def skill_files(root: Path, unreadable: list[str]) -> list[Path]:
     return out
 
 
+def missing_handoff(home: Path, unreadable: list[str]) -> str | None:
+    """Why Codex would get NO repo handoff, or None. The repo's handoff reaches Codex (both the
+    plain and the Orca CODEX_HOME) through one link, ~/.agents/skills/handoff -> <repo>/handoff.
+    Decided with lstat/stat so that a permission error is "could not judge" (appended to
+    unreadable), never "absent": pathlib's exists() swallows it on 3.15 but raises on 3.11."""
+    link, repo = home / ".agents/skills/handoff", repo_handoff()
+    relink = f"run: ln -sfn {repo} {link}"
+    try:
+        st = os.lstat(link)
+    except FileNotFoundError:
+        mk = "" if link.parent.is_dir() else f"mkdir -p {link.parent} && "
+        return f"{link} is absent; run: {mk}ln -s {repo} {link}"
+    except OSError as exc:
+        unreadable.append(f"{link} ({type(exc).__name__})")
+        return None
+    if stat.S_ISLNK(st.st_mode):
+        try:
+            os.stat(link)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            return f"{link} is a dangling link to {os.readlink(link)}; {relink}"
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                return f"{link} is a link loop; {relink}"
+            unreadable.append(f"{link} ({type(exc).__name__})")
+            return None
+        if os.path.realpath(link) != repo:
+            return f"{link} links to {os.path.realpath(link)}, not {repo}; {relink}"
+    elif os.path.realpath(link) != repo:   # not a link itself; fine if reached through a linked parent
+        kind = "folder" if stat.S_ISDIR(st.st_mode) else "file"
+        return f"{link} is a real {kind}, not a link to {repo}; move it away, then ln -s {repo} {link}"
+    md = Path(repo) / "SKILL.md"
+    try:
+        name = skill_name(read_raw(md))
+    except (OSError, UnicodeDecodeError):
+        return f"{md} is missing or unreadable (is the repo on a branch without handoff/?)"
+    if name != "handoff":
+        return f"{md} is named {name!r}, not 'handoff'"
+    return None
+
+
 def duplicate_handoffs(home: Path, unreadable: list[str]) -> list[str]:
     allowed = repo_handoff()
     roots = [ch / "skills" for ch in codex_homes(home)] + [home / ".agents/skills"]
@@ -177,8 +220,14 @@ def check(home: Path) -> tuple[int, list[str], list[dict]]:
     is missing or stale)."""
     problems, unreadable, versions, pinned, plans = [], [], set(), 0, []
     dupes = duplicate_handoffs(home, unreadable)
+    missing_link = missing_handoff(home, unreadable)
+    if missing_link:
+        # The link itself (its target, or a folder in its place) is MISSING's to repair; reporting
+        # it again as a duplicate would tell the user to delete what the link points at.
+        here = os.path.realpath(home / ".agents/skills/handoff")
+        dupes = [d for d in dupes if d.split(" (reached via ")[0] != here]
     configs = config_paths(home)
-    if not configs and not dupes:
+    if not configs and not dupes and not missing_link:
         return 2, [f"UNREADABLE {u}" for u in unreadable] + ["VERIFY: UNREADABLE no Codex config.toml found"], []
     for cfg in configs:
         try:
@@ -211,10 +260,11 @@ def check(home: Path) -> tuple[int, list[str], list[dict]]:
             plans.append({"cfg": cfg, "text": text, "stale": stale, "missing": missing,
                           "explicitly_enabled": [h for h in missing if norm(str(h)) in not_disabled]})
 
-    lines = list(problems)
+    lines = [f"PROBLEM missing repo handoff: {missing_link}"] if missing_link else []
+    lines += problems
     lines += [f"PROBLEM duplicate handoff skill: {d} (delete it per README)" for d in dupes]
     lines += [f"UNREADABLE {u}" for u in unreadable]
-    parts = []
+    parts = ["MISSING the repo handoff link (Codex has no handoff)"] if missing_link else []
     if problems:
         parts.append(f"STALE Matt Pocock handoff pin in {len(problems)} Codex config(s); "
                      f"installed {', '.join(sorted(versions))}; run verify.py --fix")

@@ -2,8 +2,13 @@
 
 Keeps Codex offered exactly one `handoff` skill: this repo's (via `~/.agents/skills/handoff`).
 
-Two things have given Codex a second one, and `verify.py` checks both:
+`verify.py` checks three things:
 
+0. **MISSING** — the one link that gives Codex this repo's handoff,
+   `~/.agents/skills/handoff -> /Users/kimhawk/orca/skills/handoff`, is absent, dangling, points
+   elsewhere, or reaches a `handoff/` whose `SKILL.md` is missing or not named `handoff` (the
+   repo checked out on a branch without it). Then Codex has no handoff at all. `~/.agents/skills`
+   is read by Codex under both `~/.codex` and Orca's `CODEX_HOME`, so this one link covers both.
 1. **STALE** — Matt Pocock's plugin `handoff` is disabled by a config pin that goes stale on
    every plugin update (below).
 2. **DUPLICATE** — a standalone skill named `handoff` in a Codex home. An Orca account carried
@@ -73,6 +78,9 @@ A skill folder that cannot be listed or read makes the check exit 2, never 0.
 python3 /Users/kimhawk/orca/skills/docs/patches/codex-duplicate-handoff/verify.py
 ```
 
+- `PROBLEM missing repo handoff: …` — run the `ln -s` / `ln -sfn` command the line names
+  (`-sfn` replaces a dangling or wrong link). A real folder in the link's place must be moved
+  away first; it is never removed for you.
 - `PROBLEM <config>: no enabled=false entry for <path>` — run `verify.py --fix`. It repoints the
   stale `[[skills.config]]` entry's `path` to `<path>` (or appends the entry if there is none),
   touching nothing else in the file (line endings included), keeping its mode (the temp file is
@@ -89,7 +97,7 @@ python3 /Users/kimhawk/orca/skills/docs/patches/codex-duplicate-handoff/verify.p
 
 Re-run `verify.py` until it prints `VERIFY: OK`.
 
-Exit codes: `0` one handoff only, `1` stale/missing pin or a duplicate, `2` could not judge (no
+Exit codes: `0` exactly one handoff, `1` the repo link missing, a stale/missing pin, or a duplicate, `2` could not judge (no
 config found, a config would not parse, a SKILL.md unreadable), which is not a pass.
 
 ## Retiring

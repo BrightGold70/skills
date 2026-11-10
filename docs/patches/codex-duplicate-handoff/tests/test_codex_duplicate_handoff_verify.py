@@ -16,11 +16,28 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 PATCH_DIR = Path(__file__).resolve().parents[1]
+REPO_HANDOFF = Path(__file__).resolve().parents[4] / "handoff"
 VERIFY = PATCH_DIR / "verify.py"
 HOOK = PATCH_DIR.parent / "patch-verify-on-update.sh"
 REL = "skills/productivity/handoff/SKILL.md"
+# Run verify.py under the interpreter the hook uses (`python3`, Homebrew 3.15 here), not pytest's:
+# pathlib's exists()/is_symlink() swallow PermissionError on 3.15 but raise on 3.11.
+VERIFY_PY = shutil.which("python3")
+assert VERIFY_PY, "python3 is not on PATH: the hook runs verify.py with python3, so these tests must too"
 ORCA = "Library/Application Support/orca/codex-accounts/acct-1/home/config.toml"
+
+
+@pytest.fixture(autouse=True)
+def agents_link(tmp_path):
+    """Every fake HOME starts with the expected ~/.agents/skills/handoff -> this repo's handoff/
+    (the MISSING check fails without it). Tests that need it absent or wrong remove it."""
+    link = tmp_path / ".agents/skills/handoff"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(REPO_HANDOFF)
+    return link
 
 
 def plugin(home: Path, version: str, handoff: bool = True) -> Path:
@@ -54,7 +71,7 @@ def run(home: Path, extra_env: dict | None = None):
     env = {k: v for k, v in os.environ.items() if k not in ("CODEX_HOME", "HANDOFF_REPO_DIR")}
     env["HOME"] = str(home)
     env.update(extra_env or {})
-    out = subprocess.run([sys.executable, str(VERIFY)], capture_output=True, text=True, env=env, timeout=30)
+    out = subprocess.run([VERIFY_PY, str(VERIFY)], capture_output=True, text=True, env=env, timeout=30)
     return out.returncode, out.stdout + out.stderr
 
 
@@ -96,7 +113,7 @@ def test_codex_home_config_is_checked(tmp_path):
     link_plugins(tmp_path / "elsewhere", tmp_path)
     other = config(tmp_path / "elsewhere/config.toml")   # plugin enabled, no disable
     env = {**os.environ, "HOME": str(tmp_path), "CODEX_HOME": str(other.parent)}
-    out = subprocess.run([sys.executable, str(VERIFY)], capture_output=True, text=True, env=env, timeout=30)
+    out = subprocess.run([VERIFY_PY, str(VERIFY)], capture_output=True, text=True, env=env, timeout=30)
     assert out.returncode == 1, out.stdout
     assert "elsewhere" in out.stdout
 
@@ -254,8 +271,11 @@ def test_system_skills_copy_is_caught(tmp_path):
 def repo_handoff(tmp_path: Path) -> tuple[Path, dict]:
     repo = tmp_path / "repo/handoff"
     skill(repo, "handoff")
-    (tmp_path / ".agents/skills").mkdir(parents=True, exist_ok=True)
-    (tmp_path / ".agents/skills/handoff").symlink_to(repo)
+    link = tmp_path / ".agents/skills/handoff"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if link.is_symlink() or link.exists():
+        link.unlink()
+    link.symlink_to(repo)
     return repo, {"HANDOFF_REPO_DIR": str(repo)}
 
 
@@ -277,9 +297,11 @@ def test_only_the_repo_is_exempt_not_whatever_agents_points_at(tmp_path):
     (tmp_path / ".codex/skills/handoff").symlink_to(copy.parent)
     rc, out = run(tmp_path, env)
     assert rc == 1, out
-    problems = [l for l in out.splitlines() if l.startswith("PROBLEM duplicate")]
-    assert len(problems) == 1, out                          # one copy, two roots: one report
-    assert str(tmp_path / ".agents/skills/handoff") in problems[0]   # names the folder to delete
+    # The copy sits where the repo link belongs: one report, under MISSING (move it away, link
+    # the repo), not a second "delete it" duplicate report for the same folder.
+    problems = [l for l in out.splitlines() if l.startswith("PROBLEM ")]
+    assert len(problems) == 1 and problems[0].startswith("PROBLEM missing"), out
+    assert str(tmp_path / ".agents/skills/handoff") in problems[0]
 
 
 def test_second_handoff_in_agents_skills_is_caught(tmp_path):
@@ -425,6 +447,9 @@ def test_stale_pin_and_copy_both_reported(tmp_path):
 def hook(home: Path, patches: Path, extra_env: dict | None = None, stdin: str = ""):
     env = {k: v for k, v in os.environ.items() if k != "CODEX_HOME"}
     env.update(HOME=str(home), PATCH_VERIFY_DIR=str(patches), PATCH_VERIFY_NPM_ROOT=str(home / "npm"))
+    # The hook runs a COPY of verify.py from tmp patches/, whose repo-relative handoff/ is absent;
+    # name the real one, as the installed copy's location does in production.
+    env["HANDOFF_REPO_DIR"] = str(REPO_HANDOFF)
     env.update(extra_env or {})
     out = subprocess.run(["bash", str(HOOK)], input=stdin, capture_output=True, text=True, env=env, timeout=60)
     assert out.returncode == 0, out.stderr
@@ -530,7 +555,7 @@ import tomllib  # noqa: E402
 def fix(home: Path, *args: str):
     env = {k: v for k, v in os.environ.items() if k not in ("CODEX_HOME", "HANDOFF_REPO_DIR")}
     env["HOME"] = str(home)
-    out = subprocess.run([sys.executable, str(VERIFY), "--fix", *args], capture_output=True, text=True,
+    out = subprocess.run([VERIFY_PY, str(VERIFY), "--fix", *args], capture_output=True, text=True,
                          env=env, timeout=30)
     return out.returncode, out.stdout + out.stderr
 
@@ -853,3 +878,198 @@ def test_cleanup_survives_a_config_rewritten_as_non_utf8(tmp_path, monkeypatch, 
     with pytest.raises(RuntimeError, match="original failure"):   # not masked by cleanup
         mod.main(["--fix"])
     assert not temps(cfg)
+
+
+# --- MISSING: the repo handoff link itself ----------------------------------------------------
+
+def missing_lines(out: str) -> list[str]:
+    return [l for l in out.splitlines() if l.startswith("PROBLEM missing")]
+
+
+def test_absent_repo_link_is_missing(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert len(missing_lines(out)) == 1 and f"ln -s {REPO_HANDOFF} {agents_link}" in out
+    assert out.strip().splitlines()[-1].startswith("VERIFY: MISSING")
+
+
+def test_dangling_repo_link_is_missing(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    agents_link.symlink_to(tmp_path / "moved-away/handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert "dangling" in missing_lines(out)[0] and f"ln -sfn {REPO_HANDOFF} {agents_link}" in out
+
+
+def test_link_to_somewhere_else_is_missing(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    other = tmp_path / "other-skill"
+    skill(other, "other")
+    agents_link.unlink()
+    agents_link.symlink_to(other)
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert str(other) in missing_lines(out)[0] and "ln -sfn" in out
+
+
+def test_real_folder_in_place_of_the_link_is_missing(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    skill(agents_link, "notes")                            # a real folder, not a link
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert "real folder" in missing_lines(out)[0] and "move it away" in out
+
+
+def test_repo_without_its_handoff_skill_is_missing(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    empty = tmp_path / "branch-without-handoff/handoff"
+    empty.mkdir(parents=True)                               # the dir exists, SKILL.md does not
+    agents_link.unlink()
+    agents_link.symlink_to(empty)
+    rc, out = run(tmp_path, {"HANDOFF_REPO_DIR": str(empty)})
+    assert rc == 1, out
+    assert "SKILL.md" in missing_lines(out)[0]
+
+
+def test_missing_wins_over_no_config(tmp_path, agents_link):
+    agents_link.unlink()
+    rc, out = run(tmp_path)                                 # no Codex config at all
+    assert rc == 1, out
+    assert missing_lines(out)
+
+
+def test_present_repo_link_is_not_missing(tmp_path):
+    pinned_home(tmp_path)
+    rc, out = run(tmp_path)
+    assert rc == 0 and not missing_lines(out), out
+
+
+def test_hook_warns_when_the_repo_link_disappears(tmp_path, agents_link):
+    patches, *_ = setup_hook(tmp_path)
+    assert hook(tmp_path, patches) == ""
+    agents_link.unlink()
+    out = hook(tmp_path, patches)
+    assert out, "hook stayed silent: its fingerprint does not see the repo handoff link"
+    assert "repo handoff link" in json.loads(out)["systemMessage"], out
+
+
+def test_hook_warns_when_the_repo_link_dangles(tmp_path, agents_link):
+    patches, *_ = setup_hook(tmp_path)
+    assert hook(tmp_path, patches) == ""
+    agents_link.unlink()
+    agents_link.symlink_to(tmp_path / "gone")
+    out = hook(tmp_path, patches)
+    assert out and "repo handoff link" in json.loads(out)["systemMessage"], out
+
+
+def test_repo_skill_with_another_name_is_missing(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    repo = tmp_path / "renamed/handoff"
+    skill(repo, "handoff-v2")                               # the skill was renamed upstream
+    agents_link.unlink()
+    agents_link.symlink_to(repo)
+    rc, out = run(tmp_path, {"HANDOFF_REPO_DIR": str(repo)})
+    assert rc == 1, out
+    assert "'handoff-v2'" in missing_lines(out)[0]
+
+
+def test_unlistable_agents_skills_cannot_judge(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.parent.chmod(0)
+    try:
+        rc, out = run(tmp_path)
+    finally:
+        agents_link.parent.chmod(0o755)
+    assert rc == 2, out
+    assert not missing_lines(out) and "absent" not in out
+
+
+def test_link_to_a_handoff_copy_is_reported_once_as_missing(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    copy = skill(tmp_path / "other-checkout/handoff", "handoff")
+    agents_link.unlink()
+    agents_link.symlink_to(copy.parent)
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert len(missing_lines(out)) == 1 and "ln -sfn" in out
+    assert not [l for l in out.splitlines() if l.startswith("PROBLEM duplicate")], out
+    assert "DUPLICATE" not in out.strip().splitlines()[-1]
+
+
+def test_real_handoff_folder_in_place_of_the_link_is_reported_once(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    skill(agents_link, "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert len(missing_lines(out)) == 1 and "move it away" in out
+    assert not [l for l in out.splitlines() if l.startswith("PROBLEM duplicate")], out
+
+
+def test_a_second_copy_is_still_a_duplicate_when_the_link_is_missing(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    skill(tmp_path / ".codex/skills/handoff", "handoff")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert missing_lines(out) and [l for l in out.splitlines() if l.startswith("PROBLEM duplicate")]
+
+
+def test_absent_link_repair_creates_the_parent(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    shutil.rmtree(agents_link.parents[1])                    # no ~/.agents at all
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert f"mkdir -p {agents_link.parent} && ln -s {REPO_HANDOFF} {agents_link}" in out
+
+
+def test_regular_file_in_place_of_the_link_is_named_a_file(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    agents_link.write_text("x")
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert "real file" in missing_lines(out)[0]
+
+
+@pytest.mark.parametrize("before,after", [
+    ("---\nname: handoff\n---\n", "name: handoff\n---\n"),                 # lost its opening ---
+    ("---\nname: >\n  handoff\n---\n", "---\nname: >\n  handoff-v2\n---\n"),  # block scalar renamed
+    ("\ufeff---\nname: handoff\n---\n", "\ufeff---\nname: handoff-v2\n---\n"),  # BOM
+    ("---\r\nname: handoff\r\n---\r\n", "---\r\nname: handoff-v2\r\n---\r\n"),  # CRLF
+    (" ---\nname: handoff\n---\n", " ---\nname: handoff-v2\n---\n"),       # indented fence
+])
+def test_hook_rechecks_when_the_repo_skill_frontmatter_changes(tmp_path, agents_link, before, after):
+    patches, *_ = setup_hook(tmp_path)
+    repo = tmp_path / "repo/handoff"
+    repo.mkdir(parents=True)
+    (repo / "SKILL.md").write_text(before, encoding="utf-8", newline="")
+    agents_link.unlink()
+    agents_link.symlink_to(repo)
+    env = {"HANDOFF_REPO_DIR": str(repo), "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8"}
+    assert hook(tmp_path, patches, env) == ""
+    (repo / "SKILL.md").write_text(after, encoding="utf-8", newline="")
+    out = hook(tmp_path, patches, env)
+    assert out, "hook stayed silent: its fingerprint does not see the SKILL.md frontmatter"
+    assert "repo handoff link" in json.loads(out)["systemMessage"], out
+
+
+def test_link_loop_is_missing_not_unreadable(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    agents_link.unlink()
+    agents_link.symlink_to(agents_link)                     # points at itself
+    rc, out = run(tmp_path)
+    assert rc == 1, out
+    assert "link loop" in missing_lines(out)[0] and "ln -sfn" in out
+
+
+def test_agents_skills_linked_to_the_repo_root_is_fine(tmp_path, agents_link):
+    pinned_home(tmp_path)
+    shutil.rmtree(agents_link.parent)
+    agents_link.parent.symlink_to(REPO_HANDOFF.parent)     # ~/.agents/skills -> the repo root
+    rc, out = run(tmp_path)
+    assert not missing_lines(out), out
