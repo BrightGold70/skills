@@ -14,6 +14,8 @@ RELATIVE = ("dist/installer/mcp-registry.js", "bridge/cli.cjs")
 
 
 ROOTS_ENV = "OMC_PATCH_ROOTS"
+NPM_ENV = "OMC_NPM_ROOT"
+NPM_DEFAULT = "/opt/homebrew/lib/node_modules/oh-my-claude-sisyphus"
 
 
 def roots() -> list[Path]:
@@ -21,6 +23,8 @@ def roots() -> list[Path]:
 
     `OMC_PATCH_ROOTS` (os.pathsep-separated) replaces the lookup entirely, with no
     fallback, so tests can point apply/verify at fixture roots and never at the host.
+    `OMC_NPM_ROOT` replaces only the npm CLI path (empty: no npm copy), so a test can
+    drive the real installed_plugins.json lookup under a fixture HOME.
     """
     override = os.environ.get(ROOTS_ENV)
     if override is not None:
@@ -36,9 +40,9 @@ def roots() -> list[Path]:
             for entry in entries:
                 if entry.get("installPath"):
                     found.append(Path(entry["installPath"]))
-    npm = Path("/opt/homebrew/lib/node_modules/oh-my-claude-sisyphus")
-    if npm.is_dir():
-        found.append(npm)
+    npm_path = os.environ.get(NPM_ENV, NPM_DEFAULT)
+    if npm_path and Path(npm_path).is_dir():
+        found.append(Path(npm_path))
     return found
 
 

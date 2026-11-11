@@ -24,7 +24,10 @@
       "find": "missing.append(str(path))",
       "replace": "pass",
       "test": "tests/test_verify.py::test_dropped_patch_in_the_bundle_alone_is_reported_missing",
-      "requires": ["node", "--version"]
+      "requires": [
+        "node",
+        "--version"
+      ]
     },
     {
       "name": "missing-exits-zero",
@@ -34,7 +37,10 @@
       "find": "        return 1\n",
       "replace": "        return 0\n",
       "test": "tests/test_verify.py::test_dropped_patch_in_the_bundle_alone_is_reported_missing",
-      "requires": ["node", "--version"]
+      "requires": [
+        "node",
+        "--version"
+      ]
     },
     {
       "name": "probe-type-lines-ignored",
@@ -44,7 +50,23 @@
       "find": "elif res.get(\"typeLines\") != 0:",
       "replace": "elif False:",
       "test": "tests/test_verify.py::test_render_probe_catches_an_emission_the_regex_does_not_know",
-      "requires": ["node", "--version"]
+      "requires": [
+        "node",
+        "--version"
+      ]
+    },
+    {
+      "name": "lookup-misses-updated-install",
+      "_mechanism": "roots() stops reading installed_plugins.json. After an OMC update repoints installPath at a fresh, unpatched version, only the patched npm copy is checked and verify.py prints VERIFY: OK files=2: the update dropped the patch silently.",
+      "file": "targets.py",
+      "symbol": "roots",
+      "find": "if key.startswith(\"oh-my-claudecode@\"):",
+      "replace": "if False:",
+      "test": "tests/test_verify.py::test_update_to_an_unpatched_version_is_reported_missing",
+      "requires": [
+        "node",
+        "--version"
+      ]
     }
   ]
 }

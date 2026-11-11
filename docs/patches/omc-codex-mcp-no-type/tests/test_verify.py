@@ -5,6 +5,7 @@ OMC_PATCH_ROOTS, so nothing here reads or writes the host's plugin cache or npm 
 The fake dist module is a real ESM renderer carrying the exact upstream emission line,
 so verify.py's node probe runs against code that genuinely emits `type`.
 """
+import json
 import os
 import shutil
 import subprocess
@@ -143,3 +144,70 @@ def test_an_upstream_fix_without_the_marker_reads_missing(tmp_path):
     r = run(VERIFY, str(root))
     assert r.returncode == 1
     assert "VERIFY: MISSING" in r.stdout
+
+
+# --- An OMC update, through the real installed_plugins.json lookup -----------------
+#
+# Every test above sets OMC_PATCH_ROOTS, which bypasses roots()' plugin lookup. That
+# lookup is what has to follow an update: the plugin manager installs the new version
+# into a fresh cache dir and repoints installPath, while the old, patched dir stays on
+# disk. If the lookup stopped reading the new installPath, verify.py would still see
+# the patched npm copy and print VERIFY: OK -- the silent drop. These tests drive the
+# lookup under a fixture HOME and a fixture npm root, never the host's.
+
+def write_installed(home: Path, install_path: Path) -> None:
+    plugins = home / ".claude/plugins"
+    plugins.mkdir(parents=True, exist_ok=True)
+    (plugins / "installed_plugins.json").write_text(json.dumps({
+        "version": 2,
+        "plugins": {"oh-my-claudecode@omc": [{"scope": "user", "installPath": str(install_path)}]},
+    }))
+
+
+def updated_host(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    """A patched old version and npm copy, plus a fresh, unpatched new version."""
+    old = make_root(tmp_path / "cache/5.8.4")
+    npm = make_root(tmp_path / "npm")
+    new = make_root(tmp_path / "cache/5.8.5")
+    assert run(APPLY, os.pathsep.join([str(old), str(npm)])).returncode == 0
+    return tmp_path / "home", old, npm, new
+
+
+def run_on_host(script: Path, home: Path, npm: Path) -> subprocess.CompletedProcess:
+    env = {k: v for k, v in os.environ.items() if k != "OMC_PATCH_ROOTS"}
+    env.update(HOME=str(home), OMC_NPM_ROOT=str(npm))
+    return subprocess.run([sys.executable, str(script)], env=env, capture_output=True,
+                          text=True, timeout=60)
+
+
+def test_lookup_control_patched_install_reads_ok(tmp_path):
+    # Positive control for the test below: installPath on the patched version gives OK
+    # over all 4 files, so the lookup really read installed_plugins.json (a lookup that
+    # found nothing would report files=2, from npm alone).
+    home, old, npm, _new = updated_host(tmp_path)
+    write_installed(home, old)
+    r = run_on_host(VERIFY, home, npm)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "VERIFY: OK files=4" in r.stdout
+
+
+def test_update_to_an_unpatched_version_is_reported_missing(tmp_path):
+    home, old, npm, new = updated_host(tmp_path)
+    write_installed(home, new)
+    r = run_on_host(VERIFY, home, npm)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "VERIFY: MISSING" in r.stdout
+    for rel in ("dist/installer/mcp-registry.js", "bridge/cli.cjs"):
+        assert str(new / rel) in r.stdout
+    assert "(renderer still emits" in r.stdout
+    assert str(old) not in r.stdout and str(npm) not in r.stdout
+
+
+def test_apply_after_the_update_patches_the_new_version(tmp_path):
+    home, _old, npm, new = updated_host(tmp_path)
+    write_installed(home, new)
+    assert run_on_host(APPLY, home, npm).returncode == 0
+    assert render_type_lines(new / "dist/installer/mcp-registry.js") == 0
+    r = run_on_host(VERIFY, home, npm)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "VERIFY: OK files=4" in r.stdout

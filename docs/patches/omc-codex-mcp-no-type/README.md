@@ -2,6 +2,7 @@
 
 **Status:** applied locally on 2026-11-09 (OMC 5.8.0). Retire it once upstream fixes this; see "Retiring" below.
 **2026-11-10, OMC 5.8.3:** NOT retirable yet. #4903 (merged to `dev`, contained in the v5.8.3 tag) fixed only `src/installer/mcp-registry.ts`. The compiled `dist/installer/mcp-registry.js` in the same tag, and the npm `oh-my-claude-sisyphus@5.8.3` tarball (`gitHead 73e0d61`), still contain `lines.push(`type = ${renderTomlString(entry.type)}`)`. The auto-update to 5.8.3 dropped the patch (`verify.py`: MISSING, renderer emits 2 `type` lines). It was re-applied (`VERIFY: OK files=4`).
+**2026-11-11, OMC 5.8.4:** NOT retirable yet. The update dropped the patch again (renderer still emits 2 `type` lines); re-applied, `VERIFY: OK files=4`.
 **Upstream:** [Yeachan-Heo/oh-my-claudecode#4899](https://github.com/Yeachan-Heo/oh-my-claudecode/issues/4899)
 
 ## The problem
@@ -37,6 +38,8 @@ Nothing else changes. The parse and compare side (`codexEntriesEqual`) already t
 
 - the active plugin install from `~/.claude/plugins/installed_plugins.json` (`oh-my-claudecode@*`): `dist/installer/mcp-registry.js` and `bridge/cli.cjs`
 - the global npm CLI `/opt/homebrew/lib/node_modules/oh-my-claude-sisyphus` (`omc`): the same two files
+
+Tests override both: `OMC_PATCH_ROOTS` replaces the whole lookup, `OMC_NPM_ROOT` replaces only the npm path (empty = none). The `test_update_*` tests use a fixture `HOME` plus `OMC_NPM_ROOT` to drive the real `installed_plugins.json` lookup through an update to a fresh, unpatched version dir; mutation row `lookup-misses-updated-install` proves they catch a lookup that stops following `installPath` (which would otherwise read `VERIFY: OK files=2` from the patched npm copy alone).
 
 `~/.claude/plugins/marketplaces/omc/src/` is the upstream git clone. It does not run and is not patched.
 
