@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-12 · pattern · [0.5] · `mutation-testing,handoff:2026-11-12-omc-upstream-check` — Read the mutation harness's crash_kills: a row caught by a traceback hides a real crash path (exit 1 read as EMITS). Report the case in one place so the row dies by assertion.
+- 2026-11-12 · gotcha · [0.7] · `testing,omc-patch,handoff:2026-11-12-omc-upstream-check` — A test that sets an override env var (OMC_PATCH_ROOTS) bypasses the code it replaces; the real lookup that must follow an update went untested. Drive the lookup itself under a fixture HOME.
 - 2026-11-11 · gotcha · [0.5] · `bash,awk,hooks,fingerprint,handoff:2026-11-11-codex-single-handoff` — Don't parse SKILL.md frontmatter in a bash fingerprint: BSD awk under a UTF-8 locale won't match a BOM byte regex and missed renames twice. Hash the whole file; verify.py does the parsing.
 - 2026-11-11 · pattern · [0.7] · `toctou,symlink,fix,handoff:2026-11-11-codex-single-handoff` — A re-check-before-acting guard must re-check the STATE, not just identity: a dangling link whose target returns keeps its target string but now works. Record the value seen at classification, not a later read.
 - 2026-11-11 · gotcha · [0.7] · `python,pathlib,hooks,handoff:2026-11-11-codex-single-handoff` — pathlib exists()/is_symlink() swallow PermissionError on Python 3.15 but raise on 3.11; decide link states with os.lstat/os.stat, and test a hook's script under the hook's own interpreter.
