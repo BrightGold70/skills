@@ -56,6 +56,21 @@ python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/verify.py 
 
 The SessionStart hook `patch-verify-on-update.sh` runs `verify.py` whenever its fingerprint changes. Since 2026-11-09 that fingerprint also covers the npm package: `package.json` plus the mtime and size of the 2 patched files (`NPM_FILES` in the hook). So a `npm update -g oh-my-claude-sisyphus`, or a same-version reinstall, triggers a re-check. Measured: with the npm `cli.cjs` reverted to unpatched, the previous hook stayed silent and the new one reported `omc-codex-mcp-no-type: patch MISSING`.
 
+## Check upstream before updating
+
+```bash
+python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/upstream.py            # newest release
+python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/upstream.py --tag v5.9.0
+```
+
+It reads the tag's compiled `dist/installer/mcp-registry.js` and `bridge/cli.cjs` from GitHub through `gh` (needs `gh auth`), without installing anything.
+
+- `UPSTREAM: EMITS` (exit 1): the build still writes `type`. Updating drops the patch; re-apply after.
+- `UPSTREAM: FIXED` (exit 0): neither file has the emission and both still contain `renderCodexServerBlock`. Go to §Retiring.
+- `UPSTREAM: UNREADABLE` (exit 2): not a pass. `gh` failed, a file is gone or empty, the renderer moved, or a `type = ${…}` template exists that the exact pattern does not match (upstream respelled the line, so `apply.py` would refuse too). Read the files by hand.
+
+2026-11-12: `v5.8.4` and `v5.8.2` both read `EMITS`, one line in each file. It checks the GitHub tag, not the npm tarball; on 5.8.4 the two had the same file sizes and the same emission line (not compared byte for byte).
+
 ## Retiring
 
 When #4899 is fixed in a released OMC: update, run `verify.py`. It will report MISSING, because the marker is gone. Then grep the new renderer: if no `type =` emission is left, delete this directory and mark it RETIRED here.

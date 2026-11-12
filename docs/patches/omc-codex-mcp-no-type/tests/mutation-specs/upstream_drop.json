@@ -1,0 +1,56 @@
+{
+  "_why": "upstream.py decides whether an OMC update is safe to take without re-applying, and whether the patch can be retired. A false FIXED retires a patch that is still needed. These rows prove the tests notice if it stopped seeing the emission, or stopped treating doubt as UNREADABLE.",
+  "_provenance": "docs/patches/omc-codex-mcp-no-type/README.md; OMC issue Yeachan-Heo/oh-my-claudecode#4899.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_upstream.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "exact-emission-ignored",
+      "_mechanism": "The exact emission line is no longer reported as EMITS; an unfixed build then reads UNREADABLE at best.",
+      "file": "upstream.py",
+      "symbol": "judge",
+      "find": "    if exact:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_upstream.py::test_unfixed_build_reports_emits"
+    },
+    {
+      "name": "respelled-emission-reads-fixed",
+      "_mechanism": "The loose backstop is dropped; an emission spelled differently from ORIGINAL reads FIXED and the patch would be retired while upstream still writes type.",
+      "file": "upstream.py",
+      "symbol": "judge",
+      "find": "    if loose:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_upstream.py::test_respelled_emission_is_unreadable_not_fixed"
+    },
+    {
+      "name": "missing-renderer-reads-fixed",
+      "_mechanism": "A file whose renderer moved has no emission either; without the guard it reads FIXED.",
+      "file": "upstream.py",
+      "symbol": "judge",
+      "find": "    if RENDERER not in text:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_upstream.py::test_file_without_the_renderer_is_unreadable_not_fixed"
+    },
+    {
+      "name": "emits-exits-zero",
+      "_mechanism": "EMITS is printed but the exit code is 0, so a caller reading only the exit code takes an unfixed build as fixed. Named test is the bundle-only case, where one file emits and the other does not.",
+      "file": "upstream.py",
+      "symbol": "main",
+      "find": "        return 1\n",
+      "replace": "        return 0\n",
+      "test": "tests/test_upstream.py::test_emission_in_the_bundle_alone_still_reports_emits"
+    }
+  ]
+}
