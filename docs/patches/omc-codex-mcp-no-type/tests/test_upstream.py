@@ -94,3 +94,78 @@ def test_empty_file_is_unreadable_not_fixed(tmp_path):
     r = run(make(tmp_path, dist="", cli=CLI % ""))
     assert r.returncode == 2, r.stdout + r.stderr
     assert "mcp-registry.js is empty" in r.stdout
+
+
+# --- npm tarball ---------------------------------------------------------------------
+#
+# The global `omc` CLI updates from npm, not from the GitHub tag, so a build fixed on
+# one side and stale on the other must still read EMITS. These tests build real
+# gzip tarballs with npm's `package/` layout and feed them through --npm-from-tgz.
+
+def make_tgz(tmp_path: Path, files: dict[str, str], name: str = "pkg.tgz") -> Path:
+    import io
+    import tarfile
+    tgz = tmp_path / name
+    with tarfile.open(tgz, "w:gz") as tar:
+        for rel, text in files.items():
+            data = text.encode()
+            info = tarfile.TarInfo(f"package/{rel}")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return tgz
+
+
+NPM_EMITS = {"dist/installer/mcp-registry.js": DIST % DIST_EMIT, "bridge/cli.cjs": CLI % CLI_EMIT}
+NPM_FIXED = {"dist/installer/mcp-registry.js": DIST % "", "bridge/cli.cjs": CLI % ""}
+
+
+def run_args(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(UPSTREAM), *args],
+                          capture_output=True, text=True, timeout=30)
+
+
+def test_npm_stale_while_tag_fixed_reports_emits(tmp_path):
+    tag = make(tmp_path, dist=DIST % "", cli=CLI % "")
+    r = run_args("--from-dir", str(tag), "--npm-from-tgz", str(make_tgz(tmp_path, NPM_EMITS)))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "npm:mcp-registry.js emission line x1" in r.stdout
+    assert "npm:cli.cjs emission line x1" in r.stdout
+    assert "tag:mcp-registry.js no emission" in r.stdout
+
+
+def test_both_sources_fixed_reports_fixed(tmp_path):
+    tag = make(tmp_path, dist=DIST % "", cli=CLI % "")
+    r = run_args("--from-dir", str(tag), "--npm-from-tgz", str(make_tgz(tmp_path, NPM_FIXED)))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.startswith("UPSTREAM: FIXED tag=local npm=local")
+    assert r.stdout.count("no emission") == 4
+
+
+def test_tarball_alone_checks_only_npm(tmp_path):
+    r = run_args("--npm-from-tgz", str(make_tgz(tmp_path, NPM_FIXED)))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "tag:" not in r.stdout and "tag=" not in r.stdout
+    assert r.stdout.count("npm:") == 2
+
+
+def test_tarball_missing_a_member_is_unreadable_not_fixed(tmp_path):
+    tgz = make_tgz(tmp_path, {"dist/installer/mcp-registry.js": DIST % ""})
+    r = run_args("--npm-from-tgz", str(tgz))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "has no package/bridge/cli.cjs" in r.stdout
+
+
+def test_corrupt_tarball_is_unreadable_not_fixed(tmp_path):
+    bad = tmp_path / "bad.tgz"
+    bad.write_bytes(b"not a tarball")
+    r = run_args("--npm-from-tgz", str(bad))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "npm@local unreadable" in r.stdout
+
+
+def test_tarball_reader_control_finds_the_emission(tmp_path):
+    # Positive control for the FIXED tests: the same reader, given an emitting
+    # tarball and no tag, says EMITS, so "no emission" above is not a reader that
+    # returns empty strings.
+    r = run_args("--npm-from-tgz", str(make_tgz(tmp_path, NPM_EMITS)))
+    assert r.returncode == 1, r.stdout + r.stderr

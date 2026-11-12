@@ -51,6 +51,24 @@
       "find": "        return 1\n",
       "replace": "        return 0\n",
       "test": "tests/test_upstream.py::test_emission_in_the_bundle_alone_still_reports_emits"
+    },
+    {
+      "name": "npm-source-skipped",
+      "_mechanism": "The npm tarball is never judged. A release whose GitHub build is fixed but whose npm tarball is stale reads FIXED, and updating the global omc CLI drops the patch.",
+      "file": "upstream.py",
+      "symbol": "main",
+      "find": "    if do_npm and version:\n",
+      "replace": "    if False:\n",
+      "test": "tests/test_upstream.py::test_npm_stale_while_tag_fixed_reports_emits"
+    },
+    {
+      "name": "missing-tarball-member-ignored",
+      "_mechanism": "A file absent from the tarball is skipped instead of reported. With the other file fixed, a tarball missing one runtime file reads FIXED.",
+      "file": "upstream.py",
+      "symbol": "check_npm",
+      "find": "            results.append((\"UNREADABLE\", f\"{name} absent: tarball has no package/{rel}\"))\n",
+      "replace": "            pass\n",
+      "test": "tests/test_upstream.py::test_tarball_missing_a_member_is_unreadable_not_fixed"
     }
   ]
 }

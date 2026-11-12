@@ -63,13 +63,18 @@ python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/upstream.p
 python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/upstream.py --tag v5.9.0
 ```
 
-It reads the tag's compiled `dist/installer/mcp-registry.js` and `bridge/cli.cjs` from GitHub through `gh` (needs `gh auth`), without installing anything.
+It reads the compiled `dist/installer/mcp-registry.js` and `bridge/cli.cjs` from both update sources, without installing anything:
+
+- the GitHub tag, through `gh api` (needs `gh auth`); this is what the plugin cache installs;
+- the npm tarball `oh-my-claude-sisyphus@<tag without v>`, through `npm pack` into a temp dir, read in memory; this is what the global `omc` CLI installs. With no `--tag`, npm's own `latest` is checked, and a mismatch with the newest tag is printed as a `note:`.
+
+All 4 files go into one verdict, so a build fixed on one side and stale on the other reads `EMITS`.
 
 - `UPSTREAM: EMITS` (exit 1): the build still writes `type`. Updating drops the patch; re-apply after.
 - `UPSTREAM: FIXED` (exit 0): neither file has the emission and both still contain `renderCodexServerBlock`. Go to §Retiring.
-- `UPSTREAM: UNREADABLE` (exit 2): not a pass. `gh` failed, a file is gone or empty, the renderer moved, or a `type = ${…}` template exists that the exact pattern does not match (upstream respelled the line, so `apply.py` would refuse too). Read the files by hand.
+- `UPSTREAM: UNREADABLE` (exit 2): not a pass. `gh` or `npm` failed, a file is gone or empty (or absent from the tarball), the renderer moved, or a `type = ${…}` template exists that the exact pattern does not match (upstream respelled the line, so `apply.py` would refuse too). Read the files by hand.
 
-2026-11-12: `v5.8.4` and `v5.8.2` both read `EMITS`, one line in each file. It checks the GitHub tag, not the npm tarball; on 5.8.4 the two had the same file sizes and the same emission line (not compared byte for byte).
+2026-11-12: `v5.8.4` and `v5.8.3` both read `EMITS` on all 4 files (tag and npm), one line in each.
 
 ## Retiring
 
