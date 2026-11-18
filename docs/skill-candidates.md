@@ -3078,3 +3078,5 @@ Reconciled first: the census read `OPEN(yes+maybe)=0` before this entry; no open
 - **real-host-positive-control**: three times, a live artifact was broken on purpose (restored the deleted Orca copy, removed the `~/.agents/skills/handoff` link, introduced a stale pin), the installed hook or verify was run, and the artifact was restored with a byte comparison. This is a judgment call about which live state is safe to touch for a few seconds, so it stays a working habit, not a tool. — remedy: review-rule — recurrence: 3 — candidate: no
 
 ## 2026-11-12 — omc-upstream-check — no candidates
+
+## 2026-11-18 — omc-update-check — no candidates
