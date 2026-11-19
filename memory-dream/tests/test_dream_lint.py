@@ -397,3 +397,44 @@ class TestOversizedScope:
         assert "  OVERSIZED live_big.md" in r.stdout
         assert "  OVERSIZED old_big.md" not in r.stdout
         assert "  archived  old_big.md" in r.stdout
+
+
+class TestHookFindings:
+    def _store(self, tmp_path, hook: str, body: str):
+        (tmp_path / "MEMORY.md").write_text(f"- [Note](n.md) — {hook}\n")
+        (tmp_path / "n.md").write_text(note("", body, slug="n"))
+        return dl.Store(tmp_path)
+
+    def test_supported_citations_are_silent(self, tmp_path):
+        s = self._store(tmp_path, "shipped a1b2c3d4 in PR #42", "merged as `a1b2c3d4e5` (PR #42)\n")
+        assert s.hook_findings() == []
+
+    def test_sha_missing_from_body(self, tmp_path):
+        s = self._store(tmp_path, "shipped deadbee1", "merged as `a1b2c3d4e5`\n")
+        assert s.hook_findings() == [("HOOK_UNSUPPORTED", "n.md", "sha deadbee1")]
+
+    def test_ref_missing_from_body(self, tmp_path):
+        s = self._store(tmp_path, "see #77", "see #7 and #770\n")
+        assert s.hook_findings() == [("HOOK_UNSUPPORTED", "n.md", "#77")]
+
+    def test_hook_repeats_a_superseded_claim(self, tmp_path):
+        body = "Context. The PR waits on #91 [SUPERSEDED 2026-11-19]. More.\n"
+        s = self._store(tmp_path, "waiting on #91", body)
+        assert ("HOOK_SUPERSEDED", "n.md", "#91") in s.hook_findings()
+
+    def test_the_tag_itself_carries_the_new_value(self, tmp_path):
+        body = "The PR waits on FAILDIFF [SUPERSEDED: merged via PR #175]. Later #175 landed.\n"
+        s = self._store(tmp_path, "merged (PR #175)", body)
+        assert s.hook_findings() == []
+
+    def test_conflict_hidden_and_shown(self, tmp_path):
+        body = "CONFLICT (2026-11-19): A says MET; B says not.\n"
+        assert self._store(tmp_path, "AC-11.5 MET", body).hook_findings() == \
+            [("HOOK_HIDES_CONFLICT", "n.md", "body has CONFLICT, hook shows no doubt")]
+        (tmp_path / "MEMORY.md").write_text("- [Note](n.md) — AC-11.5 CONFLICT, unmeasured\n")
+        assert dl.Store(tmp_path).hook_findings() == []
+
+    def test_hook_findings_make_the_run_actionable(self, tmp_path):
+        self._store(tmp_path, "shipped deadbee1", "nothing\n")
+        r = subprocess.run([sys.executable, SCRIPT, str(tmp_path)], capture_output=True, text=True)
+        assert r.returncode == 1 and "hooks=1" in r.stdout and "HOOK_UNSUPPORTED" in r.stdout

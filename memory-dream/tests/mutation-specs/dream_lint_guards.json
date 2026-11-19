@@ -222,6 +222,60 @@
       "find": "    archived = store.archive_only()\n",
       "replace": "    archived = set()\n",
       "test": "tests/test_dream_lint.py::TestOversizedScope::test_archive_only_notes_are_not_split_candidates"
+    },
+    {
+      "name": "hook-sha-unchecked",
+      "_mechanism": "A hook sha missing from the body is not reported.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.hook_findings",
+      "find": "                    out.append((\"HOOK_UNSUPPORTED\", name, f\"sha {s}\"))\n",
+      "replace": "                    pass\n",
+      "test": "tests/test_dream_lint.py::TestHookFindings::test_sha_missing_from_body"
+    },
+    {
+      "name": "hook-ref-substring",
+      "_mechanism": "#77 is accepted because the body has #770 (no word boundary).",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.hook_findings",
+      "find": "                if not re.search(rf\"(?<![\\w/&])#{r}\\b\", body):\n",
+      "replace": "                if not re.search(rf\"#{r}\", body):\n",
+      "test": "tests/test_dream_lint.py::TestHookFindings::test_ref_missing_from_body"
+    },
+    {
+      "name": "superseded-tag-not-stripped",
+      "_mechanism": "The [SUPERSEDED ...] tag's own new value is read as the stale claim.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.hook_findings",
+      "find": "                    claim = SUPERSEDED_TAG.sub(\" \", sent)\n",
+      "replace": "                    claim = sent\n",
+      "test": "tests/test_dream_lint.py::TestHookFindings::test_the_tag_itself_carries_the_new_value"
+    },
+    {
+      "name": "superseded-unchecked",
+      "_mechanism": "A hook repeating a superseded claim is not reported.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.hook_findings",
+      "find": "                        out.append((\"HOOK_SUPERSEDED\", name, tok))\n",
+      "replace": "                        pass\n",
+      "test": "tests/test_dream_lint.py::TestHookFindings::test_hook_repeats_a_superseded_claim"
+    },
+    {
+      "name": "conflict-unchecked",
+      "_mechanism": "A body CONFLICT hidden by a confident hook is not reported.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.hook_findings",
+      "find": "            if CONFLICT_MARK.search(body) and not DOUBT_WORDS.search(hook):\n",
+      "replace": "            if False:\n",
+      "test": "tests/test_dream_lint.py::TestHookFindings::test_conflict_hidden_and_shown"
+    },
+    {
+      "name": "hooks-not-actionable",
+      "_mechanism": "Hook findings do not affect the exit code.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "main",
+      "find": "    blocking = bool(counts.get(\"UNSAFE\") or counts.get(\"AMBIGUOUS\") or orphans or hooks\n",
+      "replace": "    blocking = bool(counts.get(\"UNSAFE\") or counts.get(\"AMBIGUOUS\") or orphans\n",
+      "test": "tests/test_dream_lint.py::TestHookFindings::test_hook_findings_make_the_run_actionable"
     }
   ]
 }

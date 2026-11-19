@@ -25,6 +25,8 @@ answers questions that have one correct answer:
   index     MEMORY.md against Claude Code's load caps (via h_mad_check_memory_index)
   oversized topic files above --max-note-bytes that MEMORY.md links (or orphans): SPLIT
             candidates (proposal only). Archive-only ones are counted separately, listed with --verbose.
+  hooks     MEMORY.md hooks whose citations the note body does not back (HOOK_UNSUPPORTED,
+            HOOK_SUPERSEDED, HOOK_HIDES_CONFLICT); see Store.hook_findings
   stubs     files already retired to a single `MOVED TO [[slug]]` line
   last dream  age of the `.last-dream` stamp the skill writes after a full pass
 
@@ -36,7 +38,7 @@ copies the original into a fresh timestamped subdirectory of --backup-dir (fsync
 replaces the file atomically with its mode and line endings preserved. A window of
 microseconds between the final hash check and the rename remains; the backup covers it.
 
-Exit: 0 nothing actionable · 1 actionable findings (FIXABLE, UNSAFE, AMBIGUOUS, orphans,
+Exit: 0 nothing actionable · 1 actionable findings (FIXABLE, UNSAFE, AMBIGUOUS, orphans, hooks,
 an index at WARN/OVER, or a skipped write) · 2 unreadable store, I/O failure or usage
 error. Unreadable is never reported as clean.
 """
@@ -69,6 +71,13 @@ FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.S)
 NAME = re.compile(r"^name:\s*(.+?)\s*$", re.M)
 INDEX_LINK = re.compile(r"\]\((?:\./)?([^)\s#]+\.md)(?:#[^)\s]*)?\)")
 STUB = re.compile(r"^\s*MOVED TO \[\[[^\]]+\]\]\s*$")
+INDEX_ENTRY = re.compile(r"^- \[(?P<title>[^\]]*)\]\((?:\./)?(?P<file>[^)\s#]+\.md)(?:#[^)\s]*)?\)(?P<rest>.*)$", re.M)
+# a commit sha: 7-40 hex with at least one letter and one digit, not part of a longer word or path
+SHA = re.compile(r"(?<![0-9A-Za-z_/.-])(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}(?![0-9A-Za-z_-])")
+REF = re.compile(r"(?<![\w/&])#(\d{1,5})\b")
+SUPERSEDED_TAG = re.compile(r"\[SUPERSEDED[^\]]*\]")
+CONFLICT_MARK = re.compile(r"^CONFLICT\b|\bCONFLICT \(", re.M)
+DOUBT_WORDS = re.compile(r"conflict|doubt|unmeasured|disput|unverified", re.I)
 NONLINK = re.compile(r"^:|\.|^\s*$|[{}<>=\"'`]")
 
 
@@ -210,6 +219,45 @@ class Store:
     def orphans(self) -> list[str]:
         linked = set().union(*(self.indexed(i) for i in INDEXES))
         return sorted(n for n in self.topics if n not in linked)
+
+    def hook_findings(self) -> list[tuple[str, str, str]]:
+        """(kind, file, detail) for MEMORY.md hooks whose citations the note body does not back.
+
+        Mechanical only — "the hook says shipped, the body says blocked" needs judgment and is
+        SKILL.md's job. These three catch what a dream's own corrections can leave behind:
+          HOOK_UNSUPPORTED  the hook cites a sha or #N that appears nowhere in the body
+          HOOK_SUPERSEDED   the hook repeats a sha or #N from a body sentence tagged [SUPERSEDED
+                            (the tag's own brackets are excluded: they carry the NEW value)
+          HOOK_HIDES_CONFLICT the body carries a CONFLICT marker and the hook shows no doubt
+        """
+        out = []
+        for m in INDEX_ENTRY.finditer(self.text["MEMORY.md"]):
+            name = m.group("file")
+            if name not in self.text or name in INDEXES:
+                continue
+            hook = f"{m.group('title')} {m.group('rest')}"
+            fm = FRONTMATTER.match(self.text[name])
+            body = self.text[name][fm.end():] if fm else self.text[name]
+            for s in sorted(set(SHA.findall(hook))):
+                if not re.search(rf"(?<![0-9a-f]){s}", body):
+                    out.append(("HOOK_UNSUPPORTED", name, f"sha {s}"))
+            for r in sorted(set(REF.findall(hook)), key=int):
+                if not re.search(rf"(?<![\w/&])#{r}\b", body):
+                    out.append(("HOOK_UNSUPPORTED", name, f"#{r}"))
+            hook_toks = set(SHA.findall(hook)) | {f"#{r}" for r in REF.findall(hook)}
+            for line in body.splitlines():
+                if "[SUPERSEDED" not in line:
+                    continue
+                for sent in re.split(r"(?<=[.!?])\s+", line):
+                    if "[SUPERSEDED" not in sent:
+                        continue
+                    claim = SUPERSEDED_TAG.sub(" ", sent)
+                    toks = set(SHA.findall(claim)) | {f"#{r}" for r in REF.findall(claim)}
+                    for tok in sorted(toks & hook_toks):
+                        out.append(("HOOK_SUPERSEDED", name, tok))
+            if CONFLICT_MARK.search(body) and not DOUBT_WORDS.search(hook):
+                out.append(("HOOK_HIDES_CONFLICT", name, "body has CONFLICT, hook shows no doubt"))
+        return sorted(set(out))
 
     def archive_only(self) -> set[str]:
         """Topic files the archive indexes and MEMORY.md does not: never loaded at session start."""
@@ -361,11 +409,15 @@ def main(argv: list[str]) -> int:
         print(f"  OVERSIZED {n} {size}B")
     for size, n in cold if args.verbose else ():
         print(f"  archived  {n} {size}B (archive-only, informational)")
+    hooks = store.hook_findings()
+    print(f"hooks={len(hooks)}")
+    for kind, n, detail in hooks:
+        print(f"  {kind:<19} {n}: {detail}")
     print(f"stubs={len(store.stubs())}")
     days = last_dream_days(store.root, _dt.date.today())
     print(f"last_dream={'never' if days is None else f'{days}d ago'}")
 
-    blocking = bool(counts.get("UNSAFE") or counts.get("AMBIGUOUS") or orphans
+    blocking = bool(counts.get("UNSAFE") or counts.get("AMBIGUOUS") or orphans or hooks
                     or a["verdict"] != "OK")
     actionable = blocking or bool(counts.get("FIXABLE"))
     if args.fix_links:
