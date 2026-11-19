@@ -83,3 +83,10 @@ until the user approves rows.** Then for each approved row:
 Re-run `dream_lint.py` and report the before and after counts. Write today's date to
 `$M/.last-dream`; `dream_lint` reports its age. A full dream is due when it reads over 7 days.
 The handoff WRITE auto-memories step runs the mechanical report on every closeout.
+
+Then apply the backup retention rule (operator, 2026-11-19: prune backups older than 30 days):
+`python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/memory-dream/scripts/prune_backups.py" --apply`.
+It deletes only timestamp-named backup directories past 30 days, never symlinks, and always keeps
+the newest full snapshot (both indexes plus every file they link to). Before a judgment pass that
+edits many notes, take a full snapshot (`cp -p "$M"/*.md` into a new timestamped directory) so a
+current complete restore point exists.

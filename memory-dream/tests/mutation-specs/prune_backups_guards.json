@@ -1,0 +1,74 @@
+{
+  "_why": "prune_backups.py deletes backups, the only undo for an unversioned memory store. These rows prove the tests notice if a guard that narrows deletion stops working.",
+  "_provenance": "memory-dream/SKILL.md \u00a73 Close; retention rule requested 2026-11-19.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_prune_backups.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "full-snapshot-unprotected",
+      "_mechanism": "The newest full snapshot is deleted like any other old backup.",
+      "file": "scripts/prune_backups.py",
+      "symbol": "plan",
+      "find": "        if p == newest_full:\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_prune_backups.py::test_newest_full_snapshot_is_protected_however_old"
+    },
+    {
+      "name": "index-means-full",
+      "_mechanism": "Any backup holding MEMORY.md counts as full, so a partial one is protected and the real full snapshot is deleted.",
+      "file": "scripts/prune_backups.py",
+      "symbol": "is_full",
+      "find": "        return bool(targets) and all((d / t).is_file() for t in targets)\n",
+      "replace": "        return True\n",
+      "test": "tests/test_prune_backups.py::test_holding_memory_md_does_not_make_a_backup_full"
+    },
+    {
+      "name": "symlink-followed",
+      "_mechanism": "A symlink to a sibling backup inside the root passes the resolve check and is scheduled for deletion.",
+      "file": "scripts/prune_backups.py",
+      "symbol": "plan",
+      "find": "        if (ts is None or p.is_symlink() or not p.is_dir()\n",
+      "replace": "        if (ts is None or not p.is_dir()\n",
+      "test": "tests/test_prune_backups.py::test_symlink_to_a_sibling_backup_is_ignored"
+    },
+    {
+      "name": "foreign-names-deleted",
+      "_mechanism": "Directories without a backup timestamp are treated as old backups.",
+      "file": "scripts/prune_backups.py",
+      "symbol": "stamp",
+      "find": "    if not m:\n        return None\n",
+      "replace": "    if not m:\n        return _dt.datetime(2000, 1, 1)\n",
+      "test": "tests/test_prune_backups.py::test_foreign_names_files_and_symlinks_are_ignored"
+    },
+    {
+      "name": "cutoff-inclusive",
+      "_mechanism": "A backup exactly N days old is deleted (off-by-one at the boundary).",
+      "file": "scripts/prune_backups.py",
+      "symbol": "plan",
+      "find": "        elif ts < cutoff:\n",
+      "replace": "        elif ts <= cutoff:\n",
+      "test": "tests/test_prune_backups.py::test_age_comes_from_the_name_and_the_cutoff_is_exclusive"
+    },
+    {
+      "name": "dry-run-deletes",
+      "_mechanism": "Deletion happens without --apply.",
+      "file": "scripts/prune_backups.py",
+      "symbol": "main",
+      "find": "        if args.apply:\n            shutil.rmtree(d)\n",
+      "replace": "        shutil.rmtree(d)\n",
+      "test": "tests/test_prune_backups.py::test_dry_run_deletes_nothing_and_apply_deletes_only_the_plan"
+    }
+  ]
+}
