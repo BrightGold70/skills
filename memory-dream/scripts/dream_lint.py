@@ -23,7 +23,8 @@ answers questions that have one correct answer:
             including ones that span lines.
   orphans   topic files that neither MEMORY.md nor MEMORY-ARCHIVE.md links to
   index     MEMORY.md against Claude Code's load caps (via h_mad_check_memory_index)
-  oversized topic files above --max-note-bytes: candidates for a SPLIT (proposal only)
+  oversized topic files above --max-note-bytes that MEMORY.md links (or orphans): SPLIT
+            candidates (proposal only). Archive-only ones are counted separately, listed with --verbose.
   stubs     files already retired to a single `MOVED TO [[slug]]` line
   last dream  age of the `.last-dream` stamp the skill writes after a full pass
 
@@ -203,11 +204,16 @@ class Store:
                 kind, tgt = self.classify(inner)
                 yield n, s, e, inner, kind, tgt
 
+    def indexed(self, idx: str) -> set[str]:
+        return set(INDEX_LINK.findall(self.text.get(idx, "")))
+
     def orphans(self) -> list[str]:
-        linked = set()
-        for idx in INDEXES:
-            linked |= set(INDEX_LINK.findall(self.text.get(idx, "")))
+        linked = set().union(*(self.indexed(i) for i in INDEXES))
         return sorted(n for n in self.topics if n not in linked)
+
+    def archive_only(self) -> set[str]:
+        """Topic files the archive indexes and MEMORY.md does not: never loaded at session start."""
+        return self.indexed("MEMORY-ARCHIVE.md") - self.indexed("MEMORY.md")
 
     def stubs(self) -> list[str]:
         return sorted(n for n in self.topics if STUB.match(self.text[n]))
@@ -345,9 +351,16 @@ def main(argv: list[str]) -> int:
 
     big = sorted(((len(store.raw[n]), n) for n in store.topics
                   if len(store.raw[n]) > args.max_note_bytes), reverse=True)
-    print(f"oversized(>{args.max_note_bytes}B)={len(big)}")
-    for size, n in big:
+    archived = store.archive_only()
+    live = [(s, n) for s, n in big if n not in archived]
+    cold = [(s, n) for s, n in big if n in archived]
+    # Only notes MEMORY.md links (or orphans) are worth splitting: archive-only notes are
+    # never loaded at session start, so their size costs nothing until someone opens them.
+    print(f"oversized(>{args.max_note_bytes}B)={len(live)} archived_oversized={len(cold)}")
+    for size, n in live:
         print(f"  OVERSIZED {n} {size}B")
+    for size, n in cold if args.verbose else ():
+        print(f"  archived  {n} {size}B (archive-only, informational)")
     print(f"stubs={len(store.stubs())}")
     days = last_dream_days(store.root, _dt.date.today())
     print(f"last_dream={'never' if days is None else f'{days}d ago'}")

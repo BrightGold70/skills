@@ -213,6 +213,15 @@
       "find": "        if path.is_symlink() or path.stat().st_nlink > 1:\n",
       "replace": "        if path.is_symlink():\n",
       "test": "tests/test_dream_lint.py::TestRoundTwo::test_hard_linked_topic_is_skipped"
+    },
+    {
+      "name": "archived-counted-as-live",
+      "_mechanism": "Archive-only notes are reported as split candidates, so already-archived records are proposed for archiving or splitting.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "main",
+      "find": "    archived = store.archive_only()\n",
+      "replace": "    archived = set()\n",
+      "test": "tests/test_dream_lint.py::TestOversizedScope::test_archive_only_notes_are_not_split_candidates"
     }
   ]
 }

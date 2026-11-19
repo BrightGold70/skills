@@ -383,3 +383,17 @@ class TestRoundTwo:
         written, skipped, _ = dl.apply_fixes(dl.Store(root), tmp_path_factory.mktemp("bak"))
         assert written == [] and skipped[0].startswith("user.md (")
         assert "[[Beta X]]" in other.read_text()
+
+
+class TestOversizedScope:
+    def test_archive_only_notes_are_not_split_candidates(self, tmp_path):
+        big = "x" * 20000 + "\n"
+        (tmp_path / "MEMORY.md").write_text("- [Live](live_big.md) — x\n")
+        (tmp_path / "MEMORY-ARCHIVE.md").write_text("- [Old](old_big.md) — y\n- [Live](live_big.md) — x\n")
+        (tmp_path / "live_big.md").write_text(big)
+        (tmp_path / "old_big.md").write_text(big)
+        r = subprocess.run([sys.executable, SCRIPT, str(tmp_path), "--verbose"], capture_output=True, text=True)
+        assert "oversized(>16384B)=1 archived_oversized=1" in r.stdout, r.stdout
+        assert "  OVERSIZED live_big.md" in r.stdout
+        assert "  OVERSIZED old_big.md" not in r.stdout
+        assert "  archived  old_big.md" in r.stdout
