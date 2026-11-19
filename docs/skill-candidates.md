@@ -3080,3 +3080,7 @@ Reconciled first: the census read `OPEN(yes+maybe)=0` before this entry; no open
 ## 2026-11-12 — omc-upstream-check — no candidates
 
 ## 2026-11-18 — omc-update-check — no candidates
+
+## 2026-11-20 — memory-dream
+
+- **memory-note split**: hand-wrote a verbatim hub+topic split script with exact-once line coverage 7 times in one session (taxonomy, mutation, audit-pass, dispatch, four-splits, closures, part-b) — remedy: tool-improvement (a `split` subcommand in memory-dream/scripts, config-driven) — recurrence: 7 — candidate: yes

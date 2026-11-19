@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-20 · gotcha · [0.7] · `zsh,measurement,handoff:2026-11-20-memory-dream` — zsh: a glob with no match aborts the whole command, so 'ls a/* b/*' printing nothing is not absence; use find plus a positive control
+- 2026-11-20 · pattern · [0.7] · `memory-dream,calibration,handoff:2026-11-20-memory-dream` — Calibrate a new memory check on real snapshots before shipping: a hook-older-than-body date check gave 3/3 false positives; every real stale hook needed judgment, so it became a skill step
+- 2026-11-20 · gotcha · [0.7] · `memory-dream,backups,retention,handoff:2026-11-20-memory-dream` — A full memory snapshot must be link-closed (both indexes + every file they link to); a backup merely holding MEMORY.md is partial — the index is often one of the files an edit touched
 - 2026-11-12 · pattern · [0.5] · `mutation-testing,handoff:2026-11-12-omc-upstream-check` — Read the mutation harness's crash_kills: a row caught by a traceback hides a real crash path (exit 1 read as EMITS). Report the case in one place so the row dies by assertion.
 - 2026-11-12 · gotcha · [0.7] · `testing,omc-patch,handoff:2026-11-12-omc-upstream-check` — A test that sets an override env var (OMC_PATCH_ROOTS) bypasses the code it replaces; the real lookup that must follow an update went untested. Drive the lookup itself under a fixture HOME.
 - 2026-11-11 · gotcha · [0.5] · `bash,awk,hooks,fingerprint,handoff:2026-11-11-codex-single-handoff` — Don't parse SKILL.md frontmatter in a bash fingerprint: BSD awk under a UTF-8 locale won't match a BOM byte regex and missed renames twice. Hash the whole file; verify.py does the parsing.
