@@ -1,0 +1,218 @@
+{
+  "_why": "dream_lint.py rewrites files in a shared, unversioned memory store. These rows prove the tests notice if a guard that keeps the rewrite safe stops working: links inside code, the unique-target rule, the changed-since-read skip, the backup, and the exit code for an unreadable store.",
+  "_provenance": "memory-dream/SKILL.md; Anthropic 'components of agent memory' dreaming cookbook (2026-11).",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_dream_lint.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "ambiguous-treated-as-fixable",
+      "_mechanism": "Any normalised hit counts as a unique target, so a link matching two files is rewritten to an arbitrary one.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.classify",
+      "find": "        if len(hits) == 1:\n",
+      "replace": "        if len(hits) >= 1:\n",
+      "test": "tests/test_dream_lint.py::TestClassification::test_two_normalised_targets_are_ambiguous"
+    },
+    {
+      "name": "no-backup",
+      "_mechanism": "The file is rewritten without a backup copy; the store is not under version control.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "apply_fixes",
+      "find": "        _fsync_write(backup_dir / name, current)\n",
+      "replace": "        pass\n",
+      "test": "tests/test_dream_lint.py::TestFix::test_apply_backs_up_and_writes"
+    },
+    {
+      "name": "unreadable-exits-zero",
+      "_mechanism": "A store with no MEMORY.md is reported with exit 0, indistinguishable from a clean store.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "main",
+      "find": "        print(f\"DREAM_LINT: UNREADABLE {args.memory_dir} ({exc})\", file=sys.stderr)\n        return 2\n",
+      "replace": "        print(f\"DREAM_LINT: UNREADABLE {args.memory_dir} ({exc})\", file=sys.stderr)\n        return 0\n",
+      "test": "tests/test_dream_lint.py::TestStructure::test_missing_index_is_unreadable_exit_2"
+    },
+    {
+      "name": "fence-length-ignored",
+      "_mechanism": "A shorter closing fence ends a longer one, so a code example's links are rewritten.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "mask_code",
+      "find": "and len(m.group(1)) >= fence[1] \\\n",
+      "replace": "\\\n",
+      "test": "tests/test_dream_lint.py::TestCodeRegions::test_shorter_fence_does_not_close_a_longer_one"
+    },
+    {
+      "name": "fenced-code-scanned",
+      "_mechanism": "The fence's opening line is left unmasked, so a link in its info string is read.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "mask_code",
+      "find": "            fence = (m.group(1)[0], len(m.group(1)))\n            out.append(re.sub(r\"[^\\r\\n]\", \" \", line))\n",
+      "replace": "            fence = (m.group(1)[0], len(m.group(1)))\n            out.append(line)\n",
+      "test": "tests/test_dream_lint.py::TestCodeRegions::test_fence_opening_line_is_code"
+    },
+    {
+      "name": "indented-scanned",
+      "_mechanism": "Indented code lines are read as prose.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "mask_code",
+      "find": "        elif INDENTED.match(line):\n",
+      "replace": "        elif False:\n",
+      "test": "tests/test_dream_lint.py::TestCodeRegions::test_indented_line_is_code"
+    },
+    {
+      "name": "no-roundtrip",
+      "_mechanism": "The replacement spelling is not required to resolve back to the same file.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.replacement",
+      "find": "                    and self.exact.get(cand) == {target_file}):\n",
+      "replace": "                    ):\n",
+      "test": "tests/test_dream_lint.py::TestRewriteRoundTrip::test_slug_that_names_another_file_falls_back_to_stem"
+    },
+    {
+      "name": "nonlink-replacement",
+      "_mechanism": "A quoted or dotted slug is used as the replacement, turning a link into a non-link.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.replacement",
+      "find": "if (cand and not NONLINK.search(cand) and not",
+      "replace": "if (cand and not",
+      "test": "tests/test_dream_lint.py::TestRewriteRoundTrip::test_quoted_or_dotted_slug_uses_the_stem"
+    },
+    {
+      "name": "name-from-body",
+      "_mechanism": "name: is read anywhere in the file, so body text supplies the slug.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "frontmatter_name",
+      "find": "    fm = FRONTMATTER.match(text)\n    if not fm:\n        return None\n    m = NAME.search(fm.group(1))\n",
+      "replace": "    m = NAME.search(text)\n",
+      "test": "tests/test_dream_lint.py::TestRewriteRoundTrip::test_name_is_read_from_frontmatter_only"
+    },
+    {
+      "name": "hash-from-second-read",
+      "_mechanism": "Hashes are re-taken at apply time instead of from the read the fix was built from, so an edit in between is clobbered.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "apply_fixes",
+      "find": "    for name in store.topics:\n        new = fixed_text(store, name)\n",
+      "replace": "    store.hashes = {n: sha((store.root / n).read_bytes()) for n in store.topics}\n    for name in store.topics:\n        new = fixed_text(store, name)\n",
+      "test": "tests/test_dream_lint.py::TestWriteSafety::test_edit_between_store_read_and_apply_is_skipped"
+    },
+    {
+      "name": "changed-file-not-skipped",
+      "_mechanism": "The final re-hash is ignored, so a concurrent session's write is clobbered.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "apply_fixes",
+      "find": "        if sha(current) != store.hashes[name]:\n",
+      "replace": "        if False:\n",
+      "test": "tests/test_dream_lint.py::TestFix::test_file_changed_after_read_is_skipped_not_clobbered"
+    },
+    {
+      "name": "crlf-translated",
+      "_mechanism": "Text is decoded with newline translation, so CRLF files become LF.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.__init__",
+      "find": "            self.text[p.name] = b.decode(\"utf-8\")\n",
+      "replace": "            self.text[p.name] = b.decode(\"utf-8\").replace(\"\\r\\n\", \"\\n\")\n",
+      "test": "tests/test_dream_lint.py::TestWriteSafety::test_crlf_preserved"
+    },
+    {
+      "name": "mode-lost",
+      "_mechanism": "The temp file's 0600 mode replaces the original's.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "atomic_write",
+      "find": "        shutil.copymode(path, tmp)\n",
+      "replace": "        pass\n",
+      "test": "tests/test_dream_lint.py::TestWriteSafety::test_mode_preserved"
+    },
+    {
+      "name": "dangling-rewritten",
+      "_mechanism": "A link with no target is classified FIXABLE instead of DANGLING.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.classify",
+      "find": "        return \"DANGLING\", None\n",
+      "replace": "        return \"FIXABLE\", None\n",
+      "test": "tests/test_dream_lint.py::TestClassification::test_a_link_to_nothing_is_dangling_not_fixable"
+    },
+    {
+      "name": "apply-oserror-uncaught",
+      "_mechanism": "An I/O error during --apply escapes as a traceback (exit 1) instead of exit 2.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "main",
+      "find": "            except OSError as exc:\n                print(f\"DREAM_LINT: IO_ERROR",
+      "replace": "            except ValueError as exc:\n                print(f\"DREAM_LINT: IO_ERROR",
+      "test": "tests/test_dream_lint.py::TestExitCodeEdges::test_backup_dir_that_is_a_file_is_usage_exit_2"
+    },
+    {
+      "name": "non-utf8-exit-1",
+      "_mechanism": "A decode error is not caught as unreadable.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "main",
+      "find": "    except (OSError, UnicodeDecodeError) as exc:\n        print(f\"DREAM_LINT: UNREADABLE",
+      "replace": "    except (OSError,) as exc:\n        print(f\"DREAM_LINT: UNREADABLE",
+      "test": "tests/test_dream_lint.py::TestExitCodeEdges::test_non_utf8_is_exit_2"
+    },
+    {
+      "name": "code-span-unmasked",
+      "_mechanism": "Code spans are not masked, so a backticked [[link]] is rewritten.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "mask_code",
+      "find": "    return mask_code_spans(\"\".join(out))\n",
+      "replace": "    return \"\".join(out)\n",
+      "test": "tests/test_dream_lint.py::TestClassification::test_code_fences_and_inline_code_are_not_links"
+    },
+    {
+      "name": "span-crosses-blank-line",
+      "_mechanism": "A lone backtick masks everything up to the next backtick, paragraphs away.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "mask_code_spans",
+      "find": "        limit = next((b for b in blanks if b >= opener.end()), len(text))\n",
+      "replace": "        limit = len(text)\n",
+      "test": "tests/test_dream_lint.py::TestCodeRegions::test_code_span_never_crosses_a_blank_line"
+    },
+    {
+      "name": "span-closes-on-any-run",
+      "_mechanism": "Any backtick run closes a span, so a longer inner run ends it and exposes a link in code.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "mask_code_spans",
+      "find": "and len(runs[j].group(0)) != n:",
+      "replace": "and False:",
+      "test": "tests/test_dream_lint.py::TestRoundTwo::test_longer_inner_run_stays_inside_the_span"
+    },
+    {
+      "name": "bracket-or-pipe-slug-written",
+      "_mechanism": "A slug containing ]] or | is accepted, writing [[x]]y]] or [[pipe|name]], links that point elsewhere.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "Store.replacement",
+      "find": " and not re.search(r\"[\\[\\]|\\r\\n]\", cand)\n",
+      "replace": "\n",
+      "test": "tests/test_dream_lint.py::TestRoundTwo::test_pipe_slug_falls_back_to_the_stem"
+    },
+    {
+      "name": "symlink-replaced",
+      "_mechanism": "A symlinked topic is replaced by a regular file, leaving the real target stale.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "apply_fixes",
+      "find": "        if path.is_symlink() or path.stat().st_nlink > 1:\n",
+      "replace": "        if path.stat().st_nlink > 1:\n",
+      "test": "tests/test_dream_lint.py::TestWriteSafety::test_symlinked_topic_is_skipped"
+    },
+    {
+      "name": "hardlink-split",
+      "_mechanism": "A hard-linked topic is replaced, splitting it from its twin.",
+      "file": "scripts/dream_lint.py",
+      "symbol": "apply_fixes",
+      "find": "        if path.is_symlink() or path.stat().st_nlink > 1:\n",
+      "replace": "        if path.is_symlink():\n",
+      "test": "tests/test_dream_lint.py::TestRoundTwo::test_hard_linked_topic_is_skipped"
+    }
+  ]
+}

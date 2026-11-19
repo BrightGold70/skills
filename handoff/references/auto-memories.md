@@ -58,6 +58,17 @@ files after, and refuse to write on any difference. An entry that lands in neith
 exactly as silently as the cap itself. Both dimensions are scored and the **worse** one binds: an index at 40% of its byte cap can
 still be over on lines, so a byte-only eyeball reports healthy on a broken index.
 
+**Then run the mechanical dream report** (read-only, seconds):
+
+```bash
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/memory-dream/scripts/dream_lint.py" <memory-dir>
+```
+
+Put its `links`, `orphans` and `last_dream` lines in the handoff's Open Items when it exits 1, and
+name the `memory-dream` skill in `**Suggested-Skills:**` when `last_dream` is `never` or over 7 days.
+Do **not** run `--apply` or the judgment pass from WRITE: both edit a shared store, and each needs the
+user's approval of a shown diff. Exit 2 means the store could not be read; report it, never "clean".
+
 **How to apply:**
 1. Read the store's `MEMORY.md` index first. For each candidate, find an existing memory file it
    updates and **edit that file** (correct/flip stale claims, append a dated reinforcement) rather
