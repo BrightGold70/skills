@@ -58,6 +58,7 @@ Do not use a Claude-specific skill-root variable or home-directory path in Codex
 | `claude-skills-dir` | mapped | Load handoff from its installed `~/.agents/skills/handoff` package path. | observed Codex Skills instructions (DP16) |
 | `claude-settings` | not-applicable | Codex hooks use a hooks file rather than Claude's settings file. | observed Codex hooks configuration (DP16) |
 | `claude-handoffs-dir` | mapped | Keep the existing shared handoff file store; Codex reads and writes it through the shell. | observed shared store index |
+| `claude-projects-store` | not-applicable | READ's memory dream-age check is Claude Code only: Codex memory lives under its own home, so skip the check rather than lint Claude's project store. | `codex features list`; observed Codex memories directory (DP16) |
 | `session-reset-command` | not-applicable | No Codex reset command is evidenced; start a fresh `codex exec` session for READ. | Codex 0.157.1 help; observed prompt history (DP16) |
 | `skill-slash-invocation` | mapped | Name the installed skill as `$handoff` or in plain text. | observed Codex Skills instructions (DP16) |
 | `claude-homunculus` | mapped | Keep the optional file read when the source path is present. | observed optional store path |

@@ -65,6 +65,7 @@ Modes, ordering and stop conditions are unchanged from `../SKILL.md`. Two host f
 | `claude-skills-dir` | mapped | Load handoff from the installed `~/.gemini/config/skills/handoff` package. | agy `skills.md` |
 | `claude-settings` | not-applicable | agy does not read Claude's settings file; its hooks live in `~/.gemini/config/hooks.json`. | agy `hooks.md` |
 | `claude-handoffs-dir` | mapped | Keep the existing shared handoff file store. | observed shared store index |
+| `claude-projects-store` | not-applicable | READ's memory dream-age check is Claude Code only: agy keeps project records under `~/.gemini/config/projects/*.json`, so skip the check rather than lint Claude's project store. | Observed agy project records. |
 | `session-reset-command` | not-applicable | agy has no documented reset command; start a fresh `agy` session for READ. | agy docs dir |
 | `skill-slash-invocation` | mapped | Invoke the installed agy handoff skill by name. | agy `skills.md` |
 | `claude-homunculus` | mapped | Keep the optional file read when the source path is present. | observed optional store path |

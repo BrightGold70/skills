@@ -148,6 +148,14 @@ In parallel:
   - **A carried "N unpushed commits" claim about any branch** is a premise, not a todo: run `python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/local_only_commits.py" --repo <repo>` (read-only; fetches first) before restoring it. Being ahead of its own remote says nothing about main. HemaSuite carried "26 unpushed" through three handoffs when all 26 were on main, reached through a stale `origin/main`. The script classifies each branch and worktree HEAD as `MERGED` / `ON_BASE` (patch or squash) / `PARTIAL` / `UNIQUE`.
   - **A carried "these N tests fail anyway / are environmental / pre-existing" claim** is a premise too. Do not run it here (READ runs no tests), but restore its todo with the command that settles it instead of a hand-built clean-worktree diff: `python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_failure_diff.py" run --base <ref> -- <test files>`. It runs the selection here and in a throwaway detached worktree at `<ref>`, diffs failure **ids** (never counts), and ends on one token: `FAILDIFF: SAME|NEW|FLAKY|FIXED_ONLY|UNREADABLE`. `UNREADABLE` (busy suite, collection error, no tests ran) is never "no new failures". Measured 2026-10-31: a session re-typed that worktree-and-`comm` sequence four times, and once read an empty control run as "39 new failures", while this script had existed since 2026-10-05 (`fb474949`). Nothing in this skill pointed at it.
 - **In-flight processes** — for each PID cited in In-Flight Processes / Open Items / Next Steps, run `ps -p <PID> -o pid,etime,stat`. For each cited log path, `ls -la <log>` to read size + mtime. Surface one of: "still running, N min elapsed (matches handoff trajectory)" / "exited" / "log unchanged for N hours — likely dead, treat as historical". This is the single most load-bearing reconciliation when the handoff hands off live work; never skip it. If the doc is days old, treat all in-flight claims as historical without bothering to check `ps` (the PID has been recycled and reporting on a stranger's process is worse than silence).
+- **Memory dream age** (Claude Code only) — the auto-memory store this session loads can drift while no one is looking. Run the memory-dream lint read-only on it and keep three of its lines for the Step 5 report:
+
+  ```bash
+  M="$HOME/.claude/projects/$(python3 -c 'import re,pathlib; print(re.sub(r"[^A-Za-z0-9]", "-", str(pathlib.Path.cwd())))')/memory"
+  [ -f "$M/MEMORY.md" ] && python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/memory-dream/scripts/dream_lint.py" "$M" | grep -E '^(links|orphans|last_dream)'
+  ```
+
+  No `MEMORY.md` there (another host, or a project with no memory yet) → skip silently. Exit 2 means the store could not be read: report that as a divergence, never as a clean store. `last_dream` of `never` or over 7 days → suggest `/memory-dream` in the report. This step only reads: no `--fix-links`, no `--apply`, and memory edits are never on Step 3.6's allowlist, because the store is shared and unversioned and every edit to it needs the user's approval of a shown diff.
 - **Parked-item location** — if an Open/Blocked item is parked feature-work whose `repo · branch · worktree` the doc did NOT record (an older handoff, before this was required), recover the location before restoring its todo instead of guessing: check `hmad-dispatch worktree-list` (a child worktree's `childWorktreeIds`/comment — `worktree-ps` is a compact orchestration summary and does not carry them), the session scratchpad for `codex_*_{red,green,verify}.txt` (H-MAD TDD prompts carry `REPO:`/`BRANCH:`/`FEATURE:` verbatim), and `.h-mad/telemetry.jsonl` for the feature's last phase. Also reconcile whether the parked branch has since merged — "parked, nothing committed" can be stale, and the owed work may now be verification-only on the merged code. Resolve the default branch rather than assuming `main`, then check both directions:
 
   ```bash
@@ -308,6 +316,7 @@ After reconciliation and the todo restore, give the user a brief resume report.
 **Branch:** main (matches)
 **Remote:** 2 behind origin/main → fast-forwarded to `a1b2c3d`
 **Uncommitted changes:** 2 files (matches handoff)
+**Memory:** last dream 9d ago · links 1013/1024 · orphans 0 → suggest `/memory-dream` (over 7 days)
 
 **Split the two lists.** `Resolved` and `Divergences` answer different questions — what you changed
 versus what the user must decide — and merging them hides both. If Step 3.6 resolved nothing, say

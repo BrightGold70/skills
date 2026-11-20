@@ -62,6 +62,7 @@ the missing path. Do not infer the root from a user-specific checkout.
 | `claude-skills-dir` | mapped | Load from `~/.claude/skills/handoff` through `compat.claude.skills`. | grok inspect |
 | `claude-settings` | not-applicable | Built-in `todo_write` needs no settings opt-in for handoff. | `01-getting-started.md` |
 | `claude-handoffs-dir` | mapped | Keep the shared plain-file handoff store that hosts read and write. | observed: shared handoff index file |
+| `claude-projects-store` | not-applicable | READ's memory dream-age check is Claude Code only: grok keeps its own store at `~/.grok/memory/`, so skip the check rather than lint Claude's project store. | `13-memory.md` |
 | `session-reset-command` | mapped | Use `/new` (alias `/clear`) for a fresh READ session; `/compact` is also a documented session action. | `04-slash-commands.md` |
 | `skill-slash-invocation` | mapped | Invoke `/handoff` as an installed skill. | observed: available_commands in sibling probe log |
 | `claude-homunculus` | mapped | Keep the optional file read when the source path is present. | observed: optional store path |

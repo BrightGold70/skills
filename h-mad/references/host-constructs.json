@@ -152,7 +152,8 @@
       "id": "claude-projects-store",
       "pattern": "(?:~|\\$HOME|\\$\\{HOME\\})/\\.claude/projects\\b|\\bMEMORY\\.md\\b",
       "skills": [
-        "h-mad"
+        "h-mad",
+        "handoff"
       ],
       "description": "Claude Code projects store and memory file."
     },

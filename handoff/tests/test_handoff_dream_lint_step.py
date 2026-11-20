@@ -24,6 +24,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SKILL = REPO / "handoff" / "SKILL.md"
 AUTO = REPO / "handoff" / "references" / "auto-memories.md"
+READ = REPO / "handoff" / "references" / "read-mode.md"
 DREAM_SKILL = REPO / "memory-dream" / "SKILL.md"
 COMMAND = re.compile(r'python3 "\$\{CLAUDE_SKILLS_ROOT:-\$HOME/\.claude/skills\}/(?P<rel>[^"]+)" <memory-dir>')
 
@@ -92,3 +93,58 @@ def test_staleness_threshold_matches_memory_dream():
     assert step_days and dream_days
     assert step_days.group(1) == dream_days.group(1)
     assert "`memory-dream`" in _step() and "**Suggested-Skills:**" in _step()
+
+
+# ---- READ: the resume report shows the dream age (added 2026-11-19) -------------------------
+
+
+def _read_step() -> str:
+    text = READ.read_text(encoding="utf-8")
+    m = re.search(r"^- \*\*Memory dream age\*\*.*?(?=^- \*\*Parked-item location\*\*)", text, re.M | re.S)
+    assert m, "read-mode.md Step 3 has no 'Memory dream age' bullet"
+    return m.group(0)
+
+
+def test_read_runs_the_same_script_read_only():
+    step = _read_step()
+    m = re.search(r'python3 "\$\{CLAUDE_SKILLS_ROOT:-\$HOME/\.claude/skills\}/(?P<rel>[^"]+)" "\$M"', step)
+    assert m and (REPO / m.group("rel")) == _script(), "READ must run the same dream_lint as WRITE"
+    assert "--apply" not in step.replace("no `--apply`", "") and "--fix-links" not in step.replace("no `--fix-links`", "")
+    assert "never on Step 3.6's allowlist" in step
+
+
+def test_read_keeps_lines_the_script_prints_and_reports_them(tmp_path):
+    step = _read_step()
+    grep = re.search(r"grep -E '\^\((?P<alts>[^)]+)\)'", step)
+    assert grep, "READ's line filter is missing or reshaped"
+    (tmp_path / "s").mkdir()
+    out = _run(_store(tmp_path / "s", "self [[a]]\n")).stdout
+    for name in grep.group("alts").split("|"):
+        assert re.search(rf"^{name}[ =]", out, re.M), (name, out)
+    assert re.search(r"^\*\*Memory:\*\* last dream", READ.read_text(encoding="utf-8"), re.M), "Step 5 template lacks the Memory line"
+
+
+def test_read_derives_the_store_path_claude_code_actually_uses():
+    """Ground truth, not a re-implementation: run the doc's own snippet with this repo as cwd and
+    compare it with the project directory Claude Code itself created for this repo."""
+    m = re.search(r"python3 -c '(?P<code>[^']+)'", _read_step())
+    assert m, "READ's project-dir derivation is missing or reshaped"
+    # (cwd, the project dir Claude Code itself created for it). The second has spaces, so an
+    # encoding that only rewrites '/' gives a different answer.
+    cases = [(Path("/Users/kimhawk/orca/skills"), "-Users-kimhawk-orca-skills"),
+             (Path("/Users/kimhawk/Library/CloudStorage/Dropbox-EUMCIMH/Kim Hawk/Current studies"),
+              "-Users-kimhawk-Library-CloudStorage-Dropbox-EUMCIMH-Kim-Hawk-Current-studies")]
+    live = [(c, n) for c, n in cases if c.is_dir() and (Path.home() / ".claude" / "projects" / n).is_dir()]
+    if not live:
+        import pytest
+        pytest.skip("ground-truth project dirs only exist on the operator's machine")
+    for cwd, name in live:
+        out = subprocess.run([sys.executable, "-c", m.group("code")], cwd=cwd,
+                             capture_output=True, text=True).stdout.strip()
+        assert out == name, (cwd, out)
+
+
+def test_read_threshold_matches_memory_dream():
+    days = re.search(r"`never` or over (\d+) days", _read_step())
+    dream = re.search(r"A full dream is due when it reads over (\d+) days", DREAM_SKILL.read_text(encoding="utf-8"))
+    assert days and dream and days.group(1) == dream.group(1)
