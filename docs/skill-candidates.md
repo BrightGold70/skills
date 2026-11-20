@@ -3084,3 +3084,10 @@ Reconciled first: the census read `OPEN(yes+maybe)=0` before this entry; no open
 ## 2026-11-20 — memory-dream
 
 - **memory-note split**: hand-wrote a verbatim hub+topic split script with exact-once line coverage 7 times in one session (taxonomy, mutation, audit-pass, dispatch, four-splits, closures, part-b) — remedy: tool-improvement (a `split` subcommand in memory-dream/scripts, config-driven) — recurrence: 7 — candidate: yes
+
+## 2026-11-20 — read-dream-step-mcp-fixes
+
+Reconciled first: the census read `OPEN(yes+maybe)=1` before this entry (memory-note split, 2026-11-20); it is still unbuilt, so it stays open.
+
+- **omc-plugin-cache-deps-check**: the OMC MCP server failed at every session start because the plugin cache dir has no `node_modules`; the cause sat uninvestigated across at least three handoffs. `docs/patches/patch-verify-on-update.sh` already runs after plugin updates and could probe `node <cache>/bridge/mcp-server.cjs` (or test for `node_modules/zod-to-json-schema`) and print the two npm commands — remedy: existing-tool-repair — recurrence: 1 — candidate: maybe
+- **codex-pane-restart-in-place**: restarting codex inside a pinned Orca pane took four hand steps (read the old argv with `ps -ww`, `/quit`, rebuild the quoted `-c` flags, resend) to keep the handle and pin valid; `hmad-dispatch launch` only spawns a fresh terminal — remedy: tool-improvement (a `relaunch <agent>` verb) — recurrence: 1 — candidate: maybe

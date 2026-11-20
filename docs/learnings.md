@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-20 · solution · [0.5] · `codex,ai-memory,mcp,orca,handoff:2026-11-20-read-dream-step-mcp-fixes` — Codex MCP for ai-memory: use the stdio bridge (ai-memory mcp-bridge --no-session-id --server-url URL) instead of bearer_token_env_var; the bridge reads the token from the data dir, so no export is needed where Orca launches codex.
+- 2026-11-20 · solution · [0.5] · `omc,mcp,plugin-cache,handoff:2026-11-20-read-dream-step-mcp-fixes` — OMC plugin cache has no node_modules: bridge/mcp-server.cjs dies on zod-to-json-schema ('Connection closed'). Per version dir run npm install --omit=dev --ignore-scripts, then npm rebuild better-sqlite3. Never plugin-setup.mjs.
+- 2026-11-20 · gotcha · [0.5] · `host-parity,handoff,h-mad,handoff:2026-11-20-read-dream-step-mcp-fixes` — A Claude-only path added to split-body skill text (references/*.md behind a split marker) fails h-mad host parity unless the skill is listed for that construct in host-constructs.json and each <host>-runtime.md gets a row.
 - 2026-11-20 · gotcha · [0.7] · `zsh,measurement,handoff:2026-11-20-memory-dream` — zsh: a glob with no match aborts the whole command, so 'ls a/* b/*' printing nothing is not absence; use find plus a positive control
 - 2026-11-20 · pattern · [0.7] · `memory-dream,calibration,handoff:2026-11-20-memory-dream` — Calibrate a new memory check on real snapshots before shipping: a hook-older-than-body date check gave 3/3 false positives; every real stale hook needed judgment, so it became a skill step
 - 2026-11-20 · gotcha · [0.7] · `memory-dream,backups,retention,handoff:2026-11-20-memory-dream` — A full memory snapshot must be link-closed (both indexes + every file they link to); a backup merely holding MEMORY.md is partial — the index is often one of the files an edit touched
