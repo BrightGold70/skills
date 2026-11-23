@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-24 · pattern · [0.5] · `h-mad,gate,review,handoff:2026-11-24-phase5-gate-feature-scope` — Review a shell-policy change by diffing decisions: run HEAD's policy and the tree's over a large argv corpus on each interpreter and list every differing decision; a green suite cannot show an undisclosed loosening
+- 2026-11-24 · solution · [0.5] · `shared-tree,codex,provenance,handoff:2026-11-24-phase5-gate-feature-scope` — Before calling stray edits in a shared tree 'unknown author', grep -rl <new symbol> ~/.codex/sessions/<date>: the rollout names the session, cwd, and the operator messages showing what was approved
 - 2026-11-23 · gotcha · [0.5] · `h-mad,mutation,handoff:2026-11-23-codex-skill-dups-gate-scope` — Adding a line to a script that already has mutation specs can make a sibling spec's anchor match twice (PRECHECK_FAILED for all specs); run h_mad_mutation_harness.py --check-anchors after the edit
 - 2026-11-23 · gotcha · [0.5] · `claude-code,mcp,handoff:2026-11-23-codex-skill-dups-gate-scope` — /clear keeps the Claude Code process, so MCP servers are not respawned and a 'failed to connect' notice is the start-up attempt; test a fix with /mcp reconnect <name> and read the mcp-logs dir for a new attempt
 - 2026-11-23 · gotcha · [0.7] · `python,pathlib,h-mad,handoff:2026-11-23-codex-skill-dups-gate-scope` — Path.is_dir() on an EACCES dir raises PermissionError up to Python 3.13 and returns False from 3.14: tests on 3.11 crash where production 3.15 reads 'absent'. Use os.stat and split ENOENT/ENOTDIR from other OSError

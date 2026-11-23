@@ -3098,3 +3098,9 @@ Reconciled first: the census read `OPEN(yes+maybe)=3` before this entry (memory-
 
 - **phase5-gate-feature-scope**: the codex Phase-5 gate arms for the whole repo when any one feature is at `step5` (`_any_phase5_status`), so a codex session planning another feature has its audit commands denied and hands the operator a `.h-mad/phase5-shell-allow` patch per cycle (four on 2026-11-23 in HemaSuite). Routed to `/h-mad phase5-gate-feature-scope` by the operator; brief in `docs/handoffs/2026-11-23-main__codex-skill-dups-gate-scope.md` — remedy: existing-tool-repair — recurrence: 4 — candidate: no
 - **commit-only-what-was-verified**: in a shared tree another lane's uncommitted edits appeared between the full-suite run and the commit; keeping the commit to the verified content took a hand comparison of `git diff -- <paths> | shasum` against the checksum recorded before the run, plus an explicit-path `git add`. A small tool that records the checksum with the suite log and refuses a commit whose staged diff differs would make that one step — remedy: tool-improvement — recurrence: 1 — candidate: maybe
+
+## 2026-11-24 — phase5-gate-feature-scope
+
+Reconciled first: the census read `OPEN(yes+maybe)=4` before this entry (memory-note split, omc-plugin-cache-deps-check, codex-pane-restart-in-place, commit-only-what-was-verified). None was built, so all four stay open.
+
+- **policy-decision-diff**: a review of the shared gate policy had to hand-build a harness that runs the committed and the working-tree policy over a large argv corpus on both interpreters and prints every decision that differs; it is what showed that only the intended rule changed. A bundled script would make that check repeatable for every policy edit — remedy: deterministic-check — recurrence: 2 — candidate: maybe
