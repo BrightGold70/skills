@@ -4,7 +4,7 @@
 **Branch:** main
 **Project:** skills
 **Supersedes:** 2026-11-20-main__read-dream-step-mcp-fixes.md
-**Next-Session Focus:** Start `/h-mad phase5-gate-feature-scope` in a fresh session, after settling who owns the uncommitted gate-policy edits another lane left in this tree.
+**Next-Session Focus:** Fix the open Phase-5 policy finding (Next Step 1), then start `/h-mad phase5-gate-feature-scope` in a fresh session.
 **Suggested-Skills:** h-mad (the operator chose the full seven-phase route for the gate fix), verify-hmad-gates (prove any gate change end to end)
 
 ## Session Summary
@@ -23,7 +23,7 @@ Resumed from the 2026-11-20 handoff and closed its top item: the OMC MCP server 
 
 ## Next Steps
 
-1. **Settle the foreign uncommitted edits first.** `git status --short` shows `M h-mad/scripts/h_mad_target_identity.py`, `M h-mad/tests/test_h_mad_codex_runtime.py` and untracked `h-mad/scripts/h_mad_p14_local_gate.py`, `h-mad/scripts/h_mad_p14_review.py`, `h-mad/tests/test_h_mad_p14_local_gate.py`, dated 2026-11-22 14:28–18:58. They are not this session's. `h_mad_p14_local_gate.py` names `FEATURE = "pubmed-pico-relevance-triage"`, a HemaSuite lane. The policy edit adds a `--authors-test` safe-authoring path to the live gate. Ask the operator which lane owns them; do not commit, revert or stash them.
+1. **Fix the output-path check in the Phase-5 shell policy** (`h-mad/scripts/h_mad_target_identity.py`, `_option_value`, `_path_within`). A gate weakness already on `main` before this session, found by review and confirmed. Details are kept out of this public repo: session task #10 and `/Users/kimhawk/orca/_worktree-backups/2026-11-23/skills-p14-gate-exception/open-gate-finding.md`. Small fix with tests, mutations and a review; the operator has not yet said whether to start it.
 2. **Run `/h-mad phase5-gate-feature-scope`** in a fresh session on a clean tree. Brief:
    - Problem: the Key Learnings entry above. Evidence: `HemaSuite/.h-mad/phase5-shell-allow` (18 lines, all exact commands), patches `/private/tmp/p16-plan-*.patch`, state `HemaSuite/docs/.bkit-memory.json` (`issue-187-file-root-move-refusal` at `step5`, `csa-column-mapper-jev` with no phase).
    - Goal: a codex session working on a feature that is not in Phase 5 is not shell-gated because a different feature is.
@@ -41,7 +41,8 @@ Resumed from the 2026-11-20 handoff and closed its top item: the OMC MCP server 
 
 **From this session:**
 - **Phase-5 gate scope fix** — status: not started; route chosen by the operator is `/h-mad` (Next Step 2).
-- **Foreign uncommitted edits in this tree** — status: open, owner unknown (Next Step 1). They touch the same policy file the gate fix will change.
+- **Foreign uncommitted edits in this tree** — status: settled 2026-11-23. Their author was the operator's P14 codex session (HemaSuite, 2026-11-22). The `--authors-test` rule was finished and pushed as `e506d871` (full suite 9326 passed, mutation 20/20, review must=0; the last small edits not re-reviewed). The P14-only gate exception and its three files were retired: P14 shipped in HemaSuite PR #202. Backup: `/Users/kimhawk/orca/_worktree-backups/2026-11-23/skills-p14-gate-exception/`.
+- **`authors-test` limits noted by review, not fixed** — status: accepted for now. A looped link resolves differently on Python 3.13+, and a project root spelled through an outside link is judged physically.
 - **HemaSuite P16 lane still needs an allow line per audit cycle** — status: unchanged until the gate fix lands or #187 leaves `step5`. Owned by the HemaSuite lane; `/private/tmp/p16-plan-rounds3-4.patch` is already applied there.
 - **Codex `AGENTS.md` and both codex homes changed outside the repo** — status: done, untested in a live codex turn. `~/.codex/AGENTS.md` has an Orca block in place of the cmux block and `gpt-6-luna` in Subagent Defaults. `omx setup` ran on `~/.codex` and on the Orca account home, adding OMX hooks, a notify dispatcher (the Computer Use notifier is kept as `previousNotify`) and `developer_instructions` to each. An OMX `PreToolUse` hook now runs in the codex pane h-mad dispatches to; no TDD-gate dispatch has been run with it. Backups: `~/.codex-backups/2026-11-22-pre-omx-setup/`, `~/.codex-backups/2026-11-22-pre-omx-setup-orca-home/`, `~/.codex/AGENTS.md.pre-orca-block-20261122`, `config.toml.pre-subagent-model-20261122` beside each config.
 - **Orca may recreate the `.omx` symlink in the account home** — status: open risk; `omx setup` would refuse again, the config entries stay.
@@ -89,6 +90,8 @@ Resumed from the 2026-11-20 handoff and closed its top item: the OMC MCP server 
 
 ## Context for Next Session
 
+**Also committed, in `e506d871`:** `h-mad/scripts/h_mad_target_identity.py`, `h-mad/tests/test_h_mad_codex_runtime.py`, `h-mad/tests/mutation-specs/gate_authoring_scope.json`.
+
 **Files touched this session (committed in `8977ca86`):**
 - `h-mad/scripts/h_mad_install_check.py`
 - `h-mad/tests/test_h_mad_install_check_codex_skill_dups.py`
@@ -100,12 +103,12 @@ Resumed from the 2026-11-20 handoff and closed its top item: the OMC MCP server 
 
 **Outside the repo:** `~/.codex/AGENTS.md`, both codex `config.toml` and `hooks.json` files, `~/.codex/agents/*.toml`, `~/.codex/skills/` and `prompts/` (OMX install), the Orca home's `.omx/`, `.omc/notepad.md`, one memory note (`reference_code_mode_off_for_remote_control.md`).
 
-**Uncommitted changes:** five foreign paths, not this session's (Next Step 1); none of this session's own before this handoff's files.
+**Uncommitted changes:** none.
 
 **To resume:**
 ```bash
 cd /Users/kimhawk/orca/skills
-git status --short --branch        # expect the five foreign paths until their owner settles them
+git status --short --branch        # expect clean, in sync with origin/main
 hmad-dispatch env                  # expect PREFLIGHT: FAIL stale=codex,agy until re-pinned
 python3 h-mad/scripts/h_mad_install_check.py   # expect INSTALL: PASS and no CODEX_SKILL_ line
 ```
