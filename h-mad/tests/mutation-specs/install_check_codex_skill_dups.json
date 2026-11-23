@@ -1,0 +1,307 @@
+{
+  "_why": "The duplicate-skill advisory exists because a codex home held a stale `h-mad` beside the linked checkout and the install check read PASS (2026-11-22). Every mutation here makes the advisory quiet or falsely reassuring in one spelling: could-not-check read as none, a pin that is not a disable silencing it, one home standing in for all, or the lines never reaching main().",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_install_check_codex_skill_dups.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "skill-dup-missing-verifier-is-unknown",
+      "_mechanism": "M:SD-VERIFIER. Return no lines when the verifier cannot be loaded and a check that never ran reads as a clean home.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "    except ValueError as exc:  # M:SD-VERIFIER\n        return [f\"CODEX_SKILL_DUPLICATE_UNKNOWN:{DUPLICATE_VERIFIER} reason={exc}\"]",
+      "replace": "    except ValueError as exc:  # M:SD-VERIFIER\n        return []",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_missing_verifier_module_is_unknown_not_clean"
+    },
+    {
+      "name": "skill-dup-one-home-reports-once",
+      "_mechanism": "M:SD-ONCE. Drop the seen guard and a home reached by two spellings (CODEX_HOME and its symlink) prints every duplicate twice.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "        if key in seen:  # M:SD-ONCE",
+      "replace": "        if False:  # M:SD-ONCE",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_the_same_home_named_twice_reports_once"
+    },
+    {
+      "name": "skill-dup-shared-skills-dir-keeps-each-config",
+      "_mechanism": "Key the seen guard on the skills dir alone and a second home sharing that dir is skipped, so the first home's pin silences a copy the second home's config leaves on.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "        key = (os.path.realpath(skills_root), os.path.realpath(config))",
+      "replace": "        key = (os.path.realpath(skills_root), \"\")",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_pin_in_one_home_does_not_silence_another_home_sharing_its_skills_dir"
+    },
+    {
+      "name": "skill-dup-same-file-is-not-a-duplicate",
+      "_mechanism": "M:SD-SAME-FILE. Drop the real-path comparison and two links to one checkout skill, which cannot drift or shadow, raise an advisory on every correct install.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "                      if others and os.path.realpath(copy) not in other_reals]  # M:SD-SAME-FILE",
+      "replace": "                      if others]  # M:SD-SAME-FILE",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_two_links_to_the_same_skill_are_not_a_duplicate"
+    },
+    {
+      "name": "skill-dup-keeps-every-copy-of-a-name",
+      "_mechanism": "Keep only the first SKILL.md per name and a correct link, walked first, hides the stale copy beside it.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_named_skills",
+      "find": "            names.setdefault(name, []).append(path)",
+      "replace": "            names.setdefault(name, [path])",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_correct_link_does_not_hide_a_stale_copy_beside_it"
+    },
+    {
+      "name": "skill-dup-unreadable-config-is-reported",
+      "_mechanism": "M:SD-CONFIG-UNKNOWN. Swallow the config error silently and the operator is never told the pins could not be read.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "            disabled = set()\n            lines.append(f\"CODEX_SKILL_DUPLICATE_UNKNOWN:{config} reason={exc}\")",
+      "replace": "            disabled = set()",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_an_unparseable_config_never_suppresses_the_duplicate"
+    },
+    {
+      "name": "skill-dup-unreadable-config-never-suppresses",
+      "_mechanism": "M:SD-CONFIG-UNKNOWN. Skip the home when its config cannot be read and could-not-check hides a duplicate that was seen.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "            lines.append(f\"CODEX_SKILL_DUPLICATE_UNKNOWN:{config} reason={exc}\")\n        for name, codex_copy, others in pairs:",
+      "replace": "            lines.append(f\"CODEX_SKILL_DUPLICATE_UNKNOWN:{config} reason={exc}\")\n            continue\n        for name, codex_copy, others in pairs:",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_an_unparseable_config_never_suppresses_the_duplicate"
+    },
+    {
+      "name": "skill-dup-disabled-codex-copy-is-silent",
+      "_mechanism": "M:SD-DISABLED. Ignore the pin on the codex-home copy and the documented remedy leaves a permanent advisory, which teaches the reader to ignore the line.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "            if os.path.realpath(codex_copy) in disabled:  # M:SD-DISABLED",
+      "replace": "            if False:  # M:SD-DISABLED",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_the_codex_home_copy_disabled_in_that_homes_config_is_not_reported"
+    },
+    {
+      "name": "skill-dup-disabled-agents-copy-is-shadowed",
+      "_mechanism": "M:SD-SHADOWED. Report a disabled agents copy as an ordinary duplicate and the line tells the operator codex lists both, when it uses only the stale one.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "            if not live:  # M:SD-SHADOWED",
+      "replace": "            if False:  # M:SD-SHADOWED",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_disabling_the_linked_copy_is_reported_as_shadowed_not_silenced"
+    },
+    {
+      "name": "skill-dup-only-enabled-false-disables",
+      "_mechanism": "M:SD-DISABLED-ONLY. Treat any `[[skills.config]]` entry as a disable and an explicit `enabled = true` silences the duplicate it keeps live.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_disabled_skill_paths",
+      "find": "        if not isinstance(path, str) or entry.get(\"enabled\") is not False:  # M:SD-DISABLED-ONLY",
+      "replace": "        if not isinstance(path, str):  # M:SD-DISABLED-ONLY",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_an_explicitly_enabled_entry_does_not_silence_it"
+    },
+    {
+      "name": "skill-dup-relative-pin-is-ignored",
+      "_mechanism": "M:SD-ABSOLUTE-PIN. Resolve a relative pin and whether it silences the line depends on the directory the check was run from.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_disabled_skill_paths",
+      "find": "        if os.path.isabs(path):  # M:SD-ABSOLUTE-PIN",
+      "replace": "        if True:  # M:SD-ABSOLUTE-PIN",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_relative_pin_path_does_not_silence"
+    },
+    {
+      "name": "skill-dup-odd-config-shape-is-unknown",
+      "_mechanism": "M:SD-CONFIG-SHAPE. Read a config whose `skills` is not a table as holding no pins and could-not-read becomes an answer.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_disabled_skill_paths",
+      "find": "        raise ValueError(\"config-shape\")  # M:SD-CONFIG-SHAPE",
+      "replace": "        entries = [e for e in (entries or []) if isinstance(e, dict)]  # M:SD-CONFIG-SHAPE",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_config_of_unexpected_shape_is_unknown_and_never_suppresses[skills-scalar]"
+    },
+    {
+      "name": "skill-dup-unlistable-root-is-unknown",
+      "_mechanism": "M:SD-UNREADABLE. Drop the unreadable lines and a skills dir that could not be listed reads as a home with no duplicates.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "    lines += [_unknown_line(item) for item in dict.fromkeys(unreadable)]  # M:SD-UNREADABLE",
+      "replace": "    pass  # M:SD-UNREADABLE",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_an_unlistable_skills_dir_is_unknown_not_clean"
+    },
+    {
+      "name": "skill-dup-unexaminable-home-is-not-absent",
+      "_mechanism": "M:SD-STAT. Read EACCES as absent and a codex home that could not be entered reports no duplicates, which is what python 3.14+ `is_dir()` did.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_dir_state",
+      "find": "    except OSError as exc:  # M:SD-STAT\n        return f\"unreadable:{type(exc).__name__}\"",
+      "replace": "    except OSError as exc:  # M:SD-STAT\n        return \"absent\"",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_root_that_cannot_be_examined_is_unknown_on_every_python[codex-home]"
+    },
+    {
+      "name": "skill-dup-unexaminable-agents-root-is-unknown",
+      "_mechanism": "Return no lines for an agents root that could not be examined and the whole check reads as clean.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "        return [f\"CODEX_SKILL_DUPLICATE_UNKNOWN:{agents_root} reason={state}\"]",
+      "replace": "        return []",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_root_that_cannot_be_examined_is_unknown_on_every_python[agents-parent]"
+    },
+    {
+      "name": "skill-dup-unnamed-file-is-not-compared",
+      "_mechanism": "M:SD-NAMED. Fall back to the folder name and a SKILL.md codex may never list is reported as a duplicate.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_named_skills",
+      "find": "        name = verifier.skill_name(text)\n        if name:  # M:SD-NAMED",
+      "replace": "        name = verifier.skill_name(text) or path.parent.name\n        if name:  # M:SD-NAMED",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_skill_md_with_no_frontmatter_name_is_not_compared"
+    },
+    {
+      "name": "skill-dup-compares-the-frontmatter-name",
+      "_mechanism": "Compare folder names and a stale copy saved under another folder name, which codex still lists as `h-mad`, is invisible.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_named_skills",
+      "find": "        name = verifier.skill_name(text)\n        if name:  # M:SD-NAMED",
+      "replace": "        name = path.parent.name\n        if name:  # M:SD-NAMED",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_the_name_compared_is_the_frontmatter_name_not_the_folder"
+    },
+    {
+      "name": "skill-dup-empty-override-means-no-homes",
+      "_mechanism": "M:SD-HOMES-ENV. Read an empty override as unset and a test or operator that names no homes gets the developer's real ones.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "default_codex_homes",
+      "find": "    if CODEX_HOMES_ENV not in env:  # M:SD-HOMES-ENV",
+      "replace": "    if not env.get(CODEX_HOMES_ENV):  # M:SD-HOMES-ENV",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_main_reads_the_homes_from_the_env_override"
+    },
+    {
+      "name": "skill-dup-reaches-main",
+      "_mechanism": "M:SD-MAIN-WIRE. Never call the check from main() and the advisory exists only for callers of the function, which there are none of.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "main",
+      "find": "    for line in codex_skill_duplicate_lines(codex_homes, agents_dir):  # M:SD-MAIN-WIRE",
+      "replace": "    for line in []:  # M:SD-MAIN-WIRE",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_main_prints_the_advisory_and_leaves_the_summary_and_issue_count"
+    },
+    {
+      "name": "skill-dup-cannot-crash-after-the-verdict",
+      "_mechanism": "M:SD-NO-CRASH. Narrow the catch and an unexpected error prints a traceback after `INSTALL:` and turns exit 0 into exit 1.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "codex_skill_duplicate_lines",
+      "find": "    except Exception as exc:  # M:SD-NO-CRASH",
+      "replace": "    except KeyError as exc:  # M:SD-NO-CRASH",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_an_exception_inside_the_advisory_cannot_fail_the_run"
+    },
+    {
+      "name": "skill-dup-checks-every-home",
+      "_mechanism": "Stop after the first home and the 2026-11-22 layout, one duplicate in the Orca home and one in `~/.codex`, reports half.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "    for home in homes:\n        skills_root = home / \"skills\"",
+      "replace": "    for home in homes[:1]:\n        skills_root = home / \"skills\"",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_every_home_is_checked_and_each_names_its_own_copy"
+    },
+    {
+      "name": "skill-dup-pins-are-per-home",
+      "_mechanism": "Read the pins from another home's config and a disable written there silences a duplicate here.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "        config = home / \"config.toml\"\n        # Keyed on the skills dir AND the config",
+      "replace": "        config = homes[-1] / \"config.toml\"\n        # Keyed on the skills dir AND the config",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_pin_in_another_homes_config_does_not_silence_this_home"
+    },
+    {
+      "name": "skill-dup-discovery-covers-both-homes",
+      "_mechanism": "Discover only `$CODEX_HOME` and a duplicate in `~/.codex` is never seen from an Orca session.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_discover_codex_homes",
+      "find": "    found = [home / \".codex\"]\n    if os.environ.get(\"CODEX_HOME\"):",
+      "replace": "    found = []\n    if os.environ.get(\"CODEX_HOME\"):",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_main_discovers_dot_codex_and_codex_home_when_nothing_is_named"
+    },
+    {
+      "name": "skill-dup-discovery-covers-codex-home",
+      "_mechanism": "Discover `~/.codex` and the Orca accounts but not `$CODEX_HOME`, and a codex pointed at a home elsewhere is never checked.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_discover_codex_homes",
+      "find": "    if os.environ.get(\"CODEX_HOME\"):\n        found.append(Path(os.environ[\"CODEX_HOME\"]))",
+      "replace": "    if False:\n        found.append(Path(os.environ[\"CODEX_HOME\"]))",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_main_discovers_dot_codex_and_codex_home_when_nothing_is_named"
+    },
+    {
+      "name": "skill-dup-discovery-covers-orca-accounts",
+      "_mechanism": "M:SD-ACCOUNTS. Drop the Orca account homes and the home where the 2026-11-22 stale `h-mad` sat is checked only when the session happens to export it as CODEX_HOME.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_discover_codex_homes",
+      "find": "    return found + [accounts / name / \"home\" for name in names]  # M:SD-ACCOUNTS",
+      "replace": "    return found  # M:SD-ACCOUNTS",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_main_discovers_every_orca_account_home"
+    },
+    {
+      "name": "skill-dup-unlistable-accounts-dir-is-unknown",
+      "_mechanism": "M:SD-ACCOUNTS-UNKNOWN. Read an accounts dir that could not be listed as holding no accounts and every Orca home drops out without a line.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "_discover_codex_homes",
+      "find": "        unreadable.append(f\"{accounts} ({type(exc).__name__})\")\n        names = []",
+      "replace": "        names = []",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_main_discovery_reports_a_home_it_cannot_examine_and_keeps_going[accounts-root]"
+    },
+    {
+      "name": "skill-dup-line-spells-the-copy-through-its-own-home",
+      "_mechanism": "M:SD-OWN-SPELLING. Print the cached path and the second of two homes sharing a skills dir is told to pin the first home's spelling, which codex under that home may not match.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "        mine = {name: [skills_root / path.relative_to(base) for path in paths]  # M:SD-OWN-SPELLING",
+      "replace": "        mine = {name: [path for path in paths]  # M:SD-OWN-SPELLING",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_pin_in_one_home_does_not_silence_another_home_sharing_its_skills_dir"
+    },
+    {
+      "name": "skill-dup-line-names-a-live-agents-copy",
+      "_mechanism": "M:SD-LIVE-AGENTS. Name the first agents copy regardless of pins and the line points at a copy the config has already turned off.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "                f\"CODEX_SKILL_DUPLICATE:{name} codex={codex_copy} agents={live[0]} — \"",
+      "replace": "                f\"CODEX_SKILL_DUPLICATE:{name} codex={codex_copy} agents={others[0]} — \"",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_the_line_names_a_live_agents_copy_not_a_disabled_one"
+    },
+    {
+      "name": "skill-dup-empty-flag-value-is-reported",
+      "_mechanism": "M:SD-EMPTY-HOME. Drop the empty-value line and a wrapper passing an unset variable as `--codex-home` checks no home while printing nothing, which reads as no duplicates.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "main",
+      "find": "    if args.codex_home and not all(args.codex_home):  # M:SD-EMPTY-HOME",
+      "replace": "    if False:  # M:SD-EMPTY-HOME",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_main_reports_an_empty_codex_home_value_instead_of_reading_the_cwd"
+    },
+    {
+      "name": "skill-dup-crash-line-blames-no-path",
+      "_mechanism": "Name the agents root in the crash line and a failure in one codex home sends the reader to a directory that is fine.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "codex_skill_duplicate_lines",
+      "find": "        return [f\"CODEX_SKILL_DUPLICATE_UNKNOWN:(the whole check) \"",
+      "replace": "        return [f\"CODEX_SKILL_DUPLICATE_UNKNOWN:{agents_skills_dir} \"",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_an_exception_inside_the_advisory_cannot_fail_the_run"
+    },
+    {
+      "name": "skill-dup-empty-flag-value-is-never-read",
+      "_mechanism": "Keep the empty value in the list and `Path(\"\")` makes the cwd a codex home: `<cwd>/skills` is reported.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "main",
+      "find": "    codex_homes = [Path(p) for p in args.codex_home if p] if args.codex_home \\",
+      "replace": "    codex_homes = [Path(p) for p in args.codex_home] if args.codex_home \\",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_main_reports_an_empty_codex_home_value_instead_of_reading_the_cwd"
+    },
+    {
+      "name": "skill-dup-homes-are-printed-absolute",
+      "_mechanism": "M:SD-ABSOLUTE-HOME. Keep a relative home as given and the printed path names a different tree from every other cwd.",
+      "file": "scripts/h_mad_install_check.py",
+      "symbol": "check_codex_skill_duplicates",
+      "find": "    homes = [Path(os.path.abspath(home)) for home in homes]  # M:SD-ABSOLUTE-HOME",
+      "replace": "    homes = list(homes)  # M:SD-ABSOLUTE-HOME",
+      "test": "tests/test_h_mad_install_check_codex_skill_dups.py::test_a_relative_home_is_printed_as_an_absolute_path"
+    }
+  ]
+}

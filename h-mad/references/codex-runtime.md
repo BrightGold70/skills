@@ -130,6 +130,17 @@ line per gate entry with no record, naming the key it looked for and the `config
 `CODEX_HOOK_TRUST_RECORDED: … (hash not verified)`, never "enforced". The advisory never changes
 `INSTALL:` or `issues=`.
 
+Codex lists a skill once per copy it finds, by frontmatter `name`, across its home's `skills/` and
+the shared agents root. A leftover copy in a codex home therefore lists `h-mad` twice and can be the
+one codex opens (measured 2026-11-22: a 5 KB copy from 2026-09-09 listed ahead of the linked
+checkout). `h_mad_install_check.py` reports it after the hook-trust lines: one
+`CODEX_SKILL_DUPLICATE:<name> codex=<path> agents=<path>` line per codex-home copy of such a name,
+across `~/.codex`, `$CODEX_HOME` and every Orca account home. Keep one copy: remove the other, or
+disable the codex-home copy in that home's `config.toml` with `[[skills.config]] enabled = false`.
+Disabling the agents copy does not silence it: the codex-home copy is then the only one codex uses,
+and the line becomes `CODEX_SKILL_SHADOWED:`. It is an advisory too and never changes `INSTALL:` or
+`issues=`.
+
 Check the installed links with:
 
 ```bash

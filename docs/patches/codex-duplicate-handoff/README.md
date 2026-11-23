@@ -112,3 +112,8 @@ config found, a config would not parse, a SKILL.md unreadable), which is not a p
 Delete this directory, its `pytest.ini` `testpaths` entry, and `codex_fp` in
 `docs/patches/patch-verify-on-update.sh` if no other patch needs it; then re-copy the hook.
 Remove the `[[skills.config]]` entries from the configs above.
+
+`verify.py` has a second user: `h-mad/scripts/h_mad_install_check.py` loads it for `skill_files`
+and `skill_name` (the duplicate-skill advisory). Before deleting this directory, move those two
+functions into h-mad; otherwise every install check prints
+`CODEX_SKILL_DUPLICATE_UNKNOWN: … reason=verifier-missing`.

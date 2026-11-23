@@ -149,6 +149,10 @@ def _hermetic_codex_home(monkeypatch, tmp_path):
     # The suite runs inside this repo, whose own `.codex/hooks.json` carries the
     # gate; the default hooks file would put an advisory into every test's output.
     monkeypatch.setenv("HMAD_CODEX_HOOKS_JSON", str(tmp_path / "absent-codex-hooks.json"))
+    # The duplicate-skill advisory discovers `~/.codex` and every Orca codex home
+    # from the real HOME; a test that names its own agents root would then report
+    # the developer's skills.
+    monkeypatch.setenv("HMAD_CODEX_HOMES", str(tmp_path / "absent-codex-home"))
 
 
 # `audit-cycle` mints a fresh `audit_<feature>_<phase>_cycle<N>_run<ts>-<pid>` stem
