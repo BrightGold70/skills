@@ -319,12 +319,124 @@ def test_codex_hook_allows_observational_hmad_dispatch_verb(tmp_path):
 
 
 
-def _hook_decision(project, command):
-    result = _run_hook(project, {"tool_name": "Bash", "tool_input": {"command": command}})
+def _hook_decision(project, command, **tool_input):
+    result = _run_hook(project, {
+        "tool_name": "Bash", "tool_input": {"command": command, **tool_input}})
     assert result.returncode == 0, result.stderr
     if result.stdout.strip() in ("", "{}"):
         return "allow"
     return json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"]
+
+
+def test_codex_hook_allows_gate_authoring_scoped_to_the_worktree(tmp_path):
+    project = _active_project(tmp_path / "project")
+    assembler = ROOT / "scripts" / "h_mad_assemble_tdd.py"
+    command = (
+        f"python3 {assembler} --phase gate --project-root . "
+        "--authors-test tests/test_one.py --authors-test=package/tests/two_test.py "
+        "--expect-fail 2 --expect-pass 1"
+    )
+    assert _hook_decision(project, command) == "allow"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        "--phase gate --project-root . --authors-test ../tests/test_outside.py",
+        "--phase gate --project-root .. --authors-test tests/test_outside.py",
+        "--phase gate --project-root . --authors-test linked/tests/test_outside.py",
+        "--phase gate --project-root . --authors-test test_alias.py",
+        "--phase gate --project-root . --authors-test docs/probe.py",
+        "--phase gate --project-root . --authors-test package/tools/widget.py",
+        "--phase gate --project-root . --authors-test tests/test_one.py --authors-test",
+        "--phase red --project-root . --authors-test tests/test_one.py",
+    ],
+)
+def test_codex_hook_denies_invalid_gate_authoring_scope(tmp_path, arguments):
+    project = _active_project(tmp_path / "project")
+    (project / "linked").symlink_to(tmp_path, target_is_directory=True)
+    (project / "test_alias.py").symlink_to(project / "docs" / "probe.py")
+    assembler = ROOT / "scripts" / "h_mad_assemble_tdd.py"
+    assert _hook_decision(project, f"python3 {assembler} {arguments}") == "deny"
+
+
+def _authoring_decision(project, arguments, **tool_input):
+    assembler = ROOT / "scripts" / "h_mad_assemble_tdd.py"
+    return _hook_decision(project, f"python3 {assembler} {arguments}", **tool_input)
+
+
+AUTHORS_ONE = "--authors-test tests/test_one.py"
+
+
+@pytest.mark.parametrize("arguments", [
+    f"--phase gate --project-root . --project-root .. {AUTHORS_ONE}",
+    f"--phase gate --project-root . --project-root=.. {AUTHORS_ONE}",
+    f"--phase gate --phase red --project-root . {AUTHORS_ONE}",
+    f"--phase gate --project-root= {AUTHORS_ONE}",
+    f"--phase gate --project-root=--x {AUTHORS_ONE}",
+    f"--phase gate {AUTHORS_ONE}",
+    "--phase gate --project-root . --authors-test tests/../tests/test_one.py",
+    "--phase gate --project-root . --authors-test=--x/test_one.py",
+    "--phase gate --project-root . --authors-test alias.py",
+    "--phase gate --project-root . --authors-test src/prod.py::x_test.py",
+    "--phase gate --project-root . --authors-test 'src/a.py, src/prod.py, x_test.py'",
+    f"--phase gate --project-root . --authors-test src/prod.py {AUTHORS_ONE}",
+], ids=["root-twice", "root-twice-equals", "phase-twice", "root-empty", "root-is-option",
+        "root-absent", "dotdot-inside", "dash-value", "alias-to-a-test",
+        "node-id", "path-list", "bad-value-first"])
+def test_codex_hook_denies_gate_authoring_outside_the_rule(tmp_path, arguments):
+    """One input per refusal. A repeated root or phase is refused because argparse
+    keeps the LAST one; `prod.py::x_test.py` because pytest reads it as a node of
+    production code; a bad value in any position because argparse keeps them all."""
+    project = _active_project(tmp_path / "project")
+    (project / "tests").mkdir()
+    (project / "tests" / "test_one.py").write_text("", encoding="utf-8")
+    (project / "alias.py").symlink_to(project / "tests" / "test_one.py")
+    assert _authoring_decision(project, f"--phase gate --project-root . {AUTHORS_ONE}") == "allow"
+    assert _authoring_decision(project, arguments) == "deny"
+
+
+def test_codex_hook_denies_an_absolute_gate_authoring_path_inside_the_project(tmp_path):
+    project = _active_project(tmp_path / "project")
+    path = project / "tests" / "test_one.py"
+    assert _authoring_decision(project, f"--phase gate --project-root . --authors-test {path}") == "deny"
+
+
+def test_codex_hook_judges_gate_authoring_from_the_directory_the_command_runs_in(tmp_path):
+    """`--project-root .` is relative to the command's workdir. `sub/test_x.py` is a
+    link to production code; `test_x.py` under the root is not."""
+    project = _active_project(tmp_path / "project")
+    sub = project / "sub"
+    sub.mkdir()
+    (sub / "widget.py").write_text("", encoding="utf-8")
+    (sub / "test_x.py").symlink_to(sub / "widget.py")
+    arguments = "--phase gate --project-root . --authors-test test_x.py"
+    assert _authoring_decision(project, arguments) == "allow", "control: from the root"
+    assert _authoring_decision(project, arguments, workdir=str(sub)) == "deny"
+
+
+def test_codex_hook_denies_gate_authoring_run_outside_the_project(tmp_path):
+    project = _active_project(tmp_path / "project")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    arguments = f"--phase gate --project-root . {AUTHORS_ONE}"
+    assert _authoring_decision(project, arguments, workdir=str(project)) == "allow", "control"
+    assert _authoring_decision(project, arguments, workdir=str(outside)) == "deny"
+
+
+def test_codex_hook_denies_gate_authoring_with_a_malformed_workdir(tmp_path):
+    project = _active_project(tmp_path / "project")
+    arguments = f"--phase gate --project-root . {AUTHORS_ONE}"
+    assert _authoring_decision(project, arguments, workdir=0) == "deny"
+
+
+def test_codex_hook_refuses_the_abbreviation_that_would_skip_the_authoring_rule(tmp_path):
+    """argparse would expand `--authors` to `--authors-test`; the option allow-list
+    refuses the abbreviation, so the authoring rule is never skipped."""
+    project = _active_project(tmp_path / "project")
+    assert _authoring_decision(project, "--phase red --project-root .") == "allow", "control"
+    assert _authoring_decision(
+        project, "--phase red --project-root . --authors src/widget.py") == "deny"
 
 
 def test_codex_hook_allows_run_verb_around_a_trusted_command(tmp_path):

@@ -1,0 +1,198 @@
+{
+  "_why": "The Phase-5 shell gate admits `h_mad_assemble_tdd.py --authors-test`. Each mutant loosens one refusal of that rule, unwires it, or drops the admit.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_codex_runtime.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "authoring-rule-always-allows",
+      "_mechanism": "Every authoring path is admitted.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "    if not paths:\n        return True",
+      "replace": "    if True:\n        return True",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_invalid_gate_authoring_scope[--phase gate --project-root . --authors-test package/tools/widget.py]"
+    },
+    {
+      "name": "authoring-any-phase",
+      "_mechanism": "RED/GREEN dispatches may name authored tests.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "    if values[\"--phase\"] != [\"gate\"] or len(roots) != 1 or _cwd_escapes_root(root, cwd):",
+      "replace": "    if len(roots) != 1 or _cwd_escapes_root(root, cwd):",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_invalid_gate_authoring_scope[--phase red --project-root . --authors-test tests/test_one.py]"
+    },
+    {
+      "name": "authoring-first-phase-wins",
+      "_mechanism": "argparse keeps the last --phase; judging the first vouches for a phase not used.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "    if values[\"--phase\"] != [\"gate\"] or len(roots) != 1 or _cwd_escapes_root(root, cwd):",
+      "replace": "    if values[\"--phase\"][:1] != [\"gate\"] or len(roots) != 1 or _cwd_escapes_root(root, cwd):",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_outside_the_rule[phase-twice]"
+    },
+    {
+      "name": "authoring-repeated-root",
+      "_mechanism": "argparse keeps the last --project-root; judging the first vouches for a root not used.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "    if values[\"--phase\"] != [\"gate\"] or len(roots) != 1 or _cwd_escapes_root(root, cwd):",
+      "replace": "    if values[\"--phase\"] != [\"gate\"] or not roots or _cwd_escapes_root(root, cwd):",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_outside_the_rule[root-twice]"
+    },
+    {
+      "name": "authoring-cwd-outside-root",
+      "_mechanism": "A workdir outside the root falls back to the root and is judged there.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "    if values[\"--phase\"] != [\"gate\"] or len(roots) != 1 or _cwd_escapes_root(root, cwd):",
+      "replace": "    if values[\"--phase\"] != [\"gate\"] or len(roots) != 1:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_run_outside_the_project"
+    },
+    {
+      "name": "authoring-root-value-unchecked",
+      "_mechanism": "An option-shaped value is read as the project root.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "    if not roots[0] or roots[0].startswith(\"-\"):",
+      "replace": "    if not roots[0]:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_outside_the_rule[root-is-option]"
+    },
+    {
+      "name": "authoring-empty-root",
+      "_mechanism": "An empty --project-root is read as the working directory.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "    if not roots[0] or roots[0].startswith(\"-\"):",
+      "replace": "    if roots[0].startswith(\"-\"):",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_outside_the_rule[root-empty]"
+    },
+    {
+      "name": "authoring-root-may-leave-the-project",
+      "_mechanism": "--project-root .. names files outside the gated root.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "        project.relative_to(root.resolve())\n",
+      "replace": "",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_invalid_gate_authoring_scope[--phase gate --project-root .. --authors-test tests/test_outside.py]"
+    },
+    {
+      "name": "authoring-dash-value",
+      "_mechanism": "An option-shaped value is taken as a path.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "            if value.startswith(\"-\") or path.is_absolute() or \"..\" in path.parts:",
+      "replace": "            if path.is_absolute() or \"..\" in path.parts:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_outside_the_rule[dash-value]"
+    },
+    {
+      "name": "authoring-absolute-path",
+      "_mechanism": "An absolute path is admitted.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "            if value.startswith(\"-\") or path.is_absolute() or \"..\" in path.parts:",
+      "replace": "            if value.startswith(\"-\") or \"..\" in path.parts:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_an_absolute_gate_authoring_path_inside_the_project"
+    },
+    {
+      "name": "authoring-dotdot",
+      "_mechanism": "A .. component is admitted when it lands inside.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "            if value.startswith(\"-\") or path.is_absolute() or \"..\" in path.parts:",
+      "replace": "            if value.startswith(\"-\") or path.is_absolute():",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_outside_the_rule[dotdot-inside]"
+    },
+    {
+      "name": "authoring-target-may-leave",
+      "_mechanism": "A linked directory carries the target outside the project.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "            target = (project / path).resolve().relative_to(project)",
+      "replace": "            target = (project / path).resolve()",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_invalid_gate_authoring_scope[--phase gate --project-root . --authors-test linked/tests/test_outside.py]"
+    },
+    {
+      "name": "authoring-target-name-unchecked",
+      "_mechanism": "A test-named link to production code is admitted.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "                for candidate in (path, target)",
+      "replace": "                for candidate in (path,)",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_invalid_gate_authoring_scope[--phase gate --project-root . --authors-test test_alias.py]"
+    },
+    {
+      "name": "authoring-path-name-unchecked",
+      "_mechanism": "A production-named link to a test is admitted.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "                for candidate in (path, target)",
+      "replace": "                for candidate in (target,)",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_outside_the_rule[alias-to-a-test]"
+    },
+    {
+      "name": "authoring-rule-unwired",
+      "_mechanism": "The rule exists and nothing calls it.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_hmad_script",
+      "find": "        return _safe_gate_authoring(args, root, cwd) and all(",
+      "replace": "        return all(",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_invalid_gate_authoring_scope[--phase gate --project-root . --authors-test package/tools/widget.py]"
+    },
+    {
+      "name": "authoring-cwd-unwired",
+      "_mechanism": "The command's directory never reaches the rule, so a relative root is judged from the project root.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_argv",
+      "find": "        return _safe_hmad_script(script, argv[2:], root or Path.cwd(), cwd)",
+      "replace": "        return _safe_hmad_script(script, argv[2:], root or Path.cwd())",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_gate_authoring_from_the_directory_the_command_runs_in"
+    },
+    {
+      "name": "authoring-option-not-admitted",
+      "_mechanism": "The pre-fix gate: an approved gate task cannot name the test it authors.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "        \"--authors-test\", \"--effort\",",
+      "replace": "        \"--effort\",",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_allows_gate_authoring_scoped_to_the_worktree"
+    },
+    {
+      "name": "authoring-node-id",
+      "_mechanism": "A pytest node id of production code ends in a test-shaped name and is admitted.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "            if AUTHORED_TEST_PATH.fullmatch(value) is None:",
+      "replace": "            if False:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_outside_the_rule[node-id]"
+    },
+    {
+      "name": "authoring-last-value-only",
+      "_mechanism": "argparse appends; judging only the last value admits a bad one before it.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_safe_gate_authoring",
+      "find": "        for value in paths:",
+      "replace": "        for value in paths[-1:]:",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_outside_the_rule[bad-value-first]"
+    },
+    {
+      "name": "authoring-malformed-workdir",
+      "_mechanism": "A workdir codex sent that is not a string is judged from the root.",
+      "file": "scripts/h_mad_target_identity.py",
+      "symbol": "_cwd_escapes_root",
+      "find": "    if cwd is MALFORMED_WORKDIR:\n        return True\n    if not isinstance(cwd, str) or not cwd:\n        return False\n    return _payload_cwd_base(root, cwd) == root and",
+      "replace": "    if not isinstance(cwd, str) or not cwd:\n        return False\n    return _payload_cwd_base(root, cwd) == root and",
+      "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_gate_authoring_with_a_malformed_workdir"
+    }
+  ]
+}

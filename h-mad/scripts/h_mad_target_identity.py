@@ -261,9 +261,9 @@ SAFE_DISPATCH_VERBS = {
 }
 SAFE_HMAD_SCRIPT_OPTIONS = {
     "h_mad_assemble_tdd.py": {
-        "--effort", "--expect-fail", "--expect-pass", "--feature", "--guard", "--impl-plan",
-        "--log", "--model", "--module", "--out", "--phase", "--project-root", "--prompt",
-        "--report-file", "--sandbox", "--task", "--template", "--test-path", "--timeout",
+        "--authors-test", "--effort", "--expect-fail", "--expect-pass", "--feature", "--guard",
+        "--impl-plan", "--log", "--model", "--module", "--out", "--phase", "--project-root",
+        "--prompt", "--report-file", "--sandbox", "--task", "--template", "--test-path", "--timeout",
     },
     "h_mad_baseline_sha.py": {"--branch", "--repo", "--trunk"},
     "h_mad_context_budget.py": {"--ceiling", "--cwd", "--host", "--mode", "--transcript", "--window"},
@@ -435,7 +435,56 @@ def _option_value(args: list[str], option: str) -> str | None:
     return None
 
 
-def _safe_hmad_script(script: Path, args: list[str], root: Path) -> bool:
+#: A plain relative path. `:` would make it a pytest node id, and `,` or a space a
+#: list, whose LAST part alone would be judged as the file name.
+AUTHORED_TEST_PATH = re.compile(r"[A-Za-z0-9_./-]+")
+
+
+def _safe_gate_authoring(args: list[str], root: Path, cwd: object) -> bool:
+    """`h_mad_assemble_tdd.py --authors-test` names only test files inside the project.
+
+    Judged only when the option is present. `--phase` and `--project-root` must each
+    appear exactly once: argparse keeps the last of a repeated option, so judging any
+    one of several would vouch for a value the assembler never uses.
+    """
+    values = {"--authors-test": [], "--phase": [], "--project-root": []}
+    for index, token in enumerate(args):
+        option, separator, value = token.partition("=")
+        if option in values:
+            if not separator:
+                value = args[index + 1] if index + 1 < len(args) else ""
+            values[option].append(value)
+
+    paths = values["--authors-test"]
+    if not paths:
+        return True
+    roots = values["--project-root"]
+    if values["--phase"] != ["gate"] or len(roots) != 1 or _cwd_escapes_root(root, cwd):
+        return False
+    if not roots[0] or roots[0].startswith("-"):
+        return False
+
+    try:
+        project = (_payload_cwd_base(root, cwd) / roots[0]).resolve()
+        project.relative_to(root.resolve())
+        for value in paths:
+            path = Path(value)
+            if AUTHORED_TEST_PATH.fullmatch(value) is None:
+                return False
+            if value.startswith("-") or path.is_absolute() or ".." in path.parts:
+                return False
+            target = (project / path).resolve().relative_to(project)
+            if not all(
+                candidate.match("test_*.py") or candidate.match("*_test.py")
+                for candidate in (path, target)
+            ):
+                return False
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return True
+
+
+def _safe_hmad_script(script: Path, args: list[str], root: Path, cwd: object = None) -> bool:
     allowed_options = SAFE_HMAD_SCRIPT_OPTIONS.get(script.name)
     if allowed_options is None:
         return False
@@ -462,7 +511,7 @@ def _safe_hmad_script(script: Path, args: list[str], root: Path) -> bool:
     if script.name == "h_mad_wire_registry.py":
         return bool(args) and args[0] in {"challenge", "verify"}
     if script.name == "h_mad_assemble_tdd.py":
-        return all(
+        return _safe_gate_authoring(args, root, cwd) and all(
             (value := _option_value(args, option)) is None or _path_within(value, Path("/tmp"))
             for option in TEMP_OUTPUT_OPTIONS
         )
@@ -584,7 +633,7 @@ def _safe_argv(argv: list[str], root: Path | None, cwd: object) -> bool:
             script.relative_to(scripts_root)
         except ValueError:
             return False
-        return _safe_hmad_script(script, argv[2:], root or Path.cwd())
+        return _safe_hmad_script(script, argv[2:], root or Path.cwd(), cwd)
     return False
 
 
