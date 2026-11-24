@@ -3121,3 +3121,10 @@ Reconciled first: the census read `OPEN(yes+maybe)=5` before this entry; none wa
 Reconciled first: the census read `OPEN(yes+maybe)=5` before this entry. This session built none of the five, so all stay open.
 
 - **codex-hook-live-trust-probe**: a 40-line probe asked `codex app-server` `hooks/list` for each hook's live trust status about a dozen times (before and after two edits, in throwaway homes, and after the operator's trust). `h_mad_install_check.py` `check_codex_hook_trust` reads only the recorded hash and calls its coverage unknown; the probe showed that the hash covers the command, and it reports `trusted` / `modified` / `untrusted` per hook — remedy: tool-improvement — recurrence: 1 — candidate: maybe
+
+## 2026-11-25 — phase5-gate-design-findings
+
+Reconciled first: the census was read before this entry; no tool code landed since `74ba0661` (`git diff --stat 74ba0661..HEAD -- h-mad handoff memory-dream agent-messaging`), so this session closed none of the open rows and did not re-derive each against source.
+
+- **delta-stage-for-untracked-documents**: `h_mad_delta_stage.py` requires `--sha`, so the delta review of phase documents that stay untracked until 5c (a public repository) was staged by hand from diffs against private copies, twice, with report paths outside the audit grammar chosen by hand — remedy: tool-improvement — recurrence: 2 — candidate: maybe
+- **audit-cycle-single-leg-redispatch**: when one leg of a three-surface cycle dies on a provider timeout the documented re-dispatch repeats the whole cycle, the project suite (about 55 minutes) included; nothing re-runs one leg and combines it with the reports already collected — remedy: tool-improvement — recurrence: 1 — candidate: maybe
