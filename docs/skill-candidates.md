@@ -3115,3 +3115,9 @@ Reconciled first: the census read `OPEN(yes+maybe)=5` before this entry (memory-
 ## 2026-11-24 — phase5-gate-plan-approved
 
 Reconciled first: the census read `OPEN(yes+maybe)=5` before this entry; none was built, so all five stay open. No new candidates: the author dispatch, hash gate and report read recurred five times, but that sequence is already the h-mad teammate-authors contract.
+
+## 2026-11-24 — agent-messaging-codex-hooks
+
+Reconciled first: the census read `OPEN(yes+maybe)=5` before this entry. This session built none of the five, so all stay open.
+
+- **codex-hook-live-trust-probe**: a 40-line probe asked `codex app-server` `hooks/list` for each hook's live trust status about a dozen times (before and after two edits, in throwaway homes, and after the operator's trust). `h_mad_install_check.py` `check_codex_hook_trust` reads only the recorded hash and calls its coverage unknown; the probe showed that the hash covers the command, and it reports `trusted` / `modified` / `untrusted` per hook — remedy: tool-improvement — recurrence: 1 — candidate: maybe
