@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-24 · solution · [0.5] · `h-mad,delta-review,handoff:2026-11-24-phase5-gate-design-cycle1` — Untracked phase documents cannot use h_mad_delta_stage.py (it needs a commit): diff against private copies and hand-dispatch doc-auditor
+- 2026-11-24 · pattern · [0.5] · `h-mad,audit,delta-review,handoff:2026-11-24-phase5-gate-design-cycle1` — Plan text written to fix audit findings creates many of the next round's findings; a doc-auditor delta review before the gate caught 9 then 2
+- 2026-11-24 · gotcha · [0.3] · `h-mad,audit,grok,handoff:2026-11-24-phase5-gate-design-cycle1` — h-mad grok leg can die on a provider 'retry_deadline' (no answer in 300 s): the cycle reads UNVERIFIED no_report though other legs stand
 - 2026-11-24 · gotcha · [0.7] · `homebrew,node,hooks,handoff:2026-11-24-agent-messaging-codex-hooks` — process.execPath under Homebrew is a versioned Cellar path that the next brew upgrade deletes; anything that persists it (hooks, launchers) then exits 127. Persist the opt or bin link when it resolves to the same file.
 - 2026-11-24 · pattern · [0.7] · `codex,hooks,verification,handoff:2026-11-24-agent-messaging-codex-hooks` — A silent pane does not prove a hook works: an untrusted Codex hook never runs, so it logs no error. Prove it with the files the hook writes in a fresh process, and check trust with app-server hooks/list.
 - 2026-11-24 · gotcha · [0.7] · `codex,orca,hooks,handoff:2026-11-24-agent-messaging-codex-hooks` — Orca rebuilds a Codex account home's hooks.json from ~/.codex/hooks.json plus its own hooks at every Codex start. Add hooks to ~/.codex, or they vanish. Trust is keyed by position and covers the command text.
