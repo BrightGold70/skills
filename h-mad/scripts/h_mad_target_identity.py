@@ -285,6 +285,8 @@ SAFE_HMAD_SCRIPT_OPTIONS = {
         "--repo", "--rootdir", "--testpath",
     },
 }
+#: What `h_mad_wire_pin_gate.py` writes when --registry is absent (pinned by a test).
+DEFAULT_WIRE_REGISTRY = ".h-mad/wires.jsonl"
 TEMP_OUTPUT_OPTIONS = {"--log", "--out", "--prompt", "--report-file"}
 # Operator-declared argv prefixes admitted through Bash during step5, for work
 # unrelated to the feature (a manuscript run). Codex may not write this file
@@ -374,6 +376,8 @@ def _is_production_python(relative: str) -> bool:
 def _trusted_executable(token: str) -> Path | None:
     if "/" in token:
         candidate = Path(token).expanduser()
+        if not candidate.is_absolute():  # M:TE-ABS the command's directory is not known here
+            return None
     else:
         found = shutil.which(token)
         if not found:
@@ -426,13 +430,44 @@ def _path_within(path: str, parent: Path) -> bool:
     return True
 
 
-def _option_value(args: list[str], option: str) -> str | None:
+def _command_path(value: str, root: Path, cwd: object) -> Path | None:
+    """A path the script itself opens, as the command will resolve it, or None when
+    that cannot be known.
+
+    A relative path belongs to the directory the COMMAND runs in, which is not this
+    process's. Unlike `_payload_cwd_base`, a directory outside the root is used as it
+    is: the caller's own containment check then judges the true location.
+    """
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    if value.startswith("="):  # M:CP-EQUALS zsh reads `=name` as that command's path
+        return None
+    if cwd is None or cwd == "":
+        return root / path
+    if not isinstance(cwd, str):  # M:CP-MALFORMED
+        return None
+    base = Path(cwd)
+    if not base.is_absolute() or not base.is_dir():  # M:CP-UNKNOWN
+        return None
+    return base / path
+
+
+def _argument_within(value: str, parent: Path, root: Path, cwd: object) -> bool:
+    path = _command_path(value, root, cwd)
+    return path is not None and _path_within(str(path), parent)
+
+
+def _option_values(args: list[str], option: str) -> list[str]:
+    """Every value given for `option`. argparse keeps the last of a repeated option,
+    so a caller must judge them all."""
+    values = []
     for index, token in enumerate(args):
         if token == option and index + 1 < len(args):
-            return args[index + 1]
-        if token.startswith(option + "="):
-            return token.split("=", 1)[1]
-    return None
+            values.append(args[index + 1])
+        elif token.startswith(option + "="):
+            values.append(token.split("=", 1)[1])
+    return values
 
 
 #: A plain relative path. `:` would make it a pytest node id, and `,` or a space a
@@ -496,24 +531,30 @@ def _safe_hmad_script(script: Path, args: list[str], root: Path, cwd: object = N
 
     if script.name == "h_mad_state_write.py":
         return bool(args) and not args[0].startswith("-") and Path(args[0]).name == ".bkit-memory.json" \
-            and _path_within(args[0], root / "docs")
+            and _argument_within(args[0], root / "docs", root, cwd)
     if script.name == "h_mad_wire_pin_gate.py":
         if not args or args[0].startswith("-") or not args[0].endswith(".impl-plan.md"):
             return False
-        registry = _option_value(args, "--registry")
-        return _path_within(args[0], root) and (registry is None or _path_within(registry, root / ".h-mad"))
+        registries = _option_values(args, "--registry")
+        if not registries and not _argument_within(DEFAULT_WIRE_REGISTRY, root, root, cwd):  # M:WR-DEFAULT
+            return False
+        return _argument_within(args[0], root, root, cwd) and all(
+            _argument_within(value, root / ".h-mad", root, cwd) for value in registries
+        )
     if script.name == "h_mad_mutation_harness.py":
         # Only the read-only anchor check: a full run writes mutants into
         # production code. Every spec it reads must be inside the project.
         specs = [token for token in args if not token.startswith("-")]
         return ("--check-anchors" in args and bool(specs)  # M:CX-MUT-ANCHORS
-                and all(_path_within(spec, root) for spec in specs))
+                and all(_argument_within(spec, root, root, cwd) for spec in specs))
     if script.name == "h_mad_wire_registry.py":
         return bool(args) and args[0] in {"challenge", "verify"}
     if script.name == "h_mad_assemble_tdd.py":
+        # Absolute only: --out, --log and --report-file are printed for a command run
+        # later from another directory, so no directory here can vouch for a relative one.
         return _safe_gate_authoring(args, root, cwd) and all(
-            (value := _option_value(args, option)) is None or _path_within(value, Path("/tmp"))
-            for option in TEMP_OUTPUT_OPTIONS
+            os.path.isabs(value) and _path_within(value, Path("/tmp"))
+            for option in TEMP_OUTPUT_OPTIONS for value in _option_values(args, option)
         )
     return True
 
@@ -626,8 +667,12 @@ def _safe_argv(argv: list[str], root: Path | None, cwd: object) -> bool:
                     and _safe_argv(argv[5:], root, cwd))  # M:CX-RUN-INNER
         return argv[1] in SAFE_DISPATCH_VERBS
     if executable.startswith("python") and len(argv) >= 2:
-        script = Path(os.path.expandvars(argv[1])).expanduser()
-        script = script.resolve() if script.is_absolute() else (Path.cwd() / script).resolve()
+        if argv[1].startswith("-"):  # M:PY-OPTION an option's glued value is not the script
+            return False
+        script = _command_path(argv[1], root or Path.cwd(), cwd)
+        if script is None:  # M:PY-UNKNOWN
+            return False
+        script = script.resolve()
         scripts_root = (Path(__file__).resolve().parents[1] / "scripts").resolve()
         try:
             script.relative_to(scripts_root)

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 import pytest
 import yaml
@@ -74,7 +75,7 @@ def _active_project(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _run_hook(project: Path, payload: dict) -> subprocess.CompletedProcess:
+def _run_hook(project: Path, payload: dict, hook_cwd: Path | None = None) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env["CODEX_PROJECT_DIR"] = str(project)
     return subprocess.run(
@@ -82,7 +83,7 @@ def _run_hook(project: Path, payload: dict) -> subprocess.CompletedProcess:
         input=json.dumps(payload),
         text=True,
         capture_output=True,
-        cwd=project,
+        cwd=hook_cwd or project,
         env=env,
         check=False,
     )
@@ -319,9 +320,9 @@ def test_codex_hook_allows_observational_hmad_dispatch_verb(tmp_path):
 
 
 
-def _hook_decision(project, command, **tool_input):
+def _hook_decision(project, command, *, hook_cwd=None, **tool_input):
     result = _run_hook(project, {
-        "tool_name": "Bash", "tool_input": {"command": command, **tool_input}})
+        "tool_name": "Bash", "tool_input": {"command": command, **tool_input}}, hook_cwd)
     assert result.returncode == 0, result.stderr
     if result.stdout.strip() in ("", "{}"):
         return "allow"
@@ -437,6 +438,170 @@ def test_codex_hook_refuses_the_abbreviation_that_would_skip_the_authoring_rule(
     assert _authoring_decision(project, "--phase red --project-root .") == "allow", "control"
     assert _authoring_decision(
         project, "--phase red --project-root . --authors src/widget.py") == "deny"
+
+
+# One option, several occurrences: argparse keeps the LAST, so a policy that judges
+# any single one vouches for a value the script never uses.
+JUDGED_OPTIONS = [
+    ("h_mad_assemble_tdd.py --phase red --project-root .", option, "/tmp/hmad-x.txt", "/var/hmad-x/prod.py")
+    for option in ("--prompt", "--out", "--log", "--report-file")
+] + [("h_mad_wire_pin_gate.py docs/f.impl-plan.md", "--registry", ".h-mad/wires.jsonl", "src/prod.py")]
+
+
+@pytest.mark.parametrize("last", ["{option} {bad}", "{option}={bad}"], ids=["space", "equals"])
+@pytest.mark.parametrize("first", ["{option} {good}", "{option}={good}"], ids=["space", "equals"])
+@pytest.mark.parametrize("prefix, option, good, bad", JUDGED_OPTIONS, ids=[o[1] for o in JUDGED_OPTIONS])
+def test_codex_hook_judges_every_occurrence_of_a_repeated_option(
+        tmp_path, prefix, option, good, bad, first, last):
+    project = _active_project(tmp_path / "project")
+    command = f"python3 {ROOT / 'scripts'}/{prefix} "
+    first = first.format(option=option, good=good)
+    again = last.format(option=option, bad=good)
+    last = last.format(option=option, bad=bad)
+    assert _hook_decision(project, f"{command}{first} {again}") == "allow", "control: same repeat, both inside"
+    assert _hook_decision(project, f"{command}{first} {last}") == "deny"
+    assert _hook_decision(project, f"{command}{last} {first}") == "deny"
+
+
+@pytest.mark.parametrize("option", ["--prompt", "--out", "--log", "--report-file"])
+def test_codex_hook_denies_a_relative_temp_output(tmp_path, option):
+    """The assembler only prints three of the four, for a command started elsewhere, so
+    a relative one has no directory to be judged from -- wherever this one runs."""
+    project = _active_project(tmp_path / "project")
+    assembler = ROOT / "scripts" / "h_mad_assemble_tdd.py"
+    command = f"python3 {assembler} --phase red --project-root . {option} "
+    with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+        for workdir in (tmp, str(project)):
+            absolute = f"{tmp}/src/prod.py"
+            assert _hook_decision(project, command + absolute, hook_cwd=tmp, workdir=workdir) == "allow", "control"
+            assert _hook_decision(project, command + "src/prod.py", hook_cwd=tmp, workdir=workdir) == "deny"
+
+
+PROJECT_RELATIVE_COMMANDS = {
+    "state-write": "h_mad_state_write.py docs/.bkit-memory.json --feature f --release",
+    "wire-pin-plan": "h_mad_wire_pin_gate.py docs/f.impl-plan.md",
+    "wire-pin-registry": "h_mad_wire_pin_gate.py {project}/docs/f.impl-plan.md --registry .h-mad/wires.jsonl",
+    "anchor-check": "h_mad_mutation_harness.py --check-anchors docs/spec.json",
+}
+
+
+@pytest.mark.parametrize("arguments", PROJECT_RELATIVE_COMMANDS.values(), ids=PROJECT_RELATIVE_COMMANDS)
+def test_codex_hook_judges_a_relative_path_from_the_command_directory(tmp_path, arguments):
+    """Each way round: the hook process inside the project and the command outside, and
+    the reverse. Only where the COMMAND runs decides."""
+    project = _active_project(tmp_path / "project")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    command = f"python3 {ROOT / 'scripts'}/{arguments.format(project=project)}"
+    assert _hook_decision(project, command, hook_cwd=outside, workdir=str(project)) == "allow"
+    assert _hook_decision(project, command, hook_cwd=project, workdir=str(outside)) == "deny"
+
+
+@pytest.mark.parametrize("workdir", [0, "absent"], ids=["malformed", "absent-directory"])
+def test_codex_hook_denies_a_relative_path_when_the_command_directory_is_unknown(tmp_path, workdir):
+    project = _active_project(tmp_path / "project")
+    command = f"python3 {ROOT / 'scripts' / 'h_mad_mutation_harness.py'} --check-anchors "
+    if isinstance(workdir, str):
+        workdir = str(project / workdir)
+    assert _hook_decision(project, command + f"{project}/docs/spec.json", workdir=workdir) == "allow", "control"
+    assert _hook_decision(project, command + "docs/spec.json", workdir=workdir) == "deny"
+
+
+def test_codex_hook_judges_a_relative_script_from_the_command_directory(tmp_path):
+    """The hook process stands in h-mad; the command runs a same-named project file."""
+    project = _active_project(tmp_path / "project")
+    command = "python3 scripts/h_mad_identifier_sweep.py old_name"
+    assert _hook_decision(project, command, hook_cwd=ROOT, workdir=str(project)) == "deny"
+    assert _hook_decision(project, command, hook_cwd=project, workdir=str(ROOT)) == "allow"
+
+
+def test_shared_policy_refuses_a_relative_script_when_the_command_directory_is_unknown(tmp_path, monkeypatch):
+    """Called directly: through the hook, a raised exception is also a deny."""
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    from h_mad_target_identity import MALFORMED_WORKDIR, _safe_shell_command
+
+    project = _active_project(tmp_path / "project")
+    monkeypatch.chdir(ROOT)
+    command = "python3 scripts/h_mad_identifier_sweep.py old_name"
+    assert _safe_shell_command(command, project, str(ROOT)) is True, "control"
+    assert _safe_shell_command(command, project, MALFORMED_WORKDIR) is False
+
+
+def test_codex_hook_denies_an_interpreter_option_in_place_of_the_script(tmp_path):
+    """`-W` and `-X` take a glued value, so the token is not the file python runs; the
+    next one is."""
+    project = _active_project(tmp_path / "project")
+    relative = os.path.relpath(ROOT / "scripts" / "h_mad_identifier_sweep.py", project)
+    assert _hook_decision(project, f"python3 x/../{relative} gen.py", workdir=str(project)) == "allow", "control"
+    for option in ("-W", "-X"):
+        assert _hook_decision(project, f"python3 {option}x/../{relative} gen.py", workdir=str(project)) == "deny"
+
+
+def test_codex_hook_denies_a_relative_dispatch_wrapper(tmp_path):
+    """Judged from the hook's directory, a project's own `bin/hmad-dispatch` would be
+    vouched for as h-mad's."""
+    project = _active_project(tmp_path / "project")
+    wrapper = ROOT / "bin" / "hmad-dispatch"
+    for arguments in ("progress x", "run --timeout 5 -- cat x"):
+        assert _hook_decision(project, f"{wrapper} {arguments}", hook_cwd=ROOT, workdir=str(project)) == "allow", "control"
+        assert _hook_decision(project, f"bin/hmad-dispatch {arguments}", hook_cwd=ROOT, workdir=str(project)) == "deny"
+
+
+def test_codex_hook_denies_a_relative_dispatch_wrapper_around_an_operator_command(tmp_path):
+    project = _active_project(tmp_path / "project")
+    (project / ".h-mad").mkdir()
+    (project / ".h-mad" / "phase5-shell-allow").write_text("python3 --version\n", encoding="utf-8")
+    run = "run --timeout 5 -- python3 --version"
+    wrapper = ROOT / "bin" / "hmad-dispatch"
+    assert _hook_decision(project, f"{wrapper} {run}", hook_cwd=ROOT, workdir=str(project)) == "allow", "control"
+    assert _hook_decision(project, f"bin/hmad-dispatch {run}", hook_cwd=ROOT, workdir=str(project)) == "deny"
+
+
+def test_codex_hook_judges_the_default_registry_from_the_command_directory(tmp_path):
+    """Without --registry the script writes `.h-mad/wires.jsonl` where it runs. A
+    sub-project keeps its own; another checkout's is not this command's to write."""
+    project = _active_project(tmp_path / "project")
+    (project / "sub").mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    command = f"python3 {ROOT / 'scripts' / 'h_mad_wire_pin_gate.py'} {project}/docs/f.impl-plan.md --feature f"
+    assert _hook_decision(project, command, workdir=str(project)) == "allow"
+    assert _hook_decision(project, command, workdir=str(project / "sub")) == "allow"
+    assert _hook_decision(project, command, workdir=str(outside)) == "deny"
+    explicit = f"{command} --registry {project}/.h-mad/wires.jsonl"
+    assert _hook_decision(project, explicit, workdir=str(outside)) == "allow", "the default is not used"
+
+
+def test_shared_policy_names_the_registry_default_the_script_uses(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    import h_mad_target_identity
+    import h_mad_wire_registry
+
+    assert h_mad_target_identity.DEFAULT_WIRE_REGISTRY == h_mad_wire_registry.DEFAULT_REGISTRY
+
+
+def test_codex_hook_denies_a_relative_path_zsh_would_expand(tmp_path):
+    """zsh reads a word that starts with `=` as the path of that command."""
+    project = _active_project(tmp_path / "project")
+    command = f"python3 {ROOT / 'scripts' / 'h_mad_mutation_harness.py'} --check-anchors "
+    assert _hook_decision(project, command + "./=ls", workdir=str(project)) == "allow", "control: not expanded"
+    assert _hook_decision(project, command + "=ls", workdir=str(project)) == "deny"
+
+
+def test_shared_policy_resolves_a_relative_path_without_a_command_directory_from_the_root(
+        tmp_path, monkeypatch):
+    """No cwd at all means the project root, as the other rules read it. A cwd that is
+    itself relative names no directory."""
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    from h_mad_target_identity import _safe_shell_command
+
+    project = _active_project(tmp_path / "project")
+    command = f"python3 {ROOT / 'scripts' / 'h_mad_mutation_harness.py'} --check-anchors docs/spec.json"
+    monkeypatch.chdir(tmp_path)
+    assert _safe_shell_command(command, project, None)
+    assert _safe_shell_command(command, project, "")
+    monkeypatch.chdir(project)
+    assert not _safe_shell_command(command, project, "docs/..")
 
 
 def test_codex_hook_allows_run_verb_around_a_trusted_command(tmp_path):

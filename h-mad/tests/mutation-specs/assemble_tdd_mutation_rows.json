@@ -51,7 +51,7 @@
       "name": "CX-MUT-WITHIN",
       "_mechanism": "drop the inside-the-project check on spec paths.",
       "file": "scripts/h_mad_target_identity.py",
-      "find": "                and all(_path_within(spec, root) for spec in specs))",
+      "find": "                and all(_argument_within(spec, root, root, cwd) for spec in specs))",
       "replace": "                and True)",
       "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_admits_mutation_harness_only_for_check_anchors"
     }

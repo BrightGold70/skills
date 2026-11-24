@@ -734,6 +734,22 @@ def test_relative_cwd_is_joined_against_the_root(tmp_path, monkeypatch, capsys):
     )
 
 
+def test_repeated_option_is_judged_on_every_value(tmp_path):
+    root = _root(tmp_path, "active")
+    command = f"python3 {SCRIPTS / 'h_mad_assemble_tdd.py'} --phase red --project-root . --prompt /tmp/a.txt --prompt "
+    _expect(_decide(root, _command_payload(command + "/tmp/b.txt")), "allow", because="control: both in /tmp")
+    _expect(_decide(root, _command_payload(command + "/var/hmad-x/prod.py")), "deny", "shell-not-admitted")
+
+
+@pytest.mark.parametrize("shape", ["absent", "zero"])
+def test_relative_path_under_an_unknown_command_directory_is_refused(tmp_path, shape):
+    root = _root(tmp_path, "active")
+    command = f"python3 {SCRIPTS / 'h_mad_mutation_harness.py'} --check-anchors docs/spec.json"
+    _expect(_decide(root, _command_payload(command)), "allow", because="control: no Cwd means the root")
+    _expect(_decide(root, _command_payload(command, Cwd=_bad_command_cwd(root, shape))),
+            "deny", "shell-not-admitted")
+
+
 def test_operator_allowance_admits_a_listed_command(tmp_path):
     root = _root(tmp_path, "active")
     policy = importlib.import_module("h_mad_target_identity")

@@ -1,0 +1,307 @@
+{
+ "_why": "The Phase-5 shell gate judges every occurrence of a repeated option, and judges a path from the directory the command runs in or not at all. Each mutant restores one way of judging something the command does not use.",
+ "root": "../..",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_codex_runtime.py",
+  "tests/test_h_mad_agy_tdd_gate.py",
+  "-q"
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "repeat-first-only",
+   "_mechanism": "Only the first occurrence of an option is returned.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_option_values",
+   "find": "    return values\n",
+   "replace": "    return values[:1]\n",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_every_occurrence_of_a_repeated_option[--prompt-space-space]"
+  },
+  {
+   "name": "repeat-last-only",
+   "_mechanism": "Only the last occurrence of an option is returned.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_option_values",
+   "find": "    return values\n",
+   "replace": "    return values[-1:]\n",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_every_occurrence_of_a_repeated_option[--prompt-space-space]"
+  },
+  {
+   "name": "repeat-space-form-unseen",
+   "_mechanism": "The `--option value` form is not collected.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_option_values",
+   "find": "            values.append(args[index + 1])",
+   "replace": "            pass",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_every_occurrence_of_a_repeated_option[--prompt-equals-space]"
+  },
+  {
+   "name": "repeat-equals-form-unseen",
+   "_mechanism": "The `--option=value` form is not collected.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_option_values",
+   "find": "            values.append(token.split(\"=\", 1)[1])",
+   "replace": "            pass",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_every_occurrence_of_a_repeated_option[--prompt-space-equals]"
+  },
+  {
+   "name": "temp-first-only",
+   "_mechanism": "The /tmp rule judges one value per option.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "            os.path.isabs(value) and _path_within(value, Path(\"/tmp\"))\n            for option in TEMP_OUTPUT_OPTIONS for value in _option_values(args, option)",
+   "replace": "            os.path.isabs(value) and _path_within(value, Path(\"/tmp\"))\n            for option in TEMP_OUTPUT_OPTIONS for value in _option_values(args, option)[:1]",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_every_occurrence_of_a_repeated_option[--log-space-space]"
+  },
+  {
+   "name": "registry-first-only",
+   "_mechanism": "The registry rule judges one value.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "for value in registries\n",
+   "replace": "for value in registries[:1]\n",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_every_occurrence_of_a_repeated_option[--registry-space-space]"
+  },
+  {
+   "name": "base-is-hook-process",
+   "_mechanism": "A relative path is resolved from the hook's own directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "    return base / path",
+   "replace": "    return Path.cwd() / path",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_a_relative_path_from_the_command_directory[anchor-check]"
+  },
+  {
+   "name": "base-is-root-when-outside",
+   "_mechanism": "A command outside the project is judged as if it ran at the root.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "    return base / path",
+   "replace": "    return (base if root in (base, *base.parents) else root) / path",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_a_relative_path_from_the_command_directory[anchor-check]"
+  },
+  {
+   "name": "absent-cwd-is-hook-process",
+   "_mechanism": "No command directory falls back to the hook's own directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "        return root / path",
+   "replace": "        return Path.cwd() / path",
+   "test": "tests/test_h_mad_codex_runtime.py::test_shared_policy_resolves_a_relative_path_without_a_command_directory_from_the_root"
+  },
+  {
+   "name": "empty-cwd-is-unknown",
+   "_mechanism": "An empty cwd no longer means the root.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "    if cwd is None or cwd == \"\":",
+   "replace": "    if cwd is None:",
+   "test": "tests/test_h_mad_codex_runtime.py::test_shared_policy_resolves_a_relative_path_without_a_command_directory_from_the_root"
+  },
+  {
+   "name": "malformed-workdir-is-root",
+   "_mechanism": "A workdir that is not a string is read as the project root.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "    if not isinstance(cwd, str):  # M:CP-MALFORMED\n        return None",
+   "replace": "    if not isinstance(cwd, str):  # M:CP-MALFORMED\n        return root / path",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_a_relative_path_when_the_command_directory_is_unknown[malformed]"
+  },
+  {
+   "name": "relative-cwd-admitted",
+   "_mechanism": "A relative cwd is resolved from the hook's own directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "    if not base.is_absolute() or not base.is_dir():  # M:CP-UNKNOWN",
+   "replace": "    if not base.is_dir():  # M:CP-UNKNOWN",
+   "test": "tests/test_h_mad_codex_runtime.py::test_shared_policy_resolves_a_relative_path_without_a_command_directory_from_the_root"
+  },
+  {
+   "name": "absent-directory-admitted",
+   "_mechanism": "A command directory that does not exist is trusted.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "    if not base.is_absolute() or not base.is_dir():  # M:CP-UNKNOWN",
+   "replace": "    if not base.is_absolute():  # M:CP-UNKNOWN",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_a_relative_path_when_the_command_directory_is_unknown[absent-directory]"
+  },
+  {
+   "name": "temp-relative-admitted",
+   "_mechanism": "A relative output option is judged from a directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "            os.path.isabs(value) and _path_within(value, Path(\"/tmp\"))",
+   "replace": "            _argument_within(value, Path(\"/tmp\"), root, cwd)",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_a_relative_temp_output[--prompt]"
+  },
+  {
+   "name": "state-write-unwired",
+   "_mechanism": "The state path drops the command directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "_argument_within(args[0], root / \"docs\", root, cwd)",
+   "replace": "_path_within(args[0], root / \"docs\")",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_a_relative_path_from_the_command_directory[state-write]"
+  },
+  {
+   "name": "wire-pin-plan-unwired",
+   "_mechanism": "The impl-plan path drops the command directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "        return _argument_within(args[0], root, root, cwd) and all(",
+   "replace": "        return _path_within(args[0], root) and all(",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_a_relative_path_from_the_command_directory[wire-pin-plan]"
+  },
+  {
+   "name": "wire-pin-registry-unwired",
+   "_mechanism": "The registry path drops the command directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "_argument_within(value, root / \".h-mad\", root, cwd) for value in registries",
+   "replace": "_path_within(value, root / \".h-mad\") for value in registries",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_a_relative_path_from_the_command_directory[wire-pin-registry]"
+  },
+  {
+   "name": "anchor-check-unwired",
+   "_mechanism": "The spec paths drop the command directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "all(_argument_within(spec, root, root, cwd) for spec in specs)",
+   "replace": "all(_path_within(spec, root) for spec in specs)",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_a_relative_path_from_the_command_directory[anchor-check]"
+  },
+  {
+   "name": "script-unwired",
+   "_mechanism": "The script token is resolved from the hook's own directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_argv",
+   "find": "        script = _command_path(argv[1], root or Path.cwd(), cwd)",
+   "replace": "        script = Path.cwd() / argv[1]",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_a_relative_script_from_the_command_directory"
+  },
+  {
+   "name": "temp-any-absolute",
+   "_mechanism": "An absolute output option is not held to /tmp.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "            os.path.isabs(value) and _path_within(value, Path(\"/tmp\"))",
+   "replace": "            os.path.isabs(value)",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_every_occurrence_of_a_repeated_option[--prompt-space-space]"
+  },
+  {
+   "name": "default-registry-unjudged",
+   "_mechanism": "The registry default is not judged.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "        if not registries and not _argument_within(DEFAULT_WIRE_REGISTRY, root, root, cwd):  # M:WR-DEFAULT",
+   "replace": "        if False:  # M:WR-DEFAULT",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_the_default_registry_from_the_command_directory"
+  },
+  {
+   "name": "default-registry-always-judged",
+   "_mechanism": "The default is judged even when --registry replaces it.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "        if not registries and not _argument_within(DEFAULT",
+   "replace": "        if not _argument_within(DEFAULT",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_the_default_registry_from_the_command_directory"
+  },
+  {
+   "name": "default-registry-root-only",
+   "_mechanism": "A sub-project's own registry is refused.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_hmad_script",
+   "find": "_argument_within(DEFAULT_WIRE_REGISTRY, root, root, cwd)",
+   "replace": "_argument_within(DEFAULT_WIRE_REGISTRY, root / \".h-mad\", root, cwd)",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_judges_the_default_registry_from_the_command_directory"
+  },
+  {
+   "name": "default-registry-drifts",
+   "_mechanism": "The policy names another default than the script's.",
+   "file": "scripts/h_mad_target_identity.py",
+   "find": "DEFAULT_WIRE_REGISTRY = \".h-mad/wires.jsonl\"",
+   "replace": "DEFAULT_WIRE_REGISTRY = \".h-mad/other.jsonl\"",
+   "test": "tests/test_h_mad_codex_runtime.py::test_shared_policy_names_the_registry_default_the_script_uses"
+  },
+  {
+   "name": "relative-wrapper-admitted",
+   "_mechanism": "A relative executable is resolved from the hook's directory.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_trusted_executable",
+   "find": "        if not candidate.is_absolute():  # M:TE-ABS",
+   "replace": "        if False:  # M:TE-ABS",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_a_relative_dispatch_wrapper"
+  },
+  {
+   "name": "relative-wrapper-admitted-operator",
+   "_mechanism": "The same, around an operator-declared command.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_trusted_executable",
+   "find": "        if not candidate.is_absolute():  # M:TE-ABS",
+   "replace": "        if False:  # M:TE-ABS",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_a_relative_dispatch_wrapper_around_an_operator_command"
+  },
+  {
+   "name": "interpreter-option-admitted",
+   "_mechanism": "An interpreter option is judged as the script.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_argv",
+   "find": "        if argv[1].startswith(\"-\"):  # M:PY-OPTION",
+   "replace": "        if False:  # M:PY-OPTION",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_an_interpreter_option_in_place_of_the_script"
+  },
+  {
+   "name": "unknown-script-raises",
+   "_mechanism": "A script with no known directory raises instead of being refused.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_safe_argv",
+   "find": "        if script is None:  # M:PY-UNKNOWN",
+   "replace": "        if False:  # M:PY-UNKNOWN",
+   "test": "tests/test_h_mad_codex_runtime.py::test_shared_policy_refuses_a_relative_script_when_the_command_directory_is_unknown"
+  },
+  {
+   "name": "equals-word-admitted",
+   "_mechanism": "A word zsh would expand is judged as a file name.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "    if value.startswith(\"=\"):  # M:CP-EQUALS",
+   "replace": "    if False:  # M:CP-EQUALS",
+   "test": "tests/test_h_mad_codex_runtime.py::test_codex_hook_denies_a_relative_path_zsh_would_expand"
+  },
+  {
+   "name": "agy-repeat-first-only",
+   "_mechanism": "agy: only the first occurrence is judged.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_option_values",
+   "find": "    return values\n",
+   "replace": "    return values[:1]\n",
+   "test": "tests/test_h_mad_agy_tdd_gate.py::test_repeated_option_is_judged_on_every_value"
+  },
+  {
+   "name": "agy-malformed-is-root",
+   "_mechanism": "agy: a malformed Cwd is read as the root.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "    if not isinstance(cwd, str):  # M:CP-MALFORMED\n        return None",
+   "replace": "    if not isinstance(cwd, str):  # M:CP-MALFORMED\n        return root / path",
+   "test": "tests/test_h_mad_agy_tdd_gate.py::test_relative_path_under_an_unknown_command_directory_is_refused[zero]"
+  },
+  {
+   "name": "agy-absent-admitted",
+   "_mechanism": "agy: an absent Cwd is trusted.",
+   "file": "scripts/h_mad_target_identity.py",
+   "symbol": "_command_path",
+   "find": "    if not base.is_absolute() or not base.is_dir():  # M:CP-UNKNOWN",
+   "replace": "    if not base.is_absolute():  # M:CP-UNKNOWN",
+   "test": "tests/test_h_mad_agy_tdd_gate.py::test_relative_path_under_an_unknown_command_directory_is_refused[absent]"
+  }
+ ]
+}

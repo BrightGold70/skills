@@ -21,7 +21,7 @@ MOVED_FUNCTIONS = (
     "_contained_venv_executable",
     "_cwd_escapes_root",
     "_load_judge",
-    "_option_value",
+    "_option_values",
     "_path_within",
     "_payload_cwd_base",
     "_safe_argv",

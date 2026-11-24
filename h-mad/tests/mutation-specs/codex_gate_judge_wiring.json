@@ -187,8 +187,8 @@
       "name": "CX-FORCE-SCRIPT",
       "_mechanism": "Task 2 WIRE 1 forced: canonical_directory on script.resolve inside _safe_shell_command.",
       "file": "scripts/h_mad_target_identity.py",
-      "find": "        script = script.resolve() if script.is_absolute() else (Path.cwd() / script).resolve()",
-      "replace": "        script = Path(canonical_directory(str(script.resolve() if script.is_absolute() else (Path.cwd() / script).resolve())))",
+      "find": "        script = script.resolve()\n        scripts_root",
+      "replace": "        script = Path(canonical_directory(str(script.resolve())))\n        scripts_root",
       "test": "tests/test_h_mad_codex_tdd_gate_judge.py::test_codex_safe_shell_script_keeps_path_resolve_spelling"
     },
     {
