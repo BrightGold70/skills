@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-24 · pattern · [0.5] · `h-mad,gate,design,handoff:2026-11-24-phase5-gate-plan-approved` — Before protecting a gate's input from the gated agent, list every legitimate writer, the step it writes at, and whether it is gated at that moment; design its exit with the protection
+- 2026-11-24 · pattern · [0.5] · `h-mad,gate,design,handoff:2026-11-24-phase5-gate-plan-approved` — A scoping field that defaults to fail-closed when absent must be written in the same step that arms the gate; the Phase-5 gate arms at 5a, so writing the checkout at 5c would leave siblings gated through 5b
+- 2026-11-24 · gotcha · [0.7] · `h-mad,state,worktree,handoff:2026-11-24-phase5-gate-plan-approved` — h_mad_state_write.py on a symlinked docs/.bkit-memory.json replaces the link with a copy, so two checkouts sharing state fork silently; write to the real file until phase5-gate-feature-scope AC-1.7 lands
 - 2026-11-24 · gotcha · [0.7] · `h-mad,testing,handoff:2026-11-24-phase5-option-judging` — orca/skills full suite = pytest from the repo root (9368 on 2026-11-24, ~52 min); h-mad/tests is ~690 tests short, so compare collected counts before quoting a suite result
 - 2026-11-24 · gotcha · [0.7] · `h-mad,gate,testing,handoff:2026-11-24-phase5-option-judging` — A fail-closed hook denies on any exception, and the agy fixture root 'repo Ω [*]' is refused lexically: assert the deny reason or call the policy directly, with ASCII paths, or the test is hollow
 - 2026-11-24 · gotcha · [0.5] · `h-mad,gate,review,handoff:2026-11-24-phase5-option-judging` — An old-vs-new policy diff is only as good as its oracle: check which process really uses each judged value. A printed-for-later path has no directory here, so 'no new allows' hid a regression

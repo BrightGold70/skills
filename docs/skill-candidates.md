@@ -3111,3 +3111,7 @@ Reconciled first: the census read `OPEN(yes+maybe)=5` before this entry (memory-
 
 - **policy-decision-diff** *(existing row, recurrence bumped)*: hand-built again for `74ba0661` (258,816 decisions, two interpreters). It missed one regression because its oracle assumed every relative value belongs to the command's directory; the reviewer's replay of 52,328 real codex calls was a useful second corpus. A bundled script should take recorded calls as well as generated ones — recurrence: 3
 - **commit-only-what-was-verified** *(existing row, recurrence bumped)*: the diff checksum was again compared by hand before and after the suite, and again before the commit — recurrence: 2
+
+## 2026-11-24 — phase5-gate-plan-approved
+
+Reconciled first: the census read `OPEN(yes+maybe)=5` before this entry; none was built, so all five stay open. No new candidates: the author dispatch, hash gate and report read recurred five times, but that sequence is already the h-mad teammate-authors contract.
