@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-24 · gotcha · [0.7] · `h-mad,testing,handoff:2026-11-24-phase5-option-judging` — orca/skills full suite = pytest from the repo root (9368 on 2026-11-24, ~52 min); h-mad/tests is ~690 tests short, so compare collected counts before quoting a suite result
+- 2026-11-24 · gotcha · [0.7] · `h-mad,gate,testing,handoff:2026-11-24-phase5-option-judging` — A fail-closed hook denies on any exception, and the agy fixture root 'repo Ω [*]' is refused lexically: assert the deny reason or call the policy directly, with ASCII paths, or the test is hollow
+- 2026-11-24 · gotcha · [0.5] · `h-mad,gate,review,handoff:2026-11-24-phase5-option-judging` — An old-vs-new policy diff is only as good as its oracle: check which process really uses each judged value. A printed-for-later path has no directory here, so 'no new allows' hid a regression
 - 2026-11-24 · pattern · [0.5] · `h-mad,gate,review,handoff:2026-11-24-phase5-gate-feature-scope` — Review a shell-policy change by diffing decisions: run HEAD's policy and the tree's over a large argv corpus on each interpreter and list every differing decision; a green suite cannot show an undisclosed loosening
 - 2026-11-24 · solution · [0.5] · `shared-tree,codex,provenance,handoff:2026-11-24-phase5-gate-feature-scope` — Before calling stray edits in a shared tree 'unknown author', grep -rl <new symbol> ~/.codex/sessions/<date>: the rollout names the session, cwd, and the operator messages showing what was approved
 - 2026-11-23 · gotcha · [0.5] · `h-mad,mutation,handoff:2026-11-23-codex-skill-dups-gate-scope` — Adding a line to a script that already has mutation specs can make a sibling spec's anchor match twice (PRECHECK_FAILED for all specs); run h_mad_mutation_harness.py --check-anchors after the edit

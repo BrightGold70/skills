@@ -3104,3 +3104,10 @@ Reconciled first: the census read `OPEN(yes+maybe)=3` before this entry (memory-
 Reconciled first: the census read `OPEN(yes+maybe)=4` before this entry (memory-note split, omc-plugin-cache-deps-check, codex-pane-restart-in-place, commit-only-what-was-verified). None was built, so all four stay open.
 
 - **policy-decision-diff**: a review of the shared gate policy had to hand-build a harness that runs the committed and the working-tree policy over a large argv corpus on both interpreters and prints every decision that differs; it is what showed that only the intended rule changed. A bundled script would make that check repeatable for every policy edit — remedy: deterministic-check — recurrence: 2 — candidate: maybe
+
+## 2026-11-24 — phase5-option-judging
+
+Reconciled first: the census read `OPEN(yes+maybe)=5` before this entry (memory-note split, omc-plugin-cache-deps-check, codex-pane-restart-in-place, commit-only-what-was-verified, policy-decision-diff). None was built, so all five stay open.
+
+- **policy-decision-diff** *(existing row, recurrence bumped)*: hand-built again for `74ba0661` (258,816 decisions, two interpreters). It missed one regression because its oracle assumed every relative value belongs to the command's directory; the reviewer's replay of 52,328 real codex calls was a useful second corpus. A bundled script should take recorded calls as well as generated ones — recurrence: 3
+- **commit-only-what-was-verified** *(existing row, recurrence bumped)*: the diff checksum was again compared by hand before and after the suite, and again before the commit — recurrence: 2
