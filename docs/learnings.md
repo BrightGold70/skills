@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-25 · pattern · [0.7] · `h-mad,delta-review,phase5-gate,handoff:2026-11-25-phase5-gate-design-cycle2` — When one author's revision answers findings, run a fresh-context delta review: 4 of 4 musts it found were fix-introduced and the orchestrator had missed 3 reading the same diffs
+- 2026-11-25 · gotcha · [0.7] · `rtk,review,phase5-gate,handoff:2026-11-25-phase5-gate-design-cycle2` — A long-line document diff shown through RTK-filtered grep/diff is silently shortened; read it with the Read tool or a token-level differ before calling it read
+- 2026-11-25 · gotcha · [0.7] · `gate-design,phase5-gate,handoff:2026-11-25-phase5-gate-design-cycle2` — A refusal added as 'fail closed' can break a compatibility contract: check each added refusal against the unchanged-decisions rule, not only against the gate's strictness
 - 2026-11-24 · solution · [0.5] · `h-mad,delta-review,handoff:2026-11-24-phase5-gate-design-cycle1` — Untracked phase documents cannot use h_mad_delta_stage.py (it needs a commit): diff against private copies and hand-dispatch doc-auditor
 - 2026-11-24 · pattern · [0.5] · `h-mad,audit,delta-review,handoff:2026-11-24-phase5-gate-design-cycle1` — Plan text written to fix audit findings creates many of the next round's findings; a doc-auditor delta review before the gate caught 9 then 2
 - 2026-11-24 · gotcha · [0.3] · `h-mad,audit,grok,handoff:2026-11-24-phase5-gate-design-cycle1` — h-mad grok leg can die on a provider 'retry_deadline' (no answer in 300 s): the cycle reads UNVERIFIED no_report though other legs stand

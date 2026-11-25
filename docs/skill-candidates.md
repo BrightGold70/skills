@@ -3128,3 +3128,9 @@ Reconciled first: the census was read before this entry; no tool code landed sin
 
 - **delta-stage-for-untracked-documents**: `h_mad_delta_stage.py` requires `--sha`, so the delta review of phase documents that stay untracked until 5c (a public repository) was staged by hand from diffs against private copies, twice, with report paths outside the audit grammar chosen by hand — remedy: tool-improvement — recurrence: 2 — candidate: maybe
 - **audit-cycle-single-leg-redispatch**: when one leg of a three-surface cycle dies on a provider timeout the documented re-dispatch repeats the whole cycle, the project suite (about 55 minutes) included; nothing re-runs one leg and combines it with the reports already collected — remedy: tool-improvement — recurrence: 1 — candidate: maybe
+
+## 2026-11-25 scout (phase5-gate-design-cycle2)
+
+Reconciled first: `delta-stage-for-untracked-documents` and `audit-cycle-single-leg-redispatch` are still open (no tool code landed this session).
+
+- **word-diff-for-long-line-documents**: gating author revisions meant reading diffs of documents whose lines run to thousands of characters, where `diff` and `git diff` print whole lines and RTK shortened the output twice without failing; a 15-line token-level differ was written ad hoc and used 4 times — candidate: maybe
