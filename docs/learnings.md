@@ -9,6 +9,10 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-25 · solution · [0.5] · `audit,h-mad,handoff:2026-11-25-phase5-gate-phase4-exit` — h_mad_delta_stage.py needs a commit that touched the document; for untracked docs dispatch the delta review by hand, with the report name outside the audit grammar.
+- 2026-11-25 · pattern · [0.5] · `design,h-mad,handoff:2026-11-25-phase5-gate-phase4-exit` — When a fix adds a lifecycle mechanism (deadline, kill, atexit) to close a finding, try removing the mechanism first: two reviews in a row found a must in text the previous revision had added.
+- 2026-11-25 · gotcha · [0.5] · `audit,h-mad,handoff:2026-11-25-phase5-gate-phase4-exit` — h_mad_audit_gate: a sidecar [key] counts only if the report's own finding bullet starts with the same key; otherwise use the finding's exact text.
+- 2026-11-25 · gotcha · [0.5] · `mutation,h-mad,handoff:2026-11-25-phase5-gate-phase4-exit` — A mutation probe has two arms: where the anchor text ends up. A helper with moved anchors and a caller with left anchors give opposite verdicts; run both before calling a connection covered.
 - 2026-11-25 · pattern · [0.7] · `h-mad,delta-review,phase5-gate,handoff:2026-11-25-phase5-gate-design-cycle2` — When one author's revision answers findings, run a fresh-context delta review: 4 of 4 musts it found were fix-introduced and the orchestrator had missed 3 reading the same diffs
 - 2026-11-25 · gotcha · [0.7] · `rtk,review,phase5-gate,handoff:2026-11-25-phase5-gate-design-cycle2` — A long-line document diff shown through RTK-filtered grep/diff is silently shortened; read it with the Read tool or a token-level differ before calling it read
 - 2026-11-25 · gotcha · [0.7] · `gate-design,phase5-gate,handoff:2026-11-25-phase5-gate-design-cycle2` — A refusal added as 'fail closed' can break a compatibility contract: check each added refusal against the unchanged-decisions rule, not only against the gate's strictness

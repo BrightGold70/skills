@@ -3134,3 +3134,11 @@ Reconciled first: the census was read before this entry; no tool code landed sin
 Reconciled first: `delta-stage-for-untracked-documents` and `audit-cycle-single-leg-redispatch` are still open (no tool code landed this session).
 
 - **word-diff-for-long-line-documents**: gating author revisions meant reading diffs of documents whose lines run to thousands of characters, where `diff` and `git diff` print whole lines and RTK shortened the output twice without failing; a 15-line token-level differ was written ad hoc and used 4 times — candidate: maybe
+
+## 2026-11-25 — phase5-gate-phase4-exit
+
+Reconciled first: the census read `OPEN(yes+maybe)=9` before this entry; no tool code landed this session (HEAD was still `eaf9412a`), so every open row stays open.
+
+- **delta-stage-for-untracked-documents** *(existing row, recurrence bumped)*: two more advisory delta reviews (design v1.7; then all three documents) were staged by hand because `h_mad_delta_stage.py` needs a commit — recurrence: 4
+- **word-diff-for-long-line-documents** *(existing row, recurrence bumped)*: a hand-written word-level diff script read every one of seven author revisions — recurrence: 8
+- **audit-ack-matches-nothing**: an `--ack-file` sidecar bullet that matches no finding is silent in `h_mad_audit_gate.py`, so two sidecars that used `[key]` tags acknowledged nothing until the gate's `measurement=` count was compared by hand; a line naming unmatched acknowledgements would show it — remedy: deterministic-check — recurrence: 2 — candidate: maybe
