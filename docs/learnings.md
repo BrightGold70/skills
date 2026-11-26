@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-11-26 · gotcha · [0.5] · `bkit,hooks,grep,handoff:2026-11-26-phase5-gate-public-text-rulings` — bkit G-012 refuses a Bash command whose own text holds network-fetch or eval tokens joined by pipes, even a read-only grep or a note naming them; split the pattern or delegate the scan
+- 2026-11-26 · gotcha · [0.7] · `pytest,counts,measurement,handoff:2026-11-26-phase5-gate-public-text-rulings` — Compare collected node IDs (comm over sorted --collect-only ids), not totals: 'N passed' and the collected count differ (52d88bd4: 9350 vs 9348); only the ID diff proves what a change added or removed
+- 2026-11-26 · gotcha · [0.5] · `h-mad,mutation,harness,handoff:2026-11-26-phase5-gate-public-text-rulings` — h_mad_mutation_harness --only <row> re-runs the spec's whole command (~15-20 min/row for grok_audit_surface.json) and edits files in place: run rows serially and never run the full suite in the same tree meanwhile
 - 2026-11-25 · solution · [0.5] · `audit,h-mad,handoff:2026-11-25-phase5-gate-phase4-exit` — h_mad_delta_stage.py needs a commit that touched the document; for untracked docs dispatch the delta review by hand, with the report name outside the audit grammar.
 - 2026-11-25 · pattern · [0.5] · `design,h-mad,handoff:2026-11-25-phase5-gate-phase4-exit` — When a fix adds a lifecycle mechanism (deadline, kill, atexit) to close a finding, try removing the mechanism first: two reviews in a row found a must in text the previous revision had added.
 - 2026-11-25 · gotcha · [0.5] · `audit,h-mad,handoff:2026-11-25-phase5-gate-phase4-exit` — h_mad_audit_gate: a sidecar [key] counts only if the report's own finding bullet starts with the same key; otherwise use the finding's exact text.

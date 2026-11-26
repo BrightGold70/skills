@@ -3142,3 +3142,9 @@ Reconciled first: the census read `OPEN(yes+maybe)=9` before this entry; no tool
 - **delta-stage-for-untracked-documents** *(existing row, recurrence bumped)*: two more advisory delta reviews (design v1.7; then all three documents) were staged by hand because `h_mad_delta_stage.py` needs a commit — recurrence: 4
 - **word-diff-for-long-line-documents** *(existing row, recurrence bumped)*: a hand-written word-level diff script read every one of seven author revisions — recurrence: 8
 - **audit-ack-matches-nothing**: an `--ack-file` sidecar bullet that matches no finding is silent in `h_mad_audit_gate.py`, so two sidecars that used `[key]` tags acknowledged nothing until the gate's `measurement=` count was compared by hand; a line naming unmatched acknowledgements would show it — remedy: deterministic-check — recurrence: 2 — candidate: maybe
+
+## 2026-11-26 — phase5-gate-public-text-rulings
+
+- **collected-id-diff**: proving a suite-count change needed a throwaway detached worktree at the base, `--collect-only` in both trees and a `comm` over sorted node ids; `h_mad_failure_diff.py` already owns the base-worktree machinery but diffs failures only — remedy: tool-improvement (a `collect` mode printing `COLLECTDIFF: added=N removed=M` with the ids) — recurrence: 1 — candidate: maybe
+- **orchestration-inbox-read**: read `orca orchestration check --json` twice with a hand-written `.result.messages` parser to see a peer's message — remedy: tool-improvement (an `hmad-dispatch inbox` verb that asserts the container and prints from/type/subject/body) — recurrence: 2 — candidate: maybe
+- **session-to-worktree lookup**: finding which worktree a live session runs in took the transcript's project-folder slug (`~/.claude/projects/<slug>/<session>.jsonl`); `h_mad_lane_liveness.py` already reads that transcript — remedy: tool-improvement (print the transcript's project dir beside `LIVENESS:`) — recurrence: 1 — candidate: maybe
