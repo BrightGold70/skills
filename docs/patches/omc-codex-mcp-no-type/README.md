@@ -1,83 +1,35 @@
-# omc-codex-mcp-no-type: stop OMC writing `type` into Codex MCP blocks
+# omc-codex-mcp-no-type: RETIRED 2026-11-26 (OMC 5.8.9)
 
-**Status:** applied locally on 2026-11-09 (OMC 5.8.0). Retire it once upstream fixes this; see "Retiring" below.
-**2026-11-10, OMC 5.8.3:** NOT retirable yet. #4903 (merged to `dev`, contained in the v5.8.3 tag) fixed only `src/installer/mcp-registry.ts`. The compiled `dist/installer/mcp-registry.js` in the same tag, and the npm `oh-my-claude-sisyphus@5.8.3` tarball (`gitHead 73e0d61`), still contain `lines.push(`type = ${renderTomlString(entry.type)}`)`. The auto-update to 5.8.3 dropped the patch (`verify.py`: MISSING, renderer emits 2 `type` lines). It was re-applied (`VERIFY: OK files=4`).
-**2026-11-11, OMC 5.8.4:** NOT retirable yet. The update dropped the patch again (renderer still emits 2 `type` lines); re-applied, `VERIFY: OK files=4`.
-**Upstream:** [Yeachan-Heo/oh-my-claudecode#4899](https://github.com/Yeachan-Heo/oh-my-claudecode/issues/4899)
+This local patch stopped OMC writing a `type` key into the `[mcp_servers.<name>]` blocks it
+manages in `$CODEX_HOME/config.toml`. Codex has no such key and printed
+`Codex is ignoring 2 unrecognized configuration settings` on every run. Upstream:
+[Yeachan-Heo/oh-my-claudecode#4899](https://github.com/Yeachan-Heo/oh-my-claudecode/issues/4899),
+fixed in source by #4903; the compiled build stayed unfixed through 5.8.3 and 5.8.4.
 
-## The problem
+## Why it was retired
 
-`renderCodexServerBlock()` (`src/installer/mcp-registry.ts:877` upstream) copies a registry entry's `type` into the managed `[mcp_servers.<name>]` block it writes to `$CODEX_HOME/config.toml`. Codex 0.167 has no such key. On every run it prints:
+Measured on 2026-11-26, with OMC 5.8.9 installed in the plugin cache and as the global npm
+`oh-my-claude-sisyphus@5.8.9`:
 
-```
-warning: Codex is ignoring 2 unrecognized configuration settings. Check for typos or deprecated settings.
-  user (<CODEX_HOME>/config.toml): `mcp_servers.context7.type` is ignored.
-```
+- `verify.py` reported `MISSING` on all 4 runtime files **without** `renderer still emits N type
+  lines`: the real renderer, fed entries that carry `type`, emitted none. This was the retirement
+  condition this README set.
+- `upstream.py --tag v5.8.9`: `UPSTREAM: FIXED` on the tag and npm tarball, both files each.
+- The installed `dist/installer/mcp-registry.js` and `bridge/cli.cjs` (plugin cache and npm) each
+  contain 0 `type = ${…}` emissions and still define `renderCodexServerBlock`.
+- Neither `~/.codex/config.toml` nor the Orca account home's `config.toml` carries a stale
+  `type =` line, so no hand cleanup was owed (OMC never deletes one that is already there).
 
-Measured on 2026-11-09 with config-only temp `CODEX_HOME`s. All of `type = "stdio"`, `"http"` and `"streamable-http"` are ignored. A `url` entry with no `type` still runs as HTTP, so Codex never needs the key.
+## What was removed
 
-The registry-data workaround has already been applied: `"type"` was removed from `~/.omc/mcp-registry.json`. This patch covers the code path, so a registry entry that gets a `type` back (for example from a fresh bootstrap of Claude's config) cannot bring the warning back.
+`apply.py`, `verify.py`, `upstream.py`, `targets.py` and `tests/` (with their `pytest.ini`
+testpaths entry). The SessionStart hook `docs/patches/patch-verify-on-update.sh` discovers
+patches by `*/verify.py`, so it no longer checks this one; its npm fingerprint block
+(`NPM_FILES`, `PATCH_VERIFY_NPM_ROOT`), which existed only for this patch, was removed too.
+The scripts are in git history before this commit.
 
-## What the patch does
+## If the warning comes back
 
-It replaces the one emission line in each runtime copy:
-
-```js
-lines.push(`type = ${renderTomlString(entry.type)}`);   // entry2 in bridge/cli.cjs
-```
-
-with the marker comment `/* omc-codex-mcp-no-type: codex ignores mcp_servers.*.type (OMC #4899) */`.
-
-Nothing else changes. The parse and compare side (`codexEntriesEqual`) already treats a missing Codex `type` as the inferred transport. So both codex homes stay in sync with no rewrite churn (`inspectUnifiedMcpRegistrySync().codexMismatched == []`, checked after patching).
-
-**Not covered:** OMC still never deletes a `type` line that is already in a Codex file (the second half of #4899). Existing lines must be removed by hand once.
-
-## Targets
-
-`targets.py` finds them at run time:
-
-- the active plugin install from `~/.claude/plugins/installed_plugins.json` (`oh-my-claudecode@*`): `dist/installer/mcp-registry.js` and `bridge/cli.cjs`
-- the global npm CLI `/opt/homebrew/lib/node_modules/oh-my-claude-sisyphus` (`omc`): the same two files
-
-Tests override both: `OMC_PATCH_ROOTS` replaces the whole lookup, `OMC_NPM_ROOT` replaces only the npm path (empty = none). The `test_update_*` tests use a fixture `HOME` plus `OMC_NPM_ROOT` to drive the real `installed_plugins.json` lookup through an update to a fresh, unpatched version dir; mutation row `lookup-misses-updated-install` proves they catch a lookup that stops following `installPath` (which would otherwise read `VERIFY: OK files=2` from the patched npm copy alone).
-
-`~/.claude/plugins/marketplaces/omc/src/` is the upstream git clone. It does not run and is not patched.
-
-## Re-apply after an update
-
-```bash
-python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/apply.py    # idempotent
-python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/verify.py   # expect VERIFY: OK
-```
-
-`apply.py` refuses a file whose emission line does not match exactly once (exit 2, nothing written). That means upstream changed the code: re-read it before forcing anything. The first apply leaves a `*.pre-omc-codex-mcp-no-type` backup beside each file.
-
-`verify.py` exit codes: 0 = patched everywhere, and the real renderer, fed entries that carry `type`, emits 2 server blocks and 0 `type` lines; 1 = MISSING; 2 = could not judge, which is not a pass. Before the patch it reported MISSING on all 4 files and "renderer still emits 2 type lines" (the control).
-
-The SessionStart hook `patch-verify-on-update.sh` runs `verify.py` whenever its fingerprint changes. Since 2026-11-09 that fingerprint also covers the npm package: `package.json` plus the mtime and size of the 2 patched files (`NPM_FILES` in the hook). So a `npm update -g oh-my-claude-sisyphus`, or a same-version reinstall, triggers a re-check. Measured: with the npm `cli.cjs` reverted to unpatched, the previous hook stayed silent and the new one reported `omc-codex-mcp-no-type: patch MISSING`.
-
-## Check upstream before updating
-
-```bash
-python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/upstream.py            # newest release
-python3 /Users/kimhawk/orca/skills/docs/patches/omc-codex-mcp-no-type/upstream.py --tag v5.9.0
-```
-
-It reads the compiled `dist/installer/mcp-registry.js` and `bridge/cli.cjs` from both update sources, without installing anything:
-
-- the GitHub tag, through `gh api` (needs `gh auth`); this is what the plugin cache installs;
-- the npm tarball `oh-my-claude-sisyphus@<tag without v>`, through `npm pack` into a temp dir, read in memory; this is what the global `omc` CLI installs. With no `--tag`, npm's own `latest` is checked, and a mismatch with the newest tag is printed as a `note:`.
-
-All 4 files go into one verdict, so a build fixed on one side and stale on the other reads `EMITS`.
-
-- `UPSTREAM: EMITS` (exit 1): the build still writes `type`. Updating drops the patch; re-apply after.
-- `UPSTREAM: FIXED` (exit 0): neither file has the emission and both still contain `renderCodexServerBlock`. Go to §Retiring.
-- `UPSTREAM: UNREADABLE` (exit 2): not a pass. `gh` or `npm` failed, a file is gone or empty (or absent from the tarball), the renderer moved, or a `type = ${…}` template exists that the exact pattern does not match (upstream respelled the line, so `apply.py` would refuse too). Read the files by hand.
-
-2026-11-12: `v5.8.4` and `v5.8.3` both read `EMITS` on all 4 files (tag and npm), one line in each.
-
-## Retiring
-
-When #4899 is fixed in a released OMC: update, run `verify.py`. It will report MISSING, because the marker is gone. Then grep the new renderer: if no `type =` emission is left, delete this directory and mark it RETIRED here.
-
-Grep the **installed `dist/` and `bridge/cli.cjs`**, not the upstream source or the release notes. 5.8.3 shipped a fixed `.ts` with a stale build. `verify.py`'s real-renderer check settles it: after an update, `MISSING` together with `renderer still emits N type lines` means the build is still unfixed, so re-apply.
+Run a real `codex exec … </dev/null` with stderr captured (`codex mcp list` never prints it) and
+grep the installed OMC `dist/` and `bridge/cli.cjs` for a `type = ${` emission. The registry-data
+workaround (no `"type"` in `~/.omc/mcp-registry.json`) is user data and still in place.

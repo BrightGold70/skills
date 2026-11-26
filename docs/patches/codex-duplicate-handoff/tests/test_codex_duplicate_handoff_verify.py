@@ -446,7 +446,7 @@ def test_stale_pin_and_copy_both_reported(tmp_path):
 
 def hook(home: Path, patches: Path, extra_env: dict | None = None, stdin: str = ""):
     env = {k: v for k, v in os.environ.items() if k != "CODEX_HOME"}
-    env.update(HOME=str(home), PATCH_VERIFY_DIR=str(patches), PATCH_VERIFY_NPM_ROOT=str(home / "npm"))
+    env.update(HOME=str(home), PATCH_VERIFY_DIR=str(patches))
     # The hook runs a COPY of verify.py from tmp patches/, whose repo-relative handoff/ is absent;
     # name the real one, as the installed copy's location does in production.
     env["HANDOFF_REPO_DIR"] = str(REPO_HANDOFF)
