@@ -2136,3 +2136,29 @@ print `GAP CLOSED` when upstream catches up.
   same line. 4 tests (`unwritable_out`, in `test_hmad_dispatch_exec.py` and
   `test_hmad_dispatch_exec_grok.py`): all red on upstream `1525a2f6`, green after.
   Status: `FIXED` `5942ee68`.
+
+## Surfaced by the h-mad-app-profile `/h-mad` run (2026-11-26)
+
+- 🟡 **J57 — the audit assembler's duplicate-rubric preflight keys on each rubric file's FIRST
+  LINE, so ordinary document content halts assembly.** `h_mad_assemble_audit.py:217`
+  (`needle = body.splitlines()[0]`) takes the first line of `invariants.base.md` and of the
+  project's `.h-mad/invariants.md` and requires it to occur exactly once in the assembled prompt.
+  But the prompt also inlines the plan, spec and design, so the count measures document content,
+  not how many times the rubric was inlined. Seen from both sides on one feature:
+  - **A quoted heading.** h-mad-app-profile plan v1.1, cycle 1: the plan quoted the project
+    invariants heading verbatim as evidence (`head -1 .h-mad/invariants.md` output) →
+    `ASSEMBLE: HALT plan:preflight` / `project rubric ('# H-MAD Project Invariants — Axis B
+    (BrightGold70/') appears 2x, want 1` → `AUDITCYCLE: UNVERIFIED reason=assemble_halt:p1`, before
+    any agent ran. Worked around by rewording the plan (`24a17cb5`), not by fixing the check.
+  - **A generic first line.** A rubric file that opens with front matter has `---` as its needle,
+    which matches every horizontal rule and front-matter fence in the inlined documents. Reproduced
+    by that feature's spec author in a temporary directory: `project rubric ('---') appears 41x`
+    HALT. The h-mad-app-profile spec (v1.2+, FR-2/AC-2.9) makes the assembler strip front matter,
+    which closes only this member.
+  Fails closed (HALT, never a false PASS), hence 🟡. **Class:** any rubric whose first line also
+  occurs in an inlined document — a quoted heading, a blank or generic first line, a heading that
+  a document legitimately cites. **Fix direction (hypothesis, not a spec):** count a marker the
+  assembler itself wraps around each inlined rubric (for example a per-rubric sentinel line),
+  rather than a substring of the rubric's own text, so document content cannot collide with it.
+  Re-verify `:217` before acting; the h-mad-app-profile feature edits this file.
+  Status: `MONITORING`.

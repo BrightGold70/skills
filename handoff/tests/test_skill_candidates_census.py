@@ -435,10 +435,10 @@ def test_the_non_j_rows_are_reported_but_never_parsed_as_entries() -> None:
     out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-monitoring.md")
 
     # Bumped 46 -> 48 for J50/J51 (2026-10-12), 48 -> 50 for J52/J53 (2026-10-15), 50 -> 53
-    # for J54-J56 (2026-10-18). Real entries move both numbers together; the historical gap
-    # the pin exists for stays exactly 33 (86 - 53).
-    assert "J-entries=   53" in out or "J-entries=53" in out, out
-    assert "parsed=53 row-shaped=86" in out, out
+    # for J54-J56 (2026-10-18), 53 -> 54 for J57 (2026-11-26). Real entries move both numbers
+    # together; the historical gap the pin exists for stays exactly 33 (87 - 54).
+    assert "J-entries=   54" in out or "J-entries=54" in out, out
+    assert "parsed=54 row-shaped=87" in out, out
 
 
 def test_widening_the_parser_would_be_visible_here() -> None:
@@ -448,9 +448,10 @@ def test_widening_the_parser_would_be_visible_here() -> None:
     out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-monitoring.md")
 
     # 0 -> 2 for J52/J53 (2026-10-15), 2 -> 4 for J54-J56 (2026-10-18; J56 FIXED, two
-    # MONITORING). Lower it when an open entry is closed.
+    # MONITORING), 4 -> 5 for J57 (2026-11-26, MONITORING). Lower it when an open entry is
+    # closed.
     open_line = [l for l in out.splitlines() if "J-entries" in l][0]
-    assert "OPEN(MONITORING+PLANNED)=   4" in open_line, open_line
+    assert "OPEN(MONITORING+PLANNED)=   5" in open_line, open_line
 
 
 def test_the_coverage_gap_names_what_it_is(tmp_path) -> None:
