@@ -1426,20 +1426,20 @@
       "test": "tests/test_grok_audit_surface_gate_pins.py::test_union_three_passes_all_clean_pass"
     },
     {
-      "name": "teammate-surfaces-pin",
-      "_mechanism": "Replace the documented Grok stand-in with Codex so the teammate fallback guard must fail.",
+      "name": "teammate-routes-grok",
+      "_mechanism": "2026-11-25 ruling: put a grok audit surface back in the teammate section so the no-grok-leg guard must fail.",
       "file": "SKILL.md",
-      "find": "--project-root <root> --passes 2 --surfaces agy,grok",
-      "replace": "--project-root <root> --passes 2 --surfaces agy,codex",
-      "test": "tests/test_grok_fallback_docs.py::test_teammate_section_documents_the_grok_leg"
+      "find": "the union and **gates**, beside `agy`.",
+      "replace": "the union and **gates**, beside `agy` (or `--surfaces agy,grok`).",
+      "test": "tests/test_grok_fallback_docs.py::test_teammate_section_routes_no_audit_leg_to_grok"
     },
     {
-      "name": "teammate-unmeasured-pin",
-      "_mechanism": "K2, re-anchored at S3: claim GREEN, mutation and wiring measured so the teammate evidence caveat guard must fail.",
+      "name": "teammate-fallback-scope",
+      "_mechanism": "2026-11-25 ruling: widen fallback_agent back to the audit leg so the teammate scope guard must fail.",
       "file": "SKILL.md",
-      "find": "Grok's GREEN, mutation, and wiring remain **unmeasured** (D4)",
-      "replace": "Grok's GREEN, mutation, and wiring remain **measured** (D4)",
-      "test": "tests/test_grok_fallback_docs.py::test_teammate_section_documents_the_grok_leg"
+      "find": "field selects only the Phase-5 author, and Grok is never an audit leg",
+      "replace": "field selects the Phase-5 author and the audit leg",
+      "test": "tests/test_grok_fallback_docs.py::test_teammate_section_routes_no_audit_leg_to_grok"
     },
     {
       "name": "grok-runtime-host-sentence-changed",
@@ -1458,12 +1458,20 @@
       "test": "tests/test_grok_audit_surface_docs.py::test_grok_runtime_states_the_outcome_sentence"
     },
     {
-      "name": "never-gate-surfaces-pin",
-      "_mechanism": "Replace Grok with Codex in the fallback cross-reference so its documentation guard must fail.",
+      "name": "never-gate-ruling",
+      "_mechanism": "2026-11-25 ruling: invert the no-grok sentence so the never-gate ruling guard must fail.",
       "file": "SKILL.md",
-      "find": "When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,grok`",
-      "replace": "When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,codex`",
-      "test": "tests/test_grok_fallback_docs.py::test_never_gate_section_cross_references_the_grok_leg"
+      "find": "**Grok is not an audit or review leg**",
+      "replace": "**Grok is an audit leg**",
+      "test": "tests/test_grok_fallback_docs.py::test_never_gate_section_rules_grok_out_as_a_surface"
+    },
+    {
+      "name": "never-gate-three-surface",
+      "_mechanism": "2026-11-25 ruling: restore the three-surface grok first gate so the two-surface guard must fail.",
+      "file": "SKILL.md",
+      "find": "`--passes 2 --surfaces codex,agy` (or `codex`",
+      "replace": "`--passes 3 --surfaces codex,agy,grok` (or `codex`",
+      "test": "tests/test_grok_audit_surface_docs.py::test_never_gate_section_names_the_two_surface_first_gate"
     },
     {
       "name": "grok-sandbox-default-dropped",

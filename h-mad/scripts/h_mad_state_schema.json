@@ -151,7 +151,7 @@
       ]
     },
     "fallback_agent": {
-      "description": "Who covers Phase-5 authoring when both peers are out. The field is read only when codex is out and agy is out too: each peer is out when its HMAD_CODEX_UNAVAILABLE/HMAD_AGY_UNAVAILABLE flag is non-empty, its codex_status/agy_status is unavailable|exhausted, or its CLI is not on PATH. Absent, null and 'claude' are equivalent: Claude covers, test-first. HMAD_CODEX_UNAVAILABLE does not override 'grok'; a one-off Claude escape needs --set fallback_agent=claude. Audit-leg routing to grok (audit-cycle --surfaces agy,grok) is prose-enforced by SKILL.md, and no script reads this field for it.",
+      "description": "Who covers Phase-5 authoring when both peers are out. The field is read only when codex is out and agy is out too: each peer is out when its HMAD_CODEX_UNAVAILABLE/HMAD_AGY_UNAVAILABLE flag is non-empty, its codex_status/agy_status is unavailable|exhausted, or its CLI is not on PATH. Absent, null and 'claude' are equivalent: Claude covers, test-first. HMAD_CODEX_UNAVAILABLE does not override 'grok'; a one-off Claude escape needs --set fallback_agent=claude. It never routes an audit leg: SKILL.md rules Grok out as an audit surface (prose-enforced, operator 2026-11-25), and no script reads this field for audits.",
       "enum": ["grok", "claude", null]
     },
     "implementer": {

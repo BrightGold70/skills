@@ -845,20 +845,14 @@ defect — but a same-surface run now **says so on stderr** instead of looking l
 surface's blind spot, and on one feature the second leg was hollow in 21 of 22 passes while the
 union reported as two.
 
-When Codex is unavailable and `fallback_agent=grok`, use `--surfaces agy,grok`
-for the independent audit legs (§"Teammate audit leg").
+**Grok is not an audit or review leg** (operator, 2026-11-25). No audit cycle names it as a
+surface, whatever `fallback_agent` says; `fallback_agent` selects only the Phase-5 author.
 
 **Which two surfaces — routed by whether codex can run, and by whether this is the document's
-first gate.** First gating cycle of a document, codex available: `codex` + `agy` + `grok` via
-`--passes 3` and `--surfaces codex,agy,grok` (`docs/03-analysis/grok-audit-surface.measurement.md`;
-or `codex` + `doc-auditor` full pass where agy is not dispatched — #77). If `command -v grok` fails, the first gate runs `--passes 2 --surfaces codex,agy`.
-If the grok pass is the `pN` named in `UNVERIFIED reason=…:pN` on both the first run and its one
-re-dispatch, the cycle is re-run as `--passes 2 --surfaces codex,agy`. Either way the stamp records the
-legs that actually ran. A grok must-fix goes through §"Verifying a review finding before acting on it"
-before it is acted on, and a rejected one is recorded per §"Record a rejected finding in the rejections
-ledger, never in a gated document". Codex unavailable (§"Teammate audit
-leg"): `grok` + `agy` when `fallback_agent=grok`; otherwise `doc-auditor` teammate + `agy`.
-The stand-in holds codex's leg and **gates**.
+first gate.** First gating cycle of a document, codex available: `codex` + `agy` via
+`--passes 2 --surfaces codex,agy` (or `codex` + `doc-auditor` full pass where agy is not
+dispatched — #77). The stamp records the legs that actually ran. Codex unavailable (§"Teammate
+audit leg"): `doc-auditor` teammate + `agy`. The stand-in holds codex's leg and **gates**.
 **Revision cycles** (§"Document-audit round cap"): `codex` gates and the `doc-auditor` reviews the
 DIFF (§"Delta self-review", advisory) — the delta review is the second surface, not a second full
 pass. Never two full passes of one surface, and never the teammate full pass *plus* codex on the
@@ -1612,22 +1606,10 @@ fi
 
 ## Teammate audit leg — when codex is unavailable
 
-If `codex_status` records Codex unavailable and `fallback_agent=grok`, prefer
-Grok as the independent stand-in: dispatch the audit with
-`hmad-dispatch audit-cycle --feature <feature> --phase <phase> --cycle <N> --project-root <root> --passes 2 --surfaces agy,grok`.
-Grok's GREEN, mutation, and wiring remain **unmeasured** (D4); audit precision
-measured on 27 seeds: recall 12/27 against agy's 10/27, fabrication 0/38 against
-agy's 0/23 (`SEEDSCORE: PASS`), measured with the calibration-only path-scope
-clause (AC-3.9) (`docs/03-analysis/grok-audit-surface.measurement.md`). Check its
-reported evidence against source. This audit routing is an orchestrator decision, not a script reading
-`fallback_agent` for you. A codex audit round is still owed when Codex returns.
-Switching the leg from `doc-auditor` to `grok` changes the stamped leg set: the
-exit check reports `legs_changed:` once, starts a new baseline, and needs two
-fresh agreeing cycles with the new set. When `fallback_agent` is absent, `null`,
-or `claude`, the existing teammate path below is unchanged.
-
-On that existing path, when the codex leg above cannot run, a fresh-context
-`doc-auditor` teammate takes its place in the union and **gates**. This is the
+When the codex leg cannot run, a fresh-context `doc-auditor` teammate takes its place in
+the union and **gates**, beside `agy`. This holds whatever `fallback_agent` says: that
+field selects only the Phase-5 author, and Grok is never an audit leg (operator,
+2026-11-25). A codex audit round is still owed when Codex returns. This is the
 audit-side twin of the Phase-5 authoring fallback; it keys off the same
 `codex_status` declaration:
 

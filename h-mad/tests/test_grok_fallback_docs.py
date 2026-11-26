@@ -44,14 +44,22 @@ def test_exec_section_documents_exec_grok() -> None:
     _assert_terms(section, "exec grok", "--agent grok")
 
 
-def test_teammate_section_documents_the_grok_leg() -> None:
-    section = _section(SKILL_MD, TEAMMATE_HEADING)
-    _assert_terms(section, "--surfaces agy,grok", "unmeasured")
+def test_teammate_section_routes_no_audit_leg_to_grok() -> None:
+    """Operator 2026-11-25: Grok is not an audit leg, whatever fallback_agent says."""
+    section = " ".join(_section(SKILL_MD, TEAMMATE_HEADING).split())
+    _assert_terms(
+        section,
+        "`doc-auditor` teammate takes its place",
+        "selects only the Phase-5 author",
+        "Grok is never an audit leg",
+    )
+    assert "agy,grok" not in section, "the teammate section must not route an audit to grok"
 
 
-def test_never_gate_section_cross_references_the_grok_leg() -> None:
-    section = _section(SKILL_MD, NEVER_GATE_HEADING)
-    _assert_terms(section, "--surfaces agy,grok")
+def test_never_gate_section_rules_grok_out_as_a_surface() -> None:
+    section = " ".join(_section(SKILL_MD, NEVER_GATE_HEADING).split())
+    _assert_terms(section, "**Grok is not an audit or review leg**", "`fallback_agent` selects only the Phase-5 author")
+    assert "agy,grok" not in section, "§Never gate must not name a grok audit surface"
 
 
 def test_state_schema_doc_names_fallback_agent() -> None:
