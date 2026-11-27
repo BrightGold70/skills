@@ -1,0 +1,21 @@
+{
+  "agy_events": 0,
+  "collected": "phase5-gate-feature-scope.impl-plan.audit.v1.p1.md",
+  "failed": 0,
+  "log": "/private/tmp/claude-501/-Users-kimhawk-orca-skills/ab403300-539b-44b7-8d1b-add19452f871/scratchpad/stems/audit_phase5-gate-feature-scope_impl-plan_cycle1_run20261126T222150Z-37196_p1.log",
+  "log_retained": "/Users/kimhawk/orca/workspaces/skills/phase5-gate-feature-scope/.h-mad/pass-logs/phase5-gate-feature-scope.impl-plan.audit.v1.p1.md.log",
+  "log_sha256": "0669c9b9f787fe8ccd5bb0aecd3a4c35b7fca33a72c85c890c4667a606473ae7",
+  "ok": 0,
+  "pass": 1,
+  "readable": true,
+  "shape": "codex-text",
+  "status": null,
+  "targets": {
+    "code": 28,
+    "other": 12,
+    "paths": 40,
+    "unmeasured": 6
+  },
+  "thinking": 0,
+  "tools": 0
+}

@@ -1,0 +1,21 @@
+{
+  "agy_events": 1164,
+  "collected": "phase5-gate-feature-scope.plan.audit.v1.p2.md",
+  "failed": 3,
+  "log": "/tmp/audit_phase5-gate-feature-scope_plan_cycle1_run20261124T042903Z-7719_p2.log",
+  "log_retained": "/Users/kimhawk/orca/skills/.h-mad/pass-logs/phase5-gate-feature-scope.plan.audit.v1.p2.md.log",
+  "log_sha256": "5c4fe9a9c3df40766d9def68bcfeb66001c14a3ed0b92a75e2ca34d669442521",
+  "ok": 162,
+  "pass": 2,
+  "readable": true,
+  "shape": "parsed",
+  "status": "SUCCESS",
+  "targets": {
+    "code": 83,
+    "other": 11,
+    "paths": 94,
+    "unmeasured": 0
+  },
+  "thinking": 43081,
+  "tools": 165
+}
