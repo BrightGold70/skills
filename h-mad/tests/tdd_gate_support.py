@@ -63,6 +63,34 @@ def decision(result: subprocess.CompletedProcess, form: Optional[str]) -> Outcom
     return Outcome("invalid", "", result.stdout + result.stderr, result.returncode)
 
 
+def host_decision(host: str, result: subprocess.CompletedProcess) -> Outcome:
+    """Decode the host's PreToolUse response, retaining the refusal reason."""
+    if host == "claude":
+        return decision(result, "a" if result.returncode == 2 else "b")
+    if host == "codex":
+        outcome = decision(result, "b")
+        if outcome.decision != "deny":
+            return outcome
+        kinds = re.findall(r"kind=([a-z0-9-]+)", outcome.reason)
+        return Outcome("deny", kinds[-1] if kinds else "", outcome.reason, outcome.rc)
+    if host != "agy":
+        raise ValueError(f"unknown hook host {host!r}")
+    if result.returncode == 0:
+        try:
+            data = json.loads(result.stdout)
+        except ValueError:
+            pass
+        else:
+            if isinstance(data, dict) and data.get("decision") == "allow":
+                return Outcome("allow", "", "", result.returncode)
+            if isinstance(data, dict) and data.get("decision") == "deny":
+                reason = data.get("reason")
+                if isinstance(reason, str) and reason:
+                    kinds = re.findall(r"kind=([a-z0-9-]+)", reason)
+                    return Outcome("deny", kinds[-1] if kinds else "", reason, result.returncode)
+    return Outcome("invalid", "", result.stdout + result.stderr, result.returncode)
+
+
 @dataclass(frozen=True)
 class DD7Cell:
     shape: str

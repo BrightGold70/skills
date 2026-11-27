@@ -1,0 +1,144 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_phase5_scope_differential.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "oracle-keeps-excluded-copy",
+      "_mechanism": "Keep the excluded store",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "(\"D1\" in changes and _excluded(authority, folder))",
+      "replace": "False",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_oracle_typed_verdicts[excluded-alone]",
+      "symbol": "apply_scope_changes"
+    },
+    {
+      "name": "oracle-drops-every-file",
+      "_mechanism": "Remove every store when D1 is active",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "if discard and (shape != \"not-object\" or legacy_raise_lifted):",
+      "replace": "if \"D1\" in changes or (discard and (shape != \"not-object\" or legacy_raise_lifted)):",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_oracle_typed_verdicts[excluded-beside-live-root]",
+      "symbol": "apply_scope_changes"
+    },
+    {
+      "name": "oracle-loses-nested-keep-rule",
+      "_mechanism": "Apply outer filters inside the target checkout",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "scope = _checkout((root / _scope_target(case.spec.call, case.spec.surface)).parent)",
+      "replace": "scope = root",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_oracle_typed_verdicts[nested-target-inside]",
+      "symbol": "apply_scope_changes"
+    },
+    {
+      "name": "oracle-skips-canonical-spelling",
+      "_mechanism": "Skip canonical presence normalization",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "_canonicalize_store(folder)",
+      "replace": "pass",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_oracle_typed_verdicts[presence-docs-symlink]",
+      "symbol": "apply_scope_changes"
+    },
+    {
+      "name": "oracle-keeps-variables",
+      "_mechanism": "Keep inherited Git variables in the twin",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "if key not in VARIABLES",
+      "replace": "",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_oracle_typed_verdicts[variable-beside-live-root]",
+      "symbol": "build_twin"
+    },
+    {
+      "name": "harness-wrapper-unchecked",
+      "_mechanism": "Skip the wrapper identity check",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "if selected != str(wrapper) or wrapper.resolve() != wrapper:",
+      "replace": "if False:",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_baseline_extraction_resolves_own_wrapper[old]",
+      "symbol": "_run_hook"
+    },
+    {
+      "name": "oracle-imports-a-tree",
+      "_mechanism": "Introduce an import of a gate module that loads cleanly, so only the oracle-import guard can catch it",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "import argparse",
+      "replace": "import argparse\ntry:\n    import h_mad_target_identity\nexcept ImportError:\n    h_mad_target_identity = None",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_oracle_imports_no_tree_module",
+      "symbol": "<module>"
+    },
+    {
+      "name": "agy-allow-read-by-claude-form",
+      "_mechanism": "Decode an agy allow with the silent-allow rule",
+      "file": "tests/tdd_gate_support.py",
+      "find": "return Outcome(\"allow\", \"\", \"\", result.returncode)",
+      "replace": "return decision(result, \"b\")",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_host_decoder_controls[agy-allow]",
+      "symbol": "host_decision"
+    },
+    {
+      "name": "interpreters-first-by-version",
+      "_mechanism": "Collapse distinct executables by version",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "if identity in identities:",
+      "replace": "if identity in identities or ('py%d.%d' % tuple(version)) in resolved:",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_interpreter_resolution[same-version-two-executables]",
+      "symbol": "resolve_interpreters"
+    },
+    {
+      "name": "codex-kindless-deny-invalid",
+      "_mechanism": "Reject kindless Codex refusals",
+      "file": "tests/tdd_gate_support.py",
+      "find": "return Outcome(\"deny\", kinds[-1] if kinds else \"\", outcome.reason, outcome.rc)",
+      "replace": "return Outcome(\"deny\" if kinds else \"invalid\", kinds[-1] if kinds else \"\", outcome.reason, outcome.rc)",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_host_decoder_controls[codex-deny]",
+      "symbol": "host_decision"
+    },
+    {
+      "name": "builder-call-allowance-unchecked",
+      "_mechanism": "Skip the direct lstat check after writing the shell allowance file",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "allowance.write_text(SHELL_COMMANDS[operation] + \"\\n\", encoding=\"utf-8\")\n            assert stat.S_ISREG(os.lstat(allowance).st_mode)",
+      "replace": "allowance.write_text(SHELL_COMMANDS[operation] + \"\\n\", encoding=\"utf-8\")",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_builder_checks_each_kind",
+      "symbol": "_build_call"
+    },
+    {
+      "name": "cli-fail-exits-nonzero",
+      "_mechanism": "Return exit code 1 instead of 0 after printing DIFFERENTIAL: FAIL",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "print(f\"DIFFERENTIAL: FAIL case={failed}\")\n                        return 0",
+      "replace": "print(f\"DIFFERENTIAL: FAIL case={failed}\")\n                        return 1",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_supported_interpreters_are_the_parametrised_set",
+      "symbol": "main"
+    },
+    {
+      "name": "oracle-adopts-unverified-baseline",
+      "_mechanism": "Adopt an ancestor baseline directory by path presence without verifying 7a3cca48 identity",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "if _is_baseline_extraction(candidate):",
+      "replace": "if (candidate / \"h-mad/bin/hmad-dispatch\").is_file():",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_oracle_imports_no_tree_module",
+      "symbol": "_oracle_baseline"
+    },
+    {
+      "name": "pytest-preconditions-skipped",
+      "_mechanism": "Skip decoder calibration and admission control on the unforced pytest corpus path",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/differential.py",
+      "find": "if not force and cache_key in _PRECONDITIONS_VERIFIED:",
+      "replace": "if not force:",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_supported_interpreters_are_the_parametrised_set",
+      "symbol": "ensure_preconditions"
+    }
+  ]
+}
