@@ -50,10 +50,31 @@ class Case(NamedTuple):
     labels: frozenset[str]
 
 
-class Verdict(NamedTuple):
+class _Verdict(NamedTuple):
     decision: str
     kind: str
     git_processes: int
+
+
+class Verdict(_Verdict):
+    """Keep process diagnostics outside the tuple used for verdict comparisons."""
+
+    reason = ""
+    stdout = ""
+    stderr = ""
+
+    def __new__(cls, decision: str, kind: str, git_processes: int, *,
+                reason: str = "", stdout: str = "", stderr: str = "") -> Verdict:
+        verdict = super().__new__(cls, decision, kind, git_processes)
+        verdict.reason = reason
+        verdict.stdout = stdout
+        verdict.stderr = stderr
+        return verdict
+
+    def __repr__(self) -> str:
+        return (f"Verdict(decision={self.decision!r}, kind={self.kind!r}, "
+                f"git_processes={self.git_processes}, reason={self.reason!r}, "
+                f"stdout={self.stdout!r}, stderr={self.stderr!r})")
 
 
 STATE_PATH = Path("docs/.bkit-memory.json")
@@ -700,7 +721,7 @@ def _shim_templates() -> tuple[Path, Path]:
             base = Path(_SHIM_DIR.name)
             git_shim = base / "git"
             bad_shim = base / "malformed"
-            if git_shim.is_file() and bad_shim.is_file():
+            if base.parent == Path(tempfile.gettempdir()) and git_shim.is_file() and bad_shim.is_file():
                 return git_shim, bad_shim
         _SHIM_DIR = tempfile.TemporaryDirectory(prefix="phase5-diff-shim-")
         base = Path(_SHIM_DIR.name)
@@ -747,9 +768,7 @@ def _run_hook(tree: Path, case: Case, interpreter: str, *, malformed: bool) -> V
     wrapper = package / "bin/hmad-dispatch"
     env = _hook_environment(root, case.spec.env)
     path = env.get("PATH", os.defpath)
-    git = shutil.which("git", path=path)
-    if git is None:
-        raise FileNotFoundError("git is required for the differential probe")
+    git = _TEST_SUPPORT.hook_git(path)
     git_shim, bad_shim = _shim_templates()
 
     with tempfile.TemporaryDirectory(prefix="run-", dir=root.parent) as directory:
@@ -763,7 +782,7 @@ def _run_hook(tree: Path, case: Case, interpreter: str, *, malformed: bool) -> V
             raise ValueError(f"hmad-dispatch did not resolve to the selected tree's wrapper: {selected!r}")
         git_log = scratch / "git.log"
         env["_DIFF_PROBE_GIT_LOG"] = str(git_log)
-        env["_DIFF_PROBE_GIT_EXEC"] = os.path.abspath(git)
+        env["_DIFF_PROBE_GIT_EXEC"] = git
         (scratch / "git").symlink_to(git_shim)
         (scratch / "python3").symlink_to(Path(interpreter).absolute())
 
@@ -793,7 +812,8 @@ def _run_hook(tree: Path, case: Case, interpreter: str, *, malformed: bool) -> V
         )
         outcome = _TEST_SUPPORT.host_decision(host, result)
         git_processes = git_log.read_bytes().count(b"\n") if git_log.exists() else 0
-    return Verdict(outcome.decision, outcome.kind, git_processes)
+    return Verdict(outcome.decision, outcome.kind, git_processes,
+                   reason=outcome.reason, stdout=result.stdout, stderr=result.stderr)
 
 
 def _hook_payload(host: str, call: dict, root: Path) -> dict:
@@ -861,10 +881,11 @@ def calibrate_decoders(tree: Path, where: Path, interpreter: str) -> None:
         state.write_text("{", encoding="utf-8")
         deny = run_hook(tree, case, interpreter)
         malformed = _run_hook(tree, case, interpreter, malformed=True)
-        actual = [(verdict.decision, verdict.kind) for verdict in (allow, deny, malformed)]
+        verdicts = (allow, deny, malformed)
+        actual = [(verdict.decision, verdict.kind) for verdict in verdicts]
         expected = [("allow", ""), ("deny", deny_kinds[host]), ("invalid", "")]
         if actual != expected:
-            raise ValueError(f"{host} decoder controls expected {expected!r}, observed {actual!r}")
+            raise ValueError(f"{host} decoder controls expected {expected!r}, observed {verdicts!r}")
 
 
 def check_admission_control(baseline: Path, new_tree: Path, where: Path, interpreter: str) -> None:
@@ -1097,7 +1118,8 @@ def expected_verdict(spec: CaseSpec, interpreter: str, changes: frozenset[str], 
             verdict = run_hook(tree, twin, interpreter)
             if "D6" in changes and spec.branch == "arming" and _twin_holds_governing_state(twin, changes):
                 host = spec.surface.split("-", 1)[0]
-                return Verdict("deny", "" if host == "codex" else "arming-input", verdict.git_processes)
+                return Verdict("deny", "" if host == "codex" else "arming-input", verdict.git_processes,
+                               reason=verdict.reason, stdout=verdict.stdout, stderr=verdict.stderr)
             return verdict
         finally:
             _restore_docs(where / "twin")
@@ -1114,6 +1136,7 @@ def _compare_cell(scratch: Path, executable: str, spec: CaseSpec) -> str | None:
         finally:
             _restore_docs(cell / "actual")
         if required.decision not in {"allow", "deny"} or actual[:2] != required[:2]:
+            print(f"{spec.name} on {executable}: expected {required!r}, observed {actual!r}", file=sys.stderr)
             return spec.name
     return None
 

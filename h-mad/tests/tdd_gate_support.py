@@ -128,6 +128,22 @@ def hermetic_env(**extra: str) -> dict[str, str]:
     return env
 
 
+def hook_git(path: str) -> str:
+    """Select real Git before the hook starts its timed root lookup."""
+    command = shutil.which("git", path=path)
+    if command is None:
+        raise FileNotFoundError("git is required for the differential probe")
+    if sys.platform == "darwin" and os.path.realpath(command) == "/usr/bin/git":
+        # Apple's launcher can spend the entire lookup budget building xcrun_db.
+        # Resolve the active toolchain here. Explicit Git recorders still run.
+        command = subprocess.check_output(
+            ["/usr/bin/xcrun", "--find", "git"], text=True, timeout=10,
+        ).strip()
+        if not command:
+            raise FileNotFoundError("xcrun did not return a git executable")
+    return os.path.abspath(command)
+
+
 def write_state(directory: Path, records: dict) -> Path:
     path = directory / "docs" / ".bkit-memory.json"
     path.parent.mkdir(parents=True, exist_ok=True)

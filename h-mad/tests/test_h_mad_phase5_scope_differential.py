@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import errno
+import hashlib
 import importlib
 import importlib.machinery
 import itertools
@@ -14,6 +15,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import venv
 from unittest import mock
 
@@ -59,6 +61,8 @@ def scratch_environment(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
     for variable in (*VARIABLES, "CODEX_PROJECT_DIR", "CLAUDE_PROJECT_DIR"):
         monkeypatch.delenv(variable, raising=False)
@@ -90,11 +94,14 @@ def test_supported_interpreters_are_the_parametrised_set(tmp_path, request, monk
     seen = set()
     admission_seen = set()
     seen_before_first = []
+    hook_verdicts = []
+    decoder_verdicts = []
     decoder_file = Path(support.__file__).resolve()
     real_run_hook = module.run_hook
 
     def record_run_hook(tree, case, python):
         verdict = real_run_hook(tree, case, python)
+        hook_verdicts.append((case.spec.name, tree, case.spec.call, verdict))
         if case.spec.name == "admission-control":
             side = "new" if Path(tree).resolve() == ROOT.resolve() else "old"
             cmd = (
@@ -110,7 +117,14 @@ def test_supported_interpreters_are_the_parametrised_set(tmp_path, request, monk
     def record_decoder(frame, event, outcome):
         if (event == "return" and frame.f_code.co_name == "host_decision" and outcome is not None
                 and Path(frame.f_code.co_filename).resolve() == decoder_file):
-            seen.add((frame.f_locals["host"], outcome.decision))
+            host = frame.f_locals["host"]
+            result = frame.f_locals["result"]
+            seen.add((host, outcome.decision))
+            decoder_verdicts.append((host, outcome, result.stdout, result.stderr))
+
+    def verdict_details(hook_count=None, decoder_count=None):
+        return (f"hook verdicts={hook_verdicts[:hook_count]!r}\n"
+                f"decoder outcomes with stdout and stderr={decoder_verdicts[:decoder_count]!r}")
 
     calibrated = set(itertools.product(("claude", "codex", "agy"), ("allow", "deny", "invalid")))
     expected_admission = set(itertools.product(
@@ -121,8 +135,10 @@ def test_supported_interpreters_are_the_parametrised_set(tmp_path, request, monk
     compared = []
 
     def after_decoder_controls(*args, **kwargs):
-        assert calibrated <= seen, f"missing baseline decoder controls before first twin: {calibrated - seen}"
-        seen_before_first.append((set(seen), set(admission_seen)))
+        assert calibrated <= seen, (
+            f"missing baseline decoder controls before first twin: {calibrated - seen}\n{verdict_details()}"
+        )
+        seen_before_first.append((set(seen), set(admission_seen), len(hook_verdicts), len(decoder_verdicts)))
         compared.append(True)
         return expected(*args, **kwargs)
 
@@ -131,22 +147,30 @@ def test_supported_interpreters_are_the_parametrised_set(tmp_path, request, monk
     old_profile = sys.getprofile()
     try:
         sys.setprofile(record_decoder)
-        assert module.main() == 0
+        assert module.main() == 0, f"{capsys.readouterr()!r}\n{verdict_details()}"
     finally:
         sys.setprofile(old_profile)
-    assert calibrated <= seen, f"missing baseline decoder controls: {calibrated - seen}"
-    assert compared, "the CLI must compare the selected corpus row"
-    assert re.fullmatch(r"DIFFERENTIAL: PASS cases=[1-9][0-9]*\n", capsys.readouterr().out)
+    assert calibrated <= seen, f"missing baseline decoder controls: {calibrated - seen}\n{verdict_details()}"
+    assert compared, f"the CLI must compare the selected corpus row\n{verdict_details()}"
+    result = capsys.readouterr()
+    assert re.fullmatch(r"DIFFERENTIAL: PASS cases=[1-9][0-9]*\n", result.out), (
+        f"{result!r}\n{verdict_details()}"
+    )
 
     def wrong_twin(spec, interpreter, changes, scratch, legacy_raise_lifted=False):
         return expected(spec, interpreter, changes ^ {"D1"}, scratch, legacy_raise_lifted)
 
     monkeypatch.setattr(module, "expected_verdict", wrong_twin)
-    assert module.main() == 0, "DIFFERENTIAL: FAIL is a normal verdict token and must exit 0"
-    assert capsys.readouterr().out == f"DIFFERENTIAL: FAIL case={row.name}\n"
+    assert module.main() == 0, (
+        f"DIFFERENTIAL: FAIL is a normal verdict token and must exit 0: {capsys.readouterr()!r}\n"
+        f"{verdict_details()}"
+    )
+    result = capsys.readouterr()
+    assert result.out == f"DIFFERENTIAL: FAIL case={row.name}\n", f"{result!r}\n{verdict_details()}"
 
     assert expected_admission <= seen_before_first[0][1], (
-        f"missing admission controls in main() before first twin: {expected_admission - seen_before_first[0][1]}"
+        f"missing admission controls in main() before first twin: {expected_admission - seen_before_first[0][1]}\n"
+        f"{verdict_details(*seen_before_first[0][2:])}"
     )
 
     assert hasattr(module, "ensure_preconditions"), (
@@ -156,6 +180,8 @@ def test_supported_interpreters_are_the_parametrised_set(tmp_path, request, monk
     admission_seen.clear()
     seen_before_first.clear()
     compared.clear()
+    hook_verdicts.clear()
+    decoder_verdicts.clear()
     monkeypatch.setattr(module, "_PRECONDITIONS_VERIFIED", set())
     monkeypatch.setattr(module, "expected_verdict", after_decoder_controls)
     monkeypatch.setattr(sys.modules[__name__], "_assert_surface_coverage", lambda rows, surface: None)
@@ -165,17 +191,18 @@ def test_supported_interpreters_are_the_parametrised_set(tmp_path, request, monk
         test_crossed_corpus(tmp_path / "pytest-precond", request, monkeypatch, "py3.11", "codex-shell")
     finally:
         sys.setprofile(old_profile)
-    assert compared, "test_crossed_corpus must compare the selected corpus row"
+    assert compared, f"test_crossed_corpus must compare the selected corpus row\n{verdict_details()}"
     assert calibrated <= seen_before_first[0][0], (
-        f"test_crossed_corpus missing decoder controls before first twin: {calibrated - seen_before_first[0][0]}"
+        f"test_crossed_corpus missing decoder controls before first twin: {calibrated - seen_before_first[0][0]}\n"
+        f"{verdict_details(*seen_before_first[0][2:])}"
     )
     assert expected_admission <= seen_before_first[0][1], (
         f"test_crossed_corpus missing admission controls before first twin: "
-        f"{expected_admission - seen_before_first[0][1]}"
+        f"{expected_admission - seen_before_first[0][1]}\n{verdict_details(*seen_before_first[0][2:])}"
     )
     admission_seen.clear()
     module.ensure_preconditions(sys.executable)
-    assert not admission_seen, "ensure_preconditions must cache verified interpreters"
+    assert not admission_seen, f"ensure_preconditions must cache verified interpreters\n{verdict_details()}"
 
 
 @pytest.mark.parametrize("shape", ("alias-collapses", "same-version-two-executables",
@@ -253,7 +280,8 @@ def test_baseline_extraction_resolves_own_wrapper(side, tmp_path, monkeypatch):
     case = shell_case(module, live_root(tmp_path), "codex", "pwd")
     wrapper = tree / "h-mad/bin/hmad-dispatch"
     assert os.access(wrapper, os.X_OK)
-    assert module.run_hook(tree, case, sys.executable).decision == "allow"
+    verdict = module.run_hook(tree, case, sys.executable)
+    assert verdict.decision == "allow", f"{side} wrapper control: {verdict!r}"
     # Make PATH offer a runnable foreign wrapper after the scratch tree's own bin.
     foreign = tmp_path / "foreign-bin"
     foreign.mkdir()
@@ -278,12 +306,18 @@ def test_admission_control(ident, host, tmp_path):
         for spelling in (command, "hmad-dispatch run --timeout 60 -- " + command):
             case = shell_case(module, root, host, spelling)
             for tree in (baseline, ROOT):
-                verdict = module.run_hook(tree, case, python)
+                # Neither side gets a developer-tool cache warmed by fixture setup.
+                env = {"TMPDIR": tempfile.mkdtemp(dir=tmp_path)}
+                cold_case = case._replace(spec=case.spec._replace(env=env))
+                verdict = module.run_hook(tree, cold_case, python)
+                context = f"{ident} {host} {tree}: {spelling!r}, declared={declared}"
                 assert verdict.decision == ("allow" if declared else "deny"), (
-                    f"{ident} {host} {tree}: {spelling!r}, declared={declared}: {verdict}"
+                    f"{context}: {verdict!r}"
                 )
                 if not declared:
-                    assert verdict.kind == ("" if host == "codex" else "shell-not-admitted")
+                    assert verdict.kind == ("" if host == "codex" else "shell-not-admitted"), (
+                        f"{context}: {verdict!r}"
+                    )
 
 
 def test_oracle_imports_no_tree_module(tmp_path, monkeypatch):
@@ -331,7 +365,7 @@ def test_oracle_imports_no_tree_module(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "run_hook", old_side_only)
     result = module.expected_verdict(row, sys.executable, frozenset(), tmp_path / "oracle", False)
     assert calls and set(calls) == {row.surface}, "old hook must supply the oracle answer"
-    assert result.decision == "deny", "excluded live copy still gates the baseline shell"
+    assert result.decision == "deny", f"excluded live copy still gates the baseline shell: {result!r}"
 
     # A sibling directory named 'baseline' extracted from another commit or holding
     # altered bytes must never be adopted by _oracle_baseline.
@@ -343,7 +377,7 @@ def test_oracle_imports_no_tree_module(tmp_path, monkeypatch):
     assert trees and head_decoy.resolve() not in trees, (
         "oracle adopted a sibling baseline directory extracted from HEAD instead of 7a3cca48"
     )
-    assert head_verdict.decision == "deny"
+    assert head_verdict.decision == "deny", f"HEAD decoy control: {head_verdict!r}"
 
     tampered = module.extract_old_tree(tmp_path / "tampered-case/baseline", BASE)
     (tampered / "h-mad/hooks/h-mad-codex-tdd-gate.py").write_bytes(
@@ -356,7 +390,7 @@ def test_oracle_imports_no_tree_module(tmp_path, monkeypatch):
     assert trees and tampered.resolve() not in trees, (
         "oracle adopted a tampered baseline directory without verifying 7a3cca48 content"
     )
-    assert tampered_verdict.decision == "deny"
+    assert tampered_verdict.decision == "deny", f"tampered baseline control: {tampered_verdict!r}"
 
     genuine = module.extract_old_tree(tmp_path / "genuine-case/baseline", BASE)
     trees.clear()
@@ -364,7 +398,7 @@ def test_oracle_imports_no_tree_module(tmp_path, monkeypatch):
         row, sys.executable, frozenset(), tmp_path / "genuine-case/oracle", False,
     )
     assert trees == [genuine.resolve()], "oracle must adopt a verified 7a3cca48 baseline extraction"
-    assert genuine_verdict.decision == "deny"
+    assert genuine_verdict.decision == "deny", f"verified baseline control: {genuine_verdict!r}"
 
 
 # Host decoder controls
@@ -423,6 +457,7 @@ def _decoder_control(package, tmp_path, host, control, env, hostile):
     shell = {"tool_name": "exec_command", "tool_input": {"cmd": "pwd", "workdir": str(root)}}
     shim_dir = tmp_path / "bin"
     shim_dir.mkdir()
+    (shim_dir / "git").symlink_to(support.hook_git(env["PATH"]))
     (shim_dir / "python3").symlink_to(sys.executable)
     hook = package / "hooks" / f"h-mad-{host}-tdd-gate.py"
     cwd = root
@@ -505,17 +540,18 @@ def test_host_decoder_controls(tmp_path, host, answer):
 
     for control, kind, reason_fragment, result in raw_controls:
         outcome = support.host_decision(host, result)
+        details = (f"{host} {control}: {outcome!r}, "
+                   f"stdout={result.stdout!r}, stderr={result.stderr!r}")
         assert (outcome.decision, outcome.kind) == (expected_decision, kind), (
-            f"{host} {control} decoder: expected {(expected_decision, kind)!r}, "
-            f"got {outcome!r} for stdout={result.stdout!r}, stderr={result.stderr!r}"
+            f"decoder expected {(expected_decision, kind)!r}, got {details}"
         )
         if reason_fragment:
-            assert reason_fragment in outcome.reason, f"{host} {control} reason: {outcome.reason!r}"
+            assert reason_fragment in outcome.reason, details
         if host == "codex" and control == "judge-error":
-            assert "kind=operand" in outcome.reason
-            assert outcome.reason.endswith("kind=judge-error")
+            assert "kind=operand" in outcome.reason, details
+            assert outcome.reason.endswith("kind=judge-error"), details
         if host == "codex" and control == "kindless":
-            assert "kind=" not in outcome.reason
+            assert "kind=" not in outcome.reason, details
 
 
 # Typed oracle controls
@@ -586,13 +622,14 @@ def test_oracle_typed_verdicts(name, tmp_path):
         assert not neighbour.labels, f"{neighbour_spec.name} must sit outside D1 through D7"
         old_tree = module.extract_old_tree(tmp_path / "baseline")
         changed = False
+        comparisons = {}
 
     for python_id, executable in available.items():
         scratch = tmp_path / python_id
         scratch.mkdir()
         verdict = module.expected_verdict(spec, executable, ALL_CLASSES, scratch)
         assert (verdict.decision, verdict.kind) == (decision, kind), (
-            f"{name} on {python_id} requires {(decision, kind)}, got {verdict}"
+            f"{name} on {python_id} requires {(decision, kind)}, got {verdict!r}"
         )
         if name == "nested-target-inside":
             for variant in ("nested-in-excluded-tree", "nested-below-fixtures"):
@@ -604,11 +641,12 @@ def test_oracle_typed_verdicts(name, tmp_path):
                     variant_scratch,
                 )
                 assert (nested.decision, nested.kind) == (variant_decision, variant_kind), (
-                    f"{variant} on {python_id} must retain the nested root after outer filtering"
+                    f"{variant} on {python_id} must retain the nested root after outer filtering: {nested!r}"
                 )
         if isolated:
             baseline = module.run_hook(old_tree, original, executable)
-            assert baseline.decision in {"allow", "deny"}, f"{name} baseline is malformed"
+            assert baseline.decision in {"allow", "deny"}, f"{name} baseline is malformed: {baseline!r}"
+            comparisons[python_id] = (baseline, verdict)
             changed |= baseline.decision != verdict.decision
             neighbour_scratch = scratch / "neighbour-oracle"
             neighbour_scratch.mkdir()
@@ -618,10 +656,13 @@ def test_oracle_typed_verdicts(name, tmp_path):
             before = module.run_hook(old_tree, neighbour, executable)
             assert (before.decision, before.kind) == (unchanged.decision, unchanged.kind) == (
                 "deny", "",
-            ), f"{neighbour_spec.name} on {python_id} must retain its kindless refusal"
+            ), (f"{neighbour_spec.name} on {python_id} must retain its kindless refusal: "
+                f"baseline={before!r}, twin={unchanged!r}")
 
     if isolated:
-        assert changed, f"{name} must change the baseline decision on a supported interpreter"
+        assert changed, (
+            f"{name} must change the baseline decision on a supported interpreter: {comparisons!r}"
+        )
 
 
 # Corpus coverage and comparison
@@ -671,7 +712,7 @@ def _assert_surface_coverage(rows, surface):
 
 
 def _git_call_recorder(scratch, monkeypatch):
-    git = shutil.which("git")
+    git = support.hook_git(os.environ["PATH"])
     assert git, "differential fixtures require git"
     log = scratch / "git-calls.jsonl"
     git_shim = scratch / "git"
@@ -1118,7 +1159,7 @@ def test_crossed_corpus(tmp_path, request, monkeypatch, interpreter_id, surface)
                 required = module.expected_verdict(
                     spec, python, ALL_CLASSES, scratch / "mention-required", lifted,
                 )
-                assert required.decision == "deny", f"{spec.name}: FR-5 mention must be refused"
+                assert required.decision == "deny", f"{spec.name}: FR-5 mention must be refused: {required!r}"
             if inaccessible:
                 directories = _inaccessible_docs(scratch)
                 assert directories, f"{spec.name}: missing inaccessible-docs fixture"
@@ -1149,7 +1190,8 @@ def test_crossed_corpus(tmp_path, request, monkeypatch, interpreter_id, surface)
                     spec, python, changes ^ {"D1"}, scratch / "wrong-twin", lifted,
                 )
                 assert wrong.decision in {"allow", "deny"} and wrong.decision != actual.decision, (
-                    f"{spec.name}: detector requires a well-formed opposite decision"
+                    f"{spec.name}: detector requires a well-formed opposite decision: "
+                    f"wrong twin={wrong!r}, current={actual!r}"
                 )
                 with pytest.raises(AssertionError, match=re.escape(spec.name)):
                     _assert_case_verdict(spec, wrong, actual)
@@ -1157,3 +1199,531 @@ def test_crossed_corpus(tmp_path, request, monkeypatch, interpreter_id, surface)
             if inaccessible:
                 for docs in _inaccessible_docs(scratch):
                     docs.chmod(0o755)
+
+
+# Measurement probe CLIs
+
+
+def _probe_cli(tmp_path, name, *args):
+    path = PROBE.with_name(name + ".py")
+    return subprocess.run(
+        [sys.executable, "-I", "-B", str(path), *map(str, args)], cwd=tmp_path,
+        env=_decoder_environment(tmp_path), capture_output=True, text=True, timeout=180,
+    )
+
+
+def _reading(tmp_path, name, *args):
+    result = _probe_cli(tmp_path, name, *args)
+    assert result.returncode == 0, f"{name} must return a reading for {args!r}: {result.stderr}"
+    return result.stdout.splitlines()
+
+
+@pytest.mark.parametrize("name", ("discovery_probe", "timing", "pin_census", "mixtures"))
+def test_probe_usage_error_exits_2_with_empty_stdout(name, tmp_path, capsys, monkeypatch):
+    result = _probe_cli(tmp_path, name, "--unknown-option")
+    assert PROBE.with_name(name + ".py").is_file(), f"{name} usage handler missing: {result.stderr}"
+    assert (result.returncode, result.stdout) == (2, ""), f"{name} usage error: {result!r}"
+    if name == "timing":
+        samples = tmp_path / "samples.json"
+        samples.write_text("[]", encoding="utf-8")
+        result = _probe_cli(tmp_path, name, "--samples", samples)
+        assert (result.returncode, result.stdout) == (2, ""), "--samples still requires --old"
+        with mock.patch.object(sys, "platform", "darwin"), mock.patch.object(
+                shutil, "which", return_value="/usr/bin/git"), mock.patch.object(
+                subprocess, "check_output", return_value="\n"):
+            with pytest.raises(FileNotFoundError, match="git"):
+                support.hook_git(os.defpath)
+    probe = _load_probe(name)
+    if name == "pin_census":
+        _check_observed_baseline(probe, tmp_path)
+    assert probe.main(["--unknown-option"]) == 2
+    assert capsys.readouterr().out == ""
+
+    def broken_parser(*args, **kwargs):
+        print("partial reading")
+        raise KeyError("measurement unavailable")
+
+    monkeypatch.setattr(probe.argparse.ArgumentParser, "parse_args", broken_parser)
+    assert probe.main([]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == "" and "measurement unavailable" in captured.err
+
+    def interrupted_parser(*args, **kwargs):
+        raise SystemExit(1)
+
+    monkeypatch.setattr(probe.argparse.ArgumentParser, "parse_args", interrupted_parser)
+    assert probe.main([]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err
+
+
+def _load_probe(name):
+    spec = importlib.util.spec_from_file_location(name, PROBE.with_name(name + ".py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _check_observed_baseline(probe, scratch):
+    nodes = [
+        "h-mad/tests/test_h_mad_wire_pin_gate.py::TestRegistrationWire::test_template_wire_arrow_registers",
+        "h-mad/tests/test_hmad_dispatch_exec.py::test_ac_5_6_exec_run_consumes_heartbeat_context_without_child_argv",
+        "h-mad/tests/test_hmad_dispatch_exec.py::test_ac_5_8_exec_run_does_not_implicitly_read_heartbeat_env",
+    ]
+    classes = {
+        "root-unlistable": [
+            f"test_h_mad_tdd_gate_judge.py::test_mode_000_project_dir_refuses[{variant}]"
+            for variant in ("as-on-disk", "mis-cased")
+        ],
+        "lstat-undecidable": [
+            "test_h_mad_agy_tdd_gate.py::test_deny_row_kind[t7-chain-unreadable]",
+            "test_h_mad_agy_tdd_gate.py::test_unsearchable_chain_denies_although_the_scan_is_inactive",
+            "test_h_mad_codex_tdd_gate_judge.py::test_unsearchable_docs_on_the_chain_denies_although_the_scan_is_inactive",
+            "test_h_mad_tdd_gate_judge.py::test_fast_path_defers[unsearchable-docs]",
+            *(f"test_h_mad_agy_tdd_gate_differential.py::test_target_differential[chmod000-chain-{status}]"
+              for status in ("active", "inactive", "unknown")),
+            *("test_h_mad_hook_live_interpreter.py::"
+              f"test_a_symlink_loop_target_is_denied_as_unresolvable_not_crashed_or_allowed[{host}]"
+              for host in ("codex", "agy")),
+        ],
+    }
+    nodes.extend("h-mad/tests/" + case for cases in classes.values() for case in cases)
+    run = subprocess.run
+
+    def select_nodes(argv, **kwargs):
+        if argv[1:4] != ["-m", "pytest", "-q"]:
+            return run(argv, **kwargs)
+        assert all(node.split("::")[0] in argv[4:] for node in nodes)
+        result = run([*argv[:4], *nodes], **kwargs)
+        assert result.returncode == 0, "\n".join(result.stdout.splitlines()[-6:])
+        assert f"{len(nodes)} passed" in result.stdout
+        return result
+
+    with mock.patch.object(probe.subprocess, "run", select_nodes):
+        directory = scratch / "baseline"
+        directory.mkdir()
+        rows = probe.reading(directory)
+    hits = {
+        label: {line.split()[2] for line in rows if line.startswith(f"CENSUS-HIT: {label} ")}
+        for label in classes
+    }
+    for label, cases in classes.items():
+        assert {"h-mad/tests/" + case for case in cases} <= hits[label]
+    overlap = hits["root-unlistable"] & hits["lstat-undecidable"]
+    assert not overlap, f"baseline IDs observed in both census classes: {sorted(overlap)}"
+
+
+@pytest.mark.parametrize("part", (
+    "fx", "fx2", "disc", "ev2", "proto2", "failclosed", "chain", "names", "arming",
+))
+def test_discovery_probe_part_reads(part, tmp_path):
+    root = live_root(tmp_path)
+    subject = Path("sub") / "docs" / "n.md"
+    (root / subject).parent.mkdir(parents=True)
+    (root / subject).write_text(_decoder_hostile_text(_decoder_environment(tmp_path)), encoding="utf-8")
+    support.write_state(root / "sub", {})
+    args = {
+        "fx": (), "fx2": (), "disc": (root, 1), "ev2": (root, "sub"),
+        "proto2": (root, subject), "failclosed": ("fc",), "chain": (root, subject, "shared", 1),
+        "names": (root,), "arming": (root,),
+    }
+    lines = _reading(tmp_path, "discovery_probe", part, *args[part])
+    assert len(lines) == 1 and lines[0].strip(), f"{part} must print one reading: {lines!r}"
+    keys = {
+        "fx": "layouts", "fx2": "layouts", "disc": "files errors listed processes seconds wait",
+        "ev2": "files errors first processes excluded_listed excluded_state_opened",
+        "proto2": "current_ms current_git no-live_ms no-live_git live_ms live_git",
+        "chain": "mode files chain_files scan_processes processes",
+        "names": "layouts name_counts folds_case",
+        "arming": "commands positions mentions controls wrapper_cases",
+        "failclosed": "cases baseline head_changed allow_changed required-import_changed",
+    }
+    assert lines[0].startswith(f"DISCOVERY: part={part} "), lines
+    fields = set(re.findall(r"(?:^| )([\w-]+)=\S", lines[0]))
+    assert set(keys[part].split()) <= fields, lines
+    if part == "failclosed":
+        expected = {"cases=44", "baseline=44", "allow_changed=2", "historical_38=not-re-runnable",
+                    "allow_H4_detected=1", "allow_CANON1_detected=1",
+                    "required-import_H4_detected=0", "required-import_CANON1_detected=0"}
+        assert expected <= set(lines[0].split()), lines
+        edited = _reading(tmp_path, "discovery_probe", part, "allow", "stub-edited")
+        assert "allow_changed=0" in edited[0].split(), edited
+    if part == "arming":
+        for field in ("commands=54", "executed=54", "safe_comparisons=192", "operator_comparisons=192",
+                      "cwd_cases=5", "historical_54=not-re-runnable"):
+            assert field in lines[0].split(), lines
+        values = dict(word.split("=", 1) for word in lines[0].split() if "=" in word)
+        assert int(values["changed"]) > 0 and values["changed"] == values["changed_hits"], lines
+    if part in ("fx", "fx2"):
+        assert any(
+            not path.is_relative_to(root) for path in tmp_path.rglob(".bkit-memory.json")
+        ), f"{part} must build its scratch layout"
+
+
+def test_pin_census_control_logs_every_class(tmp_path, monkeypatch):
+    lines = _reading(tmp_path, "pin_census", "--control")
+    for case, route in (("unsearchable-parent", "target"), ("looping-docs", "scan")):
+        assert [line for line in lines if line.endswith(" " + case)] == [
+            f"CENSUS-CONTROL: lstat-undecidable {route} {case}"
+        ], case
+    assert "CENSUS-CONTROL: lstat-undecidable target" in lines
+    assert "CENSUS-CONTROL: lstat-undecidable scan" in lines
+    # Each line names the detector and the particular control that reached it.
+    hits = {frozenset(re.findall(r"[\w-]+", line)) for line in lines}
+    expected = [(label,) for label in ("D1", "D2", "D3", "D5")]
+    expected.extend(itertools.product(("D4",), (*PRESENCE, "fifo"), ("scan", "chain")))
+    expected.extend(itertools.product(("D6",), ("codex", "agy", "claude"),
+                                      ("name", "symlink", "other-checkout")))
+    expected.extend(itertools.product(("D6",), ("referent",), ("codex", "agy", "claude")))
+    expected.extend(itertools.product(("D6",), ("codex", "agy"), ("position", "mention")))
+    expected.extend(itertools.product(("D7",), VARIABLES, ("codex", "agy", "codex-explicit", "claude")))
+    expected.extend([("lstat-undecidable",), ("root-unlistable",), ("git-shim",), ("replaced-run",)])
+    expected.extend([("lstat-undecidable", "scan"), ("lstat-undecidable", "chain"),
+                     ("lstat-undecidable", "target"), ("lstat-undecidable", "referent")])
+    expected.extend([("claude-stub",), ("D6", "judge", "name"), ("agy-kinds",),
+                     ("shell-refusal",), ("git-root-lookup",)])
+    missing = [row for row in expected if not any(set(row) <= hit for hit in hits)]
+
+    probe = _load_probe("pin_census")
+    root = tmp_path / "d1"
+    root.mkdir()
+
+    def git(*args):
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+    git("init", "-q")
+    (root / ".gitignore").write_text(".bkit-memory.json\nignored/\nindexed/\ncommitted/\n")
+    for folder in ("ordinary", "ignored/nested", "indexed", "committed"):
+        support.write_state(root / folder, {})
+    for folder in ("committed", "indexed"):
+        (root / folder / "marker").touch()
+        git("add", "-f", f"{folder}/marker")
+        if folder == "committed":
+            git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                "-c", "commit.gpgsign=false", "commit", "-qm", "fixture")
+            git("rm", "--cached", "committed/marker")
+    shim = tmp_path / "observed-bin"
+    shim.mkdir()
+    (shim / "git").write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$0.calls"\nexit 1\n')
+    (shim / "git").chmod(0o755)
+    monkeypatch.setenv("HMAD_CENSUS_GIT", shutil.which("git"))
+    import discovery_probe
+    monkeypatch.setitem(discovery_probe.GIT_ENV, "PATH", str(shim))
+    fields = ("phase", "implementation_checkout", "phase5_stage", "phase5_checkout",
+              "autonomous_entry_ts", "xphase", "0phase", "_phase", "éphase")
+    field_hits = []
+    for field in fields:
+        rows = []
+        probe.Census(lambda *row: rows.append(row)).shell(
+            "codex", f"inspect 'h_mad_state_write.py {field} ='", root, None, False)
+        if rows:
+            field_hits.append(field)
+    assert field_hits == ["phase", "implementation_checkout", "phase5_stage", "éphase"]
+    for folder in ("ordinary", "ignored/nested", "indexed", "committed"):
+        rows = []
+        probe.Census(lambda *row: rows.append(row)).presence(
+            root, root / folder / "docs" / probe.STATE, "scan")
+        assert (("D1", "scan") in rows) == (folder == "ignored/nested"), (folder, rows)
+    calls = shim / "git.calls"
+    assert not calls.exists(), calls.read_text()
+    detector = probe.Census(lambda *row: pytest.fail(f"unexpected classification: {row}"))
+    with mock.patch.object(Path, "lstat", side_effect=OSError(errno.EIO, "read error")):
+        with pytest.raises(OSError, match="read error"):
+            detector.presence(root, root / "docs" / probe.STATE, "scan")
+        with pytest.raises(OSError, match="read error"):
+            detector.write_target("codex", root, root / "note.txt")
+    assert not missing, f"census control omitted detector hits {missing!r}: {lines!r}"
+
+
+def _timing_checkouts(tmp_path):
+    root = tmp_path / "repository"
+    root.mkdir()
+    env = _decoder_environment(tmp_path)
+
+    def git(*args):
+        subprocess.run(["git", *args], cwd=root, env=env, check=True, capture_output=True, timeout=20)
+
+    git("init", "-q")
+    hostile = _decoder_hostile_text(env)
+    (root / "src").mkdir()
+    (root / "src/x.py").write_text("pass\n", encoding="utf-8")
+    support.write_state(root, {})
+    (root / "docs/n.md").write_text(hostile, encoding="utf-8")
+    git("add", ".")
+    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+        "-c", "commit.gpgsign=false", "commit", "-qm", "fixture")
+    second = tmp_path / "second checkout"
+    git("worktree", "add", "-q", "--detach", str(second), "HEAD")
+    return root, second
+
+
+def _file_hashes(*checkouts):
+    return {
+        (checkout.name, path.relative_to(checkout)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for checkout in checkouts for path in checkout.rglob("*") if path.is_file()
+    }
+
+
+def _assert_timing_cases(lines, hooks, record):
+    bias = "TIMING-GIT: resolved toolchain git excludes host launcher overhead per git call"
+    assert lines.count(bias) == 1, lines
+    summary = [line for line in lines if line.startswith("TIMING:")]
+    assert len(summary) == 1, lines
+    assert re.fullmatch(r"TIMING: max_added_ms=-?\d+(?:\.\d+)? bound=300", summary[0]), lines
+    second = [line for line in lines if line.startswith("TIMING-SECOND-CHECKOUT:")]
+    assert len(second) == len(hooks), f"one second-checkout reading per hook: {second}"
+    expected = {(hook, target) for hook in hooks for target in ("document", "production", "state-file")}
+    expected.update((hook, "shell") for hook in hooks if hook in ("codex", "agy"))
+    observed = []
+    for line in lines:
+        if line in second or line in summary or line == bias:
+            continue
+        fields = dict(field.split("=", 1) for field in line.split() if "=" in field)
+        observed.append((fields["hook"], fields["target"]))
+        assert all(float(fields[key]) >= 0 for key in ("old_ms", "new_ms")), line
+        if fields["target"] == "shell":
+            assert fields.get("record") == record, f"shell must name the measured root state: {line}"
+    assert sorted(observed) == sorted(expected), f"wrong bounded hook cases: {lines}"
+    for hook in hooks:
+        assert sum(f"hook={hook}" in line.split() for line in second) == 1, second
+
+
+@pytest.mark.parametrize("mode", ("every-hook", "one-hook", "second-checkout-apart"))
+def test_timing_probe_prints_its_token(mode, tmp_path):
+    if mode == "second-checkout-apart":
+        samples = tmp_path / "medians.json"
+        samples.write_text(json.dumps([
+            {"hook": "claude", "target": target, "old_ms": old, "new_ms": new}
+            for target, old, new in (("document", 10, 12), ("production", 30, 47),
+                                     ("state-file", 60, 59), ("second-checkout", 4, 991))
+        ]), encoding="utf-8")
+        lines = _reading(tmp_path, "timing", "--old", tmp_path / "absent",
+                         "--hook", "claude", "--samples", samples)
+        assert "TIMING: max_added_ms=17 bound=300" in lines, f"largest bounded delta must be 17: {lines}"
+        second = [line for line in lines if line.startswith("TIMING-SECOND-CHECKOUT:")]
+        assert len(second) == 1 and "added_ms=987" in second[0].split(), second
+        assert all("987" not in line for line in lines if line not in second), lines
+        return
+
+    old = differential().extract_old_tree(tmp_path / "baseline")
+    root, second = _timing_checkouts(tmp_path)
+    hooks = ("codex", "agy", "claude") if mode == "every-hook" else ("claude",)
+    selection = () if mode == "every-hook" else ("--hook", "claude")
+    for record in (("none", "live") if mode == "every-hook" else ("none",)):
+        if record == "live":
+            key = _decoder_hostile_text(_decoder_environment(tmp_path))
+            support.write_state(root, {key: {"phase": "step5", "fixture": "timing read-only"}})
+        before = _file_hashes(root, second)
+        lines = _reading(tmp_path, "timing", "--old", old, "--repo", root, "--runs", 1, *selection)
+        assert _file_hashes(root, second) == before, "--repo timing changed checkout files"
+        _assert_timing_cases(lines, hooks, record)
+    if mode == "one-hook":
+        probe = _load_probe("timing")
+        observed = []
+
+        def record_case(diff, hook, session, target, value, *unused):
+            if target == probe.SECOND:
+                observed.append((session, value.parent))
+
+        args = mock.Mock(old=old, repo=root, runs=1)
+        with mock.patch.object(probe, "_bench", record_case):
+            probe._measure(args, hooks)
+        assert observed == [(root.resolve(), second.resolve())]
+
+
+@pytest.mark.parametrize("mode", ("identical-trees-pass", "failing-mixture-named", "every-mixture-run"))
+def test_mixtures_probe(mode, tmp_path):
+    old, new = tmp_path / "old", tmp_path / "new"
+    log = tmp_path / "observations.jsonl"
+    # The two versions agree on their own revision. Only a newer value with
+    # the older reader accepts the 'compare' case. 'observe' always refuses.
+    for tree, revision in ((old, 0), (new, int(mode != "identical-trees-pass"))):
+        tree.mkdir()
+        (tree / "value.json").write_text(json.dumps(revision), encoding="utf-8")
+        (tree / "entry.py").write_text(
+            "import json, sys\nfrom pathlib import Path\n"
+            f"reader = {revision}\n"
+            "value = json.loads(Path(__file__).with_name('value.json').read_text())\n"
+            f"with Path({str(log)!r}).open('a') as output:\n"
+            "    home = Path.home()\n"
+            "    local_home = home.is_dir() and home.is_relative_to(Path.cwd().parent)\n"
+            "    print(json.dumps([reader, value, sys.argv[2], local_home]), file=output)\n"
+            "sys.exit(0 if sys.argv[1] == 'compare' and value > reader else 1)\n",
+            encoding="utf-8",
+        )
+    hostile = _decoder_hostile_text(_decoder_environment(tmp_path))
+    case = "compare" if mode == "failing-mixture-named" else "observe"
+    definition = tmp_path / "set.json"
+    definition.write_text(json.dumps({
+        "name": "toy", "files": ["entry.py", "value.json"], "entry": [sys.executable, "entry.py"],
+        "corpus": [{"name": case, "argv": [case, hostile]}],
+    }), encoding="utf-8")
+    lines = _reading(tmp_path, "mixtures", "--old", old, "--new", new, "--set-file", definition)
+    if mode == "failing-mixture-named":
+        assert lines == ["MIXTURES: FAIL set=toy mixture=value.json case=compare"], lines
+    else:
+        assert len(lines) == 1, lines
+        assert re.fullmatch(r"MIXTURES: PASS set=toy mixtures=4 cases=[1-9]\d*", lines[0]), lines
+    observed = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    assert observed and all(payload == hostile for _, _, payload, _ in observed), observed
+    assert all(local_home for _, _, _, local_home in observed), "each mixture needs its own scratch HOME"
+    if mode == "every-mixture-run":
+        combinations = {(reader, value) for reader, value, _, _ in observed}
+        assert combinations == set(itertools.product(range(2), repeat=2)), (
+            f"the entry must run on all four reader/value combinations: {observed!r}"
+        )
+    if mode == "identical-trees-pass":
+        baseline = differential().extract_old_tree(tmp_path / "baseline")
+        lines = _reading(tmp_path, "mixtures", "--old", baseline, "--new", ROOT, "--set", "staging")
+        assert lines == ["MIXTURES: PASS set=staging mixtures=4 cases=24"], lines
+        probe = _load_probe("mixtures")
+        args = mock.Mock(old=baseline, new=ROOT, set="staging", set_file=None)
+        with mock.patch.object(probe, "_staging", return_value={"review-live-complete": False}):
+            assert probe._measure(args, tmp_path) == "MIXTURES: FAIL set=staging mixture=none case=review-live-complete"
+        for label, tree in (("old", baseline), ("new", ROOT)):
+            work = tmp_path / f"writes-{label}"
+            (work / "home").mkdir(parents=True)
+            rows = probe._writes(tree, work, pure=True)
+            accepted = ("create", "set", "append", "claim", "beat", "release", "drop", "switch")
+            refused = ("create-invalid", "set-unknown", "append-type", "claim-owner",
+                       "beat-owner", "release-owner", "drop-absent", "switch-extra")
+            assert rows == {f"{form}-{op}": op in accepted for form in ("regular", "symlink")
+                            for op in (*accepted, *refused)}
+    if mode == "every-mixture-run":
+        _check_mixture_readings(tmp_path)
+    if mode == "failing-mixture-named":
+        _check_pure_mixture_answers(tmp_path)
+
+
+def _check_mixture_readings(tmp_path):
+    probe = _load_probe("mixtures")
+    diff = differential()
+    work = tmp_path / "gate-work"
+    work.mkdir()
+    (work / "home").mkdir()
+    run = subprocess.run
+    homes = []
+
+    def observe_hook(argv, **kwargs):
+        if len(argv) > 1 and Path(argv[1]).name in {
+                "h-mad-codex-tdd-gate.py", "h-mad-agy-tdd-gate.py", "h-mad-tdd-gate.sh"}:
+            env = kwargs["env"]
+            homes.append(Path(env["HOME"]))
+            assert homes[-1].is_dir() and homes[-1].is_relative_to(work)
+            assert all(key not in env for key in VARIABLES)
+        return run(argv, **kwargs)
+
+    with mock.patch.object(subprocess, "run", observe_hook):
+        gates = probe._gates(ROOT, work)
+    assert len(homes) == len(gates) == 10
+    expected_gates = {case: case.endswith(("-document", "-safe")) for case in gates}
+    errors = {case: value for case, value in gates.items() if value != expected_gates[case]}
+    work = tmp_path / "invalid-gate"
+    work.mkdir()
+    with mock.patch.object(diff, "run_hook", return_value=diff.Verdict("invalid", "", 0)):
+        invalid = probe._gates(ROOT, work)
+    errors.update({case: value for case, value in invalid.items() if value is not None})
+
+    def staging(args, root, home, **env):
+        if args[0] == "git":
+            return subprocess.CompletedProcess(args, 0)
+        prompt = root / "prompt.txt"
+        stdout = ""
+        if root.name.startswith("green-"):
+            stdout = "ASSEMBLE-TDD: PASS fixture\nASSEMBLE-TDD: HALT task_not_found\n"
+        if root.name == "green-live-complete":
+            stdout = "ASSEMBLE-TDD: PASS\n"
+        if root.name.startswith("gate-"):
+            prompt.symlink_to("missing")
+        if root.name.startswith("review-"):
+            Path(str(prompt) + ".assembled").touch()
+        if root.name.startswith(("gate-", "review-")):
+            stdout = "ASSEMBLE-TDD: HALT task_not_found\n"
+        return subprocess.CompletedProcess(args, int("absent" in root.name), stdout, "ImportError")
+
+    work = tmp_path / "stage-work"
+    with mock.patch.object(probe, "_command", staging):
+        stages = probe._staging(ROOT, work)
+    for case, actual in stages.items():
+        expected = False if case.startswith("red-") else None
+        if actual is not expected:
+            errors[case] = actual
+    assert not errors, errors
+
+
+def _check_pure_mixture_answers(tmp_path):
+    probe = _load_probe("mixtures")
+    tree = tmp_path / "mixture-input"
+    for folder in ("scripts", "hooks", "references", "bin"):
+        (tree / "h-mad" / folder).mkdir(parents=True)
+    (tree / probe.WRITER).touch()
+    problems = []
+    for group, case, wrong in (
+            ("writes", "regular-create", False), ("writes", "symlink-drop-absent", True),
+            ("gates", "codex-shell-refused", True), ("gates", "claude-document", False),
+            ("staging", "green-live-missing-task", True)):
+        args = mock.Mock(old=tree, new=tree, set=group, set_file=None)
+        with mock.patch.dict(probe.FILES, {group: (probe.WRITER,)}), mock.patch.object(
+                probe, "_" + group, return_value={case: wrong}):
+            line = probe._measure(args, tmp_path)
+        if line != f"MIXTURES: FAIL set={group} mixture=none case={case}":
+            problems.append((case, line))
+
+    token = "TDD-IMPLEMENTER: agy chosen=codex switch=codex->agy reason=status"
+    versions = (probe.WRITER, probe.JUDGE)
+    new = tmp_path / "mixture-new"
+    (tree / probe.JUDGE).write_text("old")
+    shutil.copytree(tree, new)
+    for file in versions:
+        (new / file).write_text("new")
+    args = mock.Mock(old=tree, new=new, set="writes", set_file=None)
+
+    def write(argv, root, home, **env):
+        case = root.name.split("-", 1)[1]
+        source = argv[1].parents[2]
+        mixed = (source / probe.JUDGE).read_text() != (source / probe.WRITER).read_text()
+        path = root / "docs/.bkit-memory.json"
+        if mixed and case == "set-unknown":
+            if scenario == "missing-store":
+                path.unlink()
+            if scenario == "bare-ok":
+                return subprocess.CompletedProcess(argv, 1, "STATE-WRITE: OK\n", "")
+        if case.startswith("switch"):
+            if mixed and case == "switch" and scenario == "partial-record":
+                path.write_text("{}")
+                return subprocess.CompletedProcess(argv, 0, token + "\n", "")
+            if mixed and scenario == "record-failed":
+                return subprocess.CompletedProcess(argv, 0, "fixture starting\n" + token + " record=failed\n", "")
+            if case == "switch" and (not mixed or scenario == "changed-field"):
+                data = json.loads(path.read_bytes())
+                if mixed:
+                    data["orchestrator_state"]["fixture"]["agy_status"] = "unavailable"
+                data["orchestrator_state"]["fixture"]["implementer_switch"] = dict(
+                    ts="now", reason="status", **{"from": "codex", "to": "agy"})
+                path.write_text(json.dumps(data))
+                return subprocess.CompletedProcess(argv, 0, token + "\n", "")
+            if case == "switch-extra" and not mixed and scenario != "pure-error":
+                return subprocess.CompletedProcess(argv, 0, token + " record=failed\n", "")
+            stdout = "fixture starting\n" if mixed else ""
+            return subprocess.CompletedProcess(argv, 1, stdout, "ImportError: fixture unavailable\n")
+        stdout = "STATE-WRITE: OK feature=fixture" if "-" not in case else ""
+        return subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    (tree / probe.WRITER).write_text("old")
+    with mock.patch.dict(probe.FILES, {"writes": versions}), mock.patch.object(probe, "_command", write):
+        success = "MIXTURES: PASS set=writes mixtures=4 cases=32"
+        mixed_failure = f"MIXTURES: FAIL set=writes mixture={probe.WRITER} case=regular-"
+        for scenario, expected in (
+                ("pure-error", "MIXTURES: FAIL set=writes mixture=none case=regular-switch-extra"),
+                ("exception", success), ("record-failed", success),
+                ("partial-record", mixed_failure + "switch"),
+                ("changed-field", mixed_failure + "switch"),
+                ("missing-store", mixed_failure + "set-unknown"),
+                ("bare-ok", mixed_failure + "set-unknown")):
+            try:
+                line = probe._measure(args, tmp_path)
+            except (KeyError, OSError) as exc:
+                line = type(exc).__name__
+            if line != expected:
+                problems.append((scenario, expected, line))
+    assert not problems, problems

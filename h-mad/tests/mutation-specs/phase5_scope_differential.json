@@ -139,6 +139,42 @@
       "replace": "if not force:",
       "test": "tests/test_h_mad_phase5_scope_differential.py::test_supported_interpreters_are_the_parametrised_set",
       "symbol": "ensure_preconditions"
+    },
+    {
+      "name": "census-control-skips-d7",
+      "_mechanism": "Skip the D7 control",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/pin_census.py",
+      "find": "    drive_git_environment(detector, root)",
+      "replace": "    pass",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_pin_census_control_logs_every_class",
+      "symbol": "control"
+    },
+    {
+      "name": "probe-usage-exit-0",
+      "_mechanism": "Return success after argument parsing rejects input",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/discovery_probe.py",
+      "find": "        return int(error.code)",
+      "replace": "        return 0",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_probe_usage_error_exits_2_with_empty_stdout[discovery_probe]",
+      "symbol": "main"
+    },
+    {
+      "name": "timing-second-checkout-bounded",
+      "_mechanism": "Include the second checkout in the bounded maximum",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/timing.py",
+      "find": "max_added = max(row.added_ms for row in bounded)",
+      "replace": "max_added = max(row.added_ms for row in readings)",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_timing_probe_prints_its_token[second-checkout-apart]",
+      "symbol": "_lines"
+    },
+    {
+      "name": "mixtures-whole-trees-only",
+      "_mechanism": "Enumerate only the two whole trees",
+      "file": "../docs/03-analysis/probes/phase5-gate-feature-scope/mixtures.py",
+      "find": "for size in range(len(files) + 1):",
+      "replace": "for size in (0, len(files)):",
+      "test": "tests/test_h_mad_phase5_scope_differential.py::test_mixtures_probe[failing-mixture-named]",
+      "symbol": "mixtures"
     }
   ]
 }
