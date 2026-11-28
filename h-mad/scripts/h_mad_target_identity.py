@@ -13,6 +13,7 @@ import shutil
 import stat
 import sys
 from typing import Any, NamedTuple, Sequence
+from typing import Callable, Union
 
 
 PY_SUFFIXES = (".py", ".pY", ".Py", ".PY")
@@ -319,6 +320,96 @@ def _read_regular_text(path: Path) -> str:
         return b"".join(chunks).decode("utf-8")
     finally:
         os.close(descriptor)
+
+
+PathArg = Union[str, "os.PathLike[str]"]
+
+
+class StateRead(NamedTuple):
+    path: str
+    status: str
+    data: object
+    error: str
+    exception: BaseException | None
+
+
+class LiveRecord(NamedTuple):
+    feature: str
+    state_file: str
+    data: dict
+
+
+class Status(NamedTuple):
+    value: str
+    applied: tuple
+
+
+INACTIVE = Status("inactive", ())
+
+
+def git_environment() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_CEILING_DIRECTORIES"):
+        env.pop(key, None)
+    env["LC_ALL"] = "C"
+    return env
+
+
+def read_state(path: PathArg) -> StateRead:
+    path = os.fspath(path)
+    try:
+        try:
+            mode = os.lstat(path).st_mode
+        except (FileNotFoundError, NotADirectoryError):
+            return StateRead(path, "absent", None, "", None)
+        if stat.S_ISLNK(mode):
+            mode = os.stat(path).st_mode
+        if not stat.S_ISREG(mode):
+            return StateRead(path, "unreadable", None, "not-a-regular-file", None)
+        data = json.loads(_read_regular_text(path))
+    except Exception as exc:
+        error = type(exc).__name__
+        if isinstance(exc, OSError) and exc.args == ("not a regular file",):
+            error = "not-a-regular-file"
+        caught = isinstance(exc, (OSError, UnicodeDecodeError, json.JSONDecodeError))
+        return StateRead(path, "unreadable", None, error, None if caught else exc)
+    try:
+        records = data.get("orchestrator_state", {})
+    except AttributeError as exc:
+        return StateRead(path, "not-object", data, "not-an-object", exc)
+    if not isinstance(records, dict):
+        return StateRead(path, "not-object", data, "not-an-object", None)
+    return StateRead(path, "read", data, "", None)
+
+
+def live_records(read: StateRead) -> tuple[LiveRecord, ...]:
+    if read.status != "read":
+        return ()
+    return tuple(
+        LiveRecord(feature, read.path, record)
+        for feature, record in read.data.get("orchestrator_state", {}).items()
+        if isinstance(record, dict) and record.get("phase") == "step5"
+    )
+
+
+def stage_gates_shell(record: LiveRecord) -> bool:
+    return record.data.get("phase5_stage") != "planning"
+
+
+def every_stage(record: LiveRecord) -> bool:
+    return True
+
+
+def command_directory(args: object, key: str, decode: Callable[[], object], absent: object) -> object:
+    try:
+        if not isinstance(args, dict) or key not in args:
+            return absent
+        value = args[key]
+        if not isinstance(value, str) or not value:
+            return MALFORMED_WORKDIR
+        return decode()
+    except Exception:
+        return MALFORMED_WORKDIR
 
 
 def _state_status(state_file: Path) -> str:

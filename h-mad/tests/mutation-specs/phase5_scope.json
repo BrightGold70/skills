@@ -1,0 +1,81 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_phase5_scope.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "git-env-keeps-git-dir",
+      "_mechanism": "Keep GIT_DIR in the child environment",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "\"GIT_DIR\", \"GIT_WORK_TREE\"",
+      "replace": "\"GIT_WORK_TREE\"",
+      "test": "tests/test_h_mad_phase5_scope.py::test_git_environment_drops_the_four_variables[GIT_DIR]",
+      "symbol": "git_environment"
+    },
+    {
+      "name": "git-env-no-lc-all",
+      "_mechanism": "Leave the inherited locale in place",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "    env[\"LC_ALL\"] = \"C\"\n",
+      "replace": "",
+      "test": "tests/test_h_mad_phase5_scope.py::test_git_environment_sets_lc_all_c",
+      "symbol": "git_environment"
+    },
+    {
+      "name": "stage-planning-gates",
+      "_mechanism": "Gate a planning record",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "return record.data.get(\"phase5_stage\") != \"planning\"",
+      "replace": "return True",
+      "test": "tests/test_h_mad_phase5_scope.py::test_stage_gates_shell[planning]",
+      "symbol": "stage_gates_shell"
+    },
+    {
+      "name": "stage-absent-exempt",
+      "_mechanism": "Default a missing stage to planning",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "record.data.get(\"phase5_stage\")",
+      "replace": "record.data.get(\"phase5_stage\", \"planning\")",
+      "test": "tests/test_h_mad_phase5_scope.py::test_stage_gates_shell[absent]",
+      "symbol": "stage_gates_shell"
+    },
+    {
+      "name": "command-directory-null-is-absent",
+      "_mechanism": "Treat a present null as an absent key",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "or key not in args:",
+      "replace": "or args.get(key) is None:",
+      "test": "tests/test_h_mad_phase5_scope.py::test_command_directory[null]",
+      "symbol": "command_directory"
+    },
+    {
+      "name": "command-directory-decode-propagates",
+      "_mechanism": "Propagate decoder exceptions",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "return decode()\n    except Exception:\n        return MALFORMED_WORKDIR",
+      "replace": "return decode()\n    except Exception:\n        raise",
+      "test": "tests/test_h_mad_phase5_scope.py::test_command_directory[decode-raises]",
+      "symbol": "command_directory"
+    },
+    {
+      "name": "live-records-any-phase",
+      "_mechanism": "Include records from every phase",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "if isinstance(record, dict) and record.get(\"phase\") == \"step5\"",
+      "replace": "if isinstance(record, dict)",
+      "test": "tests/test_h_mad_phase5_scope.py::test_live_records[other-phase]",
+      "symbol": "live_records"
+    }
+  ]
+}

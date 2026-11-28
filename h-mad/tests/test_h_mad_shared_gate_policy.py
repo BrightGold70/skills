@@ -46,6 +46,15 @@ MOVED_CONSTANTS = (
     "TRUSTED_BIN_DIRS",
     "MALFORMED_WORKDIR",
 )
+SCOPE_FUNCTIONS = (
+    "git_environment",
+    "read_state",
+    "live_records",
+    "stage_gates_shell",
+    "every_stage",
+    "command_directory",
+)
+SCOPE_CONSTANTS = ("INACTIVE",)
 
 
 @pytest.fixture(autouse=True)
@@ -164,3 +173,31 @@ def test_codex_gate_self_check_parser_fail_is_a_verdict_with_exit_0(gate, monkey
     )
     assert captured.err == "", "parser self-check FAIL verdict must leave stderr empty"
     assert rc == 0, "parser self-check FAIL verdict must exit 0"
+
+
+@pytest.mark.parametrize("name", SCOPE_FUNCTIONS)
+def test_each_scope_function_has_one_definition_in_the_identity_module(tracked_python_trees, name):
+    definitions = [
+        relative
+        for relative, tree in tracked_python_trees.items()
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+    ]
+    assert definitions == [IDENTITY_PATH], f"{name} must be defined once in {IDENTITY_PATH}, found {definitions}"
+
+
+@pytest.mark.parametrize("name", SCOPE_CONSTANTS)
+def test_each_scope_constant_is_assigned_in_the_identity_module(tracked_python_trees, name):
+    assignments = []
+    for relative, tree in tracked_python_trees.items():
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if any(isinstance(target, ast.Name) and isinstance(target.ctx, ast.Store) and target.id == name
+                   for assigned in targets for target in ast.walk(assigned)):
+                assignments.append(relative)
+    assert assignments == [IDENTITY_PATH], f"{name} must be assigned once in {IDENTITY_PATH}, found {assignments}"
