@@ -76,6 +76,60 @@
       "replace": "if isinstance(record, dict)",
       "test": "tests/test_h_mad_phase5_scope.py::test_live_records[other-phase]",
       "symbol": "live_records"
+    },
+    {
+      "name": "checkout-message-alone",
+      "_mechanism": "Ignore the ancestor entry check.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "no_repo and not _has_git_entry(directory)",
+      "replace": "no_repo",
+      "test": "tests/test_h_mad_phase5_scope.py::test_checkout_of[message-alone]",
+      "symbol": "_ask_checkout"
+    },
+    {
+      "name": "checkout-entry-alone",
+      "_mechanism": "Accept exit 128 without matching the whole diagnostic.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "result.returncode == 128 and result.stderr.removesuffix(b\"\\n\") == diagnostic",
+      "replace": "result.returncode == 128",
+      "test": "tests/test_h_mad_phase5_scope.py::test_checkout_of[no-entry-alone]",
+      "symbol": "_ask_checkout"
+    },
+    {
+      "name": "recorded-asks-before-stat",
+      "_mechanism": "Ask git before stat validates the recorded path.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "mode = os.stat(value).st_mode",
+      "replace": "checkout_of(value)\n        mode = os.stat(value).st_mode",
+      "test": "tests/test_h_mad_phase5_scope.py::test_recorded_checkout_reason[fifo]",
+      "symbol": "recorded_checkout"
+    },
+    {
+      "name": "recorded-no-session-shortcut",
+      "_mechanism": "Remove the return for a known checkout.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "    if session is not None and session.answered and session.top == canonical:\n        return canonical, \"\"\n",
+      "replace": "",
+      "test": "tests/test_h_mad_phase5_scope.py::test_recorded_checkout_reason[equals-session-no-git]",
+      "symbol": "recorded_checkout"
+    },
+    {
+      "name": "recorded-missing-is-invalid",
+      "_mechanism": "Classify a missing path as an invalid field.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "return None, \"path-missing\"",
+      "replace": "return None, \"field-invalid\"",
+      "test": "tests/test_h_mad_phase5_scope.py::test_recorded_checkout_reason[missing]",
+      "symbol": "recorded_checkout"
+    },
+    {
+      "name": "session-checkout-asks-git",
+      "_mechanism": "Continue discovery after canonicalisation fails.",
+      "file": "scripts/h_mad_target_identity.py",
+      "find": "canonical_directory(os.fspath(root))\n    except (OSError, ValueError):\n        return Checkout(None, False)",
+      "replace": "canonical_directory(os.fspath(root))\n    except (OSError, ValueError):\n        pass",
+      "test": "tests/test_h_mad_phase5_scope.py::test_session_checkout[refused-top-level-root]",
+      "symbol": "session_checkout"
     }
   ]
 }

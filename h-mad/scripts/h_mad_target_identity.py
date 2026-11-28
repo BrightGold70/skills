@@ -11,6 +11,7 @@ import re
 import shlex
 import shutil
 import stat
+import subprocess
 import sys
 from typing import Any, NamedTuple, Sequence
 from typing import Callable, Union
@@ -323,6 +324,97 @@ def _read_regular_text(path: Path) -> str:
 
 
 PathArg = Union[str, "os.PathLike[str]"]
+
+
+class Checkout(NamedTuple):
+    top: str | None
+    answered: bool
+
+
+def _has_git_entry(directory: Path) -> bool:
+    for ancestor in (directory, *directory.parents):
+        try:
+            os.lstat(ancestor / ".git")
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return True
+        return True
+    return False
+
+
+def _ask_checkout(directory: Path) -> Checkout:
+    try:
+        result = subprocess.run(
+            ["git", "--no-optional-locks", "-C", str(directory), "rev-parse", "--show-toplevel"],
+            capture_output=True, timeout=2,
+        )
+        if result.returncode == 0:
+            top = os.fsdecode(result.stdout.removesuffix(b"\n"))
+            return Checkout(canonical_directory(top), True)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return Checkout(None, False)
+    diagnostic = b"fatal: not a git repository (or any of the parent directories): .git"
+    no_repo = result.returncode == 128 and result.stderr.removesuffix(b"\n") == diagnostic
+    return Checkout(None, no_repo and not _has_git_entry(directory))
+
+
+def checkout_of(path: PathArg) -> Checkout:
+    try:
+        resolved = Path(os.path.realpath(path))
+        directory = resolved
+        while not stat.S_ISDIR(os.stat(directory).st_mode):
+            directory = directory.parent
+    except (FileNotFoundError, NotADirectoryError):
+        while not directory.is_dir() and directory != directory.parent:
+            directory = directory.parent
+    except (OSError, ValueError):
+        return Checkout(None, False)
+    answer = _ask_checkout(directory)
+    if answer.top is None:
+        for component in (resolved, *resolved.parents):
+            if component.name == ".git" and component.parent.is_dir():
+                holder = _ask_checkout(component.parent)
+                if holder.top is not None:
+                    return holder
+    return answer
+
+
+def session_checkout(root: PathArg) -> Checkout:
+    try:
+        canonical_directory(os.fspath(root))
+    except (OSError, ValueError):
+        return Checkout(None, False)
+    return checkout_of(root)
+
+
+def recorded_checkout(value: object, session: Checkout | None = None) -> tuple[str | None, str]:
+    if value is None:
+        return None, "field-absent"
+    if not isinstance(value, str) or not os.path.isabs(value):
+        return None, "field-invalid"
+    try:
+        mode = os.stat(value).st_mode
+    except ValueError:
+        return None, "field-invalid"
+    except (FileNotFoundError, NotADirectoryError):
+        return None, "path-missing"
+    except OSError:
+        return None, "checkout-unreadable"
+    if not stat.S_ISDIR(mode):
+        return None, "not-a-checkout"
+    try:
+        canonical = canonical_directory(value)
+    except OSError:
+        return None, "checkout-unreadable"
+    if session is not None and session.answered and session.top == canonical:
+        return canonical, ""
+    answer = checkout_of(canonical)
+    if not answer.answered:
+        return None, "checkout-unreadable"
+    if answer.top != canonical:
+        return None, "not-a-checkout"
+    return canonical, ""
 
 
 class StateRead(NamedTuple):

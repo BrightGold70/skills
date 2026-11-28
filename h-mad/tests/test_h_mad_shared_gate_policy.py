@@ -53,6 +53,9 @@ SCOPE_FUNCTIONS = (
     "stage_gates_shell",
     "every_stage",
     "command_directory",
+    "checkout_of",
+    "session_checkout",
+    "recorded_checkout",
 )
 SCOPE_CONSTANTS = ("INACTIVE",)
 
